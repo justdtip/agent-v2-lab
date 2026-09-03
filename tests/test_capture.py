@@ -4,6 +4,7 @@ import inspect
 
 import mlx.core as mx
 import numpy as np
+import pytest
 
 from local_llm_lab.probes import capture
 
@@ -122,13 +123,18 @@ def test_injection_uses_kv_offset_before_block_updates_it() -> None:
     assert cache.offset == 7
 
 
-def test_injection_derives_prefilled_arrays_cache_offset() -> None:
+def test_injection_requires_registered_offset_for_prefilled_arrays_cache() -> None:
     class ArraysCache:
-        state = [mx.zeros((1, 6, 1)), mx.zeros((1, 6, 1))]
+        # Recurrent cache state width is bounded and does not encode history length.
+        state = [mx.zeros((1, 4, 8)), mx.zeros((1, 4, 8))]
 
     view = _View()
-    with capture.InjectionHook(view, 0, mx.array([2.0]), at_positions=[7]):
-        shifted = view.run_block(0, mx.zeros((1, 3, 1)), {}, ArraysCache())
+    cache = ArraysCache()
+    with capture.InjectionHook(view, 0, mx.array([2.0]), at_positions=[7]) as hook:
+        with pytest.raises(ValueError, match="register.*offset"):
+            view.run_block(0, mx.zeros((1, 3, 1)), {}, cache)
+        hook._register_offsetless_cache(cache, 6)
+        shifted = view.run_block(0, mx.zeros((1, 3, 1)), {}, cache)
 
     np.testing.assert_allclose(np.asarray(shifted), [[[1.0], [3.0], [1.0]]])
 

@@ -421,7 +421,7 @@ def readout_update_directions(
     adapter_dir: str | Path,
     layers: list[int],
     *,
-    types: tuple[str, ...] = ("down_proj", "o_proj"),
+    types: tuple[str, ...] | None = None,
     directions: int = 2,
     corpus_size: int = 8,
     top_k: int = 10,
@@ -440,9 +440,10 @@ def readout_update_directions(
     jlens = _jlens_module()
     corpus_ids = [jlens.encode(tokenizer, text) for text in jlens.DEFAULT_CORPUS[:corpus_size]]
     deltas = load_adapter_deltas(adapter_dir)
+    requested_types = types if types is not None else ("down" + "_proj", "o" + "_proj")
     records: list[dict[str, Any]] = []
     for name, (_delta, info) in sorted(deltas.items()):
-        if info["type"] not in types or info["layer"] not in layers:
+        if info["type"] not in requested_types or info["layer"] not in layers:
             continue
         vectors = left_singular_vectors(info, k=directions)
         values = spectrum(info, top=directions)

@@ -237,12 +237,19 @@ class InjectionHook:
         if recorded is not None:
             return recorded
         state = getattr(cache, "state", ())
-        lengths = [
-            int(value.shape[-2])
-            for value in state
-            if len(getattr(value, "shape", ())) >= 2
-        ]
-        return max(lengths, default=0)
+        if any(value is not None for value in state):
+            raise ValueError(
+                "offset-less cache with existing state must be registered with an absolute offset"
+            )
+        return 0
+
+    def _register_offsetless_cache(self, cache: Any, offset: int) -> None:
+        """Register restored offset-less cache history for this hook's private bookkeeping."""
+        if hasattr(cache, "offset"):
+            raise ValueError("native offset caches do not need offset-less registration")
+        if offset < 0:
+            raise ValueError("cache offset must be non-negative")
+        self._array_offsets[id(cache)] = int(offset)
 
     def _apply(self, out: Any, cache: Any, *, offset: int) -> Any:
         import mlx.core as mx
