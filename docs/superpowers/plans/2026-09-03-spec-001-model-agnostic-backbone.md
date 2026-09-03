@@ -31,6 +31,7 @@
 - A raw HF id equal to the current 3B id resolves to the registered `qwen25-coder-3b` defaults. Unknown HF ids get conservative non-thinking defaults and must not silently inherit Qwen3.5 behavior.
 - Data generation records the unresolved `ModelSpec` when no model is loaded; `ResolvedSpec` is optional in provenance at this stage. Data generation never loads a checkpoint merely to fill derived metadata.
 - `cache_equivalence_verified` is represented as optional cache metadata in `ModelSpec`; `auto` keeps trim reuse for the dense 3B model and falls back to `none` for an unverified snapshot strategy.
+- `ArchitectureView` adds the read-only facts `vocab_size` and `tie_word_embeddings` plus `lora_parameter_count(keys, rank) -> int`. This is the smallest additive resolution seam needed to populate the normative `ResolvedSpec` fields without duplicating model traversal in `models.py`; the omission from wiring-map §2.2 is recorded as a spec ambiguity.
 - Existing configs that use `tasks:` and omit explicit split difficulties remain the historical compatibility path. New `splits:` behavior is owned by SPEC-003.
 - This plan uses serialized subagent development in the primary checkout because Coordinator requires a shared worktree. The baseline commit `bda5ff5` and per-task commits provide the review boundary.
 
@@ -94,7 +95,7 @@ def registered_models() -> list[str]: ...
 
 - [ ] **Step 4: Define the resolution contract without duplicating architecture inspection**
 
-Define `ResolvedSpec` and make `ModelSpec.resolve` lazily delegate to `ArchitectureView.from_model`; Task 2 supplies that module and activates the runtime path. Task 1 tests configuration validation only. Do not duplicate structural traversal in `models.py`. Reject invalid layer fractions, unsupported thinking values, and invalid cache policies with actionable `ValueError` messages.
+Define `ResolvedSpec` and make `ModelSpec.resolve` lazily delegate to `ArchitectureView.from_model`; Task 2 supplies that module and activates the runtime path. Resolution reads `view.vocab_size`, `view.tie_word_embeddings`, and `view.lora_parameter_count(lora_keys, self.lora.rank)`; it must not rely on a precomputed count that ignores the selected keys or rank. Task 1 proves this contract with an injected fake view but does not create `arch.py`. Do not duplicate structural traversal in `models.py`. Reject invalid layer fractions, unsupported thinking values, and invalid cache policies with actionable `ValueError` messages.
 
 - [ ] **Step 5: Replace raw model ids in the three v2 pipeline YAMLs with `model: qwen25-coder-3b`**
 
@@ -125,7 +126,7 @@ git commit -m "feat: add model registry"
 **Interfaces:**
 
 - Consumes: Task 1 `ModelSpec`/`ResolvedSpec` and activates `ModelSpec.resolve`.
-- Produces: `ArchitectureView` exactly as wiring-map §2.2, including `residuals(ids, layers)` and `tail(layer)`.
+- Produces: `ArchitectureView` as wiring-map §2.2, including `residuals(ids, layers)` and `tail(layer)`, plus the documented additive resolution seam `vocab_size`, `tie_word_embeddings`, and `lora_parameter_count(keys, rank)`.
 - Owns: the only sanctioned hard-coded structural compatibility table and model constants.
 
 - [ ] **Step 1: Add a hybrid fake whose text module lives at `language_model.model`**
@@ -167,7 +168,7 @@ All activation-returning methods cast to float32. `masks` must dispatch to `crea
 
 - [ ] **Step 5: Implement tied/untied unembedding, cache inspection, layer kinds, probe indices, and LoRA discovery**
 
-`lora_targets("attention+mlp")` resolves only the seven dense suffixes that actually exist; `all-linear` also admits `in_proj_qkvz`, `in_proj_ba`, and `out_proj`; `auto` selects by layer kinds; explicit tuples are validated against the module tree.
+`lora_targets("attention+mlp")` resolves only the seven dense suffixes that actually exist; `all-linear` also admits `in_proj_qkvz`, `in_proj_ba`, and `out_proj`; `auto` selects by layer kinds; explicit tuples are validated against the module tree. `lora_parameter_count(keys, rank)` sums the actual low-rank A/B shapes implied by those targets and the requested rank, without mutating or dequantizing weights.
 
 Complete `ModelSpec.resolve` through the view and test that it populates layer types, sizes, tied embeddings, explicit LoRA keys, trainable parameter count, resolved probe indices, cache strategy, snapshot revision, and JVP method.
 
