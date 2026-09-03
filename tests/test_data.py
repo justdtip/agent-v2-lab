@@ -6,9 +6,18 @@ import json
 import os
 from dataclasses import asdict
 
+import pytest
+
 from local_llm_lab.agent_protocol import Action
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, load_model_spec
-from local_llm_lab.pipeline.data import build_rows, render_rows, write_dataset, write_jsonl
+from local_llm_lab.pipeline.data import (
+    SplitSpec,
+    build_rows,
+    read_jsonl,
+    render_rows,
+    write_dataset,
+    write_jsonl,
+)
 from local_llm_lab.pipeline.protocol import assistant_message
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks
 from local_llm_lab.tuner_data import RenderedRowsDataset
@@ -26,6 +35,7 @@ def _legacy_spec() -> ModelSpec:
         probe_layer_fractions=(1.0,),
         memory_budget_gib=1.0,
         policies={},
+        cache_equivalence_verified=None,
     )
 
 
@@ -41,6 +51,7 @@ def _thinking_spec(mode: str) -> ModelSpec:
         probe_layer_fractions=(1.0,),
         memory_budget_gib=1.0,
         policies={},
+        cache_equivalence_verified=None,
     )
 
 
@@ -200,7 +211,7 @@ def test_write_dataset_records_the_complete_unresolved_spec_without_resolving(
 
 
 def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens() -> None:
-    assert GENERATOR_VERSION == 2
+    assert GENERATOR_VERSION == 3
     tokenizer = _Qwen25TemplateTokenizer()
     spec = load_model_spec("qwen25-coder-3b")
     row = build_rows(make_tasks("train", 12, seed=20260902)[0])[0]
@@ -257,3 +268,71 @@ def test_recovery_rows_are_marked_and_oversampled_in_train_only(tmp_path) -> Non
     for split in ("valid", "test"):
         held = manifest["splits"][split]
         assert held["recovery_rows_after_repeats"] == held["recovery_targets"]
+
+
+def test_split_specs_aggregate_named_chunks_by_role_deterministically(tmp_path) -> None:
+    """Catch lost difficulty/perturb flags or accidental cross-role concatenation."""
+    splits = {
+        "train": SplitSpec(2, difficulty=0, perturb=True, role="train"),
+        "train1": SplitSpec(2, difficulty=1, perturb=True, role="train"),
+        "valid": SplitSpec(2, difficulty=1, perturb=False, role="valid"),
+        "valid2": SplitSpec(2, difficulty=2, perturb=False, role="valid"),
+        "test": SplitSpec(2, difficulty=2, perturb=False, role="test"),
+        "test3": SplitSpec(2, difficulty=3, perturb=False, role="test"),
+    }
+    manifest = write_dataset(tmp_path, splits, recovery_repeats={"wrong_path": 2})
+
+    split_metadata = {
+        (name, info["difficulty"], info["perturb"], info["role"])
+        for name, info in manifest["splits"].items()
+    }
+    assert split_metadata == {
+        ("train", 0, True, "train"),
+        ("train1", 1, True, "train"),
+        ("valid", 1, False, "valid"),
+        ("valid2", 2, False, "valid"),
+        ("test", 2, False, "test"),
+        ("test3", 3, False, "test"),
+    }
+    roles = {
+        "train": {"train", "train1"},
+        "valid": {"valid", "valid2"},
+        "test": {"test", "test3"},
+    }
+    for role, names in roles.items():
+        task_ids = {
+            row["metadata"]["task_id"].split("-", 1)[0]
+            for row in read_jsonl(tmp_path / f"{role}.jsonl")
+            if row["metadata"]["source"] == "expert"
+        }
+        assert task_ids <= names
+        assert task_ids == names
+        assert manifest["outputs"][role]["rows"] == len(read_jsonl(tmp_path / f"{role}.jsonl"))
+
+
+def test_split_specs_add_role_replay_once_and_reject_invalid_values(tmp_path) -> None:
+    """Catch replay duplication on secondary chunks and malformed split declarations."""
+    chat = tmp_path / "chat"
+    chat.mkdir()
+    for role in ("train", "valid", "test"):
+        write_jsonl(chat / f"{role}.jsonl", [{"metadata": {"source": "chat", "role": role}}])
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    write_jsonl(extra / "train.jsonl", [{"metadata": {"source": "extra"}}])
+    splits = {
+        "train": SplitSpec(1, role="train"), "train1": SplitSpec(1, role="train"),
+        "valid": SplitSpec(1, role="valid"), "valid2": SplitSpec(1, role="valid"),
+        "test": SplitSpec(1, role="test"), "test3": SplitSpec(1, role="test"),
+    }
+    manifest = write_dataset(tmp_path / "out", splits, chat_dir=chat, extra_dirs=[extra])
+    assert {
+        role: manifest["outputs"][role]["chat_rows"]
+        for role in ("train", "valid", "test")
+    } == {"train": 1, "valid": 1, "test": 1}
+    assert manifest["outputs"]["train"]["extra_rows"] == 1
+    with pytest.raises(ValueError):
+        SplitSpec(0)
+    with pytest.raises(ValueError):
+        SplitSpec(1, difficulty=-1)
+    with pytest.raises(ValueError):
+        SplitSpec(1, perturb="yes")  # type: ignore[arg-type]

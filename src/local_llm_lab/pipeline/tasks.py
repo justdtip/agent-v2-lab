@@ -26,7 +26,7 @@ FAMILIES = (
 )
 LONG_HORIZON_FAMILIES = FAMILIES[6:]
 VARIANTS = ("clean", "wrong_path", "transient", "unknown_tool", "stale_path", "failed_edit")
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -203,6 +203,17 @@ def task_from_id(
     return replace(task, task_id=task_id, difficulty=level)
 
 
+def render_expert_note(task: Task, step_index: int) -> str:
+    """Return the canonical ground-truth note for one expert step.
+
+    Keeping the renderer at the task seam lets later consumers reuse the generator's notes
+    without copying family templates or reconstructing task-local state.
+    """
+    if step_index < 0 or step_index >= len(task.steps):
+        raise IndexError(f"{task.task_id}: step index {step_index} is out of range")
+    return task.steps[step_index].thought
+
+
 # --------------------------------------------------------------------------- helpers
 
 
@@ -309,7 +320,7 @@ def _read(split: str, index: int, level: int, rng: random.Random) -> Task:
         _step(
             f"Plan: read {_short(path)} and report its Owner field exactly.", "read_file", path=path
         ),
-        _step(f"The file shows Owner: {owner}. Task complete.", "finish", answer=owner),
+        _step(f"Owner: {owner}; pending: none.", "finish", answer=owner),
     )
     return Task(
         f"{split}-read-{index:04d}",
@@ -349,7 +360,7 @@ def _search(split: str, index: int, level: int, rng: random.Random) -> Task:
         _step(
             f"Search matched {target}. Reading it for the Status field.", "read_file", path=target
         ),
-        _step(f"The matching file shows Status: {status}. Task complete.", "finish", answer=status),
+        _step(f"Status: {status}; pending: none.", "finish", answer=status),
     )
     return Task(
         f"{split}-search-{index:04d}",
@@ -383,7 +394,7 @@ def _calc(split: str, index: int, level: int, rng: random.Random) -> Task:
             "calculate",
             expression=expression,
         ),
-        _step(f"Calculator result is {answer}. Task complete.", "finish", answer=answer),
+        _step(f"Calculator result: {answer}; pending: none.", "finish", answer=answer),
     )
     return Task(
         f"{split}-calculate-{index:04d}",
@@ -426,7 +437,7 @@ def _synthesis(split: str, index: int, level: int, rng: random.Random) -> Task:
             "calculate",
             expression=expression,
         ),
-        _step(f"Total cost is {answer}. Task complete.", "finish", answer=answer),
+        _step(f"Total cost: {answer}; pending: none.", "finish", answer=answer),
     )
     return Task(
         f"{split}-synthesis-{index:04d}",
@@ -470,7 +481,7 @@ def _update(split: str, index: int, level: int, rng: random.Random) -> Task:
             "read_file",
             path=path,
         ),
-        _step(f"Verified the file now shows {answer}. Task complete.", "finish", answer=answer),
+        _step(f"Verified {answer}; pending: none.", "finish", answer=answer),
     )
     return Task(
         f"{split}-update-{index:04d}",
@@ -510,7 +521,7 @@ def _list(split: str, index: int, level: int, rng: random.Random) -> Task:
             directory=directory,
         ),
         _step(f"Listing shows one Markdown file: {target}. Reading it.", "read_file", path=target),
-        _step(f"First line of the summary is {label}. Task complete.", "finish", answer=label),
+        _step(f"First line: {label}; pending: none.", "finish", answer=label),
     )
     return Task(
         f"{split}-list-{index:04d}",
@@ -562,7 +573,7 @@ def _pointer_chain(split: str, index: int, level: int, rng: random.Random) -> Ta
             )
         )
     steps.append(
-        _step(f"The final node reports Result: {result}. Task complete.", "finish", answer=result)
+        _step(f"Result: {result}; pending: none.", "finish", answer=result)
     )
     return Task(
         f"{split}-pointer_chain-{index:04d}",
@@ -624,29 +635,29 @@ def _ledger_reconcile(split: str, index: int, level: int, rng: random.Random) ->
     steps.extend(
         [
             _step(
-                f"All {entries} invoices read. approved: {_join(approved_so_far)}; held skipped: {_join(held_so_far)}. Summing approved amounts.",
+                f"Invoices read: {entries} of {entries}. approved: {_join(approved_so_far)}; held skipped: {_join(held_so_far)}. Summing approved amounts.",
                 "calculate",
                 expression=expression,
             ),
             _step(
-                f"Approved total = {total}. Inspecting the summary before editing.",
+                f"approved: {_join(approved_so_far)}; summary {_short(summary_path)}; total {total}. Inspecting before editing.",
                 "read_file",
                 path=summary_path,
             ),
             _step(
-                f"Summary contains {old_summary}. Replacing PENDING with {total}.",
+                f"Summary {_short(summary_path)} contains {old_summary}; approved: {_join(approved_so_far)}. Replacing PENDING with {total}.",
                 "replace_text",
                 path=summary_path,
                 old=old_summary,
                 new=new_summary,
             ),
             _step(
-                "Replacement confirmed by the tool. Re-reading the summary to verify.",
+                f"Replacement confirmed for {_short(summary_path)}; approved: {_join(approved_so_far)}. Re-reading to verify.",
                 "read_file",
                 path=summary_path,
             ),
             _step(
-                f"Verified the summary reads {new_summary}. Task complete.",
+                f"Verified {_short(summary_path)} reads {new_summary}; pending: none.",
                 "finish",
                 answer=new_summary,
             ),
@@ -689,16 +700,22 @@ def _cross_reference(split: str, index: int, level: int, rng: random.Random) -> 
     steps = []
     for hop, (key, path) in enumerate(zip(keys, target_paths, strict=True)):
         if hop == 0:
-            thought = f"Plan: search each key, read the matching record, follow Next-Key until a Resolution appears. Searching {key}."
+            thought = f"Hop 1: current key {key}. Searching for its record."
         else:
-            thought = f"Hop {hop}: record gave Next-Key {key}, no Resolution yet. Searching for it; the file whose Lookup-Key equals it is the new one."
+            thought = f"Hop {hop + 1}: current key {key}; no Resolution yet. Searching for its record."
         steps.append(_step(thought, "search_files", query=key))
         # The previous record also contains this key (as its Next-Key), so the search returns
         # two files; the note must say which one is already read and which one to open.
         matches = _search_matches(files, key)
-        steps.append(_step(_match_note(matches, path, target_paths[:hop]), "read_file", path=path))
+        steps.append(
+            _step(
+                f"Hop {hop + 1}: current key {key}. {_match_note(matches, path, target_paths[:hop])}",
+                "read_file",
+                path=path,
+            )
+        )
     steps.append(
-        _step(f"The record shows Resolution: {answer}. Task complete.", "finish", answer=answer)
+        _step(f"Resolution: {answer}; pending: none.", "finish", answer=answer)
     )
     return Task(
         f"{split}-cross_reference-{index:04d}",
@@ -748,15 +765,17 @@ def _conditional_update(split: str, index: int, level: int, rng: random.Random) 
     ]
     best_index: int | None = None
     best_load: int | None = None
+    observed_loads: list[str] = []
     for position, path in enumerate(service_paths):
         best_label = f"service-{best_index}={best_load}" if best_index is not None else "none"
         steps.append(
             _step(
-                f"threshold={threshold}. highest so far: {best_label}. Reading service {position + 1} of {count}: {_short(path)}; {_pending(service_paths[position + 1 :])}.",
+                f"threshold={threshold}. loads so far: {_join(observed_loads)}. highest so far: {best_label}. Reading service {position + 1} of {count}: {_short(path)}; {_pending(service_paths[position + 1 :])}.",
                 "read_file",
                 path=path,
             )
         )
+        observed_loads.append(f"service-{position}={loads[position]}")
         if best_load is None or loads[position] > best_load:
             best_index, best_load = position, loads[position]
     assert (best_index, best_load) == (target_index, loads[target_index]), (
@@ -765,7 +784,7 @@ def _conditional_update(split: str, index: int, level: int, rng: random.Random) 
     steps.extend(
         [
             _step(
-                f"threshold={threshold}. highest so far: service-{best_index}={best_load} (final), "
+                f"threshold={threshold}. loads so far: {_join(observed_loads)}. highest so far: service-{best_index}={best_load}; "
                 f"above threshold, so throttle {_short(target_path)}.",
                 "replace_text",
                 path=target_path,
@@ -773,12 +792,12 @@ def _conditional_update(split: str, index: int, level: int, rng: random.Random) 
                 new="mode=throttled",
             ),
             _step(
-                f"Replacement confirmed for service-{target_index}. Re-reading to verify.",
+                f"loads so far: {_join(observed_loads)}. Replacement confirmed for {_short(target_path)}. Re-reading to verify.",
                 "read_file",
                 path=target_path,
             ),
             _step(
-                f"Verified service-{target_index} now has mode=throttled. Task complete.",
+                f"loads so far: {_join(observed_loads)}. Verified service-{target_index} now has mode=throttled; pending: none.",
                 "finish",
                 answer=answer,
             ),
@@ -828,29 +847,19 @@ def _batch_update(split: str, index: int, level: int, rng: random.Random) -> Tas
         )
     ]
     for n, (path, _, _) in enumerate(targets):
-        prefix = (
-            f"Phase inspect begins; manifest read, {target_count} workers queued. "
-            if n == 0
-            else "Phase inspect. "
-        )
         steps.append(
             _step(
-                f"{prefix}Next: {_queue_line(targets[n])}. "
-                f"Remaining after this: {_queue_tail(targets[n + 1 :])}.",
+                f"Inspected {n} of {target_count}. Next: {_queue_line(targets[n])}. "
+                f"queue: {_queue_tail(targets[n:])}; {_pending([item[0] for item in targets[n:]])}.",
                 "read_file",
                 path=path,
             )
         )
     for n, (path, old, new) in enumerate(targets):
-        prefix = (
-            f"Phase apply begins; all {target_count} workers inspected. "
-            if n == 0
-            else "Phase apply. "
-        )
         steps.append(
             _step(
-                f"{prefix}Next: {_queue_line(targets[n])}. "
-                f"Remaining after this: {_queue_tail(targets[n + 1 :])}.",
+                f"Applied {n} of {target_count}. Next: {_queue_line(targets[n])}. "
+                f"queue: {_queue_tail(targets[n:])}; {_pending([item[0] for item in targets[n:]])}.",
                 "replace_text",
                 path=path,
                 old=f"mode={old}",
@@ -858,22 +867,17 @@ def _batch_update(split: str, index: int, level: int, rng: random.Random) -> Tas
             )
         )
     for n, (path, _, _) in enumerate(targets):
-        prefix = (
-            f"Phase apply complete, all {target_count} replacements confirmed; phase verify begins. "
-            if n == 0
-            else "Phase verify. "
-        )
         steps.append(
             _step(
-                f"{prefix}Next: {_verify_line(targets[n])}. "
-                f"Remaining after this: {_verify_tail(targets[n + 1 :])}.",
+                f"Applied {target_count} of {target_count}; verified {n} of {target_count}. Next: {_verify_line(targets[n])}. "
+                f"queue: {_queue_tail(targets[n:])}; {_pending([item[0] for item in targets[n:]])}.",
                 "read_file",
                 path=path,
             )
         )
     steps.append(
         _step(
-            f"Phase verify complete; all {target_count} workers verified. Task complete.",
+            f"Applied {target_count} of {target_count}; verified {target_count} of {target_count}; pending: none.",
             "finish",
             answer=answer,
         )
@@ -924,55 +928,53 @@ def _aggregate_report(split: str, index: int, level: int, rng: random.Random) ->
             directory=root,
         )
     ]
-    first_half: list[int] = []
-    second_half: list[int] = []
+    values_so_far: list[int] = []
     for position, path in enumerate(metric_paths):
-        first_full = len(first_half) == split_at
-        first_label = f"{_join(first_half)} (full)" if first_full else _join(first_half)
         steps.append(
             _step(
-                f"first half: {first_label}; second half: {_join(second_half)}. Reading metric {position + 1} of {metric_count}: {_short(path)}; {_pending(metric_paths[position + 1 :])}.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. "
+                f"Reading metric {position + 1} of {metric_count}: {_short(path)}; {_pending(metric_paths[position + 1 :])}.",
                 "read_file",
                 path=path,
             )
         )
-        (first_half if position < split_at else second_half).append(values[position])
+        values_so_far.append(values[position])
     steps.extend(
         [
             _step(
-                f"first half complete: {first_expression}; second half complete: {second_expression}. Computing the first subtotal.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. Computing the first subtotal {first_expression}.",
                 "calculate",
                 expression=first_expression,
             ),
             _step(
-                f"First subtotal = {first_total}. Computing the second subtotal {second_expression}.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. First subtotal = {first_total}; computing {second_expression}.",
                 "calculate",
                 expression=second_expression,
             ),
             _step(
-                f"Subtotals {first_total} and {second_total}. Adding them for the grand total.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. Subtotals {first_total} and {second_total}; adding them.",
                 "calculate",
                 expression=grand_expression,
             ),
             _step(
-                f"Grand total = {grand_total}. Inspecting report.txt before editing.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. Grand total = {grand_total}; inspecting {_short(report_path)}.",
                 "read_file",
                 path=report_path,
             ),
             _step(
-                f"Report contains {old_report}. Replacing PENDING with {grand_total}.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. {_short(report_path)} contains {old_report}; replacing PENDING with {grand_total}.",
                 "replace_text",
                 path=report_path,
                 old=old_report,
                 new=new_report,
             ),
             _step(
-                "Replacement confirmed by the tool. Re-reading the report to verify.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. Replacement confirmed for {_short(report_path)}; re-reading to verify.",
                 "read_file",
                 path=report_path,
             ),
             _step(
-                f"Verified the report reads {new_report}. Task complete.",
+                f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. Verified {_short(report_path)} reads {new_report}; pending: none.",
                 "finish",
                 answer=new_report,
             ),

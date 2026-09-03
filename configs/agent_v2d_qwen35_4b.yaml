@@ -1,0 +1,55 @@
+model: qwen35-4b
+output: "outputs/agent-v2d-qwen35-4b"
+data: "data/agent_v2d"
+seed: 20260902
+keep_last: 2
+
+splits:
+  train:  {count: 240, difficulty: 0, perturb: true,  role: train}
+  train1: {count: 120, difficulty: 1, perturb: true,  role: train}
+  valid:  {count: 24,  difficulty: 1, perturb: false, role: valid}
+  valid2: {count: 24,  difficulty: 2, perturb: false, role: valid}
+  test:   {count: 180, difficulty: 2, perturb: false, role: test}
+  test3:  {count: 60,  difficulty: 3, perturb: false, role: test}
+
+chat_replay: "data/chat_replay"
+chat_repeats: 1
+recovery_repeats:
+  transient: 1
+  wrong_path: 2
+  unknown_tool: 2
+  stale_path: 6
+  failed_edit: 6
+
+train:
+  num_layers: 36
+  rank: 16
+  scale: 32.0
+  dropout: 0.0
+  iters: 400
+  batch_size: 2
+  grad_accumulation_steps: 2
+  learning_rate: 3.0e-5
+  max_seq_length: 2688
+  grad_checkpoint: true
+  val_batches: 24
+  steps_per_report: 10
+  steps_per_eval: 100
+  save_every: 100
+
+select:
+  screen:
+    - {split: valid, difficulty: 1, per_family: {default: 1, long: 3}}
+    - {split: valid2, difficulty: 2, per_family: {default: 1, long: 3}}
+
+eval:
+  split: test
+  limit: 180
+  max_steps: 24
+  max_tokens: 200
+
+rollout:
+  limit: 96
+  samples: 4
+  temperature: 0.7
+  keep_per_task: 2

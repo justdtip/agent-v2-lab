@@ -16,7 +16,7 @@ import yaml
 
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.branch import run_branch_mining
-from local_llm_lab.pipeline.data import write_dataset
+from local_llm_lab.pipeline.data import SplitSpec, write_dataset
 from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.report import load_summaries, render
@@ -41,6 +41,38 @@ def _log(message: str) -> None:
     print(f"\n### {time.strftime('%H:%M:%S')} {message}", flush=True)
 
 
+def dataset_splits(config: dict[str, Any]) -> dict[str, SplitSpec]:
+    """Convert one supported data schema to role-aware deterministic split specifications."""
+    has_tasks = "tasks" in config
+    has_splits = "splits" in config
+    if has_tasks == has_splits:
+        raise ValueError("data config must define exactly one of tasks or splits")
+    if has_tasks:
+        raw_tasks = config["tasks"]
+        if not isinstance(raw_tasks, dict):
+            raise ValueError("tasks must be a mapping")
+        result: dict[str, SplitSpec] = {}
+        for name, count in raw_tasks.items():
+            if name not in {"train", "valid", "test"}:
+                raise ValueError(f"legacy task split {name!r} has no standard role")
+            result[name] = SplitSpec(count, role=name)
+        return result
+    raw_splits = config["splits"]
+    if not isinstance(raw_splits, dict):
+        raise ValueError("splits must be a mapping")
+    result = {}
+    for name, value in raw_splits.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"split {name!r} must be a mapping")
+        result[name] = SplitSpec(
+            value.get("count"),
+            difficulty=value.get("difficulty"),
+            perturb=value.get("perturb"),
+            role=value.get("role", "train"),
+        )
+    return result
+
+
 # --------------------------------------------------------------------------- stages
 
 
@@ -48,7 +80,7 @@ def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
     _log("data: generating expert trajectories with state-carrying notes")
     manifest = write_dataset(
         config["data"],
-        config["tasks"],
+        dataset_splits(config),
         seed=config["seed"],
         keep_last=config["keep_last"],
         chat_dir=config.get("chat_replay"),

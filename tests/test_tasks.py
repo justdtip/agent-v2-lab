@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from local_llm_lab.pipeline import tasks as task_module
 from local_llm_lab.pipeline.cli import load_config, stage_data
 from local_llm_lab.pipeline.data import write_dataset
 from local_llm_lab.pipeline.tasks import (
@@ -71,7 +72,12 @@ def test_reference_generator_hashes_are_pinned_by_version(tmp_path) -> None:
             "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
             "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
             "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
-        }
+        },
+        3: {
+            "train": "6a2875aff061e7dcdde0b8a394fc3115ff5c6f2b4dbcb8f399db5af373c6970e",
+            "valid": "6df3a890d09e989c83baaf6078a27d56ec9da035807c8820e83b44c09a8259e3",
+            "test": "925f5b282885e4c52f2a20280372804a17dfc9c2f1d8039478de98211eee1303",
+        },
     }
 
     assert manifest["generator_version"] == GENERATOR_VERSION
@@ -100,7 +106,12 @@ def test_reference_generator_hashes_include_configured_replay(tmp_path) -> None:
             "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
             "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
             "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
-        }
+        },
+        3: {
+            "train": "92f40d1868438553f306be192b09cace7b3d5efc8cff4a55c84fc3a96827ddf2",
+            "valid": "6e2617d5159e42fc7d26077e332a83e9f27fc0e755d50140d6336c75116c44b7",
+            "test": "f79d6fc673674719cc17664278a15ee8ba9fcb6de8f9418d9226b99b5d24de59",
+        },
     }
 
     assert manifest["generator_version"] == GENERATOR_VERSION
@@ -150,3 +161,57 @@ def test_family_balanced_selection_is_clean_deterministic_and_split_isolated() -
             assert not {
                 path for task in left for path in task.files
             } & {path for task in right for path in task.files}
+
+
+@pytest.mark.parametrize("level", (0, 1, 2, 3))
+def test_run_d_long_family_notes_preserve_full_ground_truth_state(level: int) -> None:
+    """Catch compressed Run C notes or a level that stops extending a long horizon."""
+    tasks = make_tasks("run-d", len(FAMILIES), difficulty=level, perturb=False)
+    by_family = {task.family: task for task in tasks}
+
+    for family in LONG_HORIZON_FAMILIES:
+        if level:
+            previous = make_tasks("run-d", len(FAMILIES), difficulty=level - 1, perturb=False)
+            assert by_family[family].horizon > previous[FAMILIES.index(family)].horizon
+        else:
+            assert by_family[family].horizon > 0
+
+    aggregate = by_family["aggregate_report"]
+    values = [
+        int(path_content.rsplit("value=", 1)[1])
+        for path_content in aggregate.files.values()
+        if "value=" in path_content
+    ]
+    split = len(values) // 2
+    for step in aggregate.steps:
+        if step.action.name in {"read_file", "calculate"}:
+            assert f"split after {split} of {len(values)}" in step.thought
+            assert "values so far:" in step.thought
+            assert "(full)" not in step.thought.casefold()
+
+    conditional = by_family["conditional_update"]
+    for step in conditional.steps:
+        is_service_step = "policy.txt" not in step.action.arguments.get("path", "")
+        if step.action.name in {"read_file", "replace_text"} and is_service_step:
+            assert "loads so far:" in step.thought
+
+    batch = by_family["batch_update"]
+    assert any("Inspected 1 of" in step.thought for step in batch.steps)
+    assert any(
+        "Applied 0 of" in step.thought and "Next: worker-0.ini mode=" in step.thought
+        for step in batch.steps
+    )
+
+
+def test_run_d_renderer_is_canonical_and_recovery_notes_name_the_bad_path() -> None:
+    """Catch a copied template or a recovery note/call path mismatch."""
+    for variant in ("wrong_path", "stale_path"):
+        task = next(
+            task for task in make_tasks("train", 144, difficulty=1) if task.variant == variant
+        )
+        for index, step in enumerate(task.steps):
+            assert task_module.render_expert_note(task, index) == step.thought
+            if not step.supervise and step.action.name == "read_file":
+                assert step.action.arguments["path"] in step.thought
+    with pytest.raises(IndexError):
+        task_module.render_expert_note(task, len(task.steps))

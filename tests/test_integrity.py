@@ -21,6 +21,7 @@ from local_llm_lab.pipeline.integrity import (
 )
 from local_llm_lab.pipeline.runner import Trajectory
 from local_llm_lab.pipeline.tasks import (
+    FAMILIES,
     VARIANTS,
     difficulty,
     make_tasks,
@@ -68,6 +69,39 @@ def test_make_tasks_sets_explicit_difficulty_deterministically() -> None:
     assert [task.task_id for task in first] == [
         f"test-{task.family}-{index:04d}-clean" for index, task in enumerate(first)
     ]
+
+
+def test_run_d_generator_uses_pending_none_only_for_empty_action_queues() -> None:
+    """Catch any completion wording that is not the exhausted-queue form."""
+    patterns = completion_patterns()
+    for level in range(4):
+        for task in make_tasks("integrity", len(FAMILIES), difficulty=level, perturb=False):
+            for step in task.steps:
+                matches = [pattern.search(step.thought) for pattern in patterns]
+                if any(matches):
+                    assert "pending: none" in step.thought.casefold()
+
+
+@pytest.mark.parametrize(
+    "family",
+    (
+        "ledger_reconcile",
+        "cross_reference",
+        "conditional_update",
+        "batch_update",
+        "aggregate_report",
+    ),
+)
+def test_run_d_required_carry_facts_are_literal_in_the_consuming_note(family: str) -> None:
+    """Catch a long-family note that drops hidden values, keys, paths, or workers."""
+    task = next(
+        task for task in make_tasks("carry", len(FAMILIES), difficulty=3) if task.family == family
+    )
+    for step_index, facts in required_carry(task, keep_last=2).items():
+        thought = task.steps[step_index].thought
+        for fact in facts:
+            value = fact.value.rsplit("/", 1)[-1]
+            assert value in thought, (task.task_id, step_index, fact, thought)
 
 
 @pytest.mark.parametrize("split", ["train", "valid", "test", "fresh-split"])
@@ -270,22 +304,30 @@ def test_check_trajectory_detects_each_violation_kind_once() -> None:
 
 
 def test_check_trajectory_covers_other_structured_fact_families() -> None:
-    cases = [
-        ("aggregate_report", 7, "14 + ", "", "value_drop"),
-        ("conditional_update", 7, "service-2=88", "service-2=87", "stale_fact"),
-        (
-            "cross_reference",
-            2,
-            "REF-TEST-0008-9496-1",
-            "REF-TEST-0008-0000-1",
-            "value_drop",
-        ),
-        ("synthesis", 3, "568", "569", "value_drop"),
-    ]
-    for family, index, old, new, kind in cases:
+    cases = (
+        ("aggregate_report", "metric", "value_drop"),
+        ("conditional_update", "load", "value_drop"),
+        ("cross_reference", "next_key", "value_drop"),
+        ("synthesis", "total", "value_drop"),
+    )
+    for family, fact_kind, kind in cases:
         task = _task(family)
         trace = _expert_trace(task)
-        trace[index]["thought"] = str(trace[index]["thought"]).replace(old, new)
+        carries = required_carry(task, keep_last=0)
+        index, facts = next(
+            (index, facts)
+            for index, facts in reversed(tuple(carries.items()))
+            if any(fact.kind == fact_kind for fact in facts)
+        )
+        candidates = [fact for fact in facts if fact.kind == fact_kind]
+        fact = next(
+            fact
+            for fact in candidates
+            if sum(other.value == fact.value for other in candidates) == 1
+        )
+        old = fact.value.rsplit("/", 1)[-1]
+        assert old in str(trace[index]["thought"])
+        trace[index]["thought"] = str(trace[index]["thought"]).replace(old, "999999", 1)
         assert kind in check_trajectory(task, trace, keep_last=0).counts
 
 
