@@ -1,7 +1,7 @@
 # SPEC-002 implementation report, part 3: selection
 
-Status: implementation complete; independent principal review approved after review-fix round 4.
-Only the final documentation-only review of this closeout commit remains pending.
+Status: implementation complete; independent principal reviews approved, including the issue #7
+provenance follow-up through review round 2 with no findings.
 
 ## Scope
 
@@ -26,8 +26,8 @@ interval expectations.
 | `tests/test_tasks.py`, `test_evaluate.py`, `test_cli.py`, `test_selection.py`, `test_report.py` | focused contracts using fakes and temporary metadata only |
 | `tests/test_pipeline.py` (R10 extractions only) | removed the exact empty-checkpoint test to `tests/test_selection.py` and report-table test to `tests/test_report.py` |
 
-Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 595;
-`report.py` 138; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 20;
+Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 637;
+`report.py` 138; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 169;
 `test_selection.py` 147; and `test_report.py` 380.
 
 Wiring-map rows touched are 2.4 (`Task` consumption only; frozen record and exact
@@ -152,3 +152,26 @@ round with no findings.
   `2607e02db5d2ec4867cc09087c5e8a9cc78a0f56`,
   `72b1e57d6514f6acb5904e4fa82c4b27799c39b0`, and
   `67c52f36c85c3db8f302ee9992274b9712881c4a`.
+
+## Issue #7 `stage_select` provenance follow-up
+
+Root formally released this bounded follow-up to `pipeline/cli.py` and `tests/test_cli.py` only.
+Its fake-only RED regression showed that `stage_select` made no provenance call. The accepted
+implementation writes `selection.json` first, then calls
+`write_provenance(output, resolved=None, spec=load_model_spec(config["model"]),
+extra={"stage": "select", "selection": json.loads(selection_path.read_text(encoding="utf-8"))})`;
+the parsed durable JSON is therefore the exact provenance selection payload. Code commit:
+`c73bfed74b5c565486dfe0da6ec82b25d5c6ff34`.
+
+Review round 1 found one Medium test-oracle gap: the model-spec fake did not verify its lookup
+argument. The mutation-resistant, test-only fix records and asserts the single exact
+`config["model"]` lookup; commit `d510c265141ae920344622c0442b11bb5605ae98`. The same reviewer
+approved review round 2 with no findings. Controller verification recorded 10 focused fake-only
+tests passed, scoped Ruff and commit/path checks clean, and strict C901 limited to inherited
+`pipeline/cli.py::main` = 17.
+
+The full fake-only gate was not green: it reported `411 passed, 10 failed in 6.79s`. All ten
+failures were the already documented external SPEC-003, probe, or protected-output failures
+outside these two paths. Exact deselection confirmed `411 passed, 10 deselected in 5.58s`.
+No model, checkpoint, tokenizer, probe, preflight, cache-equivalence, J-space workload, protected
+artifact, or pending document was changed by this follow-up.
