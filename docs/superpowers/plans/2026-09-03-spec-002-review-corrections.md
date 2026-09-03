@@ -4,7 +4,7 @@
 
 **Goal:** Implement and independently review issue #2 follow-ups F1–F4 under rulings R5–R6 without changing the accepted SPEC-002 §3/§5 behavior.
 
-**Architecture:** Treat generator versioning as metadata around the deterministic task/data boundary: `tasks.py` owns the version, `data.py` copies it into every dataset manifest, and the data CLI writes the same value to run provenance through a small deterministic helper. Put transcript header filtering behind one reusable iterator, and make impossible recovery-variant construction fail at its source with task-specific errors. Keep the work as one test-driven vertical because the report and hash pin describe the integrated correction.
+**Architecture:** Treat generator versioning as metadata around the deterministic task/data boundary: `tasks.py` owns the version, `data.py` copies it into every dataset manifest, and the data CLI writes the same value to run provenance through a small deterministic helper. Put transcript header filtering behind one reusable iterator, and make impossible recovery-variant construction fail at its source with task-specific errors. The R10 follow-up isolates the complete generator-version/hash-oracle test surface in `tests/test_tasks.py` and keeps separate generator-only and protected replay-inclusive guards.
 
 **Tech Stack:** Python 3.13, pytest, YAML configuration, JSON/JSONL, GitHub CLI for issue evidence.
 
@@ -22,12 +22,21 @@
   `e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58`, valid
   `816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f`, and test
   `10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877`.
+- A second version-2 oracle uses the shipped `configs/agent_v2c.yaml` `chat_replay` path and
+  `chat_repeats` value. When that protected directory is present, its mixed hashes are train
+  `ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79`, valid
+  `d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8`, and test
+  `fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3`. Skip this oracle only
+  when the configured replay directory is absent; never copy, manufacture, or modify replay data.
 - Every transcript reader must skip the header record lacking `task_id` through `transcript.iter_task_records(path)`.
 - Impossible `_wrong_path` and `_stale_path` construction must raise `RuntimeError` naming `task.task_id`; it must not silently change variants.
 - No model/checkpoint loading and no real train/select/eval/rollout/branch/prefer/preflight/probe execution. Fake-only tests and deterministic data generation are allowed.
 - Do not modify or regenerate tracked or untracked content under `data/`, `outputs/`, or `reports/`.
 - Work directly on `codex/agent-v2-specs` in `/Users/daniel.tipton/Desktop/An app`; do not create or switch branches or worktrees.
-- Modify only the nine paths in native task `01a06718-057a-7bb2-a62d-71f86e904d64`'s active Coordinator claim. Skill-generated ignored SDD brief/report/review-package artifacts may live beside the claimed progress ledger.
+- For R10, modify only the five paths in native task `01a06718-057a-7bb2-a62d-71f86e904d64`'s
+  active Coordinator claim: `tests/test_pipeline.py`, `tests/test_tasks.py`, this plan, the part-one
+  implementation report, and the SDD progress ledger. Skill-generated ignored SDD
+  brief/report/review-package artifacts may live beside the claimed progress ledger.
 - Leave issue #2 open because SPEC-002 §1, §2, §4, §5, and §6 remain outstanding.
 
 ---
@@ -256,3 +265,98 @@
   ```
 
   Do not stage the Coordinator board, SDD scratch artifacts, unrelated SPEC-004 work, or any pre-existing user/peer changes.
+
+---
+
+### Task 2: Split and extend the version-keyed hash oracles under R10
+
+**Files:**
+
+- Modify: `tests/test_pipeline.py`
+- Create: `tests/test_tasks.py`
+- Modify: `design_specifications/under_review/SPEC-002-IMPLEMENTATION-REPORT-part1.md`
+- Include: `docs/superpowers/plans/2026-09-03-spec-002-review-corrections.md`
+- Update: `.superpowers/sdd/2026-09-03-spec-002-review-corrections/progress.md`
+
+**Interfaces:**
+
+- Consumes: `load_config(configs/agent_v2c.yaml)`, `stage_data`, and
+  `write_dataset(..., chat_dir, chat_repeats, recovery_repeats)`.
+- Produces: a dedicated `tests/test_tasks.py` containing the complete generator-version test
+  surface, including both the generator-only and configured protected replay-inclusive hash
+  oracles.
+- Preserves: the generator-only hashes above, existing production behavior, and all protected
+  replay data byte-for-byte.
+
+- [ ] **Step 1: Move only the generator-version tests and directly owned imports**
+
+  Move these tests from `tests/test_pipeline.py` into the new `tests/test_tasks.py` without
+  broadening the split:
+
+  - `test_data_stage_writes_generator_version_provenance`
+  - `test_dataset_manifest_records_generator_version`
+  - the existing generator-only reference hash test
+
+  Move or add only imports used by those tests. Keep `json` and `write_dataset` in
+  `tests/test_pipeline.py` because unrelated tests still use them; remove its now-unused top-level
+  `Path`, `load_config`, `stage_data`, and `GENERATOR_VERSION` imports.
+
+- [ ] **Step 2: Add the replay-inclusive oracle with deliberately wrong wiring and verify RED**
+
+  Add a second test that loads `configs/agent_v2c.yaml`, skips only when the resolved configured
+  `chat_replay` directory does not exist, and compares the three mixed hashes above through a
+  `GENERATOR_VERSION`-keyed table. First call `write_dataset` with `chat_dir=None` while retaining
+  the mixed expectations, then run:
+
+  ```bash
+  uv run pytest -q tests/test_tasks.py -k 'reference'
+  ```
+
+  Expected with protected replay present: the new test fails with all three generator-only
+  digests differing from the mixed expectations. On a clean checkout without the configured
+  protected directory, only the replay-inclusive case skips while the generator-only test passes.
+
+- [ ] **Step 3: Wire the configured replay input and verify GREEN**
+
+  Pass `chat_dir=config["chat_replay"]`, `chat_repeats=config["chat_repeats"]`, and the existing
+  seed, counts, keep-last, and recovery-repeat settings. Both oracles must write only to their
+  independent pytest `tmp_path` output. Give both equality assertions a clear failure message
+  instructing maintainers to bump `GENERATOR_VERSION` and re-pin both oracles when an intentional
+  row change occurs. Run:
+
+  ```bash
+  uv run pytest -q tests/test_tasks.py -k 'reference'
+  ```
+
+  Expected with protected replay present: two passes. Expected when absent: one pass and one skip.
+
+- [ ] **Step 4: Verify collection, the focused module, the full pipeline module, and scoped Ruff**
+
+  Run:
+
+  ```bash
+  uv run pytest --collect-only -q tests/test_tasks.py tests/test_pipeline.py
+  uv run pytest -q tests/test_tasks.py
+  uv run pytest -q tests/test_pipeline.py
+  uv run ruff check tests/test_tasks.py tests/test_pipeline.py
+  git diff --check -- tests/test_tasks.py tests/test_pipeline.py docs/superpowers/plans/2026-09-03-spec-002-review-corrections.md design_specifications/under_review/SPEC-002-IMPLEMENTATION-REPORT-part1.md
+  ```
+
+  No command may load a model, tokenizer, checkpoint, or run real MLX execution.
+
+- [ ] **Step 5: Update evidence and commit the four tracked R10 paths**
+
+  Add the R10 finding, RED/GREEN output, final verification counts, protected-directory skip
+  semantics, and explicit no-model/no-data-mutation statement to the report and SDD ledger. Stage
+  only the four tracked claim paths (the ledger is ignored), inspect the staged names and diff,
+  then commit:
+
+  ```bash
+  git add -- tests/test_pipeline.py tests/test_tasks.py design_specifications/under_review/SPEC-002-IMPLEMENTATION-REPORT-part1.md docs/superpowers/plans/2026-09-03-spec-002-review-corrections.md
+  git diff --cached --name-only
+  git diff --cached --check
+  git commit -m "test: cover configured replay in generator hashes"
+  ```
+
+  Leave issue #2 open and do not stage or modify any protected data, pending specifications,
+  Coordinator state, or unrelated user/peer work.

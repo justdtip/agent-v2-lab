@@ -4,7 +4,6 @@ import json
 import re
 import sys
 import types
-from pathlib import Path
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -12,7 +11,6 @@ import pytest
 
 from local_llm_lab.agent_protocol import TOOL_SPECS, Action, ActionParseError
 from local_llm_lab.pipeline import jlens
-from local_llm_lab.pipeline.cli import load_config, stage_data
 from local_llm_lab.pipeline.data import build_rows, write_dataset
 from local_llm_lab.pipeline.env import TRANSIENT_ERROR, Fault, Simulator, validate_arguments
 from local_llm_lab.pipeline.evaluate import percentile, summarize
@@ -37,7 +35,7 @@ from local_llm_lab.pipeline.runner import (
     generate_turn_with_count,
     trajectory_rows,
 )
-from local_llm_lab.pipeline.tasks import FAMILIES, GENERATOR_VERSION, VARIANTS, make_tasks
+from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
 from local_llm_lab.pipeline.transcript import iter_task_records
 
 
@@ -1451,29 +1449,6 @@ def test_stage_select_refuses_empty_checkpoint_directory(tmp_path) -> None:
         stage_select(config, limit=None, quiet=True)
 
 
-def test_data_stage_writes_generator_version_provenance(tmp_path) -> None:
-    """The data stage must record its generator without resolving or loading model weights."""
-    config = {
-        "model": "qwen25-coder-3b",
-        "output": tmp_path / "output",
-        "data": tmp_path / "data",
-        "seed": 20260902,
-        "keep_last": 2,
-        "tasks": {"train": 1, "valid": 1, "test": 1},
-        "chat_replay": None,
-        "chat_repeats": 1,
-        "recovery_repeats": 1,
-    }
-
-    stage_data(config, [])
-
-    provenance_path = config["output"] / "provenance.json"
-    assert provenance_path.is_file()
-    assert json.loads(provenance_path.read_text(encoding="utf-8"))["generator_version"] == (
-        GENERATOR_VERSION
-    )
-
-
 def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch) -> None:
     """Starting a training run removes stale checkpoints without deleting sibling outputs."""
     from local_llm_lab.pipeline import cli
@@ -1832,41 +1807,6 @@ def test_recovery_rows_are_marked_and_oversampled_in_train_only(tmp_path) -> Non
     for split in ("valid", "test"):
         held = manifest["splits"][split]
         assert held["recovery_rows_after_repeats"] == held["recovery_targets"]
-
-
-def test_dataset_manifest_records_generator_version(tmp_path) -> None:
-    """Every generated manifest, returned and persisted, must identify its row generator."""
-    manifest = write_dataset(tmp_path, {"train": 1, "valid": 1, "test": 1})
-
-    assert manifest["generator_version"] == GENERATOR_VERSION
-    written = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    assert written["generator_version"] == GENERATOR_VERSION
-
-
-def test_reference_generator_hashes_are_pinned_by_version(tmp_path) -> None:
-    """A row-changing generator edit must be accompanied by an explicit version bump."""
-    config_path = Path(__file__).resolve().parents[1] / "configs" / "agent_v2c.yaml"
-    config = load_config(config_path)
-    manifest = write_dataset(
-        tmp_path,
-        config["tasks"],
-        seed=config["seed"],
-        keep_last=config["keep_last"],
-        chat_dir=None,
-        recovery_repeats=config["recovery_repeats"],
-    )
-    expected = {
-        2: {
-            "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
-            "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
-            "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
-        }
-    }
-
-    assert manifest["generator_version"] == GENERATOR_VERSION
-    assert {split: info["sha256"] for split, info in manifest["splits"].items()} == expected[
-        GENERATOR_VERSION
-    ]
 
 
 # --------------------------------------------------------------------------- jlens

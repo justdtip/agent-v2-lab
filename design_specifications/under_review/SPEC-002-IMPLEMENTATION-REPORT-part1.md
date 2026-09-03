@@ -138,3 +138,62 @@ All checks passed!; exit 0.
 git diff --check -- tests/test_pipeline.py docs/superpowers/plans/2026-09-03-spec-002-review-corrections.md design_specifications/under_review/SPEC-002-IMPLEMENTATION-REPORT-part1.md
 No output; exit 0.
 ```
+
+## R10 follow-up: configured replay oracle
+
+R10 adds a second, conditional oracle for the shipped configuration's complete local mix while
+preserving the hermetic generator-only oracle from Fix Round 1. The three complete
+generator-version tests moved from `tests/test_pipeline.py` to dedicated `tests/test_tasks.py`:
+
+- data-stage provenance records `GENERATOR_VERSION`;
+- returned and persisted dataset manifests record `GENERATOR_VERSION`;
+- the generator-only `agent_v2c` task/expert-row hashes remain pinned with `chat_dir=None`.
+
+`tests/test_tasks.py` also pins the replay-inclusive hashes using the resolved
+`config["chat_replay"]` directory and `config["chat_repeats"]`. It skips only when that configured
+protected directory is absent. Both hash assertions instruct maintainers to bump
+`GENERATOR_VERSION` and re-pin both oracles after an intentional row change. Each oracle writes
+only to its independent pytest `tmp_path`.
+
+### R10 RED/GREEN evidence
+
+The replay-inclusive test was first wired with `chat_dir=None` while retaining the mixed-data
+expectations:
+
+```text
+uv run pytest -q tests/test_tasks.py -k 'reference'
+.F                                                                       [100%]
+1 failed, 1 passed; exit 1.
+```
+
+The failure showed all three generator-only digests instead of the expected replay-inclusive
+digests and included the actionable version-bump/two-repin message. After wiring
+`chat_dir=config["chat_replay"]` and `chat_repeats=config["chat_repeats"]`, the same command
+reported `.. [100%]` (2 passed; exit 0). Protected replay was present, so the absence-only skip
+branch did not run in this checkout.
+
+### R10 final verification
+
+```text
+uv run pytest --collect-only -q tests/test_tasks.py tests/test_pipeline.py
+tests/test_pipeline.py: 84
+tests/test_tasks.py: 4
+
+uv run pytest -q tests/test_tasks.py
+....                                                                     [100%]
+
+uv run pytest -q tests/test_pipeline.py
+........................................................................ [ 85%]
+............                                                             [100%]
+
+uv run ruff check tests/test_tasks.py tests/test_pipeline.py
+All checks passed!
+
+git diff --check -- tests/test_tasks.py tests/test_pipeline.py docs/superpowers/plans/2026-09-03-spec-002-review-corrections.md design_specifications/under_review/SPEC-002-IMPLEMENTATION-REPORT-part1.md
+No output; exit 0.
+```
+
+R10 changes tests and documentation only; production behavior is unchanged. The configured
+protected replay files were read in place by the replay-inclusive test and were not copied,
+manufactured, or modified. No model, tokenizer, or checkpoint was loaded, and no real MLX or
+train/select/eval/rollout/branch/prefer/preflight/probe command ran.
