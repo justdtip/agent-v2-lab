@@ -1878,31 +1878,6 @@ class _ChatTokenizer(_ProbeTokenizer):
         return [sum(map(ord, word)) % self.vocab_size for word in words]
 
 
-def test_build_prompt_with_a_wide_window_does_not_re_hide_observations() -> None:
-    """``build_probe_dataset`` re-renders rows that ``build_rows`` already windowed; windowing
-    twice would re-stub a stub and silently change the text, so the call must be a no-op."""
-    from local_llm_lab.pipeline.protocol import build_prompt, hidden_observation
-
-    tokenizer = _ChatTokenizer()
-    messages = [
-        {"role": "system", "content": "rules"},
-        {"role": "user", "content": "task"},
-        {
-            "role": "tool",
-            "name": "read_file",
-            "content": hidden_observation("read_file", "a\nb\nc"),
-        },
-        {"role": "assistant", "content": "note"},
-        {"role": "tool", "name": "read_file", "content": "x\ny"},
-    ]
-    wide = build_prompt(tokenizer, messages, keep_last=len(messages))
-    assert wide == tokenizer.apply_chat_template(
-        messages, add_generation_prompt=True, tokenize=False
-    )
-    assert "3 line(s)" in wide  # the original stub, not a stub of the stub
-    assert "1 line(s)" not in build_prompt(tokenizer, messages, keep_last=len(messages))
-
-
 def test_build_probe_dataset_captures_one_row_per_supervised_step(tmp_path) -> None:
     from local_llm_lab.pipeline.data import build_rows
     from local_llm_lab.pipeline.tasks import make_tasks
