@@ -161,7 +161,6 @@ def test_model_spec_resolve_reads_architecture_and_tokenizer_metadata(monkeypatc
         hidden_size = 12
         vocab_size = 321
         tie_word_embeddings = True
-        trainable_parameters = 456
         cache_trimmable = True
 
         @classmethod
@@ -175,6 +174,11 @@ def test_model_spec_resolve_reads_architecture_and_tokenizer_metadata(monkeypatc
         def lora_targets(self, policy):
             assert policy == "attention+mlp"
             return ("layers.0.q_proj", "layers.1.down_proj")
+
+        def lora_parameter_count(self, keys, rank):
+            assert keys == ("layers.0.q_proj", "layers.1.down_proj")
+            assert rank == 16
+            return 456
 
     fake_arch = types.ModuleType("local_llm_lab.arch")
     fake_arch.ArchitectureView = FakeView

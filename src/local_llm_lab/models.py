@@ -78,7 +78,7 @@ class ModelSpec:
             tie_word_embeddings=view.tie_word_embeddings,
             layer_types=layer_types,
             lora_keys=lora_keys,
-            trainable_parameters=view.trainable_parameters,
+            trainable_parameters=view.lora_parameter_count(lora_keys, self.lora.rank),
             probe_layers=tuple(
                 max(1, round(fraction * view.num_layers))
                 for fraction in self.probe_layer_fractions
