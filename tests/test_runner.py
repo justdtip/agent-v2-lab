@@ -435,6 +435,135 @@ def test_make_turn_cache_selects_strategy_and_warns_only_for_unverified_hybrid(c
     assert capsys.readouterr().err == ""
 
 
+class _IntegrationCache:
+    def __init__(self) -> None:
+        self.state: list[int] = []
+        self.offset = 0
+
+    def is_trimmable(self) -> bool:
+        return True
+
+    def trim(self, count: int) -> int:
+        removed = min(count, self.offset)
+        self.state = self.state[: self.offset - removed]
+        self.offset -= removed
+        return removed
+
+
+class _IntegrationView:
+    def __init__(self, entry: _IntegrationCache) -> None:
+        self.entry = entry
+        self.make_cache_calls = 0
+
+    def make_cache(self):
+        self.make_cache_calls += 1
+        return [self.entry]
+
+
+class _IntegrationModel:
+    def __init__(self) -> None:
+        self.primed: list[list[int]] = []
+
+    def __call__(self, token_ids, *, cache):
+        prefix = list(token_ids.values)
+        self.primed.append(prefix)
+        cache[0].state = prefix
+        cache[0].offset = len(prefix)
+
+
+class _IntegrationTokenizer:
+    prompt_tokens = {
+        "turn-one": [10, 11, 12, 13],
+        "turn-two": [10, 11, 14, 15],
+    }
+
+    def __init__(self, responses: dict[int, str]) -> None:
+        self.responses = responses
+
+    def encode(self, prompt: str) -> list[int]:
+        return list(self.prompt_tokens[prompt])
+
+    def decode(self, ids: list[int]) -> str:
+        return "".join(self.responses[token] for token in ids)
+
+    def convert_tokens_to_ids(self, token: str) -> int:
+        raise KeyError(token)
+
+
+@pytest.mark.parametrize("strategy", ["trim", "snapshot", "none"])
+def test_fake_greedy_generation_is_equivalent_for_cache_strategies(
+    monkeypatch, strategy: str
+) -> None:
+    """A disconnected or stale prompt cache must change this context-sensitive fake output."""
+    import mlx_lm
+
+    from local_llm_lab.pipeline.runner import make_turn_cache
+
+    _fake_mx(monkeypatch)
+    entry = _IntegrationCache()
+    _fake_cache_module(monkeypatch, [entry])
+    view = _IntegrationView(entry)
+    model = _IntegrationModel()
+    responses = {
+        1: render_turn("first", Action("read_file", {"path": "a"})),
+        2: render_turn("second", Action("finish", {"answer": "done"})),
+    }
+    tokenizer = _IntegrationTokenizer(responses)
+    response_for_prompt = {
+        (10, 11, 12, 13): 1,
+        (10, 11, 14, 15): 2,
+    }
+    prompt_cache_flags = []
+
+    def fake_stream_generate(
+        model, tokenizer, *, prompt, max_tokens, sampler, prompt_cache=None
+    ):
+        suffix = tokenizer.encode(prompt) if isinstance(prompt, str) else list(prompt.values)
+        prefix = [] if prompt_cache is None else list(prompt_cache[0].state)
+        full_prompt = prefix + suffix
+        response_token = response_for_prompt[tuple(full_prompt)]
+        prompt_cache_flags.append(prompt_cache is not None)
+        if prompt_cache is not None:
+            prompt_cache[0].state = full_prompt + [response_token]
+            prompt_cache[0].offset = len(prompt_cache[0].state)
+        yield _FakeResponse(response_token, responses[response_token])
+
+    monkeypatch.setattr(mlx_lm, "stream_generate", fake_stream_generate)
+    layer_types = ("linear_attention", "attention") if strategy == "snapshot" else ("attention",)
+    turn_cache = make_turn_cache(
+        model,
+        view,
+        _resolved(strategy, f"explicit:{strategy}", layer_types),
+        prefix_tokens=2,
+    )
+    spec = load_model_spec("qwen35-4b")
+
+    def generate(cache):
+        raw_turns = []
+        actions = []
+        for prompt in ("turn-one", "turn-two"):
+            raw, total_tokens, think_tokens = generate_turn_with_count(
+                model, tokenizer, prompt, "greedy", 20, cache, spec=spec
+            )
+            raw_turns.append(raw)
+            actions.append(parse_turn(raw).action)
+            assert (total_tokens, think_tokens) == (1, 0)
+        return raw_turns, actions
+
+    cached_raw, cached_actions = generate(turn_cache)
+    plain_raw, plain_actions = generate(None)
+
+    assert cached_raw == plain_raw
+    assert cached_actions == plain_actions
+    if strategy == "none":
+        assert prompt_cache_flags == [False, False, False, False]
+    else:
+        assert prompt_cache_flags == [True, True, False, False]
+    if strategy == "snapshot":
+        assert model.primed == [[10, 11]]
+        assert view.make_cache_calls == 1
+
+
 def _finish_task() -> Task:
     return Task(
         task_id="test-runner-0001-clean",

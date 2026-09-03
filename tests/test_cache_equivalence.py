@@ -7,6 +7,8 @@ import types
 from importlib.util import module_from_spec, spec_from_file_location
 from types import SimpleNamespace
 
+import pytest
+
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.project import PROJECT_ROOT
 
@@ -40,7 +42,21 @@ class _FakeView:
         return 256
 
 
-def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "argv",
+    [[], ["--strategy", "none"], ["--strategy", "auto"]],
+)
+def test_cli_rejects_unattestable_cache_strategy(argv) -> None:
+    """An omitted, disabled, or auto-disabled cache cannot attest snapshot equivalence."""
+    cache_equivalence = _load_cache_equivalence_module()
+
+    with pytest.raises(SystemExit):
+        cache_equivalence._parse_args(argv)
+
+
+def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(
+    monkeypatch, capsys
+) -> None:
     """A hard-coded model or omitted runner metadata makes equivalence evidence unauditable."""
     from local_llm_lab.pipeline import evaluate, runner, tasks
 
@@ -88,15 +104,21 @@ def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(monkeypat
 
     monkeypatch.setattr(runner, "run_task", fake_run_task)
 
-    cache_equivalence.main(["--model", "qwen35-4b", "--strategy", "none"])
+    cache_equivalence.main(["--model", "qwen35-4b", "--strategy", "snapshot"])
 
-    assert load_calls[0][0] == "mlx-community/Qwen3.5-4B-MLX-4bit"
+    assert load_calls == [("mlx-community/Qwen3.5-4B-MLX-4bit", None)]
+    assert (
+        "ATTESTATION selected_model=qwen35-4b resolved_model=qwen35-4b "
+        "hf_id=mlx-community/Qwen3.5-4B-MLX-4bit "
+        "selected_strategy=snapshot resolved_strategy=snapshot reason=explicit:snapshot"
+        in capsys.readouterr().out
+    )
     assert len(run_calls) == 12
     for index, (actual_model, actual_tokenizer, _task, kwargs) in enumerate(run_calls):
         assert (actual_model, actual_tokenizer) == (model, tokenizer)
         assert kwargs["spec"].name == "qwen35-4b"
-        assert kwargs["spec"].cache_strategy == "none"
+        assert kwargs["spec"].cache_strategy == "snapshot"
         assert kwargs["view"] is fake_view
-        assert kwargs["resolved"].cache_strategy == "none"
-        assert kwargs["resolved"].cache_strategy_reason == "explicit:none"
+        assert kwargs["resolved"].cache_strategy == "snapshot"
+        assert kwargs["resolved"].cache_strategy_reason == "explicit:snapshot"
         assert kwargs["use_cache"] is bool(index % 2)

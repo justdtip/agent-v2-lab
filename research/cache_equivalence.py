@@ -8,7 +8,7 @@ but different actions, which is exactly the kind of bug that survives a green te
 So this compares cached and uncached runs of the same tasks under greedy decoding and reports any
 divergence, plus the measured speedup.
 
-Run with: uv run python research/cache_equivalence.py
+Run with: uv run python research/cache_equivalence.py --model qwen35-4b --strategy snapshot
 """
 
 from __future__ import annotations
@@ -28,8 +28,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--model", default="qwen25-coder-3b", help="registered model name or HF id")
     parser.add_argument(
         "--strategy",
-        choices=("auto", "trim", "snapshot", "none"),
-        help="override the model registry's cache strategy",
+        required=True,
+        choices=("trim", "snapshot"),
+        help="explicit non-disabled cache strategy to attest",
     )
     return parser.parse_args(argv)
 
@@ -42,18 +43,20 @@ def main(argv: Sequence[str] | None = None) -> None:
     from local_llm_lab.pipeline.evaluate import load_policy, make_sampler
     from local_llm_lab.pipeline.runner import run_task
     from local_llm_lab.pipeline.tasks import make_tasks
-    from local_llm_lab.project import PROJECT_ROOT
 
     args = _parse_args(argv)
     spec = load_model_spec(args.model)
-    if args.strategy is not None:
-        spec = replace(spec, cache_strategy=args.strategy)
-    model, tokenizer = load_policy(
-        spec.hf_id,
-        PROJECT_ROOT / "outputs" / "agent-v2" / "best-adapter",
-    )
+    spec = replace(spec, cache_strategy=args.strategy)
+    model, tokenizer = load_policy(spec.hf_id, None)
     view = ArchitectureView.from_model(model)
     resolved = spec.resolve(model, tokenizer)
+    if resolved.cache_strategy == "none":
+        raise SystemExit("cache equivalence requires a non-disabled resolved strategy")
+    print(
+        f"ATTESTATION selected_model={args.model} resolved_model={spec.name} "
+        f"hf_id={spec.hf_id} selected_strategy={args.strategy} "
+        f"resolved_strategy={resolved.cache_strategy} reason={resolved.cache_strategy_reason}"
+    )
     # Cover the long, listing-heavy families where prompts grow most, plus a couple of short ones.
     families = ("ledger_reconcile", "batch_update", "aggregate_report", "read", "search", "update")
     tasks = []
