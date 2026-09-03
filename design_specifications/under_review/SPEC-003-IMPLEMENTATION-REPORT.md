@@ -2,7 +2,7 @@
 
 ## Outcome
 
-This implementation delivers SPEC-003 sections 1–3 only. It bumps the generator from v2 to v3,
+This implementation delivers SPEC-003 sections 1–3 only. It bumps the generator from v2 to v4,
 introduces completion-safe state notes and `render_expert_note`, aggregates named logical splits
 into role files through `SplitSpec`, normalizes both YAML schemas at the CLI seam, and adds D3,
 D4, and B4 configs. Training/evaluation matrix work was not run.
@@ -34,8 +34,11 @@ D4, and B4 configs. Training/evaluation matrix work was not run.
 | v3 generator-only | `6a2875aff061e7dcdde0b8a394fc3115ff5c6f2b4dbcb8f399db5af373c6970e` | `6df3a890d09e989c83baaf6078a27d56ec9da035807c8820e83b44c09a8259e3` | `925f5b282885e4c52f2a20280372804a17dfc9c2f1d8039478de98211eee1303` |
 | v2 configured replay | `ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79` | `d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8` | `fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3` |
 | v3 configured replay | `92f40d1868438553f306be192b09cace7b3d5efc8cff4a55c84fc3a96827ddf2` | `6e2617d5159e42fc7d26077e332a83e9f27fc0e755d50140d6336c75116c44b7` | `f79d6fc673674719cc17664278a15ee8ba9fcb6de8f9418d9226b99b5d24de59` |
+| v4 generator-only | `99176c0b378d85502e738f23b8d174dd8321cb48a51e10c3a9bcd7fd9db3f035` | `41ec07d6f122a123ee7780885d59ba2bc77ca5ce836e896ed8ddd2861f680deb` | `8b8aeaf28460798e0863ab0e5cb217da25b8661b7b3a802d21182fcd36a294a7` |
+| v4 configured replay | `67d49cddc00c95fafed9a0166b431021d405348354d029cb7941006d31117eec` | `27ec5981da0864f094de8e764a28140ec063443a1a20c89e4f7a40f489d6c6a2` | `67e4ead6a0a899de82395cc8c3101fdd81d5b9b853328b8d3d53b2bde908f0a6` |
 
-The v3 values were reproduced in two independent pytest temporary directories before pinning.
+The v4 values were reproduced through independent pytest temporary directories `pytest-535`
+(intentional pre-pin RED) and `pytest-541` (post-pin GREEN) before acceptance.
 
 ## Verification
 
@@ -64,3 +67,27 @@ did not alter those protected seams or artifacts.
 Baseline: `18c4bd9`. Source implementation: `68e4dac feat: implement SPEC-003 Run D data
 recipe`. No pending spec, protected data/output/report artifact, model, or GPU operation was
 touched.
+
+## Review-fix evidence
+
+- RED: `uv run pytest -o addopts='' -q tests/test_tasks.py::test_run_d_conditional_and_recovery_notes_preserve_family_state`
+  produced `4 failed` before the conditional/recovery state patch. `uv run pytest -o addopts='' -q
+  tests/test_data.py::test_split_specs_preserve_chunk_boundaries_effects_hashes_and_recovery_repeats`
+  produced `1 failed` (`KeyError: difficulty`) before split metadata plumbing. The two hash-oracle
+  nodes produced `2 failed` before v4 was pinned.
+- GREEN: `uv run pytest -o addopts='' -q tests/test_tasks.py tests/test_data.py tests/test_cli.py
+  tests/test_integrity.py` produced `76 passed, 1 failed`; the one failure is the protected
+  historical reconstruction node described above. The review-specific focused command produced
+  `29 passed, 48 deselected`; the independent v4 hash rerun produced `2 passed`.
+- `uv run ruff check` on owned production and test paths and owned-path `git diff --check` were
+  clean. Strict `uv run ruff check --select C901 --config lint.mccabe.max-complexity=10` reports
+  only pre-existing `cli.main=17`; it reports no new owned function.
+- Full fake-only suite: `396 passed, 14 failed`. The introduced bounded legacy-note/version
+  conflicts are the protected reconstruction node and old exact-form assertions in
+  `tests/test_pipeline.py`/`tests/test_probes.py`; concurrent SPEC-001 registry/probe failures
+  account for the remainder.
+- Evidence/documentation commit already recorded: `c0e2893 docs: record SPEC-003 implementation
+  evidence`. Before this review update, `git diff --numstat 18c4bd9 -- <owned paths>` recorded
+  config `55/0` each (three files), plan `192/0`, task/data/CLI `99/64`, `173/39`, `34/2`, tests
+  `104/2`, `135/2`, `94/1`, `71/14`, and report `66/0`.
+- Review-fix implementation commit: `83ca7e1 fix: strengthen SPEC-003 Run D contracts`.
