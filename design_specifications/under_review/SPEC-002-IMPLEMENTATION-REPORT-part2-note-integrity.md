@@ -1,50 +1,67 @@
 # SPEC-002 implementation report, part 2: note integrity
 
-Status: implemented for SPEC-002 §2 only. SPEC-002 and issue #2 remain open.
+Status: implemented for SPEC-002 §2 only. Independent review round 1 is **CHANGES REQUIRED**;
+this remediation round is pending re-review. SPEC-002 and issue #2 remain open.
 
 ## Scope delivered
 
 This change implements the model-free note-integrity vertical: deterministic task reconstruction,
 ground-truth carry derivation, six trajectory checks, evaluation annotations and summaries,
 rollout eligibility filtering, backward-compatible summary rendering, and a retroactive offline
-B-vs-C report. It deliberately does not implement the later selection, verdict-hardening, runner
-dataclass, or model-spec work in SPEC-002.
+B-vs-C report. The reviewed package also contains the B1 prerequisite that adds explicit defaulted
+`difficulty` and `integrity` fields to `Trajectory`; this report does not claim the rest of the
+later selection, verdict-hardening, runner, or model-spec work in SPEC-002.
 
 The claimed files at final verification were:
 
 | Path | Final lines | Change |
 | --- | ---: | --- |
-| `src/local_llm_lab/pipeline/integrity.py` | 564 | new pure scoring and offline-report module |
-| `src/local_llm_lab/pipeline/tasks.py` | 1,227 | difficulty override and exact task reconstruction |
-| `src/local_llm_lab/pipeline/evaluate.py` | 350 | scoring, attribution, summary, and JSON bridge |
+| `src/local_llm_lab/pipeline/integrity.py` | 712 | pure scoring, focused helpers, and offline reporting |
+| `src/local_llm_lab/pipeline/tasks.py` | 1,226 | difficulty override and exact task reconstruction |
+| `src/local_llm_lab/pipeline/evaluate.py` | 397 | scoring, attribution, and helper-factored summaries |
 | `src/local_llm_lab/pipeline/rollout.py` | 209 | integrity-clean supervision filter |
 | `src/local_llm_lab/pipeline/report.py` | 59 | backward-compatible integrity-clean column |
-| `tests/test_integrity.py` | 582 | new isolated and artifact-backed coverage |
+| `src/local_llm_lab/pipeline/runner.py` | 353 | B1 prerequisite: explicit defaulted trajectory fields |
+| `tests/test_integrity.py` | 610 | isolated, integration, and artifact-backed coverage |
+| `tests/test_runner.py` | 37 | B1 field round-trip and backward-compatibility coverage |
 | `pyproject.toml` | 68 | `agent-v2-integrity` entry point |
 | `reports/note-integrity-B-vs-C.md` | 95 | authorised offline analysis, 3,687 bytes |
 | `docs/superpowers/plans/2026-09-04-spec-002-note-integrity.md` | 363 | execution plan and checklist |
-| this report | measured at final verification | implementation evidence |
+| this report | 205 | implementation evidence |
 
 ## Interfaces and wiring
 
 Wiring-map §2.4 is implemented by retaining `difficulty`, adding its optional override, resolving a
 single difficulty per generated task, recording it on the backward-compatible final `Task` field,
-and adding `task_from_id`. Reconstruction parses from the right so hyphenated splits work, restores
-the exact `v2:{seed}:{split}:{index}` RNG stream, calls one maker, applies the named variant from the
-post-maker RNG state, and rejects malformed, unknown, or structurally impossible IDs with an error
-that names the task. Existing IDs and generator hashes remain unchanged.
+and adding the exact normative signature
+`task_from_id(task_id: str, seed: int, difficulty: int | None = None)`. Reconstruction requires an
+explicit seed, accepts difficulty as the third positional-or-keyword argument, parses from the right
+so hyphenated splits work, restores the exact `v2:{seed}:{split}:{index}` RNG stream, calls one
+maker, applies the named variant from the post-maker RNG state, and rejects malformed, unknown, or
+structurally impossible IDs with a task-named error. Existing IDs and generator hashes remain
+unchanged.
 
 Wiring-map §2.9 is implemented with the exact frozen `Fact`, `Violation`, and `IntegrityReport`
 records and the required public functions. Consumers are `evaluate.evaluate_tasks`,
 `evaluate.failure_reason`, `rollout.collect_rollouts`, the offline CLI, and the new tests. The CLI
 entry is registered in `pyproject.toml`.
 
-The touched §4 wiring gap is intentionally bridged without taking ownership of SPEC-002 §4's future
-`Trajectory` fields. `evaluate_tasks` and `collect_rollouts` attach dynamic `difficulty` and
-`integrity` attributes after `run_task`; `write_report` merges them into copied serialised records.
-`summarize` consumes the dynamic integrity record. `report.render` shows `integrity-clean` whenever
-at least one new summary is present, prints `-` for legacy summaries in a mixed table, and preserves
-the historical layout when every input is legacy. `run_evaluation` now records `data_seed`.
+The reviewed B1 prerequisite closes the touched §4 wiring gap by declaring
+`Trajectory.difficulty: int = -1` and `Trajectory.integrity: dict[str, Any]` explicitly; both fields
+round-trip through `as_dict()` and `Trajectory(**record)`. `evaluate_tasks` and `collect_rollouts`
+still assign resolved values after `run_task`, because the runner creates a trajectory before the
+consumer performs integrity scoring. `write_report` explicitly copies those values into serialised
+records; with B1 this is redundant for new trajectories but preserves the consumer boundary and old
+test doubles without mutating the source. `summarize` consumes the explicit integrity record.
+`report.render` shows `integrity-clean` whenever at least one new summary is present, prints `-` for
+legacy summaries in a mixed table, and preserves the historical layout when every input is legacy.
+`run_evaluation` records `data_seed`.
+
+The offline reader treats exactly integer `difficulty=-1` as the B1 legacy/missing sentinel and
+passes `None` to `task_from_id`, which uses the split mapping. Other negative values and non-integers
+remain invalid. The compatibility cost is intentional conflation of an absent difficulty field and
+a newly serialised default sentinel; neither carries a resolved difficulty, while real evaluations
+continue to record a non-negative value.
 
 ## Ground truth and checks
 
@@ -71,6 +88,12 @@ Checks run once per policy step in the required order:
 Malformed saved records are scored without crashing. Violations are sorted by policy step and
 check order; counts retain repeated step-level instances, while the retroactive report counts each
 kind once per affected trajectory.
+
+Review remediation split fact parsing into scalar/listing/worker helpers, trajectory evaluation into
+one helper per ordered check, summary aggregation into totals/failure/integrity/group helpers, and
+Markdown rendering into section-row builders. Public interfaces, check order, classifications, and
+the 3,687-byte report are unchanged. A strict maximum-complexity-9 C901 run passes the two files
+containing the four review-target functions.
 
 ## Evaluation, rollout, and report behaviour
 
@@ -119,7 +142,7 @@ RED evidence captured during implementation:
   (exit 1);
 - CLI selection: entry-point registration was absent while the pure helper tests passed (exit 1).
 
-GREEN evidence before final verification:
+GREEN evidence before the first review package:
 
 - task prerequisite selection: 12 passed;
 - generator regression guard: `tests/test_tasks.py`, 4 passed;
@@ -131,26 +154,51 @@ GREEN evidence before final verification:
 - combined `tests/test_integrity.py tests/test_tasks.py`: 40 passed;
 - scoped Ruff: all checks passed.
 
-The broader `tests/test_pipeline.py` run passed 83 tests and had one failure in
-`test_jlens_map_averages_and_matches_manual_mean`: the test still calls the removed concurrent
-`jlens_map(..., stats=...)` API. This is outside the claimed paths and was not altered here. The two
-report compatibility failures first exposed by that run were fixed and their focused rerun passed
-3 tests across old and new coverage.
+N1 then strengthened `verbatim_copy` to assert the exact isolated dictionary. Its original copied
+ledger note correctly double-fired `count_mismatch`; RED observed both kinds. Two adjacent neutral
+invoice-reading notes now produce exactly `{"verbatim_copy": 1}` without production suppression.
+
+B1 added the explicit trajectory fields. The resulting three RED failures exposed one obsolete
+absence assertion and synthetic records containing the `difficulty=-1` sentinel. The write-report
+test now asserts explicit-field round trips; a named sentinel test failed before the offline reader
+normalised `-1`, then passed. The post-B1 MLX-free focused suite was 43 tests before this remediation.
+
+This remediation added the normative signature test. RED was
+`TypeError: task_from_id() takes from 1 to 2 positional arguments but 3 were given`; GREEN accepts
+the third positional difficulty and rejects an omitted seed. The current focused set is 44 tests.
+Behavior-preserving helper extraction retained all 44 tests throughout. Default scoped Ruff and
+strict maximum-complexity-9 C901 checks pass. In-memory offline rendering remains byte-identical to
+the committed report, and the protected input hashes remain unchanged.
+
+The authoritative fake-only full-suite result supplied at HEAD `4631e78` is **302 passed, 0 failed,
+0 skipped in 4.80 seconds**. This bounded remediation lane did not rerun the broad suite because its
+prohibited real-MLX collection path is outside scope.
 
 The final command results, diff checks, banned-constant scan, commit, and status inspection are
 recorded in the ignored task report.
 
 ## Deviations, ambiguities, and observed defects
 
-- The wiring map's future `Task.difficulty` has no default and future `Trajectory` owns explicit
-  fields. This bounded §2 implementation follows the task brief: a final `Task` default of `-1`
-  preserves construction compatibility, and dynamic trajectory attributes bridge until §4.
+- `Task.difficulty=-1` and the B1 `Trajectory.difficulty=-1` preserve constructor compatibility.
+  Resolved generated/evaluated tasks still record a non-negative difficulty, and offline analysis
+  interprets only the exact integer sentinel as legacy/missing.
 - A table containing only legacy summaries retains its original columns; a mixed old/new table
   displays `integrity-clean` and `-` for legacy rows. This preserves existing callers while making
   the new metric visible.
 - The offline report is 3,687 bytes, below R11's 1 MiB atomic-write threshold, so direct writing is
   permitted.
-- The unrelated `jlens_map(..., stats=...)` regression remains observed but not fixed.
+
+## Review history and immutable packages
+
+Independent review round 1 examined immutable package `review-a854b57..8d72622.diff`, SHA-256
+`170e968342946373f499b23754bd773dd470283cf47ee91d5d73361631410751`, over committed range
+`a854b577e66cb61a30cc7083a14dc0b5d13eaa0b..8d72622199732dc4d144bc3ba12ddc3f53fbf1b9`.
+It included commits `ed9136a`, `fa8f201`, the relevant B1 runner/test-runner hunks from `fbfe714`,
+and `8d72622`, while excluding unrelated probe/J-lens work. Verdict: **CHANGES REQUIRED** for the
+signature, four complexity ceilings, and this report's stale B1/follow-up description.
+
+This remediation addresses all three findings and is pending a new immutable package and independent
+re-review. No approval is claimed here.
 
 Pending specifications and protected `data/` and `outputs/` inputs were not modified. No model,
 checkpoint, tokenizer, MLX, probe, preflight, or J-space workload ran. All test doubles were local

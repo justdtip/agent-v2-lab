@@ -103,9 +103,16 @@ def test_task_from_id_rejects_invalid_or_impossible_ids(task_id: str) -> None:
 def test_task_from_id_does_not_depend_on_global_random_state() -> None:
     original = make_tasks("fresh-split", 48)[-1]
     random.seed(99)
-    assert task_from_id(original.task_id, difficulty=original.difficulty) == original
+    assert task_from_id(original.task_id, 20260902, difficulty=original.difficulty) == original
     with pytest.raises(ValueError, match=original.task_id):
-        task_from_id(original.task_id, difficulty=-1)
+        task_from_id(original.task_id, 20260902, difficulty=-1)
+
+
+def test_task_from_id_requires_seed_and_accepts_positional_difficulty() -> None:
+    original = make_tasks("test", 3, 20260902)[-1]
+    assert task_from_id(original.task_id, 20260902, original.difficulty) == original
+    with pytest.raises(TypeError):
+        task_from_id(original.task_id)
 
 
 def test_every_public_variant_name_is_covered_by_reconstruction_validation() -> None:

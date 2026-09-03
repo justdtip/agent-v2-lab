@@ -107,111 +107,158 @@ def failure_reason(trajectory: Trajectory) -> str:
     return (trajectory.verdict.get("reasons") or ["unknown"])[0].split(":")[0]
 
 
-def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
-    successes = sum(t.success for t in trajectories)
-    clean = sum(bool(t.verdict.get("clean")) for t in trajectories)
-    turns = sum(t.turns for t in trajectories)
-    valid = sum(t.valid_turns for t in trajectories)
-    calls = sum(t.verdict.get("calls", 0) for t in trajectories)
-    schema_failures = sum(t.verdict.get("schema_failures", 0) for t in trajectories)
-    executable = sum(t.verdict.get("executable_calls", 0) for t in trajectories)
-    generated_tokens = sum(t.generated_tokens for t in trajectories)
-    latencies = [t.elapsed_seconds for t in trajectories]
+def _ratio(numerator: int | float, denominator: int | float, digits: int = 4) -> float:
+    return round(numerator / denominator, digits) if denominator else 0.0
+
+
+def _trajectory_totals(trajectories: list[Trajectory]) -> dict[str, Any]:
+    totals: dict[str, Any] = {
+        "successes": 0,
+        "clean": 0,
+        "turns": 0,
+        "valid": 0,
+        "calls": 0,
+        "schema_failures": 0,
+        "executable": 0,
+        "generated_tokens": 0,
+        "tool_errors": 0,
+        "recovered_errors": 0,
+        "loop_failures": 0,
+        "exhausted": 0,
+        "latencies": [],
+    }
+    for trajectory in trajectories:
+        totals["successes"] += int(trajectory.success)
+        totals["clean"] += int(bool(trajectory.verdict.get("clean")))
+        totals["turns"] += trajectory.turns
+        totals["valid"] += trajectory.valid_turns
+        totals["calls"] += trajectory.verdict.get("calls", 0)
+        totals["schema_failures"] += trajectory.verdict.get("schema_failures", 0)
+        totals["executable"] += trajectory.verdict.get("executable_calls", 0)
+        totals["generated_tokens"] += trajectory.generated_tokens
+        totals["tool_errors"] += trajectory.verdict.get("errors", 0)
+        totals["recovered_errors"] += trajectory.verdict.get("recovered_errors", 0)
+        totals["loop_failures"] += int(trajectory.loop_detected and not trajectory.success)
+        totals["exhausted"] += int(trajectory.exhausted and not trajectory.success)
+        totals["latencies"].append(trajectory.elapsed_seconds)
+    return totals
+
+
+def _failure_reasons(trajectories: list[Trajectory]) -> dict[str, int]:
     reasons: dict[str, int] = {}
     for trajectory in trajectories:
         if trajectory.success:
             continue
         reason = failure_reason(trajectory)
         reasons[reason] = reasons.get(reason, 0) + 1
+    return dict(sorted(reasons.items(), key=lambda item: -item[1]))
 
-    integrity_by_kind: dict[str, dict[str, int]] = {}
-    integrity_by_family: dict[str, dict[str, Any]] = {}
-    integrity_clean = 0
-    integrity_affected = 0
-    integrity_violations = 0
+
+def _integrity_values(trajectory: Trajectory) -> tuple[dict[str, Any], bool]:
+    integrity = trajectory.integrity
+    if not isinstance(integrity, dict):
+        integrity = {"clean": True, "counts": {}}
+    counts = integrity.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+    return counts, bool(integrity.get("clean", not counts))
+
+
+def _integrity_family_bucket() -> dict[str, Any]:
+    return {
+        "trajectories": 0,
+        "clean_trajectories": 0,
+        "violations": 0,
+        "affected_trajectories": 0,
+    }
+
+
+def _integrity_summary(
+    trajectories: list[Trajectory], *, failed: int
+) -> dict[str, Any]:
+    by_kind: dict[str, dict[str, int]] = {}
+    by_family: dict[str, dict[str, Any]] = {}
+    clean = 0
+    affected = 0
+    violations = 0
     failed_with_violation = 0
     for trajectory in trajectories:
-        integrity = getattr(trajectory, "integrity", None)
-        if not isinstance(integrity, dict):
-            integrity = {"clean": True, "counts": {}}
-        counts = integrity.get("counts", {})
-        if not isinstance(counts, dict):
-            counts = {}
-        is_clean = bool(integrity.get("clean", not counts))
-        integrity_clean += int(is_clean)
-        integrity_affected += int(not is_clean)
-        integrity_violations += sum(int(value) for value in counts.values())
+        counts, is_clean = _integrity_values(trajectory)
+        count = sum(int(value) for value in counts.values())
+        clean += int(is_clean)
+        affected += int(not is_clean)
+        violations += count
         failed_with_violation += int(not trajectory.success and not is_clean)
-        family = integrity_by_family.setdefault(
-            trajectory.family,
-            {
-                "trajectories": 0,
-                "clean_trajectories": 0,
-                "violations": 0,
-                "affected_trajectories": 0,
-            },
-        )
+        family = by_family.setdefault(trajectory.family, _integrity_family_bucket())
         family["trajectories"] += 1
         family["clean_trajectories"] += int(is_clean)
-        family["violations"] += sum(int(value) for value in counts.values())
+        family["violations"] += count
         family["affected_trajectories"] += int(not is_clean)
         for kind, value in counts.items():
-            bucket = integrity_by_kind.setdefault(
+            bucket = by_kind.setdefault(
                 str(kind), {"violations": 0, "affected_trajectories": 0}
             )
             bucket["violations"] += int(value)
             bucket["affected_trajectories"] += int(value > 0)
-    for family in integrity_by_family.values():
-        family["clean_rate"] = round(
-            family["clean_trajectories"] / family["trajectories"], 4
+    for family in by_family.values():
+        family["clean_rate"] = _ratio(
+            family["clean_trajectories"], family["trajectories"]
         )
+    return {
+        "clean_trajectories": clean,
+        "clean_rate": _ratio(clean, len(trajectories)),
+        "affected_trajectories": affected,
+        "violations": violations,
+        "by_kind": dict(sorted(by_kind.items())),
+        "by_family": dict(sorted(by_family.items())),
+        "failed_trajectories": failed,
+        "failed_with_violation": failed_with_violation,
+        "failure_explained_rate": _ratio(failed_with_violation, failed),
+    }
 
-    def group(key: str) -> dict[str, dict[str, Any]]:
-        table: dict[str, dict[str, Any]] = {}
-        for trajectory in trajectories:
-            bucket = table.setdefault(getattr(trajectory, key), {"successes": 0, "tasks": 0})
-            bucket["tasks"] += 1
-            bucket["successes"] += int(trajectory.success)
-        for bucket in table.values():
-            bucket["success_rate"] = round(bucket["successes"] / bucket["tasks"], 4)
-        return dict(sorted(table.items()))
 
+def _group(trajectories: list[Trajectory], key: str) -> dict[str, dict[str, Any]]:
+    table: dict[str, dict[str, Any]] = {}
+    for trajectory in trajectories:
+        bucket = table.setdefault(getattr(trajectory, key), {"successes": 0, "tasks": 0})
+        bucket["tasks"] += 1
+        bucket["successes"] += int(trajectory.success)
+    for bucket in table.values():
+        bucket["success_rate"] = _ratio(bucket["successes"], bucket["tasks"])
+    return dict(sorted(table.items()))
+
+
+def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
+    totals = _trajectory_totals(trajectories)
     count = len(trajectories)
-    failed = count - successes
+    successes = totals["successes"]
+    failed = count - totals["successes"]
     return {
         "tasks": count,
         "successes": successes,
-        "success_rate": round(successes / count, 4) if count else 0.0,
-        "clean_successes": clean,
-        "clean_rate": round(clean / count, 4) if count else 0.0,
-        "valid_action_rate": round(valid / turns, 4) if turns else 0.0,
-        "schema_validity_rate": round(1 - schema_failures / calls, 4) if calls else 0.0,
-        "executable_call_rate": round(executable / calls, 4) if calls else 0.0,
-        "tool_errors": sum(t.verdict.get("errors", 0) for t in trajectories),
-        "recovered_errors": sum(t.verdict.get("recovered_errors", 0) for t in trajectories),
-        "loop_failures": sum(1 for t in trajectories if t.loop_detected and not t.success),
-        "exhausted": sum(1 for t in trajectories if t.exhausted and not t.success),
-        "generated_tokens": generated_tokens,
-        "tokens_per_success": round(generated_tokens / successes, 1) if successes else None,
-        "latency_p50_seconds": round(percentile(latencies, 50), 2),
-        "latency_p95_seconds": round(percentile(latencies, 95), 2),
-        "mean_steps": round(sum(t.turns for t in trajectories) / count, 2) if count else 0.0,
-        "by_family": group("family"),
-        "by_variant": group("variant"),
-        "failure_reasons": dict(sorted(reasons.items(), key=lambda item: -item[1])),
-        "integrity": {
-            "clean_trajectories": integrity_clean,
-            "clean_rate": round(integrity_clean / count, 4) if count else 0.0,
-            "affected_trajectories": integrity_affected,
-            "violations": integrity_violations,
-            "by_kind": dict(sorted(integrity_by_kind.items())),
-            "by_family": dict(sorted(integrity_by_family.items())),
-            "failed_trajectories": failed,
-            "failed_with_violation": failed_with_violation,
-            "failure_explained_rate": (
-                round(failed_with_violation / failed, 4) if failed else 0.0
-            ),
-        },
+        "success_rate": _ratio(successes, count),
+        "clean_successes": totals["clean"],
+        "clean_rate": _ratio(totals["clean"], count),
+        "valid_action_rate": _ratio(totals["valid"], totals["turns"]),
+        "schema_validity_rate": _ratio(
+            totals["calls"] - totals["schema_failures"], totals["calls"]
+        ),
+        "executable_call_rate": _ratio(totals["executable"], totals["calls"]),
+        "tool_errors": totals["tool_errors"],
+        "recovered_errors": totals["recovered_errors"],
+        "loop_failures": totals["loop_failures"],
+        "exhausted": totals["exhausted"],
+        "generated_tokens": totals["generated_tokens"],
+        "tokens_per_success": (
+            round(totals["generated_tokens"] / successes, 1) if successes else None
+        ),
+        "latency_p50_seconds": round(percentile(totals["latencies"], 50), 2),
+        "latency_p95_seconds": round(percentile(totals["latencies"], 95), 2),
+        "mean_steps": _ratio(totals["turns"], count, 2),
+        "by_family": _group(trajectories, "family"),
+        "by_variant": _group(trajectories, "variant"),
+        "failure_reasons": _failure_reasons(trajectories),
+        "integrity": _integrity_summary(trajectories, failed=failed),
     }
 
 

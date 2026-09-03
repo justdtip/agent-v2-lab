@@ -133,8 +133,7 @@ def make_tasks(
 
 def task_from_id(
     task_id: str,
-    seed: int = 20260902,
-    *,
+    seed: int,
     difficulty: int | None = None,
 ) -> Task:
     try:

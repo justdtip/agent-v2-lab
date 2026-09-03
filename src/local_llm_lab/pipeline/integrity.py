@@ -79,29 +79,45 @@ def _action_text(action: Any) -> str:
     return _normalise(" ".join(str(value) for value in arguments.values()))
 
 
-def _extract_facts(observation: str, observed_at: int) -> set[Fact]:
+def _matched_fact(
+    observation: str,
+    pattern: str,
+    kind: str,
+    observed_at: int,
+    *,
+    flags: int = 0,
+) -> Fact | None:
+    match = re.search(pattern, observation, flags)
+    return Fact(kind, match.group(1), observed_at) if match else None
+
+
+def _approved_amount_fact(observation: str, observed_at: int) -> Fact | None:
+    if "status=approved" not in observation:
+        return None
+    return _matched_fact(observation, r"\bamount=(\d+)\b", "amount", observed_at)
+
+
+def _load_fact(observation: str, observed_at: int) -> Fact | None:
+    match = re.search(
+        r"\bname=(service-\d+)\b.*?\bload=(\d+)\b", observation, re.DOTALL
+    )
+    if not match:
+        return None
+    return Fact("load", f"{match.group(1)}={match.group(2)}", observed_at)
+
+
+def _listing_facts(observation: str, observed_at: int) -> set[Fact]:
     facts: set[Fact] = set()
-    if "status=approved" in observation:
-        match = re.search(r"\bamount=(\d+)\b", observation)
-        if match:
-            facts.add(Fact("amount", match.group(1), observed_at))
-    metric = re.search(r"\bmetric=\d+\b.*?\bvalue=(\d+)\b", observation, re.DOTALL)
-    if metric:
-        facts.add(Fact("metric", metric.group(1), observed_at))
-    service = re.search(r"\bname=(service-\d+)\b.*?\bload=(\d+)\b", observation, re.DOTALL)
-    if service:
-        facts.add(Fact("load", f"{service.group(1)}={service.group(2)}", observed_at))
-    next_key = re.search(r"\bNext-Key:\s*([^\s]+)", observation, re.IGNORECASE)
-    if next_key:
-        facts.add(Fact("next_key", next_key.group(1), observed_at))
-    total = re.search(r"\bRESULT:\s*([^\s]+)", observation, re.IGNORECASE)
-    if total:
-        facts.add(Fact("total", total.group(1), observed_at))
     for listing in re.finditer(r"(?:^|\n)(?:FILES|MATCHES):\s*([^\n]*)", observation):
         for path in listing.group(1).split(","):
             basename = path.strip().rsplit("/", 1)[-1]
             if basename:
                 facts.add(Fact("path", basename, observed_at))
+    return facts
+
+
+def _worker_facts(observation: str, observed_at: int) -> set[Fact]:
+    facts: set[Fact] = set()
     for line in observation.splitlines():
         manifest = re.fullmatch(r"\s*([^|]+)\|mode=([^\s]+)->mode=([^\s]+)\s*", line)
         if manifest:
@@ -113,6 +129,38 @@ def _extract_facts(observation: str, observed_at: int) -> set[Fact]:
                     observed_at,
                 )
             )
+    return facts
+
+
+def _extract_facts(observation: str, observed_at: int) -> set[Fact]:
+    scalar_facts = (
+        _approved_amount_fact(observation, observed_at),
+        _matched_fact(
+            observation,
+            r"\bmetric=\d+\b.*?\bvalue=(\d+)\b",
+            "metric",
+            observed_at,
+            flags=re.DOTALL,
+        ),
+        _load_fact(observation, observed_at),
+        _matched_fact(
+            observation,
+            r"\bNext-Key:\s*([^\s]+)",
+            "next_key",
+            observed_at,
+            flags=re.IGNORECASE,
+        ),
+        _matched_fact(
+            observation,
+            r"\bRESULT:\s*([^\s]+)",
+            "total",
+            observed_at,
+            flags=re.IGNORECASE,
+        ),
+    )
+    facts = {fact for fact in scalar_facts if fact is not None}
+    facts.update(_listing_facts(observation, observed_at))
+    facts.update(_worker_facts(observation, observed_at))
     return facts
 
 
@@ -145,6 +193,124 @@ def required_carry(task: Task, *, keep_last: int) -> dict[int, frozenset[Fact]]:
     return result
 
 
+def _policy_index(record: dict[str, Any], position: int, horizon: int) -> int:
+    saved_index = record.get("index")
+    if isinstance(saved_index, int) and 0 <= saved_index < horizon:
+        return saved_index
+    return position
+
+
+def _canonical_note(notes: list[str], index: int) -> str:
+    return notes[index] if 0 <= index < len(notes) else ""
+
+
+def _verbatim_copy_violation(step: int, note: str, previous_note: str) -> Violation | None:
+    if note and previous_note and note == previous_note:
+        return Violation(step, "verbatim_copy", "note repeats the previous step verbatim")
+    return None
+
+
+def _fact_is_visible(fact: Fact, observations: list[str]) -> bool:
+    return any(
+        any(
+            visible_fact.kind == fact.kind and visible_fact.value == fact.value
+            for visible_fact in _extract_facts(observation, -1)
+        )
+        for observation in observations
+    )
+
+
+def _fact_is_missing(
+    fact: Fact,
+    note: str,
+    visible: list[str],
+    stale_labels: set[str],
+    canonical: str,
+) -> bool:
+    return (
+        fact.kind not in {"path", "worker"}
+        and not _fact_is_referenced(fact, note)
+        and not _fact_is_visible(fact, visible)
+        and not _fact_covered_by_stale_field(fact, stale_labels, canonical)
+    )
+
+
+def _value_drop_violation(
+    step: int,
+    facts: frozenset[Fact],
+    note: str,
+    visible: list[str],
+    stale_labels: set[str],
+    canonical: str,
+) -> Violation | None:
+    missing = [
+        fact
+        for fact in sorted(facts, key=lambda item: (item.kind, item.value))
+        if _fact_is_missing(fact, note, visible, stale_labels, canonical)
+    ]
+    if not missing:
+        return None
+    values = ", ".join(dict.fromkeys(fact.value for fact in missing))
+    return Violation(step, "value_drop", f"missing required values: {values}")
+
+
+def _completion_violation(
+    step: int, note: str, canonical: str, *, at_or_after_horizon: bool
+) -> Violation | None:
+    if not _has_premature_completion(
+        note, canonical, at_or_after_horizon=at_or_after_horizon
+    ):
+        return None
+    return Violation(step, "premature_completion", "completion claim is not licensed at this step")
+
+
+def _count_violation(step: int, note: str, canonical: str) -> Violation | None:
+    actual = re.findall(r"\b(\d+)\s+of\s+(\d+)\b", note, re.IGNORECASE)
+    expected = re.findall(r"\b(\d+)\s+of\s+(\d+)\b", canonical, re.IGNORECASE)
+    if not actual or actual == expected:
+        return None
+    return Violation(step, "count_mismatch", f"count {actual!r} contradicts canonical {expected!r}")
+
+
+def _stale_violation(step: int, stale_labels: set[str]) -> Violation | None:
+    if not stale_labels:
+        return None
+    labels = ", ".join(sorted(stale_labels))
+    return Violation(step, "stale_fact", f"contradictory structured fields: {labels}")
+
+
+def _queue_violation(step: int, note: str, canonical: str) -> Violation | None:
+    omitted = _omitted_queue_entries(note, canonical)
+    if not omitted:
+        return None
+    return Violation(
+        step, "queue_loss", f"omitted remaining entries: {', '.join(sorted(omitted))}"
+    )
+
+
+def _step_violations(
+    *,
+    step: int,
+    note: str,
+    previous_note: str,
+    canonical: str,
+    facts: frozenset[Fact],
+    visible: list[str],
+    at_or_after_horizon: bool,
+) -> tuple[Violation | None, ...]:
+    stale_labels = _contradictory_fields(note, canonical)
+    return (
+        _verbatim_copy_violation(step, note, previous_note),
+        _value_drop_violation(step, facts, note, visible, stale_labels, canonical),
+        _completion_violation(
+            step, note, canonical, at_or_after_horizon=at_or_after_horizon
+        ),
+        _count_violation(step, note, canonical),
+        _stale_violation(step, stale_labels),
+        _queue_violation(step, note, canonical),
+    )
+
+
 def check_trajectory(
     task: Task,
     steps: list[dict[str, Any]],
@@ -158,88 +324,30 @@ def check_trajectory(
     violations: list[tuple[int, int, Violation]] = []
     actual_observations: list[str] = []
     previous_note = ""
-
-    for position, record in enumerate(steps):
-        if not isinstance(record, dict):
-            record = {}
-        saved_index = record.get("index")
-        canonical_index = (
-            saved_index
-            if isinstance(saved_index, int) and 0 <= saved_index < len(task.steps)
-            else position
-        )
-        violation_step = canonical_index
+    for position, raw_record in enumerate(steps):
+        record = raw_record if isinstance(raw_record, dict) else {}
+        step = _policy_index(record, position, len(task.steps))
         note = _normalise(record.get("thought") or "")
-        canonical = (
-            canonical_notes[canonical_index]
-            if 0 <= canonical_index < len(canonical_notes)
-            else ""
-        )
-
-        def add(
-            order: int, kind: str, detail: str, *, step: int = violation_step
-        ) -> None:
-            violations.append(
-                (step, order, Violation(step, kind, detail))
-            )
-
-        if note and previous_note and note == previous_note:
-            add(0, "verbatim_copy", "note repeats the previous step verbatim")
-
-        stale_labels = _contradictory_fields(note, canonical)
+        canonical = _canonical_note(canonical_notes, step)
         visible = actual_observations[-keep_last:] if keep_last else []
-        missing: list[Fact] = []
-        if canonical_index in carry:
-            reference = note
-            for fact in sorted(carry[canonical_index], key=lambda item: (item.kind, item.value)):
-                if fact.kind in {"path", "worker"}:
-                    continue
-                if _fact_is_referenced(fact, reference):
-                    continue
-                if any(
-                    any(
-                        visible_fact.kind == fact.kind and visible_fact.value == fact.value
-                        for visible_fact in _extract_facts(observation, -1)
-                    )
-                    for observation in visible
-                ):
-                    continue
-                if _fact_covered_by_stale_field(fact, stale_labels, canonical):
-                    continue
-                missing.append(fact)
-        if missing:
-            values = ", ".join(dict.fromkeys(fact.value for fact in missing))
-            add(1, "value_drop", f"missing required values: {values}")
-
-        if _has_premature_completion(
-            note,
-            canonical,
-            at_or_after_horizon=canonical_index >= len(task.steps) - 1,
-        ):
-            add(2, "premature_completion", "completion claim is not licensed at this step")
-
-        actual_counts = re.findall(r"\b(\d+)\s+of\s+(\d+)\b", note, re.IGNORECASE)
-        canonical_counts = re.findall(r"\b(\d+)\s+of\s+(\d+)\b", canonical, re.IGNORECASE)
-        if actual_counts and actual_counts != canonical_counts:
-            add(
-                3,
-                "count_mismatch",
-                f"count {actual_counts!r} contradicts canonical {canonical_counts!r}",
-            )
-
-        if stale_labels:
-            labels = ", ".join(sorted(stale_labels))
-            add(4, "stale_fact", f"contradictory structured fields: {labels}")
-
-        omitted = _omitted_queue_entries(note, canonical)
-        if omitted:
-            add(5, "queue_loss", f"omitted remaining entries: {', '.join(sorted(omitted))}")
-
+        candidates = _step_violations(
+            step=step,
+            note=note,
+            previous_note=previous_note,
+            canonical=canonical,
+            facts=carry.get(step, frozenset()),
+            visible=visible,
+            at_or_after_horizon=step >= len(task.steps) - 1,
+        )
+        violations.extend(
+            (step, order, violation)
+            for order, violation in enumerate(candidates)
+            if violation is not None
+        )
         observation = record.get("observation")
         if isinstance(observation, str) and observation != "FINISHED":
             actual_observations.append(observation)
         previous_note = note
-
     ordered = tuple(item[2] for item in sorted(violations, key=lambda item: item[:2]))
     counts = dict(sorted(Counter(violation.kind for violation in ordered).items()))
     return IntegrityReport(ordered, ordered[0] if ordered else None, counts, not ordered)
@@ -392,8 +500,7 @@ def _table(headers: list[str], rows: list[list[Any]]) -> list[str]:
     ]
 
 
-def _render_evaluations(paths: list[Path], seed: int) -> str:
-    evaluations = [_analyse_evaluation(path, seed) for path in paths]
+def _validated_task_ids(evaluations: list[dict[str, Any]]) -> set[str]:
     if not evaluations:
         raise ValueError("at least one evaluation is required")
     task_ids = set(evaluations[0]["records"])
@@ -406,26 +513,28 @@ def _render_evaluations(paths: list[Path], seed: int) -> str:
                 "evaluation task_id sets differ: "
                 f"{evaluation['path']} missing={missing[:3]} extra={extra[:3]}"
             )
+    return task_ids
 
-    lines = ["# Offline note-integrity comparison", "", "## Sources and configuration", ""]
-    lines.extend(
-        _table(
-            ["run", "source", "data seed", "keep-last", "tasks"],
-            [
-                [
-                    evaluation["label"],
-                    evaluation["path"],
-                    evaluation["seed"],
-                    evaluation["keep_last"],
-                    len(evaluation["records"]),
-                ]
-                for evaluation in evaluations
-            ],
-        )
-    )
 
-    lines.extend(["", "## Overall", ""])
-    overall_rows = []
+def _section(title: str, headers: list[str], rows: list[list[Any]]) -> list[str]:
+    return ["", f"## {title}", "", *_table(headers, rows)]
+
+
+def _source_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
+    return [
+        [
+            evaluation["label"],
+            evaluation["path"],
+            evaluation["seed"],
+            evaluation["keep_last"],
+            len(evaluation["records"]),
+        ]
+        for evaluation in evaluations
+    ]
+
+
+def _overall_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
+    rows = []
     for evaluation in evaluations:
         records = list(evaluation["records"].values())
         successes = sum(record["success"] for record in records)
@@ -434,7 +543,7 @@ def _render_evaluations(paths: list[Path], seed: int) -> str:
         failed_affected = sum(
             not record["success"] and not record["integrity"].clean for record in records
         )
-        overall_rows.append(
+        rows.append(
             [
                 evaluation["label"],
                 _fraction(successes, len(records)),
@@ -443,28 +552,19 @@ def _render_evaluations(paths: list[Path], seed: int) -> str:
                 _fraction(failed_affected, failed),
             ]
         )
-    lines.extend(
-        _table(
-            [
-                "run",
-                "outcome success",
-                "integrity clean",
-                "affected trajectories",
-                "failed with violation",
-            ],
-            overall_rows,
-        )
-    )
+    return rows
 
-    lines.extend(["", "## Per-family", ""])
-    family_rows = []
+
+def _family_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
+    rows = []
     for evaluation in evaluations:
         records = evaluation["records"]
-        for family in sorted({record["family"] for record in records.values()}):
+        families = sorted({record["family"] for record in records.values()})
+        for family in families:
             group = [record for record in records.values() if record["family"] == family]
             successes = sum(record["success"] for record in group)
             clean = sum(record["integrity"].clean for record in group)
-            family_rows.append(
+            rows.append(
                 [
                     evaluation["label"],
                     family,
@@ -473,84 +573,128 @@ def _render_evaluations(paths: list[Path], seed: int) -> str:
                     _fraction(clean, len(group)),
                 ]
             )
-    lines.extend(
-        _table(
-            ["run", "family", "outcome success", "failures", "integrity clean"],
-            family_rows,
-        )
-    )
+    return rows
 
-    lines.extend(["", "## Violation kinds (affected trajectories)", ""])
-    violation_rows = []
+
+def _affected_counts(evaluation: dict[str, Any]) -> Counter[tuple[str, str]]:
+    affected: Counter[tuple[str, str]] = Counter()
+    for record in evaluation["records"].values():
+        for kind in record["integrity"].counts:
+            affected[(record["family"], kind)] += 1
+    return affected
+
+
+def _violation_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
+    rows = []
     for evaluation in evaluations:
-        affected: Counter[tuple[str, str]] = Counter()
-        for record in evaluation["records"].values():
-            for kind in record["integrity"].counts:
-                affected[(record["family"], kind)] += 1
-        for (family, kind), count in sorted(affected.items()):
-            violation_rows.append([evaluation["label"], family, kind, count])
-    lines.extend(
-        _table(
-            ["run", "family", "violation", "affected trajectories"],
-            violation_rows,
-        )
+        for (family, kind), count in sorted(_affected_counts(evaluation).items()):
+            rows.append([evaluation["label"], family, kind, count])
+    return rows
+
+
+def _paired_sections(
+    evaluations: list[dict[str, Any]], task_ids: set[str]
+) -> list[str]:
+    if len(evaluations) < 2:
+        return []
+    first, second = evaluations[:2]
+    pairs = [
+        (first["records"][task_id], second["records"][task_id])
+        for task_id in sorted(task_ids)
+    ]
+    integrity_flips = Counter(
+        (left["integrity"].clean, right["integrity"].clean) for left, right in pairs
     )
+    outcome_flips = Counter((left["success"], right["success"]) for left, right in pairs)
+    labels = {
+        (True, True): "clean → clean",
+        (True, False): "clean → affected",
+        (False, True): "affected → clean",
+        (False, False): "affected → affected",
+    }
+    outcome_labels = {
+        (True, True): "success → success",
+        (True, False): "success → failure",
+        (False, True): "failure → success",
+        (False, False): "failure → failure",
+    }
+    return [
+        *_section(
+            "Integrity-clean paired flips",
+            ["transition", "tasks"],
+            [[labels[key], integrity_flips[key]] for key in labels],
+        ),
+        *_section(
+            "Outcome paired flips",
+            ["transition", "tasks"],
+            [[outcome_labels[key], outcome_flips[key]] for key in outcome_labels],
+        ),
+    ]
 
-    if len(evaluations) >= 2:
-        first, second = evaluations[:2]
-        pairs = [
-            (first["records"][task_id], second["records"][task_id])
-            for task_id in sorted(task_ids)
-        ]
-        integrity_flips = Counter(
-            (left["integrity"].clean, right["integrity"].clean) for left, right in pairs
-        )
-        outcome_flips = Counter((left["success"], right["success"]) for left, right in pairs)
-        labels = {
-            (True, True): "clean → clean",
-            (True, False): "clean → affected",
-            (False, True): "affected → clean",
-            (False, False): "affected → affected",
-        }
-        outcome_labels = {
-            (True, True): "success → success",
-            (True, False): "success → failure",
-            (False, True): "failure → success",
-            (False, False): "failure → failure",
-        }
-        lines.extend(["", "## Integrity-clean paired flips", ""])
-        lines.extend(
-            _table(
-                ["transition", "tasks"],
-                [[labels[key], integrity_flips[key]] for key in labels],
-            )
-        )
-        lines.extend(["", "## Outcome paired flips", ""])
-        lines.extend(
-            _table(
-                ["transition", "tasks"],
-                [[outcome_labels[key], outcome_flips[key]] for key in outcome_labels],
-            )
-        )
 
+def _acceptance_rows(evaluation: dict[str, Any]) -> list[list[Any]]:
     acceptance = {
         ("cross_reference", "verbatim_copy"): 15,
         ("batch_update", "premature_completion"): 14,
         ("ledger_reconcile", "value_drop"): 6,
     }
-    last = evaluations[-1]
-    observed: Counter[tuple[str, str]] = Counter()
-    for record in last["records"].values():
-        for kind in record["integrity"].counts:
-            observed[(record["family"], kind)] += 1
-    lines.extend(["", "## Memo acceptance checks", ""])
+    observed = _affected_counts(evaluation)
+    return [
+        [
+            family,
+            kind,
+            expected,
+            observed[(family, kind)],
+            "PASS" if observed[(family, kind)] == expected else "FAIL",
+        ]
+        for (family, kind), expected in acceptance.items()
+    ]
+
+
+def _render_evaluations(paths: list[Path], seed: int) -> str:
+    evaluations = [_analyse_evaluation(path, seed) for path in paths]
+    task_ids = _validated_task_ids(evaluations)
+
+    lines = ["# Offline note-integrity comparison", "", "## Sources and configuration", ""]
     lines.extend(
         _table(
-            ["family", "violation", "expected", "observed", "status"],
+            ["run", "source", "data seed", "keep-last", "tasks"],
+            _source_rows(evaluations),
+        )
+    )
+    lines.extend(
+        _section(
+            "Overall",
             [
-                [family, kind, expected, observed[(family, kind)], "PASS" if observed[(family, kind)] == expected else "FAIL"]
-                for (family, kind), expected in acceptance.items()
+                "run",
+                "outcome success",
+                "integrity clean",
+                "affected trajectories",
+                "failed with violation",
             ],
+            _overall_rows(evaluations),
+        )
+    )
+    lines.extend(
+        _section(
+            "Per-family",
+            ["run", "family", "outcome success", "failures", "integrity clean"],
+            _family_rows(evaluations),
+        )
+    )
+    lines.extend(
+        _section(
+            "Violation kinds (affected trajectories)",
+            ["run", "family", "violation", "affected trajectories"],
+            _violation_rows(evaluations),
+        )
+    )
+    lines.extend(_paired_sections(evaluations, task_ids))
+    lines.extend(
+        _section(
+            "Memo acceptance checks",
+            ["family", "violation", "expected", "observed", "status"],
+            _acceptance_rows(evaluations[-1]),
         )
     )
     return "\n".join(lines) + "\n"
