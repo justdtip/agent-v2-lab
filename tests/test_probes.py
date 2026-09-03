@@ -1713,6 +1713,60 @@ def test_reanalysis_recodes_running_max_and_hidden_error_from_generator_truth() 
     assert recovery_truth[5]["hidden_error"] == 1  # the same observation has now been stubbed
 
 
+def test_reanalysis_surface_counts_only_the_prior_note_not_its_tool_call() -> None:
+    dataset = _offline_reanalysis_dataset()
+    _labels, surface, _metadata = state_probe._offline_rows(dataset, data_seed=20260902)
+    row = next(
+        index
+        for index, (task_id, step) in enumerate(
+            zip(dataset.task_ids.tolist(), dataset.step_index.tolist(), strict=True)
+        )
+        if task_id == "train-read-0000-clean" and step == 1
+    )
+    # The prior note is exactly "Plan: read project.md and report its Owner field exactly."
+    # Under the documented lexical rule it has 13 tokens, no digits, and no commas. The fenced
+    # JSON tool call appended to the assistant content has 38 more tokens, 4 digits, and 1 comma.
+    assert surface[row, 1:4].tolist() == [13.0, 0.0, 0.0]
+
+
+def test_reanalysis_rejects_a_data_seed_that_disagrees_with_capture_provenance() -> None:
+    dataset = _offline_reanalysis_dataset()
+    with pytest.raises(ValueError, match="captured data seed 20260902"):
+        state_probe.reanalyse_dataset(
+            dataset,
+            split_seeds=(3,),
+            bootstrap_resamples=1,
+            data_seed=1,
+            logistic_steps=5,
+        )
+
+
+def test_reanalysis_fails_closed_when_capture_has_no_data_seed_provenance() -> None:
+    dataset = _offline_reanalysis_dataset()
+    dataset.meta.pop("data_seed")
+    with pytest.raises(ValueError, match="capture does not record a data seed"):
+        state_probe.reanalyse_dataset(
+            dataset,
+            split_seeds=(3,),
+            bootstrap_resamples=1,
+            data_seed=20260902,
+            logistic_steps=5,
+        )
+
+
+def test_reanalysis_rejects_saved_labels_that_do_not_match_regenerated_truth() -> None:
+    dataset = _offline_reanalysis_dataset()
+    dataset.labels["pending_count"][0] += 1.0
+    with pytest.raises(ValueError, match="saved pending_count labels do not match regenerated"):
+        state_probe.reanalyse_dataset(
+            dataset,
+            split_seeds=(3,),
+            bootstrap_resamples=1,
+            data_seed=20260902,
+            logistic_steps=5,
+        )
+
+
 def test_offline_reanalysis_reports_task_bootstrap_intervals_and_both_margins() -> None:
     dataset = _offline_reanalysis_dataset()
     results = state_probe.reanalyse_dataset(

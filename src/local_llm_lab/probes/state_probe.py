@@ -45,7 +45,7 @@ from typing import Any
 import numpy as np
 
 from local_llm_lab.pipeline.data import build_rows
-from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt
+from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt, parse_turn
 from local_llm_lab.pipeline.tasks import Task
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import capture_residuals, strip_state_fields
@@ -1554,8 +1554,26 @@ def _offline_rows(
             saved_row = row_lookup.get((task_id, step))
             if saved_row is None:
                 continue
+            original_truth = row_labels(task, step)
+            for target, expected in original_truth.items():
+                if target not in TARGETS or target not in dataset.labels:
+                    continue
+                saved = dataset.labels[target][saved_row]
+                if TARGETS[target] == "regression":
+                    matches = (
+                        np.isnan(float(saved))
+                        if expected is None
+                        else float(saved) == float(expected)
+                    )
+                else:
+                    matches = str(saved) == str(expected)
+                if not matches:
+                    raise ValueError(
+                        f"saved {target} labels do not match regenerated ground truth at "
+                        f"{task_id} step {step}"
+                    )
             context = row["messages"][:-1]
-            last_note = next(
+            prior_turn = next(
                 (
                     str(message.get("content", ""))
                     for message in reversed(context)
@@ -1563,6 +1581,7 @@ def _offline_rows(
                 ),
                 "",
             )
+            last_note = parse_turn(prior_turn).thought if prior_turn else ""
             prompt_text = "\n".join(str(message.get("content", "")) for message in context)
             surface[saved_row, 0] = _lexical_token_count(prompt_text)
             surface[saved_row, 1] = _lexical_token_count(last_note)
@@ -2022,6 +2041,7 @@ def reanalyse_dataset(
     split_seeds: tuple[int, ...] = DEFAULT_REANALYSIS_SPLIT_SEEDS,
     bootstrap_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
     data_seed: int = 20260902,
+    captured_data_seed: int | None = None,
     ridge_alpha: float = 10.0,
     logistic_l2: float = 0.01,
     logistic_steps: int = 120,
@@ -2031,6 +2051,15 @@ def reanalyse_dataset(
         raise ValueError("split seeds must be non-empty and unique")
     if bootstrap_resamples < 1:
         raise ValueError("bootstrap_resamples must be positive")
+    recorded_data_seed = (
+        captured_data_seed if captured_data_seed is not None else dataset.meta.get("data_seed")
+    )
+    if recorded_data_seed is None:
+        raise ValueError("capture does not record a data seed; refusing to regenerate ground truth")
+    if recorded_data_seed is not None and int(recorded_data_seed) != data_seed:
+        raise ValueError(
+            f"captured data seed {int(recorded_data_seed)} does not match requested seed {data_seed}"
+        )
     labels, surface, surface_meta = _offline_rows(dataset, data_seed=data_seed)
     all_rows = np.ones(len(dataset), dtype=bool)
     train_prefix = np.array(
@@ -2249,14 +2278,16 @@ def _main_reanalyse(argv: list[str]) -> None:
     args = parser.parse_args(argv)
     seeds = tuple(int(value) for value in args.split_seeds.split(",") if value.strip())
     dataset = load_dataset(args.input)
+    capture_context = _captured_context(args.input)
+    captured_data_seed = capture_context.get("data_seed", dataset.meta.get("data_seed"))
     results = reanalyse_dataset(
         dataset,
         split_seeds=seeds,
         bootstrap_resamples=args.bootstrap_resamples,
         data_seed=args.data_seed,
+        captured_data_seed=captured_data_seed,
         logistic_steps=args.logistic_steps,
     )
-    capture_context = _captured_context(args.input)
     if capture_context:
         results["metadata"]["model"] = {
             "reference": capture_context.get("model"),
