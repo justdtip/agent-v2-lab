@@ -36,6 +36,7 @@ import re
 import shlex
 import sys
 import tempfile
+import time
 import warnings
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field, is_dataclass
@@ -109,6 +110,10 @@ DEFAULT_MLX_CACHE_LIMIT_MIB = 512
 CHECKPOINT_VERSION = 1
 DEFAULT_REANALYSIS_SPLIT_SEEDS = tuple(range(20260903, 20260908))
 DEFAULT_BOOTSTRAP_RESAMPLES = 1_000
+_COHORT_LABELS = {
+    "all_rows": "all_rows (reportable for base)",
+    "sft_disjoint": "sft_disjoint (paired adapter comparisons, within difficulty only)",
+}
 _SURFACE_FEATURE_NAMES = [
     "prompt_token_count",
     "last_note_token_count",
@@ -1733,6 +1738,26 @@ def _interval(values: list[float]) -> dict[str, float]:
     return {"median": float(median), "lower": float(lower), "upper": float(upper)}
 
 
+def _within_cell(
+    bootstrap_scores: list[float],
+    full_fit_scores: list[float],
+    row_counts: list[int],
+    cell_counts: list[int],
+) -> dict[str, Any]:
+    """Summarise one pooled within-position result under the ratified R8 thresholds."""
+    interval = _interval(bootstrap_scores)
+    finite_scores = [score for score in full_fit_scores if np.isfinite(score)]
+    n_test = min(row_counts, default=0)
+    n_cells = min(cell_counts, default=0)
+    return {
+        "estimate": float(np.mean(finite_scores)) if finite_scores else float("nan"),
+        **interval,
+        "n_test": int(n_test),
+        "n_cells": int(n_cells),
+        "eligible": bool(n_test >= MIN_WITHIN_TEST_ROWS and n_cells >= MIN_WITHIN_CELLS),
+    }
+
+
 def _bootstrap_bundle(
     kind: str,
     predictions: dict[str, dict[str, np.ndarray]],
@@ -1848,6 +1873,13 @@ def _analyse_cohort(
     result: dict[str, Any] = {
         "rows": len(cohort),
         "tasks": len(set(cohort.task_ids.tolist())),
+        "by_difficulty": {
+            str(level): {
+                "rows": int(np.sum(cohort.difficulty == level)),
+                "tasks": len(set(cohort.task_ids[cohort.difficulty == level].tolist())),
+            }
+            for level in sorted(set(cohort.difficulty.tolist()))
+        },
         "targets": {},
     }
     comparison_cells: list[dict[str, Any]] = []
@@ -1964,10 +1996,23 @@ def _analyse_cohort(
                 "intervals": {name: _interval(values_) for name, values_ in samples.items()},
             }
             within_overall: list[float] = []
+            within_full_scores: list[float] = []
+            within_row_counts: list[int] = []
+            within_cell_counts: list[int] = []
             difficulty_parts: dict[str, list[float]] = defaultdict(list)
+            difficulty_full_scores: dict[str, list[float]] = defaultdict(list)
+            difficulty_row_counts: dict[str, list[int]] = defaultdict(list)
+            difficulty_cell_counts: dict[str, list[int]] = defaultdict(list)
             family_parts: dict[str, list[float]] = defaultdict(list)
+            family_full_scores: dict[str, list[float]] = defaultdict(list)
+            family_row_counts: dict[str, list[int]] = defaultdict(list)
+            family_cell_counts: dict[str, list[int]] = defaultdict(list)
             for offset, (prediction, rows) in enumerate(within_distributions[layer]):
                 tasks = cohort.task_ids[rows]
+                full_rows = np.arange(len(rows), dtype=int)
+                within_full_scores.append(_primary_score(kind, prediction, full_rows))
+                within_row_counts.append(len(rows))
+                within_cell_counts.append(len(set(cohort.cells[rows].tolist())))
                 overall = _bootstrap_bundle(
                     kind,
                     {"within": prediction},
@@ -1985,6 +2030,15 @@ def _analyse_cohort(
                     seed=layer * 37 + split_seeds[offset % len(split_seeds)],
                 ).items():
                     difficulty_parts[group].extend(scores)
+                for group in sorted(set(cohort.difficulty[rows].tolist()), key=str):
+                    selected = np.flatnonzero(cohort.difficulty[rows] == group)
+                    difficulty_full_scores[str(group)].append(
+                        _primary_score(kind, prediction, selected)
+                    )
+                    difficulty_row_counts[str(group)].append(len(selected))
+                    difficulty_cell_counts[str(group)].append(
+                        len(set(cohort.cells[rows[selected]].tolist()))
+                    )
                 for group, scores in _group_bootstrap_samples(
                     kind,
                     prediction,
@@ -1994,12 +2048,38 @@ def _analyse_cohort(
                     seed=layer * 53 + split_seeds[offset % len(split_seeds)],
                 ).items():
                     family_parts[group].extend(scores)
+                for group in sorted(set(cohort.family[rows].tolist()), key=str):
+                    selected = np.flatnonzero(cohort.family[rows] == group)
+                    family_full_scores[str(group)].append(_primary_score(kind, prediction, selected))
+                    family_row_counts[str(group)].append(len(selected))
+                    family_cell_counts[str(group)].append(
+                        len(set(cohort.cells[rows[selected]].tolist()))
+                    )
             layer_entry["within_position"] = {
-                "overall": _interval(within_overall),
+                "overall": _within_cell(
+                    within_overall,
+                    within_full_scores,
+                    within_row_counts,
+                    within_cell_counts,
+                ),
                 "by_difficulty": {
-                    group: _interval(entries) for group, entries in difficulty_parts.items()
+                    group: _within_cell(
+                        entries,
+                        difficulty_full_scores[group],
+                        difficulty_row_counts[group],
+                        difficulty_cell_counts[group],
+                    )
+                    for group, entries in difficulty_parts.items()
                 },
-                "by_family": {group: _interval(entries) for group, entries in family_parts.items()},
+                "by_family": {
+                    group: _within_cell(
+                        entries,
+                        family_full_scores[group],
+                        family_row_counts[group],
+                        family_cell_counts[group],
+                    )
+                    for group, entries in family_parts.items()
+                },
             }
             position_margin = samples["margin_over_position"]
             surface_margin = samples["margin_over_surface"]
@@ -2089,15 +2169,17 @@ def reanalyse_dataset(
             logistic_steps=logistic_steps,
         ),
     }
+    for name, analysis in analyses.items():
+        analysis["label"] = _COHORT_LABELS[name]
     supported = []
-    for target, entry in analyses["sft_disjoint"]["targets"].items():
+    for target, entry in analyses["all_rows"]["targets"].items():
         layers = [
             layer for layer, value in entry.get("layers", {}).items() if value.get("holm_supported")
         ]
         if layers:
             supported.append(f"{target} at layers {', '.join(layers)}")
     readme = (
-        "Conclusions that survived SFT-row exclusion and both controls: "
+        "Conclusions that survived both controls in all_rows (reportable for base): "
         + ("; ".join(supported) if supported else "none at Holm-adjusted 0.05 support")
         + ". Future adapter comparisons and all gated probe work remain deferred."
     )
@@ -2129,6 +2211,13 @@ def _format_interval(value: dict[str, float]) -> str:
     return f"{value['median']:.3f} [{value['lower']:.3f}, {value['upper']:.3f}]"
 
 
+def _format_within_cell(value: dict[str, Any]) -> str:
+    finite = all(np.isfinite(value.get(key, float("nan"))) for key in ("estimate", "lower", "upper"))
+    if not value.get("eligible") or not finite:
+        return f"n/a (n={value.get('n_test', 0)})"
+    return f"{value['estimate']:.3f} [{value['lower']:.3f}, {value['upper']:.3f}]"
+
+
 def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
     """Render the original target/layer table shape with interval-valued controls."""
     out = [f"# P2 offline re-analysis — {label}", "", results["readme"], ""]
@@ -2139,15 +2228,28 @@ def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
             f"{metadata['bootstrap_resamples']} resamples for each of five deterministic split seeds. "
             "Surface token counts use the recorded tokenizer-free lexical rule.",
             "",
+            "Holm support means the probe clears the Holm-adjusted 0.05 threshold and both "
+            "paired 95% intervals exclude zero; the flag jointly refers to margin vs position and margin vs surface.",
+            "",
         ]
     )
-    for analysis_name, analysis in results["analyses"].items():
+    for analysis in results["analyses"].values():
         out.extend(
             [
-                f"## {analysis_name}",
+                f"## {analysis['label']}",
                 "",
                 f"{analysis['rows']} rows from {analysis['tasks']} tasks. Tested "
                 f"{analysis['multiple_comparisons']['tested_cells']} (target, layer) cells with Holm correction.",
+                "",
+                "Cohort rows by difficulty:",
+                "",
+                *_table(
+                    ["difficulty", "rows", "tasks"],
+                    [
+                        [difficulty, str(values["rows"]), str(values["tasks"])]
+                        for difficulty, values in analysis["by_difficulty"].items()
+                    ],
+                ),
                 "",
             ]
         )
@@ -2189,6 +2291,17 @@ def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
             out.append("")
             within_rows = []
             for layer, layer_entry in entry["layers"].items():
+                overall = layer_entry["within_position"]["overall"]
+                within_rows.append(
+                    [
+                        layer,
+                        "overall",
+                        "all eligible cells",
+                        str(overall["n_test"]),
+                        str(overall["n_cells"]),
+                        _format_within_cell(overall),
+                    ]
+                )
                 for group_kind in ("by_difficulty", "by_family"):
                     for group, interval in layer_entry["within_position"][group_kind].items():
                         within_rows.append(
@@ -2196,14 +2309,26 @@ def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
                                 layer,
                                 group_kind.removeprefix("by_"),
                                 group,
-                                _format_interval(interval),
+                                str(interval["n_test"]),
+                                str(interval["n_cells"]),
+                                _format_within_cell(interval),
                             ]
                         )
             out.extend(
                 [
                     "Within-position analyses (training-cell means removed):",
                     "",
-                    *_table(["layer", "grouping", "group", "metric (95% interval)"], within_rows),
+                    *_table(
+                        [
+                            "layer",
+                            "grouping",
+                            "group",
+                            "n_test",
+                            "n_cells",
+                            "metric (95% interval)",
+                        ],
+                        within_rows,
+                    ),
                     "",
                 ]
             )
@@ -2211,8 +2336,10 @@ def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
         [
             "## intervals",
             "",
-            "Every displayed number is the median with 2.5th/97.5th task-bootstrap percentiles. "
-            "The JSON `intervals` blocks retain the machine-readable values.",
+            "Within-position point estimates are means of the full-fit split scores; intervals "
+            "use 2.5th/97.5th task-bootstrap percentiles restricted to eligible cells. Other "
+            "displayed numbers are bootstrap medians with the same percentiles. The JSON "
+            "`intervals` blocks retain the machine-readable values.",
             "",
         ]
     )
@@ -2266,6 +2393,7 @@ def _captured_context(path: Path) -> dict[str, Any]:
 
 
 def _main_reanalyse(argv: list[str]) -> None:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(
         description="Offline SPEC-004 re-analysis of a saved P2 capture."
     )
@@ -2296,8 +2424,14 @@ def _main_reanalyse(argv: list[str]) -> None:
         results["metadata"]["policy"] = capture_context.get("policy")
         results["metadata"]["adapter_artifact"] = capture_context.get("adapter_artifact")
         results["metadata"]["capture_context"] = capture_context
+    model_reference = capture_context.get("model", dataset.meta.get("model"))
+    if isinstance(model_reference, str):
+        from local_llm_lab.models import load_model_spec
+
+        results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
     results["metadata"]["command"] = shlex.join(sys.argv)
     results["metadata"]["input"] = str(args.input)
+    results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
     stem = args.input.name.removesuffix(".npz") + ".reanalysis"
     json_path = args.output / f"{stem}.json"
     markdown_path = args.output / f"{stem}.md"
@@ -2377,7 +2511,7 @@ def _determinism_section(results: dict[str, Any]) -> list[str]:
     return out
 
 
-def _preflight_section(results: dict[str, Any]) -> list[str]:
+def _gate_section(results: dict[str, Any]) -> list[str]:
     preflight = results.get("meta", {}).get("deconfounding_preflight")
     if not preflight:
         return []
@@ -2524,7 +2658,7 @@ def render_markdown(results: dict[str, Any], label: str) -> str:
         f"{'difficulties ' + json.dumps(difficulties) + ', ' if difficulties else ''}"
         f"split by task id ({split} train/test rows), seed {results.get('seed')}.\n"
     )
-    out.extend(_preflight_section(results))
+    out.extend(_gate_section(results))
     out.extend(_determinism_section(results))
     for target, entry in results["targets"].items():
         out.append(f"## {target} ({entry['kind']})")

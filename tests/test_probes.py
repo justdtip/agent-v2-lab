@@ -1789,9 +1789,25 @@ def test_offline_reanalysis_reports_task_bootstrap_intervals_and_both_margins() 
         "step_index",
     ]
     assert set(results["analyses"]) == {"all_rows", "sft_disjoint"}
-    assert results["analyses"]["all_rows"]["tasks"] == 72
-    assert results["analyses"]["sft_disjoint"]["tasks"] == 48
-    targets = results["analyses"]["all_rows"]["targets"]
+    all_rows = results["analyses"]["all_rows"]
+    disjoint = results["analyses"]["sft_disjoint"]
+    assert all_rows["label"] == "all_rows (reportable for base)"
+    assert disjoint["label"] == (
+        "sft_disjoint (paired adapter comparisons, within difficulty only)"
+    )
+    assert all_rows["tasks"] == 72
+    assert disjoint["tasks"] == 48
+    assert all_rows["by_difficulty"] == {
+        "0": {"rows": 200, "tasks": 36},
+        "1": {"rows": 86, "tasks": 12},
+        "2": {"rows": 174, "tasks": 24},
+    }
+    assert disjoint["by_difficulty"] == {
+        "0": {"rows": 60, "tasks": 12},
+        "1": {"rows": 86, "tasks": 12},
+        "2": {"rows": 174, "tasks": 24},
+    }
+    targets = all_rows["targets"]
     assert "prev_error" not in targets
     assert "running_max" not in targets
     assert {
@@ -1813,7 +1829,15 @@ def test_offline_reanalysis_reports_task_bootstrap_intervals_and_both_margins() 
     assert set(layer["intervals"]["probe"]) == {"median", "lower", "upper"}
     assert "by_difficulty" in layer["within_position"]
     assert "by_family" in layer["within_position"]
-    assert results["analyses"]["all_rows"]["multiple_comparisons"]["tested_cells"] > 0
+    overall = layer["within_position"]["overall"]
+    assert overall["estimate"] == pytest.approx(0.9941802215767919)
+    assert overall["n_test"] == 38
+    assert overall["n_cells"] == 19
+    assert overall["eligible"] is True
+    assert layer["within_position"]["by_family"]["synthesis"]["n_test"] == 1
+    assert layer["within_position"]["by_family"]["synthesis"]["n_cells"] == 1
+    assert layer["within_position"]["by_family"]["synthesis"]["eligible"] is False
+    assert all_rows["multiple_comparisons"]["tested_cells"] > 0
 
 
 def test_reanalysis_marks_zero_variance_bootstrap_r2_undefined() -> None:
@@ -1831,7 +1855,9 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
 ) -> None:
     from local_llm_lab.pipeline import evaluate
 
-    captured = state_probe.save_dataset(_offline_reanalysis_dataset(), tmp_path / "state-mini.npz")
+    dataset = _offline_reanalysis_dataset()
+    dataset.meta["model"] = "qwen25-coder-3b"
+    captured = state_probe.save_dataset(dataset, tmp_path / "state-mini.npz")
 
     def forbidden_loader(*_args, **_kwargs):
         raise AssertionError("offline reanalysis attempted to load a model or tokenizer")
@@ -1863,12 +1889,42 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
     markdown_path = output / "state-mini.reanalysis.md"
     payload = json.loads(json_path.read_text())
     assert payload["metadata"]["command"] == " ".join(sys.argv)
-    assert payload["metadata"]["model"] == {"name": "saved-model-metadata"}
+    assert payload["metadata"]["model"] == "qwen25-coder-3b"
+    assert payload["metadata"]["elapsed_seconds"] >= 0.0
+    model_spec = payload["metadata"]["model_spec"]
+    assert set(model_spec) == {
+        "name",
+        "hf_id",
+        "family",
+        "chat",
+        "lora",
+        "train",
+        "cache_strategy",
+        "probe_layer_fractions",
+        "memory_budget_gib",
+        "policies",
+    }
+    assert model_spec["name"] == "qwen25-coder-3b"
+    assert model_spec["hf_id"] == "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
+    assert model_spec["chat"] == {
+        "thinking": "unsupported",
+        "template_kwargs": {},
+        "end_of_turn": "<|im_end|>",
+        "extra_stop_tokens": ["<|endoftext|>"],
+        "max_think_tokens": 512,
+    }
+    assert set(path.name for path in output.iterdir()) == {
+        "state-mini.reanalysis.json",
+        "state-mini.reanalysis.md",
+    }
     assert "Conclusions that survived" in markdown_path.read_text()
-    first_json = json_path.read_bytes()
+    first_payload = payload
+    first_payload["metadata"].pop("elapsed_seconds")
     first_markdown = markdown_path.read_bytes()
     state_probe.main()
-    assert json_path.read_bytes() == first_json
+    second_payload = json.loads(json_path.read_text())
+    second_payload["metadata"].pop("elapsed_seconds")
+    assert second_payload == first_payload
     assert markdown_path.read_bytes() == first_markdown
 
 
