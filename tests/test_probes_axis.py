@@ -25,6 +25,51 @@ def _marker_reply(role: str) -> str:
     return "I speak in my own voice: " + ", ".join(assistant_axis.ROLE_MARKERS[role]) + "."
 
 
+def test_trajectory_projections_forwards_the_selected_spec_to_prompt_rendering(
+    monkeypatch, tmp_path
+) -> None:
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline import protocol
+
+    selected = load_model_spec("qwen35-4b")
+    eval_path = tmp_path / "eval.json"
+    eval_path.write_text(
+        json.dumps(
+            {
+                "trajectories": [
+                    {
+                        "task_id": "fake",
+                        "family": "read",
+                        "variant": "clean",
+                        "label": "x",
+                        "prompt": "task",
+                        "steps": [{"raw": "note"}],
+                        "verdict": {"success": True},
+                        "loop_detected": False,
+                        "exhausted": False,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    seen = []
+    monkeypatch.setattr(
+        protocol,
+        "build_prompt",
+        lambda *_args, spec=None, **_kwargs: seen.append(spec) or "prompt",
+    )
+    monkeypatch.setattr(
+        assistant_axis,
+        "response_mean_activations",
+        lambda *_args, **_kwargs: {0: np.array([1.0], dtype=np.float32)},
+    )
+
+    assistant_axis.trajectory_projections(None, None, eval_path, [1.0], 0, spec=selected)
+
+    assert seen == [selected]
+
+
 def test_role_prompts_are_strong_and_have_markers_and_exemplars() -> None:
     names = [name for name, _system in assistant_axis.ROLES]
     low_and_neutral = {

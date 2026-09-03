@@ -79,11 +79,19 @@ __all__ = [
     "main",
     "probe_layers",
     "readout",
+    "render_probe_prompt",
     "residual_at",
     "token_evidence",
 ]
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
+
+
+def render_probe_prompt(tokenizer: Any, messages: list[dict[str, Any]], *, spec: Any) -> str:
+    """Render the J-lens probe context under the selected model declaration."""
+    from local_llm_lab.pipeline.protocol import build_prompt
+
+    return build_prompt(tokenizer, messages, spec=spec)
 
 # A small, hand-written stand-in for a pretraining distribution: plain prose, code, structured
 # key=value lines, file paths, and a little dialogue. This is NOT a sample of the model's real
@@ -454,7 +462,7 @@ def _print_table(records: list[dict[str, Any]], candidates: dict[str, str]) -> N
 
 
 def main() -> None:
-    from local_llm_lab.pipeline.protocol import build_prompt
+    from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.tasks import make_tasks
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
     from local_llm_lab.project import configure_local_cache
@@ -497,6 +505,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     add_gpu_arguments(parser)
     args = parser.parse_args()
+    spec = load_model_spec(args.model)
 
     try:
         layers = [int(part) for part in args.layers.split(",") if part.strip()]
@@ -543,7 +552,7 @@ def main() -> None:
         args.model, adapter_path=None if args.adapter is None else str(args.adapter.resolve())
     )
 
-    prompt = build_prompt(tokenizer, messages)
+    prompt = render_probe_prompt(tokenizer, messages, spec=spec)
     if args.force_prefix:
         prompt = prompt + args.force_prefix
     bos = getattr(tokenizer, "bos_token", None)

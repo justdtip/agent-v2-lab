@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from local_llm_lab.agent_protocol import ActionParseError
+from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.data import write_jsonl
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.evaluate import DEFAULT_MODEL, load_policy, make_sampler
@@ -19,20 +20,20 @@ from local_llm_lab.pipeline.protocol import (
     assistant_message,
     build_prompt,
     parse_turn,
-    render_turn,
     tool_message,
 )
+from local_llm_lab.pipeline.protocol import render_completion as protocol_render_completion
 from local_llm_lab.pipeline.runner import generate_turn, run_task
 from local_llm_lab.pipeline.tasks import Task, make_tasks
 from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT
 
-END = END_OF_TURN
+_LEGACY_SPEC = load_model_spec(DEFAULT_MODEL)
 
 
 def render_completion(thought: str, action: Any) -> str:
-    """Exactly what the chat template renders for this assistant message plus end of turn."""
-    return render_turn(thought, action) + END
+    """Compatibility delegate for consumers that still import the legacy branch seam."""
+    return protocol_render_completion(thought, action, spec=_LEGACY_SPEC)
 
 
 def _continue(
@@ -127,7 +128,7 @@ def mine_pairs(
         for branch in range(branches):
             mx.random.seed(seed * 100_003 + point * 101 + branch)
             raw = generate_turn(model, tokenizer, prompt, sampler, max_tokens)
-            completion = raw.replace(END, "") + END
+            completion = raw.replace(END_OF_TURN, "") + END_OF_TURN
             stats["branches"] += 1
             if completion in good or completion in bad:
                 continue

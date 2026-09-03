@@ -910,6 +910,7 @@ def trajectory_projections(
     *,
     limit: int | None = None,
     progress: Any = None,
+    spec: Any = None,
 ) -> list[dict[str, Any]]:
     """Per-turn axis projections for every trajectory in an evaluation JSON.
 
@@ -943,7 +944,7 @@ def trajectory_projections(
         for step in record["steps"]:
             raw = step.get("raw") or ""
             if raw.strip():
-                prompt = build_prompt(tokenizer, messages)
+                prompt = build_prompt(tokenizer, messages, spec=spec)
                 means = response_mean_activations(
                     model, tokenizer, prompt, raw, [layer], stats=capture_stats
                 )
@@ -1246,6 +1247,7 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
 
 
 def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.evaluate import load_policy
     from local_llm_lab.probes.guard import require_idle_gpu
     from local_llm_lab.probes.policies import resolve_policy
@@ -1255,6 +1257,7 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.layer not in axis:
         parser.error(f"axis file has layers {sorted(axis)}, not {args.layer}")
     model, tokenizer = load_policy(args.model, resolve_policy(args.policy))
+    spec = load_model_spec(args.model)
     records = trajectory_projections(
         model,
         tokenizer,
@@ -1263,6 +1266,7 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
         args.layer,
         limit=args.limit,
         progress=lambda number, total: print(f"[{number:03d}/{total:03d}]", flush=True),
+        spec=spec,
     )
     summary = summarize_projections(records)
     payload = {

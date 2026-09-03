@@ -390,6 +390,7 @@ def build_probe_dataset(
     memory_progress: Any = None,
     checkpoint_dir: Path | None = None,
     checkpoint_context: dict[str, Any] | None = None,
+    spec: Any = None,
 ) -> ProbeDataset:
     """Capture the last prompt token's residual stream for every supervised row.
 
@@ -457,7 +458,7 @@ def build_probe_dataset(
                     context = row["messages"][:-1]
                     if strip:
                         context = _strip_messages(context)
-                    prompt = build_prompt(tokenizer, context, keep_last=len(context))
+                    prompt = build_prompt(tokenizer, context, keep_last=len(context), spec=spec)
                     token_ids = encode(tokenizer, prompt)
                     task_lengths.append(len(token_ids))
                     captured = capture_residuals(model, token_ids, layers, positions="last")
@@ -2730,6 +2731,7 @@ def main() -> None:
         _main_reanalyse(sys.argv[2:])
         return
 
+    from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.evaluate import load_policy
     from local_llm_lab.pipeline.tasks import make_tasks
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
@@ -2774,6 +2776,7 @@ def main() -> None:
     parser.add_argument("--reuse", action="store_true", help="Reuse a captured .npz if present.")
     add_gpu_arguments(parser)
     args = parser.parse_args()
+    spec = load_model_spec(args.model)
 
     if args.split is not None:
         if args.splits != "train":
@@ -2894,6 +2897,7 @@ def main() -> None:
                     "mix_difficulty": bool(args.mix_difficulty),
                     "data_seed": args.data_seed,
                 },
+                spec=spec,
             )
         finally:
             model = None

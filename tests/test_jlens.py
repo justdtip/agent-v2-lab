@@ -7,6 +7,22 @@ import pytest
 from local_llm_lab.pipeline import jlens
 
 
+def test_render_probe_prompt_forwards_the_selected_spec(monkeypatch) -> None:
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline import protocol
+
+    selected = load_model_spec("qwen35-4b")
+    seen = []
+    monkeypatch.setattr(
+        protocol,
+        "build_prompt",
+        lambda *_args, spec=None, **_kwargs: seen.append(spec) or "prompt",
+    )
+
+    assert jlens.render_probe_prompt(None, [], spec=selected) == "prompt"
+    assert seen == [selected]
+
+
 class _View:
     """Small view seam: no model or checkpoint is involved in these contracts."""
 
