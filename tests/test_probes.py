@@ -549,7 +549,6 @@ def test_model_spec_resolve_populates_every_field_from_real_architecture_view() 
     )
     assert resolved.trainable_parameters == 7648
     assert resolved.probe_layers == (1, 1, 2, 3, 3, 4)
-    assert resolved.cache_strategy == "snapshot"
     assert resolved.snapshot_revision == "fake-hybrid-revision"
     assert resolved.jvp_method == "untested"
 

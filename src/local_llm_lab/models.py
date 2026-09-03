@@ -66,6 +66,7 @@ class ModelSpec:
         lora_keys = view.lora_targets(self.lora.keys)
         cache_strategy: Literal["trim", "snapshot", "none"]
         if self.cache_strategy == "auto":
+            # TEMPORARY until R1 (Task 5)
             cache_strategy = "trim" if view.cache_trimmable else "snapshot"
         else:
             cache_strategy = self.cache_strategy
