@@ -6,7 +6,7 @@ import json
 import os
 import random
 import tempfile
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +185,7 @@ def write_dataset(
         "splits": {},
     }
     if rendering_spec is not None:
+        manifest["model"] = asdict(spec)
         manifest["rendering"] = {
             "thinking": rendering_spec.chat.thinking,
             "template_kwargs": rendering_spec.chat.template_kwargs,

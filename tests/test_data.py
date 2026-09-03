@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+from dataclasses import asdict
 
 from local_llm_lab.agent_protocol import Action
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, load_model_spec
@@ -174,6 +175,28 @@ def test_write_dataset_records_the_effective_inference_training_renderer(tmp_pat
 
     assert manifest["rendering"]["thinking"] == "off"
     assert manifest["rendering"]["template_kwargs"] == {"enable_thinking": False}
+
+
+def test_write_dataset_records_the_complete_unresolved_spec_without_resolving(
+    monkeypatch, tmp_path
+) -> None:
+    spec = _thinking_spec("inference")
+
+    def forbid_resolve(*args, **kwargs) -> None:
+        del args, kwargs
+        raise AssertionError("write_dataset must not resolve a model specification")
+
+    monkeypatch.setattr(ModelSpec, "resolve", forbid_resolve)
+
+    manifest = write_dataset(
+        tmp_path,
+        {"train": 12},
+        tokenizer=_ThinkingTokenizer(),
+        spec=spec,
+    )
+
+    assert manifest["model"] == asdict(spec)
+    assert manifest["rendering"]["thinking"] == "off"
 
 
 def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens() -> None:
