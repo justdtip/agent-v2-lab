@@ -415,6 +415,28 @@ def _jlens_module() -> Any:
     return jlens
 
 
+def _default_residual_types(
+    deltas: dict[str, tuple[Any, dict[str, Any]]],
+    hidden_size: int,
+) -> set[str]:
+    """Select only unambiguous residual-update outputs from parsed adapter metadata.
+
+    A square hidden-to-hidden update can be an internal attention projection as easily as a
+    residual update. Default discovery therefore only admits outputs with the residual width and
+    a distinct input width. Ambiguous paths remain available through the explicit ``types``
+    filter at the public call site.
+    """
+    selected: set[str] = set()
+    for _delta, info in deltas.values():
+        shape = info.get("shape", ())
+        if len(shape) != 2:
+            continue
+        output_size, input_size = (int(size) for size in shape)
+        if output_size == hidden_size and input_size != hidden_size:
+            selected.add(str(info["type"]))
+    return selected
+
+
 def readout_update_directions(
     view: ArchitectureView,
     tokenizer: Any,
@@ -428,8 +450,9 @@ def readout_update_directions(
 ) -> list[dict[str, Any]]:
     """Read top output directions of parsed adapter updates as tokens.
 
-    Without an explicit ``types`` filter, every module type represented by the parsed adapter
-    records is read. This avoids baking one dense-backbone projection layout into the probe.
+    Without an explicit ``types`` filter, parsed shape metadata and the view's residual width
+    select only unambiguous residual-update outputs. Ambiguous hidden-to-hidden internal paths
+    require an intentional caller filter instead of being assumed from a module name.
 
     A direction produced by block ``L`` lands in the layer ``L + 1`` residual stream, so that is
     the layer whose tail Jacobian the J-lens uses.
@@ -441,7 +464,9 @@ def readout_update_directions(
     jlens = _jlens_module()
     corpus_ids = [jlens.encode(tokenizer, text) for text in jlens.DEFAULT_CORPUS[:corpus_size]]
     deltas = load_adapter_deltas(adapter_dir)
-    requested_types = types if types is not None else {str(info["type"]) for _, info in deltas.values()}
+    requested_types = (
+        types if types is not None else _default_residual_types(deltas, int(view.hidden_size))
+    )
     records: list[dict[str, Any]] = []
     for name, (_delta, info) in sorted(deltas.items()):
         if info["type"] not in requested_types or info["layer"] not in layers:

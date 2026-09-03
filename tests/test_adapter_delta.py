@@ -8,7 +8,12 @@ from local_llm_lab.probes import adapter_delta
 def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(monkeypatch) -> None:
     calls: list[float] = []
 
-    info = {"type": "down_proj", "layer": 0, "module": "layers.0.down_proj"}
+    info = {
+        "type": "down_proj",
+        "layer": 0,
+        "module": "layers.0.down_proj",
+        "shape": [2, 8],
+    }
     monkeypatch.setattr(
         adapter_delta,
         "load_adapter_deltas",
@@ -45,20 +50,41 @@ def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(m
         readout = logit_lens
 
     monkeypatch.setattr(adapter_delta, "_jlens_module", lambda: JLens)
-    records = adapter_delta.readout_update_directions(object(), object(), "adapter", [0])
+    view = type("View", (), {"hidden_size": 2})()
+    records = adapter_delta.readout_update_directions(view, object(), "adapter", [0])
 
     assert len(records) == 2  # +v and -v need no duplicate corpus JVP.
     assert calls == [1.0, 1.0]
 
 
-def test_adapter_direction_readouts_default_to_parsed_adapter_module_types(monkeypatch) -> None:
+def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(monkeypatch) -> None:
     calls: list[float] = []
-    down = {"type": "down_proj", "layer": 0, "module": "layers.0.down_proj"}
-    up = {"type": "up_proj", "layer": 0, "module": "layers.0.up_proj"}
+    down = {
+        "type": "down_proj",
+        "layer": 0,
+        "module": "layers.0.down_proj",
+        "shape": [2, 8],
+    }
+    up = {
+        "type": "up_proj",
+        "layer": 0,
+        "module": "layers.0.up_proj",
+        "shape": [8, 2],
+    }
+    internal = {
+        "type": "q_proj",
+        "layer": 0,
+        "module": "layers.0.self_attn.q_proj",
+        "shape": [2, 2],
+    }
     monkeypatch.setattr(
         adapter_delta,
         "load_adapter_deltas",
-        lambda _path: {"layers.0.down_proj": (None, down), "layers.0.up_proj": (None, up)},
+        lambda _path: {
+            "layers.0.down_proj": (None, down),
+            "layers.0.self_attn.q_proj": (None, internal),
+            "layers.0.up_proj": (None, up),
+        },
     )
     monkeypatch.setattr(
         adapter_delta,
@@ -88,16 +114,17 @@ def test_adapter_direction_readouts_default_to_parsed_adapter_module_types(monke
         readout = logit_lens
 
     monkeypatch.setattr(adapter_delta, "_jlens_module", lambda: JLens)
+    view = type("View", (), {"hidden_size": 2})()
     records = adapter_delta.readout_update_directions(
-        object(), object(), "adapter", [0], directions=1
+        view, object(), "adapter", [0], directions=1
     )
 
-    assert [record["type"] for record in records] == ["down_proj", "up_proj"]
-    assert calls == [1.0, 1.0]
+    assert [record["type"] for record in records] == ["down_proj"]
+    assert calls == [1.0]
 
     calls.clear()
     filtered = adapter_delta.readout_update_directions(
-        object(), object(), "adapter", [0], types=("up_proj",), directions=1
+        view, object(), "adapter", [0], types=("up_proj",), directions=1
     )
 
     assert [record["type"] for record in filtered] == ["up_proj"]
