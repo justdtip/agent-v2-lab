@@ -33,7 +33,7 @@ _LEGACY_SPEC = load_model_spec(DEFAULT_MODEL)
 
 def render_completion(thought: str, action: Any) -> str:
     """Compatibility delegate for consumers that still import the legacy branch seam."""
-    return protocol_render_completion(thought, action, spec=_LEGACY_SPEC)
+    return protocol_render_completion(thought, action, spec=_LEGACY_SPEC).removesuffix("\n")
 
 
 def _continue(

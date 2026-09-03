@@ -174,3 +174,44 @@ def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> N
         jlens.main()
 
     assert calls == ["guard", "cache", "load"]
+
+
+def test_jlens_main_loads_and_dispatches_the_selected_spec(monkeypatch) -> None:
+    from local_llm_lab import models, project
+    from local_llm_lab.pipeline import tasks
+    from local_llm_lab.probes import guard
+
+    selected = object()
+    seen = []
+    task = SimpleNamespace(
+        steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
+        files={"x": ""},
+        task_id="fake",
+    )
+    monkeypatch.setattr(tasks, "make_tasks", lambda *_args, **_kwargs: [task])
+    monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
+    monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(project, "configure_local_cache", lambda: None)
+    monkeypatch.setattr(
+        models,
+        "load_model_spec",
+        lambda model: seen.append(("load", model)) or selected,
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "mlx_lm",
+        SimpleNamespace(load=lambda *_args, **_kwargs: (None, None)),
+    )
+
+    def intercept(*_args, **kwargs):
+        seen.append(("dispatch", kwargs["spec"]))
+        raise RuntimeError("stop after dispatch")
+
+    monkeypatch.setattr(jlens, "render_probe_prompt", intercept)
+    monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--model", "qwen35-4b"])
+
+    with pytest.raises(RuntimeError, match="stop after dispatch"):
+        jlens.main()
+
+    assert seen == [("load", "qwen35-4b"), ("dispatch", selected)]

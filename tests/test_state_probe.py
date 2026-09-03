@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.probes import state_probe
@@ -78,3 +79,43 @@ def test_build_probe_dataset_forwards_the_selected_spec_to_prompt_rendering(monk
     )
 
     assert seen == [selected]
+
+
+def test_main_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path) -> None:
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard, policies
+
+    selected = object()
+    seen = []
+    monkeypatch.setattr(
+        models,
+        "load_model_spec",
+        lambda model: seen.append(("load", model)) or selected,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "make_tasks",
+        lambda *_args, **_kwargs: [SimpleNamespace(task_id="t", difficulty=0)],
+    )
+    monkeypatch.setattr(state_probe, "task_difficulties", lambda *_args: {"t": 0})
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None))
+    monkeypatch.setattr(state_probe, "artifact_identity", lambda *_args: {})
+    monkeypatch.setattr(state_probe, "set_mlx_cache_limit", lambda *_args: 0)
+
+    def intercept(*_args, **kwargs):
+        seen.append(("dispatch", kwargs["spec"]))
+        raise RuntimeError("stop after dispatch")
+
+    monkeypatch.setattr(state_probe, "build_probe_dataset", intercept)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["state-probe", "--model", "qwen35-4b", "--output", str(tmp_path), "--limit", "1"],
+    )
+
+    with pytest.raises(RuntimeError, match="stop after dispatch"):
+        state_probe.main()
+
+    assert seen == [("load", "qwen35-4b"), ("dispatch", selected)]

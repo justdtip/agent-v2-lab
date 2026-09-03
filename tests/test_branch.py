@@ -7,14 +7,29 @@ import pytest
 from local_llm_lab.agent_protocol import Action
 
 
-def test_render_completion_delegates_to_the_canonical_protocol_renderer() -> None:
-    from local_llm_lab.models import load_model_spec
-    from local_llm_lab.pipeline import branch, protocol
+def test_render_completion_delegates_with_the_legacy_declaration(monkeypatch) -> None:
+    from local_llm_lab.pipeline import branch
 
+    seen = []
+    monkeypatch.setattr(
+        branch,
+        "protocol_render_completion",
+        lambda thought, action, *, spec: seen.append((thought, action, spec)) or "canonical\n",
+    )
     action = Action("finish", {"answer": "done"})
 
-    assert branch.render_completion("note", action) == protocol.render_completion(
-        "note", action, spec=load_model_spec(branch.DEFAULT_MODEL)
+    assert branch.render_completion("note", action) == "canonical"
+    assert seen == [("note", action, branch._LEGACY_SPEC)]
+
+
+def test_render_completion_preserves_legacy_end_token_bytes() -> None:
+    from local_llm_lab.pipeline import branch
+
+    assert branch.render_completion("note", Action("finish", {"answer": "done"})).endswith(
+        "<|im_end|>"
+    )
+    assert not branch.render_completion("note", Action("finish", {"answer": "done"})).endswith(
+        "<|im_end|>\n"
     )
 
 

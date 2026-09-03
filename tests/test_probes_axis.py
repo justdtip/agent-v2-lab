@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from pathlib import Path
@@ -68,6 +69,49 @@ def test_trajectory_projections_forwards_the_selected_spec_to_prompt_rendering(
     assistant_axis.trajectory_projections(None, None, eval_path, [1.0], 0, spec=selected)
 
     assert seen == [selected]
+
+
+def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: Path) -> None:
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.probes import guard, policies
+
+    selected = object()
+    seen = []
+    args = argparse.Namespace(
+        axis=tmp_path / "axis.npz",
+        layer=18,
+        model="qwen35-4b",
+        policy="base",
+        eval=tmp_path / "eval.json",
+        limit=1,
+        output=tmp_path,
+    )
+    parser = argparse.ArgumentParser()
+    monkeypatch.setattr(
+        assistant_axis,
+        "load_axis",
+        lambda *_args: ({18: np.array([1.0])}, {"layers": {"18": {}}}),
+    )
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None))
+    monkeypatch.setattr(
+        models,
+        "load_model_spec",
+        lambda model: seen.append(("load", model)) or selected,
+    )
+
+    def intercept(*_args, **kwargs):
+        seen.append(("dispatch", kwargs["spec"]))
+        raise RuntimeError("stop after dispatch")
+
+    monkeypatch.setattr(assistant_axis, "trajectory_projections", intercept)
+
+    with pytest.raises(RuntimeError, match="stop after dispatch"):
+        assistant_axis._project(args, parser)
+
+    assert seen == [("load", "qwen35-4b"), ("dispatch", selected)]
 
 
 def test_role_prompts_are_strong_and_have_markers_and_exemplars() -> None:
