@@ -220,7 +220,23 @@ def test_render_refuses_entire_cohort_for_malformed_trajectory(
     assert "Paired McNemar" not in render(summaries)
 
 
-@pytest.mark.parametrize("tasks", [True, -1, "2", 1, 3])
+def test_render_refuses_pair_when_summary_task_count_is_boolean(tmp_path: Path) -> None:
+    """A bool must not masquerade as the exact count of one valid trajectory."""
+    task_id = "valid-read-0000-clean"
+    left = _single_task_summary("a")
+    right = _single_task_summary("b")
+    left["tasks"] = True
+    right["tasks"] = True
+    _write_eval(tmp_path / "a.json", left, {task_id: True})
+    _write_eval(tmp_path / "b.json", right, {task_id: False})
+
+    summaries = load_summaries(tmp_path)
+
+    assert all(summary["_outcomes"] == {} for summary in summaries)
+    assert "Paired McNemar" not in render(summaries)
+
+
+@pytest.mark.parametrize("tasks", [-1, "2", 1, 3])
 def test_render_refuses_pair_when_summary_task_count_is_invalid_or_mismatched(
     tmp_path: Path, tasks: object
 ) -> None:
@@ -294,6 +310,27 @@ def test_render_refuses_pairs_for_same_ids_with_different_seed_or_task_difficult
 
     assert "Paired McNemar" not in render(load_summaries(seed_dir))
     assert "Paired McNemar" not in render(load_summaries(level_dir))
+
+
+@pytest.mark.parametrize("missing", [True, False], ids=["missing", "null"])
+def test_render_refuses_pair_for_missing_or_null_data_seed(tmp_path: Path, missing: bool) -> None:
+    """A matching cohort without a real data seed has no trustworthy pairing identity."""
+    task_id = "valid-read-0000-clean"
+    left = _single_task_summary("a")
+    right = _single_task_summary("b")
+    if missing:
+        left.pop("data_seed")
+        right.pop("data_seed")
+    else:
+        left["data_seed"] = None
+        right["data_seed"] = None
+    _write_eval(tmp_path / "a.json", left, {task_id: True})
+    _write_eval(tmp_path / "b.json", right, {task_id: False})
+
+    summaries = load_summaries(tmp_path)
+
+    assert all(summary["_outcomes"] for summary in summaries)
+    assert "Paired McNemar" not in render(summaries)
 
 
 def test_render_refuses_pair_for_matching_negative_difficulty(tmp_path: Path) -> None:

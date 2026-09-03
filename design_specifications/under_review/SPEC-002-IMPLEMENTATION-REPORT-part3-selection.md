@@ -27,7 +27,7 @@ interval expectations.
 
 Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 595;
 `report.py` 138; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 20;
-`test_selection.py` 147; and `test_report.py` 343.
+`test_selection.py` 147; and `test_report.py` 380.
 
 Wiring-map rows touched are 2.4 (`Task` consumption only; frozen record and exact
 `task_from_id` signature retained), 2.10 (evaluation summary and screen arguments), 2.11
@@ -124,3 +124,11 @@ Pairing now rejects every negative per-trajectory difficulty, including the `-1`
 sentinel. The guard regressions use count-valid one-record cohorts where only the named
 identity, split, seed, difficulty, or outcome property varies; malformed-record tests retain
 the extra ID-less and non-dict cases to prove silent skipping cannot manufacture a pair.
+The round-3 fix commit is `72b1e57d6514f6acb5904e4fa82c4b27799c39b0`.
+
+## Review-fix round 4
+
+The boolean `summary.tasks` guard now has a count-valid one-trajectory regression: without its
+explicit boolean rejection, `len(outcomes) == True` would pair the cohorts. Missing and null
+data-seed cohorts likewise retain otherwise matching non-empty outcomes, proving the non-null
+seed guard is independently required. These are test-strengthening changes only.
