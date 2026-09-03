@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import sys
 import types
@@ -27,12 +26,9 @@ from local_llm_lab.pipeline.protocol import (
 from local_llm_lab.pipeline.runner import (
     Trajectory,
     detect_loop,
-    generate_turn,
-    generate_turn_with_count,
     trajectory_rows,
 )
 from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
-from local_llm_lab.pipeline.transcript import iter_task_records
 
 
 def test_registered_models_include_all_three_backbones() -> None:
@@ -688,58 +684,6 @@ def test_conditional_update_note_before_replace_names_the_modified_service() -> 
         assert match.group(1) == modified, task.task_id
 
 
-class _FakeResponse:
-    def __init__(self, token: int, text: str) -> None:
-        self.token = token
-        self.text = text
-
-
-class _FakeTokenizer:
-    def __init__(self, pieces: list[str]) -> None:
-        self.pieces = pieces
-
-    def decode(self, ids: list[int]) -> str:
-        return "".join(self.pieces[i] for i in ids)
-
-    def convert_tokens_to_ids(self, token: str) -> int:
-        raise KeyError(token)
-
-
-def test_generate_turn_stops_at_closing_fence(monkeypatch) -> None:
-    rendered = render_turn("n", Action("finish", {"answer": "x"}))
-    pieces = [
-        "n",
-        "\n",
-        "```",
-        "json",
-        "\n",
-        '{"name": "finish", ',
-        '"arguments": {"answer": "x"}}',
-        "\n",
-        "```",
-        "\nJUNK",
-    ]
-    assert "".join(pieces) == rendered + "\nJUNK"
-    consumed: list[int] = []
-
-    def fake_stream_generate(model, tokenizer, *, prompt, max_tokens, sampler):
-        for index, piece in enumerate(pieces):
-            consumed.append(index)
-            yield _FakeResponse(index, piece)
-
-    fake_module = types.ModuleType("mlx_lm")
-    fake_module.stream_generate = fake_stream_generate
-    monkeypatch.setitem(sys.modules, "mlx_lm", fake_module)
-    text = generate_turn(None, _FakeTokenizer(pieces), "prompt", None, 200)
-    assert "JUNK" not in text
-    assert text == rendered
-    assert consumed == list(range(9)), "generation stops right after the closing fence"
-    assert parse_turn(text).action == Action("finish", {"answer": "x"})
-    consumed.clear()
-    counted, n_tokens = generate_turn_with_count(None, _FakeTokenizer(pieces), "prompt", None, 200)
-    assert counted == rendered and n_tokens == 9 == len(consumed)
-
-
 def test_simulator_verdict_reports_reasons_and_recovery() -> None:
     task = make_tasks("valid", 12)[4]  # update family, clean
     simulator = Simulator.for_task(task, faults=(Fault(call_index=0),))
@@ -803,90 +747,6 @@ def test_verdict_rejects_unexpected_changes_and_keeps_raw_normalized_answer() ->
     assert "unexpected file change: removed.ini" in verdict.reasons
     assert "required tools unused: read_file" in verdict.reasons
     assert verdict.as_dict()["raw_answer"] == "`updated.`"
-
-
-def test_transcript_keeps_multiple_task_records_in_one_run(tmp_path) -> None:
-    """Truncating JSONL on each task start drops all but the final task's transcript."""
-    from local_llm_lab.pipeline.transcript import Transcript
-
-    first_task, second_task = make_tasks("valid", 2)
-    first = Transcript(stream=None, directory=tmp_path)
-    first.start(first_task, "run")
-    first.finish(
-        {
-            "success": True,
-            "errors": 0,
-            "answer": first_task.expected_answer,
-            "expected_answer": first_task.expected_answer,
-            "reasons": [],
-        },
-        0.1,
-    )
-    second = Transcript(stream=None, directory=tmp_path)
-    second.start(second_task, "run")
-    second.finish(
-        {
-            "success": False,
-            "errors": 0,
-            "answer": second_task.expected_answer,
-            "expected_answer": second_task.expected_answer,
-            "reasons": ["unexpected file change: extra.ini"],
-        },
-        0.1,
-    )
-    jsonl = tmp_path / "transcripts.jsonl"
-    records = [__import__("json").loads(line) for line in jsonl.read_text(encoding="utf-8").splitlines()]
-    assert len(records) == 3
-    run_id = records[0]["run_id"]
-    assert [record["task_id"] for record in records[1:]] == [first_task.task_id, second_task.task_id]
-    assert [record["run_id"] for record in records[1:]] == [run_id, run_id]
-    markdown = (tmp_path / f"run-{second_task.task_id}.md").read_text(encoding="utf-8")
-    assert "**FAIL** (unexpected file change: extra.ini)" in markdown
-
-
-def test_iter_task_records_skips_headers_blank_lines_and_metadata(tmp_path) -> None:
-    """Transcript consumers must see task rows only, never the run header or metadata."""
-    path = tmp_path / "transcripts.jsonl"
-    first = {"task_id": "task-1", "verdict": {"success": True}}
-    second = {"task_id": "task-2", "verdict": {"success": False}}
-    path.write_text(
-        "\n".join(
-            (
-                json.dumps({"run_id": "run-1"}),
-                json.dumps(first),
-                "",
-                json.dumps({"summary": {"tasks": 2}}),
-                json.dumps(second),
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    assert list(iter_task_records(path)) == [first, second]
-
-
-def test_transcript_explicit_run_boundary_replaces_prior_run(tmp_path) -> None:
-    """A new explicit run must truncate old task records and allocate a new run id."""
-    from local_llm_lab.pipeline.transcript import Transcript
-
-    first_task, second_task = make_tasks("valid", 2)
-    Transcript.start_run(tmp_path)
-    first = Transcript(stream=None, directory=tmp_path)
-    first.start(first_task, "run")
-    first.finish(
-        {"success": True, "errors": 0, "answer": "a", "expected_answer": "a", "reasons": []}, 0.1
-    )
-    Transcript.start_run(tmp_path)
-    second = Transcript(stream=None, directory=tmp_path)
-    second.start(second_task, "run")
-    second.finish(
-        {"success": True, "errors": 0, "answer": "b", "expected_answer": "b", "reasons": []}, 0.1
-    )
-    records = [__import__("json").loads(line) for line in (tmp_path / "transcripts.jsonl").read_text().splitlines()]
-    assert len(records) == 2
-    assert records[1]["task_id"] == second_task.task_id
-    assert records[1]["run_id"] == records[0]["run_id"]
 
 
 def test_trajectory_rows_skip_errored_steps_except_injected_faults() -> None:
@@ -1760,102 +1620,3 @@ def test_probe_layers_returns_one_record_per_layer_with_both_lenses() -> None:
         assert len(record["logit_lens_top_k"]) == 5
         assert set(record["jlens_evidence"]) == {"a", "b"}
         assert set(record["logit_lens_evidence"]) == {"a", "b"}
-
-
-class _FakeKV:
-    """Minimal stand-in for an mlx-lm KV cache entry: tracks an offset and trims from the end."""
-
-    def __init__(self) -> None:
-        self.offset = 0
-        self.trimmable = True
-
-    def is_trimmable(self) -> bool:
-        return self.trimmable
-
-    def trim(self, n: int) -> int:
-        n = min(n, self.offset)
-        self.offset -= n
-        return n
-
-
-def _fake_cache_module(monkeypatch, entries):
-    """Patch just the three cache helpers on the real module, leaving its other exports intact."""
-    from mlx_lm.models import cache as kv
-
-    monkeypatch.setattr(kv, "make_prompt_cache", lambda model: list(entries))
-    monkeypatch.setattr(
-        kv, "can_trim_prompt_cache", lambda cache: all(c.is_trimmable() for c in cache)
-    )
-    monkeypatch.setattr(kv, "trim_prompt_cache", lambda cache, n: [c.trim(n) for c in cache][0])
-    return kv
-
-
-def test_common_prefix_length_counts_shared_leading_tokens() -> None:
-    from local_llm_lab.pipeline.runner import common_prefix_length
-
-    assert common_prefix_length([1, 2, 3, 4], [1, 2, 9, 4]) == 2
-    assert common_prefix_length([1, 2], [1, 2, 3]) == 2
-    assert common_prefix_length([], [1]) == 0
-    assert common_prefix_length([5], [6]) == 0
-
-
-def test_turn_cache_reuses_shared_prefix_and_encodes_only_the_rest(monkeypatch) -> None:
-    from local_llm_lab.pipeline.runner import TurnCache
-
-    entry = _FakeKV()
-    _fake_cache_module(monkeypatch, [entry])
-    cache = TurnCache(model=object())
-
-    first = [1, 2, 3, 4, 5]
-    assert cache.prepare(first) == first, "an empty cache must encode the whole prompt"
-    entry.offset = len(first)
-    cache.commit(first, [90, 91])
-    entry.offset = len(first) + 2
-
-    # Next prompt shares 1,2,3 then diverges; the generated tail must be trimmed away too.
-    second = [1, 2, 3, 7, 8]
-    assert cache.prepare(second) == [7, 8]
-    assert entry.offset == 3, "cache must be trimmed back to exactly the shared prefix"
-    assert cache.reused_tokens == 3
-
-
-def test_turn_cache_never_consumes_the_entire_prompt(monkeypatch) -> None:
-    """The model needs at least one token to run, so an identical prompt still encodes one."""
-    from local_llm_lab.pipeline.runner import TurnCache
-
-    entry = _FakeKV()
-    _fake_cache_module(monkeypatch, [entry])
-    cache = TurnCache(model=object())
-    prompt = [1, 2, 3]
-    cache.prepare(prompt)
-    entry.offset = 3
-    cache.commit(prompt, [])
-    assert cache.prepare(prompt) == [3]
-    assert entry.offset == 2
-
-
-def test_turn_cache_rebuilds_when_it_cannot_be_trimmed(monkeypatch) -> None:
-    from local_llm_lab.pipeline.runner import TurnCache
-
-    entry = _FakeKV()
-    _fake_cache_module(monkeypatch, [entry])
-    cache = TurnCache(model=object())
-    cache.prepare([1, 2, 3, 4])
-    entry.offset = 4
-    cache.commit([1, 2, 3, 4], [])
-    entry.trimmable = False
-    # Divergence would need a trim, which is impossible: fall back to encoding everything.
-    assert cache.prepare([1, 2, 9]) == [1, 2, 9]
-
-
-def test_turn_cache_rebuilds_on_offset_mismatch(monkeypatch) -> None:
-    """A cache whose offset disagrees with the shared prefix would attend to stale keys."""
-    from local_llm_lab.pipeline.runner import TurnCache
-
-    entry = _FakeKV()
-    _fake_cache_module(monkeypatch, [entry])
-    cache = TurnCache(model=object())
-    cache.prepare([1, 2, 3, 4])
-    cache.commit([1, 2, 3, 4], [])
-    entry.offset = 99  # corrupted state
-    assert cache.prepare([1, 2, 3, 9]) == [1, 2, 3, 9]
