@@ -19,6 +19,7 @@ train:
   grad_checkpoint: true
 cache:
   strategy: trim
+  equivalence_verified: null
 probes:
   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
 memory:

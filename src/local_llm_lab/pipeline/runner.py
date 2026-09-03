@@ -1,25 +1,31 @@
 from __future__ import annotations
 
 import contextlib
+import copy
+import sys
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from local_llm_lab.agent_protocol import ActionParseError
 from local_llm_lab.pipeline.env import Fault, Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
-    TOOL_SPECS,
     assistant_message,
     build_prompt,
     parse_turn,
+    strip_thinking,
     tool_message,
     turn_is_complete,
     window_messages,
 )
 from local_llm_lab.pipeline.tasks import Task
 from local_llm_lab.pipeline.transcript import Transcript
+
+if TYPE_CHECKING:
+    from local_llm_lab.arch import ArchitectureView
+    from local_llm_lab.models import ModelSpec, ResolvedSpec
 
 # Window sizes for the three repetition rules in :func:`detect_loop`.
 LOOP_IDENTICAL_CALLS = 3
@@ -46,6 +52,8 @@ class Trajectory:
     exhausted: bool = False
     difficulty: int = -1
     integrity: dict[str, Any] = field(default_factory=dict)
+    think_tokens: int = 0
+    model: dict[str, Any] = field(default_factory=dict)
 
     @property
     def success(self) -> bool:
@@ -65,7 +73,17 @@ def common_prefix_length(left: list[int], right: list[int]) -> int:
     return count
 
 
-class TurnCache:
+class TurnCacheBase(Protocol):
+    cache: Any
+    reused_tokens: int
+    encoded_tokens: int
+
+    def prepare(self, token_ids: list[int]) -> list[int]: ...
+
+    def commit(self, token_ids: list[int], generated: list[int]) -> None: ...
+
+
+class TrimCache:
     """A KV cache reused across the turns of one task via longest-common-prefix matching.
 
     Consecutive prompts in a trajectory share almost everything: the system message and task
@@ -128,20 +146,95 @@ class TurnCache:
         self.tokens = list(token_ids) + list(generated)
 
 
+class SnapshotCache:
+    """Reuse only a verified immutable-prefix snapshot across turns."""
+
+    def __init__(self, model: Any, view: ArchitectureView, prefix_tokens: int):
+        self.model = model
+        self.view = view
+        self.prefix_tokens = prefix_tokens
+        self.cache: Any = None
+        self.reused_tokens = 0
+        self.encoded_tokens = 0
+        self._prefix: list[int] | None = None
+        self._states: list[Any] | None = None
+
+    def prepare(self, token_ids: list[int]) -> list[int]:
+        if not 0 < self.prefix_tokens < len(token_ids):
+            raise ValueError("prefix_tokens must lie strictly within the prompt")
+        prefix = list(token_ids[: self.prefix_tokens])
+        suffix = list(token_ids[self.prefix_tokens :])
+        if self.cache is None:
+            import mlx.core as mx
+
+            self.cache = self.view.make_cache()
+            self.model(mx.array(prefix)[None, :], cache=self.cache)
+            mx.eval(*(entry.state for entry in self.cache))
+            self._prefix = prefix
+            self._states = [_copy_cache_state(entry.state) for entry in self.cache]
+            self.encoded_tokens += len(token_ids)
+            return suffix
+        if prefix != self._prefix:
+            raise ValueError("immutable prefix changed after snapshot creation")
+        assert self._states is not None
+        for entry, state in zip(self.cache, self._states, strict=True):
+            entry.state = _copy_cache_state(state)
+        self.reused_tokens += self.prefix_tokens
+        self.encoded_tokens += len(suffix)
+        return suffix
+
+    def commit(self, token_ids: list[int], generated: list[int]) -> None:
+        """The live cache may advance; the saved prefix snapshot remains unchanged."""
+
+
+def _copy_cache_state(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_copy_cache_state(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_copy_cache_state(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _copy_cache_state(item) for key, item in value.items()}
+    return copy.deepcopy(value)
+
+
+def make_turn_cache(
+    model: Any,
+    view: ArchitectureView,
+    resolved: ResolvedSpec,
+    *,
+    prefix_tokens: int,
+) -> TurnCacheBase | None:
+    if resolved.cache_strategy == "trim":
+        return TrimCache(model)
+    if resolved.cache_strategy == "snapshot":
+        return SnapshotCache(model, view, prefix_tokens)
+    if resolved.cache_strategy == "none":
+        hybrid = any(layer_type == "linear_attention" for layer_type in resolved.layer_types)
+        if hybrid and resolved.cache_strategy_reason == "auto:equivalence_unverified":
+            print(
+                f"WARNING: {resolved.spec.name} cache auto-resolution disabled reuse: "
+                "equivalence is unverified",
+                file=sys.stderr,
+            )
+        return None
+    raise ValueError(f"unsupported resolved cache strategy: {resolved.cache_strategy}")
+
+
 def generate_turn_with_count(
     model: Any,
     tokenizer: Any,
     prompt: str,
     sampler: Any,
     max_tokens: int,
-    turn_cache: TurnCache | None = None,
-) -> tuple[str, int]:
+    turn_cache: TurnCacheBase | None = None,
+    *,
+    spec: ModelSpec,
+) -> tuple[str, int, int]:
     """Generate one assistant turn, stopping as soon as the tool call closes.
 
-    Returns the decoded text and the number of tokens generated. The closing fence is ordinary
-    text, so completion is checked by decoding the accumulated ids whenever the newest piece
-    could close a fence, a legacy tag, or the turn. When ``turn_cache`` is given, the shared
-    prefix with the previous turn is served from its KV cache and only the remainder is encoded.
+    Returns decoded text, total generated tokens, and tokens spent in the first think block.
+    When a thinking mode exhausts its budget, a closing tag is inserted into the raw output and
+    generation continues until the visible note and tool call are complete.
     """
     import mlx.core as mx
     from mlx_lm import stream_generate
@@ -159,25 +252,61 @@ def generate_turn_with_count(
         kwargs["prompt_cache"] = turn_cache.cache
 
     ids: list[int] = []
+    thinking_enabled = spec.chat.thinking in {"inference", "trained"}
+    thinking_started = False
+    thinking_finished = False
+    thinking_start_token = 0
+    think_tokens = 0
+    forced_close_at: int | None = None
+
+    def decoded_text() -> str:
+        if forced_close_at is None:
+            return tokenizer.decode(ids)
+        return (
+            tokenizer.decode(ids[:forced_close_at])
+            + "\n</think>\n\n"
+            + tokenizer.decode(ids[forced_close_at:])
+        )
+
     for response in stream_generate(
         model, tokenizer, prompt=prompt_input, max_tokens=max_tokens, sampler=sampler, **kwargs
     ):
         ids.append(response.token)
+        decoded = tokenizer.decode(ids)
+        if thinking_enabled and not thinking_finished:
+            thinking_start = decoded.find("<think>")
+            if thinking_start >= 0:
+                if not thinking_started:
+                    thinking_started = True
+                    thinking_start_token = next(
+                        index
+                        for index in range(len(ids))
+                        if len(tokenizer.decode(ids[: index + 1])) > thinking_start
+                    )
+                think_tokens = len(ids) - thinking_start_token
+                if decoded.find("</think>", thinking_start) >= 0:
+                    thinking_finished = True
+                elif think_tokens >= spec.chat.max_think_tokens:
+                    forced_close_at = len(ids)
+                    thinking_finished = True
         if response.token in stop_ids:
             break
         piece = response.text or ""
-        if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
-            tokenizer.decode(ids)
-        ):
+        if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(decoded_text()):
             break
     if turn_cache is not None:
         turn_cache.commit(prompt_ids, ids)
-    return tokenizer.decode(ids), len(ids)
+    if not thinking_started:
+        think_tokens = 0
+    return decoded_text(), len(ids), think_tokens
 
 
 def generate_turn(model: Any, tokenizer: Any, prompt: str, sampler: Any, max_tokens: int) -> str:
     """Text-only view of :func:`generate_turn_with_count`, for callers that ignore token counts."""
-    return generate_turn_with_count(model, tokenizer, prompt, sampler, max_tokens)[0]
+    spec, _, _ = _compatibility_runner_inputs(None, None, None)
+    return generate_turn_with_count(
+        model, tokenizer, prompt, sampler, max_tokens, spec=spec
+    )[0]
 
 
 def detect_loop(steps: list[dict[str, Any]]) -> bool:
@@ -225,24 +354,24 @@ def run_task(
     task: Task,
     *,
     sampler: Any,
+    spec: ModelSpec | None = None,
+    view: ArchitectureView | None = None,
+    resolved: ResolvedSpec | None = None,
     label: str = "policy",
     max_steps: int = 24,
     max_tokens: int = 200,
     keep_last: int = DEFAULT_KEEP_LAST,
     faults: tuple[Fault, ...] | None = None,
     transcript: Transcript | None = None,
-    tools: list[dict[str, Any]] = TOOL_SPECS,
     use_cache: bool = True,
 ) -> Trajectory:
     """Drive one task end to end, mirroring every step to the transcript.
 
-    ``tools`` is forwarded to :func:`build_prompt` for API compatibility only; the rendered
-    prompt takes its tool list from the system message. ``use_cache`` reuses the KV cache across
-    the task's turns; it is a pure speed optimisation and must not change any output, which
-    ``research/cache_equivalence.py`` checks against a cache-free run.
+    Omitted model metadata is the temporary legacy 3B compatibility path. Callers that provide
+    a view and resolved spec always use the resolved safe cache strategy.
     """
     started = time.monotonic()
-    turn_cache = TurnCache(model) if use_cache else None
+    spec, view, resolved = _compatibility_runner_inputs(spec, view, resolved)
     simulator = Simulator.for_task(task, faults=faults)
     trajectory = Trajectory(
         task.task_id,
@@ -251,6 +380,7 @@ def run_task(
         label,
         task.prompt,
         faults=[fault.call_index for fault in simulator.faults],
+        model={} if resolved is None else resolved.as_dict(),
     )
     if transcript is not None:
         transcript.start(task, label)
@@ -258,27 +388,69 @@ def run_task(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": task.prompt},
     ]
+    prefix_prompt = build_prompt(
+        tokenizer,
+        messages[:2],
+        spec=spec,
+        keep_last=keep_last,
+        generation=False,
+    )
+    prefix_tokens = len(tokenizer.encode(prefix_prompt))
+    turn_cache = (
+        make_turn_cache(model, view, resolved, prefix_tokens=prefix_tokens)
+        if use_cache and view is not None and resolved is not None
+        else TrimCache(model)
+        if use_cache
+        else None
+    )
     finished = False
     for index in range(max_steps):
-        prompt = build_prompt(tokenizer, messages, tools=tools, keep_last=keep_last)
-        raw, n_tokens = generate_turn_with_count(
-            model, tokenizer, prompt, sampler, max_tokens, turn_cache
+        prompt = build_prompt(
+            tokenizer,
+            messages,
+            spec=spec,
+            keep_last=keep_last,
+            generation=True,
+        )
+        raw, n_tokens, think_tokens = generate_turn_with_count(
+            model, tokenizer, prompt, sampler, max_tokens, turn_cache, spec=spec
         )
         trajectory.turns += 1
         trajectory.generated_tokens += n_tokens
+        trajectory.think_tokens += think_tokens
+        thinking, action_text = strip_thinking(raw)
         try:
-            turn = parse_turn(raw)
+            turn = parse_turn(action_text)
         except ActionParseError as error:
             trajectory.parse_error = str(error)
-            trajectory.steps.append({"index": index, "raw": raw, "parse_error": str(error)})
+            trajectory.steps.append(
+                {
+                    "index": index,
+                    "thinking": thinking,
+                    "think_tokens": think_tokens,
+                    "raw": raw,
+                    "parse_error": str(error),
+                }
+            )
             if transcript is not None:
-                transcript.step(index, "", None, None, raw=raw, parse_error=str(error))
+                transcript.step(
+                    index,
+                    "",
+                    None,
+                    None,
+                    thinking=thinking,
+                    think_tokens=think_tokens,
+                    raw=raw,
+                    parse_error=str(error),
+                )
             break
         trajectory.valid_turns += 1
         observation = simulator.execute(turn.action)
         trajectory.steps.append(
             {
                 "index": index,
+                "thinking": thinking,
+                "think_tokens": think_tokens,
                 "thought": turn.thought,
                 "action": {"name": turn.action.name, "arguments": turn.action.arguments},
                 "observation": observation,
@@ -286,7 +458,15 @@ def run_task(
             }
         )
         if transcript is not None:
-            transcript.step(index, turn.thought, turn.action, observation, raw=raw)
+            transcript.step(
+                index,
+                turn.thought,
+                turn.action,
+                observation,
+                thinking=thinking,
+                think_tokens=think_tokens,
+                raw=raw,
+            )
         # Measure repetition but never rescue: the run continues to finish or max_steps.
         if detect_loop(trajectory.steps):
             trajectory.loop_detected = True
@@ -302,6 +482,18 @@ def run_task(
     if transcript is not None:
         transcript.finish(trajectory.verdict, trajectory.elapsed_seconds)
     return trajectory
+
+
+def _compatibility_runner_inputs(
+    spec: ModelSpec | None,
+    view: ArchitectureView | None,
+    resolved: ResolvedSpec | None,
+) -> tuple[ModelSpec, ArchitectureView | None, ResolvedSpec | None]:
+    if spec is None:
+        from local_llm_lab.models import load_model_spec
+
+        spec = load_model_spec("qwen25-coder-3b")
+    return spec, view, resolved
 
 
 def trajectory_rows(

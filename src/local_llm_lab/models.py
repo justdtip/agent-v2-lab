@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -52,6 +53,7 @@ class ModelSpec:
     probe_layer_fractions: tuple[float, ...]
     memory_budget_gib: float
     policies: dict[str, str]
+    cache_equivalence_verified: dict[str, str] | None = None
 
     def resolve(self, model: Any, tokenizer: Any) -> ResolvedSpec:
         """Combine this declaration with facts exposed by ``ArchitectureView``.
@@ -66,10 +68,18 @@ class ModelSpec:
         lora_keys = view.lora_targets(self.lora.keys)
         cache_strategy: Literal["trim", "snapshot", "none"]
         if self.cache_strategy == "auto":
-            # TEMPORARY until R1 (Task 5)
-            cache_strategy = "trim" if view.cache_trimmable else "snapshot"
+            if view.cache_trimmable:
+                cache_strategy = "trim"
+                cache_strategy_reason = "auto:trimmable"
+            elif self.cache_equivalence_verified is not None:
+                cache_strategy = "snapshot"
+                cache_strategy_reason = "auto:equivalence_verified"
+            else:
+                cache_strategy = "none"
+                cache_strategy_reason = "auto:equivalence_unverified"
         else:
             cache_strategy = self.cache_strategy
+            cache_strategy_reason = f"explicit:{self.cache_strategy}"
         return ResolvedSpec(
             spec=self,
             num_layers=view.num_layers,
@@ -84,6 +94,7 @@ class ModelSpec:
                 for fraction in self.probe_layer_fractions
             ),
             cache_strategy=cache_strategy,
+            cache_strategy_reason=cache_strategy_reason,
             snapshot_revision=_snapshot_revision(model, tokenizer),
             jvp_method="untested",
         )
@@ -101,6 +112,7 @@ class ResolvedSpec:
     trainable_parameters: int
     probe_layers: tuple[int, ...]
     cache_strategy: Literal["trim", "snapshot", "none"]
+    cache_strategy_reason: str
     snapshot_revision: str | None
     jvp_method: Literal["forward", "finite_difference", "untested"]
 
@@ -117,6 +129,7 @@ class ResolvedSpec:
             "trainable_parameters": self.trainable_parameters,
             "probe_layers": list(self.probe_layers),
             "cache_strategy": self.cache_strategy,
+            "cache_strategy_reason": self.cache_strategy_reason,
             "snapshot_revision": self.snapshot_revision,
             "jvp_method": self.jvp_method,
         }
@@ -164,6 +177,22 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     cache_strategy = _required_string(cache, "strategy", source)
     if cache_strategy not in _CACHE_STRATEGIES:
         raise ValueError(f"{source}: cache.strategy must be one of {sorted(_CACHE_STRATEGIES)}")
+    cache_equivalence_verified = cache.get("equivalence_verified")
+    if cache_equivalence_verified is not None:
+        valid_keys = isinstance(cache_equivalence_verified, dict) and set(
+            cache_equivalence_verified
+        ) == {"date", "sha256"}
+        if not valid_keys or not all(
+            isinstance(value, str) and value for value in cache_equivalence_verified.values()
+        ):
+            raise ValueError(
+                f"{source}: cache.equivalence_verified must be null or a mapping with "
+                "non-empty date and sha256 strings"
+            )
+        if re.fullmatch(r"[0-9a-fA-F]{64}", cache_equivalence_verified["sha256"]) is None:
+            raise ValueError(
+                f"{source}: cache.equivalence_verified.sha256 must be 64 hexadecimal characters"
+            )
     keys = lora.get("keys")
     if isinstance(keys, list):
         if not all(isinstance(key, str) and key for key in keys):
@@ -216,6 +245,9 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
         ),
         train=dict(train),
         cache_strategy=cache_strategy,
+        cache_equivalence_verified=None
+        if cache_equivalence_verified is None
+        else dict(cache_equivalence_verified),
         probe_layer_fractions=fractions,
         memory_budget_gib=float(memory.get("budget_gib")),
         policies=dict(policies),
@@ -232,6 +264,7 @@ def _default_spec(hf_id: str) -> ModelSpec:
         lora=LoraSpec("attention+mlp", 16, 32.0, 0.0),
         train={},
         cache_strategy="none",
+        cache_equivalence_verified=None,
         probe_layer_fractions=_DEFAULT_PROBE_FRACTIONS,
         memory_budget_gib=22.0,
         policies={},

@@ -25,6 +25,13 @@ def _supports_color(stream: TextIO) -> bool:
     return hasattr(stream, "isatty") and stream.isatty()
 
 
+def _collapse_thinking(thinking: str | None) -> str:
+    lines = [line.strip() for line in (thinking or "").splitlines() if line.strip()]
+    if len(lines) < 2:
+        return lines[0] if lines else ""
+    return f"{lines[0]} … {lines[-1]}"
+
+
 @dataclass
 class Transcript:
     """Live, human-readable trace of one task, mirrored to Markdown and JSONL on disk."""
@@ -94,6 +101,8 @@ class Transcript:
         action: Action | None,
         observation: str | None,
         *,
+        thinking: str | None = None,
+        think_tokens: int = 0,
         raw: str | None = None,
         parse_error: str | None = None,
     ) -> None:
@@ -104,15 +113,26 @@ class Transcript:
             if action is None
             else {"name": action.name, "arguments": action.arguments},
             "observation": observation,
+            "thinking": thinking,
+            "think_tokens": think_tokens,
             "raw": raw,
             "parse_error": parse_error,
         }
         self._record["steps"].append(entry)
         head = self._paint(f"[{index:02d}]", "1")
+        thinking_summary = _collapse_thinking(thinking)
+        thinking_text = (
+            f"\n     {self._paint('think', '34')}  {thinking_summary}" if thinking_summary else ""
+        )
+        thinking_markdown = (
+            f"\n\n**Thinking.** _{thinking_summary}_" if thinking_summary else ""
+        )
         if parse_error:
             self._emit(
-                f"{head} {self._paint('PARSE ERROR: ' + parse_error, '31')}\n     raw: {raw!r}",
-                f"\n**Step {index}.** PARSE ERROR: {parse_error}\n\n```\n{raw}\n```\n",
+                f"{head} {self._paint('PARSE ERROR: ' + parse_error, '31')}"
+                f"{thinking_text}\n     raw: {raw!r}",
+                f"\n**Step {index}.** PARSE ERROR: {parse_error}"
+                f"{thinking_markdown}\n\n```\n{raw}\n```\n",
             )
             return
         note = thought if thought else "(no note)"
@@ -125,10 +145,11 @@ class Transcript:
             shown += f"\n     … ({len(obs_lines) - self.observation_lines} more lines)"
         obs_text = self._paint(shown, "31" if is_error else "2")
         self._emit(
-            f"{head} {self._paint('note', '33')}  {note}\n"
+            f"{head} {self._paint('note', '33')}  {note}{thinking_text}\n"
             f"     {self._paint('call', '32')}  {call}\n"
             f"     {self._paint('obs ', '35')}  {obs_text.replace(chr(10), chr(10) + '           ')}",
-            f"\n**Step {index}.** _{note}_\n\n`{call}`\n\n```\n{observation or ''}\n```\n",
+            f"\n**Step {index}.** _{note}_{thinking_markdown}"
+            f"\n\n`{call}`\n\n```\n{observation or ''}\n```\n",
         )
 
     def finish(self, verdict: dict[str, Any], elapsed: float) -> None:
