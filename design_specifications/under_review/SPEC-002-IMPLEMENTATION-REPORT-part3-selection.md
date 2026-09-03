@@ -26,8 +26,8 @@ interval expectations.
 | `tests/test_tasks.py`, `test_evaluate.py`, `test_cli.py`, `test_selection.py`, `test_report.py` | focused contracts using fakes and temporary metadata only |
 | `tests/test_pipeline.py` (R10 extractions only) | removed the exact empty-checkpoint test to `tests/test_selection.py` and report-table test to `tests/test_report.py` |
 
-Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 637;
-`report.py` 138; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 169;
+Final line counts: configs 54/66/68; `tasks.py` 1,299; `evaluate.py` 482; `cli.py` 637;
+`report.py` 138; `test_tasks.py` 265; `test_evaluate.py` 182; `test_cli.py` 169;
 `test_selection.py` 147; and `test_report.py` 380.
 
 Wiring-map rows touched are 2.4 (`Task` consumption only; frozen record and exact
