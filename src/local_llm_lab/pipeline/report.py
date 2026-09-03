@@ -30,6 +30,7 @@ def _outcomes(trajectories: object, task_count: object) -> dict[tuple[str, int],
             or not task_id
             or not isinstance(difficulty, int)
             or isinstance(difficulty, bool)
+            or difficulty < 0
             or not isinstance(success, bool)
         ):
             return {}

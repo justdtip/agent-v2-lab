@@ -55,6 +55,22 @@ def _write_eval(path: Path, summary: dict[str, object], outcomes: dict[str, bool
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _single_task_summary(
+    label: str, *, split: str = "valid", difficulty: int = 1, data_seed: int = 17
+) -> dict[str, object]:
+    summary = _summary(label, split=split, difficulty=difficulty, data_seed=data_seed)
+    summary["tasks"] = 1
+    return summary
+
+
+def _write_records(
+    path: Path, summary: dict[str, object], trajectories: list[object]
+) -> None:
+    path.write_text(
+        json.dumps({"summary": summary, "trajectories": trajectories}), encoding="utf-8"
+    )
+
+
 def _cells(line: str) -> list[str]:
     """Split a report row on its two-space column separator (cells may contain one space)."""
     return re.split(r" {2,}", line.strip())
@@ -135,55 +151,72 @@ def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluation
 
 
 @pytest.mark.parametrize(
-    ("name", "extra"),
+    ("name", "left_records", "right_records", "empty_outcomes"),
     [
-        ("id-less", {"difficulty": 1, "verdict": {"success": True}}),
-        ("non-dict", None),
+        (
+            "id-less",
+            [{"task_id": "valid", "difficulty": 1, "verdict": {"success": True}}],
+            [
+                {"task_id": "valid", "difficulty": 1, "verdict": {"success": True}},
+                {"difficulty": 1, "verdict": {"success": True}},
+            ],
+            [False, True],
+        ),
+        (
+            "non-dict",
+            [{"task_id": "valid", "difficulty": 1, "verdict": {"success": True}}],
+            [
+                {"task_id": "valid", "difficulty": 1, "verdict": {"success": True}},
+                None,
+            ],
+            [False, True],
+        ),
         (
             "invalid-difficulty",
-            {"task_id": "invalid", "difficulty": True, "verdict": {"success": True}},
+            [{"task_id": "valid", "difficulty": True, "verdict": {"success": True}}],
+            [{"task_id": "valid", "difficulty": True, "verdict": {"success": False}}],
+            [True, True],
         ),
         (
             "duplicate",
-            {
-                "task_id": "valid-read-0000-clean",
-                "difficulty": 1,
-                "verdict": {"success": True},
-            },
+            [
+                {"task_id": "valid", "difficulty": 1, "verdict": {"success": True}},
+                {"task_id": "valid", "difficulty": 1, "verdict": {"success": False}},
+            ],
+            [
+                {"task_id": "valid", "difficulty": 1, "verdict": {"success": False}},
+                {"task_id": "valid", "difficulty": 1, "verdict": {"success": True}},
+            ],
+            [True, True],
         ),
         (
             "missing-outcome",
-            {"task_id": "missing", "difficulty": 1, "verdict": {}},
+            [{"task_id": "valid", "difficulty": 1, "verdict": {}}],
+            [{"task_id": "valid", "difficulty": 1, "verdict": {}}],
+            [True, True],
         ),
         (
             "non-boolean-outcome",
-            {"task_id": "invalid", "difficulty": 1, "verdict": {"success": "yes"}},
+            [{"task_id": "valid", "difficulty": 1, "verdict": {"success": "yes"}}],
+            [{"task_id": "valid", "difficulty": 1, "verdict": {"success": "yes"}}],
+            [True, True],
         ),
     ],
 )
 def test_render_refuses_entire_cohort_for_malformed_trajectory(
-    tmp_path: Path, name: str, extra: object
+    tmp_path: Path,
+    name: str,
+    left_records: list[object],
+    right_records: list[object],
+    empty_outcomes: list[bool],
 ) -> None:
-    """A malformed extra trajectory must not be silently skipped or coerced into a pair."""
-    outcomes = {"valid-read-0000-clean": True, "valid-read-0012-clean": False}
-    _write_eval(tmp_path / "a.json", _summary("a"), outcomes)
-    payload = {
-        "summary": _summary("b"),
-        "trajectories": [
-            {
-                "task_id": task_id,
-                "difficulty": 1,
-                "verdict": {"success": success},
-            }
-            for task_id, success in outcomes.items()
-        ]
-        + [extra],
-    }
-    (tmp_path / f"b-{name}.json").write_text(json.dumps(payload), encoding="utf-8")
+    """Each malformed identity/outcome alone must fail closed for an otherwise valid pair."""
+    _write_records(tmp_path / f"a-{name}.json", _single_task_summary("a"), left_records)
+    _write_records(tmp_path / f"b-{name}.json", _single_task_summary("b"), right_records)
 
     summaries = load_summaries(tmp_path)
 
-    assert summaries[1]["_outcomes"] == {}
+    assert [summary["_outcomes"] == {} for summary in summaries] == empty_outcomes
     assert "Paired McNemar" not in render(summaries)
 
 
@@ -206,19 +239,32 @@ def test_render_refuses_pair_when_summary_task_count_is_invalid_or_mismatched(
 
 def test_render_refuses_pairs_for_different_ids_split_or_difficulty(tmp_path: Path) -> None:
     """Catch fabricated paired comparisons across non-equivalent evaluation cohorts."""
-    _write_eval(tmp_path / "ids.json", _summary("ids"), {"valid-read-0000-clean": True})
+    ids_dir = tmp_path / "ids"
+    ids_dir.mkdir()
+    _write_eval(ids_dir / "a.json", _single_task_summary("a"), {"valid-read-0000-clean": True})
+    _write_eval(ids_dir / "b.json", _single_task_summary("b"), {"valid-read-0001-clean": False})
+    split_dir = tmp_path / "split"
+    split_dir.mkdir()
+    _write_eval(split_dir / "a.json", _single_task_summary("a"), {"valid-read-0000-clean": True})
     _write_eval(
-        tmp_path / "split.json",
-        _summary("split", split="test"),
+        split_dir / "b.json",
+        _single_task_summary("b", split="test"),
         {"valid-read-0000-clean": True},
     )
+    difficulty_dir = tmp_path / "difficulty"
+    difficulty_dir.mkdir()
     _write_eval(
-        tmp_path / "difficulty.json",
-        _summary("difficulty", difficulty=2),
+        difficulty_dir / "a.json", _single_task_summary("a"), {"valid-read-0000-clean": True}
+    )
+    _write_eval(
+        difficulty_dir / "b.json",
+        _single_task_summary("b", difficulty=2),
         {"valid-read-0000-clean": True},
     )
 
-    assert "Paired McNemar" not in render(load_summaries(tmp_path))
+    assert "Paired McNemar" not in render(load_summaries(ids_dir))
+    assert "Paired McNemar" not in render(load_summaries(split_dir))
+    assert "Paired McNemar" not in render(load_summaries(difficulty_dir))
 
 
 def test_render_refuses_pairs_for_same_ids_with_different_seed_or_task_difficulty(
@@ -228,13 +274,13 @@ def test_render_refuses_pairs_for_same_ids_with_different_seed_or_task_difficult
     task_id = "valid-read-0000-clean"
     seed_dir = tmp_path / "seed"
     seed_dir.mkdir()
-    _write_eval(seed_dir / "a.json", _summary("seed-a", data_seed=17), {task_id: True})
-    _write_eval(seed_dir / "b.json", _summary("seed-b", data_seed=18), {task_id: False})
+    _write_eval(seed_dir / "a.json", _single_task_summary("seed-a", data_seed=17), {task_id: True})
+    _write_eval(seed_dir / "b.json", _single_task_summary("seed-b", data_seed=18), {task_id: False})
     level_dir = tmp_path / "level"
     level_dir.mkdir()
-    _write_eval(level_dir / "a.json", _summary("level-a"), {task_id: True})
+    _write_eval(level_dir / "a.json", _single_task_summary("level-a"), {task_id: True})
     payload = {
-        "summary": _summary("level-b"),
+        "summary": _single_task_summary("level-b"),
         "trajectories": [
             {
                 "task_id": task_id,
@@ -248,6 +294,20 @@ def test_render_refuses_pairs_for_same_ids_with_different_seed_or_task_difficult
 
     assert "Paired McNemar" not in render(load_summaries(seed_dir))
     assert "Paired McNemar" not in render(load_summaries(level_dir))
+
+
+def test_render_refuses_pair_for_matching_negative_difficulty(tmp_path: Path) -> None:
+    """The -1 unset sentinel is not a valid per-trajectory pairing identity."""
+    task_id = "valid-read-0000-clean"
+    left = _single_task_summary("a", difficulty=-1)
+    right = _single_task_summary("b", difficulty=-1)
+    _write_eval(tmp_path / "a.json", left, {task_id: True})
+    _write_eval(tmp_path / "b.json", right, {task_id: False})
+
+    summaries = load_summaries(tmp_path)
+
+    assert all(summary["_outcomes"] == {} for summary in summaries)
+    assert "Paired McNemar" not in render(summaries)
 
 
 def test_render_adds_top_level_integrity_interval_to_nested_clean_rate() -> None:

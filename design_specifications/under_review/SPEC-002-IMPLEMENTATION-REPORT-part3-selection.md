@@ -26,8 +26,8 @@ interval expectations.
 | `tests/test_pipeline.py` (R10 extractions only) | removed the exact empty-checkpoint test to `tests/test_selection.py` and report-table test to `tests/test_report.py` |
 
 Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 595;
-`report.py` 137; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 20;
-`test_selection.py` 147; and `test_report.py` 283.
+`report.py` 138; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 20;
+`test_selection.py` 147; and `test_report.py` 343.
 
 Wiring-map rows touched are 2.4 (`Task` consumption only; frozen record and exact
 `task_from_id` signature retained), 2.10 (evaluation summary and screen arguments), 2.11
@@ -107,7 +107,8 @@ or supplies a non-boolean outcome. It also accepts outcomes only when their uniq
 `(task_id, difficulty)` count equals a non-boolean, non-negative integer summary `tasks` value.
 Matching cohorts remain pairable across different model/adapter metadata when their split,
 non-null data seed, and exact per-task identities agree. RED/GREEN evidence is recorded in the
-ignored task ledger; the commit hash is recorded by the subsequent documentation handoff.
+ignored task ledger. The round-2 fix commit is
+`87181f0c308a86577f3b5c5e939da6bb0096d25f`.
 
 ## Integration correction
 
@@ -115,3 +116,11 @@ The final R10 extraction moves `test_report_table_lists_runs_and_families` subtr
 `tests/test_pipeline.py` to `tests/test_report.py`. It retains the run, family, and header
 assertions while asserting rich summary cells: success, schema validity, and executable calls
 show their required Wilson intervals. The full fake-only `uv run pytest -q` gate passes.
+The integration correction commit is `2607e02db5d2ec4867cc09087c5e8a9cc78a0f56`.
+
+## Review-fix round 3
+
+Pairing now rejects every negative per-trajectory difficulty, including the `-1` unset
+sentinel. The guard regressions use count-valid one-record cohorts where only the named
+identity, split, seed, difficulty, or outcome property varies; malformed-record tests retain
+the extra ID-less and non-dict cases to prove silent skipping cannot manufacture a pair.
