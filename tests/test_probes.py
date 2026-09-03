@@ -1615,6 +1615,7 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         "lora",
         "train",
         "cache_strategy",
+        "cache_equivalence_verified",
         "probe_layer_fractions",
         "memory_budget_gib",
         "policies",
