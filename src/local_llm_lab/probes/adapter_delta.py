@@ -428,13 +428,21 @@ def _default_residual_types(
     """
     selected: set[str] = set()
     for _delta, info in deltas.values():
-        shape = info.get("shape", ())
-        if len(shape) != 2:
+        shape = _update_shape(info)
+        if shape is None:
             continue
-        output_size, input_size = (int(size) for size in shape)
+        output_size, input_size = shape
         if output_size == hidden_size and input_size != hidden_size:
             selected.add(str(info["type"]))
     return selected
+
+
+def _update_shape(info: dict[str, Any]) -> tuple[int, int] | None:
+    """Return an adapter update's `(output, input)` shape when record metadata is valid."""
+    shape = info.get("shape", ())
+    if len(shape) != 2:
+        return None
+    return int(shape[0]), int(shape[1])
 
 
 def readout_update_directions(
@@ -452,7 +460,8 @@ def readout_update_directions(
 
     Without an explicit ``types`` filter, parsed shape metadata and the view's residual width
     select only unambiguous residual-update outputs. Ambiguous hidden-to-hidden internal paths
-    require an intentional caller filter instead of being assumed from a module name.
+    require an intentional caller filter instead of being assumed from a module name. Every
+    selected record still must output the residual width, including explicit filters.
 
     A direction produced by block ``L`` lands in the layer ``L + 1`` residual stream, so that is
     the layer whose tail Jacobian the J-lens uses.
@@ -467,13 +476,19 @@ def readout_update_directions(
     requested_types = (
         types if types is not None else _default_residual_types(deltas, int(view.hidden_size))
     )
+    hidden_size = int(view.hidden_size)
     records: list[dict[str, Any]] = []
     for name, (_delta, info) in sorted(deltas.items()):
         if info["type"] not in requested_types or info["layer"] not in layers:
             continue
+        shape = _update_shape(info)
+        if shape is None or shape[0] != hidden_size:
+            continue
         vectors = left_singular_vectors(info, k=directions)
         values = spectrum(info, top=directions)
         for index in range(vectors.shape[1]):
+            if vectors.shape[0] != hidden_size:
+                continue
             direction = _as_mx(vectors[:, index])
             readouts: dict[str, Any] = {}
             mapped, _stats = jlens.jlens_map(view, int(info["layer"]) + 1, direction, corpus_ids)

@@ -60,36 +60,43 @@ def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(m
 def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(monkeypatch) -> None:
     calls: list[float] = []
     down = {
-        "type": "down_proj",
+        "type": "residual_update",
         "layer": 0,
-        "module": "layers.0.down_proj",
+        "module": "layers.0.reducer",
         "shape": [2, 8],
     }
-    up = {
-        "type": "up_proj",
+    same_type_expansion = {
+        "type": "residual_update",
         "layer": 0,
-        "module": "layers.0.up_proj",
+        "module": "layers.1.reducer",
         "shape": [8, 2],
     }
-    internal = {
-        "type": "q_proj",
+    expansion = {
+        "type": "expansion",
         "layer": 0,
-        "module": "layers.0.self_attn.q_proj",
+        "module": "layers.0.expander",
+        "shape": [8, 2],
+    }
+    square = {
+        "type": "square_residual",
+        "layer": 0,
+        "module": "layers.0.square",
         "shape": [2, 2],
     }
     monkeypatch.setattr(
         adapter_delta,
         "load_adapter_deltas",
         lambda _path: {
-            "layers.0.down_proj": (None, down),
-            "layers.0.self_attn.q_proj": (None, internal),
-            "layers.0.up_proj": (None, up),
+            "layers.0.expander": (None, expansion),
+            "layers.0.reducer": (None, down),
+            "layers.0.square": (None, square),
+            "layers.1.reducer": (None, same_type_expansion),
         },
     )
     monkeypatch.setattr(
         adapter_delta,
         "left_singular_vectors",
-        lambda _info, k: np.ones((2, k), dtype=np.float32),
+        lambda info, k: np.ones((info["shape"][0], k), dtype=np.float32),
     )
     monkeypatch.setattr(
         adapter_delta, "spectrum", lambda _info, top: np.ones((top,), dtype=np.float32))
@@ -119,13 +126,20 @@ def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(mo
         view, object(), "adapter", [0], directions=1
     )
 
-    assert [record["type"] for record in records] == ["down_proj"]
+    assert [record["module"] for record in records] == ["layers.0.reducer"]
     assert calls == [1.0]
 
     calls.clear()
-    filtered = adapter_delta.readout_update_directions(
-        view, object(), "adapter", [0], types=("up_proj",), directions=1
+    incompatible = adapter_delta.readout_update_directions(
+        view, object(), "adapter", [0], types=("expansion",), directions=1
     )
 
-    assert [record["type"] for record in filtered] == ["up_proj"]
+    assert incompatible == []
+    assert calls == []
+
+    square_records = adapter_delta.readout_update_directions(
+        view, object(), "adapter", [0], types=("square_residual",), directions=1
+    )
+
+    assert [record["module"] for record in square_records] == ["layers.0.square"]
     assert calls == [1.0]
