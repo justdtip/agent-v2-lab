@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -111,3 +112,52 @@ def test_run_d_configs_are_literal_pairwise_recipes() -> None:
         "test": {"count": 180, "difficulty": 2, "perturb": False, "role": "test"},
         "test3": {"count": 60, "difficulty": 3, "perturb": False, "role": "test"},
     }
+
+
+def test_stage_select_writes_provenance_after_selection_json(monkeypatch, tmp_path: Path) -> None:
+    """Selection provenance must capture the same durable payload without loading a model."""
+    output = tmp_path / "output"
+    output.mkdir()
+    adapter = tmp_path / "step-10"
+    adapter.mkdir()
+    config = {
+        "output": output,
+        "model": "fake-model",
+        "seed": 17,
+        "keep_last": 2,
+        "eval": {"max_steps": 2, "max_tokens": 3},
+        "select": {
+            "screen": [
+                {"split": "valid", "difficulty": 1, "per_family": {"default": 1}}
+            ]
+        },
+    }
+    spec = object()
+    calls = []
+
+    monkeypatch.setattr(cli, "checkpoint_dirs", lambda config: [(10, adapter)])
+    monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
+    monkeypatch.setattr(cli, "load_model_spec", lambda model: spec)
+    monkeypatch.setattr(
+        cli,
+        "run_evaluation",
+        lambda **kwargs: {
+            "rate_counts": {
+                "success": {"numerator": 1, "denominator": 1},
+                "clean": {"numerator": 1, "denominator": 1},
+                "valid_actions": {"numerator": 1, "denominator": 1},
+            },
+            "by_family": {"read": {"successes": 1, "tasks": 1}},
+        },
+    )
+
+    def capture_provenance(run_dir, *, resolved, spec, extra):
+        assert (output / "selection.json").is_file()
+        calls.append((run_dir, resolved, spec, extra))
+
+    monkeypatch.setattr(cli, "write_provenance", capture_provenance)
+
+    assert cli.stage_select(config, limit=None, quiet=True) == output / "best-adapter"
+
+    selection = json.loads((output / "selection.json").read_text(encoding="utf-8"))
+    assert calls == [(output, None, spec, {"stage": "select", "selection": selection})]

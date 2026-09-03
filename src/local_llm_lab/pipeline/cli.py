@@ -366,7 +366,17 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
         "criterion": "family macro success, micro success, clean rate, valid actions, lower validation loss, earlier step",
         "checkpoints": results,
     }
-    (output / "selection.json").write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
+    selection_path = output / "selection.json"
+    selection_path.write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
+    write_provenance(
+        output,
+        resolved=None,
+        spec=load_model_spec(config["model"]),
+        extra={
+            "stage": "select",
+            "selection": json.loads(selection_path.read_text(encoding="utf-8")),
+        },
+    )
     print("\nCheckpoint screen:")
     for row in results:
         mark = "<- selected" if row["step"] == best["step"] else ""
