@@ -352,7 +352,11 @@ def _analyse_evaluation(path: Path, fallback_seed: int) -> dict[str, Any]:
         if task_id in analysed:
             raise ValueError(f"{path}: duplicate task_id {task_id}")
         difficulty = record.get("difficulty")
-        if difficulty is not None and not isinstance(difficulty, int):
+        if type(difficulty) is int and difficulty == -1:
+            difficulty = None
+        elif difficulty is not None and (
+            type(difficulty) is not int or difficulty < 0
+        ):
             raise ValueError(f"{path}: {task_id} has invalid difficulty")
         task = task_from_id(task_id, seed, difficulty=difficulty)
         steps = record.get("steps", [])

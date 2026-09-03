@@ -426,7 +426,8 @@ def test_write_report_serialises_dynamic_integrity_fields(tmp_path: Path) -> Non
     record = json.loads(destination.read_text())["trajectories"][0]
     assert record["difficulty"] == 2
     assert record["integrity"]["clean"] is True
-    assert "difficulty" not in trajectory.as_dict()
+    assert trajectory.as_dict()["difficulty"] == record["difficulty"]
+    assert trajectory.as_dict()["integrity"] == record["integrity"]
 
 
 def test_report_render_adds_backward_compatible_integrity_clean_column() -> None:
@@ -509,6 +510,24 @@ def _write_evaluation(path: Path, task, trace: list[dict], *, success: bool, lab
             }
         )
     )
+
+
+def test_cli_treats_default_trajectory_difficulty_as_legacy(tmp_path: Path) -> None:
+    task = _task("calculate")
+    evaluation = tmp_path / "legacy.json"
+    _write_evaluation(
+        evaluation,
+        task,
+        _expert_trace(task),
+        success=True,
+        label="legacy",
+    )
+    saved = json.loads(evaluation.read_text())
+    assert saved["trajectories"][0]["difficulty"] == -1
+
+    rendered = _render_evaluations([evaluation], 20260902)
+
+    assert "| legacy | 1/1 | 1/1 | 0 | 0/0 |" in rendered
 
 
 def test_cli_helper_renders_deterministic_offline_comparison(tmp_path: Path) -> None:
