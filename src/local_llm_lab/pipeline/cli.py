@@ -273,10 +273,15 @@ def _selection_key(row: dict[str, Any]) -> tuple[float, float, float, float, flo
 def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path:
     output: Path = config["output"]
     select = config["select"]
+    checkpoints = checkpoint_dirs(config)
+    if not checkpoints:
+        raise SystemExit(
+            f"no checkpoint directories found in {output / 'adapters'}; run the train stage first"
+        )
     screen = select["screen"]
     losses = _validation_losses(output)
     results = []
-    for step, adapter in checkpoint_dirs(config):
+    for step, adapter in checkpoints:
         summaries = []
         for cell in screen:
             split = cell["split"]
@@ -310,10 +315,6 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
                 "wilson_95": {"success": wilson(components["successes"], components["tasks"])},
                 "val_loss": losses.get(step),
             }
-        )
-    if not results:
-        raise SystemExit(
-            f"no checkpoint directories found in {output / 'adapters'}; run the train stage first"
         )
     best = max(results, key=_selection_key)
     loss_rows = [row for row in results if row["val_loss"] is not None]

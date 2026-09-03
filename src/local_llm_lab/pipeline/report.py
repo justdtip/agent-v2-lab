@@ -17,11 +17,20 @@ def load_summaries(evals: Path) -> list[dict[str, Any]]:
             summary = dict(summary)
             summary["_file"] = path.name
             trajectories = payload.get("trajectories", [])
-            summary["_outcomes"] = {
-                str(record["task_id"]): bool(record.get("verdict", {}).get("success"))
-                for record in trajectories
-                if isinstance(record, dict) and isinstance(record.get("task_id"), str)
-            }
+            outcomes = {}
+            for record in trajectories:
+                if not isinstance(record, dict) or not isinstance(record.get("task_id"), str):
+                    continue
+                difficulty = record.get("difficulty")
+                if not isinstance(difficulty, int) or isinstance(difficulty, bool):
+                    outcomes = {}
+                    break
+                identity = (record["task_id"], difficulty)
+                if identity in outcomes:
+                    outcomes = {}
+                    break
+                outcomes[identity] = bool(record.get("verdict", {}).get("success"))
+            summary["_outcomes"] = outcomes
             summaries.append(summary)
     return summaries
 
@@ -47,7 +56,8 @@ def _paired_rows(summaries: list[dict[str, Any]]) -> list[str]:
         if (
             not left_outcomes
             or left.get("split") != right.get("split")
-            or left.get("difficulty") != right.get("difficulty")
+            or left.get("data_seed") is None
+            or left.get("data_seed") != right.get("data_seed")
             or left_outcomes.keys() != right_outcomes.keys()
         ):
             continue
@@ -87,7 +97,9 @@ def render(summaries: list[dict[str, Any]]) -> str:
             f"{s['mean_steps']:.1f}",
         ]
         if has_integrity:
-            row.append(_rate(s.get("integrity", {}), "clean_rate"))
+            row.append(
+                f"{_rate(s.get('integrity', {}), 'clean_rate')}{_interval(s, 'integrity_clean')}"
+            )
         for family in families:
             stats = s.get("by_family", {}).get(family)
             row.append(

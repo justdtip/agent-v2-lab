@@ -6,11 +6,14 @@ from pathlib import Path
 from local_llm_lab.pipeline.report import load_summaries, render
 
 
-def _summary(label: str, *, split: str = "valid", difficulty: int = 1) -> dict[str, object]:
+def _summary(
+    label: str, *, split: str = "valid", difficulty: int = 1, data_seed: int = 17
+) -> dict[str, object]:
     return {
         "label": label,
         "split": split,
         "difficulty": difficulty,
+        "data_seed": data_seed,
         "tasks": 2,
         "successes": 1,
         "success_rate": 0.5,
@@ -84,6 +87,45 @@ def test_render_refuses_pairs_for_different_ids_split_or_difficulty(tmp_path: Pa
     )
 
     assert "Paired McNemar" not in render(load_summaries(tmp_path))
+
+
+def test_render_refuses_pairs_for_same_ids_with_different_seed_or_task_difficulty(
+    tmp_path: Path,
+) -> None:
+    """Catch pairing that treats a seed-shifted or difficulty-shifted task string as identical."""
+    task_id = "valid-read-0000-clean"
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    _write_eval(seed_dir / "a.json", _summary("seed-a", data_seed=17), {task_id: True})
+    _write_eval(seed_dir / "b.json", _summary("seed-b", data_seed=18), {task_id: False})
+    level_dir = tmp_path / "level"
+    level_dir.mkdir()
+    _write_eval(level_dir / "a.json", _summary("level-a"), {task_id: True})
+    payload = {
+        "summary": _summary("level-b"),
+        "trajectories": [
+            {
+                "task_id": task_id,
+                "difficulty": 2,
+                "prompt": "different seed would produce different files",
+                "verdict": {"success": False},
+            }
+        ],
+    }
+    (level_dir / "b.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert "Paired McNemar" not in render(load_summaries(seed_dir))
+    assert "Paired McNemar" not in render(load_summaries(level_dir))
+
+
+def test_render_adds_top_level_integrity_interval_to_nested_clean_rate() -> None:
+    """Catch an integrity-clean column that discards its summary Wilson interval."""
+    rich = _summary("rich")
+    rich["clean_rate"] = 1.0
+    rich["integrity"] = {"clean_rate": 0.5}
+    rich["wilson_95"] = {**rich["wilson_95"], "integrity_clean": [0.2, 0.8]}
+
+    assert "50% [20%-80%]" in render([rich])
 
 
 def test_render_preserves_legacy_only_and_mixed_integrity_layouts() -> None:

@@ -7,8 +7,9 @@ Status: implementation complete; independent review is pending until the reviewe
 This change implements SPEC-002 section 1 only: deterministic family-balanced checkpoint
 screen construction, difficulty-aware evaluation metadata, Wilson intervals, exact paired
 McNemar comparisons, two-cell selector configuration, validation-loss parsing, and report
-rendering. It does not modify note-integrity scoring, generator task rows, runner behavior,
-protected data/output/report artifacts, or the released legacy pipeline test.
+rendering. It does not modify note-integrity scoring, generator task rows, runner behavior, or
+protected data/output/report artifacts. Step 0 behavior-preservingly moved the legacy empty
+checkpoint regression from `tests/test_pipeline.py` to `tests/test_selection.py`.
 
 ## Changed paths and interfaces
 
@@ -20,6 +21,7 @@ protected data/output/report artifacts, or the released legacy pipeline test.
 | `pipeline/cli.py` | parses saved `train.log` validation losses and writes deterministic per-checkpoint selection components |
 | `pipeline/report.py` | retains lightweight outcomes for safe pairing and renders supplied intervals/paired McNemar rows |
 | `tests/test_tasks.py`, `test_evaluate.py`, `test_cli.py`, `test_selection.py`, `test_report.py` | focused contracts using fakes and temporary metadata only |
+| `tests/test_pipeline.py` (Step 0 only) | removed the exact empty-checkpoint test after its behavior-preserving move to `tests/test_selection.py` |
 
 Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 480; `cli.py` 594;
 `report.py` 105; tests 152/143/20/133/109 respectively.
@@ -46,8 +48,9 @@ lower validation loss, then earlier step.
 - New summary rate records preserve existing rounded rates and note-integrity fields. Exact
   numerator/denominator values feed selection, while intervals use the standard uncorrected
   Wilson formula.
-- McNemar only pairs non-empty identical task-id sets with matching summary split and difficulty.
-  Legacy records have no outcomes/metadata and therefore cannot be fabricated into pairs.
+- McNemar only pairs non-empty identical per-trajectory `(task_id, difficulty)` sets with the
+  same non-null data seed and split. Legacy records have no outcomes/metadata and therefore
+  cannot be fabricated into pairs.
 - The supplied Wilson expected value for 5/10 differs from the stated `z=1.96` formula by about
   3.4e-6. The formula governs: implementation returns `(0.2365895936, 0.7634104064)`.
 
@@ -75,6 +78,20 @@ test execution. Both conditions are recorded rather than hidden or fixed outside
 No model, checkpoint, tokenizer, or training/evaluation/select stage was run. Test doubles used
 temporary adapter directories and saved log text only. No protected `data/`, `outputs/`, or
 `reports/` path was modified. The behavior-preserving extraction commit is
-`8e7783977fc216568dc240ad9f426e2100c2ac59`; the selection implementation commit is recorded
-after its final scoped verification. Observed-but-not-fixed items are the two existing C901
+`8e7783977fc216568dc240ad9f426e2100c2ac59`; the selection implementation commit is
+`72140033ef2f83badf0f8ba1ed3da0dfcb051eb5`. Observed-but-not-fixed items are the two existing C901
 violations and the local full-suite collection abort above.
+
+## Review-fix round 1
+
+The formal screen ruling preserves exactly `{default: 1, long: 3}` per cell: `valid` at
+difficulty 1 and `valid2` at difficulty 2, for 48 total tasks and combined short/long family
+counts of 2/6. The screen is deliberately long-horizon weighted; family balance is the primary
+macro score, not equal sample counts.
+
+The accepted review fixes add fail-closed paired comparison identity (same non-null `data_seed`
+and exact per-trajectory task-id/difficulty keys), truthful mixed-difficulty evaluation metadata,
+the top-level integrity-clean Wilson interval in the nested report column, and restoration of
+the extracted empty-checkpoint regression in `tests/test_selection.py`. RED and GREEN evidence
+for all four focused regressions is recorded in the ignored task ledger; the round-1 fix commit
+is reported through the native task handoff.

@@ -395,13 +395,15 @@ def run_evaluation(
         use_cache=use_cache,
     )
     summary = summarize(trajectories)
+    difficulties = sorted({task.difficulty for task in tasks})
     summary.update(
         {
             "label": label,
             "model": model_name,
             "adapter": None if adapter is None else str(adapter.resolve()),
             "split": split,
-            "difficulty": tasks[0].difficulty if tasks else difficulty,
+            "difficulty": difficulties[0] if len(difficulties) == 1 else None,
+            "difficulties": difficulties,
             "stress": stress,
             "temperature": temperature,
             "keep_last": keep_last,

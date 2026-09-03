@@ -141,3 +141,42 @@ def test_run_evaluation_records_explicit_difficulty_and_screen_metadata(
     assert summary["data_seed"] == 17
     payload = (tmp_path / "eval.json").read_text(encoding="utf-8")
     assert '"difficulty": 2' in payload and '"data_seed": 17' in payload
+
+
+def test_run_evaluation_marks_mixed_default_difficulties_without_a_false_single_level(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Catch metadata that labels an alternating split as its first task's difficulty."""
+
+    monkeypatch.setattr(evaluate, "load_policy", lambda _model, _adapter: (object(), object()))
+    monkeypatch.setattr(
+        evaluate,
+        "evaluate_tasks",
+        lambda _model, _tokenizer, tasks, **_kwargs: [
+            _trajectory(
+                task.task_id,
+                success=True,
+                clean=True,
+                difficulty=task.difficulty,
+                family=task.family,
+            )
+            for task in tasks
+        ],
+    )
+    monkeypatch.setattr(evaluate, "_seed_model_rng", lambda _seed: None)
+    monkeypatch.setattr(evaluate, "_clear_model_cache", lambda: None)
+
+    summary = evaluate.run_evaluation(
+        model_name="fake-model",
+        adapter=None,
+        label="mixed",
+        split="valid2",
+        limit=4,
+        output=tmp_path / "mixed.json",
+        transcript_dir=None,
+        quiet=True,
+        seed=17,
+    )
+
+    assert summary["difficulty"] is None
+    assert summary["difficulties"] == [0, 1]
