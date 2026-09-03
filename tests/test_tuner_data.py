@@ -48,6 +48,40 @@ def test_rendered_rows_dataset_truncates_only_completion_tokens_at_the_sequence_
     assert dataset[0] == ([11, 12], 1)
 
 
+def test_rendered_rows_dataset_sorts_unsorted_rows_by_sequence_length_stably() -> None:
+    class _LengthTokenizer:
+        def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+            assert not add_special_tokens
+            return {
+                "p1": [1],
+                "p2": [2],
+                "p3": [3],
+                "p4": [4],
+                "c1": [11],
+                "c2": [12, 13],
+                "c3": [14, 15, 16],
+                "c4": [17, 18],
+            }[text]
+
+    dataset = RenderedRowsDataset(
+        [
+            {"prompt": "p1", "completion": "c3"},
+            {"prompt": "p2", "completion": "c1"},
+            {"prompt": "p3", "completion": "c2"},
+            {"prompt": "p4", "completion": "c4"},
+        ],
+        _LengthTokenizer(),
+        max_seq_length=8,
+    )
+
+    assert [dataset[index][0] for index in range(len(dataset))] == [
+        [2, 11],
+        [3, 12, 13],
+        [4, 17, 18],
+        [1, 14, 15, 16],
+    ]
+
+
 def test_load_rendered_splits_validates_each_named_file(tmp_path) -> None:
     for split in ("train", "valid", "test"):
         (tmp_path / f"{split}.jsonl").write_text(

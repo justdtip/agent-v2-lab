@@ -88,7 +88,7 @@ def test_open_thinking_blocks_completion_and_spec_rendering_declares_end_of_turn
     action = Action("finish", {"answer": "done"})
     spec = _spec("inference")
 
-    assert render_completion("note", action, spec=spec) == render_turn("note", action) + "<eot>"
+    assert render_completion("note", action, spec=spec) == render_turn("note", action) + "<eot>\n"
     assert parse_turn(render_turn("note", action)).thinking is None
     assert not turn_is_complete("<think>```json\n{}\n```\n" + render_turn("note", action))
 

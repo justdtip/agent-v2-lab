@@ -137,7 +137,7 @@ def render_turn(thought: str, action: Action) -> str:
 
 def render_completion(thought: str, action: Action, *, spec: ModelSpec) -> str:
     """Render the supervised assistant completion using the model's declared turn terminator."""
-    return render_turn(thought, action) + spec.chat.end_of_turn
+    return render_turn(thought, action) + spec.chat.end_of_turn + "\n"
 
 
 def assistant_message(thought: str, action: Action) -> dict[str, Any]:

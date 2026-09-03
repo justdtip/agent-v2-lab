@@ -6,10 +6,11 @@ import json
 import os
 
 from local_llm_lab.agent_protocol import Action
-from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec
+from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, load_model_spec
 from local_llm_lab.pipeline.data import build_rows, render_rows, write_dataset, write_jsonl
 from local_llm_lab.pipeline.protocol import assistant_message
-from local_llm_lab.pipeline.tasks import make_tasks
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks
+from local_llm_lab.tuner_data import RenderedRowsDataset
 
 
 def _legacy_spec() -> ModelSpec:
@@ -66,6 +67,29 @@ class _ThinkingTokenizer(_LegacyTokenizer):
         return rendered + (suffix + "<think>\n\n</think>\n\n" if kwargs["enable_thinking"] is False else suffix)
 
 
+class _Qwen25TemplateTokenizer:
+    """Byte-level fake for the registered 3B Qwen2.5 chat-template contract."""
+
+    def apply_chat_template(self, messages, *, add_generation_prompt, tokenize, **kwargs) -> str:
+        assert not tokenize and not kwargs
+        rendered = "".join(
+            f"<|im_start|>{message['role']}\n{message['content']}<|im_end|>\n"
+            for message in messages
+        )
+        return rendered + ("<|im_start|>assistant\n" if add_generation_prompt else "")
+
+    def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        assert not add_special_tokens
+        return list(text.encode("utf-8"))
+
+
+def _legacy_qwen25_messages(messages: list[dict[str, object]]) -> str:
+    return "".join(
+        f"<|im_start|>{message['role']}\n{message['content']}<|im_end|>\n"
+        for message in messages
+    )
+
+
 def test_render_rows_adds_canonical_fields_without_mutating_messages() -> None:
     row = {
         "messages": [
@@ -83,7 +107,7 @@ def test_render_rows_adds_canonical_fields_without_mutating_messages() -> None:
     assert rendered[0]["messages"] == original["messages"]
     assert rendered[0]["metadata"] == {"task_id": "fake"}
     assert rendered[0]["prompt"] == "system:rules\nuser:task\n<|im_start|>assistant\n"
-    assert rendered[0]["completion"] == 'note\n```json\n{"name": "finish", "arguments": {"answer": "done"}}\n```<eot>'
+    assert rendered[0]["completion"] == 'note\n```json\n{"name": "finish", "arguments": {"answer": "done"}}\n```<eot>\n'
 
 
 def test_write_jsonl_atomically_replaces_payloads_at_or_above_one_mebibyte(
@@ -103,6 +127,23 @@ def test_write_jsonl_atomically_replaces_payloads_at_or_above_one_mebibyte(
     assert len(replacements) == 1
     assert replacements[0][1] == str(destination)
     assert digest == hashlib.sha256(destination.read_bytes()).hexdigest()
+
+
+def test_write_jsonl_atomically_replaces_sub_mebibyte_array_payloads(monkeypatch, tmp_path) -> None:
+    destination = tmp_path / "rows.jsonl"
+    replacements: list[tuple[str, str]] = []
+    original_replace = os.replace
+
+    def record_replace(source: str, target: str) -> None:
+        replacements.append((source, target))
+        original_replace(source, target)
+
+    monkeypatch.setattr(os, "replace", record_replace)
+
+    write_jsonl(destination, [{"messages": [{"role": "user", "content": "small"}]}])
+
+    assert len(replacements) == 1
+    assert replacements[0][1] == str(destination)
 
 
 def test_write_dataset_emits_rendered_rows_when_given_a_tokenizer_and_spec(tmp_path) -> None:
@@ -129,22 +170,23 @@ def test_write_dataset_records_the_effective_inference_training_renderer(tmp_pat
     assert manifest["rendering"]["template_kwargs"] == {"enable_thinking": False}
 
 
-def test_render_rows_preserves_legacy_prompt_bytes_and_independent_token_ids() -> None:
-    tokenizer = _LegacyTokenizer()
-    messages = [
-        {"role": "system", "content": "rules"},
-        {"role": "user", "content": "task"},
-        assistant_message("note", Action("finish", {"answer": "done"})),
-    ]
+def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens() -> None:
+    assert GENERATOR_VERSION == 2
+    tokenizer = _Qwen25TemplateTokenizer()
+    spec = load_model_spec("qwen25-coder-3b")
+    row = build_rows(make_tasks("train", 12, seed=20260902)[0])[0]
+    legacy_render = _legacy_qwen25_messages(row["messages"])
+    legacy_tokens = list(legacy_render.encode("utf-8"))
 
-    row = render_rows([{"messages": messages, "metadata": {}}], tokenizer, spec=_legacy_spec())[0]
+    rendered = render_rows([row], tokenizer, spec=spec)[0]
+    dataset = RenderedRowsDataset(
+        [rendered], tokenizer, max_seq_length=len(legacy_tokens) + 1
+    )
+    tokens, offset = dataset[0]
 
-    expected_prompt = "system:rules\nuser:task\n<|im_start|>assistant\n"
-    expected_completion = 'note\n```json\n{"name": "finish", "arguments": {"answer": "done"}}\n```<eot>'
-    assert row["prompt"] == expected_prompt
-    assert row["completion"] == expected_completion
-    assert tokenizer.encode(row["prompt"]) == [ord(character) for character in expected_prompt]
-    assert tokenizer.encode(row["completion"]) == [ord(character) for character in expected_completion]
+    assert rendered["prompt"] + rendered["completion"] == legacy_render
+    assert tokens == legacy_tokens
+    assert offset == len(rendered["prompt"].encode("utf-8"))
 
 
 def test_render_rows_disables_inference_thinking_and_preserves_trained_reasoning() -> None:
@@ -158,7 +200,7 @@ def test_render_rows_disables_inference_thinking_and_preserves_trained_reasoning
 
     assert inference_tokenizer.template_kwargs == [{"enable_thinking": False}]
     assert "<think>reason</think>" not in inference["completion"]
-    assert trained["completion"] == "<think>reason</think>\n\n" + assistant_message("note", action)["content"] + "<eot>"
+    assert trained["completion"] == "<think>reason</think>\n\n" + assistant_message("note", action)["content"] + "<eot>\n"
 
 
 def test_recovery_rows_are_marked_and_oversampled_in_train_only(tmp_path) -> None:

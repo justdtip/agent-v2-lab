@@ -26,8 +26,6 @@ from local_llm_lab.pipeline.protocol import (
 )
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
 
-_ATOMIC_WRITE_THRESHOLD = 1024 * 1024
-
 
 def build_rows(task: Task, *, keep_last: int = DEFAULT_KEEP_LAST) -> list[dict[str, Any]]:
     """Replay a task through the simulator, emitting one supervised row per expert decision.
@@ -133,14 +131,11 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> str:
-    """Write JSONL directly when small and atomically when its payload reaches one MiB."""
+    """Atomically write dataset JSONL through a flushed, same-directory temporary file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = "".join(
         json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows
     )
-    if len(payload.encode("utf-8")) < _ATOMIC_WRITE_THRESHOLD:
-        path.write_text(payload, encoding="utf-8")
-        return hashlib.sha256(path.read_bytes()).hexdigest()
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )

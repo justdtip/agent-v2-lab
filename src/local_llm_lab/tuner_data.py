@@ -15,9 +15,15 @@ class RenderedRowsDataset:
     def __init__(self, rows: list[dict[str, Any]], tokenizer: Any, *, max_seq_length: int) -> None:
         if max_seq_length <= 0:
             raise ValueError("max_seq_length must be positive")
-        self._items = [
+        tokenized = [
             _tokenize_row(row, tokenizer, max_seq_length=max_seq_length, index=index)
             for index, row in enumerate(rows)
+        ]
+        self._items = [
+            item
+            for _, item in sorted(
+                enumerate(tokenized), key=lambda pair: (len(pair[1][0]), pair[0])
+            )
         ]
 
     def __len__(self) -> int:
