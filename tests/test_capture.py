@@ -148,7 +148,13 @@ def test_injection_restores_shared_view_run_block_after_an_error() -> None:
     ):
         raise RuntimeError("boom")
 
-    assert view.run_block is original
+    restored = view.run_block
+    assert restored.__self__ is original.__self__
+    assert restored.__func__ is original.__func__
+
+    # A surviving wrapper would inject at position zero and turn this baseline 1 into 2.
+    after_error = view.run_block(0, mx.zeros((1, 1, 1)), {}, None)
+    np.testing.assert_allclose(np.asarray(after_error), [[[1.0]]])
 
 
 def test_lora_block_mask_uses_view_owned_blocks_and_restores_after_error() -> None:

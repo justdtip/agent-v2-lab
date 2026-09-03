@@ -83,9 +83,9 @@ def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(mo
         "shape": [8, 2],
     }
     square = {
-        "type": "square_residual",
-        "layer": 0,
-        "module": "layers.0.square",
+        "type": "residual_update",
+        "layer": 1,
+        "module": "layers.1.square",
         "shape": [2, 2],
     }
     monkeypatch.setattr(
@@ -94,7 +94,7 @@ def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(mo
         lambda _path: {
             "layers.0.expander": (None, expansion),
             "layers.0.reducer": (None, down),
-            "layers.0.square": (None, square),
+            "layers.1.square": (None, square),
             "layers.1.reducer": (None, same_type_expansion),
         },
     )
@@ -128,7 +128,7 @@ def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(mo
     monkeypatch.setattr(adapter_delta, "_jlens_module", lambda: JLens)
     view = type("View", (), {"hidden_size": 2})()
     records = adapter_delta.readout_update_directions(
-        view, object(), "adapter", [0], directions=1
+        view, object(), "adapter", [0, 1], directions=1
     )
 
     assert [record["module"] for record in records] == ["layers.0.reducer"]
@@ -143,8 +143,8 @@ def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(mo
     assert calls == []
 
     square_records = adapter_delta.readout_update_directions(
-        view, object(), "adapter", [0], types=("square_residual",), directions=1
+        view, object(), "adapter", [1], types=("residual_update",), directions=1
     )
 
-    assert [record["module"] for record in square_records] == ["layers.0.square"]
+    assert [record["module"] for record in square_records] == ["layers.1.square"]
     assert calls == [1.0]

@@ -484,6 +484,11 @@ def readout_update_directions(
         shape = _update_shape(info)
         if shape is None or shape[0] != hidden_size:
             continue
+        if types is None and shape[1] == hidden_size:
+            # The default type discovery is intentionally conservative, but a type can
+            # occur on multiple paths. Recheck each record so one non-square residual
+            # update cannot admit a same-typed square internal projection.
+            continue
         vectors = left_singular_vectors(info, k=directions)
         values = spectrum(info, top=directions)
         for index in range(vectors.shape[1]):
