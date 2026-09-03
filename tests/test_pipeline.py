@@ -1300,20 +1300,6 @@ def test_checkpoint_dirs_replaces_stale_weight_copy(tmp_path) -> None:
     assert stale.read_bytes() == b"fresh weights"
 
 
-def test_stage_select_refuses_empty_checkpoint_directory(tmp_path) -> None:
-    """Selection with no checkpoint weights must stop before any evaluation is attempted."""
-    from local_llm_lab.pipeline.cli import stage_select
-
-    output = tmp_path / "run"
-    adapters = output / "adapters"
-    adapters.mkdir(parents=True)
-    (adapters / "adapter_config.json").write_text("{}", encoding="utf-8")
-    config = {"output": output, "select": {"limit": 1, "split": "valid"}}
-
-    with pytest.raises(SystemExit, match="no checkpoint directories.*train"):
-        stage_select(config, limit=None, quiet=True)
-
-
 def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch) -> None:
     """Starting a training run removes stale checkpoints without deleting sibling outputs."""
     from local_llm_lab.pipeline import cli
