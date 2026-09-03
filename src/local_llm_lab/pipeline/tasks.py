@@ -26,7 +26,7 @@ FAMILIES = (
 )
 LONG_HORIZON_FAMILIES = FAMILIES[6:]
 VARIANTS = ("clean", "wrong_path", "transient", "unknown_tool", "stale_path", "failed_edit")
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -626,7 +626,12 @@ def _ledger_reconcile(split: str, index: int, level: int, rng: random.Random) ->
         remaining = [later for later, _ in ordered[position + 1 :]]
         steps.append(
             _step(
-                f"Invoices read: {position} of {entries}. approved: {_join(approved_so_far)}; held (skip): {_join(held_so_far)}. Reading {_short(path)}; {_pending(remaining)}.",
+                f"Invoices read: {position} of {entries}. approved: {_join(approved_so_far)}; held (skip): {_join(held_so_far)}. Reading {_short(path)}; "
+                + (
+                    _pending(remaining) + "."
+                    if remaining
+                    else "then sum the approved amounts and update the summary."
+                ),
                 "read_file",
                 path=path,
             )
@@ -757,20 +762,26 @@ def _conditional_update(split: str, index: int, level: int, rng: random.Random) 
     )
     steps = [
         _step(
-            "Plan: read the policy threshold, list services, read every service load, throttle the highest load if above threshold, re-read to verify, report. Reading policy.",
+            "loads so far: none. Plan: read the policy threshold, list services, read every service load, throttle the highest load if above threshold, re-read to verify, report. Reading policy.",
             "read_file",
             path=policy_path,
         ),
-        _step(f"threshold={threshold}. Listing the service files.", "list_files", directory=root),
+        _step(
+            f"loads so far: none. threshold={threshold}. Listing the service files.",
+            "list_files",
+            directory=root,
+        ),
     ]
     best_index: int | None = None
     best_load: int | None = None
     observed_loads: list[str] = []
     for position, path in enumerate(service_paths):
         best_label = f"service-{best_index}={best_load}" if best_index is not None else "none"
+        remaining = service_paths[position + 1 :]
         steps.append(
             _step(
-                f"threshold={threshold}. loads so far: {_join(observed_loads)}. highest so far: {best_label}. Reading service {position + 1} of {count}: {_short(path)}; {_pending(service_paths[position + 1 :])}.",
+                f"threshold={threshold}. loads so far: {_join(observed_loads)}. highest so far: {best_label}. Reading service {position + 1} of {count}: {_short(path)}; "
+                + (_pending(remaining) + "." if remaining else "then select the highest load."),
                 "read_file",
                 path=path,
             )
@@ -930,10 +941,12 @@ def _aggregate_report(split: str, index: int, level: int, rng: random.Random) ->
     ]
     values_so_far: list[int] = []
     for position, path in enumerate(metric_paths):
+        remaining = metric_paths[position + 1 :]
         steps.append(
             _step(
                 f"values so far: {_join(values_so_far)}; split after {split_at} of {metric_count}. "
-                f"Reading metric {position + 1} of {metric_count}: {_short(path)}; {_pending(metric_paths[position + 1 :])}.",
+                f"Reading metric {position + 1} of {metric_count}: {_short(path)}; "
+                + (_pending(remaining) + "." if remaining else "then calculate the two subtotals."),
                 "read_file",
                 path=path,
             )
@@ -1030,6 +1043,16 @@ def _apply_variant(task: Task, variant: str, rng: random.Random) -> Task:
     raise ValueError(f"unsupported variant: {variant}")
 
 
+def _injected_state_prefix(task: Task, fallback: str) -> str:
+    """Keep a recovery guess inside the family state representation it interrupts."""
+    if task.family == "aggregate_report":
+        total = sum("value=" in content for content in task.files.values())
+        return f"values so far: none; split after {total // 2} of {total}. {fallback}"
+    if task.family == "conditional_update":
+        return f"loads so far: none. {fallback}"
+    return fallback
+
+
 def _transient(task: Task, rng: random.Random) -> Task:
     candidates = [i for i, step in enumerate(task.steps) if step.action.name != "finish"]
     k = rng.choice(candidates)
@@ -1056,7 +1079,8 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
             raise RuntimeError(f"{task.task_id}: could not construct a wrong_path variant")
         guess = rng.choice(candidates)
         wrong = Step(
-            f"Trying guessed path {guess} before listing the directory.",
+            f"Trying guessed path {guess} before listing the directory. "
+            f"{_injected_state_prefix(task, task.steps[0].thought)}",
             Action("read_file", {"path": guess}),
             supervise=False,
         )
@@ -1081,7 +1105,11 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
     if not candidates:
         raise RuntimeError(f"{task.task_id}: could not construct a wrong_path variant")
     guess = rng.choice(candidates)
-    wrong = Step(f"Trying guessed path {guess}.", Action("read_file", {"path": guess}), supervise=False)
+    wrong = Step(
+        f"Trying guessed path {guess}. {step.thought}",
+        Action("read_file", {"path": guess}),
+        supervise=False,
+    )
     recovery = Step(
         f"That path does not exist; use the exact path from the earlier tool result instead of guessing: {correct}. "
         + step.thought,
@@ -1149,10 +1177,14 @@ def _stale_path(task: Task, rng: random.Random) -> Task:
         raise RuntimeError(f"{task.task_id}: could not construct a stale_path variant")
     k, guess, directory = rng.choice(candidates)
     step = task.steps[k]
-    wrong = Step(f"Trying stale guessed path {guess}.", Action("read_file", {"path": guess}), supervise=False)
+    wrong = Step(
+        f"Trying stale guessed path {guess}. {step.thought}",
+        Action("read_file", {"path": guess}),
+        supervise=False,
+    )
     listing = Step(
         "That path does not exist and the earlier listing is no longer visible, so list the "
-        "directory again for the exact names instead of guessing.",
+        f"directory again for the exact names instead of guessing. {step.thought}",
         Action("list_files", {"directory": directory}),
     )
     recovered = Step("The listing gives the exact name. " + step.thought, step.action)
@@ -1238,7 +1270,8 @@ def _build_failed_edit(task: Task, k: int, rng: random.Random) -> Task | None:
     )
     reread = Step(
         "The replacement failed because that exact text is not in the file, so re-read it to "
-        "see its current contents instead of retrying the same edit.",
+        "see its current contents instead of retrying the same edit. "
+        + step.thought,
         Action("read_file", {"path": path}),
     )
     recovered = Step(

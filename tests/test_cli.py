@@ -55,6 +55,42 @@ def test_stage_data_normalizes_legacy_and_explicit_splits(monkeypatch, tmp_path)
         stage_data(base, [])
 
 
+def test_stage_data_passes_the_exact_six_run_d_chunks_and_recovery_multipliers(
+    monkeypatch, tmp_path
+) -> None:
+    """Stage the shipped recipe through the fake writer; no YAML dict may leak through."""
+    received = []
+
+    def capture_dataset(*args, **kwargs):
+        received.append((args, kwargs))
+        return {"splits": {}}
+
+    monkeypatch.setattr(cli, "write_dataset", capture_dataset)
+    monkeypatch.setattr(cli, "write_provenance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: object())
+    config = load_config(Path(__file__).parents[1] / "configs" / "agent_v2d.yaml")
+    config["data"] = tmp_path / "data"
+    config["output"] = tmp_path / "output"
+
+    stage_data(config, [])
+
+    assert received[-1][0][1] == {
+        "train": SplitSpec(240, difficulty=0, perturb=True, role="train"),
+        "train1": SplitSpec(120, difficulty=1, perturb=True, role="train"),
+        "valid": SplitSpec(24, difficulty=1, perturb=False, role="valid"),
+        "valid2": SplitSpec(24, difficulty=2, perturb=False, role="valid"),
+        "test": SplitSpec(180, difficulty=2, perturb=False, role="test"),
+        "test3": SplitSpec(60, difficulty=3, perturb=False, role="test"),
+    }
+    assert received[-1][1]["recovery_repeats"] == {
+        "transient": 1,
+        "wrong_path": 2,
+        "unknown_tool": 2,
+        "stale_path": 6,
+        "failed_edit": 6,
+    }
+
+
 def test_run_d_configs_are_literal_pairwise_recipes() -> None:
     """Catch a data-recipe drift between D3/D4 or B/B4."""
     root = Path(__file__).parents[1] / "configs"

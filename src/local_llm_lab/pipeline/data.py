@@ -285,7 +285,18 @@ def _build_logical_chunk(
         perturb=split_spec.perturb,
         difficulty=split_spec.difficulty,
     )
-    expert_rows = [row for task in tasks for row in build_rows(task, keep_last=keep_last)]
+    expert_rows = [
+        {
+            **row,
+            "metadata": {
+                **row["metadata"],
+                "difficulty": split_spec.difficulty,
+                "perturb": split_spec.perturb,
+            },
+        }
+        for task in tasks
+        for row in build_rows(task, keep_last=keep_last)
+    ]
     recovery_targets = sum(row["metadata"].get("recovery", False) for row in expert_rows)
     if split_spec.role == "train":
         expert_rows = [row for row in expert_rows for _ in range(_repeats(row, recovery_repeats))]

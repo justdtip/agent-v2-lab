@@ -211,7 +211,7 @@ def test_write_dataset_records_the_complete_unresolved_spec_without_resolving(
 
 
 def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens() -> None:
-    assert GENERATOR_VERSION == 3
+    assert GENERATOR_VERSION == 4
     tokenizer = _Qwen25TemplateTokenizer()
     spec = load_model_spec("qwen25-coder-3b")
     row = build_rows(make_tasks("train", 12, seed=20260902)[0])[0]
@@ -308,6 +308,62 @@ def test_split_specs_aggregate_named_chunks_by_role_deterministically(tmp_path) 
         assert task_ids <= names
         assert task_ids == names
         assert manifest["outputs"][role]["rows"] == len(read_jsonl(tmp_path / f"{role}.jsonl"))
+
+
+def _logical_hash(rows: list[dict[str, object]]) -> str:
+    payload = "".join(
+        json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def test_split_specs_preserve_chunk_boundaries_effects_hashes_and_recovery_repeats(
+    tmp_path,
+) -> None:
+    """Independently prove the six logical chunks concatenate in declaration order."""
+    splits = {
+        "train": SplitSpec(24, difficulty=0, perturb=True, role="train"),
+        "train1": SplitSpec(24, difficulty=1, perturb=True, role="train"),
+        "valid": SplitSpec(24, difficulty=1, perturb=False, role="valid"),
+        "valid2": SplitSpec(24, difficulty=2, perturb=False, role="valid"),
+        "test": SplitSpec(24, difficulty=2, perturb=False, role="test"),
+        "test3": SplitSpec(24, difficulty=3, perturb=False, role="test"),
+    }
+    repeats = {"wrong_path": 2, "stale_path": 6, "failed_edit": 6}
+    first = write_dataset(tmp_path / "one", splits, recovery_repeats=repeats)
+    second = write_dataset(tmp_path / "two", splits, recovery_repeats=repeats)
+
+    for role, chunk_names in {
+        "train": ("train", "train1"),
+        "valid": ("valid", "valid2"),
+        "test": ("test", "test3"),
+    }.items():
+        first_bytes = (tmp_path / "one" / f"{role}.jsonl").read_bytes()
+        assert first_bytes == (tmp_path / "two" / f"{role}.jsonl").read_bytes()
+        rows = read_jsonl(tmp_path / "one" / f"{role}.jsonl")
+        offset = 0
+        for name in chunk_names:
+            info = first["splits"][name]
+            chunk = rows[offset : offset + info["rows"]]
+            offset += info["rows"]
+            assert len(chunk) == info["rows"]
+            assert {row["metadata"]["task_id"].split("-", 1)[0] for row in chunk} == {name}
+            assert _logical_hash(chunk) == info["sha256"]
+            assert {row["metadata"]["difficulty"] for row in chunk} == {info["difficulty"]}
+            assert {row["metadata"]["perturb"] for row in chunk} == {info["perturb"]}
+            if info["perturb"]:
+                assert {row["metadata"]["variant"] for row in chunk} != {"clean"}
+        assert offset == len(rows)
+        assert hashlib.sha256(first_bytes).hexdigest() == first["outputs"][role]["sha256"]
+
+    for name in ("train", "train1"):
+        info = first["splits"][name]
+        assert info["recovery_targets"] > 0
+        assert info["recovery_rows_after_repeats"] > info["recovery_targets"]
+    assert first == second
+    assert (tmp_path / "one" / "manifest.json").read_bytes() == (
+        tmp_path / "two" / "manifest.json"
+    ).read_bytes()
 
 
 def test_split_specs_add_role_replay_once_and_reject_invalid_values(tmp_path) -> None:

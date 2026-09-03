@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,7 +22,6 @@ from local_llm_lab.pipeline.integrity import (
 )
 from local_llm_lab.pipeline.runner import Trajectory
 from local_llm_lab.pipeline.tasks import (
-    FAMILIES,
     VARIANTS,
     difficulty,
     make_tasks,
@@ -75,11 +75,17 @@ def test_run_d_generator_uses_pending_none_only_for_empty_action_queues() -> Non
     """Catch any completion wording that is not the exhausted-queue form."""
     patterns = completion_patterns()
     for level in range(4):
-        for task in make_tasks("integrity", len(FAMILIES), difficulty=level, perturb=False):
-            for step in task.steps:
+        for task in make_tasks("integrity", 144, difficulty=level):
+            for index, step in enumerate(task.steps):
                 matches = [pattern.search(step.thought) for pattern in patterns]
                 if any(matches):
                     assert "pending: none" in step.thought.casefold()
+                    remaining = [
+                        later
+                        for later in task.steps[index + 1 :]
+                        if later.action.name != "finish"
+                    ]
+                    assert not remaining, (task.task_id, index, step.thought)
 
 
 @pytest.mark.parametrize(
@@ -94,14 +100,22 @@ def test_run_d_generator_uses_pending_none_only_for_empty_action_queues() -> Non
 )
 def test_run_d_required_carry_facts_are_literal_in_the_consuming_note(family: str) -> None:
     """Catch a long-family note that drops hidden values, keys, paths, or workers."""
-    task = next(
-        task for task in make_tasks("carry", len(FAMILIES), difficulty=3) if task.family == family
-    )
-    for step_index, facts in required_carry(task, keep_last=2).items():
-        thought = task.steps[step_index].thought
-        for fact in facts:
-            value = fact.value.rsplit("/", 1)[-1]
-            assert value in thought, (task.task_id, step_index, fact, thought)
+    for level in range(4):
+        tasks = make_tasks("carry", 144, difficulty=level)
+        for task in (task for task in tasks if task.family == family):
+            for step_index, facts in required_carry(task, keep_last=2).items():
+                thought = task.steps[step_index].thought
+                for fact in facts:
+                    value = fact.value.rsplit("/", 1)[-1]
+                    if fact.kind in {"amount", "metric", "total"}:
+                        assert re.search(rf"(?<!\d){re.escape(value)}(?!\d)", thought)
+                    else:
+                        normalized_value = " ".join(value.split()).casefold()
+                        normalized_note = " ".join(thought.split()).casefold()
+                        assert re.search(
+                            rf"(?<![A-Za-z0-9_-]){re.escape(normalized_value)}(?![A-Za-z0-9_-])",
+                            normalized_note,
+                        )
 
 
 @pytest.mark.parametrize("split", ["train", "valid", "test", "fresh-split"])

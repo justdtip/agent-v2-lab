@@ -78,6 +78,11 @@ def test_reference_generator_hashes_are_pinned_by_version(tmp_path) -> None:
             "valid": "6df3a890d09e989c83baaf6078a27d56ec9da035807c8820e83b44c09a8259e3",
             "test": "925f5b282885e4c52f2a20280372804a17dfc9c2f1d8039478de98211eee1303",
         },
+        4: {
+            "train": "99176c0b378d85502e738f23b8d174dd8321cb48a51e10c3a9bcd7fd9db3f035",
+            "valid": "41ec07d6f122a123ee7780885d59ba2bc77ca5ce836e896ed8ddd2861f680deb",
+            "test": "8b8aeaf28460798e0863ab0e5cb217da25b8661b7b3a802d21182fcd36a294a7",
+        },
     }
 
     assert manifest["generator_version"] == GENERATOR_VERSION
@@ -111,6 +116,11 @@ def test_reference_generator_hashes_include_configured_replay(tmp_path) -> None:
             "train": "92f40d1868438553f306be192b09cace7b3d5efc8cff4a55c84fc3a96827ddf2",
             "valid": "6e2617d5159e42fc7d26077e332a83e9f27fc0e755d50140d6336c75116c44b7",
             "test": "f79d6fc673674719cc17664278a15ee8ba9fcb6de8f9418d9226b99b5d24de59",
+        },
+        4: {
+            "train": "67d49cddc00c95fafed9a0166b431021d405348354d029cb7941006d31117eec",
+            "valid": "27ec5981da0864f094de8e764a28140ec063443a1a20c89e4f7a40f489d6c6a2",
+            "test": "67e4ead6a0a899de82395cc8c3101fdd81d5b9b853328b8d3d53b2bde908f0a6",
         },
     }
 
@@ -215,3 +225,30 @@ def test_run_d_renderer_is_canonical_and_recovery_notes_name_the_bad_path() -> N
                 assert step.action.arguments["path"] in step.thought
     with pytest.raises(IndexError):
         task_module.render_expert_note(task, len(task.steps))
+
+
+@pytest.mark.parametrize("level", range(4))
+def test_run_d_conditional_and_recovery_notes_preserve_family_state(level: int) -> None:
+    """Catch omitted empty load state or generic recovery notes that erase task state."""
+    tasks = make_tasks("state", 144, difficulty=level)
+    conditional = next(task for task in tasks if task.family == "conditional_update")
+    for step in conditional.steps:
+        if step.action.name in {"read_file", "list_files", "replace_text", "finish"}:
+            assert "loads so far:" in step.thought
+
+    for task in tasks:
+        if task.variant not in {"wrong_path", "stale_path"}:
+            continue
+        for index, step in enumerate(task.steps):
+            if step.supervise or step.action.name != "read_file":
+                continue
+            guessed = step.action.arguments["path"]
+            assert guessed in step.thought
+            recovery = task.steps[index + 1]
+            assert recovery.supervise
+            if task.family == "cross_reference":
+                assert "Hop " in step.thought and "current key" in step.thought
+            if task.family == "aggregate_report":
+                assert "values so far:" in step.thought and "split after" in step.thought
+            if task.family == "conditional_update":
+                assert "loads so far:" in step.thought
