@@ -127,8 +127,9 @@ failed`: the unchanged retrospective memo test and unchanged reanalysis metadata
 ### Chief ruling request: historical replay version selection
 
 Read-only inspection finds B/C JSON summaries contain `keep_last: 2` and run metadata (label,
-model, adapter, split, stress, temperature, cache, elapsed time); trajectories contain `task_id`,
-family, variant, prompt, steps, and verdict. They lack both `generator_version` and `data_seed`.
+model, adapter, split, stress, temperature, `kv_cache`, elapsed time); trajectories contain
+`task_id`, family, variant, prompt, steps, and verdict. They lack `generator_version`,
+`data_seed`, and trajectory `difficulty`.
 Current public signatures are `task_from_id(task_id: str, seed: int, difficulty: int | None =
 None) -> Task` and `_render_evaluations(paths: list[Path], seed: int) -> str`.
 `_analyse_evaluation(path, fallback_seed)` calls `task_from_id(task_id, seed,
@@ -137,3 +138,13 @@ absent. Identical historical `test-*` ids/actions therefore cannot select v1/v2 
 notes today. Please choose one policy: (1) versioned replay, adding/consuming saved generator
 version metadata; or (2) named-version refusal for unversioned historical records. This task does
 not implement either option.
+
+### Issue #11 review-fix evidence
+
+The v4 migration oracle now independently derives paired cross-reference Hop/current-key state and
+multi-match new-target/already-read competitors; manifest order and every batch old/new action,
+queue head, and complete `k of N` count; and aggregate values, split, subtotal/grand calculations,
+report phases, and final total. Focused Run D tests are `13 passed, 6 deselected`; affected modules
+are `218 passed, 2 failed`, and the fake-only suite is `412 passed, 2 failed`. The two unchanged
+residuals are the protected unversioned B/C replay/memo contract and protected reanalysis
+ModelSpec-key expectation. Normal Ruff is clean.

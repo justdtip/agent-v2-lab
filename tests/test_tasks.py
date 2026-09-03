@@ -37,6 +37,147 @@ def _first_read_for_each_path(steps):
     return unique
 
 
+def _manifest_targets(task):
+    """Parse batch order and replacements from the manifest, not its worker actions."""
+    manifest_path = next(path for path in task.files if path.endswith("/manifest.txt"))
+    targets = []
+    for line in task.files[manifest_path].splitlines():
+        match = re.fullmatch(r"(.+)\|mode=([a-z]+)->mode=([a-z]+)", line)
+        assert match, f"malformed manifest entry: {line!r}"
+        targets.append(match.groups())
+    assert targets
+    return manifest_path, targets
+
+
+def _cross_reference_pairs(task):
+    """Pair each supervised search with its read and the reads that preceded it."""
+    pairs = []
+    prior_reads: set[str] = set()
+    hop = 0
+    last_key = None
+    for index, step in enumerate(task.steps):
+        if step.supervise and step.action.name == "search_files":
+            key = step.action.arguments["query"]
+            hop += key != last_key
+            last_key = key
+            following = next(
+                later
+                for later in task.steps[index + 1 :]
+                if later.supervise and later.action.name == "read_file"
+            )
+            pairs.append((hop, key, step, following, prior_reads.copy()))
+        if step.supervise and step.action.name == "read_file":
+            prior_reads.add(step.action.arguments["path"])
+    return pairs
+
+
+def _assert_cross_reference_pair(task, hop, key, search, following, prior_reads) -> None:
+    assert f"Hop {hop}:" in search.thought
+    assert f"current key {key}" in search.thought
+    assert f"Hop {hop}:" in following.thought
+    assert f"current key {key}" in following.thought
+    matches = {path for path, content in task.files.items() if key in content}
+    target = following.action.arguments["path"]
+    assert target in matches
+    if len(matches) <= 1:
+        return
+    competitors = matches - {target}
+    assert target not in prior_reads
+    assert competitors <= prior_reads
+    assert "new one" in following.thought
+    assert target.rsplit("/", 1)[-1] in following.thought
+    assert "already read" in following.thought
+    for competitor in competitors:
+        assert competitor.rsplit("/", 1)[-1] in following.thought
+
+
+def _aggregate_metric_state(task, metric_paths, values, split) -> None:
+    seen: list[int] = []
+    last_path = None
+    for step in task.steps:
+        if not step.supervise or step.action.name != "read_file":
+            continue
+        path = step.action.arguments["path"]
+        if path not in metric_paths or path == last_path:
+            continue
+        assert f"values so far: {', '.join(map(str, seen)) or 'none'}" in step.thought
+        assert f"split after {split} of {len(values)}" in step.thought
+        assert "first half:" not in step.thought.casefold()
+        assert "(full)" not in step.thought.casefold()
+        seen.append(int(task.files[path].rsplit("value=", 1)[1]))
+        last_path = path
+    assert seen == values
+
+
+def _canonical_calculations(supervised):
+    calculations = []
+    for step in supervised:
+        if step.action.name != "calculate":
+            continue
+        if (
+            calculations
+            and step.action.arguments["expression"]
+            == calculations[-1].action.arguments["expression"]
+        ):
+            continue
+        calculations.append(step)
+    return calculations
+
+
+def _aggregate_completion_state(task, values, split) -> None:
+    total = sum(values)
+    complete_state = f"values so far: {', '.join(map(str, values))}"
+    split_state = f"split after {split} of {len(values)}"
+    supervised = [step for step in task.steps if step.supervise]
+    calculations = _canonical_calculations(supervised)
+    first_total, second_total = sum(values[:split]), sum(values[split:])
+    expected_expressions = [
+        " + ".join(map(str, values[:split])),
+        " + ".join(map(str, values[split:])),
+        f"{first_total} + {second_total}",
+    ]
+    assert [step.action.arguments["expression"] for step in calculations] == expected_expressions
+    calculated_total = sum(
+        map(int, calculations[-1].action.arguments["expression"].split(" + "))
+    )
+    assert calculated_total == total
+
+    calculation_start = supervised.index(calculations[0])
+    for step in supervised[calculation_start:]:
+        assert complete_state in step.thought
+        assert split_state in step.thought
+
+    report_path = next(
+        path for path, content in task.files.items() if content == "grand_total=PENDING"
+    )
+    replace_index = next(
+        index for index, step in enumerate(supervised) if step.action.name == "replace_text"
+    )
+    inspection = [
+        step
+        for step in supervised[supervised.index(calculations[-1]) + 1 : replace_index]
+        if step.action.name == "read_file"
+    ]
+    assert inspection
+    assert all(step.action.arguments["path"] == report_path for step in inspection)
+    replacement = supervised[replace_index]
+    assert replacement.action.arguments == {
+        "path": report_path,
+        "old": "grand_total=PENDING",
+        "new": f"grand_total={total}",
+    }
+    verification = [
+        step for step in supervised[replace_index + 1 :] if step.action.name == "read_file"
+    ]
+    assert verification
+    assert all(step.action.arguments["path"] == report_path for step in verification)
+    finish = supervised[-1]
+    assert finish.action.name == "finish"
+    assert finish.action.arguments["answer"] == f"grand_total={total}"
+    for step in (*inspection, replacement, finish):
+        assert re.search(rf"(?<!\d){total}(?!\d)", step.thought)
+
+
 def test_data_stage_writes_generator_version_provenance(tmp_path) -> None:
     """The data stage must record its generator without resolving or loading model weights."""
     config = {
@@ -232,33 +373,8 @@ def test_run_d_cross_reference_actions_follow_current_keys_and_read_new_matches(
         for task in make_tasks("run-d-cross", 144, difficulty=level):
             if task.family != "cross_reference":
                 continue
-            prior_reads: set[str] = set()
-            hop = 0
-            last_key = None
-            for index, step in enumerate(task.steps):
-                if not step.supervise:
-                    continue
-                if step.action.name == "search_files":
-                    key = step.action.arguments["query"]
-                    if key != last_key:
-                        hop += 1
-                    last_key = key
-                    assert f"Hop {hop}:" in step.thought
-                    assert f"current key {key}" in step.thought
-                    matches = {
-                        path for path, content in task.files.items() if key in content
-                    }
-                    following = next(
-                        later
-                        for later in task.steps[index + 1 :]
-                        if later.supervise and later.action.name == "read_file"
-                    )
-                    target = following.action.arguments["path"]
-                    assert target in matches
-                    if len(matches) > 1:
-                        assert matches - {target} <= prior_reads
-                if step.action.name == "read_file":
-                    prior_reads.add(step.action.arguments["path"])
+            for pair in _cross_reference_pairs(task):
+                _assert_cross_reference_pair(task, *pair)
 
 
 def test_run_d_aggregate_notes_carry_action_derived_values_split_and_total() -> None:
@@ -271,24 +387,8 @@ def test_run_d_aggregate_notes_carry_action_derived_values_split_and_total() -> 
             metric_paths.sort()
             values = [int(task.files[path].rsplit("value=", 1)[1]) for path in metric_paths]
             split = len(values) // 2
-            seen: list[int] = []
-            last_path = None
-            for step in task.steps:
-                if not step.supervise or step.action.name != "read_file":
-                    continue
-                path = step.action.arguments["path"]
-                if path not in metric_paths or path == last_path:
-                    continue
-                assert f"values so far: {', '.join(map(str, seen)) or 'none'}" in step.thought
-                assert f"split after {split} of {len(values)}" in step.thought
-                assert "first half:" not in step.thought.casefold()
-                assert "(full)" not in step.thought.casefold()
-                seen.append(int(task.files[path].rsplit("value=", 1)[1]))
-                last_path = path
-            assert seen == values
-            total = sum(values)
-            finish = next(step for step in task.steps if step.action.name == "finish")
-            assert re.search(rf"(?<!\d){total}(?!\d)", finish.thought)
+            _aggregate_metric_state(task, metric_paths, values, split)
+            _aggregate_completion_state(task, values, split)
 
 
 def test_run_d_batch_notes_follow_action_derived_worker_order_and_pending_queue() -> None:
@@ -297,12 +397,12 @@ def test_run_d_batch_notes_follow_action_derived_worker_order_and_pending_queue(
         for task in make_tasks("run-d-batch", 144, difficulty=level):
             if task.family != "batch_update":
                 continue
-            workers = sorted(
-                (path for path in task.files if re.search(r"worker-\d+\.ini$", path)),
-                key=lambda path: int(re.search(r"worker-(\d+)\.ini$", path).group(1)),
-            )
+            manifest_path, targets = _manifest_targets(task)
+            workers = [path for path, _, _ in targets]
             names = [path.rsplit("/", 1)[-1] for path in workers]
             supervised = [step for step in task.steps if step.supervise]
+            assert supervised[0].action.name == "read_file"
+            assert supervised[0].action.arguments["path"] == manifest_path
             replace_at = next(
                 i for i, step in enumerate(supervised) if step.action.name == "replace_text"
             )
@@ -312,8 +412,11 @@ def test_run_d_batch_notes_follow_action_derived_worker_order_and_pending_queue(
                 if step.action.name == "read_file" and step.action.arguments["path"] in workers
             ])
             assert [step.action.arguments["path"] for step in inspect] == workers
-            for index, step in enumerate(inspect):
+            for index, (step, target) in enumerate(zip(inspect, targets, strict=True)):
+                path, old, new = target
+                assert step.action.arguments["path"] == path
                 assert f"Inspected {index} of {len(workers)}" in step.thought
+                assert f"Next: {path.rsplit('/', 1)[-1]} mode={old} -> mode={new}" in step.thought
                 assert f"pending: {', '.join(names[index:])}." in step.thought
 
             apply = [
@@ -323,10 +426,14 @@ def test_run_d_batch_notes_follow_action_derived_worker_order_and_pending_queue(
                 step for i, step in enumerate(apply)
                 if i == 0 or step.action.arguments["path"] != apply[i - 1].action.arguments["path"]
             ]
-            assert [step.action.arguments["path"] for step in apply] == workers
-            for index, step in enumerate(apply):
-                old = step.action.arguments["old"].removeprefix("mode=")
-                new = step.action.arguments["new"].removeprefix("mode=")
+            assert len(apply) == len(targets)
+            for index, (step, target) in enumerate(zip(apply, targets, strict=True)):
+                path, old, new = target
+                assert step.action.arguments == {
+                    "path": path,
+                    "old": f"mode={old}",
+                    "new": f"mode={new}",
+                }
                 assert f"Applied {index} of {len(workers)}" in step.thought
                 assert f"Next: {names[index]} mode={old} -> mode={new}" in step.thought
                 assert f"pending: {', '.join(names[index:])}." in step.thought
@@ -336,15 +443,22 @@ def test_run_d_batch_notes_follow_action_derived_worker_order_and_pending_queue(
                 for step in supervised[supervised.index(apply[-1]) + 1 :]
                 if step.action.name == "read_file" and step.action.arguments["path"] in workers
             ])
-            assert [step.action.arguments["path"] for step in verify] == workers
-            for index, step in enumerate(verify):
+            assert len(verify) == len(targets)
+            for index, (step, target) in enumerate(zip(verify, targets, strict=True)):
+                path, _old, new = target
+                assert step.action.arguments["path"] == path
                 assert (
-                    f"Applied {len(workers)} of {len(workers)}; verified {index} of"
+                    f"Applied {len(workers)} of {len(workers)}; verified {index} of {len(workers)}"
                     in step.thought
                 )
+                assert f"Next: {path.rsplit('/', 1)[-1]}, expect mode={new}" in step.thought
                 assert f"pending: {', '.join(names[index:])}." in step.thought
             assert task.steps[-1].action.name == "finish"
-            assert "pending: none" in task.steps[-1].thought
+            assert (
+                f"Applied {len(workers)} of {len(workers)}; "
+                f"verified {len(workers)} of {len(workers)}; "
+                "pending: none."
+            ) in task.steps[-1].thought
 
 
 def test_run_d_conditional_notes_accumulate_loads_and_modify_the_true_maximum() -> None:
@@ -400,39 +514,50 @@ def test_run_d_renderer_is_canonical_and_recovery_notes_name_the_bad_path() -> N
         task_module.render_expert_note(task, len(task.steps))
 
 
+def _assert_conditional_state_notes(task) -> None:
+    for step in task.steps:
+        if step.action.name in {"read_file", "list_files", "replace_text", "finish"}:
+            assert "loads so far:" in step.thought
+
+
+def _family_state_fragments(family):
+    return {
+        "cross_reference": ("Hop ", "current key"),
+        "aggregate_report": ("values so far:", "split after"),
+        "conditional_update": ("loads so far:",),
+    }.get(family, ())
+
+
+def _assert_recovery_state(task, index, step) -> None:
+    guessed = step.action.arguments["path"]
+    assert guessed in step.thought
+    recovery = task.steps[index + 1]
+    assert recovery.supervise
+    fragments = _family_state_fragments(task.family)
+    for fragment in fragments:
+        assert fragment in step.thought
+    if task.variant != "stale_path":
+        return
+    assert recovery.action.name == "list_files"
+    for fragment in fragments:
+        assert fragment in recovery.thought
+
+
+def _assert_family_recoveries(task) -> None:
+    for index, step in enumerate(task.steps):
+        if step.supervise or step.action.name != "read_file":
+            continue
+        _assert_recovery_state(task, index, step)
+
+
 @pytest.mark.parametrize("level", range(4))
 def test_run_d_conditional_and_recovery_notes_preserve_family_state(level: int) -> None:
     """Catch omitted empty load state or generic recovery notes that erase task state."""
     tasks = make_tasks("state", 144, difficulty=level)
     conditional = next(task for task in tasks if task.family == "conditional_update")
-    for step in conditional.steps:
-        if step.action.name in {"read_file", "list_files", "replace_text", "finish"}:
-            assert "loads so far:" in step.thought
+    _assert_conditional_state_notes(conditional)
 
     for task in tasks:
         if task.variant not in {"wrong_path", "stale_path"}:
             continue
-        for index, step in enumerate(task.steps):
-            if step.supervise or step.action.name != "read_file":
-                continue
-            guessed = step.action.arguments["path"]
-            assert guessed in step.thought
-            recovery = task.steps[index + 1]
-            assert recovery.supervise
-            if task.family == "cross_reference":
-                assert "Hop " in step.thought and "current key" in step.thought
-            if task.family == "aggregate_report":
-                assert "values so far:" in step.thought and "split after" in step.thought
-            if task.family == "conditional_update":
-                assert "loads so far:" in step.thought
-            if task.variant == "stale_path":
-                assert recovery.action.name == "list_files"
-                if task.family == "cross_reference":
-                    assert "Hop " in recovery.thought and "current key" in recovery.thought
-                if task.family == "aggregate_report":
-                    assert (
-                        "values so far:" in recovery.thought
-                        and "split after" in recovery.thought
-                    )
-                if task.family == "conditional_update":
-                    assert "loads so far:" in recovery.thought
+        _assert_family_recoveries(task)
