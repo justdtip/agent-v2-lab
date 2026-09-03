@@ -41,6 +41,8 @@ class Verdict:
     calls: int = 0
     schema_failures: int = 0
     executable_calls: int = 0
+    unexpected_files: tuple[str, ...] = ()
+    raw_answer: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -54,11 +56,23 @@ class Verdict:
             "calls": self.calls,
             "schema_failures": self.schema_failures,
             "executable_calls": self.executable_calls,
+            "unexpected_files": list(self.unexpected_files),
+            "raw_answer": self.raw_answer,
         }
 
 
 def normalize(value: str) -> str:
     return " ".join(value.casefold().strip().split())
+
+
+def normalize_answer(value: str) -> str:
+    """Compare answer values without harmless Markdown fencing or terminal punctuation."""
+    cleaned = value.strip()
+    if cleaned.endswith("."):
+        cleaned = cleaned[:-1].rstrip()
+    if len(cleaned) >= 2 and cleaned.startswith("`") and cleaned.endswith("`"):
+        cleaned = cleaned[1:-1].strip()
+    return normalize(cleaned)
 
 
 def _json_type_name(value: Any) -> str:
@@ -135,6 +149,12 @@ class Simulator:
     executable_calls: int = 0
     finished_answer: str | None = None
     tools: list[dict[str, Any]] = field(default_factory=lambda: TOOL_SPECS)
+    initial_files: dict[str, str] = field(default_factory=dict)
+    executed_tools: set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        if not self.initial_files:
+            self.initial_files = dict(self.files)
 
     @classmethod
     def for_task(cls, task: Any, faults: tuple[Fault, ...] | None = None) -> Simulator:
@@ -144,6 +164,7 @@ class Simulator:
             expected_files=dict(task.expected_files),
             required_tools=frozenset(task.required_tools),
             faults=tuple(task.faults) if faults is None else faults,
+            initial_files=dict(task.files),
         )
 
     @property
@@ -172,6 +193,7 @@ class Simulator:
         try:
             result = self._execute(action)
             self.executable_calls += 1
+            self.executed_tools.add(action.name)
         except Exception as error:  # noqa: BLE001 - a tool must never take down the harness
             # Arguments are model-generated, so any failure here is input-driven and must come
             # back as an observation the policy can recover from. A base model passing
@@ -230,13 +252,20 @@ class Simulator:
         reasons = []
         if self.finished_answer is None:
             reasons.append("no finish call")
-        elif normalize(self.finished_answer) != normalize(self.expected_answer):
+        elif normalize_answer(self.finished_answer) != normalize_answer(self.expected_answer):
             reasons.append("wrong answer")
         for path, content in self.expected_files.items():
             if self.files.get(path) != content:
                 reasons.append(f"file state wrong: {path.rsplit('/', 1)[-1]}")
-        called = {action.name for action in self.calls}
-        missing = sorted(self.required_tools - called)
+        unexpected_files = tuple(
+            path
+            for path in sorted(set(self.initial_files) | set(self.files))
+            if path not in self.expected_files and self.files.get(path) != self.initial_files.get(path)
+        )
+        reasons.extend(
+            f"unexpected file change: {path.rsplit('/', 1)[-1]}" for path in unexpected_files
+        )
+        missing = sorted(self.required_tools - self.executed_tools)
         if missing:
             reasons.append("required tools unused: " + ", ".join(missing))
         success = not reasons
@@ -244,13 +273,15 @@ class Simulator:
             success=success,
             clean=success and self.errors == 0,
             reasons=tuple(reasons),
-            answer=self.finished_answer,
-            expected_answer=self.expected_answer,
+            answer=None if self.finished_answer is None else normalize_answer(self.finished_answer),
+            expected_answer=normalize_answer(self.expected_answer),
             errors=self.errors,
             recovered_errors=self.errors if success else 0,
             calls=len(self.calls),
             schema_failures=self.schema_failures,
             executable_calls=self.executable_calls,
+            unexpected_files=unexpected_files,
+            raw_answer=self.finished_answer,
         )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -118,6 +119,9 @@ def lora_config(
 def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | None = None) -> None:
     output: Path = config["output"]
     adapters = output / "adapters"
+    checkpoints = output / "checkpoints"
+    if checkpoints.exists():
+        shutil.rmtree(checkpoints)
     adapters.mkdir(parents=True, exist_ok=True)
     lora = lora_config(config, iters=iters, resume_from=resume_from)
     config_path = output / "lora.yaml"
@@ -166,10 +170,20 @@ def checkpoint_dirs(config: dict[str, Any]) -> list[tuple[int, Path]]:
         target = output / "checkpoints" / f"step-{step}"
         target.mkdir(parents=True, exist_ok=True)
         shutil.copy2(adapter_config, target / "adapter_config.json")
-        if not (target / "adapters.safetensors").is_file():
+        target_weights = target / "adapters.safetensors"
+        if not target_weights.is_file() or _sha256(weights) != _sha256(target_weights):
             shutil.copy2(weights, target / "adapters.safetensors")
         found.append((step, target))
     return found
+
+
+def _sha256(path: Path) -> str:
+    """Return the digest used to reject a stale materialised checkpoint weight file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path:
@@ -209,6 +223,10 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
                     )
                 },
             }
+        )
+    if not results:
+        raise SystemExit(
+            f"no checkpoint directories found in {output / 'adapters'}; run the train stage first"
         )
     best = max(
         results,

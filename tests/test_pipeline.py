@@ -305,6 +305,83 @@ def test_recovery_variants_fail_then_recover() -> None:
     assert bad.action.name not in {"replace_text", "read_file"}
 
 
+def test_variant_applicability_probes_and_caches_each_requested_level(monkeypatch) -> None:
+    """A level-specific recovery shape must not reuse the level-zero probe result."""
+    from local_llm_lab.pipeline import tasks
+
+    probes: list[int] = []
+
+    def maker(split, index, level, rng):
+        probes.append(level)
+        steps = (_step("finish", "finish", answer="done"),)
+        if level:
+            steps = (
+                _step("list", "list_files", directory="workspace"),
+                _step("read", "read_file", path="workspace/report.txt"),
+            )
+        return tasks.Task("probe", "probe", "clean", "p", {}, steps, "", frozenset())
+
+    def _step(thought, name, **arguments):
+        return Step(thought, Action(name, arguments))
+
+    monkeypatch.setitem(tasks._MAKERS, "probe", maker)
+    tasks._APPLICABLE_VARIANTS_CACHE.pop(("probe", 0), None)
+    tasks._APPLICABLE_VARIANTS_CACHE.pop(("probe", 1), None)
+
+    assert "wrong_path" not in tasks.applicable_variants("probe", 0)
+    assert "wrong_path" in tasks.applicable_variants("probe", 1)
+    assert tasks.applicable_variants("probe", 1) == tasks.applicable_variants("probe", 1)
+    assert probes == [0, 1]
+
+
+def test_recovery_path_guesses_are_absent_and_notes_name_the_guess() -> None:
+    """Changing a recovery guess to an existing path or a correct-path note must fail here."""
+    recovery_tasks = [
+        task
+        for task in make_tasks("train", 144)
+        if task.variant in {"wrong_path", "stale_path"}
+    ]
+    assert recovery_tasks
+    for task in recovery_tasks:
+        wrong = next(step for step in task.steps if not step.supervise)
+        guessed = wrong.action.arguments["path"]
+        assert guessed not in task.files
+        assert guessed in wrong.thought
+
+    from local_llm_lab.pipeline import tasks
+    import random
+
+    directory = "workspace/only-existing"
+    guarded = tasks.Task(
+        "guarded",
+        "list",
+        "clean",
+        "p",
+        {f"{directory}/{name}": "present" for name in ("index.txt", "summary.md", "data.txt", "main.ini")},
+        (
+            Step("list", Action("list_files", {"directory": directory})),
+            Step("finish", Action("finish", {"answer": "done"})),
+        ),
+        "done",
+        frozenset(),
+    )
+    recovered = tasks._wrong_path(guarded, random.Random(0))
+    assert recovered.variant == "transient"
+    assert all(
+        step.action.name != "read_file" for step in recovered.steps if not step.supervise
+    )
+
+
+def test_hardened_update_prompts_do_not_leak_expected_answer() -> None:
+    """Reintroducing an answer literal into update or batch prompts weakens the task."""
+    from local_llm_lab.pipeline import tasks
+    import random
+
+    updates = [tasks._update("train", index, 0, random.Random(index)) for index in range(20)]
+    batches = [tasks._batch_update("train", index, 1, random.Random(index)) for index in range(20)]
+    assert all(task.expected_answer not in task.prompt for task in updates + batches)
+
+
 def test_stale_path_variant_relists_before_recovering() -> None:
     """A guessed stale path fails, and the only supervised recovery is to re-list the
     directory (the hidden listing) before reading the exact path it reports."""
@@ -776,6 +853,85 @@ def test_simulator_verdict_reports_reasons_and_recovery() -> None:
     assert verdict.as_dict()["calls"] == len(task.steps) + 1
 
 
+def test_verdict_rejects_unexpected_changes_and_keeps_raw_normalized_answer() -> None:
+    """Removing initial-file comparison, successful-call tracking, or normalization breaks this."""
+    simulator = Simulator(
+        files={
+            "workspace/expected.ini": "old",
+            "workspace/extra.ini": "keep",
+            "workspace/removed.ini": "remove",
+        },
+        expected_answer="updated",
+        expected_files={"workspace/expected.ini": "new"},
+        required_tools=frozenset({"read_file"}),
+    )
+    simulator.execute(Action("read_file", {"path": "workspace/missing.ini"}))
+    simulator.execute(
+        Action(
+            "replace_text",
+            {"path": "workspace/expected.ini", "old": "old", "new": "new"},
+        )
+    )
+    simulator.execute(
+        Action("replace_text", {"path": "workspace/extra.ini", "old": "keep", "new": "changed"})
+    )
+    simulator.files["workspace/added.ini"] = "added"
+    del simulator.files["workspace/removed.ini"]
+    simulator.execute(Action("finish", {"answer": "`updated`."}))
+
+    verdict = simulator.verdict()
+
+    assert not verdict.success
+    assert verdict.raw_answer == "`updated`."
+    assert verdict.answer == "updated"
+    assert verdict.unexpected_files == (
+        "workspace/added.ini",
+        "workspace/extra.ini",
+        "workspace/removed.ini",
+    )
+    assert "unexpected file change: extra.ini" in verdict.reasons
+    assert "unexpected file change: added.ini" in verdict.reasons
+    assert "unexpected file change: removed.ini" in verdict.reasons
+    assert "required tools unused: read_file" in verdict.reasons
+    assert verdict.as_dict()["raw_answer"] == "`updated`."
+
+
+def test_transcript_start_replaces_prior_run_and_reports_hardened_failure(tmp_path) -> None:
+    """Appending stale runs or rendering a hardened failure as PASS must fail this test."""
+    from local_llm_lab.pipeline.transcript import Transcript
+
+    task = make_tasks("valid", 1)[0]
+    transcript = Transcript(stream=None, directory=tmp_path)
+    transcript.start(task, "first")
+    transcript.finish(
+        {
+            "success": True,
+            "errors": 0,
+            "answer": task.expected_answer,
+            "expected_answer": task.expected_answer,
+            "reasons": [],
+        },
+        0.1,
+    )
+    transcript.start(task, "second")
+    jsonl = tmp_path / "transcripts.jsonl"
+    header = jsonl.read_text(encoding="utf-8").splitlines()
+    assert len(header) == 1 and '"run_id"' in header[0]
+    transcript.finish(
+        {
+            "success": False,
+            "errors": 0,
+            "answer": task.expected_answer,
+            "expected_answer": task.expected_answer,
+            "reasons": ["unexpected file change: extra.ini"],
+        },
+        0.1,
+    )
+    assert len(jsonl.read_text(encoding="utf-8").splitlines()) == 2
+    markdown = (tmp_path / f"second-{task.task_id}.md").read_text(encoding="utf-8")
+    assert "**FAIL** (unexpected file change: extra.ini)" in markdown
+
+
 def test_trajectory_rows_skip_errored_steps_except_injected_faults() -> None:
     task = make_tasks("valid", 12)[0]
     trajectory = Trajectory(task.task_id, task.family, task.variant, "t", task.prompt, faults=[0])
@@ -1169,6 +1325,107 @@ def test_lora_config_reflects_grad_checkpoint_and_resume(tmp_path) -> None:
         lora_config(config)["lora_parameters"]["keys"]
         is not lora_config(config)["lora_parameters"]["keys"]
     ), "each call returns a fresh key list"
+
+
+def test_checkpoint_dirs_replaces_stale_weight_copy(tmp_path) -> None:
+    """A target adapter with different bytes must be refreshed from its checkpoint source."""
+    from local_llm_lab.pipeline.cli import checkpoint_dirs
+
+    output = tmp_path / "run"
+    adapters = output / "adapters"
+    adapters.mkdir(parents=True)
+    (adapters / "adapter_config.json").write_text("{}", encoding="utf-8")
+    source = adapters / "0000042_adapters.safetensors"
+    source.write_bytes(b"fresh weights")
+    stale = output / "checkpoints" / "step-42" / "adapters.safetensors"
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"stale weights")
+
+    found = checkpoint_dirs({"output": output})
+
+    assert found == [(42, stale.parent)]
+    assert stale.read_bytes() == b"fresh weights"
+
+
+def test_stage_select_refuses_empty_checkpoint_directory(tmp_path) -> None:
+    """Selection with no checkpoint weights must stop before any evaluation is attempted."""
+    from local_llm_lab.pipeline.cli import stage_select
+
+    output = tmp_path / "run"
+    adapters = output / "adapters"
+    adapters.mkdir(parents=True)
+    (adapters / "adapter_config.json").write_text("{}", encoding="utf-8")
+    config = {"output": output, "select": {"limit": 1, "split": "valid"}}
+
+    with pytest.raises(SystemExit, match="no checkpoint directories.*train"):
+        stage_select(config, limit=None, quiet=True)
+
+
+def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch) -> None:
+    """Starting a training run removes stale checkpoints without deleting sibling outputs."""
+    from local_llm_lab.pipeline import cli
+
+    config = cli.load_config(cli.DEFAULT_CONFIG)
+    output = tmp_path / "run"
+    config.update({"output": output, "data": tmp_path / "data"})
+    checkpoint = output / "checkpoints" / "step-1" / "adapters.safetensors"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"stale")
+    keep = output / "evals" / "prior.json"
+    keep.parent.mkdir(parents=True)
+    keep.write_text("preserve", encoding="utf-8")
+
+    class FakeProcess:
+        stdout: list[str] = []
+
+        def wait(self) -> int:
+            return 0
+
+    def fake_popen(*args, **kwargs):
+        assert not (output / "checkpoints").exists()
+        return FakeProcess()
+
+    monkeypatch.setattr(cli, "configure_local_cache", lambda: None)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+    monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
+
+    cli.stage_train(config, iters=1)
+
+    assert not (output / "checkpoints").exists()
+    assert keep.read_text(encoding="utf-8") == "preserve"
+
+
+def test_branch_pairs_keep_the_seed_step_raw_completion(monkeypatch) -> None:
+    """Canonical re-rendering must not replace a saved trajectory's chosen raw bytes."""
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.tasks import Task
+
+    chosen = branch.render_completion("saved raw note", Action("finish", {"answer": "yes"}))
+    rejected = branch.render_completion("wrong", Action("finish", {"answer": "no"}))
+    task = Task("valid-read-0000-clean", "read", "clean", "p", {}, (), "yes", frozenset())
+    trajectory = types.SimpleNamespace(
+        success=True,
+        steps=[
+            {
+                "thought": "canonical note",
+                "raw": chosen,
+                "action": {"name": "finish", "arguments": {"answer": "yes"}},
+            }
+        ],
+    )
+    monkeypatch.setattr(branch, "run_task", lambda *args, **kwargs: trajectory)
+    monkeypatch.setattr(branch, "make_sampler", lambda temperature: object())
+    monkeypatch.setattr(branch, "build_prompt", lambda *args, **kwargs: "prompt")
+    monkeypatch.setattr(branch, "generate_turn", lambda *args, **kwargs: rejected)
+
+    pairs, _ = branch.mine_pairs(
+        None, None, task, branches=1, temperature=1.0, max_steps=1, max_tokens=20, keep_last=2
+    )
+
+    assert pairs[0]["chosen"] == chosen
+    assert pairs[0]["chosen"] != branch.render_completion(
+        "canonical note", Action("finish", {"answer": "yes"})
+    )
 
 
 def _write_pairs(path, rows) -> None:

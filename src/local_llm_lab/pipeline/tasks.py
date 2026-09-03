@@ -50,17 +50,18 @@ def difficulty(split: str, index: int) -> int:
     return {"train": 0, "valid": 1, "test": 2}.get(split, index % 2)
 
 
-_APPLICABLE_VARIANTS_CACHE: dict[str, tuple[str, ...]] = {}
+_APPLICABLE_VARIANTS_CACHE: dict[tuple[str, int], tuple[str, ...]] = {}
 
 
-def applicable_variants(family: str) -> tuple[str, ...]:
+def applicable_variants(family: str, level: int) -> tuple[str, ...]:
     """Which of ``VARIANTS`` a ``family`` can structurally realise, always including ``clean``
     and ``transient``. Determined from a probe task's step shape rather than a hardcoded table,
-    so it stays correct if a family's maker changes. Cached per family."""
-    cached = _APPLICABLE_VARIANTS_CACHE.get(family)
+    so it stays correct if a family's maker changes. Cached per family and level."""
+    cache_key = (family, level)
+    cached = _APPLICABLE_VARIANTS_CACHE.get(cache_key)
     if cached is not None:
         return cached
-    probe = _MAKERS[family]("train", 0, 0, random.Random("probe"))
+    probe = _MAKERS[family]("train", 0, level, random.Random(f"probe:{level}"))
     names = [step.action.name for step in probe.steps]
     has_trailing_read = any(name == "read_file" for name in names[1:])
     starts_with_list = bool(names) and names[0] == "list_files"
@@ -77,7 +78,7 @@ def applicable_variants(family: str) -> tuple[str, ...]:
         "failed_edit": has_replace,
     }
     result = tuple(variant for variant in VARIANTS if supported[variant])
-    _APPLICABLE_VARIANTS_CACHE[family] = result
+    _APPLICABLE_VARIANTS_CACHE[cache_key] = result
     return result
 
 
@@ -95,7 +96,7 @@ def make_tasks(
         family = FAMILIES[index % len(FAMILIES)]
         draft = _MAKERS[family](split, index, difficulty(split, index), rng)
         if perturb:
-            applicable = applicable_variants(family)
+            applicable = applicable_variants(family, difficulty(split, index))
             variant = applicable[(index // len(FAMILIES)) % len(applicable)]
         else:
             variant = "clean"
@@ -354,7 +355,7 @@ def _update(split: str, index: int, level: int, rng: random.Random) -> Task:
     prompt = rng.choice(
         [
             f"In {path}, change mode from {old_mode} to {new_mode}. Inspect the file first, re-read it to verify, and report the new mode setting.",
-            f"Update {path} so that mode={old_mode} becomes mode={new_mode}. Read before editing, verify afterwards, and report the new setting.",
+            f"Update {path} after inspecting it: replace the current mode with the requested target, then verify the saved setting and report it.",
         ]
     )
     steps = (
@@ -721,8 +722,8 @@ def _batch_update(split: str, index: int, level: int, rng: random.Random) -> Tas
     answer = f"updated-and-verified={target_count}"
     prompt = rng.choice(
         [
-            f"Read {manifest_path}. For every managed worker listed there, inspect its file, apply the exact mode replacement, then read every changed file again. Do not alter unmanaged.ini. When all {target_count} updates are verified, report updated-and-verified={target_count}.",
-            f"Apply the deployment described in {manifest_path}: inspect each listed worker file, perform its exact mode replacement, and re-read each worker afterwards to verify. Leave unmanaged.ini untouched and report updated-and-verified={target_count} once every update is confirmed.",
+            f"Read {manifest_path}. For every managed worker listed there, inspect its file, apply the exact mode replacement, then read every changed file again. Do not alter unmanaged.ini. Once every update is verified, report the verification count.",
+            f"Apply the deployment described in {manifest_path}: inspect each listed worker file, perform its exact mode replacement, and re-read each worker afterwards to verify. Leave unmanaged.ini untouched and report the final verification count once every update is confirmed.",
         ]
     )
     steps = [
@@ -950,9 +951,16 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
     reads = [i for i, step in enumerate(task.steps) if step.action.name == "read_file" and i >= 1]
     if task.steps[0].action.name == "list_files" and (not reads or rng.random() < 0.5):
         directory = task.steps[0].action.arguments["directory"]
-        guess = f"{directory}/{rng.choice(('index.txt', 'summary.md', 'data.txt', 'main.ini'))}"
+        candidates = [
+            f"{directory}/{name}"
+            for name in ("index.txt", "summary.md", "data.txt", "main.ini")
+            if f"{directory}/{name}" not in task.files
+        ]
+        if not candidates:
+            return _transient(task, rng)
+        guess = rng.choice(candidates)
         wrong = Step(
-            task.steps[0].thought.replace("Listing.", "Trying a likely file first."),
+            f"Trying guessed path {guess} before listing the directory.",
             Action("read_file", {"path": guess}),
             supervise=False,
         )
@@ -968,8 +976,16 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
     step = task.steps[k]
     correct = step.action.arguments["path"]
     stem, _, ext = correct.rpartition(".")
-    guess = f"{stem}{rng.choice(('-old', '-copy', '1'))}.{ext}" if stem else correct + ".bak"
-    wrong = Step(step.thought, Action("read_file", {"path": guess}), supervise=False)
+    candidates = (
+        [f"{stem}{suffix}.{ext}" for suffix in ("-old", "-copy", "1")]
+        if stem
+        else [correct + ".bak"]
+    )
+    candidates = [candidate for candidate in candidates if candidate not in task.files]
+    if not candidates:
+        return _transient(task, rng)
+    guess = rng.choice(candidates)
+    wrong = Step(f"Trying guessed path {guess}.", Action("read_file", {"path": guess}), supervise=False)
     recovery = Step(
         f"That path does not exist; use the exact path from the earlier tool result instead of guessing: {correct}. "
         + step.thought,
@@ -1037,7 +1053,7 @@ def _stale_path(task: Task, rng: random.Random) -> Task:
         return _wrong_path(task, rng)
     k, guess, directory = rng.choice(candidates)
     step = task.steps[k]
-    wrong = Step(step.thought, Action("read_file", {"path": guess}), supervise=False)
+    wrong = Step(f"Trying stale guessed path {guess}.", Action("read_file", {"path": guess}), supervise=False)
     listing = Step(
         "That path does not exist and the earlier listing is no longer visible, so list the "
         "directory again for the exact names instead of guessing.",

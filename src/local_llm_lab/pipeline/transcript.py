@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TextIO
@@ -37,6 +38,12 @@ class Transcript:
         self._lines.append(text if markdown is None else markdown)
 
     def start(self, task: Any, label: str) -> None:
+        if self.directory is not None:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            header = {"run_id": uuid.uuid4().hex}
+            (self.directory / "transcripts.jsonl").write_text(
+                json.dumps(header, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
         self._record = {
             "task_id": task.task_id,
             "family": task.family,
