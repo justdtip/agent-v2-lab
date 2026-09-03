@@ -44,6 +44,8 @@ class Trajectory:
     generated_tokens: int = 0
     loop_detected: bool = False
     exhausted: bool = False
+    difficulty: int = -1
+    integrity: dict[str, Any] = field(default_factory=dict)
 
     @property
     def success(self) -> bool:

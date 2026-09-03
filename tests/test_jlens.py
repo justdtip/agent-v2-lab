@@ -96,6 +96,39 @@ def test_public_encode_and_distribution_use_public_view_seams() -> None:
     np.testing.assert_allclose(np.asarray(distribution), [1.0])
 
 
+def test_probe_layers_threads_selected_method_and_emits_it(monkeypatch) -> None:
+    view = _View()
+    selected: list[str] = []
+
+    def fake_map(_view, _layer, probe, _corpus, *, position, method):
+        del position
+        selected.append(method)
+        return probe, {"used": 1, "skipped": 0, "method": method}
+
+    class Tokenizer:
+        def encode(self, text, add_special_tokens=False):
+            del text, add_special_tokens
+            return [0]
+
+        def decode(self, _ids):
+            return "x"
+
+    monkeypatch.setattr(jlens, "jlens_map", fake_map)
+    records = jlens.probe_layers(
+        view,
+        Tokenizer(),
+        [1, 2],
+        [1],
+        [[3]],
+        {"candidate": "x"},
+        method="finite_difference",
+        k=1,
+    )
+
+    assert selected == ["finite_difference"]
+    assert records[0]["jvp_method"] == "finite_difference"
+
+
 def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> None:
     from local_llm_lab.pipeline import tasks
     from local_llm_lab.probes import guard
@@ -119,7 +152,7 @@ def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> N
 
     fake_mlx_lm = SimpleNamespace(load=fake_load)
     monkeypatch.setitem(__import__("sys").modules, "mlx_lm", fake_mlx_lm)
-    monkeypatch.setattr("sys.argv", ["agent-v2-jlens"])
+    monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--jvp-method", "finite_difference"])
 
     with pytest.raises(SystemExit, match="7"):
         jlens.main()

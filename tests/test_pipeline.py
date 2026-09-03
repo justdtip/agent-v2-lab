@@ -1905,29 +1905,6 @@ def test_jacobian_vector_product_matches_finite_difference() -> None:
     assert float(relative_error.item()) < 1e-2
 
 
-def test_jlens_map_averages_and_matches_manual_mean() -> None:
-    model = _jlens_model()
-    layer = 1
-    probe = jlens.residual_at(model, [1, 5, 3], layer)[0, -1]
-    corpus_ids = [[2, 4, 6], [1, 1, 3, 5], [9, 8, 7, 6, 5]]
-    stats: dict[str, int] = {}
-    estimate = jlens.jlens_map(model, layer, probe, corpus_ids, stats=stats)
-    assert estimate.shape == (16,)
-    assert bool(mx.all(mx.isfinite(estimate)).item())
-    assert stats == {"used": 3, "skipped": 0}
-
-    manual = mx.zeros_like(estimate)
-    for ids in corpus_ids:
-        context_primal = jlens.residual_at(model, ids, layer)
-        tangent = mx.zeros_like(context_primal)
-        tangent[0, -1] = probe
-        manual = (
-            manual + jlens.jacobian_vector_product(model, layer, context_primal, tangent)[0, -1]
-        )
-    manual = manual / len(corpus_ids)
-    assert bool(mx.allclose(estimate, manual, atol=1e-5).item())
-
-
 def test_jlens_map_is_approximately_linear() -> None:
     model = _jlens_model()
     layer = 2

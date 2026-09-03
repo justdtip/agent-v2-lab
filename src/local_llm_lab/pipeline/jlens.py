@@ -348,6 +348,7 @@ def probe_layers(
     candidates: dict[str, str],
     position: int = -1,
     *,
+    method: Literal["forward", "finite_difference"] = "forward",
     k: int = 20,
 ) -> list[dict[str, Any]]:
     """Run the full J-lens vs. logit-lens comparison at each layer in ``layers``.
@@ -365,7 +366,9 @@ def probe_layers(
         length = residual.shape[1]
         pos = position if position >= 0 else length + position
         probe = residual[0, pos]
-        jmap, stats = jlens_map(architecture, layer, probe, corpus_ids, position=position)
+        jmap, stats = jlens_map(
+            architecture, layer, probe, corpus_ids, position=position, method=method
+        )
         jlens_distribution = distribution(architecture, jmap)
         logit_distribution = distribution(architecture, probe)
         records.append(
@@ -373,6 +376,7 @@ def probe_layers(
                 "layer": layer,
                 "corpus_used": stats.get("used", 0),
                 "corpus_skipped": stats.get("skipped", 0),
+                "jvp_method": stats.get("method", method),
                 "jlens_top_k": _top_k(jlens_distribution, tokenizer, k),
                 "logit_lens_top_k": _top_k(logit_distribution, tokenizer, k),
                 "jlens_evidence": token_evidence(jlens_distribution, tokenizer, candidates),
@@ -484,6 +488,12 @@ def main() -> None:
     parser.add_argument("--layers", default="6,12,18,24,30")
     parser.add_argument("--corpus-size", type=int, default=16)
     parser.add_argument("--top-k", type=int, default=20)
+    parser.add_argument(
+        "--jvp-method",
+        choices=("forward", "finite_difference"),
+        default="forward",
+        help="Directional-derivative implementation used for every J-lens record.",
+    )
     parser.add_argument("--output", type=Path)
     add_gpu_arguments(parser)
     args = parser.parse_args()
@@ -548,7 +558,14 @@ def main() -> None:
     corpus_ids = [encode(tokenizer, text) for text in corpus]
 
     records = probe_layers(
-        view, tokenizer, token_ids, layers, corpus_ids, candidates, k=args.top_k
+        view,
+        tokenizer,
+        token_ids,
+        layers,
+        corpus_ids,
+        candidates,
+        method=args.jvp_method,
+        k=args.top_k,
     )
 
     print(f"task={task.task_id} step={args.step} layers={layers} corpus_size={len(corpus_ids)}")
@@ -565,6 +582,7 @@ def main() -> None:
             "step": args.step,
             "layers": layers,
             "corpus_size": len(corpus_ids),
+            "jvp_method": args.jvp_method,
             "candidates": candidates,
             "records": records,
         }

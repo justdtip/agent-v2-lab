@@ -401,7 +401,7 @@ def build_probe_dataset(
     ``difficulties`` maps task id to difficulty level (see :func:`task_difficulties`); rows of
     tasks it does not mention are recorded as ``-1``.
     """
-    from local_llm_lab.pipeline.jlens import _encode
+    from local_llm_lab.pipeline.jlens import encode
 
     if mlx_runtime is None:
         import mlx.core as mlx_runtime
@@ -458,7 +458,7 @@ def build_probe_dataset(
                     if strip:
                         context = _strip_messages(context)
                     prompt = build_prompt(tokenizer, context, keep_last=len(context))
-                    token_ids = _encode(tokenizer, prompt)
+                    token_ids = encode(tokenizer, prompt)
                     task_lengths.append(len(token_ids))
                     captured = capture_residuals(model, token_ids, layers, positions="last")
                     materialized = _materialize_residuals(captured, layers, mlx_runtime)

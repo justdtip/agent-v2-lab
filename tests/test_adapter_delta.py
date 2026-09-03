@@ -7,6 +7,7 @@ from local_llm_lab.probes import adapter_delta
 
 def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(monkeypatch) -> None:
     calls: list[float] = []
+    j_lens_inputs: list[np.ndarray] = []
 
     info = {
         "type": "down_proj",
@@ -47,7 +48,10 @@ def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(m
         def logit_lens(*_args, **_kwargs):
             return []
 
-        readout = logit_lens
+        @staticmethod
+        def readout(_view, vector, _tokenizer, **_kwargs):
+            j_lens_inputs.append(np.asarray(vector))
+            return []
 
     monkeypatch.setattr(adapter_delta, "_jlens_module", lambda: JLens)
     view = type("View", (), {"hidden_size": 2})()
@@ -55,6 +59,7 @@ def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(m
 
     assert len(records) == 2  # +v and -v need no duplicate corpus JVP.
     assert calls == [1.0, 1.0]
+    np.testing.assert_allclose(j_lens_inputs[1], -j_lens_inputs[0])
 
 
 def test_adapter_direction_readouts_default_to_residual_sized_adapter_outputs(monkeypatch) -> None:

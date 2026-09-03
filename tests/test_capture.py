@@ -139,6 +139,48 @@ def test_injection_requires_registered_offset_for_prefilled_arrays_cache() -> No
     np.testing.assert_allclose(np.asarray(shifted), [[[1.0], [3.0], [1.0]]])
 
 
+def test_injection_restores_shared_view_run_block_after_an_error() -> None:
+    view = _View()
+    original = view.run_block
+
+    with pytest.raises(RuntimeError), capture.InjectionHook(
+        view, 0, mx.array([1.0]), positions=("at", 0)
+    ):
+        raise RuntimeError("boom")
+
+    assert view.run_block is original
+
+
+def test_lora_block_mask_uses_view_owned_blocks_and_restores_after_error() -> None:
+    class Adapter:
+        def __init__(self) -> None:
+            self.lora_a = mx.ones((1, 1))
+            self.lora_b = mx.ones((1, 1))
+
+    class Block:
+        def __init__(self) -> None:
+            self.adapter = Adapter()
+
+        def named_modules(self):
+            return [("adapter", self.adapter)]
+
+    class AdapterView(_View):
+        def __init__(self) -> None:
+            super().__init__()
+            self.blocks = [Block(), Block()]
+
+    view = AdapterView()
+    saved = [block.adapter.lora_b for block in view.blocks]
+    with pytest.raises(RuntimeError), capture.lora_block_mask(view, keep_layers={1}) as masked:
+        assert masked == 1
+        assert float(mx.sum(view.blocks[0].adapter.lora_b).item()) == 0.0
+        assert float(mx.sum(view.blocks[1].adapter.lora_b).item()) == 1.0
+        raise RuntimeError("boom")
+
+    for block, original in zip(view.blocks, saved, strict=True):
+        assert bool(mx.array_equal(block.adapter.lora_b, original).item())
+
+
 def test_capture_residuals_declares_binding_positions_annotation() -> None:
     parameter = inspect.signature(capture.capture_residuals).parameters["positions"]
 
