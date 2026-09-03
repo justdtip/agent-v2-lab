@@ -49,6 +49,17 @@ def _attribute_chain(node: ast.AST) -> str | None:
     return None
 
 
+def _constant_string(node: ast.AST) -> str | None:
+    """Evaluate a string literal or a string-only constant concatenation."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _constant_string(node.left)
+        right = _constant_string(node.right)
+        return left + right if left is not None and right is not None else None
+    return None
+
+
 def _banned_model_assumptions(paths: set[Path], forbidden: tuple[str, ...]) -> list[str]:
     """Report model assumptions while ignoring incidental identifier substrings."""
     findings: list[str] = []
@@ -63,9 +74,9 @@ def _banned_model_assumptions(paths: set[Path], forbidden: tuple[str, ...]) -> l
                     findings.append(f"{path.name}:{node.lineno}:{chain}")
             if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
                 names = {
-                    item.value
+                    value
                     for item in node.elts
-                    if isinstance(item, ast.Constant) and isinstance(item.value, str)
+                    if (value := _constant_string(item)) is not None
                 }
                 if names & _PROJECTION_NAMES:
                     findings.append(f"{path.name}:{node.lineno}:projection-list")
@@ -97,6 +108,7 @@ def test_banned_model_scanner_reports_ast_assumptions_and_ignores_lookalikes(tmp
                 "size = 2048",
                 "layers = model.model.layers",
                 'keys = ("q_proj",)',
+                'hidden_keys = ("down" + "_proj",)',
                 'lookalike = "projection_q_proj_suffix"',
                 'plain = "model layers"',
             )
@@ -108,4 +120,5 @@ def test_banned_model_scanner_reports_ast_assumptions_and_ignores_lookalikes(tmp
         "example.py:2:2048",
         "example.py:3:model.model.layers",
         "example.py:4:projection-list",
+        "example.py:5:projection-list",
     ]

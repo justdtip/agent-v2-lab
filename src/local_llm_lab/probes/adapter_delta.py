@@ -426,12 +426,13 @@ def readout_update_directions(
     corpus_size: int = 8,
     top_k: int = 10,
 ) -> list[dict[str, Any]]:
-    """Read the top output directions of the ``down_proj`` and ``o_proj`` updates as tokens.
+    """Read top output directions of parsed adapter updates as tokens.
 
-    Both module types write into the residual stream, so their left singular vectors live in
-    the residual space and can be treated as activations. A direction produced by block ``L``
-    lands in the layer ``L + 1`` residual stream, so that is the layer whose tail Jacobian the
-    J-lens uses.
+    Without an explicit ``types`` filter, every module type represented by the parsed adapter
+    records is read. This avoids baking one dense-backbone projection layout into the probe.
+
+    A direction produced by block ``L`` lands in the layer ``L + 1`` residual stream, so that is
+    the layer whose tail Jacobian the J-lens uses.
 
     **These are readouts of an update *direction*, not of an activation the model ever has.**
     The sign of a singular vector is arbitrary, so ``+v`` and ``-v`` are both reported and
@@ -440,7 +441,7 @@ def readout_update_directions(
     jlens = _jlens_module()
     corpus_ids = [jlens.encode(tokenizer, text) for text in jlens.DEFAULT_CORPUS[:corpus_size]]
     deltas = load_adapter_deltas(adapter_dir)
-    requested_types = types if types is not None else ("down" + "_proj", "o" + "_proj")
+    requested_types = types if types is not None else {str(info["type"]) for _, info in deltas.values()}
     records: list[dict[str, Any]] = []
     for name, (_delta, info) in sorted(deltas.items()):
         if info["type"] not in requested_types or info["layer"] not in layers:
