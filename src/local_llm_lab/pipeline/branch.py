@@ -116,7 +116,10 @@ def mine_pairs(
     simulator = Simulator.for_task(task)
     for point, step in enumerate(seed_trajectory.steps):
         action = step["action"]
-        seed_completion = step.get("raw") or render_completion(step["thought"], _action(action))
+        raw = step.get("raw")
+        if not isinstance(raw, str) or not raw:
+            raise ValueError(f"seed trajectory step {point} is missing a raw completion")
+        seed_completion = raw
         prompt = build_prompt(tokenizer, messages, keep_last=keep_last)
         stats["branch_points"] += 1
         good: list[str] = [seed_completion]

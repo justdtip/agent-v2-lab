@@ -354,8 +354,8 @@ def _update(split: str, index: int, level: int, rng: random.Random) -> Task:
     answer = f"mode={new_mode}"
     prompt = rng.choice(
         [
-            f"In {path}, change mode from {old_mode} to {new_mode}. Inspect the file first, re-read it to verify, and report the new mode setting.",
-            f"Update {path} after inspecting it: replace the current mode with the requested target, then verify the saved setting and report it.",
+            f"In {path}, change mode from {old_mode} to {new_mode}. Inspect the file first, re-read it to verify, and report it as mode=<target>.",
+            f"Update {path} after inspecting it: set its mode to {new_mode}, then verify the saved setting and report it as mode=<target>.",
         ]
     )
     steps = (
@@ -722,8 +722,8 @@ def _batch_update(split: str, index: int, level: int, rng: random.Random) -> Tas
     answer = f"updated-and-verified={target_count}"
     prompt = rng.choice(
         [
-            f"Read {manifest_path}. For every managed worker listed there, inspect its file, apply the exact mode replacement, then read every changed file again. Do not alter unmanaged.ini. Once every update is verified, report the verification count.",
-            f"Apply the deployment described in {manifest_path}: inspect each listed worker file, perform its exact mode replacement, and re-read each worker afterwards to verify. Leave unmanaged.ini untouched and report the final verification count once every update is confirmed.",
+            f"Read {manifest_path}. For every managed worker listed there, inspect its file, apply the exact mode replacement, then read every changed file again. Do not alter unmanaged.ini. Once all {target_count} updates are verified, report as updated-and-verified=<count>.",
+            f"Apply the deployment described in {manifest_path}: inspect each listed worker file, perform its exact mode replacement, and re-read each worker afterwards to verify. Leave unmanaged.ini untouched and report all {target_count} verified updates as updated-and-verified=<count>.",
         ]
     )
     steps = [

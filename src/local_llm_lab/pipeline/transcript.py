@@ -5,7 +5,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, ClassVar, TextIO
 
 from local_llm_lab.agent_protocol import Action
 
@@ -24,6 +24,24 @@ class Transcript:
     observation_lines: int = 4
     _lines: list[str] = field(default_factory=list)
     _record: dict[str, Any] = field(default_factory=dict)
+    _active_runs: ClassVar[dict[Path, str]] = {}
+
+    @classmethod
+    def start_run(cls, directory: Path) -> str:
+        """Start one transcript run, replacing only records from the previous run."""
+        target = directory.resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        run_id = uuid.uuid4().hex
+        (target / "transcripts.jsonl").write_text(
+            json.dumps({"run_id": run_id}, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        cls._active_runs[target] = run_id
+        return run_id
+
+    @classmethod
+    def _run_id(cls, directory: Path) -> str:
+        target = directory.resolve()
+        return cls._active_runs.get(target) or cls.start_run(target)
 
     def __post_init__(self) -> None:
         if self.color is None:
@@ -38,12 +56,9 @@ class Transcript:
         self._lines.append(text if markdown is None else markdown)
 
     def start(self, task: Any, label: str) -> None:
+        run_id = None
         if self.directory is not None:
-            self.directory.mkdir(parents=True, exist_ok=True)
-            header = {"run_id": uuid.uuid4().hex}
-            (self.directory / "transcripts.jsonl").write_text(
-                json.dumps(header, ensure_ascii=False) + "\n", encoding="utf-8"
-            )
+            run_id = self._run_id(self.directory)
         self._record = {
             "task_id": task.task_id,
             "family": task.family,
@@ -52,6 +67,8 @@ class Transcript:
             "prompt": task.prompt,
             "steps": [],
         }
+        if run_id is not None:
+            self._record["run_id"] = run_id
         self._lines = []
         self._emit(
             self._paint(f"\n=== {label} :: {task.task_id} [{task.family}/{task.variant}]", "1;36"),

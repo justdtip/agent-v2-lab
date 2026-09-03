@@ -348,8 +348,9 @@ def test_recovery_path_guesses_are_absent_and_notes_name_the_guess() -> None:
         assert guessed not in task.files
         assert guessed in wrong.thought
 
-    from local_llm_lab.pipeline import tasks
     import random
+
+    from local_llm_lab.pipeline import tasks
 
     directory = "workspace/only-existing"
     guarded = tasks.Task(
@@ -373,13 +374,23 @@ def test_recovery_path_guesses_are_absent_and_notes_name_the_guess() -> None:
 
 
 def test_hardened_update_prompts_do_not_leak_expected_answer() -> None:
-    """Reintroducing an answer literal into update or batch prompts weakens the task."""
-    from local_llm_lab.pipeline import tasks
+    """Prompts must expose answer inputs and schemas without handing over the final answer."""
     import random
+
+    from local_llm_lab.pipeline import tasks
 
     updates = [tasks._update("train", index, 0, random.Random(index)) for index in range(20)]
     batches = [tasks._batch_update("train", index, 1, random.Random(index)) for index in range(20)]
-    assert all(task.expected_answer not in task.prompt for task in updates + batches)
+    for task in updates:
+        _, _, target = task.expected_answer.partition("=")
+        assert target in task.prompt
+        assert "mode=<target>" in task.prompt
+        assert task.expected_answer not in task.prompt
+    for task in batches:
+        _, _, count = task.expected_answer.partition("=")
+        assert count in task.prompt
+        assert "updated-and-verified=<count>" in task.prompt
+        assert task.expected_answer not in task.prompt
 
 
 def test_stale_path_variant_relists_before_recovering() -> None:
@@ -877,12 +888,12 @@ def test_verdict_rejects_unexpected_changes_and_keeps_raw_normalized_answer() ->
     )
     simulator.files["workspace/added.ini"] = "added"
     del simulator.files["workspace/removed.ini"]
-    simulator.execute(Action("finish", {"answer": "`updated`."}))
+    simulator.execute(Action("finish", {"answer": "`updated.`"}))
 
     verdict = simulator.verdict()
 
     assert not verdict.success
-    assert verdict.raw_answer == "`updated`."
+    assert verdict.raw_answer == "`updated.`"
     assert verdict.answer == "updated"
     assert verdict.unexpected_files == (
         "workspace/added.ini",
@@ -893,43 +904,69 @@ def test_verdict_rejects_unexpected_changes_and_keeps_raw_normalized_answer() ->
     assert "unexpected file change: added.ini" in verdict.reasons
     assert "unexpected file change: removed.ini" in verdict.reasons
     assert "required tools unused: read_file" in verdict.reasons
-    assert verdict.as_dict()["raw_answer"] == "`updated`."
+    assert verdict.as_dict()["raw_answer"] == "`updated.`"
 
 
-def test_transcript_start_replaces_prior_run_and_reports_hardened_failure(tmp_path) -> None:
-    """Appending stale runs or rendering a hardened failure as PASS must fail this test."""
+def test_transcript_keeps_multiple_task_records_in_one_run(tmp_path) -> None:
+    """Truncating JSONL on each task start drops all but the final task's transcript."""
     from local_llm_lab.pipeline.transcript import Transcript
 
-    task = make_tasks("valid", 1)[0]
-    transcript = Transcript(stream=None, directory=tmp_path)
-    transcript.start(task, "first")
-    transcript.finish(
+    first_task, second_task = make_tasks("valid", 2)
+    first = Transcript(stream=None, directory=tmp_path)
+    first.start(first_task, "run")
+    first.finish(
         {
             "success": True,
             "errors": 0,
-            "answer": task.expected_answer,
-            "expected_answer": task.expected_answer,
+            "answer": first_task.expected_answer,
+            "expected_answer": first_task.expected_answer,
             "reasons": [],
         },
         0.1,
     )
-    transcript.start(task, "second")
-    jsonl = tmp_path / "transcripts.jsonl"
-    header = jsonl.read_text(encoding="utf-8").splitlines()
-    assert len(header) == 1 and '"run_id"' in header[0]
-    transcript.finish(
+    second = Transcript(stream=None, directory=tmp_path)
+    second.start(second_task, "run")
+    second.finish(
         {
             "success": False,
             "errors": 0,
-            "answer": task.expected_answer,
-            "expected_answer": task.expected_answer,
+            "answer": second_task.expected_answer,
+            "expected_answer": second_task.expected_answer,
             "reasons": ["unexpected file change: extra.ini"],
         },
         0.1,
     )
-    assert len(jsonl.read_text(encoding="utf-8").splitlines()) == 2
-    markdown = (tmp_path / f"second-{task.task_id}.md").read_text(encoding="utf-8")
+    jsonl = tmp_path / "transcripts.jsonl"
+    records = [__import__("json").loads(line) for line in jsonl.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 3
+    run_id = records[0]["run_id"]
+    assert [record["task_id"] for record in records[1:]] == [first_task.task_id, second_task.task_id]
+    assert [record["run_id"] for record in records[1:]] == [run_id, run_id]
+    markdown = (tmp_path / f"run-{second_task.task_id}.md").read_text(encoding="utf-8")
     assert "**FAIL** (unexpected file change: extra.ini)" in markdown
+
+
+def test_transcript_explicit_run_boundary_replaces_prior_run(tmp_path) -> None:
+    """A new explicit run must truncate old task records and allocate a new run id."""
+    from local_llm_lab.pipeline.transcript import Transcript
+
+    first_task, second_task = make_tasks("valid", 2)
+    Transcript.start_run(tmp_path)
+    first = Transcript(stream=None, directory=tmp_path)
+    first.start(first_task, "run")
+    first.finish(
+        {"success": True, "errors": 0, "answer": "a", "expected_answer": "a", "reasons": []}, 0.1
+    )
+    Transcript.start_run(tmp_path)
+    second = Transcript(stream=None, directory=tmp_path)
+    second.start(second_task, "run")
+    second.finish(
+        {"success": True, "errors": 0, "answer": "b", "expected_answer": "b", "reasons": []}, 0.1
+    )
+    records = [__import__("json").loads(line) for line in (tmp_path / "transcripts.jsonl").read_text().splitlines()]
+    assert len(records) == 2
+    assert records[1]["task_id"] == second_task.task_id
+    assert records[1]["run_id"] == records[0]["run_id"]
 
 
 def test_trajectory_rows_skip_errored_steps_except_injected_faults() -> None:
@@ -1426,6 +1463,37 @@ def test_branch_pairs_keep_the_seed_step_raw_completion(monkeypatch) -> None:
     assert pairs[0]["chosen"] != branch.render_completion(
         "canonical note", Action("finish", {"answer": "yes"})
     )
+
+
+def test_branch_pairs_reject_seed_steps_without_raw_completion(monkeypatch) -> None:
+    """A missing raw completion is a producer-contract failure, not a re-rendering fallback."""
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.tasks import Task
+
+    task = Task("valid-read-0000-clean", "read", "clean", "p", {}, (), "yes", frozenset())
+    trajectory = types.SimpleNamespace(
+        success=True,
+        steps=[
+            {
+                "thought": "canonical note",
+                "raw": "",
+                "action": {"name": "finish", "arguments": {"answer": "yes"}},
+            }
+        ],
+    )
+    monkeypatch.setattr(branch, "run_task", lambda *args, **kwargs: trajectory)
+    monkeypatch.setattr(branch, "make_sampler", lambda temperature: object())
+    monkeypatch.setattr(branch, "build_prompt", lambda *args, **kwargs: "prompt")
+    monkeypatch.setattr(
+        branch,
+        "generate_turn",
+        lambda *args, **kwargs: branch.render_completion("other", Action("finish", {"answer": "yes"})),
+    )
+
+    with pytest.raises(ValueError, match="raw completion"):
+        branch.mine_pairs(
+            None, None, task, branches=1, temperature=1.0, max_steps=1, max_tokens=20, keep_last=2
+        )
 
 
 def _write_pairs(path, rows) -> None:

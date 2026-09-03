@@ -68,6 +68,8 @@ def normalize(value: str) -> str:
 def normalize_answer(value: str) -> str:
     """Compare answer values without harmless Markdown fencing or terminal punctuation."""
     cleaned = value.strip()
+    if len(cleaned) >= 2 and cleaned.startswith("`") and cleaned.endswith("`"):
+        cleaned = cleaned[1:-1].strip()
     if cleaned.endswith("."):
         cleaned = cleaned[:-1].rstrip()
     if len(cleaned) >= 2 and cleaned.startswith("`") and cleaned.endswith("`"):

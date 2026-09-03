@@ -19,6 +19,7 @@ from local_llm_lab.pipeline.evaluate import run_evaluation
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.report import load_summaries, render
 from local_llm_lab.pipeline.rollout import run_rollout
+from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "agent_v2.yaml"
@@ -192,6 +193,8 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
     limit = limit or select["limit"]
     results = []
     for step, adapter in checkpoint_dirs(config):
+        transcript_dir = output / "transcripts" / f"select-step-{step}"
+        Transcript.start_run(transcript_dir)
         _log(f"select: screening step-{step} on {select['split']} ({limit} tasks)")
         summary = run_evaluation(
             model_name=config["model"],
@@ -200,7 +203,7 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
             split=select["split"],
             limit=limit,
             output=output / "evals" / f"select-step-{step}.json",
-            transcript_dir=output / "transcripts" / f"select-step-{step}",
+            transcript_dir=transcript_dir,
             max_steps=config["eval"]["max_steps"],
             max_tokens=config["eval"]["max_tokens"],
             keep_last=config["keep_last"],
@@ -280,6 +283,8 @@ def stage_eval(
         policies.append(("best-adapter", best))
     for label, path in policies:
         stem = f"{label}-{split}{'-stress' if stress else ''}"
+        transcript_dir = output / "transcripts" / stem
+        Transcript.start_run(transcript_dir)
         _log(f"eval: {label} on {split} ({limit} tasks{', stress' if stress else ''})")
         run_evaluation(
             model_name=config["model"],
@@ -288,7 +293,7 @@ def stage_eval(
             split=split,
             limit=limit,
             output=output / "evals" / f"{stem}.json",
-            transcript_dir=output / "transcripts" / stem,
+            transcript_dir=transcript_dir,
             stress=stress,
             max_steps=evaluation["max_steps"],
             max_tokens=evaluation["max_tokens"],
@@ -309,6 +314,8 @@ def stage_rollout(
     output: Path = config["output"]
     rollout = config["rollout"]
     adapter = adapter or output / "best-adapter"
+    transcript_dir = output / "transcripts" / f"rollout-{split}"
+    Transcript.start_run(transcript_dir)
     _log(f"rollout: sampling {adapter.name} on fresh split '{split}'")
     run_rollout(
         model_name=config["model"],
@@ -319,7 +326,7 @@ def stage_rollout(
         samples=samples or rollout["samples"],
         temperature=rollout["temperature"],
         output=PROJECT_ROOT / "data" / "rollouts" / split,
-        transcript_dir=output / "transcripts" / f"rollout-{split}",
+        transcript_dir=transcript_dir,
         keep_per_task=rollout.get("keep_per_task", 2),
         max_steps=config["eval"]["max_steps"],
         max_tokens=config["eval"]["max_tokens"],
@@ -444,6 +451,8 @@ def main() -> None:
     elif args.stage == "branch":
         if args.split in {"train", "valid", "test"}:
             parser.error("branch mining must use a fresh split name, e.g. pref1")
+        transcript_dir = config["output"] / "transcripts" / f"branch-{args.split}"
+        Transcript.start_run(transcript_dir)
         run_branch_mining(
             model_name=config["model"],
             adapter=args.adapter or config["output"] / "best-adapter",
@@ -452,7 +461,7 @@ def main() -> None:
             branches=args.branches,
             temperature=config.get("branch", {}).get("temperature", 0.9),
             output=PROJECT_ROOT / "data" / "preferences" / args.split,
-            transcript_dir=config["output"] / "transcripts" / f"branch-{args.split}",
+            transcript_dir=transcript_dir,
             max_steps=config["eval"]["max_steps"],
             max_tokens=config["eval"]["max_tokens"],
             keep_last=config["keep_last"],
