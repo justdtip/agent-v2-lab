@@ -8,29 +8,49 @@ from typing import Any
 from local_llm_lab.pipeline.evaluate import mcnemar
 
 
+def _outcomes(trajectories: object, task_count: object) -> dict[tuple[str, int], bool]:
+    """Return outcomes only when the complete reported cohort is trustworthy."""
+    if (
+        not isinstance(task_count, int)
+        or isinstance(task_count, bool)
+        or task_count < 0
+        or not isinstance(trajectories, list)
+    ):
+        return {}
+    outcomes = {}
+    for record in trajectories:
+        if not isinstance(record, dict):
+            return {}
+        task_id = record.get("task_id")
+        difficulty = record.get("difficulty")
+        verdict = record.get("verdict")
+        success = verdict.get("success") if isinstance(verdict, dict) else None
+        if (
+            not isinstance(task_id, str)
+            or not task_id
+            or not isinstance(difficulty, int)
+            or isinstance(difficulty, bool)
+            or not isinstance(success, bool)
+        ):
+            return {}
+        identity = (task_id, difficulty)
+        if identity in outcomes:
+            return {}
+        outcomes[identity] = success
+    return outcomes if len(outcomes) == task_count else {}
+
+
 def load_summaries(evals: Path) -> list[dict[str, Any]]:
     summaries = []
     for path in sorted(evals.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            continue
         summary = payload.get("summary")
         if isinstance(summary, dict) and "success_rate" in summary:
             summary = dict(summary)
             summary["_file"] = path.name
-            trajectories = payload.get("trajectories", [])
-            outcomes = {}
-            for record in trajectories:
-                if not isinstance(record, dict) or not isinstance(record.get("task_id"), str):
-                    continue
-                difficulty = record.get("difficulty")
-                if not isinstance(difficulty, int) or isinstance(difficulty, bool):
-                    outcomes = {}
-                    break
-                identity = (record["task_id"], difficulty)
-                if identity in outcomes:
-                    outcomes = {}
-                    break
-                outcomes[identity] = bool(record.get("verdict", {}).get("success"))
-            summary["_outcomes"] = outcomes
+            summary["_outcomes"] = _outcomes(payload.get("trajectories"), summary.get("tasks"))
             summaries.append(summary)
     return summaries
 

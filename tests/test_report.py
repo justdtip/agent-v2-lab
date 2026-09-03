@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from local_llm_lab.pipeline.report import load_summaries, render
 
 
@@ -54,14 +56,18 @@ def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluation
     tmp_path: Path,
 ) -> None:
     """Catch interval-free rich summaries and a paired row with missing flip accounting."""
+    left = _summary("a")
+    left.update({"model": "model-a", "adapter": "adapter-a"})
+    right = _summary("b")
+    right.update({"model": "model-b", "adapter": "adapter-b"})
     _write_eval(
         tmp_path / "a.json",
-        _summary("a"),
+        left,
         {"valid-read-0000-clean": True, "valid-read-0012-clean": False},
     )
     _write_eval(
         tmp_path / "b.json",
-        _summary("b"),
+        right,
         {"valid-read-0000-clean": False, "valid-read-0012-clean": True},
     )
 
@@ -70,6 +76,76 @@ def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluation
     assert "1/2 (50%) [10%-90%]" in rendered
     assert "Paired McNemar" in rendered
     assert "a vs b: pairs 2, a-only 1, b-only 1, discordant 2, p=1" in rendered
+
+
+@pytest.mark.parametrize(
+    ("name", "extra"),
+    [
+        ("id-less", {"difficulty": 1, "verdict": {"success": True}}),
+        ("non-dict", None),
+        (
+            "invalid-difficulty",
+            {"task_id": "invalid", "difficulty": True, "verdict": {"success": True}},
+        ),
+        (
+            "duplicate",
+            {
+                "task_id": "valid-read-0000-clean",
+                "difficulty": 1,
+                "verdict": {"success": True},
+            },
+        ),
+        (
+            "missing-outcome",
+            {"task_id": "missing", "difficulty": 1, "verdict": {}},
+        ),
+        (
+            "non-boolean-outcome",
+            {"task_id": "invalid", "difficulty": 1, "verdict": {"success": "yes"}},
+        ),
+    ],
+)
+def test_render_refuses_entire_cohort_for_malformed_trajectory(
+    tmp_path: Path, name: str, extra: object
+) -> None:
+    """A malformed extra trajectory must not be silently skipped or coerced into a pair."""
+    outcomes = {"valid-read-0000-clean": True, "valid-read-0012-clean": False}
+    _write_eval(tmp_path / "a.json", _summary("a"), outcomes)
+    payload = {
+        "summary": _summary("b"),
+        "trajectories": [
+            {
+                "task_id": task_id,
+                "difficulty": 1,
+                "verdict": {"success": success},
+            }
+            for task_id, success in outcomes.items()
+        ]
+        + [extra],
+    }
+    (tmp_path / f"b-{name}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    summaries = load_summaries(tmp_path)
+
+    assert summaries[1]["_outcomes"] == {}
+    assert "Paired McNemar" not in render(summaries)
+
+
+@pytest.mark.parametrize("tasks", [True, -1, "2", 1, 3])
+def test_render_refuses_pair_when_summary_task_count_is_invalid_or_mismatched(
+    tmp_path: Path, tasks: object
+) -> None:
+    """Pairing requires a truthful, exact non-boolean task count for every cohort."""
+    outcomes = {"valid-read-0000-clean": True, "valid-read-0012-clean": False}
+    _write_eval(tmp_path / "a.json", _summary("a"), outcomes)
+    invalid = _summary("b")
+    invalid["tasks"] = tasks
+    _write_eval(tmp_path / "b.json", invalid, outcomes)
+
+    summaries = load_summaries(tmp_path)
+
+    assert summaries[1]["_outcomes"] == {}
+    assert "Paired McNemar" not in render(summaries)
 
 
 def test_render_refuses_pairs_for_different_ids_split_or_difficulty(tmp_path: Path) -> None:

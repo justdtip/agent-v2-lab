@@ -23,8 +23,9 @@ checkpoint regression from `tests/test_pipeline.py` to `tests/test_selection.py`
 | `tests/test_tasks.py`, `test_evaluate.py`, `test_cli.py`, `test_selection.py`, `test_report.py` | focused contracts using fakes and temporary metadata only |
 | `tests/test_pipeline.py` (Step 0 only) | removed the exact empty-checkpoint test after its behavior-preserving move to `tests/test_selection.py` |
 
-Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 480; `cli.py` 594;
-`report.py` 105; tests 152/143/20/133/109 respectively.
+Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 595;
+`report.py` 137; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 20;
+`test_selection.py` 147; and `test_report.py` 227.
 
 Wiring-map rows touched are 2.4 (`Task` consumption only; frozen record and exact
 `task_from_id` signature retained), 2.10 (evaluation summary and screen arguments), 2.11
@@ -93,5 +94,15 @@ The accepted review fixes add fail-closed paired comparison identity (same non-n
 and exact per-trajectory task-id/difficulty keys), truthful mixed-difficulty evaluation metadata,
 the top-level integrity-clean Wilson interval in the nested report column, and restoration of
 the extracted empty-checkpoint regression in `tests/test_selection.py`. RED and GREEN evidence
-for all four focused regressions is recorded in the ignored task ledger; the round-1 fix commit
-is reported through the native task handoff.
+for all four focused regressions is recorded in the ignored task ledger. The round-1 fix commit
+is `ab1c38df649bde1c705cb85c3504515efa301b5b`.
+
+## Review-fix round 2
+
+`load_summaries` now fails closed for an entire comparison cohort when any trajectory is
+non-dict, ID-less, has an invalid difficulty, duplicates an identity, omits its verdict outcome,
+or supplies a non-boolean outcome. It also accepts outcomes only when their unique exact
+`(task_id, difficulty)` count equals a non-boolean, non-negative integer summary `tasks` value.
+Matching cohorts remain pairable across different model/adapter metadata when their split,
+non-null data seed, and exact per-task identities agree. RED/GREEN evidence is recorded in the
+ignored task ledger; the commit hash is recorded by the subsequent documentation handoff.
