@@ -233,8 +233,10 @@ def test_check_trajectory_detects_each_violation_kind_once() -> None:
     assert check_trajectory(task, clean, keep_last=1).clean
 
     copied = [dict(step) for step in clean]
-    copied[3]["thought"] = copied[2]["thought"]
-    assert check_trajectory(task, copied, keep_last=1).counts["verbatim_copy"] == 1
+    copied_note = "Continuing invoice inspection before reconciling approved amounts."
+    copied[1]["thought"] = copied_note
+    copied[2]["thought"] = copied_note
+    assert check_trajectory(task, copied, keep_last=1).counts == {"verbatim_copy": 1}
 
     dropped = [dict(step) for step in clean]
     dropped[7]["thought"] = str(dropped[7]["thought"]).replace("178, ", "")
