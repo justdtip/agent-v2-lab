@@ -19,7 +19,6 @@ __all__ = [
 
 _THINKING_MODES = frozenset({"unsupported", "off", "inference", "trained"})
 _CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "none"})
-_LORA_POLICIES = frozenset({"auto", "attention+mlp", "all-linear"})
 _DEFAULT_PROBE_FRACTIONS = (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
 _REGISTRY_DIR = Path(__file__).resolve().parents[2] / "configs" / "models"
 
@@ -67,7 +66,7 @@ class ModelSpec:
         lora_keys = view.lora_targets(self.lora.keys)
         cache_strategy: Literal["trim", "snapshot", "none"]
         if self.cache_strategy == "auto":
-            cache_strategy = "trim" if view.cache_trimmable else "none"
+            cache_strategy = "trim" if view.cache_trimmable else "snapshot"
         else:
             cache_strategy = self.cache_strategy
         return ResolvedSpec(
@@ -148,6 +147,8 @@ def _load_registry_file(path: Path) -> ModelSpec:
 
 
 def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
+    from local_llm_lab.arch import LORA_POLICIES
+
     chat = _mapping(raw, "chat", source)
     lora = _mapping(raw, "lora", source)
     train = _mapping(raw, "train", source)
@@ -167,11 +168,11 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
         if not all(isinstance(key, str) and key for key in keys):
             raise ValueError(f"{source}: lora.keys entries must be non-empty strings")
         lora_keys: Literal["auto", "attention+mlp", "all-linear"] | tuple[str, ...] = tuple(keys)
-    elif isinstance(keys, str) and keys in _LORA_POLICIES:
+    elif isinstance(keys, str) and keys in LORA_POLICIES:
         lora_keys = keys
     else:
         raise ValueError(
-            f"{source}: lora.keys must be one of {sorted(_LORA_POLICIES)} or a list of names"
+            f"{source}: lora.keys must be one of {sorted(LORA_POLICIES)} or a list of names"
         )
     fractions_raw = probes.get("layer_fractions")
     if not isinstance(fractions_raw, list) or not fractions_raw:

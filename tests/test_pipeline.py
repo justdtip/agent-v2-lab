@@ -182,6 +182,7 @@ def test_model_spec_resolve_reads_architecture_and_tokenizer_metadata(monkeypatc
 
     fake_arch = types.ModuleType("local_llm_lab.arch")
     fake_arch.ArchitectureView = FakeView
+    fake_arch.LORA_POLICIES = frozenset({"auto", "attention+mlp", "all-linear"})
     monkeypatch.setitem(sys.modules, "local_llm_lab.arch", fake_arch)
     fake_model = object()
     tokenizer = types.SimpleNamespace(snapshot_revision="fake-snapshot-revision")

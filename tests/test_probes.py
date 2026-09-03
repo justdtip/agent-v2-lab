@@ -21,6 +21,7 @@ import mlx.nn as nn
 import numpy as np
 import pytest
 
+from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.pipeline import jlens
 from local_llm_lab.probes import adapter_delta, assistant_axis, capture, state_probe, stats
 
@@ -84,6 +85,473 @@ class _ProbeModel(nn.Module):
 def _model(seed: int = 0) -> _ProbeModel:
     mx.random.seed(seed)
     return _ProbeModel()
+
+
+_ATTENTION_MASK = "fake-attention-mask"
+_SSM_MASK = "fake-ssm-mask"
+
+
+class _FakeKVCache:
+    def __init__(self) -> None:
+        self.offset = 0
+        self.state = ("keys", "values")
+
+    def is_trimmable(self) -> bool:
+        return True
+
+
+class _FakeArraysCache:
+    def __init__(self) -> None:
+        self.state = [None, None]
+
+    def is_trimmable(self) -> bool:
+        return False
+
+
+class _ArchitectureAttention(nn.Module):
+    def __init__(self, dim: int) -> None:
+        super().__init__()
+        self.q_proj = nn.Linear(dim, dim, bias=False)
+        self.k_proj = nn.Linear(dim, dim, bias=False)
+        self.v_proj = nn.Linear(dim, dim, bias=False)
+        self.o_proj = nn.Linear(dim, dim, bias=False)
+
+    def __call__(self, x):
+        scores = self.q_proj(x) @ self.k_proj(x).transpose(0, 2, 1)
+        length = x.shape[1]
+        scores = mx.where(mx.tril(mx.ones((length, length))) > 0, scores, -1e9)
+        return self.o_proj(mx.softmax(scores, axis=-1) @ self.v_proj(x))
+
+
+class _ArchitectureLinearAttention(nn.Module):
+    def __init__(self, dim: int) -> None:
+        super().__init__()
+        self.in_proj_qkvz = nn.Linear(dim, 2 * dim, bias=False)
+        self.in_proj_ba = nn.Linear(dim, 2, bias=False)
+        self.out_proj = nn.Linear(2 * dim, dim, bias=False)
+
+    def __call__(self, x):
+        gate = mx.mean(mx.sigmoid(self.in_proj_ba(x)), axis=-1, keepdims=True)
+        return self.out_proj(mx.tanh(self.in_proj_qkvz(x)) * gate)
+
+
+class _ArchitectureSplitLinearAttention(nn.Module):
+    def __init__(self, dim: int) -> None:
+        super().__init__()
+        self.in_proj_qkv = nn.Linear(dim, 2 * dim, bias=False)
+        self.in_proj_z = nn.Linear(dim, dim, bias=False)
+        self.in_proj_b = nn.Linear(dim, 2, bias=False)
+        self.in_proj_a = nn.Linear(dim, 2, bias=False)
+        self.out_proj = nn.Linear(2 * dim, dim, bias=False)
+
+    def __call__(self, x):
+        z = self.in_proj_z(x)
+        z = mx.concatenate((z, z), axis=-1)
+        gate = mx.mean(
+            mx.sigmoid(self.in_proj_b(x) + self.in_proj_a(x)), axis=-1, keepdims=True
+        )
+        return self.out_proj(mx.tanh(self.in_proj_qkv(x) + z) * gate)
+
+
+class _ArchitectureMLP(nn.Module):
+    def __init__(self, dim: int, intermediate: int) -> None:
+        super().__init__()
+        self.gate_proj = nn.Linear(dim, intermediate, bias=False)
+        self.up_proj = nn.Linear(dim, intermediate, bias=False)
+        self.down_proj = nn.Linear(intermediate, dim, bias=False)
+
+    def __call__(self, x):
+        return self.down_proj(mx.sigmoid(self.gate_proj(x)) * self.up_proj(x))
+
+
+class _ArchitectureBlock(nn.Module):
+    def __init__(self, dim: int, *, is_linear: bool, split_linear: bool = False) -> None:
+        super().__init__()
+        self.is_linear = is_linear
+        if is_linear:
+            self.linear_attn = (
+                _ArchitectureSplitLinearAttention(dim)
+                if split_linear
+                else _ArchitectureLinearAttention(dim)
+            )
+        else:
+            self.self_attn = _ArchitectureAttention(dim)
+        self.mlp = _ArchitectureMLP(dim, intermediate=12)
+        self.calls = 0
+
+    def __call__(self, x, mask=None, cache=None):
+        del cache
+        required_mask = _SSM_MASK if self.is_linear else _ATTENTION_MASK
+        if mask != required_mask:
+            raise ValueError(f"wrong mask for block kind: {mask!r}")
+        self.calls += 1
+        attention = self.linear_attn(x) if self.is_linear else self.self_attn(x)
+        h = x + 0.05 * attention
+        return h + 0.05 * self.mlp(h)
+
+
+class _ArchitectureText(nn.Module):
+    def __init__(
+        self, *, vocab: int, dim: int, kinds: tuple[bool, ...], split_linear: bool = False
+    ) -> None:
+        super().__init__()
+        self.embed_tokens = nn.Embedding(vocab, dim)
+        self.layers = [
+            _ArchitectureBlock(dim, is_linear=kind, split_linear=split_linear) for kind in kinds
+        ]
+        self.norm = nn.RMSNorm(dim)
+        self.mask_calls: list[tuple[str, object | None]] = []
+
+    def create_attention_mask(self, h, cache=None):
+        del h
+        self.mask_calls.append(("attention", cache))
+        return _ATTENTION_MASK
+
+    def create_ssm_mask(self, h, cache=None):
+        del h
+        self.mask_calls.append(("linear_attention", cache))
+        return _SSM_MASK
+
+
+class _ArchitectureFakeBase(nn.Module):
+    text: _ArchitectureText
+
+    def make_cache(self) -> list[object]:
+        return [
+            _FakeArraysCache() if block.is_linear else _FakeKVCache()
+            for block in self.text.layers
+        ]
+
+    def _unembed(self, h):
+        language_model = getattr(self, "language_model", None)
+        if language_model is not None and hasattr(language_model, "lm_head"):
+            return language_model.lm_head(h)
+        return self.text.embed_tokens.as_linear(h)
+
+    def recording_forward(self, ids):
+        token_ids = mx.array(ids).astype(mx.int32)
+        if token_ids.ndim == 1:
+            token_ids = token_ids[None, :]
+        h = self.text.embed_tokens(token_ids)
+        recorded = {0: h}
+        cache = self.make_cache()
+        attention_index = next(
+            (index for index, block in enumerate(self.text.layers) if not block.is_linear), None
+        )
+        linear_index = next(
+            (index for index, block in enumerate(self.text.layers) if block.is_linear), None
+        )
+        attention_mask = self.text.create_attention_mask(
+            h, None if attention_index is None else cache[attention_index]
+        )
+        ssm_mask = self.text.create_ssm_mask(
+            h, None if linear_index is None else cache[linear_index]
+        )
+        for index, (block, cache_i) in enumerate(zip(self.text.layers, cache, strict=True)):
+            mask = ssm_mask if block.is_linear else attention_mask
+            h = block(h, mask=mask, cache=cache_i)
+            recorded[index + 1] = h
+        return self._unembed(self.text.norm(h)), recorded
+
+
+class _ArchitectureDenseModel(_ArchitectureFakeBase):
+    def __init__(self, *, vocab: int = 23, dim: int = 8, n_layers: int = 4) -> None:
+        super().__init__()
+        self.model = _ArchitectureText(
+            vocab=vocab, dim=dim, kinds=tuple(False for _ in range(n_layers))
+        )
+        self.text = self.model
+
+
+class _ArchitectureLanguageModel(nn.Module):
+    def __init__(self, text: _ArchitectureText, *, tied: bool) -> None:
+        super().__init__()
+        self.model = text
+        if not tied:
+            self.lm_head = nn.Linear(
+                text.embed_tokens.weight.shape[1],
+                text.embed_tokens.weight.shape[0],
+                bias=False,
+            )
+
+
+class _ArchitectureHybridModel(_ArchitectureFakeBase):
+    def __init__(
+        self, *, tied: bool = True, vocab: int = 23, dim: int = 8, split_linear: bool = False
+    ) -> None:
+        super().__init__()
+        text = _ArchitectureText(
+            vocab=vocab,
+            dim=dim,
+            kinds=(True, True, True, False),
+            split_linear=split_linear,
+        )
+        self.language_model = _ArchitectureLanguageModel(text, tied=tied)
+        self.text = text
+
+
+def make_dense_fake() -> tuple[_ArchitectureDenseModel, mx.array]:
+    mx.random.seed(91)
+    return _ArchitectureDenseModel(), mx.array([[2, 5, 1, 7]], dtype=mx.int32)
+
+
+def make_hybrid_fake(*, tied: bool = True) -> tuple[_ArchitectureHybridModel, mx.array]:
+    mx.random.seed(92 if tied else 93)
+    return _ArchitectureHybridModel(tied=tied), mx.array([[3, 1, 4, 6]], dtype=mx.int32)
+
+
+def make_split_hybrid_fake() -> tuple[_ArchitectureHybridModel, mx.array]:
+    mx.random.seed(94)
+    model = _ArchitectureHybridModel(split_linear=True)
+    return model, mx.array([[3, 1, 4, 6]], dtype=mx.int32)
+
+
+@pytest.mark.parametrize(
+    "fake_factory", [make_dense_fake, make_hybrid_fake], ids=["dense", "hybrid"]
+)
+def test_architecture_view_matches_model_forward(fake_factory) -> None:
+    model, ids = fake_factory()
+    view = ArchitectureView.from_model(model)
+    residuals = view.residuals(ids, tuple(range(view.num_layers + 1)))
+    expected, recorded = model.recording_forward(ids)
+
+    assert tuple(residuals) == tuple(range(view.num_layers + 1))
+    for layer, hidden in recorded.items():
+        assert residuals[layer].dtype == mx.float32
+        np.testing.assert_allclose(residuals[layer], hidden, rtol=1e-5, atol=1e-5)
+    actual = view.unembed(view.final_norm(residuals[view.num_layers]))
+    assert actual.dtype == mx.float32
+    np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("fake_factory", [make_dense_fake, make_hybrid_fake])
+def test_architecture_view_tail_matches_full_tail_at_every_residual(fake_factory) -> None:
+    model, ids = fake_factory()
+    view = ArchitectureView.from_model(model)
+    residuals = view.residuals(ids, tuple(range(view.num_layers + 1)))
+    expected = view.final_norm(residuals[view.num_layers])
+
+    for layer in range(view.num_layers + 1):
+        actual = view.tail(layer)(residuals[layer])
+        assert actual.dtype == mx.float32
+        np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_architecture_view_discovers_all_supported_text_module_locations() -> None:
+    dense, _ = make_dense_fake()
+    hybrid, _ = make_hybrid_fake()
+
+    assert ArchitectureView.from_model(dense.model).text_module is dense.model
+    assert ArchitectureView.from_model(dense).text_module is dense.model
+    assert ArchitectureView.from_model(hybrid).text_module is hybrid.language_model.model
+
+
+def test_hybrid_architecture_view_uses_per_kind_masks_and_caches() -> None:
+    model, ids = make_hybrid_fake()
+    view = ArchitectureView.from_model(model)
+    caches = view.make_cache()
+    h = view.embed(ids)
+    masks = view.masks(h, caches)
+
+    assert [view.layer_kind(index) for index in range(view.num_layers)] == [
+        "linear_attention",
+        "linear_attention",
+        "linear_attention",
+        "attention",
+    ]
+    assert masks == {"attention": _ATTENTION_MASK, "linear_attention": _SSM_MASK}
+    assert model.text.mask_calls[-2:] == [
+        ("attention", caches[3]),
+        ("linear_attention", caches[0]),
+    ]
+    for index, cache_i in enumerate(caches):
+        h = view.run_block(index, h, masks, cache_i)
+
+    with pytest.raises(ValueError, match="wrong mask"):
+        view.run_block(0, view.embed(ids), {"linear_attention": None}, caches[0])
+
+
+def test_architecture_view_reports_cache_kinds_and_trimmability() -> None:
+    dense, _ = make_dense_fake()
+    hybrid, _ = make_hybrid_fake()
+    dense_view = ArchitectureView.from_model(dense)
+    hybrid_view = ArchitectureView.from_model(hybrid)
+
+    assert all(isinstance(cache, _FakeKVCache) for cache in dense_view.make_cache())
+    assert dense_view.cache_trimmable is True
+    hybrid_cache = hybrid_view.make_cache()
+    assert [type(cache) for cache in hybrid_cache] == [
+        _FakeArraysCache,
+        _FakeArraysCache,
+        _FakeArraysCache,
+        _FakeKVCache,
+    ]
+    assert isinstance(hybrid_cache[0].state, list)
+    assert hybrid_view.cache_trimmable is False
+
+
+def test_architecture_view_supports_tied_and_untied_unembedding() -> None:
+    for tied in (True, False):
+        model, ids = make_hybrid_fake(tied=tied)
+        view = ArchitectureView.from_model(model)
+        expected, recorded = model.recording_forward(ids)
+
+        assert view.tie_word_embeddings is tied
+        assert view.vocab_size == 23
+        actual = view.unembed(view.final_norm(recorded[view.num_layers]))
+        np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_architecture_view_runs_only_to_the_deepest_requested_residual() -> None:
+    model, ids = make_hybrid_fake()
+    view = ArchitectureView.from_model(model)
+    residuals = view.residuals(ids, (0, 2))
+
+    assert tuple(residuals) == (0, 2)
+    assert [block.calls for block in model.text.layers] == [1, 1, 0, 0]
+    with pytest.raises(ValueError, match="layers"):
+        view.residuals(ids, ())
+    with pytest.raises(ValueError, match="layers"):
+        view.residuals(ids, (-1,))
+    with pytest.raises(ValueError, match="layers"):
+        view.residuals(ids, (view.num_layers + 1,))
+
+
+def test_architecture_view_lora_target_policies_select_only_existing_modules() -> None:
+    dense, _ = make_dense_fake()
+    hybrid, _ = make_hybrid_fake()
+    dense_view = ArchitectureView.from_model(dense)
+    hybrid_view = ArchitectureView.from_model(hybrid)
+    dense_keys = (
+        "self_attn.q_proj",
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.o_proj",
+        "mlp.gate_proj",
+        "mlp.up_proj",
+        "mlp.down_proj",
+    )
+    hybrid_keys = (
+        *dense_keys,
+        "linear_attn.in_proj_qkvz",
+        "linear_attn.in_proj_ba",
+        "linear_attn.out_proj",
+    )
+
+    assert dense_view.lora_targets("attention+mlp") == dense_keys
+    assert dense_view.lora_targets("all-linear") == dense_keys
+    assert dense_view.lora_targets("auto") == dense_keys
+    assert hybrid_view.lora_targets("attention+mlp") == dense_keys
+    assert hybrid_view.lora_targets("all-linear") == hybrid_keys
+    assert hybrid_view.lora_targets("auto") == hybrid_keys
+
+
+def test_architecture_view_validates_explicit_lora_targets_and_counts_shapes() -> None:
+    dense, _ = make_dense_fake()
+    hybrid, _ = make_hybrid_fake()
+    dense_view = ArchitectureView.from_model(dense)
+    hybrid_view = ArchitectureView.from_model(hybrid)
+    explicit = ("self_attn.q_proj", "mlp.down_proj")
+
+    assert hybrid_view.lora_targets(explicit) == explicit
+    # rank * (input + output), summed for every matching module in every block.
+    assert dense_view.lora_parameter_count(dense_view.lora_targets("auto"), rank=2) == 992
+    assert hybrid_view.lora_parameter_count(hybrid_view.lora_targets("auto"), rank=2) == 956
+    assert hybrid_view.lora_parameter_count(explicit, rank=2) == 192
+    with pytest.raises(ValueError, match="unknown LoRA target"):
+        hybrid_view.lora_targets(("linear_attn.not_real",))
+    with pytest.raises(ValueError, match="LoRA policy"):
+        hybrid_view.lora_targets("everything")
+    with pytest.raises(ValueError, match="rank"):
+        hybrid_view.lora_parameter_count(explicit, rank=0)
+
+
+def test_split_hybrid_lora_targets_and_counts_use_only_actual_modules() -> None:
+    model, _ = make_split_hybrid_fake()
+    view = ArchitectureView.from_model(model)
+    expected = (
+        "self_attn.q_proj",
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.o_proj",
+        "mlp.gate_proj",
+        "mlp.up_proj",
+        "mlp.down_proj",
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z",
+        "linear_attn.in_proj_b",
+        "linear_attn.in_proj_a",
+        "linear_attn.out_proj",
+    )
+
+    assert view.lora_targets("all-linear") == expected
+    assert view.lora_targets("auto") == expected
+    # One dense-attention block, four MLPs, and three split linear-attention blocks.
+    assert view.lora_parameter_count(expected, rank=2) == 1112
+    assert view.lora_parameter_count(
+        ("linear_attn.in_proj_qkv", "linear_attn.in_proj_b"), rank=2
+    ) == 204
+
+
+def test_architecture_view_rejects_missing_or_bad_structural_shapes() -> None:
+    class BadEmbedding:
+        weight = mx.zeros((5,))
+
+        def __call__(self, ids):
+            return ids
+
+        def as_linear(self, h):
+            return h
+
+    class BadText:
+        embed_tokens = BadEmbedding()
+        layers = [object()]
+
+        def norm(self, h):
+            return h
+
+    with pytest.raises(ValueError, match="embed_tokens.weight"):
+        ArchitectureView.from_model(BadText())
+    with pytest.raises(ValueError, match="embed_tokens.*layers.*norm"):
+        ArchitectureView.from_model(object())
+
+
+def test_model_spec_resolve_populates_every_field_from_real_architecture_view() -> None:
+    from local_llm_lab.models import load_model_spec
+
+    model, _ = make_hybrid_fake(tied=False)
+    spec = load_model_spec("qwen35-4b")
+    tokenizer = type("Tokenizer", (), {"snapshot_revision": "fake-hybrid-revision"})()
+    resolved = spec.resolve(model, tokenizer)
+
+    assert resolved.spec is spec
+    assert resolved.num_layers == 4
+    assert resolved.hidden_size == 8
+    assert resolved.vocab_size == 23
+    assert resolved.tie_word_embeddings is False
+    assert resolved.layer_types == (
+        "linear_attention",
+        "linear_attention",
+        "linear_attention",
+        "attention",
+    )
+    assert resolved.lora_keys == (
+        "self_attn.q_proj",
+        "self_attn.k_proj",
+        "self_attn.v_proj",
+        "self_attn.o_proj",
+        "mlp.gate_proj",
+        "mlp.up_proj",
+        "mlp.down_proj",
+        "linear_attn.in_proj_qkvz",
+        "linear_attn.in_proj_ba",
+        "linear_attn.out_proj",
+    )
+    assert resolved.trainable_parameters == 7648
+    assert resolved.probe_layers == (1, 1, 2, 3, 3, 4)
+    assert resolved.cache_strategy == "snapshot"
+    assert resolved.snapshot_revision == "fake-hybrid-revision"
+    assert resolved.jvp_method == "untested"
 
 
 class _ProbeTokenizer:
