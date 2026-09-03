@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+from collections import Counter
 from dataclasses import asdict
 
 import pytest
@@ -322,14 +323,20 @@ def test_split_specs_preserve_chunk_boundaries_effects_hashes_and_recovery_repea
 ) -> None:
     """Independently prove the six logical chunks concatenate in declaration order."""
     splits = {
-        "train": SplitSpec(24, difficulty=0, perturb=True, role="train"),
-        "train1": SplitSpec(24, difficulty=1, perturb=True, role="train"),
+        "train": SplitSpec(240, difficulty=0, perturb=True, role="train"),
+        "train1": SplitSpec(120, difficulty=1, perturb=True, role="train"),
         "valid": SplitSpec(24, difficulty=1, perturb=False, role="valid"),
         "valid2": SplitSpec(24, difficulty=2, perturb=False, role="valid"),
-        "test": SplitSpec(24, difficulty=2, perturb=False, role="test"),
-        "test3": SplitSpec(24, difficulty=3, perturb=False, role="test"),
+        "test": SplitSpec(180, difficulty=2, perturb=False, role="test"),
+        "test3": SplitSpec(60, difficulty=3, perturb=False, role="test"),
     }
-    repeats = {"wrong_path": 2, "stale_path": 6, "failed_edit": 6}
+    repeats = {
+        "transient": 1,
+        "wrong_path": 2,
+        "unknown_tool": 2,
+        "stale_path": 6,
+        "failed_edit": 6,
+    }
     first = write_dataset(tmp_path / "one", splits, recovery_repeats=repeats)
     second = write_dataset(tmp_path / "two", splits, recovery_repeats=repeats)
 
@@ -346,13 +353,56 @@ def test_split_specs_preserve_chunk_boundaries_effects_hashes_and_recovery_repea
             info = first["splits"][name]
             chunk = rows[offset : offset + info["rows"]]
             offset += info["rows"]
+            spec = splits[name]
+            expected_tasks = make_tasks(
+                name,
+                spec.count,
+                difficulty=spec.difficulty,
+                perturb=spec.perturb,
+            )
+            expected_rows = [row for task in expected_tasks for row in build_rows(task)]
+            recovery_by_variant = Counter(
+                row["metadata"]["variant"]
+                for row in expected_rows
+                if row["metadata"]["recovery"]
+            )
+            recovery_multipliers = repeats if spec.role == "train" else {}
+            expected_repeated_recovery = Counter(
+                {
+                    variant: count * recovery_multipliers.get(variant, 1)
+                    for variant, count in recovery_by_variant.items()
+                }
+            )
             assert len(chunk) == info["rows"]
+            assert info["count"] == spec.count
+            assert info["tasks"] == spec.count
+            assert {task.task_id for task in expected_tasks} == {
+                row["metadata"]["task_id"] for row in chunk
+            }
             assert {row["metadata"]["task_id"].split("-", 1)[0] for row in chunk} == {name}
             assert _logical_hash(chunk) == info["sha256"]
-            assert {row["metadata"]["difficulty"] for row in chunk} == {info["difficulty"]}
-            assert {row["metadata"]["perturb"] for row in chunk} == {info["perturb"]}
+            assert {task.difficulty for task in expected_tasks} == {spec.difficulty}
+            assert {row["metadata"]["difficulty"] for row in chunk} == {spec.difficulty}
+            assert {row["metadata"]["perturb"] for row in chunk} == {spec.perturb}
             if info["perturb"]:
                 assert {row["metadata"]["variant"] for row in chunk} != {"clean"}
+            assert info["variants"] == dict(
+                sorted(Counter(task.variant for task in expected_tasks).items())
+            )
+            assert info["families"] == dict(
+                sorted(Counter(task.family for task in expected_tasks).items())
+            )
+            horizons = [task.horizon for task in expected_tasks]
+            assert info["min_horizon"] == min(horizons)
+            assert info["max_horizon"] == max(horizons)
+            assert info["mean_horizon"] == round(sum(horizons) / len(horizons), 2)
+            assert info["recovery_targets"] == sum(recovery_by_variant.values())
+            assert info["recovery_rows_after_repeats"] == sum(expected_repeated_recovery.values())
+            assert Counter(
+                row["metadata"]["variant"]
+                for row in chunk
+                if row["metadata"]["recovery"]
+            ) == expected_repeated_recovery
         assert offset == len(rows)
         assert hashlib.sha256(first_bytes).hexdigest() == first["outputs"][role]["sha256"]
 

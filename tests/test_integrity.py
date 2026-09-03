@@ -79,10 +79,11 @@ def test_run_d_generator_uses_pending_none_only_for_empty_action_queues() -> Non
             for index, step in enumerate(task.steps):
                 matches = [pattern.search(step.thought) for pattern in patterns]
                 if any(matches):
+                    assert step.action.name == "finish", (task.task_id, index, step.thought)
                     assert "pending: none" in step.thought.casefold()
                     remaining = [
                         later
-                        for later in task.steps[index + 1 :]
+                        for later in task.steps[index:]
                         if later.action.name != "finish"
                     ]
                     assert not remaining, (task.task_id, index, step.thought)

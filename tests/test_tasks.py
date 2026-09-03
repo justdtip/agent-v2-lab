@@ -252,3 +252,14 @@ def test_run_d_conditional_and_recovery_notes_preserve_family_state(level: int) 
                 assert "values so far:" in step.thought and "split after" in step.thought
             if task.family == "conditional_update":
                 assert "loads so far:" in step.thought
+            if task.variant == "stale_path":
+                assert recovery.action.name == "list_files"
+                if task.family == "cross_reference":
+                    assert "Hop " in recovery.thought and "current key" in recovery.thought
+                if task.family == "aggregate_report":
+                    assert (
+                        "values so far:" in recovery.thought
+                        and "split after" in recovery.thought
+                    )
+                if task.family == "conditional_update":
+                    assert "loads so far:" in recovery.thought

@@ -45,12 +45,14 @@ The v4 values were reproduced through independent pytest temporary directories `
 - RED generator/integrity: 9 intended failures.
 - RED data: missing `SplitSpec` import error.
 - RED CLI: raw-count conversion failure and missing Run D configs.
-- Focused final: 70 passed, 1 deselected (historical compatibility blocker below).
+- Current focused review suite: `29 passed, 48 deselected`.
+- Current owned suite: `76 passed, 1 failed` (historical compatibility blocker below).
 - Scoped Ruff: clean; diff check: clean.
-- Strict C901: only established `cli.main=17` and `tasks._wrong_old=10` remain.
+- Strict C901 (`max-complexity=9`): only established `cli.main=17` and `tasks._wrong_old=10`
+  remain.
 - Banned-constant scan: no new model-layout constants were introduced in owned production paths.
-- Full suite: 366 passed, 27 failed in the concurrent shared checkout. The introduced bounded
-  conflicts are the v2/v3 historical reconstruction node plus legacy note-form assertions in
+- Full fake-only suite: `410 passed, 10 failed` in the concurrent shared checkout. The introduced
+  bounded conflicts are the v2/v4 historical reconstruction node plus legacy note-form assertions in
   `tests/test_pipeline.py`/`tests/test_probes.py`; remaining failures are concurrent SPEC-001
   cache, runner, registry, and fixture work. No model loading occurred.
 
@@ -58,7 +60,7 @@ The v4 values were reproduced through independent pytest temporary directories `
 
 The protected B/C saved evaluations have no generator-version metadata. Their read-only
 integrity renderer reconstructs tasks with `task_from_id`, which cannot distinguish historical
-v2 `test-*` records from v3 Run D records sharing ids/actions. Preserving retroactive memo counts
+v2 `test-*` records from v4 Run D records sharing ids/actions. Preserving retroactive memo counts
 requires an integrity/provenance owner to add and consume generator-version evidence; this task
 did not alter those protected seams or artifacts.
 
@@ -80,9 +82,9 @@ touched.
   historical reconstruction node described above. The review-specific focused command produced
   `29 passed, 48 deselected`; the independent v4 hash rerun produced `2 passed`.
 - `uv run ruff check` on owned production and test paths and owned-path `git diff --check` were
-  clean. Strict `uv run ruff check --select C901 --config lint.mccabe.max-complexity=10` reports
-  only pre-existing `cli.main=17`; it reports no new owned function.
-- Full fake-only suite: `396 passed, 14 failed`. The introduced bounded legacy-note/version
+  clean. Strict `uv run ruff check --select C901 --config lint.mccabe.max-complexity=9` reports
+  only pre-existing `cli.main=17` and `tasks._wrong_old=10`; it reports no new owned function.
+- Full fake-only suite: `410 passed, 10 failed`. The introduced bounded legacy-note/version
   conflicts are the protected reconstruction node and old exact-form assertions in
   `tests/test_pipeline.py`/`tests/test_probes.py`; concurrent SPEC-001 registry/probe failures
   account for the remainder.
@@ -91,3 +93,18 @@ touched.
   config `55/0` each (three files), plan `192/0`, task/data/CLI `99/64`, `173/39`, `34/2`, tests
   `104/2`, `135/2`, `94/1`, `71/14`, and report `66/0`.
 - Review-fix implementation commit: `83ca7e1 fix: strengthen SPEC-003 Run D contracts`.
+
+## Review fix round 2
+
+No production change was needed: new independent acceptance oracles passed against the corrected
+implementation. They require a supervised stale `list_files` recovery immediately after every
+realized stale guessed read and assert the family-specific Hop/key, values/split, or loads state.
+The completion oracle now requires completion-pattern notes to use `finish` and includes the
+current pre-action in its derived queue. The data oracle uses all six literal Run D split values,
+regenerates each expected task population independently, and compares task count, difficulty,
+horizon/family/variant summaries, task IDs, hashes, and exact recovery counts by variant.
+
+Round-2 verification: focused review `29 passed, 48 deselected`; owned modules `76 passed, 1
+failed` (the protected historical provenance node); full fake-only `410 passed, 10 failed`.
+Normal Ruff and owned diff checks are clean. Strict C901 max 9 reports only baseline `cli.main=17`
+and `_wrong_old=10`.
