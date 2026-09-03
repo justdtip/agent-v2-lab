@@ -288,7 +288,7 @@
 - Preserves: the generator-only hashes above, existing production behavior, and all protected
   replay data byte-for-byte.
 
-- [ ] **Step 1: Move only the generator-version tests and directly owned imports**
+- [x] **Step 1: Move only the generator-version tests and directly owned imports**
 
   Move these tests from `tests/test_pipeline.py` into the new `tests/test_tasks.py` without
   broadening the split:
@@ -301,7 +301,7 @@
   `tests/test_pipeline.py` because unrelated tests still use them; remove its now-unused top-level
   `Path`, `load_config`, `stage_data`, and `GENERATOR_VERSION` imports.
 
-- [ ] **Step 2: Add the replay-inclusive oracle with deliberately wrong wiring and verify RED**
+- [x] **Step 2: Add the replay-inclusive oracle with deliberately wrong wiring and verify RED**
 
   Add a second test that loads `configs/agent_v2c.yaml`, skips only when the resolved configured
   `chat_replay` directory does not exist, and compares the three mixed hashes above through a
@@ -316,7 +316,7 @@
   digests differing from the mixed expectations. On a clean checkout without the configured
   protected directory, only the replay-inclusive case skips while the generator-only test passes.
 
-- [ ] **Step 3: Wire the configured replay input and verify GREEN**
+- [x] **Step 3: Wire the configured replay input and verify GREEN**
 
   Pass `chat_dir=config["chat_replay"]`, `chat_repeats=config["chat_repeats"]`, and the existing
   seed, counts, keep-last, and recovery-repeat settings. Both oracles must write only to their
@@ -330,7 +330,7 @@
 
   Expected with protected replay present: two passes. Expected when absent: one pass and one skip.
 
-- [ ] **Step 4: Verify collection, the focused module, the full pipeline module, and scoped Ruff**
+- [x] **Step 4: Verify collection, the focused module, the full pipeline module, and scoped Ruff**
 
   Run:
 
@@ -344,7 +344,7 @@
 
   No command may load a model, tokenizer, checkpoint, or run real MLX execution.
 
-- [ ] **Step 5: Update evidence and commit the four tracked R10 paths**
+- [x] **Step 5: Update evidence and commit the four tracked R10 paths**
 
   Add the R10 finding, RED/GREEN output, final verification counts, protected-directory skip
   semantics, and explicit no-model/no-data-mutation statement to the report and SDD ledger. Stage
@@ -360,3 +360,17 @@
 
   Leave issue #2 open and do not stage or modify any protected data, pending specifications,
   Coordinator state, or unrelated user/peer work.
+
+#### Task 2 independent review and closure
+
+The independent R10 implementation review approved commit `ee07f6a` with no Critical,
+Important, or Minor findings. Controller verification collected 84 tests from
+`tests/test_pipeline.py` and 4 from `tests/test_tasks.py`, passed all 4 current task tests,
+reported scoped Ruff clean, and found `git diff --check 6325d3a..ee07f6a` clean.
+
+To isolate R10 from later branch changes, the controller exported exact commit `ee07f6a` with
+`git archive` to `/private/tmp/spec002-r10.k3iEI4`; using `PYTHONPATH` against that archive,
+`tests/test_pipeline.py` passed 84/84. The branch later advanced through unrelated commits
+`b39d6ea` and `d498599`. At current HEAD, the pipeline module has one later concurrent failure:
+`d498599` removed the old `jlens_map(..., stats=...)` API while the unchanged pipeline test still
+calls it. That regression is outside R10 and does not alter its approved result.

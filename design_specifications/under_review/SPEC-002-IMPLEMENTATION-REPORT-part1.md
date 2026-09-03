@@ -197,3 +197,21 @@ R10 changes tests and documentation only; production behavior is unchanged. The 
 protected replay files were read in place by the replay-inclusive test and were not copied,
 manufactured, or modified. No model, tokenizer, or checkpoint was loaded, and no real MLX or
 train/select/eval/rollout/branch/prefer/preflight/probe command ran.
+
+### R10 independent review verdict
+
+The independent implementation review approved `ee07f6a` with no Critical, Important, or Minor
+findings. Controller verification provided the following evidence:
+
+- collection remained 84 pipeline tests plus 4 dedicated task tests;
+- all 4 current `tests/test_tasks.py` tests passed;
+- scoped Ruff passed with no findings;
+- `git diff --check 6325d3a..ee07f6a` produced no errors;
+- exact commit `ee07f6a` was exported with `git archive` to
+  `/private/tmp/spec002-r10.k3iEI4`, and its `tests/test_pipeline.py` passed 84/84 using
+  `PYTHONPATH` against that archive.
+
+Current HEAD subsequently advanced through unrelated commits `b39d6ea` and `d498599`. The
+current branch's pipeline run now has one later concurrent failure because `d498599` removed the
+old `jlens_map(..., stats=...)` API while the unchanged pipeline test still calls it. This is a
+post-R10 regression, not a failure of the reviewed R10 range or its archive-isolated evidence.
