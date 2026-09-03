@@ -13,7 +13,7 @@ weight's own ``(out, in)`` orientation the update is ``scale * (lora_a @ lora_b)
 exactly what ``fuse()`` adds to ``linear.weight`` (lora.py:52-53). ``test_probes.py`` checks
 this against mlx-lm's own class rather than trusting the reading.
 
-Memory. ``down_proj``/``gate_proj``/``up_proj`` deltas are 2048x11008 float32 (90 MB each), so
+Memory. Large MLP deltas are tens of megabytes each in float32, so
 materialising all 252 would cost ~10 GB. Nothing here needs the dense matrix: because
 ``deltaW = L R`` with ``L = scale * lora_b.T`` (out x r) and ``R = lora_a.T`` (r x in), a QR of
 each factor reduces the SVD to an r x r problem, giving *exact* singular values and left
@@ -31,6 +31,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from local_llm_lab.arch import ArchitectureView
 
 __all__ = [
     "DEFAULT_SCALE",
@@ -219,7 +221,8 @@ def resolve_module(model: Any, name: str) -> Any:
     Descends through a ``LoRALinear`` wrapper's ``.linear`` when the model was loaded with the
     adapter attached, so the same name resolves to the base weight either way.
     """
-    node: Any = model
+    view = model if isinstance(model, ArchitectureView) else ArchitectureView.from_model(model)
+    node: Any = view.model
     for part in name.split("."):
         node = node[int(part)] if part.isdigit() else getattr(node, part)
     return getattr(node, "linear", node)
@@ -359,8 +362,8 @@ def compare_adapters(paths: list[str | Path], *, top: int = 16) -> dict[str, Any
 
     For every module present in all runs, the top-``top`` left singular vectors of each run's
     update are compared pairwise; the reported number is the mean cosine of the principal
-    angles (1.0 = the same subspace, 0.0 = orthogonal). Random 16-dimensional subspaces of a
-    2048-dimensional space have a mean cosine near 0.09, which is the scale to read against.
+    angles (1.0 = the same subspace, 0.0 = orthogonal). Compare the reported values with the
+    random-subspace control at the actual output dimension rather than a fixed reference size.
     """
     directories = [Path(path) for path in paths]
     if len(directories) < 2:
@@ -415,8 +418,15 @@ def compare_adapters(paths: list[str | Path], *, top: int = 16) -> dict[str, Any
 # --------------------------------------------------------------------------- direction readouts
 
 
+def _jlens_module() -> Any:
+    """Lazy import keeps adapter inspection free of MLX model work until readout is requested."""
+    from local_llm_lab.pipeline import jlens
+
+    return jlens
+
+
 def readout_update_directions(
-    model: Any,
+    view: ArchitectureView,
     tokenizer: Any,
     adapter_dir: str | Path,
     layers: list[int],
@@ -437,9 +447,8 @@ def readout_update_directions(
     The sign of a singular vector is arbitrary, so ``+v`` and ``-v`` are both reported and
     neither is "the" direction; read them as a pair.
     """
-    from local_llm_lab.pipeline import jlens
-
-    corpus_ids = [jlens._encode(tokenizer, text) for text in jlens.DEFAULT_CORPUS[:corpus_size]]
+    jlens = _jlens_module()
+    corpus_ids = [jlens.encode(tokenizer, text) for text in jlens.DEFAULT_CORPUS[:corpus_size]]
     deltas = load_adapter_deltas(adapter_dir)
     records: list[dict[str, Any]] = []
     for name, (_delta, info) in sorted(deltas.items()):
@@ -450,12 +459,12 @@ def readout_update_directions(
         for index in range(vectors.shape[1]):
             direction = _as_mx(vectors[:, index])
             readouts: dict[str, Any] = {}
+            mapped, _stats = jlens.jlens_map(view, int(info["layer"]) + 1, direction, corpus_ids)
             for sign_name, sign in (("+v", 1.0), ("-v", -1.0)):
                 probe = sign * direction
-                mapped = jlens.jlens_map(model, int(info["layer"]) + 1, probe, corpus_ids)
                 readouts[sign_name] = {
-                    "logit_lens": jlens.logit_lens(model, probe, tokenizer, k=top_k),
-                    "jlens": jlens.readout(model, mapped, tokenizer, k=top_k),
+                    "logit_lens": jlens.logit_lens(view, probe, tokenizer, k=top_k),
+                    "jlens": jlens.readout(view, sign * mapped, tokenizer, k=top_k),
                 }
             records.append(
                 {
@@ -652,7 +661,7 @@ def main() -> None:
     }
     if model is not None and readout_layers:
         payload["readouts"] = readout_update_directions(
-            model, tokenizer, args.adapters[0], readout_layers
+            ArchitectureView.from_model(model), tokenizer, args.adapters[0], readout_layers
         )
 
     args.output.mkdir(parents=True, exist_ok=True)

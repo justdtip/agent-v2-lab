@@ -64,8 +64,8 @@ def main() -> None:
     from local_llm_lab.pipeline.data import build_rows
     from local_llm_lab.pipeline.jlens import (
         DEFAULT_CORPUS,
-        _distribution,
-        _encode,
+        distribution,
+        encode,
         jlens_map,
         residual_at,
     )
@@ -77,7 +77,10 @@ def main() -> None:
         "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit",
         adapter_path="outputs/agent-v2/best-adapter",
     )
-    corpus = [_encode(tok, text) for text in DEFAULT_CORPUS[:CORPUS_SIZE]]
+    from local_llm_lab.arch import ArchitectureView
+
+    view = ArchitectureView.from_model(model)
+    corpus = [encode(tok, text) for text in DEFAULT_CORPUS[:CORPUS_SIZE]]
 
     tasks = [
         task
@@ -128,21 +131,21 @@ def main() -> None:
         raise SystemExit("too few probe points to test anything")
 
     def first_token(text: str) -> int:
-        return _encode(tok, text)[0]
+        return encode(tok, text)[0]
 
     def probabilities(prompt: str, candidates: dict[str, int]) -> dict[str, dict[str, float]]:
         """J-lens probability per layer, plus the model's real output distribution."""
         ids = tok.encode(prompt)
         result: dict[str, dict[str, float]] = {}
         for layer in LAYERS:
-            probe = residual_at(model, ids, layer)[0, -1]
-            distribution = _distribution(model, jlens_map(model, layer, probe, corpus))
-            probs = distribution.tolist()
+            probe = residual_at(view, ids, layer)[0, -1]
+            mapped, _stats = jlens_map(view, layer, probe, corpus)
+            probs = distribution(view, mapped).tolist()
             result[f"jlens_L{layer}"] = {
                 name: float(probs[tid]) for name, tid in candidates.items()
             }
-        final = residual_at(model, ids, len(model.model.layers))[0, -1]
-        probs = _distribution(model, final).tolist()
+        final = residual_at(view, ids, view.num_layers)[0, -1]
+        probs = distribution(view, final).tolist()
         result["model_output"] = {name: float(probs[tid]) for name, tid in candidates.items()}
         return result
 

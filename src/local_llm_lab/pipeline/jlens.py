@@ -64,11 +64,15 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from local_llm_lab.arch import ArchitectureView
 
 __all__ = [
     "DEFAULT_CORPUS",
     "DEFAULT_MODEL",
+    "distribution",
+    "encode",
     "jacobian_vector_product",
     "jlens_map",
     "logit_lens",
@@ -113,7 +117,7 @@ DEFAULT_CORPUS: tuple[str, ...] = (
 )
 
 
-def _encode(tokenizer: Any, text: str) -> list[int]:
+def encode(tokenizer: Any, text: str) -> list[int]:
     """Token ids for ``text`` with no added special tokens, where the tokenizer supports that."""
     try:
         return list(tokenizer.encode(text, add_special_tokens=False))
@@ -121,52 +125,32 @@ def _encode(tokenizer: Any, text: str) -> list[int]:
         return list(tokenizer.encode(text))
 
 
-def _as_token_ids(model: Any, token_ids: Any) -> Any:
-    """Normalise ``token_ids`` (a 1-D sequence or an ``mx.array``) to shape ``(1, T)`` int32."""
-    import mlx.core as mx
-
-    del model
-    ids = mx.array(token_ids).astype(mx.int32)
-    if ids.ndim == 1:
-        ids = ids[None, :]
-    return ids
+def _view(value: Any) -> Any:
+    """Return a view, temporarily adapting legacy model callers until Task 6."""
+    if callable(getattr(value, "residuals", None)) and callable(getattr(value, "tail", None)):
+        return value
+    return ArchitectureView.from_model(value)
 
 
-def _causal_mask(h: Any) -> Any:
-    """The same attention mask the model builds in its own forward pass.
-
-    Calling transformer blocks directly bypasses ``Qwen2Model.__call__``, which computes
-    ``create_attention_mask(h, cache[0])``. Passing ``None`` instead would give every prompt
-    bidirectional self-attention, so the residual stream would encode something the model never
-    computes at inference and every readout taken from it would be meaningless. Falls back to
-    ``None`` for models whose blocks do not accept a mask (the fake model used in tests).
-    """
-    try:
-        from mlx_lm.models.base import create_attention_mask
-    except ImportError:  # pragma: no cover - exercised only without mlx_lm installed
-        return None
-    return create_attention_mask(h, None)
-
-
-def residual_at(model: Any, token_ids: Any, layer: int) -> Any:
+def residual_at(view: ArchitectureView, token_ids: Any, layer: int) -> Any:
     """Residual stream entering layer ``layer`` for a single context.
 
-    Runs the token embedding followed by ``model.model.layers[:layer]`` (an empty slice for
+    Runs the view's embedding plus the blocks before ``layer`` (an empty prefix for
     ``layer == 0`` returns the raw embedding), each layer called with the model's own causal
     mask so the result matches its true forward pass. Returns an
     ``mx.array`` of shape ``(1, T, d)`` in float32.
     """
-    import mlx.core as mx
-
-    ids = _as_token_ids(model, token_ids)
-    h = model.model.embed_tokens(ids).astype(mx.float32)
-    mask = _causal_mask(h)
-    for tl in model.model.layers[:layer]:
-        h = tl(h, mask, None).astype(mx.float32)
-    return h
+    return _view(view).residuals(token_ids, [layer])[layer]
 
 
-def jacobian_vector_product(model: Any, layer: int, primal: Any, tangent: Any) -> Any:
+def jacobian_vector_product(
+    view: ArchitectureView,
+    layer: int,
+    primal: Any,
+    tangent: Any,
+    *,
+    method: Literal["forward", "finite_difference"] = "forward",
+) -> Any:
     """One forward-mode JVP of the tail of the network: layers ``[layer:]`` then the final norm.
 
     ``primal`` and ``tangent`` are both ``(1, T, d)``. This is ``J_c . tangent`` for the single
@@ -181,30 +165,32 @@ def jacobian_vector_product(model: Any, layer: int, primal: Any, tangent: Any) -
     primal32 = primal.astype(mx.float32)
     tangent32 = tangent.astype(mx.float32)
 
-    mask = _causal_mask(primal32)
-
-    def fn(x: Any) -> Any:
-        h = x
-        for tl in model.model.layers[layer:]:
-            h = tl(h, mask, None)
-        return model.model.norm(h)
-
-    _, (tangent_out,) = mx.jvp(fn, [primal32], [tangent32])
-    return tangent_out.astype(mx.float32)
+    fn = _view(view).tail(layer)
+    if method == "forward":
+        _, (tangent_out,) = mx.jvp(fn, [primal32], [tangent32])
+        return tangent_out.astype(mx.float32)
+    if method != "finite_difference":
+        raise ValueError(f"unknown JVP method {method!r}")
+    tangent_norm = mx.sqrt(mx.sum(tangent32 * tangent32))
+    if float(tangent_norm.item()) == 0.0:
+        return mx.zeros_like(primal32)
+    primal_norm = mx.sqrt(mx.sum(primal32 * primal32))
+    eps = 1e-2 * primal_norm / tangent_norm
+    return ((fn(primal32 + eps * tangent32) - fn(primal32 - eps * tangent32)) / (2.0 * eps)).astype(mx.float32)
 
 
 def jlens_map(
-    model: Any,
+    view: ArchitectureView,
     layer: int,
     probe: Any,
     corpus_ids: list[Any],
-    position: int = -1,
     *,
-    stats: dict[str, int] | None = None,
-) -> Any:
+    position: int = -1,
+    method: Literal["forward", "finite_difference"] = "forward",
+) -> tuple[Any, dict[str, Any]]:
     """Estimate ``J_layer . probe`` (shape ``(d,)``), averaged over ``corpus_ids``.
 
-    For each context: builds ``primal = residual_at(model, ids, layer)``, a tangent that is
+    For each context: builds ``primal = residual_at(view, ids, layer)``, a tangent that is
     zero everywhere except ``probe`` placed at token ``position``, and reads off the output
     tangent at that same position via :func:`jacobian_vector_product`. Because
     ``E_c[J_c] . probe == E_c[J_c . probe]``, the mean of these per-context vectors *is*
@@ -212,20 +198,21 @@ def jlens_map(
     forward-mode pass rather than one pass per dimension of ``probe``.
 
     Any context whose output tangent is not finite (or whose ``position`` does not exist in
-    that context) is skipped rather than allowed to poison the mean; the counts are written
-    into ``stats`` (keys ``"used"`` and ``"skipped"``) when a dict is supplied, so callers can
-    tell an all-finite average from one built on a degenerate corpus.
+    that context) is skipped rather than allowed to poison the mean. The returned statistics
+    record ``used``, ``skipped``, and the requested derivative ``method``.
 
     Raises ``ValueError`` if every context was skipped.
     """
     import mlx.core as mx
 
+    view_call = callable(getattr(view, "residuals", None)) and callable(getattr(view, "tail", None))
+    architecture = _view(view)
     probe32 = probe.astype(mx.float32)
     total = mx.zeros_like(probe32)
     used = 0
     skipped = 0
     for ids in corpus_ids:
-        primal = residual_at(model, layer=layer, token_ids=ids)
+        primal = residual_at(architecture, token_ids=ids, layer=layer)
         length = primal.shape[1]
         pos = position if position >= 0 else length + position
         if not (0 <= pos < length):
@@ -233,30 +220,31 @@ def jlens_map(
             continue
         tangent = mx.zeros_like(primal)
         tangent[0, pos] = probe32
-        tangent_out = jacobian_vector_product(model, layer, primal, tangent)
+        tangent_out = jacobian_vector_product(architecture, layer, primal, tangent, method=method)
         vector = tangent_out[0, pos]
         if not bool(mx.all(mx.isfinite(vector)).item()):
             skipped += 1
             continue
         total = total + vector
         used += 1
-    if stats is not None:
-        stats["used"] = used
-        stats["skipped"] = skipped
+    stats: dict[str, Any] = {"used": used, "skipped": skipped, "method": method}
     if used == 0:
         raise ValueError("jlens_map: every corpus context was skipped (empty or non-finite)")
-    return (total / used).astype(mx.float32)
+    mapped = (total / used).astype(mx.float32)
+    # Task 6 removes raw-model callers.  The temporary coercion branch keeps their historical
+    # mapped-array result while ArchitectureView callers receive the binding tuple contract.
+    if not view_call:
+        return mapped  # type: ignore[return-value]
+    return mapped, stats
 
 
-def _distribution(model: Any, vector: Any) -> Any:
+def distribution(view: ArchitectureView, vector: Any) -> Any:
     """``softmax(W_U . norm(vector))`` over the vocabulary, in float32; ``vector`` is ``(d,)``."""
     import mlx.core as mx
 
     v = vector.astype(mx.float32)
-    normed = model.model.norm(v)
-    embed = model.model.embed_tokens
-    logits = embed.as_linear(normed) if hasattr(embed, "as_linear") else model.lm_head(normed)
-    return mx.softmax(logits.astype(mx.float32), axis=-1)
+    architecture = _view(view)
+    return mx.softmax(architecture.unembed(architecture.final_norm(v)).astype(mx.float32), axis=-1)
 
 
 def _top_k(distribution: Any, tokenizer: Any, k: int) -> list[tuple[str, float, int]]:
@@ -268,28 +256,27 @@ def _top_k(distribution: Any, tokenizer: Any, k: int) -> list[tuple[str, float, 
     return [(tokenizer.decode([token_id]), float(probs[token_id]), token_id) for token_id in ids]
 
 
-def readout(model: Any, vector: Any, tokenizer: Any, k: int = 20) -> list[tuple[str, float, int]]:
+def readout(view: ArchitectureView, vector: Any, tokenizer: Any, k: int = 20) -> list[tuple[str, float, int]]:
     """The J-lens readout of ``vector``: ``top_k(softmax(W_U . norm(vector)))``.
 
     ``vector`` is expected to already be a Jacobian-mapped activation (e.g. the output of
     :func:`jlens_map`); this function itself applies no Jacobian, only the final norm and
-    unembedding, so it doubles as the shared machinery behind :func:`logit_lens`. Uses tied
-    embeddings (``model.model.embed_tokens.as_linear``) when available, falling back to
-    ``model.lm_head``. Returns up to ``k`` ``(token_string, probability, token_id)`` triples
-    sorted by descending probability.
+    unembedding, so it doubles as the shared machinery behind :func:`logit_lens`. The
+    ArchitectureView selects tied or untied unembedding. Returns up to ``k``
+    ``(token_string, probability, token_id)`` triples sorted by descending probability.
     """
-    return _top_k(_distribution(model, vector), tokenizer, k)
+    return _top_k(distribution(view, vector), tokenizer, k)
 
 
 def logit_lens(
-    model: Any, vector: Any, tokenizer: Any, k: int = 20
+    view: ArchitectureView, vector: Any, tokenizer: Any, k: int = 20
 ) -> list[tuple[str, float, int]]:
     """The standard logit-lens baseline: identical machinery to :func:`readout`, but intended
     to be called on a raw (non-Jacobian-mapped) activation. Comparing this against
     :func:`readout` on the same activation, run through :func:`jlens_map` first, is the control
     that shows whether the J-lens adds anything over just norming and unembedding directly.
     """
-    return _top_k(_distribution(model, vector), tokenizer, k)
+    return _top_k(distribution(view, vector), tokenizer, k)
 
 
 def token_evidence(
@@ -320,7 +307,7 @@ def token_evidence(
     order_list = [int(i) for i in order.tolist()]
     rank_of = {token_id: rank + 1 for rank, token_id in enumerate(order_list)}
     probs = distribution.tolist()
-    encoded = {label: _encode(tokenizer, text) for label, text in candidates.items()}
+    encoded = {label: encode(tokenizer, text) for label, text in candidates.items()}
     evidence: dict[str, dict[str, Any]] = {}
     for label, ids in encoded.items():
         shared = {i for other, other_ids in encoded.items() if other != label for i in other_ids}
@@ -352,7 +339,7 @@ def token_evidence(
 
 
 def probe_layers(
-    model: Any,
+    view: ArchitectureView,
     tokenizer: Any,
     token_ids: Any,
     layers: list[int],
@@ -370,16 +357,16 @@ def probe_layers(
     logit-lens distribution (from the raw probe). Returns one record per layer, in the order
     ``layers`` was given, with the top-``k`` tokens and :func:`token_evidence` for both lenses.
     """
+    architecture = _view(view)
     records = []
     for layer in layers:
-        residual = residual_at(model, token_ids, layer)
+        residual = residual_at(architecture, token_ids, layer)
         length = residual.shape[1]
         pos = position if position >= 0 else length + position
         probe = residual[0, pos]
-        stats: dict[str, int] = {}
-        jmap = jlens_map(model, layer, probe, corpus_ids, position=position, stats=stats)
-        jlens_distribution = _distribution(model, jmap)
-        logit_distribution = _distribution(model, probe)
+        jmap, stats = jlens_map(architecture, layer, probe, corpus_ids, position=position)
+        jlens_distribution = distribution(architecture, jmap)
+        logit_distribution = distribution(architecture, probe)
         records.append(
             {
                 "layer": layer,
@@ -464,6 +451,7 @@ def _print_table(records: list[dict[str, Any]], candidates: dict[str, str]) -> N
 def main() -> None:
     from local_llm_lab.pipeline.protocol import build_prompt
     from local_llm_lab.pipeline.tasks import make_tasks
+    from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
     from local_llm_lab.project import configure_local_cache
 
     parser = argparse.ArgumentParser(
@@ -496,6 +484,7 @@ def main() -> None:
     parser.add_argument("--corpus-size", type=int, default=16)
     parser.add_argument("--top-k", type=int, default=20)
     parser.add_argument("--output", type=Path)
+    add_gpu_arguments(parser)
     args = parser.parse_args()
 
     try:
@@ -535,6 +524,7 @@ def main() -> None:
     unseen_path = _unseen_path(args.split, seed, args.task_index, task.files)
     candidates = {"target": target_path, "already_read": already_read, "unseen": unseen_path}
 
+    require_idle_gpu(parser, args, "loading the J-lens model")
     configure_local_cache()
     from mlx_lm import load
 
@@ -552,11 +542,12 @@ def main() -> None:
     except TypeError:
         token_ids = tokenizer.encode(prompt)
 
+    view = ArchitectureView.from_model(model)
     corpus = DEFAULT_CORPUS[: args.corpus_size]
-    corpus_ids = [_encode(tokenizer, text) for text in corpus]
+    corpus_ids = [encode(tokenizer, text) for text in corpus]
 
     records = probe_layers(
-        model, tokenizer, token_ids, layers, corpus_ids, candidates, k=args.top_k
+        view, tokenizer, token_ids, layers, corpus_ids, candidates, k=args.top_k
     )
 
     print(f"task={task.task_id} step={args.step} layers={layers} corpus_size={len(corpus_ids)}")
