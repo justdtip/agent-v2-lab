@@ -54,6 +54,187 @@ def test_raw_legacy_hf_id_uses_qwen25_compatibility_defaults() -> None:
     assert spec.lora.keys == "attention+mlp"
 
 
+def test_qwen25_model_spec_preserves_full_training_and_lora_values() -> None:
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec("qwen25-coder-3b")
+
+    assert (spec.lora.keys, spec.lora.rank, spec.lora.scale, spec.lora.dropout) == (
+        "attention+mlp",
+        16,
+        32.0,
+        0.0,
+    )
+    assert spec.train == {
+        "max_seq_length": 2688,
+        "batch_size": 2,
+        "grad_accumulation_steps": 2,
+        "learning_rate": 3.0e-5,
+        "grad_checkpoint": True,
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "hf_id", "thinking", "cache_strategy", "lora_keys", "train"),
+    [
+        (
+            "qwen25-coder-3b",
+            "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit",
+            "unsupported",
+            "trim",
+            "attention+mlp",
+            {
+                "max_seq_length": 2688,
+                "batch_size": 2,
+                "grad_accumulation_steps": 2,
+                "learning_rate": 3.0e-5,
+                "grad_checkpoint": True,
+            },
+        ),
+        (
+            "qwen35-4b",
+            "mlx-community/Qwen3.5-4B-MLX-4bit",
+            "off",
+            "auto",
+            "auto",
+            {
+                "max_seq_length": 2688,
+                "batch_size": 2,
+                "grad_accumulation_steps": 2,
+                "learning_rate": 3.0e-5,
+                "grad_checkpoint": True,
+            },
+        ),
+        (
+            "qwen35-9b",
+            "mlx-community/Qwen3.5-9B-MLX-4bit",
+            "off",
+            "auto",
+            "auto",
+            {
+                "max_seq_length": 2688,
+                "batch_size": 1,
+                "grad_accumulation_steps": 4,
+                "learning_rate": 3.0e-5,
+                "grad_checkpoint": True,
+            },
+        ),
+    ],
+)
+def test_model_spec_registry_values(
+    name: str,
+    hf_id: str,
+    thinking: str,
+    cache_strategy: str,
+    lora_keys: str,
+    train: dict[str, object],
+) -> None:
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec(name)
+
+    assert spec.hf_id == hf_id
+    assert spec.chat.thinking == thinking
+    assert spec.cache_strategy == cache_strategy
+    assert spec.lora.keys == lora_keys
+    assert spec.train == train
+
+
+def test_model_spec_unknown_hf_id_uses_conservative_defaults() -> None:
+    from local_llm_lab.models import load_model_spec
+
+    hf_id = "example/unknown-model-4bit"
+    spec = load_model_spec(hf_id)
+
+    assert spec.name == hf_id and spec.hf_id == hf_id and spec.family == "unknown"
+    assert spec.chat.thinking == "unsupported" and spec.chat.template_kwargs == {}
+    assert spec.cache_strategy == "none"
+    assert spec.lora.keys == "attention+mlp"
+    assert (spec.lora.rank, spec.lora.scale, spec.lora.dropout) == (16, 32.0, 0.0)
+
+
+def test_model_spec_resolve_reads_architecture_and_tokenizer_metadata(monkeypatch) -> None:
+    from local_llm_lab.models import load_model_spec
+
+    class FakeView:
+        num_layers = 4
+        hidden_size = 12
+        vocab_size = 321
+        tie_word_embeddings = True
+        trainable_parameters = 456
+        cache_trimmable = True
+
+        @classmethod
+        def from_model(cls, model):
+            assert model is fake_model
+            return cls()
+
+        def layer_kind(self, index: int) -> str:
+            return "attention" if index % 2 == 0 else "linear_attention"
+
+        def lora_targets(self, policy):
+            assert policy == "attention+mlp"
+            return ("layers.0.q_proj", "layers.1.down_proj")
+
+    fake_arch = types.ModuleType("local_llm_lab.arch")
+    fake_arch.ArchitectureView = FakeView
+    monkeypatch.setitem(sys.modules, "local_llm_lab.arch", fake_arch)
+    fake_model = object()
+    tokenizer = types.SimpleNamespace(snapshot_revision="fake-snapshot-revision")
+
+    resolved = load_model_spec("qwen25-coder-3b").resolve(fake_model, tokenizer)
+
+    assert resolved.vocab_size == 321
+    assert resolved.tie_word_embeddings is True
+    assert resolved.trainable_parameters == 456
+    assert resolved.snapshot_revision == "fake-snapshot-revision"
+    assert resolved.layer_types == ("attention", "linear_attention", "attention", "linear_attention")
+
+
+@pytest.mark.parametrize(
+    ("source", "replacement", "match"),
+    [
+        ("thinking: unsupported", "thinking: enabled", "chat.thinking"),
+        ("strategy: trim", "strategy: reuse", "cache.strategy"),
+        ("layer_fractions: [0.5]", "layer_fractions: [true]", "probes.layer_fractions"),
+        ("layer_fractions: [0.5]", "layer_fractions: [null]", "probes.layer_fractions"),
+    ],
+)
+def test_model_spec_rejects_invalid_declared_policies_and_fractions(
+    tmp_path, monkeypatch, source: str, replacement: str, match: str
+) -> None:
+    from local_llm_lab import models
+
+    config = """\
+name: invalid
+hf_id: example/invalid
+family: test
+chat:
+  thinking: unsupported
+  template_kwargs: {}
+  end_of_turn: <|im_end|>
+  extra_stop_tokens: []
+lora:
+  keys: attention+mlp
+  rank: 16
+  scale: 32.0
+  dropout: 0.0
+train: {}
+cache:
+  strategy: trim
+probes:
+  layer_fractions: [0.5]
+memory:
+  budget_gib: 22
+policies: {}
+""".replace(source, replacement)
+    (tmp_path / "invalid.yaml").write_text(config, encoding="utf-8")
+    monkeypatch.setattr(models, "_REGISTRY_DIR", tmp_path)
+
+    with pytest.raises(ValueError, match=match):
+        models.load_model_spec("invalid")
+
+
 def test_every_split_verifies_and_supervises_only_good_steps() -> None:
     for split in ("train", "valid", "test", "iter1"):
         for task in make_tasks(split, 48):

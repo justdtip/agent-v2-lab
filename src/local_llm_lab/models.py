@@ -60,8 +60,6 @@ class ModelSpec:
         Architecture traversal belongs exclusively to ``ArchitectureView``.  The import is
         deliberately lazy so registry-only operations never import model runtime code.
         """
-        # The declared view owns model inspection; tokenizer is reserved for revision lookup.
-        del tokenizer
         from local_llm_lab.arch import ArchitectureView
 
         view = ArchitectureView.from_model(model)
@@ -76,17 +74,17 @@ class ModelSpec:
             spec=self,
             num_layers=view.num_layers,
             hidden_size=view.hidden_size,
-            vocab_size=0,
-            tie_word_embeddings=False,
+            vocab_size=view.vocab_size,
+            tie_word_embeddings=view.tie_word_embeddings,
             layer_types=layer_types,
             lora_keys=lora_keys,
-            trainable_parameters=0,
+            trainable_parameters=view.trainable_parameters,
             probe_layers=tuple(
                 max(1, round(fraction * view.num_layers))
                 for fraction in self.probe_layer_fractions
             ),
             cache_strategy=cache_strategy,
-            snapshot_revision=None,
+            snapshot_revision=_snapshot_revision(model, tokenizer),
             jvp_method="untested",
         )
 
@@ -178,6 +176,11 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     fractions_raw = probes.get("layer_fractions")
     if not isinstance(fractions_raw, list) or not fractions_raw:
         raise ValueError(f"{source}: probes.layer_fractions must be a non-empty list")
+    if any(
+        isinstance(fraction, bool) or not isinstance(fraction, (int, float))
+        for fraction in fractions_raw
+    ):
+        raise ValueError(f"{source}: probes.layer_fractions must contain numeric values")
     fractions = tuple(float(fraction) for fraction in fractions_raw)
     if any(not 0 < fraction <= 1 for fraction in fractions):
         raise ValueError(f"{source}: probes.layer_fractions must be within (0, 1]")
@@ -251,3 +254,19 @@ def _positive_int(value: Any, key: str, source: str) -> int:
     if not isinstance(value, int) or value <= 0:
         raise ValueError(f"{source}: {key} must be a positive integer")
     return value
+
+
+def _snapshot_revision(model: Any, tokenizer: Any) -> str | None:
+    """Return available tokenizer or model revision metadata without inspecting decoder state."""
+    for source in (tokenizer, model):
+        for attribute in ("snapshot_revision", "revision", "_commit_hash"):
+            value = getattr(source, attribute, None)
+            if isinstance(value, str) and value:
+                return value
+        init_kwargs = getattr(source, "init_kwargs", None)
+        if isinstance(init_kwargs, dict):
+            for key in ("snapshot_revision", "revision", "_commit_hash"):
+                value = init_kwargs.get(key)
+                if isinstance(value, str) and value:
+                    return value
+    return None
