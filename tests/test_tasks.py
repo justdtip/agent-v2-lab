@@ -7,7 +7,14 @@ import pytest
 
 from local_llm_lab.pipeline.cli import load_config, stage_data
 from local_llm_lab.pipeline.data import write_dataset
-from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
+from local_llm_lab.pipeline.tasks import (
+    FAMILIES,
+    GENERATOR_VERSION,
+    LONG_HORIZON_FAMILIES,
+    family_balanced_tasks,
+    make_tasks,
+    task_from_id,
+)
 
 _REFERENCE_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "agent_v2c.yaml"
 _REPIN_MESSAGE = (
@@ -100,3 +107,46 @@ def test_reference_generator_hashes_include_configured_replay(tmp_path) -> None:
     assert {
         split: info["sha256"] for split, info in manifest["splits"].items()
     } == expected.get(GENERATOR_VERSION), _REPIN_MESSAGE
+
+
+def test_selection_tasks_preserve_difficulty_and_exact_reconstruction() -> None:
+    """Catch wrong default mapping, ignored overrides, and non-exact reconstruction."""
+    assert [task.difficulty for task in make_tasks("valid2", 4)] == [0, 1, 0, 1]
+    overridden = make_tasks("valid2", 48, difficulty=2)
+    assert {task.difficulty for task in overridden} == {2}
+    for task in overridden:
+        assert task_from_id(task.task_id, 20260902, 2) == task
+
+
+def test_family_balanced_selection_is_clean_deterministic_and_split_isolated() -> None:
+    """Catch incorrect quotas, recovery leakage, nondeterminism, and split collisions."""
+    quotas = {"default": 1, "long": 3}
+    cells = [
+        family_balanced_tasks("valid", difficulty=1, per_family=quotas),
+        family_balanced_tasks("valid2", difficulty=2, per_family=quotas),
+    ]
+    for tasks, split, level in zip(cells, ("valid", "valid2"), (1, 2), strict=True):
+        assert len(tasks) == 24
+        assert tasks == family_balanced_tasks(split, difficulty=level, per_family=quotas)
+        assert len({task.task_id for task in tasks}) == len(tasks)
+        assert {task.variant for task in tasks} == {"clean"}
+        assert {task.difficulty for task in tasks} == {level}
+        counts = {family: sum(task.family == family for task in tasks) for family in FAMILIES}
+        assert counts == {
+            family: 3 if family in LONG_HORIZON_FAMILIES else 1 for family in FAMILIES
+        }
+
+    split_tasks = {
+        "train": make_tasks("train", 240),
+        "valid": cells[0],
+        "valid2": cells[1],
+        "test": make_tasks("test", 180),
+    }
+    for left_name, left in split_tasks.items():
+        for right_name, right in split_tasks.items():
+            if left_name >= right_name:
+                continue
+            assert not {task.prompt for task in left} & {task.prompt for task in right}
+            assert not {
+                path for task in left for path in task.files
+            } & {path for task in right for path in task.files}

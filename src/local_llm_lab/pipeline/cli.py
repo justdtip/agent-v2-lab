@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,7 +17,7 @@ import yaml
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.branch import run_branch_mining
 from local_llm_lab.pipeline.data import write_dataset
-from local_llm_lab.pipeline.evaluate import run_evaluation
+from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.report import load_summaries, render
 from local_llm_lab.pipeline.rollout import run_rollout
@@ -200,69 +201,145 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+_VAL_LOSS = re.compile(r"Iter\s+(\d+):\s+Val loss\s+([0-9.eE+-]+)")
+
+
+def _validation_losses(output: Path) -> dict[int, float]:
+    """Read lightweight saved training-log loss values without loading any model artifact."""
+    path = output / "train.log"
+    if not path.is_file():
+        return {}
+    return {
+        int(match.group(1)): float(match.group(2))
+        for match in _VAL_LOSS.finditer(path.read_text(encoding="utf-8"))
+    }
+
+
+def _counts(summary: dict[str, Any], name: str, fallback: tuple[str, str]) -> tuple[int, int]:
+    record = summary.get("rate_counts", {}).get(name, {})
+    if isinstance(record, dict) and {"numerator", "denominator"} <= record.keys():
+        return (int(record["numerator"]), int(record["denominator"]))
+    return (int(summary[fallback[0]]), int(summary[fallback[1]]))
+
+
+def _selection_components(summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate screen cells from exact counts so ranking never uses rounded rates."""
+    success = [0, 0]
+    clean = [0, 0]
+    valid = [0, 0]
+    families: dict[str, list[int]] = {}
+    for summary in summaries:
+        for target, source, fallback in (
+            (success, "success", ("successes", "tasks")),
+            (clean, "clean", ("clean_successes", "tasks")),
+            (valid, "valid_actions", ("valid_turns", "turns")),
+        ):
+            numerator, denominator = _counts(summary, source, fallback)
+            target[0] += numerator
+            target[1] += denominator
+        for family, stats in summary.get("by_family", {}).items():
+            bucket = families.setdefault(str(family), [0, 0])
+            bucket[0] += int(stats["successes"])
+            bucket[1] += int(stats["tasks"])
+    family_rates = [numerator / denominator for numerator, denominator in families.values() if denominator]
+    return {
+        "tasks": success[1],
+        "successes": success[0],
+        "family_macro_success": sum(family_rates) / len(family_rates) if family_rates else 0.0,
+        "micro_success": success[0] / success[1] if success[1] else 0.0,
+        "clean_rate": clean[0] / clean[1] if clean[1] else 0.0,
+        "valid_action_rate": valid[0] / valid[1] if valid[1] else 0.0,
+        "by_family": {
+            family: {"successes": values[0], "tasks": values[1]}
+            for family, values in sorted(families.items())
+        },
+    }
+
+
+def _selection_key(row: dict[str, Any]) -> tuple[float, float, float, float, float, int]:
+    """Rank behavior first, then lower loss and an earlier checkpoint deterministically."""
+    components = row["components"]
+    loss = row["val_loss"]
+    return (
+        float(components["family_macro_success"]),
+        float(components["micro_success"]),
+        float(components["clean_rate"]),
+        float(components["valid_action_rate"]),
+        -float("inf") if loss is None else -float(loss),
+        -int(row["step"]),
+    )
+
+
 def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path:
     output: Path = config["output"]
     select = config["select"]
-    limit = limit or select["limit"]
+    screen = select["screen"]
+    losses = _validation_losses(output)
     results = []
     for step, adapter in checkpoint_dirs(config):
-        transcript_dir = output / "transcripts" / f"select-step-{step}"
-        Transcript.start_run(transcript_dir)
-        _log(f"select: screening step-{step} on {select['split']} ({limit} tasks)")
-        summary = run_evaluation(
-            model_name=config["model"],
-            adapter=adapter,
-            label=f"step-{step}",
-            split=select["split"],
-            limit=limit,
-            output=output / "evals" / f"select-step-{step}.json",
-            transcript_dir=transcript_dir,
-            max_steps=config["eval"]["max_steps"],
-            max_tokens=config["eval"]["max_tokens"],
-            keep_last=config["keep_last"],
-            quiet=quiet,
-            seed=config["seed"],
-        )
+        summaries = []
+        for cell in screen:
+            split = cell["split"]
+            transcript_dir = output / "transcripts" / f"select-step-{step}-{split}"
+            Transcript.start_run(transcript_dir)
+            _log(f"select: screening step-{step} on {split}")
+            summaries.append(
+                run_evaluation(
+                    model_name=config["model"],
+                    adapter=adapter,
+                    label=f"step-{step}-{split}",
+                    split=split,
+                    limit=limit,
+                    difficulty=cell["difficulty"],
+                    family_quotas=cell["per_family"],
+                    output=output / "evals" / f"select-step-{step}-{split}.json",
+                    transcript_dir=transcript_dir,
+                    max_steps=config["eval"]["max_steps"],
+                    max_tokens=config["eval"]["max_tokens"],
+                    keep_last=config["keep_last"],
+                    quiet=quiet,
+                    seed=config["seed"],
+                )
+            )
+        components = _selection_components(summaries)
         results.append(
             {
                 "step": step,
                 "adapter": str(adapter),
-                **{
-                    k: summary[k]
-                    for k in (
-                        "successes",
-                        "tasks",
-                        "success_rate",
-                        "clean_rate",
-                        "valid_action_rate",
-                        "tool_errors",
-                    )
-                },
+                "components": components,
+                "wilson_95": {"success": wilson(components["successes"], components["tasks"])},
+                "val_loss": losses.get(step),
             }
         )
     if not results:
         raise SystemExit(
             f"no checkpoint directories found in {output / 'adapters'}; run the train stage first"
         )
-    best = max(
-        results,
-        key=lambda r: (r["success_rate"], r["clean_rate"], r["valid_action_rate"], r["step"]),
-    )
+    best = max(results, key=_selection_key)
+    loss_rows = [row for row in results if row["val_loss"] is not None]
+    loss_best = min(loss_rows, key=lambda row: (float(row["val_loss"]), int(row["step"]))) if loss_rows else None
     best_dir = output / "best-adapter"
     if best_dir.exists():
         shutil.rmtree(best_dir)
     shutil.copytree(best["adapter"], best_dir)
     selection = {
         "selected_step": best["step"],
-        "criterion": "held-out success, then clean rate, valid actions, later step",
-        "screen": results,
+        "behavior_best_step": best["step"],
+        "loss_best_step": None if loss_best is None else loss_best["step"],
+        "disagreement": loss_best is not None and best["step"] != loss_best["step"],
+        "model": config["model"],
+        "data_seed": config["seed"],
+        "screen": screen,
+        "criterion": "family macro success, micro success, clean rate, valid actions, lower validation loss, earlier step",
+        "checkpoints": results,
     }
     (output / "selection.json").write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
     print("\nCheckpoint screen:")
     for row in results:
         mark = "<- selected" if row["step"] == best["step"] else ""
+        components = row["components"]
         print(
-            f"  step-{row['step']:<5} {row['successes']:2d}/{row['tasks']} success  clean {row['clean_rate']:.0%}  {mark}"
+            f"  step-{row['step']:<5} {components['successes']:2d}/{components['tasks']} success  clean {components['clean_rate']:.0%}  {mark}"
         )
     print(f"Best adapter copied to {best_dir}")
     return best_dir

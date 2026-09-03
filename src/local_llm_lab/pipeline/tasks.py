@@ -24,6 +24,7 @@ FAMILIES = (
     "batch_update",
     "aggregate_report",
 )
+LONG_HORIZON_FAMILIES = FAMILIES[6:]
 VARIANTS = ("clean", "wrong_path", "transient", "unknown_tool", "stale_path", "failed_edit")
 GENERATOR_VERSION = 2
 
@@ -129,6 +130,43 @@ def make_tasks(
             )
         )
     return tasks
+
+
+def family_balanced_tasks(
+    split: str,
+    *,
+    difficulty: int,
+    per_family: dict[str, int],
+    seed: int = 20260902,
+) -> list[Task]:
+    """Return clean tasks with the requested default and long-horizon family quotas.
+
+    The selector wraps the unchanged deterministic generator so screening cannot alter task rows.
+    """
+    unknown = set(per_family) - {"default", "long"}
+    if unknown:
+        raise ValueError(f"unknown family quotas: {', '.join(sorted(unknown))}")
+    quotas = {key: per_family.get(key, 0) for key in ("default", "long")}
+    if any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in quotas.values()):
+        raise ValueError("family quotas must be non-negative integers")
+    maximum = max(quotas.values())
+    if maximum == 0:
+        return []
+    candidates = make_tasks(
+        split,
+        maximum * len(FAMILIES),
+        seed,
+        perturb=False,
+        difficulty=difficulty,
+    )
+    seen = {family: 0 for family in FAMILIES}
+    selected = []
+    for task in candidates:
+        category = "long" if task.family in LONG_HORIZON_FAMILIES else "default"
+        if seen[task.family] < quotas[category]:
+            selected.append(task)
+            seen[task.family] += 1
+    return selected
 
 
 def task_from_id(

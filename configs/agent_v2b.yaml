@@ -49,8 +49,9 @@ train:
   save_every: 100
 
 select:
-  split: valid
-  limit: 18
+  screen:
+    - {split: valid, difficulty: 1, per_family: {default: 1, long: 3}}
+    - {split: valid2, difficulty: 2, per_family: {default: 1, long: 3}}
 
 eval:
   split: test

@@ -13,12 +13,58 @@ from local_llm_lab.pipeline.env import Fault
 from local_llm_lab.pipeline.integrity import check_trajectory
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
 from local_llm_lab.pipeline.runner import Trajectory, run_task
-from local_llm_lab.pipeline.tasks import Task, make_tasks
+from local_llm_lab.pipeline.tasks import Task, family_balanced_tasks, make_tasks
 from local_llm_lab.pipeline.transcript import Transcript, summary_table
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
 STRESS_FAULTS = (Fault(call_index=1),)
+
+
+def wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Return the unclamped-precision Wilson score interval for a binomial rate."""
+    if n < 0 or successes < 0 or successes > n:
+        raise ValueError("successes must be between zero and n")
+    if n == 0:
+        return (0.0, 0.0)
+    proportion = successes / n
+    denominator = 1 + z * z / n
+    centre = (proportion + z * z / (2 * n)) / denominator
+    radius = z / denominator * math.sqrt(
+        proportion * (1 - proportion) / n + z * z / (4 * n * n)
+    )
+    return (max(0.0, centre - radius), min(1.0, centre + radius))
+
+
+def mcnemar(a: dict[str, bool], b: dict[str, bool]) -> dict[str, Any]:
+    """Calculate the exact two-sided McNemar test for matching non-empty task IDs."""
+    if not a or a.keys() != b.keys():
+        raise ValueError("McNemar inputs must contain the same non-empty task ids")
+    a_only = sum(bool(a[key]) and not bool(b[key]) for key in a)
+    b_only = sum(bool(b[key]) and not bool(a[key]) for key in a)
+    discordant = a_only + b_only
+    tail = sum(math.comb(discordant, i) for i in range(min(a_only, b_only) + 1))
+    return {
+        "tasks": len(a),
+        "a_only": a_only,
+        "b_only": b_only,
+        "discordant": discordant,
+        "p_value": 1.0 if discordant == 0 else min(1.0, 2 * tail / (2**discordant)),
+    }
+
+
+def _seed_model_rng(seed: int) -> None:
+    """Seed MLX only at the model boundary so fakes can exercise evaluation wiring."""
+    import mlx.core as mx
+
+    mx.random.seed(seed)
+
+
+def _clear_model_cache() -> None:
+    """Release model allocations after an evaluation without exposing MLX to callers."""
+    import mlx.core as mx
+
+    mx.clear_cache()
 
 
 def load_policy(model_name: str, adapter: Path | None) -> tuple[Any, Any]:
@@ -220,11 +266,15 @@ def _integrity_summary(
 def _group(trajectories: list[Trajectory], key: str) -> dict[str, dict[str, Any]]:
     table: dict[str, dict[str, Any]] = {}
     for trajectory in trajectories:
-        bucket = table.setdefault(getattr(trajectory, key), {"successes": 0, "tasks": 0})
+        bucket = table.setdefault(str(getattr(trajectory, key)), {"successes": 0, "tasks": 0})
         bucket["tasks"] += 1
         bucket["successes"] += int(trajectory.success)
     for bucket in table.values():
         bucket["success_rate"] = _ratio(bucket["successes"], bucket["tasks"])
+        bucket["rate_counts"] = {
+            "success": {"numerator": bucket["successes"], "denominator": bucket["tasks"]}
+        }
+        bucket["wilson_95"] = {"success": wilson(bucket["successes"], bucket["tasks"])}
     return dict(sorted(table.items()))
 
 
@@ -233,6 +283,21 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
     count = len(trajectories)
     successes = totals["successes"]
     failed = count - totals["successes"]
+    integrity = _integrity_summary(trajectories, failed=failed)
+    rate_counts = {
+        "success": {"numerator": successes, "denominator": count},
+        "clean": {"numerator": totals["clean"], "denominator": count},
+        "valid_actions": {"numerator": totals["valid"], "denominator": totals["turns"]},
+        "schema_validity": {
+            "numerator": totals["calls"] - totals["schema_failures"],
+            "denominator": totals["calls"],
+        },
+        "executable_calls": {"numerator": totals["executable"], "denominator": totals["calls"]},
+        "integrity_clean": {
+            "numerator": integrity["clean_trajectories"],
+            "denominator": count,
+        },
+    }
     return {
         "tasks": count,
         "successes": successes,
@@ -257,8 +322,14 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
         "mean_steps": _ratio(totals["turns"], count, 2),
         "by_family": _group(trajectories, "family"),
         "by_variant": _group(trajectories, "variant"),
+        "by_difficulty": _group(trajectories, "difficulty"),
         "failure_reasons": _failure_reasons(trajectories),
-        "integrity": _integrity_summary(trajectories, failed=failed),
+        "integrity": integrity,
+        "rate_counts": rate_counts,
+        "wilson_95": {
+            key: wilson(counts["numerator"], counts["denominator"])
+            for key, counts in rate_counts.items()
+        },
     }
 
 
@@ -280,7 +351,7 @@ def run_evaluation(
     adapter: Path | None,
     label: str,
     split: str,
-    limit: int,
+    limit: int | None,
     output: Path,
     transcript_dir: Path | None,
     stress: bool = False,
@@ -291,12 +362,23 @@ def run_evaluation(
     quiet: bool = False,
     use_cache: bool = True,
     seed: int = 20260902,
+    difficulty: int | None = None,
+    family_quotas: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    import mlx.core as mx
-
-    mx.random.seed(seed)
+    _seed_model_rng(seed)
     model, tokenizer = load_policy(model_name, adapter)
-    tasks = make_tasks(split, limit, seed)
+    tasks = (
+        family_balanced_tasks(
+            split,
+            difficulty=difficulty if difficulty is not None else 0,
+            per_family=family_quotas,
+            seed=seed,
+        )
+        if family_quotas is not None
+        else make_tasks(split, limit or 0, seed, difficulty=difficulty)
+    )
+    if limit is not None:
+        tasks = tasks[:limit]
     started = time.monotonic()
     trajectories = evaluate_tasks(
         model,
@@ -319,6 +401,7 @@ def run_evaluation(
             "model": model_name,
             "adapter": None if adapter is None else str(adapter.resolve()),
             "split": split,
+            "difficulty": tasks[0].difficulty if tasks else difficulty,
             "stress": stress,
             "temperature": temperature,
             "keep_last": keep_last,
@@ -334,7 +417,7 @@ def run_evaluation(
     if transcript_dir is not None:
         print(f"Transcripts in {transcript_dir}")
     del model
-    mx.clear_cache()
+    _clear_model_cache()
     return summary
 
 
