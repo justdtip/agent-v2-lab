@@ -33,6 +33,8 @@ import hashlib
 import json
 import os
 import re
+import shlex
+import sys
 import tempfile
 import warnings
 from collections import Counter, defaultdict
@@ -60,6 +62,8 @@ __all__ = [
     "main",
     "position_baseline",
     "position_determinism",
+    "reanalyse_dataset",
+    "reanalysis_row_labels",
     "render_markdown",
     "resolve_within_position",
     "row_labels",
@@ -81,6 +85,16 @@ TARGETS: dict[str, str] = {
     "running_max": "regression",
     "first_bucket_count": "regression",
 }
+REANALYSIS_TARGETS: dict[str, str] = {
+    "pending_count": "regression",
+    "pending_count_ordinal": "ordinal",
+    "phase": "categorical",
+    "hidden_error": "binary",
+    "next_tool": "categorical",
+    "is_new_max": "binary",
+    "rank_of_last_read": "ordinal",
+    "first_bucket_count": "regression",
+}
 CATEGORICAL = {name for name, kind in TARGETS.items() if kind in ("categorical", "binary")}
 PHASES = ("inspect", "apply", "verify", "other")
 _LOAD_RE = re.compile(r"^load=(\d+)$", re.MULTILINE)
@@ -93,6 +107,16 @@ MIN_WITHIN_TRAIN_ROWS = 48
 MIN_WITHIN_TEST_ROWS = 24
 DEFAULT_MLX_CACHE_LIMIT_MIB = 512
 CHECKPOINT_VERSION = 1
+DEFAULT_REANALYSIS_SPLIT_SEEDS = tuple(range(20260903, 20260908))
+DEFAULT_BOOTSTRAP_RESAMPLES = 1_000
+_SURFACE_FEATURE_NAMES = [
+    "prompt_token_count",
+    "last_note_token_count",
+    "last_note_digit_count",
+    "last_note_comma_count",
+    "family_one_hot",
+    "step_index",
+]
 
 
 # --------------------------------------------------------------------------- ground truth
@@ -1411,6 +1435,852 @@ def _within_position_fit(
     return {**result, **support}
 
 
+# -------------------------------------------------------------- offline re-analysis
+
+
+def reanalysis_row_labels(task: Task, *, keep_last: int) -> dict[int, dict[str, Any]]:
+    """Regenerate the revised P2 labels by replaying generator truth, without a model.
+
+    ``is_new_max`` and ``rank_of_last_read`` exist only immediately after a successful read of
+    a ``load=`` value. ``hidden_error`` asks whether any earlier error observation has moved
+    outside the retained observation window at the current decision.
+    """
+    from local_llm_lab.pipeline.env import Simulator
+
+    simulator = Simulator.for_task(task)
+    observations: list[str] = []
+    successful_loads: list[int] = []
+    previous_action = ""
+    previous_result = ""
+    out: dict[int, dict[str, Any]] = {}
+    for index, step in enumerate(task.steps):
+        if step.supervise:
+            base = row_labels(task, index)
+            hidden = observations[: max(0, len(observations) - keep_last)]
+            latest_match = (
+                _LOAD_RE.search(previous_result) if previous_action == "read_file" else None
+            )
+            is_new: int | None = None
+            rank: int | None = None
+            if latest_match is not None and not previous_result.startswith("ERROR"):
+                latest = int(latest_match.group(1))
+                earlier = successful_loads[:-1]
+                is_new = int(not earlier or latest > max(earlier))
+                rank = 1 + sum(value < latest for value in successful_loads)
+            out[index] = {
+                "pending_count": base["pending_count"],
+                "pending_count_ordinal": str(int(base["pending_count"])),
+                "phase": base["phase"],
+                "hidden_error": int(any(value.startswith("ERROR") for value in hidden)),
+                "next_tool": base["next_tool"],
+                "is_new_max": is_new,
+                "rank_of_last_read": rank,
+                "first_bucket_count": base["first_bucket_count"],
+            }
+        result = simulator.execute(step.action)
+        previous_action = step.action.name
+        previous_result = result
+        if step.action.name != "finish":
+            observations.append(result)
+        match = _LOAD_RE.search(result) if step.action.name == "read_file" else None
+        if match is not None and not result.startswith("ERROR"):
+            successful_loads.append(int(match.group(1)))
+    return out
+
+
+def _task_coordinates(task_id: str, family: str) -> tuple[str, int]:
+    marker = f"-{family}-"
+    if marker not in task_id:
+        raise ValueError(f"cannot recover split/index from task id {task_id!r}")
+    split, remainder = task_id.split(marker, 1)
+    match = re.match(r"(\d+)-", remainder)
+    if not match:
+        raise ValueError(f"cannot recover generator index from task id {task_id!r}")
+    return split, int(match.group(1))
+
+
+def _regenerate_tasks(dataset: ProbeDataset, data_seed: int) -> dict[str, Task]:
+    """Regenerate exactly the tasks named by a capture and reject a provenance mismatch."""
+    from local_llm_lab.pipeline.tasks import make_tasks
+
+    requested: dict[str, int] = {}
+    families: dict[str, str] = {}
+    for task_id, family in zip(dataset.task_ids.tolist(), dataset.family.tolist(), strict=True):
+        families.setdefault(task_id, family)
+        split, index = _task_coordinates(task_id, family)
+        requested[split] = max(requested.get(split, -1), index)
+    regenerated: dict[str, Task] = {}
+    for split, maximum in sorted(requested.items()):
+        tasks = (
+            make_tasks(split, maximum + 1, data_seed, perturb=False)
+            if split == "test"
+            else make_tasks(split, maximum + 1, data_seed)
+        )
+        regenerated.update({task.task_id: task for task in tasks})
+    missing = sorted(set(families) - set(regenerated))
+    if missing:
+        raise ValueError(
+            f"saved task ids do not regenerate with data seed {data_seed}: {', '.join(missing[:3])}"
+        )
+    return {task_id: regenerated[task_id] for task_id in families}
+
+
+def _lexical_token_count(text: str) -> int:
+    """Tokenizer-free surface count: Unicode words plus individual punctuation marks."""
+    return len(re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE))
+
+
+def _offline_rows(
+    dataset: ProbeDataset, *, data_seed: int
+) -> tuple[dict[str, np.ndarray], np.ndarray, dict[str, Any]]:
+    """Rebuild revised labels and tokenizer-free surface features in saved-row order."""
+    tasks = _regenerate_tasks(dataset, data_seed)
+    families = sorted(set(dataset.family.tolist()))
+    family_index = {family: index for index, family in enumerate(families)}
+    row_lookup = {
+        (str(task_id), int(step)): row
+        for row, (task_id, step) in enumerate(
+            zip(dataset.task_ids.tolist(), dataset.step_index.tolist(), strict=True)
+        )
+    }
+    labels: dict[str, list[Any]] = {name: [None] * len(dataset) for name in REANALYSIS_TARGETS}
+    surface = np.zeros((len(dataset), 5 + len(families)), dtype=np.float32)
+    reconstructed = 0
+    for task_id in sorted(tasks):
+        task = tasks[task_id]
+        truth = reanalysis_row_labels(task, keep_last=int(dataset.meta.get("keep_last", 2)))
+        for row in build_rows(task, keep_last=int(dataset.meta.get("keep_last", 2))):
+            step = int(row["metadata"]["step"])
+            saved_row = row_lookup.get((task_id, step))
+            if saved_row is None:
+                continue
+            context = row["messages"][:-1]
+            last_note = next(
+                (
+                    str(message.get("content", ""))
+                    for message in reversed(context)
+                    if message.get("role") == "assistant"
+                ),
+                "",
+            )
+            prompt_text = "\n".join(str(message.get("content", "")) for message in context)
+            surface[saved_row, 0] = _lexical_token_count(prompt_text)
+            surface[saved_row, 1] = _lexical_token_count(last_note)
+            surface[saved_row, 2] = sum(character.isdigit() for character in last_note)
+            surface[saved_row, 3] = last_note.count(",")
+            surface[saved_row, 4] = int(dataset.step_index[saved_row])
+            surface[saved_row, 5 + family_index[task.family]] = 1.0
+            for target, value in truth[step].items():
+                labels[target][saved_row] = value
+            reconstructed += 1
+    if reconstructed != len(dataset):
+        raise ValueError(
+            f"regenerated {reconstructed} rows but the capture contains {len(dataset)}"
+        )
+    arrays = {
+        name: (
+            np.array(["" if value is None else str(value) for value in values], dtype=str)
+            if kind != "regression"
+            else np.array(
+                [np.nan if value is None else float(value) for value in values], dtype=np.float64
+            )
+        )
+        for (name, kind), values in zip(REANALYSIS_TARGETS.items(), labels.values(), strict=True)
+    }
+    metadata = {
+        "families": families,
+        "expanded_surface_columns": [
+            "prompt_token_count",
+            "last_note_token_count",
+            "last_note_digit_count",
+            "last_note_comma_count",
+            "step_index",
+            *(f"family={family}" for family in families),
+        ],
+        "token_count_method": "Unicode words plus individual punctuation (no model tokenizer)",
+    }
+    return arrays, surface, metadata
+
+
+def _defined_kind(values: np.ndarray, kind: str) -> np.ndarray:
+    return ~np.isnan(values.astype(float)) if kind == "regression" else values != ""
+
+
+def _prediction(
+    kind: str,
+    train_x: np.ndarray,
+    train_y: np.ndarray,
+    test_x: np.ndarray,
+    test_y: np.ndarray,
+    *,
+    alpha: float,
+    l2: float,
+    steps: int,
+) -> dict[str, np.ndarray] | None:
+    train_x, test_x = _standardise(train_x.astype(np.float64), test_x.astype(np.float64))
+    if kind == "regression":
+        weights = ridge_fit(train_x, train_y.astype(float), alpha)
+        return {"predicted": _predict_linear(test_x, weights), "actual": test_y.astype(float)}
+    classes = np.array(sorted(set(train_y.tolist())))
+    if len(classes) < 2:
+        return None
+    lookup = {label: index for index, label in enumerate(classes)}
+    codes = np.array([lookup[label] for label in train_y])
+    weights = logistic_fit(train_x, codes, len(classes), l2=l2, steps=steps)
+    probabilities = _predict_logits(test_x, weights)
+    result = {"predicted": classes[np.argmax(probabilities, axis=1)], "actual": test_y}
+    if kind == "binary" and len(classes) == 2:
+        result["positive_scores"] = probabilities[:, 1]
+        result["positive_label"] = np.array(classes[-1])
+    return result
+
+
+def _position_prediction(
+    dataset: ProbeDataset,
+    kind: str,
+    values: np.ndarray,
+    train_rows: np.ndarray,
+    test_rows: np.ndarray,
+) -> dict[str, np.ndarray] | None:
+    keys = dataset.cells
+    train_keys = keys[train_rows].tolist()
+    test_keys = keys[test_rows].tolist()
+    train_y, test_y = values[train_rows], values[test_rows]
+    if kind == "regression":
+        buckets: dict[str, list[float]] = defaultdict(list)
+        for key, value in zip(train_keys, train_y.astype(float).tolist(), strict=True):
+            buckets[key].append(value)
+        fallback = float(np.mean(train_y.astype(float)))
+        means = {key: float(np.mean(entries)) for key, entries in buckets.items()}
+        return {
+            "predicted": np.array([means.get(key, fallback) for key in test_keys]),
+            "actual": test_y.astype(float),
+        }
+    classes = np.array(sorted(set(train_y.tolist())))
+    if len(classes) < 2:
+        return None
+    tallies: dict[str, Counter] = defaultdict(Counter)
+    for key, value in zip(train_keys, train_y.tolist(), strict=True):
+        tallies[key][value] += 1
+    fallback = _majority(train_y)
+    votes = {key: _majority(list(counter.elements())) for key, counter in tallies.items()}
+    result = {
+        "predicted": np.array([votes.get(key, fallback) for key in test_keys]),
+        "actual": test_y,
+    }
+    if kind == "binary" and len(classes) == 2:
+        shares = {
+            key: counter[classes[-1]] / sum(counter.values()) for key, counter in tallies.items()
+        }
+        default = float(np.mean(train_y == classes[-1]))
+        result["positive_scores"] = np.array([shares.get(key, default) for key in test_keys])
+        result["positive_label"] = np.array(classes[-1])
+    return result
+
+
+def _primary_score(kind: str, prediction: dict[str, np.ndarray], rows: np.ndarray) -> float:
+    actual = prediction["actual"][rows]
+    predicted = prediction["predicted"][rows]
+    if kind == "regression":
+        if float(np.sum((actual - actual.mean()) ** 2)) <= 1e-12:
+            return float("nan")
+        return float(stats.r2(predicted, actual))
+    if kind == "binary" and "positive_scores" in prediction:
+        positive = prediction["positive_label"].item()
+        return float(
+            stats.auc(prediction["positive_scores"][rows], (actual == positive).astype(int))
+        )
+    return float(stats.accuracy(predicted, actual))
+
+
+def _task_bootstrap_plan(task_ids: np.ndarray, *, resamples: int, seed: int) -> list[np.ndarray]:
+    """Precompute row selections without rebuilding task buckets for every metric."""
+    unique = np.array(sorted(set(task_ids.tolist())))
+    buckets = {task_id: np.flatnonzero(task_ids == task_id) for task_id in unique.tolist()}
+    rng = np.random.default_rng(seed)
+    return [
+        np.concatenate(
+            [buckets[task_id] for task_id in unique[rng.integers(0, len(unique), len(unique))]]
+        )
+        for _ in range(resamples)
+    ]
+
+
+def _interval(values: list[float]) -> dict[str, float]:
+    finite = np.asarray([value for value in values if np.isfinite(value)], dtype=float)
+    if not len(finite):
+        return {"median": float("nan"), "lower": float("nan"), "upper": float("nan")}
+    lower, median, upper = np.percentile(finite, [2.5, 50.0, 97.5])
+    return {"median": float(median), "lower": float(lower), "upper": float(upper)}
+
+
+def _bootstrap_bundle(
+    kind: str,
+    predictions: dict[str, dict[str, np.ndarray]],
+    task_ids: np.ndarray,
+    *,
+    resamples: int,
+    seed: int,
+) -> dict[str, list[float]]:
+    values = {name: [] for name in predictions}
+    for rows in _task_bootstrap_plan(task_ids, resamples=resamples, seed=seed):
+        for name, prediction in predictions.items():
+            values[name].append(_primary_score(kind, prediction, rows))
+    return values
+
+
+def _group_bootstrap_samples(
+    kind: str,
+    prediction: dict[str, np.ndarray],
+    task_ids: np.ndarray,
+    groups: np.ndarray,
+    *,
+    resamples: int,
+    seed: int,
+) -> dict[str, list[float]]:
+    out: dict[str, list[float]] = {}
+    for offset, group in enumerate(sorted(set(groups.tolist()), key=str)):
+        selected = np.flatnonzero(groups == group)
+        if not len(selected):
+            continue
+        subset_prediction = {
+            key: (value if np.asarray(value).ndim == 0 else value[selected])
+            for key, value in prediction.items()
+        }
+        subset_tasks = task_ids[selected]
+        scores = [
+            _primary_score(kind, subset_prediction, rows)
+            for rows in _task_bootstrap_plan(subset_tasks, resamples=resamples, seed=seed + offset)
+        ]
+        out[str(group)] = scores
+    return out
+
+
+def _within_prediction(
+    dataset: ProbeDataset,
+    kind: str,
+    features: np.ndarray,
+    values: np.ndarray,
+    train_rows: np.ndarray,
+    test_rows: np.ndarray,
+    *,
+    alpha: float,
+    l2: float,
+    steps: int,
+) -> tuple[dict[str, np.ndarray] | None, np.ndarray]:
+    keys = dataset.cells.tolist()
+    eligible = _varying_training_cells(values, keys, train_rows, kind)
+    within_train = np.array([row for row in train_rows if keys[row] in eligible], dtype=int)
+    within_test = np.array([row for row in test_rows if keys[row] in eligible], dtype=int)
+    if len(within_train) < 8 or len(within_test) < 2:
+        return None, within_test
+    centred = _cell_centre_features(features.astype(float), keys, train_rows)
+    targets = _cell_centre_targets(values, keys, train_rows) if kind == "regression" else values
+    return (
+        _prediction(
+            kind,
+            centred[within_train],
+            targets[within_train],
+            centred[within_test],
+            targets[within_test],
+            alpha=alpha,
+            l2=l2,
+            steps=steps,
+        ),
+        within_test,
+    )
+
+
+def _holm_adjust(p_values: list[float]) -> list[float]:
+    order = sorted(range(len(p_values)), key=lambda index: p_values[index])
+    adjusted = [1.0] * len(p_values)
+    running = 0.0
+    total = len(p_values)
+    for rank, index in enumerate(order):
+        running = max(running, min(1.0, (total - rank) * p_values[index]))
+        adjusted[index] = running
+    return adjusted
+
+
+def _analyse_cohort(
+    dataset: ProbeDataset,
+    labels: dict[str, np.ndarray],
+    surface: np.ndarray,
+    mask: np.ndarray,
+    *,
+    split_seeds: tuple[int, ...],
+    bootstrap_resamples: int,
+    alpha: float,
+    l2: float,
+    logistic_steps: int,
+) -> dict[str, Any]:
+    selected_global = np.flatnonzero(mask)
+    cohort = ProbeDataset(
+        layers=list(dataset.layers),
+        features={layer: dataset.features[layer][mask] for layer in dataset.layers},
+        labels={name: values[mask] for name, values in labels.items()},
+        task_ids=dataset.task_ids[mask],
+        family=dataset.family[mask],
+        step_index=dataset.step_index[mask],
+        difficulty=dataset.difficulty[mask],
+        meta=dict(dataset.meta),
+    )
+    cohort_surface = surface[selected_global]
+    result: dict[str, Any] = {
+        "rows": len(cohort),
+        "tasks": len(set(cohort.task_ids.tolist())),
+        "targets": {},
+    }
+    comparison_cells: list[dict[str, Any]] = []
+    for target, kind in REANALYSIS_TARGETS.items():
+        values = cohort.labels[target]
+        defined = np.flatnonzero(_defined_kind(values, kind))
+        entry: dict[str, Any] = {"kind": kind, "rows": int(len(defined)), "layers": {}}
+        if len(defined) < 8:
+            entry["skipped"] = "fewer than 8 labelled rows"
+            result["targets"][target] = entry
+            continue
+        distributions: dict[int, dict[str, list[float]]] = {
+            layer: defaultdict(list) for layer in cohort.layers
+        }
+        within_distributions: dict[int, list[tuple[dict[str, np.ndarray], np.ndarray]]] = (
+            defaultdict(list)
+        )
+        for split_offset, split_seed in enumerate(split_seeds):
+            train_local, test_local = split_by_task(
+                cohort.task_ids[defined], split_seed, difficulty=cohort.difficulty[defined]
+            )
+            if not len(train_local) or not len(test_local):
+                continue
+            train_rows, test_rows = defined[train_local], defined[test_local]
+            train_y, test_y = values[train_rows], values[test_rows]
+            if kind != "regression" and len(set(train_y.tolist())) < 2:
+                continue
+            position = _position_prediction(cohort, kind, values, train_rows, test_rows)
+            surface_prediction = _prediction(
+                kind,
+                cohort_surface[train_rows],
+                train_y,
+                cohort_surface[test_rows],
+                test_y,
+                alpha=alpha,
+                l2=l2,
+                steps=logistic_steps,
+            )
+            if position is None or surface_prediction is None:
+                continue
+            shuffled = values[defined][
+                np.random.default_rng(split_seed + 1).permutation(len(defined))
+            ]
+            shuffled_train, shuffled_test = shuffled[train_local], shuffled[test_local]
+            for layer in cohort.layers:
+                probe = _prediction(
+                    kind,
+                    cohort.features[layer][train_rows],
+                    train_y,
+                    cohort.features[layer][test_rows],
+                    test_y,
+                    alpha=alpha,
+                    l2=l2,
+                    steps=logistic_steps,
+                )
+                control = _prediction(
+                    kind,
+                    cohort.features[layer][train_rows],
+                    shuffled_train,
+                    cohort.features[layer][test_rows],
+                    shuffled_test,
+                    alpha=alpha,
+                    l2=l2,
+                    steps=logistic_steps,
+                )
+                if probe is None or control is None:
+                    continue
+                bundles = {
+                    "probe": probe,
+                    "shuffled": control,
+                    "position": position,
+                    "surface": surface_prediction,
+                }
+                boot = _bootstrap_bundle(
+                    kind,
+                    bundles,
+                    cohort.task_ids[test_rows],
+                    resamples=bootstrap_resamples,
+                    seed=split_seed * 1009 + layer * 17 + split_offset,
+                )
+                for name, samples in boot.items():
+                    distributions[layer][name].extend(samples)
+                distributions[layer]["margin_over_position"].extend(
+                    probe_value - position_value
+                    for probe_value, position_value in zip(
+                        boot["probe"], boot["position"], strict=True
+                    )
+                )
+                distributions[layer]["margin_over_surface"].extend(
+                    probe_value - surface_value
+                    for probe_value, surface_value in zip(
+                        boot["probe"], boot["surface"], strict=True
+                    )
+                )
+                within, within_rows = _within_prediction(
+                    cohort,
+                    kind,
+                    cohort.features[layer],
+                    values,
+                    train_rows,
+                    test_rows,
+                    alpha=alpha,
+                    l2=l2,
+                    steps=logistic_steps,
+                )
+                if within is not None:
+                    within_distributions[layer].append((within, within_rows))
+        for layer in cohort.layers:
+            samples = distributions[layer]
+            if not samples:
+                continue
+            layer_entry: dict[str, Any] = {
+                "metric": _HEADLINE.get(kind, "accuracy"),
+                "intervals": {name: _interval(values_) for name, values_ in samples.items()},
+            }
+            within_overall: list[float] = []
+            difficulty_parts: dict[str, list[float]] = defaultdict(list)
+            family_parts: dict[str, list[float]] = defaultdict(list)
+            for offset, (prediction, rows) in enumerate(within_distributions[layer]):
+                tasks = cohort.task_ids[rows]
+                overall = _bootstrap_bundle(
+                    kind,
+                    {"within": prediction},
+                    tasks,
+                    resamples=bootstrap_resamples,
+                    seed=split_seeds[offset % len(split_seeds)] * 2017 + layer,
+                )["within"]
+                within_overall.extend(overall)
+                for group, scores in _group_bootstrap_samples(
+                    kind,
+                    prediction,
+                    tasks,
+                    cohort.difficulty[rows],
+                    resamples=bootstrap_resamples,
+                    seed=layer * 37 + split_seeds[offset % len(split_seeds)],
+                ).items():
+                    difficulty_parts[group].extend(scores)
+                for group, scores in _group_bootstrap_samples(
+                    kind,
+                    prediction,
+                    tasks,
+                    cohort.family[rows],
+                    resamples=bootstrap_resamples,
+                    seed=layer * 53 + split_seeds[offset % len(split_seeds)],
+                ).items():
+                    family_parts[group].extend(scores)
+            layer_entry["within_position"] = {
+                "overall": _interval(within_overall),
+                "by_difficulty": {
+                    group: _interval(entries) for group, entries in difficulty_parts.items()
+                },
+                "by_family": {group: _interval(entries) for group, entries in family_parts.items()},
+            }
+            position_margin = samples["margin_over_position"]
+            surface_margin = samples["margin_over_surface"]
+            finite_position = [value for value in position_margin if np.isfinite(value)]
+            finite_surface = [value for value in surface_margin if np.isfinite(value)]
+            if finite_position and finite_surface:
+                p_position = (1 + sum(value <= 0 for value in finite_position)) / (
+                    len(finite_position) + 1
+                )
+                p_surface = (1 + sum(value <= 0 for value in finite_surface)) / (
+                    len(finite_surface) + 1
+                )
+                comparison_cells.append(layer_entry)
+                layer_entry["raw_p"] = float(max(p_position, p_surface))
+            entry["layers"][str(layer)] = layer_entry
+        result["targets"][target] = entry
+    adjusted = _holm_adjust([cell["raw_p"] for cell in comparison_cells])
+    for layer_entry, p_value in zip(comparison_cells, adjusted, strict=True):
+        intervals = layer_entry["intervals"]
+        interval_supported = (
+            intervals["margin_over_position"]["lower"] > 0
+            and intervals["margin_over_surface"]["lower"] > 0
+        )
+        layer_entry["holm_adjusted_p"] = float(p_value)
+        layer_entry["interval_supported"] = bool(interval_supported)
+        layer_entry["holm_supported"] = bool(interval_supported and p_value <= 0.05)
+    result["multiple_comparisons"] = {
+        "tested_cells": len(comparison_cells),
+        "method": "Holm",
+        "alpha": 0.05,
+        "support_requires": "both paired margin intervals exclude zero and Holm-adjusted p <= 0.05",
+    }
+    return result
+
+
+def reanalyse_dataset(
+    dataset: ProbeDataset,
+    *,
+    split_seeds: tuple[int, ...] = DEFAULT_REANALYSIS_SPLIT_SEEDS,
+    bootstrap_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
+    data_seed: int = 20260902,
+    ridge_alpha: float = 10.0,
+    logistic_l2: float = 0.01,
+    logistic_steps: int = 120,
+) -> dict[str, Any]:
+    """Run SPEC-004 §1 entirely from a saved activation capture and regenerated task truth."""
+    if len(split_seeds) != len(set(split_seeds)) or not split_seeds:
+        raise ValueError("split seeds must be non-empty and unique")
+    if bootstrap_resamples < 1:
+        raise ValueError("bootstrap_resamples must be positive")
+    labels, surface, surface_meta = _offline_rows(dataset, data_seed=data_seed)
+    all_rows = np.ones(len(dataset), dtype=bool)
+    train_prefix = np.array(
+        [str(task_id).startswith("train-") for task_id in dataset.task_ids], dtype=bool
+    )
+    analyses = {
+        "all_rows": _analyse_cohort(
+            dataset,
+            labels,
+            surface,
+            all_rows,
+            split_seeds=split_seeds,
+            bootstrap_resamples=bootstrap_resamples,
+            alpha=ridge_alpha,
+            l2=logistic_l2,
+            logistic_steps=logistic_steps,
+        ),
+        "sft_disjoint": _analyse_cohort(
+            dataset,
+            labels,
+            surface,
+            ~train_prefix,
+            split_seeds=split_seeds,
+            bootstrap_resamples=bootstrap_resamples,
+            alpha=ridge_alpha,
+            l2=logistic_l2,
+            logistic_steps=logistic_steps,
+        ),
+    }
+    supported = []
+    for target, entry in analyses["sft_disjoint"]["targets"].items():
+        layers = [
+            layer for layer, value in entry.get("layers", {}).items() if value.get("holm_supported")
+        ]
+        if layers:
+            supported.append(f"{target} at layers {', '.join(layers)}")
+    readme = (
+        "Conclusions that survived SFT-row exclusion and both controls: "
+        + ("; ".join(supported) if supported else "none at Holm-adjusted 0.05 support")
+        + ". Future adapter comparisons and all gated probe work remain deferred."
+    )
+    return {
+        "schema_version": 1,
+        "metadata": {
+            "split_seeds": list(split_seeds),
+            "bootstrap_resamples": bootstrap_resamples,
+            "bootstrap_unit": "task_id",
+            "interval_percentiles": [2.5, 50.0, 97.5],
+            "controls": ["shuffled", "position", "surface"],
+            "surface_features": list(_SURFACE_FEATURE_NAMES),
+            "surface_feature_details": surface_meta,
+            "data_seed": data_seed,
+            "model": dataset.meta.get("model"),
+            "source_metadata": dataset.meta,
+            "fit": {
+                "ridge_alpha": ridge_alpha,
+                "logistic_l2": logistic_l2,
+                "logistic_steps": logistic_steps,
+            },
+        },
+        "analyses": analyses,
+        "readme": readme,
+    }
+
+
+def _format_interval(value: dict[str, float]) -> str:
+    return f"{value['median']:.3f} [{value['lower']:.3f}, {value['upper']:.3f}]"
+
+
+def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
+    """Render the original target/layer table shape with interval-valued controls."""
+    out = [f"# P2 offline re-analysis — {label}", "", results["readme"], ""]
+    metadata = results["metadata"]
+    out.extend(
+        [
+            "Bootstrap intervals resample task IDs; every cell aggregates "
+            f"{metadata['bootstrap_resamples']} resamples for each of five deterministic split seeds. "
+            "Surface token counts use the recorded tokenizer-free lexical rule.",
+            "",
+        ]
+    )
+    for analysis_name, analysis in results["analyses"].items():
+        out.extend(
+            [
+                f"## {analysis_name}",
+                "",
+                f"{analysis['rows']} rows from {analysis['tasks']} tasks. Tested "
+                f"{analysis['multiple_comparisons']['tested_cells']} (target, layer) cells with Holm correction.",
+                "",
+            ]
+        )
+        for target, entry in analysis["targets"].items():
+            out.extend([f"### {target} ({entry['kind']})", ""])
+            if entry.get("skipped"):
+                out.extend([f"Skipped: {entry['skipped']}.", ""])
+                continue
+            rows = []
+            for layer, layer_entry in entry["layers"].items():
+                intervals = layer_entry["intervals"]
+                rows.append(
+                    [
+                        layer,
+                        _format_interval(intervals["probe"]),
+                        _format_interval(intervals["shuffled"]),
+                        _format_interval(intervals["position"]),
+                        _format_interval(intervals["surface"]),
+                        _format_interval(intervals["margin_over_position"]),
+                        _format_interval(intervals["margin_over_surface"]),
+                        "yes" if layer_entry.get("holm_supported") else "no",
+                    ]
+                )
+            out.extend(
+                _table(
+                    [
+                        "layer",
+                        "probe (95% interval)",
+                        "shuffled",
+                        "position",
+                        "surface",
+                        "margin vs position",
+                        "margin vs surface",
+                        "Holm support",
+                    ],
+                    rows,
+                )
+            )
+            out.append("")
+            within_rows = []
+            for layer, layer_entry in entry["layers"].items():
+                for group_kind in ("by_difficulty", "by_family"):
+                    for group, interval in layer_entry["within_position"][group_kind].items():
+                        within_rows.append(
+                            [
+                                layer,
+                                group_kind.removeprefix("by_"),
+                                group,
+                                _format_interval(interval),
+                            ]
+                        )
+            out.extend(
+                [
+                    "Within-position analyses (training-cell means removed):",
+                    "",
+                    *_table(["layer", "grouping", "group", "metric (95% interval)"], within_rows),
+                    "",
+                ]
+            )
+    out.extend(
+        [
+            "## intervals",
+            "",
+            "Every displayed number is the median with 2.5th/97.5th task-bootstrap percentiles. "
+            "The JSON `intervals` blocks retain the machine-readable values.",
+            "",
+        ]
+    )
+    return "\n".join(out)
+
+
+def _atomic_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _json_compliant(value: Any) -> Any:
+    """Replace non-finite floats with JSON null while preserving the report structure."""
+    if isinstance(value, dict):
+        return {key: _json_compliant(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_compliant(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_compliant(item) for item in value]
+    if isinstance(value, (float, np.floating)) and not np.isfinite(value):
+        return None
+    return value
+
+
+def _captured_context(path: Path) -> dict[str, Any]:
+    """Read capture provenance from the first saved shard, if the consolidated NPZ lacks it."""
+    checkpoint_dir = path.with_name(f"{path.stem}.checkpoints")
+    first = checkpoint_dir / "0001.npz"
+    if not first.is_file():
+        return {}
+    with np.load(first, allow_pickle=False) as handle:
+        metadata = json.loads(str(handle["meta"]))
+    return dict(metadata.get("checkpoint", {}).get("context", {}))
+
+
+def _main_reanalyse(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        description="Offline SPEC-004 re-analysis of a saved P2 capture."
+    )
+    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--split-seeds", default=",".join(map(str, DEFAULT_REANALYSIS_SPLIT_SEEDS)))
+    parser.add_argument("--bootstrap-resamples", type=int, default=DEFAULT_BOOTSTRAP_RESAMPLES)
+    parser.add_argument("--data-seed", type=int, default=20260902)
+    parser.add_argument("--logistic-steps", type=int, default=120)
+    args = parser.parse_args(argv)
+    seeds = tuple(int(value) for value in args.split_seeds.split(",") if value.strip())
+    dataset = load_dataset(args.input)
+    results = reanalyse_dataset(
+        dataset,
+        split_seeds=seeds,
+        bootstrap_resamples=args.bootstrap_resamples,
+        data_seed=args.data_seed,
+        logistic_steps=args.logistic_steps,
+    )
+    capture_context = _captured_context(args.input)
+    if capture_context:
+        results["metadata"]["model"] = {
+            "reference": capture_context.get("model"),
+            "artifact": capture_context.get("model_artifact"),
+        }
+        results["metadata"]["policy"] = capture_context.get("policy")
+        results["metadata"]["adapter_artifact"] = capture_context.get("adapter_artifact")
+        results["metadata"]["capture_context"] = capture_context
+    results["metadata"]["command"] = shlex.join(sys.argv)
+    results["metadata"]["input"] = str(args.input)
+    stem = args.input.name.removesuffix(".npz") + ".reanalysis"
+    json_path = args.output / f"{stem}.json"
+    markdown_path = args.output / f"{stem}.md"
+    _atomic_text(
+        json_path,
+        json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+    )
+    markdown = render_reanalysis_markdown(results, args.input.stem)
+    _atomic_text(markdown_path, markdown + "\n")
+    print(markdown)
+    print(f"Wrote {json_path}")
+    print(f"Wrote {markdown_path}")
+
+
 # --------------------------------------------------------------------------- rendering
 
 
@@ -1691,6 +2561,10 @@ def resolve_within_position(mix_difficulty: bool, requested: bool | None) -> boo
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "reanalyse":
+        _main_reanalyse(sys.argv[2:])
+        return
+
     from local_llm_lab.pipeline.evaluate import load_policy
     from local_llm_lab.pipeline.tasks import make_tasks
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu

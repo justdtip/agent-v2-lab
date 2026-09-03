@@ -1658,6 +1658,166 @@ def test_mix_difficulty_forces_within_position_analysis() -> None:
         state_probe.resolve_within_position(True, False)
 
 
+# ---------------------------------------------------------- SPEC-004 offline re-analysis
+
+
+def _offline_reanalysis_dataset() -> state_probe.ProbeDataset:
+    """A small real-generator capture whose activations contain deterministic signal."""
+    from local_llm_lab.pipeline.tasks import difficulty, make_tasks
+
+    tasks = [
+        *make_tasks("train", 24),
+        *make_tasks("p2mix", 24),
+        *make_tasks("test", 24, perturb=False),
+    ]
+    difficulties = {}
+    for task in tasks:
+        split = task.task_id.split("-", 1)[0]
+        index = int(task.task_id.rsplit("-", 2)[1])
+        difficulties[task.task_id] = difficulty(split, index)
+    dataset = state_probe.build_label_dataset(tasks, difficulties)
+    pending = dataset.labels["pending_count"].astype(float)
+    phase = (dataset.labels["phase"] == "inspect").astype(float)
+    rng = np.random.default_rng(417)
+    features = np.column_stack(
+        [pending, phase, pending + phase, rng.normal(size=len(dataset))]
+    ).astype(np.float32)
+    dataset.layers = [0]
+    dataset.features = {0: features}
+    dataset.meta.update(
+        {
+            "layers": [0],
+            "splits": ["train", "p2mix", "test"],
+            "keep_last": 2,
+            "data_seed": 20260902,
+            "model": {"name": "saved-model-metadata"},
+        }
+    )
+    return dataset
+
+
+def test_reanalysis_recodes_running_max_and_hidden_error_from_generator_truth() -> None:
+    """The old magnitude/error labels must not be reused for the revised targets."""
+    from local_llm_lab.pipeline.tasks import make_tasks
+
+    clean = make_tasks("test", 12, perturb=False)[9]
+    clean_truth = state_probe.reanalysis_row_labels(clean, keep_last=2)
+    # The deterministic service loads are 76, 55, 88, 87, 51. These literals are derived
+    # directly from the fixture files, independently of the implementation under test.
+    assert [clean_truth[step]["is_new_max"] for step in (3, 4, 5, 6, 7)] == [1, 0, 1, 0, 0]
+    assert [clean_truth[step]["rank_of_last_read"] for step in (3, 4, 5, 6, 7)] == [1, 1, 3, 3, 1]
+
+    recovery = make_tasks("train", 24)[21]
+    recovery_truth = state_probe.reanalysis_row_labels(recovery, keep_last=2)
+    assert recovery_truth[3]["hidden_error"] == 0  # the failed observation is still visible
+    assert recovery_truth[5]["hidden_error"] == 1  # the same observation has now been stubbed
+
+
+def test_offline_reanalysis_reports_task_bootstrap_intervals_and_both_margins() -> None:
+    dataset = _offline_reanalysis_dataset()
+    results = state_probe.reanalyse_dataset(
+        dataset,
+        split_seeds=(3, 5),
+        bootstrap_resamples=12,
+        data_seed=20260902,
+        logistic_steps=20,
+    )
+
+    assert results["metadata"]["split_seeds"] == [3, 5]
+    assert results["metadata"]["bootstrap_resamples"] == 12
+    assert results["metadata"]["controls"] == ["shuffled", "position", "surface"]
+    assert results["metadata"]["surface_features"] == [
+        "prompt_token_count",
+        "last_note_token_count",
+        "last_note_digit_count",
+        "last_note_comma_count",
+        "family_one_hot",
+        "step_index",
+    ]
+    assert set(results["analyses"]) == {"all_rows", "sft_disjoint"}
+    assert results["analyses"]["all_rows"]["tasks"] == 72
+    assert results["analyses"]["sft_disjoint"]["tasks"] == 48
+    targets = results["analyses"]["all_rows"]["targets"]
+    assert "prev_error" not in targets
+    assert "running_max" not in targets
+    assert {
+        "pending_count",
+        "pending_count_ordinal",
+        "hidden_error",
+        "is_new_max",
+        "rank_of_last_read",
+    } <= set(targets)
+    layer = targets["pending_count"]["layers"]["0"]
+    assert set(layer["intervals"]) >= {
+        "probe",
+        "shuffled",
+        "position",
+        "surface",
+        "margin_over_position",
+        "margin_over_surface",
+    }
+    assert set(layer["intervals"]["probe"]) == {"median", "lower", "upper"}
+    assert "by_difficulty" in layer["within_position"]
+    assert "by_family" in layer["within_position"]
+    assert results["analyses"]["all_rows"]["multiple_comparisons"]["tested_cells"] > 0
+
+
+def test_reanalysis_marks_zero_variance_bootstrap_r2_undefined() -> None:
+    prediction = {
+        "predicted": np.array([0.0, 1.0, 2.0]),
+        # Cell-centred floating point values can retain round-off noise even when the
+        # underlying ordinal/count target is constant in this bootstrap sample.
+        "actual": np.array([0.0, 1e-14, -1e-14]),
+    }
+    assert math.isnan(state_probe._primary_score("regression", prediction, np.arange(3)))
+
+
+def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
+    tmp_path, monkeypatch
+) -> None:
+    from local_llm_lab.pipeline import evaluate
+
+    captured = state_probe.save_dataset(_offline_reanalysis_dataset(), tmp_path / "state-mini.npz")
+
+    def forbidden_loader(*_args, **_kwargs):
+        raise AssertionError("offline reanalysis attempted to load a model or tokenizer")
+
+    monkeypatch.setattr(evaluate, "load_policy", forbidden_loader)
+    monkeypatch.setattr(state_probe, "build_prompt", forbidden_loader)
+    output = tmp_path / "result"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-state",
+            "reanalyse",
+            "--input",
+            str(captured),
+            "--output",
+            str(output),
+            "--split-seeds",
+            "3,5",
+            "--bootstrap-resamples",
+            "4",
+            "--logistic-steps",
+            "10",
+        ],
+    )
+    state_probe.main()
+
+    json_path = output / "state-mini.reanalysis.json"
+    markdown_path = output / "state-mini.reanalysis.md"
+    payload = json.loads(json_path.read_text())
+    assert payload["metadata"]["command"] == " ".join(sys.argv)
+    assert payload["metadata"]["model"] == {"name": "saved-model-metadata"}
+    assert "Conclusions that survived" in markdown_path.read_text()
+    first_json = json_path.read_bytes()
+    first_markdown = markdown_path.read_bytes()
+    state_probe.main()
+    assert json_path.read_bytes() == first_json
+    assert markdown_path.read_bytes() == first_markdown
+
+
 def test_dataset_round_trip_keeps_the_per_row_position_arrays(tmp_path) -> None:
     dataset = _pure_position_dataset()
     path = state_probe.save_dataset(dataset, tmp_path / "state.npz")
