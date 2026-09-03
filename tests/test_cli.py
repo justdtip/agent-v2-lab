@@ -134,10 +134,15 @@ def test_stage_select_writes_provenance_after_selection_json(monkeypatch, tmp_pa
     }
     spec = object()
     calls = []
+    model_lookups = []
 
     monkeypatch.setattr(cli, "checkpoint_dirs", lambda config: [(10, adapter)])
     monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
-    monkeypatch.setattr(cli, "load_model_spec", lambda model: spec)
+    def capture_model_spec(model):
+        model_lookups.append(model)
+        return spec
+
+    monkeypatch.setattr(cli, "load_model_spec", capture_model_spec)
     monkeypatch.setattr(
         cli,
         "run_evaluation",
@@ -161,3 +166,4 @@ def test_stage_select_writes_provenance_after_selection_json(monkeypatch, tmp_pa
 
     selection = json.loads((output / "selection.json").read_text(encoding="utf-8"))
     assert calls == [(output, None, spec, {"stage": "select", "selection": selection})]
+    assert model_lookups == [config["model"]]
