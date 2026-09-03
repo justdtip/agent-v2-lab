@@ -40,15 +40,24 @@ class Task:
     required_tools: frozenset[str]
     expected_files: dict[str, str] = field(default_factory=dict)
     faults: tuple[Fault, ...] = ()
+    difficulty: int = -1
 
     @property
     def horizon(self) -> int:
         return len(self.steps)
 
 
-def difficulty(split: str, index: int) -> int:
-    """train/valid/test are ordered by horizon; rollout splits alternate train/valid difficulty."""
+def _difficulty_level(split: str, index: int, override: int | None) -> int:
+    if override is not None:
+        if override < 0:
+            raise ValueError("difficulty must be non-negative")
+        return override
     return {"train": 0, "valid": 1, "test": 2}.get(split, index % 2)
+
+
+def difficulty(split: str, index: int, override: int | None = None) -> int:
+    """train/valid/test are ordered by horizon; rollout splits alternate train/valid difficulty."""
+    return _difficulty_level(split, index, override)
 
 
 _APPLICABLE_VARIANTS_CACHE: dict[tuple[str, int], tuple[str, ...]] = {}
@@ -84,7 +93,12 @@ def applicable_variants(family: str, level: int) -> tuple[str, ...]:
 
 
 def make_tasks(
-    split: str, count: int, seed: int = 20260902, *, perturb: bool | None = None
+    split: str,
+    count: int,
+    seed: int = 20260902,
+    *,
+    perturb: bool | None = None,
+    difficulty: int | None = None,
 ) -> list[Task]:
     """Deterministic, split-isolated tasks. Training splits interleave recovery variants."""
     if count < 1:
@@ -95,9 +109,10 @@ def make_tasks(
     for index in range(count):
         rng = random.Random(f"v2:{seed}:{split}:{index}")
         family = FAMILIES[index % len(FAMILIES)]
-        draft = _MAKERS[family](split, index, difficulty(split, index), rng)
+        level = _difficulty_level(split, index, difficulty)
+        draft = _MAKERS[family](split, index, level, rng)
         if perturb:
-            applicable = applicable_variants(family, difficulty(split, index))
+            applicable = applicable_variants(family, level)
             variant = applicable[(index // len(FAMILIES)) % len(applicable)]
         else:
             variant = "clean"
@@ -106,8 +121,49 @@ def make_tasks(
             f"{family}: requested variant {variant!r} but realised {task.variant!r} "
             f"(applicable_variants fell back unexpectedly)"
         )
-        tasks.append(replace(task, task_id=f"{split}-{family}-{index:04d}-{task.variant}"))
+        tasks.append(
+            replace(
+                task,
+                task_id=f"{split}-{family}-{index:04d}-{task.variant}",
+                difficulty=level,
+            )
+        )
     return tasks
+
+
+def task_from_id(
+    task_id: str,
+    seed: int = 20260902,
+    *,
+    difficulty: int | None = None,
+) -> Task:
+    try:
+        split, family, index_text, variant = task_id.rsplit("-", 3)
+    except ValueError as error:
+        raise ValueError(f"{task_id}: invalid task id") from error
+    if not split or family not in FAMILIES or variant not in VARIANTS:
+        raise ValueError(f"{task_id}: invalid task id")
+    try:
+        index = int(index_text)
+    except ValueError as error:
+        raise ValueError(f"{task_id}: invalid task index") from error
+    if index < 0:
+        raise ValueError(f"{task_id}: invalid task index")
+    if family != FAMILIES[index % len(FAMILIES)]:
+        raise ValueError(f"{task_id}: family does not match task index")
+    try:
+        level = _difficulty_level(split, index, difficulty)
+    except ValueError as error:
+        raise ValueError(f"{task_id}: {error}") from error
+    rng = random.Random(f"v2:{seed}:{split}:{index}")
+    draft = _MAKERS[family](split, index, level, rng)
+    try:
+        task = _apply_variant(draft, variant, rng)
+    except (IndexError, RuntimeError) as error:
+        raise ValueError(f"{task_id}: variant {variant!r} is not structurally possible") from error
+    if task.variant != variant:
+        raise ValueError(f"{task_id}: variant {variant!r} realised as {task.variant!r}")
+    return replace(task, task_id=task_id, difficulty=level)
 
 
 # --------------------------------------------------------------------------- helpers

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from local_llm_lab.pipeline.env import Fault
+from local_llm_lab.pipeline.integrity import check_trajectory
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
 from local_llm_lab.pipeline.runner import Trajectory, run_task
 from local_llm_lab.pipeline.tasks import Task, make_tasks
@@ -66,6 +67,10 @@ def evaluate_tasks(
             transcript=transcript,
             use_cache=use_cache,
         )
+        trajectory.difficulty = task.difficulty
+        trajectory.integrity = check_trajectory(
+            task, trajectory.steps, keep_last=keep_last
+        ).as_dict()
         trajectories.append(trajectory)
         if quiet:
             mark = "PASS" if trajectory.success else "FAIL"
@@ -91,6 +96,10 @@ def failure_reason(trajectory: Trajectory) -> str:
     """Single attributed reason for a failed trajectory; the first matching rule wins."""
     if trajectory.parse_error:
         return "parse error"
+    integrity = getattr(trajectory, "integrity", {})
+    first_violation = integrity.get("first_violation") if isinstance(integrity, dict) else None
+    if isinstance(first_violation, dict) and first_violation.get("kind"):
+        return str(first_violation["kind"]).replace("_", " ")
     if trajectory.loop_detected:
         return "repetition loop"
     if trajectory.exhausted:
@@ -115,6 +124,48 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
         reason = failure_reason(trajectory)
         reasons[reason] = reasons.get(reason, 0) + 1
 
+    integrity_by_kind: dict[str, dict[str, int]] = {}
+    integrity_by_family: dict[str, dict[str, Any]] = {}
+    integrity_clean = 0
+    integrity_affected = 0
+    integrity_violations = 0
+    failed_with_violation = 0
+    for trajectory in trajectories:
+        integrity = getattr(trajectory, "integrity", None)
+        if not isinstance(integrity, dict):
+            integrity = {"clean": True, "counts": {}}
+        counts = integrity.get("counts", {})
+        if not isinstance(counts, dict):
+            counts = {}
+        is_clean = bool(integrity.get("clean", not counts))
+        integrity_clean += int(is_clean)
+        integrity_affected += int(not is_clean)
+        integrity_violations += sum(int(value) for value in counts.values())
+        failed_with_violation += int(not trajectory.success and not is_clean)
+        family = integrity_by_family.setdefault(
+            trajectory.family,
+            {
+                "trajectories": 0,
+                "clean_trajectories": 0,
+                "violations": 0,
+                "affected_trajectories": 0,
+            },
+        )
+        family["trajectories"] += 1
+        family["clean_trajectories"] += int(is_clean)
+        family["violations"] += sum(int(value) for value in counts.values())
+        family["affected_trajectories"] += int(not is_clean)
+        for kind, value in counts.items():
+            bucket = integrity_by_kind.setdefault(
+                str(kind), {"violations": 0, "affected_trajectories": 0}
+            )
+            bucket["violations"] += int(value)
+            bucket["affected_trajectories"] += int(value > 0)
+    for family in integrity_by_family.values():
+        family["clean_rate"] = round(
+            family["clean_trajectories"] / family["trajectories"], 4
+        )
+
     def group(key: str) -> dict[str, dict[str, Any]]:
         table: dict[str, dict[str, Any]] = {}
         for trajectory in trajectories:
@@ -126,6 +177,7 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
         return dict(sorted(table.items()))
 
     count = len(trajectories)
+    failed = count - successes
     return {
         "tasks": count,
         "successes": successes,
@@ -147,12 +199,31 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
         "by_family": group("family"),
         "by_variant": group("variant"),
         "failure_reasons": dict(sorted(reasons.items(), key=lambda item: -item[1])),
+        "integrity": {
+            "clean_trajectories": integrity_clean,
+            "clean_rate": round(integrity_clean / count, 4) if count else 0.0,
+            "affected_trajectories": integrity_affected,
+            "violations": integrity_violations,
+            "by_kind": dict(sorted(integrity_by_kind.items())),
+            "by_family": dict(sorted(integrity_by_family.items())),
+            "failed_trajectories": failed,
+            "failed_with_violation": failed_with_violation,
+            "failure_explained_rate": (
+                round(failed_with_violation / failed, 4) if failed else 0.0
+            ),
+        },
     }
 
 
 def write_report(path: Path, summary: dict[str, Any], trajectories: list[Trajectory]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"summary": summary, "trajectories": [t.as_dict() for t in trajectories]}
+    records = []
+    for trajectory in trajectories:
+        record = trajectory.as_dict()
+        record["difficulty"] = getattr(trajectory, "difficulty", -1)
+        record["integrity"] = getattr(trajectory, "integrity", None)
+        records.append(record)
+    payload = {"summary": summary, "trajectories": records}
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -204,6 +275,7 @@ def run_evaluation(
             "stress": stress,
             "temperature": temperature,
             "keep_last": keep_last,
+            "data_seed": seed,
             "kv_cache": use_cache,
             "elapsed_seconds": round(time.monotonic() - started, 2),
         }

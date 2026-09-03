@@ -27,9 +27,11 @@ def render(summaries: list[dict[str, Any]]) -> str:
     if not summaries:
         return "No evaluation summaries found."
     families = sorted({family for s in summaries for family in s.get("by_family", {})})
-    head = ["run", "split", "success", "clean", "valid", "schema", "exec", "errors", "steps"] + [
-        f[:10] for f in families
-    ]
+    has_integrity = any(isinstance(summary.get("integrity"), dict) for summary in summaries)
+    head = ["run", "split", "success", "clean", "valid", "schema", "exec", "errors", "steps"]
+    if has_integrity:
+        head.append("integrity-clean")
+    head.extend(family[:10] for family in families)
     rows = [head]
     for s in summaries:
         label = s.get("label", s["_file"])
@@ -45,6 +47,8 @@ def render(summaries: list[dict[str, Any]]) -> str:
             str(s["tool_errors"]),
             f"{s['mean_steps']:.1f}",
         ]
+        if has_integrity:
+            row.append(_rate(s.get("integrity", {}), "clean_rate"))
         for family in families:
             stats = s.get("by_family", {}).get(family)
             row.append("-" if stats is None else f"{stats['successes']}/{stats['tasks']}")

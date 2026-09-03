@@ -9,6 +9,7 @@ from typing import Any
 
 from local_llm_lab.pipeline.data import write_jsonl
 from local_llm_lab.pipeline.evaluate import DEFAULT_MODEL, load_policy, make_sampler, summarize
+from local_llm_lab.pipeline.integrity import check_trajectory
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
 from local_llm_lab.pipeline.runner import Trajectory, run_task, trajectory_rows
 from local_llm_lab.pipeline.tasks import Task, make_tasks
@@ -56,8 +57,11 @@ def collect_rollouts(
                 keep_last=keep_last,
                 transcript=transcript,
             )
+            integrity = check_trajectory(task, trajectory.steps, keep_last=keep_last)
+            trajectory.difficulty = task.difficulty
+            trajectory.integrity = integrity.as_dict()
             all_trajectories.append(trajectory)
-            if trajectory.success:
+            if trajectory.success and integrity.clean:
                 candidates.append(trajectory)
         seen: set[tuple[str, ...]] = set()
         kept = 0
@@ -143,7 +147,10 @@ def run_rollout(
     summary["train_sha256"] = digest
     with (output / "rollouts.jsonl").open("w", encoding="utf-8") as handle:
         for trajectory in trajectories:
-            handle.write(json.dumps(trajectory.as_dict(), ensure_ascii=False) + "\n")
+            record = trajectory.as_dict()
+            record["difficulty"] = getattr(trajectory, "difficulty", -1)
+            record["integrity"] = getattr(trajectory, "integrity", None)
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(f"\nrollout {label} on {split}: pass@{samples}={summary['pass_at_k']:.1%}")
     print(summary_table(summary))
