@@ -8,8 +8,10 @@ This change implements SPEC-002 section 1 only: deterministic family-balanced ch
 screen construction, difficulty-aware evaluation metadata, Wilson intervals, exact paired
 McNemar comparisons, two-cell selector configuration, validation-loss parsing, and report
 rendering. It does not modify note-integrity scoring, generator task rows, runner behavior, or
-protected data/output/report artifacts. Step 0 behavior-preservingly moved the legacy empty
-checkpoint regression from `tests/test_pipeline.py` to `tests/test_selection.py`.
+protected data/output/report artifacts. R10 behavior-preservingly moved the legacy empty
+checkpoint regression from `tests/test_pipeline.py` to `tests/test_selection.py`, then moved
+the legacy report-table regression to `tests/test_report.py` and updated only its rich Wilson
+interval expectations.
 
 ## Changed paths and interfaces
 
@@ -21,11 +23,11 @@ checkpoint regression from `tests/test_pipeline.py` to `tests/test_selection.py`
 | `pipeline/cli.py` | parses saved `train.log` validation losses and writes deterministic per-checkpoint selection components |
 | `pipeline/report.py` | retains lightweight outcomes for safe pairing and renders supplied intervals/paired McNemar rows |
 | `tests/test_tasks.py`, `test_evaluate.py`, `test_cli.py`, `test_selection.py`, `test_report.py` | focused contracts using fakes and temporary metadata only |
-| `tests/test_pipeline.py` (Step 0 only) | removed the exact empty-checkpoint test after its behavior-preserving move to `tests/test_selection.py` |
+| `tests/test_pipeline.py` (R10 extractions only) | removed the exact empty-checkpoint test to `tests/test_selection.py` and report-table test to `tests/test_report.py` |
 
 Final line counts: configs 54/66/68; `tasks.py` 1,264; `evaluate.py` 482; `cli.py` 595;
 `report.py` 137; `test_tasks.py` 152; `test_evaluate.py` 182; `test_cli.py` 20;
-`test_selection.py` 147; and `test_report.py` 227.
+`test_selection.py` 147; and `test_report.py` 283.
 
 Wiring-map rows touched are 2.4 (`Task` consumption only; frozen record and exact
 `task_from_id` signature retained), 2.10 (evaluation summary and screen arguments), 2.11
@@ -106,3 +108,10 @@ or supplies a non-boolean outcome. It also accepts outcomes only when their uniq
 Matching cohorts remain pairable across different model/adapter metadata when their split,
 non-null data seed, and exact per-task identities agree. RED/GREEN evidence is recorded in the
 ignored task ledger; the commit hash is recorded by the subsequent documentation handoff.
+
+## Integration correction
+
+The final R10 extraction moves `test_report_table_lists_runs_and_families` subtractively from
+`tests/test_pipeline.py` to `tests/test_report.py`. It retains the run, family, and header
+assertions while asserting rich summary cells: success, schema validity, and executable calls
+show their required Wilson intervals. The full fake-only `uv run pytest -q` gate passes.

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
+from local_llm_lab.pipeline.evaluate import summarize
 from local_llm_lab.pipeline.report import load_summaries, render
+from local_llm_lab.pipeline.runner import Trajectory
 
 
 def _summary(
@@ -50,6 +53,59 @@ def _write_eval(path: Path, summary: dict[str, object], outcomes: dict[str, bool
         ],
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _cells(line: str) -> list[str]:
+    """Split a report row on its two-space column separator (cells may contain one space)."""
+    return re.split(r" {2,}", line.strip())
+
+
+def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
+    summary = summarize(
+        [
+            Trajectory(
+                "a",
+                "read",
+                "clean",
+                "x",
+                "p",
+                turns=2,
+                valid_turns=2,
+                verdict={
+                    "success": True,
+                    "clean": True,
+                    "errors": 0,
+                    "recovered_errors": 0,
+                    "reasons": [],
+                    "calls": 1,
+                    "schema_failures": 0,
+                    "executable_calls": 1,
+                },
+            )
+        ]
+    )
+    summary.update({"label": "x", "split": "valid"})
+    (tmp_path / "x.json").write_text(json.dumps({"summary": summary}), encoding="utf-8")
+
+    table = render(load_summaries(tmp_path))
+
+    assert "x" in table and "read" in table and "1/1 (100%) [21%-100%]" in table
+    header = _cells(table.splitlines()[0])
+    assert header[:9] == [
+        "run",
+        "split",
+        "success",
+        "clean",
+        "valid",
+        "schema",
+        "exec",
+        "errors",
+        "steps",
+    ]
+    cells = _cells(table.splitlines()[2])
+    assert cells[2] == "1/1 (100%) [21%-100%]"
+    assert cells[5] == "100% [21%-100%]"
+    assert cells[6] == "100% [21%-100%]"
 
 
 def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluations(

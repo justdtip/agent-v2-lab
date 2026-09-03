@@ -9,7 +9,7 @@ import mlx.core as mx
 import mlx.nn as nn
 import pytest
 
-from local_llm_lab.agent_protocol import TOOL_SPECS, Action
+from local_llm_lab.agent_protocol import Action
 from local_llm_lab.pipeline import jlens
 from local_llm_lab.pipeline.data import build_rows
 from local_llm_lab.pipeline.env import TRANSIENT_ERROR, Fault, Simulator, validate_arguments
@@ -1173,54 +1173,6 @@ def _cells(line: str) -> list[str]:
     import re
 
     return re.split(r" {2,}", line.strip())
-
-
-def test_report_table_lists_runs_and_families(tmp_path) -> None:
-    import json
-
-    from local_llm_lab.pipeline.report import load_summaries, render
-
-    summary = summarize(
-        [
-            Trajectory(
-                "a",
-                "read",
-                "clean",
-                "x",
-                "p",
-                turns=2,
-                valid_turns=2,
-                verdict={
-                    "success": True,
-                    "clean": True,
-                    "errors": 0,
-                    "recovered_errors": 0,
-                    "reasons": [],
-                    "calls": 2,
-                    "schema_failures": 0,
-                    "executable_calls": 2,
-                },
-            )
-        ]
-    )
-    summary.update({"label": "x", "split": "valid"})
-    (tmp_path / "x.json").write_text(json.dumps({"summary": summary}))
-    table = render(load_summaries(tmp_path))
-    assert "x" in table and "read" in table and "1/1 (100%)" in table
-    header = _cells(table.splitlines()[0])
-    assert header[:9] == [
-        "run",
-        "split",
-        "success",
-        "clean",
-        "valid",
-        "schema",
-        "exec",
-        "errors",
-        "steps",
-    ]
-    cells = _cells(table.splitlines()[2])
-    assert cells[2] == "1/1 (100%)" and cells[5] == "100%" and cells[6] == "100%"
 
 
 def test_report_prints_dashes_for_summaries_without_new_metrics(tmp_path) -> None:
