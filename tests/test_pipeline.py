@@ -93,7 +93,7 @@ def test_qwen25_model_spec_preserves_full_training_and_lora_values() -> None:
             "qwen35-4b",
             "mlx-community/Qwen3.5-4B-MLX-4bit",
             "off",
-            "auto",
+            "none",
             "auto",
             {
                 "max_seq_length": 2688,
@@ -107,7 +107,7 @@ def test_qwen25_model_spec_preserves_full_training_and_lora_values() -> None:
             "qwen35-9b",
             "mlx-community/Qwen3.5-9B-MLX-4bit",
             "off",
-            "auto",
+            "none",
             "auto",
             {
                 "max_seq_length": 2688,
