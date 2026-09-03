@@ -64,7 +64,11 @@ class _ThinkingTokenizer(_LegacyTokenizer):
         if not add_generation_prompt:
             return rendered
         suffix = "<|im_start|>assistant\n"
-        return rendered + (suffix + "<think>\n\n</think>\n\n" if kwargs["enable_thinking"] is False else suffix)
+        return rendered + (
+            suffix + "<think>\n\n</think>\n\n"
+            if kwargs["enable_thinking"] is False
+            else suffix
+        )
 
 
 class _Qwen25TemplateTokenizer:
@@ -107,7 +111,9 @@ def test_render_rows_adds_canonical_fields_without_mutating_messages() -> None:
     assert rendered[0]["messages"] == original["messages"]
     assert rendered[0]["metadata"] == {"task_id": "fake"}
     assert rendered[0]["prompt"] == "system:rules\nuser:task\n<|im_start|>assistant\n"
-    assert rendered[0]["completion"] == 'note\n```json\n{"name": "finish", "arguments": {"answer": "done"}}\n```<eot>\n'
+    assert rendered[0]["completion"] == (
+        'note\n```json\n{"name": "finish", "arguments": {"answer": "done"}}\n```<eot>\n'
+    )
 
 
 def test_write_jsonl_atomically_replaces_payloads_at_or_above_one_mebibyte(
@@ -191,8 +197,17 @@ def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens(
 
 def test_render_rows_disables_inference_thinking_and_preserves_trained_reasoning() -> None:
     action = Action("finish", {"answer": "done"})
-    thought = "<think>reason</think>\n\nnote\n```json\n{\"name\": \"finish\", \"arguments\": {\"answer\": \"done\"}}\n```"
-    row = {"messages": [{"role": "user", "content": "task"}, {"role": "assistant", "content": thought}], "metadata": {}}
+    thought = (
+        "<think>reason</think>\n\nnote\n```json\n"
+        '{"name": "finish", "arguments": {"answer": "done"}}\n```'
+    )
+    row = {
+        "messages": [
+            {"role": "user", "content": "task"},
+            {"role": "assistant", "content": thought},
+        ],
+        "metadata": {},
+    }
     inference_tokenizer = _ThinkingTokenizer()
 
     inference = render_rows([row], inference_tokenizer, spec=_thinking_spec("inference"))[0]
@@ -200,7 +215,11 @@ def test_render_rows_disables_inference_thinking_and_preserves_trained_reasoning
 
     assert inference_tokenizer.template_kwargs == [{"enable_thinking": False}]
     assert "<think>reason</think>" not in inference["completion"]
-    assert trained["completion"] == "<think>reason</think>\n\n" + assistant_message("note", action)["content"] + "<eot>\n"
+    assert trained["completion"] == (
+        "<think>reason</think>\n\n"
+        + assistant_message("note", action)["content"]
+        + "<eot>\n"
+    )
 
 
 def test_recovery_rows_are_marked_and_oversampled_in_train_only(tmp_path) -> None:

@@ -157,7 +157,10 @@ def test_parse_turn_round_trips_render_turn() -> None:
 
 def test_parse_turn_ignores_trailing_junk_after_first_call() -> None:
     first = Action("read_file", {"path": "x"})
-    junk = '\n spep\n{"name": "finish", "arguments": {"answer": "no"}}\n```json\n{"name": "list_files", "arguments": {"directory": "/"}}\n```'
+    junk = (
+        '\n spep\n{"name": "finish", "arguments": {"answer": "no"}}\n```json\n'
+        '{"name": "list_files", "arguments": {"directory": "/"}}\n```'
+    )
     turn = parse_turn(render_turn("n", first) + junk)
     assert turn.thought == "n" and turn.action == first
     cut = parse_turn(render_turn("n", first) + "\n``` `` <|im_end|>garbage")
@@ -165,7 +168,10 @@ def test_parse_turn_ignores_trailing_junk_after_first_call() -> None:
 
 
 def test_parse_turn_accepts_legacy_and_raw_forms() -> None:
-    native = 'Reading the file.\n<tool_call>\n{"name": "read_file", "arguments": {"path": "x"}}\n</tool_call>'
+    native = (
+        'Reading the file.\n<tool_call>\n'
+        '{"name": "read_file", "arguments": {"path": "x"}}\n</tool_call>'
+    )
     turn = parse_turn(native)
     assert turn.thought == "Reading the file." and turn.action == Action("read_file", {"path": "x"})
     unlabelled = parse_turn('note\n```\n{"name": "finish", "arguments": {"answer": "1"}}\n```')
@@ -210,7 +216,8 @@ def test_system_prompt_lists_tools_and_fenced_format() -> None:
     tools = render_tools(TOOL_SPECS)
     assert tools.startswith("# Tools\n")
     assert (
-        "- replace_text(path: string, old: string, new: string): Replace exact text in one virtual file."
+        "- replace_text(path: string, old: string, new: string): "
+        "Replace exact text in one virtual file."
         in tools
     )
     assert "- finish(answer: string): Finish the task with a concise grounded answer." in tools

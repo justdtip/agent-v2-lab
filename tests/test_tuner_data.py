@@ -34,7 +34,9 @@ def test_rendered_rows_dataset_tokenizes_each_side_before_the_joint_boundary_can
 def test_rendered_rows_dataset_rejects_rows_that_would_mask_every_completion_token() -> None:
     with pytest.raises(ValueError, match="leaves no room"):
         RenderedRowsDataset(
-            [{"prompt": "prompt", "completion": "completion"}], _MergingTokenizer(), max_seq_length=1
+            [{"prompt": "prompt", "completion": "completion"}],
+            _MergingTokenizer(),
+            max_seq_length=1,
         )
 
 
