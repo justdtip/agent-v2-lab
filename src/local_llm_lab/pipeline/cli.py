@@ -13,14 +13,17 @@ from typing import Any
 
 import yaml
 
+from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.branch import run_branch_mining
 from local_llm_lab.pipeline.data import write_dataset
 from local_llm_lab.pipeline.evaluate import run_evaluation
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.report import load_summaries, render
 from local_llm_lab.pipeline.rollout import run_rollout
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+from local_llm_lab.provenance import write_provenance
 
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "agent_v2.yaml"
 
@@ -51,6 +54,16 @@ def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
         chat_repeats=config.get("chat_repeats", 1),
         recovery_repeats=config.get("recovery_repeats", 1),
         extra_dirs=extra,
+    )
+    write_provenance(
+        config["output"],
+        resolved=None,
+        spec=load_model_spec(config["model"]),
+        extra={
+            "stage": "data",
+            "generator_version": GENERATOR_VERSION,
+            "dataset_manifest": manifest,
+        },
     )
     for split, info in manifest["splits"].items():
         print(

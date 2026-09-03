@@ -14,7 +14,7 @@ from local_llm_lab.pipeline.protocol import (
     tool_message,
     window_messages,
 )
-from local_llm_lab.pipeline.tasks import Task, make_tasks
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
 
 
 def build_rows(task: Task, *, keep_last: int = DEFAULT_KEEP_LAST) -> list[dict[str, Any]]:
@@ -104,6 +104,7 @@ def write_dataset(
     Held-out splits are never reweighted.
     """
     manifest: dict[str, Any] = {
+        "generator_version": GENERATOR_VERSION,
         "seed": seed,
         "keep_last": keep_last,
         "protocol": "v2-state-carrying-notes-fenced-json",

@@ -3,11 +3,22 @@ from __future__ import annotations
 import json
 import sys
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, TextIO
 
 from local_llm_lab.agent_protocol import Action
+
+
+def iter_task_records(path: Path) -> Iterator[dict[str, Any]]:
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if "task_id" in record:
+                yield record
 
 
 def _supports_color(stream: TextIO) -> bool:

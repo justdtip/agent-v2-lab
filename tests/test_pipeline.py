@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 import sys
 import types
+from pathlib import Path
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -10,7 +12,8 @@ import pytest
 
 from local_llm_lab.agent_protocol import TOOL_SPECS, Action, ActionParseError
 from local_llm_lab.pipeline import jlens
-from local_llm_lab.pipeline.data import build_rows
+from local_llm_lab.pipeline.cli import load_config, stage_data
+from local_llm_lab.pipeline.data import build_rows, write_dataset
 from local_llm_lab.pipeline.env import TRANSIENT_ERROR, Fault, Simulator, validate_arguments
 from local_llm_lab.pipeline.evaluate import percentile, summarize
 from local_llm_lab.pipeline.protocol import (
@@ -34,7 +37,8 @@ from local_llm_lab.pipeline.runner import (
     generate_turn_with_count,
     trajectory_rows,
 )
-from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
+from local_llm_lab.pipeline.tasks import FAMILIES, GENERATOR_VERSION, VARIANTS, make_tasks
+from local_llm_lab.pipeline.transcript import iter_task_records
 
 
 def test_registered_models_include_all_three_backbones() -> None:
@@ -348,6 +352,10 @@ def test_recovery_path_guesses_are_absent_and_notes_name_the_guess() -> None:
         assert guessed not in task.files
         assert guessed in wrong.thought
 
+
+def test_wrong_path_constructor_rejects_an_impossible_guess() -> None:
+    """Exhausting every path guess must not silently substitute a transient variant."""
+
     import random
 
     from local_llm_lab.pipeline import tasks
@@ -366,11 +374,34 @@ def test_recovery_path_guesses_are_absent_and_notes_name_the_guess() -> None:
         "done",
         frozenset(),
     )
-    recovered = tasks._wrong_path(guarded, random.Random(0))
-    assert recovered.variant == "transient"
-    assert all(
-        step.action.name != "read_file" for step in recovered.steps if not step.supervise
+
+    with pytest.raises(RuntimeError, match="guarded"):
+        tasks._wrong_path(guarded, random.Random(0))
+
+
+def test_stale_path_constructor_rejects_an_impossible_guess() -> None:
+    """A task with no viable stale path must not silently substitute another variant."""
+
+    import random
+
+    from local_llm_lab.pipeline import tasks
+
+    guarded = tasks.Task(
+        "stale-guarded",
+        "search",
+        "clean",
+        "p",
+        {},
+        (
+            Step("search", Action("search_files", {"query": "missing"})),
+            Step("finish", Action("finish", {"answer": "done"})),
+        ),
+        "done",
+        frozenset(),
     )
+
+    with pytest.raises(RuntimeError, match="stale-guarded"):
+        tasks._stale_path(guarded, random.Random(0))
 
 
 def test_hardened_update_prompts_do_not_leak_expected_answer() -> None:
@@ -946,6 +977,28 @@ def test_transcript_keeps_multiple_task_records_in_one_run(tmp_path) -> None:
     assert "**FAIL** (unexpected file change: extra.ini)" in markdown
 
 
+def test_iter_task_records_skips_headers_blank_lines_and_metadata(tmp_path) -> None:
+    """Transcript consumers must see task rows only, never the run header or metadata."""
+    path = tmp_path / "transcripts.jsonl"
+    first = {"task_id": "task-1", "verdict": {"success": True}}
+    second = {"task_id": "task-2", "verdict": {"success": False}}
+    path.write_text(
+        "\n".join(
+            (
+                json.dumps({"run_id": "run-1"}),
+                json.dumps(first),
+                "",
+                json.dumps({"summary": {"tasks": 2}}),
+                json.dumps(second),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert list(iter_task_records(path)) == [first, second]
+
+
 def test_transcript_explicit_run_boundary_replaces_prior_run(tmp_path) -> None:
     """A new explicit run must truncate old task records and allocate a new run id."""
     from local_llm_lab.pipeline.transcript import Transcript
@@ -1398,6 +1451,29 @@ def test_stage_select_refuses_empty_checkpoint_directory(tmp_path) -> None:
         stage_select(config, limit=None, quiet=True)
 
 
+def test_data_stage_writes_generator_version_provenance(tmp_path) -> None:
+    """The data stage must record its generator without resolving or loading model weights."""
+    config = {
+        "model": "qwen25-coder-3b",
+        "output": tmp_path / "output",
+        "data": tmp_path / "data",
+        "seed": 20260902,
+        "keep_last": 2,
+        "tasks": {"train": 1, "valid": 1, "test": 1},
+        "chat_replay": None,
+        "chat_repeats": 1,
+        "recovery_repeats": 1,
+    }
+
+    stage_data(config, [])
+
+    provenance_path = config["output"] / "provenance.json"
+    assert provenance_path.is_file()
+    assert json.loads(provenance_path.read_text(encoding="utf-8"))["generator_version"] == (
+        GENERATOR_VERSION
+    )
+
+
 def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch) -> None:
     """Starting a training run removes stale checkpoints without deleting sibling outputs."""
     from local_llm_lab.pipeline import cli
@@ -1745,8 +1821,6 @@ def test_tool_errors_never_escape_the_harness() -> None:
 
 
 def test_recovery_rows_are_marked_and_oversampled_in_train_only(tmp_path) -> None:
-    from local_llm_lab.pipeline.data import write_dataset
-
     task = next(t for t in make_tasks("train", 144) if t.variant == "failed_edit")
     rows = build_rows(task)
     marked = [row for row in rows if row["metadata"]["recovery"]]
@@ -1758,6 +1832,42 @@ def test_recovery_rows_are_marked_and_oversampled_in_train_only(tmp_path) -> Non
     for split in ("valid", "test"):
         held = manifest["splits"][split]
         assert held["recovery_rows_after_repeats"] == held["recovery_targets"]
+
+
+def test_dataset_manifest_records_generator_version(tmp_path) -> None:
+    """Every generated manifest, returned and persisted, must identify its row generator."""
+    manifest = write_dataset(tmp_path, {"train": 1, "valid": 1, "test": 1})
+
+    assert manifest["generator_version"] == GENERATOR_VERSION
+    written = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert written["generator_version"] == GENERATOR_VERSION
+
+
+def test_reference_generator_hashes_are_pinned_by_version(tmp_path) -> None:
+    """A row-changing generator edit must be accompanied by an explicit version bump."""
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "agent_v2c.yaml"
+    config = load_config(config_path)
+    manifest = write_dataset(
+        tmp_path,
+        config["tasks"],
+        seed=config["seed"],
+        keep_last=config["keep_last"],
+        chat_dir=config["chat_replay"],
+        chat_repeats=config["chat_repeats"],
+        recovery_repeats=config["recovery_repeats"],
+    )
+    expected = {
+        2: {
+            "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
+            "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
+            "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
+        }
+    }
+
+    assert manifest["generator_version"] == GENERATOR_VERSION
+    assert {split: info["sha256"] for split, info in manifest["splits"].items()} == expected[
+        GENERATOR_VERSION
+    ]
 
 
 # --------------------------------------------------------------------------- jlens

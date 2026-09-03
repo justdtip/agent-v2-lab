@@ -25,6 +25,7 @@ FAMILIES = (
     "aggregate_report",
 )
 VARIANTS = ("clean", "wrong_path", "transient", "unknown_tool", "stale_path", "failed_edit")
+GENERATOR_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -957,7 +958,7 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
             if f"{directory}/{name}" not in task.files
         ]
         if not candidates:
-            return _transient(task, rng)
+            raise RuntimeError(f"{task.task_id}: could not construct a wrong_path variant")
         guess = rng.choice(candidates)
         wrong = Step(
             f"Trying guessed path {guess} before listing the directory.",
@@ -971,7 +972,7 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
         )
         return replace(task, variant="wrong_path", steps=(wrong, recovery, *task.steps[1:]))
     if not reads:
-        return _transient(task, rng)
+        raise RuntimeError(f"{task.task_id}: could not construct a wrong_path variant")
     k = rng.choice(reads)
     step = task.steps[k]
     correct = step.action.arguments["path"]
@@ -983,7 +984,7 @@ def _wrong_path(task: Task, rng: random.Random) -> Task:
     )
     candidates = [candidate for candidate in candidates if candidate not in task.files]
     if not candidates:
-        return _transient(task, rng)
+        raise RuntimeError(f"{task.task_id}: could not construct a wrong_path variant")
     guess = rng.choice(candidates)
     wrong = Step(f"Trying guessed path {guess}.", Action("read_file", {"path": guess}), supervise=False)
     recovery = Step(
@@ -1050,7 +1051,7 @@ def _stale_path(task: Task, rng: random.Random) -> Task:
             directory = correct.rsplit("/", 1)[0]
             candidates.append((k, guess, directory))
     if not candidates:
-        return _wrong_path(task, rng)
+        raise RuntimeError(f"{task.task_id}: could not construct a stale_path variant")
     k, guess, directory = rng.choice(candidates)
     step = task.steps[k]
     wrong = Step(f"Trying stale guessed path {guess}.", Action("read_file", {"path": guess}), supervise=False)
