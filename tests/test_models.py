@@ -34,7 +34,7 @@ from local_llm_lab.models import load_model_spec
             "qwen35-4b",
             "mlx-community/Qwen3.5-4B-MLX-4bit",
             "off",
-            "none",
+            "auto",
             "auto",
             {
                 "max_seq_length": 2688,
@@ -48,7 +48,7 @@ from local_llm_lab.models import load_model_spec
             "qwen35-9b",
             "mlx-community/Qwen3.5-9B-MLX-4bit",
             "off",
-            "none",
+            "auto",
             "auto",
             {
                 "max_seq_length": 2688,
