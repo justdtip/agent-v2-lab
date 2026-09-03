@@ -1,5 +1,5 @@
 # Agent pipeline v2 on a 24 GB M4 Pro: state-carrying notes + observation windowing + QLoRA.
-model: "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
+model: qwen25-coder-3b
 output: "outputs/agent-v2"
 data: "data/agent_v2"
 seed: 20260902

@@ -1,6 +1,6 @@
 # Run B: identical recipe to agent_v2.yaml, but expert notes carry pending paths and the
 # cross-reference disambiguation rule (data-only ablation against run A).
-model: "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
+model: qwen25-coder-3b
 output: "outputs/agent-v2b"
 data: "data/agent_v2b"
 seed: 20260902

@@ -37,6 +37,23 @@ from local_llm_lab.pipeline.runner import (
 from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
 
 
+def test_registered_models_include_all_three_backbones() -> None:
+    from local_llm_lab.models import registered_models
+
+    assert registered_models() == ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"]
+
+
+def test_raw_legacy_hf_id_uses_qwen25_compatibility_defaults() -> None:
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec("mlx-community/Qwen2.5-Coder-3B-Instruct-4bit")
+
+    assert spec.name == "qwen25-coder-3b"
+    assert spec.chat.thinking == "unsupported"
+    assert spec.cache_strategy == "trim"
+    assert spec.lora.keys == "attention+mlp"
+
+
 def test_every_split_verifies_and_supervises_only_good_steps() -> None:
     for split in ("train", "valid", "test", "iter1"):
         for task in make_tasks(split, 48):
