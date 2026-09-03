@@ -54,15 +54,6 @@ __all__ = [
 ]
 
 DEFAULT_SCALE = 20.0  # mlx_lm.tuner.lora.LoRALinear's own default, used when a config omits it
-MODULE_TYPES = (
-    "q_proj",
-    "k_proj",
-    "v_proj",
-    "o_proj",
-    "gate_proj",
-    "up_proj",
-    "down_proj",
-)
 _LAYER_RE = re.compile(r"layers\.(\d+)\.")
 
 
@@ -395,8 +386,7 @@ def compare_adapters(paths: list[str | Path], *, top: int = 16) -> dict[str, Any
             module: float(
                 np.mean([record[key] for record in per_module if record["type"] == module])
             )
-            for module in MODULE_TYPES
-            if any(record["type"] == module for record in per_module)
+            for module in sorted({str(record["type"]) for record in per_module})
         }
         by_type["all"] = float(np.mean([record[key] for record in per_module]))
         summary[key] = by_type
@@ -509,7 +499,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
     for run in payload["runs"]:
         out.append(f"## {run['label']}: {label} by layer and module type")
         out.append("")
-        types = [name for name in MODULE_TYPES if any(m["type"] == name for m in run["modules"])]
+        types = sorted({str(module["type"]) for module in run["modules"]})
         layers = sorted({m["layer"] for m in run["modules"] if m["layer"] is not None})
         rows = []
         for layer in layers:
@@ -543,9 +533,9 @@ def render_markdown(payload: dict[str, Any]) -> str:
         )
         out.append("")
         pairs = list(comparison["mean_cosine_by_type"])
-        types = [
-            name for name in MODULE_TYPES if name in comparison["mean_cosine_by_type"][pairs[0]]
-        ]
+        types = sorted(
+            name for name in comparison["mean_cosine_by_type"][pairs[0]] if name != "all"
+        )
         rows = []
         for pair in pairs:
             values = comparison["mean_cosine_by_type"][pair]

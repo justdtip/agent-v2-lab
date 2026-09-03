@@ -175,7 +175,8 @@ def jacobian_vector_product(
     if float(tangent_norm.item()) == 0.0:
         return mx.zeros_like(primal32)
     primal_norm = mx.sqrt(mx.sum(primal32 * primal32))
-    eps = 1e-2 * primal_norm / tangent_norm
+    # The scale formula is undefined at the all-zero residual; retain a finite central step.
+    eps = 1e-2 if float(primal_norm.item()) == 0.0 else 1e-2 * primal_norm / tangent_norm
     return ((fn(primal32 + eps * tangent32) - fn(primal32 - eps * tangent32)) / (2.0 * eps)).astype(mx.float32)
 
 

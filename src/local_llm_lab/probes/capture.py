@@ -18,7 +18,7 @@ from __future__ import annotations
 import contextlib
 import re
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.pipeline.jlens import encode
@@ -63,7 +63,7 @@ def capture_residuals(
     token_ids: Any,
     layers: Sequence[int],
     *,
-    positions: str | Sequence[int] = "last",
+    positions: Literal["last", "all"] | Sequence[int] = "last",
 ) -> dict[int, Any]:
     """Post-block residual streams at several layers from **one** forward pass.
 
@@ -227,17 +227,28 @@ class InjectionHook:
             f"positions must be 'all', ('from', index), ('at', index), or an int; got {positions!r}"
         )
 
-    def _apply(self, out: Any, cache: Any) -> Any:
+    def _cache_offset(self, cache: Any) -> int:
+        """Absolute position before a block advances either native cache representation."""
+        if cache is None:
+            return 0
+        if hasattr(cache, "offset"):
+            return int(cache.offset)
+        recorded = self._array_offsets.get(id(cache))
+        if recorded is not None:
+            return recorded
+        state = getattr(cache, "state", ())
+        lengths = [
+            int(value.shape[-2])
+            for value in state
+            if len(getattr(value, "shape", ())) >= 2
+        ]
+        return max(lengths, default=0)
+
+    def _apply(self, out: Any, cache: Any, *, offset: int) -> Any:
         import mlx.core as mx
 
         self.calls += 1
         length = out.shape[1]
-        if cache is None:
-            offset = 0
-        elif hasattr(cache, "offset"):
-            offset = int(cache.offset)
-        else:
-            offset = self._array_offsets.get(id(cache), 0)
         weights = mx.zeros((1, length, 1), dtype=mx.float32)
         if self.mode == "all":
             weights = weights + 1.0
@@ -269,8 +280,9 @@ class InjectionHook:
         self._original_run_block = self.view.run_block
 
         def injecting_run_block(index: int, h: Any, masks: dict[str, Any], cache_i: Any = None) -> Any:
+            offset = self._cache_offset(cache_i)
             result = self._original_run_block(index, h, masks, cache_i)
-            return self._apply(result, cache_i) if index == self.layer else result
+            return self._apply(result, cache_i, offset=offset) if index == self.layer else result
 
         self.view.run_block = injecting_run_block
         return self

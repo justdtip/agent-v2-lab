@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 import mlx.core as mx
 import numpy as np
 
@@ -99,3 +101,40 @@ def test_injection_uses_kv_cache_offset_for_absolute_position() -> None:
 
     np.testing.assert_allclose(np.asarray(shifted), [[[1.0], [3.0], [1.0]]])
     assert hook.injected == 1
+
+
+def test_injection_uses_kv_offset_before_block_updates_it() -> None:
+    class KVCache:
+        offset = 4
+
+    class UpdatingView(_View):
+        def run_block(self, index, value, masks, cache_i=None):
+            result = super().run_block(index, value, masks, cache_i)
+            cache_i.offset += value.shape[1]
+            return result
+
+    view = UpdatingView()
+    cache = KVCache()
+    with capture.InjectionHook(view, 0, mx.array([2.0]), at_positions=[5]):
+        shifted = view.run_block(0, mx.zeros((1, 3, 1)), {}, cache)
+
+    np.testing.assert_allclose(np.asarray(shifted), [[[1.0], [3.0], [1.0]]])
+    assert cache.offset == 7
+
+
+def test_injection_derives_prefilled_arrays_cache_offset() -> None:
+    class ArraysCache:
+        state = [mx.zeros((1, 6, 1)), mx.zeros((1, 6, 1))]
+
+    view = _View()
+    with capture.InjectionHook(view, 0, mx.array([2.0]), at_positions=[7]):
+        shifted = view.run_block(0, mx.zeros((1, 3, 1)), {}, ArraysCache())
+
+    np.testing.assert_allclose(np.asarray(shifted), [[[1.0], [3.0], [1.0]]])
+
+
+def test_capture_residuals_declares_binding_positions_annotation() -> None:
+    parameter = inspect.signature(capture.capture_residuals).parameters["positions"]
+
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert "Literal['last', 'all'] | Sequence[int]" in str(parameter.annotation)

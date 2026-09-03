@@ -27,6 +27,12 @@ class _View:
         return value.astype(mx.float32)
 
 
+class _NonlinearView(_View):
+    def tail(self, layer):
+        del layer
+        return lambda value: (value * value).astype(mx.float32)
+
+
 @pytest.mark.parametrize("method", ["forward", "finite_difference"])
 def test_jlens_averaging_and_linearity_for_view(method: str) -> None:
     view = _View()
@@ -37,6 +43,31 @@ def test_jlens_averaging_and_linearity_for_view(method: str) -> None:
 
     assert stats["method"] == method
     np.testing.assert_allclose(np.asarray(mapped + negative), 0.0, atol=1e-4)
+
+
+@pytest.mark.parametrize("method", ["forward", "finite_difference"])
+def test_jlens_map_matches_independent_nonlinear_context_average(method: str) -> None:
+    view = _NonlinearView()
+    probe = mx.array([2.0], dtype=mx.float32)
+    mapped, stats = jlens.jlens_map(view, 1, probe, [[2], [4], []], method=method)
+
+    # residuals are ids + layer, and d(x²)/dx = 2x: mean(2*3*2, 2*5*2) = 16.
+    np.testing.assert_allclose(np.asarray(mapped), [16.0], atol=1e-3)
+    assert mapped.dtype == mx.float32
+    assert stats == {"used": 2, "skipped": 1, "method": method}
+
+
+@pytest.mark.parametrize("method", ["forward", "finite_difference"])
+def test_jvp_handles_zero_primal_and_zero_tangent(method: str) -> None:
+    view = _NonlinearView()
+    zero = mx.zeros((1, 2, 1), dtype=mx.float32)
+    tangent = mx.ones((1, 2, 1), dtype=mx.float32)
+
+    from_zero_primal = jlens.jacobian_vector_product(view, 1, zero, tangent, method=method)
+    from_zero_tangent = jlens.jacobian_vector_product(view, 1, tangent, zero, method=method)
+
+    np.testing.assert_allclose(np.asarray(from_zero_primal), 0.0, atol=1e-5)
+    np.testing.assert_allclose(np.asarray(from_zero_tangent), 0.0, atol=1e-5)
 
 
 def test_residual_at_delegates_to_one_view_head_pass() -> None:
@@ -78,14 +109,19 @@ def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> N
     monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
     monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
     calls = []
-    def fail_before_load(*_args):
-        calls.append("guard")
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: calls.append("guard"))
+    from local_llm_lab import project
+
+    monkeypatch.setattr(project, "configure_local_cache", lambda: calls.append("cache"))
+    def fake_load(*_args, **_kwargs):
+        calls.append("load")
         raise SystemExit(7)
 
-    monkeypatch.setattr(guard, "require_idle_gpu", fail_before_load)
+    fake_mlx_lm = SimpleNamespace(load=fake_load)
+    monkeypatch.setitem(__import__("sys").modules, "mlx_lm", fake_mlx_lm)
     monkeypatch.setattr("sys.argv", ["agent-v2-jlens"])
 
     with pytest.raises(SystemExit, match="7"):
         jlens.main()
 
-    assert calls == ["guard"]
+    assert calls == ["guard", "cache", "load"]
