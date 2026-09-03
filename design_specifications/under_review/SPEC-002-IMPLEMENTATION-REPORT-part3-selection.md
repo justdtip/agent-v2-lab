@@ -1,6 +1,7 @@
 # SPEC-002 implementation report, part 3: selection
 
-Status: implementation complete; independent review is pending until the reviewer returns.
+Status: implementation complete; independent principal review approved after review-fix round 4.
+Only the final documentation-only review of this closeout commit remains pending.
 
 ## Scope
 
@@ -72,18 +73,19 @@ boundary; legacy config/selector fields; and interval/pair-less rendering. GREEN
   model-layout literal and outside the new selector code; no introduced prohibited constants.
 
 The requested strict C901 max-9 command reports two pre-existing out-of-scope functions:
-`pipeline/cli.py::main` (17) and `pipeline/tasks.py::_wrong_old` (10). The fake-only full suite
-could not collect locally: `.venv/bin/python -m pytest -q` aborts in `tests/test_jlens.py` before
-test execution. Both conditions are recorded rather than hidden or fixed outside scope.
+`pipeline/cli.py::main` (17) and `pipeline/tasks.py::_wrong_old` (10). The earlier
+`.venv/bin/python -m pytest -q` collection abort in `tests/test_jlens.py` is retained as
+historical local-environment evidence. It is superseded for final verification by the successful
+pinned fake-only `uv` gate recorded below.
 
-## Safety and pending review
+## Safety and review status
 
 No model, checkpoint, tokenizer, or training/evaluation/select stage was run. Test doubles used
 temporary adapter directories and saved log text only. No protected `data/`, `outputs/`, or
 `reports/` path was modified. The behavior-preserving extraction commit is
 `8e7783977fc216568dc240ad9f426e2100c2ac59`; the selection implementation commit is
 `72140033ef2f83badf0f8ba1ed3da0dfcb051eb5`. Observed-but-not-fixed items are the two existing C901
-violations and the local full-suite collection abort above.
+violations; the earlier `.venv` collection result is historical rather than the final gate.
 
 ## Review-fix round 1
 
@@ -131,4 +133,22 @@ The round-3 fix commit is `72b1e57d6514f6acb5904e4fa82c4b27799c39b0`.
 The boolean `summary.tasks` guard now has a count-valid one-trajectory regression: without its
 explicit boolean rejection, `len(outcomes) == True` would pair the cohorts. Missing and null
 data-seed cohorts likewise retain otherwise matching non-empty outcomes, proving the non-null
-seed guard is independently required. These are test-strengthening changes only.
+seed guard is independently required. These are test-strengthening changes only. The round-4
+commit is `67c52f36c85c3db8f302ee9992274b9712881c4a`; independent principal review approved this
+round with no findings.
+
+## Final controller verification
+
+- Final authoritative fake-only gate: `uv run pytest -o addopts='' -q` — `355 passed, 1 xfailed
+  in 4.75s`.
+- Focused selection/neighbor set: 76 passed. Restored checkpoint plus pinned-hash nodes: 2
+  passed. Scoped Ruff is clean; every exact task commit and scoped net-diff check is clean.
+- Strict C901 remains at its pre-task-base values only: `pipeline/cli.py::main` = 17 and
+  `pipeline/tasks.py::_wrong_old` = 10.
+- Exact task commits: `8e7783977fc216568dc240ad9f426e2100c2ac59`,
+  `72140033ef2f83badf0f8ba1ed3da0dfcb051eb5`,
+  `ab1c38df649bde1c705cb85c3504515efa301b5b`,
+  `87181f0c308a86577f3b5c5e939da6bb0096d25f`,
+  `2607e02db5d2ec4867cc09087c5e8a9cc78a0f56`,
+  `72b1e57d6514f6acb5904e4fa82c4b27799c39b0`, and
+  `67c52f36c85c3db8f302ee9992274b9712881c4a`.
