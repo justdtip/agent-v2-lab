@@ -32,11 +32,11 @@ MLX model execution occurred.
 | File | Result | Current lines | Working diff at evidence capture |
 | --- | --- | ---: | ---: |
 | `src/local_llm_lab/probes/state_probe.py` | C1–C4 implementation plus gap-16 helper rename | 2,922 | +147 / −13 |
-| `tests/test_probes.py` | historical probe tests plus existing-test C1/C3/C4 assertions | 2,887 | +64 / −8 |
+| `tests/test_probes.py` | historical probe tests plus existing-test C1/C3/C4 assertions | 2,883 | +60 / −8 |
 | `tests/test_reanalysis.py` | R10-focused remediation and gap-16 tests | 62 | +62 / −0 |
 | `outputs/probes/state-corrected-hardened-20260903T172549/state-base-mix.reanalysis.json` | regenerated C6 artifact, intentionally uncommitted | 520,409 bytes | generated |
 | `outputs/probes/state-corrected-hardened-20260903T172549/state-base-mix.reanalysis.md` | regenerated C6 artifact, intentionally uncommitted | 80,562 bytes | generated |
-| `design_specifications/under_review/SPEC-004-s1-IMPLEMENTATION-REPORT.md` | this C5 evidence report | 207 | new |
+| `design_specifications/under_review/SPEC-004-s1-IMPLEMENTATION-REPORT.md` | this C5 evidence report | 227 | new |
 | `.superpowers/sdd/2026-09-03-spec-004-s1-remediation/progress.md` | C5 evidence entry only | 22 | append only |
 
 ## C1–C6 mapping
@@ -203,5 +203,25 @@ ratified wording.
   contributing split is below threshold.
 - The optional whole-file formatter remains affected by pre-existing formatting outside the
   remediation hunks; targeted Ruff lint and `git diff --check` are clean.
-- D3a, D3b, and every D4 wishlist/coverage item were explicitly not implemented.
+- D3a, D3b, and every D4 wishlist/coverage item were explicitly not implemented. Fix round 1
+  removed the remediation's four-line exact-two-output-files assertion after review identified
+  it as the unratified D4 coverage gap; no replacement D4 assertion was added.
 - Adapter comparisons and all gated SPEC-004 work remain deferred.
+
+## Fix round 1 evidence
+
+The reviewer-approved production code and artifacts were left byte-untouched. The only test
+change removed the unratified exact-two-output-files assertion from
+`test_reanalyse_cli_is_deterministic_and_never_calls_model_loading`. A repository search after
+the edit confirmed that neither remediation test file newly asserts the exact output-file set.
+
+Fresh focused verification after the removal:
+
+```text
+.venv/bin/python -m pytest tests/test_reanalysis.py -o addopts='' -q
+.venv/bin/python -m pytest tests/test_probes.py -k 'reanalysis_recodes_running_max or reanalysis_surface_counts_only or reanalysis_rejects_a_data_seed or reanalysis_fails_closed_when_capture_has_no_data_seed or reanalysis_rejects_saved_labels or offline_reanalysis_reports_task_bootstrap or reanalysis_marks_zero_variance or reanalyse_cli_is_deterministic' -o addopts='' -q
+```
+
+The dedicated remediation file passed 3 tests in 0.40 s. The eight selected historical and
+remediation probe tests passed with 111 deselected in 0.84 s. These focused selections avoid
+the separately owned Task 3 API boundary documented above.

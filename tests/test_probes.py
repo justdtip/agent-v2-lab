@@ -1913,10 +1913,6 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         "extra_stop_tokens": ["<|endoftext|>"],
         "max_think_tokens": 512,
     }
-    assert set(path.name for path in output.iterdir()) == {
-        "state-mini.reanalysis.json",
-        "state-mini.reanalysis.md",
-    }
     assert "Conclusions that survived" in markdown_path.read_text()
     first_payload = payload
     first_payload["metadata"].pop("elapsed_seconds")
