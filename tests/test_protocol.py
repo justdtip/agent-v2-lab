@@ -1,22 +1,109 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from local_llm_lab.agent_protocol import TOOL_SPECS, Action, ActionParseError
+from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec
 from local_llm_lab.pipeline.protocol import (
     SYSTEM_PROMPT,
     Step,
     assistant_message,
     build_prompt,
-    hidden_observation,
+    generation_suffix,
     parse_turn,
+    render_completion,
     render_tools,
     render_turn,
+    strip_thinking,
     system_prompt,
     tool_message,
     turn_is_complete,
     window_messages,
 )
+
+
+def _spec(mode: str) -> ModelSpec:
+    return ModelSpec(
+        name=f"fake-{mode}",
+        hf_id="fake",
+        family="fake",
+        chat=ChatSpec(
+            mode,  # type: ignore[arg-type]
+            {"enable_thinking": mode != "off"} if mode != "unsupported" else {},
+            "<eot>",
+            (),
+        ),
+        lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+        train={},
+        cache_strategy="none",
+        probe_layer_fractions=(1.0,),
+        memory_budget_gib=1.0,
+        policies={},
+    )
+
+
+class _RenderingTokenizer:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def apply_chat_template(self, messages, **kwargs) -> str:
+        self.calls.append({"messages": messages, **kwargs})
+        base = "".join(f"<{message['role']}>{message['content']}" for message in messages)
+        if not kwargs["add_generation_prompt"]:
+            return base
+        suffix = "<|im_start|>assistant\n"
+        if kwargs.get("enable_thinking") is False:
+            suffix += "<think>\n\n</think>\n\n"
+        return base + suffix
+
+
+@pytest.mark.parametrize("mode", ["unsupported", "off", "inference", "trained"])
+def test_build_prompt_uses_spec_template_policy_and_declared_suffix(mode: str) -> None:
+    spec = _spec(mode)
+    tokenizer = _RenderingTokenizer()
+
+    prompt = build_prompt(tokenizer, [{"role": "user", "content": "hello"}], spec=spec)
+
+    assert prompt.endswith(generation_suffix(spec))
+    assert tokenizer.calls[-1] == {
+        "messages": [{"role": "user", "content": "hello"}],
+        "add_generation_prompt": True,
+        "tokenize": False,
+        **spec.chat.template_kwargs,
+    }
+
+
+def test_strip_thinking_extracts_only_the_first_closed_block() -> None:
+    thinking, remainder = strip_thinking(
+        "<think>plan</think>\n\nNote\n```json\n{}\n```<think>literal</think>"
+    )
+
+    assert thinking == "plan"
+    assert remainder == "Note\n```json\n{}\n```<think>literal</think>"
+
+
+def test_open_thinking_blocks_completion_and_spec_rendering_declares_end_of_turn() -> None:
+    action = Action("finish", {"answer": "done"})
+    spec = _spec("inference")
+
+    assert render_completion("note", action, spec=spec) == render_turn("note", action) + "<eot>"
+    assert parse_turn(render_turn("note", action)).thinking is None
+    assert not turn_is_complete("<think>```json\n{}\n```\n" + render_turn("note", action))
+
+
+def test_build_prompt_rejects_a_wrong_suffix_and_skips_the_check_without_generation() -> None:
+    spec = _spec("unsupported")
+
+    class _WrongSuffixTokenizer:
+        def apply_chat_template(self, messages, **kwargs) -> str:
+            del messages
+            return "context" if not kwargs["add_generation_prompt"] else "wrong"
+
+    with pytest.raises(ValueError, match="generation suffix"):
+        build_prompt(_WrongSuffixTokenizer(), [], spec=spec)
+    assert build_prompt(_WrongSuffixTokenizer(), [], spec=spec, generation=False) == "context"
 
 
 def test_window_hides_only_older_observations() -> None:
@@ -161,7 +248,7 @@ class _ChatTokenizer:
     def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=False):
         assert not tokenize
         rendered = "".join(f"<|{message['role']}|>\n{message['content']}\n" for message in messages)
-        return rendered + ("<|assistant|>\n" if add_generation_prompt else "")
+        return rendered + ("<|im_start|>assistant\n" if add_generation_prompt else "")
 
     def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
         del add_special_tokens

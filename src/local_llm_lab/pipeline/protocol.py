@@ -4,9 +4,19 @@ import copy
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from local_llm_lab.agent_protocol import TOOL_SPECS, Action, ActionParseError, parse_action
+
+if TYPE_CHECKING:
+    from local_llm_lab.models import ModelSpec
+
+
+def _compatibility_spec() -> ModelSpec:
+    """Return the sole temporary default renderer specification; Task 6 removes this seam."""
+    from local_llm_lab.models import load_model_spec
+
+    return load_model_spec("qwen25-coder-3b")
 
 __all__ = [
     "DEFAULT_KEEP_LAST",
@@ -23,11 +33,14 @@ __all__ = [
     "action_json",
     "assistant_message",
     "build_prompt",
+    "generation_suffix",
     "hidden_observation",
     "parse_turn",
+    "render_completion",
     "render_tools",
     "render_turn",
     "system_prompt",
+    "strip_thinking",
     "tool_message",
     "turn_is_complete",
     "window_messages",
@@ -35,7 +48,7 @@ __all__ = [
 
 TOOL_FENCE_OPEN = "```json"
 TOOL_FENCE_CLOSE = "```"
-END_OF_TURN = "<|im_end|>"
+END_OF_TURN = _compatibility_spec().chat.end_of_turn
 DEFAULT_KEEP_LAST = 2
 
 # Tool calls are rendered as ordinary text (a fenced JSON block) rather than through the chat
@@ -108,6 +121,7 @@ class Turn:
     thought: str
     action: Action
     raw: str
+    thinking: str | None = None
 
 
 def action_json(action: Action) -> str:
@@ -119,6 +133,11 @@ def render_turn(thought: str, action: Action) -> str:
     """Plain-text assistant turn: the note, then the tool call as a fenced JSON block."""
     block = f"{TOOL_FENCE_OPEN}\n{action_json(action)}\n{TOOL_FENCE_CLOSE}"
     return f"{thought}\n{block}" if thought else block
+
+
+def render_completion(thought: str, action: Action, *, spec: ModelSpec) -> str:
+    """Render the supervised assistant completion using the model's declared turn terminator."""
+    return render_turn(thought, action) + spec.chat.end_of_turn
 
 
 def assistant_message(thought: str, action: Action) -> dict[str, Any]:
@@ -157,6 +176,7 @@ def window_messages(
 _FENCE_OPEN = re.compile(r"```[A-Za-z]*[ \t]*\r?\n?")
 _TOOL_OPEN = re.compile(r"<tool_call>", re.IGNORECASE)
 _TOOL_CLOSE = "</tool_call>"
+_THINK_BLOCK = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _DECODER = json.JSONDecoder()
 
 
@@ -197,8 +217,23 @@ def parse_turn(text: str) -> Turn:
     return Turn(thought=thought, action=action, raw=text)
 
 
+def strip_thinking(text: str) -> tuple[str | None, str]:
+    """Extract the first closed reasoning block and leave the model action text intact."""
+    match = _THINK_BLOCK.search(text)
+    if match is None:
+        return None, text
+    remainder = (text[: match.start()] + text[match.end() :]).lstrip("\r\n")
+    return match.group(1), remainder
+
+
 def turn_is_complete(text: str) -> bool:
     """True once the text contains a closed tool call (fenced JSON, legacy tag, or end of turn)."""
+    thinking_start = text.find("<think>")
+    if thinking_start >= 0:
+        thinking_end = text.find("</think>", thinking_start)
+        if thinking_end < 0:
+            return False
+        text = text[thinking_end + len("</think>") :]
     if END_OF_TURN in text or _TOOL_CLOSE in text:
         return True
     if text.count(TOOL_FENCE_CLOSE) < 2:
@@ -215,16 +250,31 @@ def build_prompt(
     *,
     tools: list[dict[str, Any]] = TOOL_SPECS,
     keep_last: int = DEFAULT_KEEP_LAST,
+    spec: ModelSpec | None = None,
+    generation: bool = True,
 ) -> str:
     """Render the windowed conversation for generation.
 
-    ``tools`` is accepted for API compatibility but is not passed to the chat template: the
-    system message already carries the tool list, and the template's own tool section would
-    instruct the model to use ``<tool_call>`` tags.
+    ``tools`` and an omitted ``spec`` are temporary Task 6 compatibility seams.  The former is
+    never passed to the template; the latter resolves only to the registered legacy 3B spec.
     """
     del tools
-    return tokenizer.apply_chat_template(
+    compatibility_mode = spec is None
+    resolved_spec = _compatibility_spec() if compatibility_mode else spec
+    prompt = tokenizer.apply_chat_template(
         window_messages(messages, keep_last),
-        add_generation_prompt=True,
+        add_generation_prompt=generation,
         tokenize=False,
+        **resolved_spec.chat.template_kwargs,
     )
+    if generation and not compatibility_mode and not prompt.endswith(generation_suffix(resolved_spec)):
+        raise ValueError("chat template generation suffix does not match the model specification")
+    return prompt
+
+
+def generation_suffix(spec: ModelSpec) -> str:
+    """Return the template suffix that anchors the first generated assistant token."""
+    assistant = "<|im_start|>assistant\n"
+    if spec.chat.thinking == "off":
+        return assistant + "<think>\n\n</think>\n\n"
+    return assistant

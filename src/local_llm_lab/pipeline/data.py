@@ -1,20 +1,32 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import os
 import random
+import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from local_llm_lab.models import ModelSpec
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
     assistant_message,
+    build_prompt,
+    generation_suffix,
+    parse_turn,
+    render_completion,
+    strip_thinking,
     tool_message,
     window_messages,
 )
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
+
+_ATOMIC_WRITE_THRESHOLD = 1024 * 1024
 
 
 def build_rows(task: Task, *, keep_last: int = DEFAULT_KEEP_LAST) -> list[dict[str, Any]]:
@@ -71,16 +83,77 @@ def build_rows(task: Task, *, keep_last: int = DEFAULT_KEEP_LAST) -> list[dict[s
     return rows
 
 
+def render_rows(
+    rows: list[dict[str, Any]], tokenizer: Any, *, spec: ModelSpec
+) -> list[dict[str, Any]]:
+    """Add non-mutating canonical prompt/completion fields for in-process training."""
+    training_spec = _training_spec(spec)
+    rendered: list[dict[str, Any]] = []
+    for row in rows:
+        messages = row.get("messages")
+        if not isinstance(messages, list) or not messages:
+            raise ValueError("rendered row must contain a non-empty messages list")
+        target = messages[-1]
+        if not isinstance(target, dict) or target.get("role") != "assistant":
+            raise ValueError("rendered row must end with an assistant target")
+        content = target.get("content")
+        if not isinstance(content, str):
+            raise ValueError("assistant target content must be a string")
+        thinking, remainder = strip_thinking(content)
+        turn = parse_turn(remainder)
+        completion = render_completion(turn.thought, turn.action, spec=training_spec)
+        if thinking is not None and spec.chat.thinking == "trained":
+            completion = f"<think>{thinking}</think>\n\n{completion}"
+        copy_row = copy.deepcopy(row)
+        copy_row["prompt"] = build_prompt(
+            tokenizer, messages[:-1], spec=training_spec, generation=True
+        )
+        copy_row["completion"] = completion
+        rendered.append(copy_row)
+    return rendered
+
+
+def _training_spec(spec: ModelSpec) -> ModelSpec:
+    """Disable inference-only thinking while retaining explicitly trained reasoning rows."""
+    if spec.chat.thinking != "inference":
+        return spec
+    return replace(
+        spec,
+        chat=replace(
+            spec.chat,
+            thinking="off",
+            template_kwargs={**spec.chat.template_kwargs, "enable_thinking": False},
+        ),
+    )
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     with path.open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> str:
+    """Write JSONL directly when small and atomically when its payload reaches one MiB."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    payload = "".join(
+        json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows
+    )
+    if len(payload.encode("utf-8")) < _ATOMIC_WRITE_THRESHOLD:
+        path.write_text(payload, encoding="utf-8")
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(temporary_path), str(path))
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -94,6 +167,8 @@ def write_dataset(
     chat_repeats: int = 1,
     recovery_repeats: int | dict[str, int] = 1,
     extra_dirs: list[Path] | None = None,
+    tokenizer: Any | None = None,
+    spec: ModelSpec | None = None,
 ) -> dict[str, Any]:
     """Write train/valid/test JSONL plus a manifest describing exactly what went in.
 
@@ -103,6 +178,9 @@ def write_dataset(
     run is shorter than one epoch, so without oversampling a given target may never be visited.
     Held-out splits are never reweighted.
     """
+    if (tokenizer is None) != (spec is None):
+        raise ValueError("tokenizer and spec must be provided together for rendered rows")
+    rendering_spec = _training_spec(spec) if spec is not None else None
     manifest: dict[str, Any] = {
         "generator_version": GENERATOR_VERSION,
         "seed": seed,
@@ -111,6 +189,12 @@ def write_dataset(
         "recovery_repeats": recovery_repeats,
         "splits": {},
     }
+    if rendering_spec is not None:
+        manifest["rendering"] = {
+            "thinking": rendering_spec.chat.thinking,
+            "template_kwargs": rendering_spec.chat.template_kwargs,
+            "generation_suffix": generation_suffix(rendering_spec),
+        }
     for split, count in counts.items():
         tasks = make_tasks(split, count, seed)
         expert_rows = [row for task in tasks for row in build_rows(task, keep_last=keep_last)]
@@ -127,6 +211,8 @@ def write_dataset(
             for extra in extra_dirs or []:
                 extra_rows.extend(read_jsonl(extra / "train.jsonl"))
         rows = [*expert_rows, *chat_rows, *extra_rows]
+        if tokenizer is not None and spec is not None:
+            rows = render_rows(rows, tokenizer, spec=spec)
         random.Random(f"{seed}:{split}").shuffle(rows)
         digest = write_jsonl(output / f"{split}.jsonl", rows)
         horizons = [task.horizon for task in tasks]
