@@ -1852,15 +1852,14 @@ def test_reference_generator_hashes_are_pinned_by_version(tmp_path) -> None:
         config["tasks"],
         seed=config["seed"],
         keep_last=config["keep_last"],
-        chat_dir=config["chat_replay"],
-        chat_repeats=config["chat_repeats"],
+        chat_dir=None,
         recovery_repeats=config["recovery_repeats"],
     )
     expected = {
         2: {
-            "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
-            "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
-            "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
+            "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
+            "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
+            "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
         }
     }
 

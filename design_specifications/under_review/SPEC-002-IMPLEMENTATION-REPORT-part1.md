@@ -38,11 +38,12 @@ accepted SPEC-002 §3/§5 commits `fc38a9d` and `6dff90c`. Those accepted change
 
 - R5 assigns generator version 1 to commit `97d197c`, the last generator that reproduces run C.
   The current generator is version 2.
-- Version 2 is pinned to train
-  `ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79`, valid
-  `d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8`, and test
-  `fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3` for
-  `configs/agent_v2c.yaml`.
+- Version 2's generator-owned task/expert rows are pinned to train
+  `e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58`, valid
+  `816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f`, and test
+  `10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877`. The oracle uses
+  `configs/agent_v2c.yaml` for counts, seed, keep-last, and recovery repeats, with
+  `chat_dir=None`.
 - There is no cross-version run-C equality assertion. Row changes require an explicit generator
   version bump and a new current-version hash table entry.
 - R6 is implemented by filtering all blank lines and all JSONL records lacking `task_id` through
@@ -108,3 +109,32 @@ remain in place and issue #2 remains open.
 
 No real model or checkpoint was loaded. No real train, select, eval, rollout, branch, prefer,
 preflight, or probe command ran.
+
+## Fix round 1: hermetic reference hashes
+
+Independent review found that the original hash test included `config["chat_replay"]`, which
+resolves to untracked `data/chat_replay`. A clean checkout would silently omit those rows, while
+local replay-data drift would be misclassified as a generator change.
+
+The corrected test explicitly passes `chat_dir=None` and pins only deterministic rows owned by
+`GENERATOR_VERSION`. It still loads `configs/agent_v2c.yaml` for task counts, seed, keep-last,
+and recovery repeats. This guard intentionally does not detect replay-data drift and does not
+preserve the complete locally mixed `agent_v2c` file hashes; replay provenance requires a
+separate versioned input contract.
+
+Fix Round 1 verification:
+
+```text
+uv run pytest -q tests/test_pipeline.py -k 'reference_generator'
+RED with the old mixed hashes: 1 failed, showing all three generator-only digests.
+GREEN with the new generator-only hashes: 1 passed.
+
+uv run pytest -q tests/test_pipeline.py
+87 passed; exit 0.
+
+uv run ruff check src/local_llm_lab/pipeline/tasks.py src/local_llm_lab/pipeline/transcript.py src/local_llm_lab/pipeline/data.py src/local_llm_lab/pipeline/cli.py src/local_llm_lab/provenance.py tests/test_pipeline.py
+All checks passed!; exit 0.
+
+git diff --check -- tests/test_pipeline.py docs/superpowers/plans/2026-09-03-spec-002-review-corrections.md design_specifications/under_review/SPEC-002-IMPLEMENTATION-REPORT-part1.md
+No output; exit 0.
+```

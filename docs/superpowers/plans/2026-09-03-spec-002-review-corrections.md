@@ -16,7 +16,12 @@
 - Commits `fc38a9d` and `6dff90c` are accepted and must not be reverted.
 - `GENERATOR_VERSION = 1` identifies commit `97d197c`, the last generator that reproduces run C; the current generator is `GENERATOR_VERSION = 2`.
 - Do not add a test requiring generator version 2 to reproduce run C. Pin the current generator's reference-config train/valid/test hashes so changed rows require a version bump.
-- The version-2 `configs/agent_v2c.yaml` reference hashes are train `ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79`, valid `d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8`, and test `fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3`.
+- The version-2 generator-only reference uses `configs/agent_v2c.yaml` for counts, seed,
+  keep-last, and recovery repeats, but passes `chat_dir=None` because chat replay is an external,
+  untracked mix input. Its hashes are train
+  `e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58`, valid
+  `816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f`, and test
+  `10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877`.
 - Every transcript reader must skip the header record lacking `task_id` through `transcript.iter_task_records(path)`.
 - Impossible `_wrong_path` and `_stale_path` construction must raise `RuntimeError` naming `task.task_id`; it must not silently change variants.
 - No model/checkpoint loading and no real train/select/eval/rollout/branch/prefer/preflight/probe execution. Fake-only tests and deterministic data generation are allowed.
@@ -108,14 +113,15 @@
   - Write a small temporary dataset and assert `manifest["generator_version"] == GENERATOR_VERSION` and the written `manifest.json` contains the same value.
   - Run `stage_data` with temporary `output` and `data` directories, tiny positive split counts, the registered `qwen25-coder-3b` name, and no chat or extra inputs. Assert `output/provenance.json` exists and its top-level `generator_version` equals `GENERATOR_VERSION`; this test must not invoke a loader.
   - Write a JSONL file containing a run header, two task records, a blank line, and a non-task metadata record. Assert `list(iter_task_records(path))` equals the two task records in order.
-  - Generate `configs/agent_v2c.yaml` into `tmp_path`, then compare literal hashes through a version-keyed table:
+  - Generate the task/expert rows from `configs/agent_v2c.yaml` into `tmp_path`, explicitly
+    passing `chat_dir=None`, then compare literal hashes through a version-keyed table:
 
   ```python
   expected = {
       2: {
-          "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
-          "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
-          "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
+          "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
+          "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
+          "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
       }
   }
   assert manifest["generator_version"] == GENERATOR_VERSION
@@ -124,7 +130,10 @@
   ]
   ```
 
-  The break caught is a row-changing generator edit without an explicit version bump. Expectations are literal hashes derived independently before implementation; do not read expected hashes from `data/agent_v2c`.
+  The break caught is a task/expert-row-changing generator edit without an explicit version
+  bump. Expectations are literal hashes derived independently before implementation; do not
+  read expected hashes from `data/agent_v2c` or include untracked `data/chat_replay`. Replay-data
+  drift and the full locally mixed dataset remain outside this generator-version oracle.
 
 - [ ] **Step 6: Run the new metadata/iterator/hash tests and verify RED**
 
