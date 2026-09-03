@@ -108,3 +108,32 @@ Round-2 verification: focused review `29 passed, 48 deselected`; owned modules `
 failed` (the protected historical provenance node); full fake-only `410 passed, 10 failed`.
 Normal Ruff and owned diff checks are clean. Strict C901 max 9 reports only baseline `cli.main=17`
 and `_wrong_old=10`.
+
+## Issue #11 — subtractive v4 test migration
+
+Following R10, removed eight obsolete phrase/parser assertions from `tests/test_pipeline.py` and
+`tests/test_probes.py` and their now-unused helpers/imports. Their lasting generator behavior now
+lives in `tests/test_tasks.py`: all four levels and realized variants prove action/file-derived
+cross-reference hop/key and new-match choices, aggregate append-only values/numeric split/total,
+batch worker-order progress/queue/verify structure, and conditional full loads/true maximum.
+No production code or protected artifact changed.
+
+The required legacy RED command returned `8 failed, 3 passed`: all eight named old tests failed
+solely on retired v2/v3 note shapes. Green evidence: focused generator/integrity `24 passed, 39
+deselected`; migrated tasks plus `test_pipeline.py` `72 passed`; affected pipeline/probe modules
+have only the protected reanalysis contract failure. Full fake-only evidence is `412 passed, 2
+failed`: the unchanged retrospective memo test and unchanged reanalysis metadata-shape test.
+
+### Chief ruling request: historical replay version selection
+
+Read-only inspection finds B/C JSON summaries contain `keep_last: 2` and run metadata (label,
+model, adapter, split, stress, temperature, cache, elapsed time); trajectories contain `task_id`,
+family, variant, prompt, steps, and verdict. They lack both `generator_version` and `data_seed`.
+Current public signatures are `task_from_id(task_id: str, seed: int, difficulty: int | None =
+None) -> Task` and `_render_evaluations(paths: list[Path], seed: int) -> str`.
+`_analyse_evaluation(path, fallback_seed)` calls `task_from_id(task_id, seed,
+difficulty=difficulty)` at `pipeline/integrity.py:469`, using the fallback when saved data seed is
+absent. Identical historical `test-*` ids/actions therefore cannot select v1/v2 rather than v4
+notes today. Please choose one policy: (1) versioned replay, adding/consuming saved generator
+version metadata; or (2) named-version refusal for unversioned historical records. This task does
+not implement either option.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,18 @@ _REPIN_MESSAGE = (
     "Intentional generator row change: bump GENERATOR_VERSION and re-pin both the "
     "generator-only and configured-replay hash oracles."
 )
+
+
+def _first_read_for_each_path(steps):
+    """Keep the first supervised read per path when a recovery re-reads it."""
+    unique = []
+    seen: set[str] = set()
+    for step in steps:
+        path = step.action.arguments["path"]
+        if path not in seen:
+            unique.append(step)
+            seen.add(path)
+    return unique
 
 
 def test_data_stage_writes_generator_version_provenance(tmp_path) -> None:
@@ -211,6 +224,166 @@ def test_run_d_long_family_notes_preserve_full_ground_truth_state(level: int) ->
         "Applied 0 of" in step.thought and "Next: worker-0.ini mode=" in step.thought
         for step in batch.steps
     )
+
+
+def test_run_d_cross_reference_actions_follow_current_keys_and_read_new_matches() -> None:
+    """Search/read choices derive from keys and files, not retired prose templates."""
+    for level in range(4):
+        for task in make_tasks("run-d-cross", 144, difficulty=level):
+            if task.family != "cross_reference":
+                continue
+            prior_reads: set[str] = set()
+            hop = 0
+            last_key = None
+            for index, step in enumerate(task.steps):
+                if not step.supervise:
+                    continue
+                if step.action.name == "search_files":
+                    key = step.action.arguments["query"]
+                    if key != last_key:
+                        hop += 1
+                    last_key = key
+                    assert f"Hop {hop}:" in step.thought
+                    assert f"current key {key}" in step.thought
+                    matches = {
+                        path for path, content in task.files.items() if key in content
+                    }
+                    following = next(
+                        later
+                        for later in task.steps[index + 1 :]
+                        if later.supervise and later.action.name == "read_file"
+                    )
+                    target = following.action.arguments["path"]
+                    assert target in matches
+                    if len(matches) > 1:
+                        assert matches - {target} <= prior_reads
+                if step.action.name == "read_file":
+                    prior_reads.add(step.action.arguments["path"])
+
+
+def test_run_d_aggregate_notes_carry_action_derived_values_split_and_total() -> None:
+    """Metric state is append-only and the final reported total is the file-derived sum."""
+    for level in range(4):
+        for task in make_tasks("run-d-aggregate", 144, difficulty=level):
+            if task.family != "aggregate_report":
+                continue
+            metric_paths = [path for path, content in task.files.items() if "value=" in content]
+            metric_paths.sort()
+            values = [int(task.files[path].rsplit("value=", 1)[1]) for path in metric_paths]
+            split = len(values) // 2
+            seen: list[int] = []
+            last_path = None
+            for step in task.steps:
+                if not step.supervise or step.action.name != "read_file":
+                    continue
+                path = step.action.arguments["path"]
+                if path not in metric_paths or path == last_path:
+                    continue
+                assert f"values so far: {', '.join(map(str, seen)) or 'none'}" in step.thought
+                assert f"split after {split} of {len(values)}" in step.thought
+                assert "first half:" not in step.thought.casefold()
+                assert "(full)" not in step.thought.casefold()
+                seen.append(int(task.files[path].rsplit("value=", 1)[1]))
+                last_path = path
+            assert seen == values
+            total = sum(values)
+            finish = next(step for step in task.steps if step.action.name == "finish")
+            assert re.search(rf"(?<!\d){total}(?!\d)", finish.thought)
+
+
+def test_run_d_batch_notes_follow_action_derived_worker_order_and_pending_queue() -> None:
+    """Inspection, apply, and verify progress is grounded in worker files and actions."""
+    for level in range(4):
+        for task in make_tasks("run-d-batch", 144, difficulty=level):
+            if task.family != "batch_update":
+                continue
+            workers = sorted(
+                (path for path in task.files if re.search(r"worker-\d+\.ini$", path)),
+                key=lambda path: int(re.search(r"worker-(\d+)\.ini$", path).group(1)),
+            )
+            names = [path.rsplit("/", 1)[-1] for path in workers]
+            supervised = [step for step in task.steps if step.supervise]
+            replace_at = next(
+                i for i, step in enumerate(supervised) if step.action.name == "replace_text"
+            )
+            inspect = _first_read_for_each_path([
+                step
+                for step in supervised[:replace_at]
+                if step.action.name == "read_file" and step.action.arguments["path"] in workers
+            ])
+            assert [step.action.arguments["path"] for step in inspect] == workers
+            for index, step in enumerate(inspect):
+                assert f"Inspected {index} of {len(workers)}" in step.thought
+                assert f"pending: {', '.join(names[index:])}." in step.thought
+
+            apply = [
+                step for step in supervised if step.action.name == "replace_text"
+            ]
+            apply = [
+                step for i, step in enumerate(apply)
+                if i == 0 or step.action.arguments["path"] != apply[i - 1].action.arguments["path"]
+            ]
+            assert [step.action.arguments["path"] for step in apply] == workers
+            for index, step in enumerate(apply):
+                old = step.action.arguments["old"].removeprefix("mode=")
+                new = step.action.arguments["new"].removeprefix("mode=")
+                assert f"Applied {index} of {len(workers)}" in step.thought
+                assert f"Next: {names[index]} mode={old} -> mode={new}" in step.thought
+                assert f"pending: {', '.join(names[index:])}." in step.thought
+
+            verify = _first_read_for_each_path([
+                step
+                for step in supervised[supervised.index(apply[-1]) + 1 :]
+                if step.action.name == "read_file" and step.action.arguments["path"] in workers
+            ])
+            assert [step.action.arguments["path"] for step in verify] == workers
+            for index, step in enumerate(verify):
+                assert (
+                    f"Applied {len(workers)} of {len(workers)}; verified {index} of"
+                    in step.thought
+                )
+                assert f"pending: {', '.join(names[index:])}." in step.thought
+            assert task.steps[-1].action.name == "finish"
+            assert "pending: none" in task.steps[-1].thought
+
+
+def test_run_d_conditional_notes_accumulate_loads_and_modify_the_true_maximum() -> None:
+    """The modified service is the file-derived running maximum, without a retired marker."""
+    for level in range(4):
+        for task in make_tasks("run-d-conditional", 144, difficulty=level):
+            if task.family != "conditional_update":
+                continue
+            services = sorted(
+                (path for path, content in task.files.items() if "name=service-" in content),
+                key=lambda path: int(re.search(r"service-(\d+)\.ini$", path).group(1)),
+            )
+            loads = {
+                path: int(re.search(r"load=(\d+)", task.files[path]).group(1)) for path in services
+            }
+            replace_at = next(
+                i for i, step in enumerate(task.steps) if step.action.name == "replace_text"
+            )
+            reads = _first_read_for_each_path([
+                step
+                for step in task.steps[:replace_at]
+                if step.supervise
+                and step.action.name == "read_file"
+                and step.action.arguments["path"] in services
+            ])
+            assert [step.action.arguments["path"] for step in reads] == services
+            seen: list[str] = []
+            for step in reads:
+                assert f"loads so far: {', '.join(seen) or 'none'}" in step.thought
+                path = step.action.arguments["path"]
+                service = path.rsplit("/", 1)[-1].removesuffix(".ini")
+                seen.append(f"{service}={loads[path]}")
+            replace = next(step for step in task.steps if step.action.name == "replace_text")
+            expected = max(services, key=loads.__getitem__)
+            service = expected.rsplit("/", 1)[-1].removesuffix(".ini")
+            assert replace.action.arguments["path"] == expected
+            assert f"loads so far: {', '.join(seen)}" in replace.thought
+            assert f"highest so far: {service}={loads[expected]}" in replace.thought
+            assert "(final)" not in replace.thought
 
 
 def test_run_d_renderer_is_canonical_and_recovery_notes_name_the_bad_path() -> None:

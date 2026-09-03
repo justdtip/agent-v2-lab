@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
 import subprocess
 import sys
 import warnings
@@ -709,49 +708,6 @@ def test_response_mean_activations_rejects_an_empty_response() -> None:
 
 # --------------------------------------------------------------------------- strip_state_fields
 
-_PENDING_RE = re.compile(r"pending: ([^.]*(?:\.[^\s][^.]*)*)\.")
-_BUCKET_RE = re.compile(
-    r"(?:approved|held \(skip\)|held skipped|first half|second half): ([0-9][0-9, ]*)"
-)
-
-
-def _long_family_notes(family: str) -> list[str]:
-    from local_llm_lab.pipeline.tasks import make_tasks
-
-    tasks = [task for task in make_tasks("test", 36) if task.family == family]
-    assert tasks, family
-    return [step.thought for task in tasks for step in task.steps]
-
-
-@pytest.mark.parametrize(
-    "family", ["ledger_reconcile", "conditional_update", "aggregate_report", "batch_update"]
-)
-def test_strip_state_fields_removes_pending_lists_and_bucket_contents(family: str) -> None:
-    stripped_any = False
-    for note in _long_family_notes(family):
-        stripped = capture.strip_state_fields(note)
-        pending = _PENDING_RE.search(note)
-        if pending:
-            stripped_any = True
-            assert "pending: [stripped]" in stripped
-            for name in (part.strip() for part in pending.group(1).split(",")):
-                assert name and name not in stripped, (name, stripped)
-        for bucket in _BUCKET_RE.finditer(note):
-            stripped_any = True
-            for value in (part.strip() for part in bucket.group(1).split(",")):
-                if not value:
-                    continue
-                # A bucket value must not survive as a standalone number; digits inside a
-                # retained filename ("invoice-4-143.txt") are not a leak.
-                assert not re.search(rf"(?<![\w.-]){re.escape(value)}(?![\w.-])", stripped), (
-                    value,
-                    stripped,
-                )
-    # batch_update carries its queue in "Next:"/"Remaining after this:" fields, which the
-    # design's field list does not name, so nothing is stripped there.
-    assert stripped_any == (family != "batch_update")
-
-
 def test_strip_state_fields_replaces_every_named_field() -> None:
     note = (
         "Invoices read: 2 of 6. approved: 178, 40; held (skip): 38. "
@@ -972,87 +928,10 @@ def test_compare_adapters_scores_a_copy_at_one_and_a_random_run_far_below(tmp_pa
 
 # --------------------------------------------------------------------------- row_labels
 
-_HIGHEST_RE = re.compile(r"highest so far: (?:none|service-\d+=(\d+))")
-_FIRST_HALF_RE = re.compile(r"first half: ([^;]*);")
-
-
 def _clean_tasks(count: int = 60):
     from local_llm_lab.pipeline.tasks import make_tasks
 
     return make_tasks("test", count)  # the test split is generated without recovery variants
-
-
-def test_row_labels_pending_count_matches_the_notes_pending_list() -> None:
-    checked = 0
-    for task in _clean_tasks():
-        for index, step in enumerate(task.steps):
-            listed = _PENDING_RE.search(step.thought)
-            if not listed:
-                continue
-            checked += 1
-            body = listed.group(1).strip()
-            expected = 0 if body == "none" else len(body.split(","))
-            assert state_probe.row_labels(task, index)["pending_count"] == expected, (
-                task.task_id,
-                index,
-                step.thought,
-            )
-    assert checked > 50
-
-
-def test_row_labels_running_max_and_first_bucket_match_their_notes() -> None:
-    checked = 0
-    for task in _clean_tasks():
-        for index, step in enumerate(task.steps):
-            labels = state_probe.row_labels(task, index)
-            highest = _HIGHEST_RE.search(step.thought)
-            if highest:
-                checked += 1
-                assert labels["running_max"] == (
-                    float(highest.group(1)) if highest.group(1) else 0.0
-                )
-            first = _FIRST_HALF_RE.search(step.thought)
-            if first:
-                checked += 1
-                body = first.group(1).strip().replace(" (full)", "")
-                assert labels["first_bucket_count"] == (
-                    0 if body == "none" else len(body.split(","))
-                )
-    assert checked > 40
-
-
-def test_row_labels_phase_matches_the_batch_update_note_prefixes() -> None:
-    checked = 0
-    for task in _clean_tasks():
-        if task.family != "batch_update":
-            continue
-        for index, step in enumerate(task.steps):
-            if step.action.name == "finish":  # "Phase verify complete" ends the verify phase
-                assert state_probe.row_labels(task, index)["phase"] == "other"
-                continue
-            # "Phase apply complete ...; phase verify begins." announces verify, so a
-            # "<phase> begins" declaration wins over the sentence's opening words.
-            lowered = step.thought.lower()
-            stated = next(
-                (
-                    phase
-                    for phase in ("inspect", "apply", "verify")
-                    if f"phase {phase} begins" in lowered
-                ),
-                None,
-            ) or next(
-                (
-                    phase
-                    for phase in ("inspect", "apply", "verify")
-                    if lowered.startswith(f"phase {phase}")
-                ),
-                None,
-            )
-            if stated is None:
-                continue
-            checked += 1
-            assert state_probe.row_labels(task, index)["phase"] == stated, (task.task_id, index)
-    assert checked > 20
 
 
 def test_row_labels_phase_is_other_or_inspect_outside_batch_update() -> None:

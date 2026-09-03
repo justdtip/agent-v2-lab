@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import sys
 import types
 
@@ -411,14 +410,6 @@ def test_failed_edit_variant_rereads_before_recovering() -> None:
         )
 
 
-def _name(path: str) -> str:
-    return path.rsplit("/", 1)[-1]
-
-
-def _long_horizon_tasks() -> list:
-    return [*make_tasks("train", 96), *make_tasks("test", 24)]
-
-
 def test_every_grounded_argument_is_derivable_from_its_context() -> None:
     """Every ``path``/``directory`` argument in a target must be composed from text already
     visible in its windowed context, not invented.
@@ -450,172 +441,6 @@ def test_every_grounded_argument_is_derivable_from_its_context() -> None:
                     f"{task.task_id} step {row['metadata']['step']}: argument {key}={value!r} "
                     f"has its {' and '.join(missing)} missing from context; target: {target!r}"
                 )
-
-
-def test_cross_reference_notes_resolve_multiple_search_matches() -> None:
-    for task in _long_horizon_tasks():
-        if task.family != "cross_reference":
-            continue
-        simulator = Simulator.for_task(task, faults=())
-        steps = [step for step in task.steps if step.supervise]
-        searches = [i for i, step in enumerate(steps) if step.action.name == "search_files"]
-        assert searches, task.task_id
-        for hop, i in enumerate(searches):
-            result = simulator.execute(steps[i].action)
-            assert result.startswith("MATCHES: "), (task.task_id, result)
-            matches = result.removeprefix("MATCHES: ").split(", ")
-            read = next(step for step in steps[i + 1 :] if step.action.name == "read_file")
-            target = read.action.arguments["path"]
-            assert target in matches, f"{task.task_id} hop {hop}: reads {target} not in {matches}"
-            if hop >= 1:
-                assert "the file whose Lookup-Key equals it is the new one" in steps[i].thought, (
-                    task.task_id
-                )
-            if len(matches) == 1:
-                assert read.thought.endswith(f"Search matched {_name(target)}. Reading it."), (
-                    task.task_id,
-                    read.thought,
-                )
-                simulator.execute(read.action)
-                continue
-            assert "already read" in read.thought, f"{task.task_id} hop {hop}: {read.thought!r}"
-            assert f"reading the new one: {_name(target)}." in read.thought, (
-                task.task_id,
-                read.thought,
-            )
-            for other in matches:
-                if other != target:
-                    assert _name(other) in read.thought, (task.task_id, other, read.thought)
-                    already = [
-                        c.arguments["path"] for c in simulator.calls if c.name == "read_file"
-                    ]
-                    assert other in already, f"{task.task_id}: {other} was not read before"
-            simulator.execute(read.action)
-
-
-def _parse_agg_bucket(label: str) -> list[int]:
-    """``18, 14, 75 (full)`` -> ``[18, 14, 75]``; ``none`` -> ``[]``."""
-    label = label.removesuffix(" (full)")
-    return [] if label == "none" else [int(part) for part in label.split(", ")]
-
-
-def _metric_value(task, step) -> int:
-    content = task.files[step.action.arguments["path"]]
-    match = re.search(r"value=(\d+)", content)
-    assert match, (task.task_id, step.action.arguments["path"])
-    return int(match.group(1))
-
-
-def test_aggregate_report_reading_drops_no_value() -> None:
-    """Every metric value must land in exactly one running bucket by the time reading
-    finishes, never be invented by indexing into a remembered list.
-
-    Each read note states the buckets as of *before* that read (mirroring
-    ``ledger_reconcile``), so the last metric's own value is not yet in either bucket at the
-    moment its note is written -- it is the value that read is about to fetch. Folding that
-    one value in, by position, must reconstruct the full value list with nothing dropped and
-    nothing duplicated; this is exactly the failure mode a trained checkpoint showed (losing
-    one value while splitting the list in one shot).
-    """
-    for task in [*make_tasks("train", 144), *make_tasks("test", 60)]:
-        if task.family != "aggregate_report":
-            continue
-        # Only supervised notes are real training decisions (a wrong_path/stale_path guess is
-        # unsupervised noise); a transient retry duplicates the immediately preceding note
-        # verbatim (same path), so adjacent duplicates by path are collapsed too.
-        raw_notes = [
-            step
-            for step in task.steps
-            if step.supervise and step.action.name == "read_file" and "first half:" in step.thought
-        ]
-        metric_notes = [
-            step
-            for i, step in enumerate(raw_notes)
-            if i == 0 or step.action.arguments["path"] != raw_notes[i - 1].action.arguments["path"]
-        ]
-        assert metric_notes, task.task_id
-        metric_count = len(metric_notes)
-        split_at = metric_count // 2
-
-        match = re.search(
-            r"first half: (.*?); second half: (.*?)\. Reading", metric_notes[-1].thought
-        )
-        assert match, (task.task_id, metric_notes[-1].thought)
-        first_half = _parse_agg_bucket(match.group(1))
-        second_half = _parse_agg_bucket(match.group(2))
-        last_value = _metric_value(task, metric_notes[-1])
-        (first_half if metric_count - 1 < split_at else second_half).append(last_value)
-
-        all_values = [_metric_value(task, step) for step in metric_notes]
-        assert sorted(first_half + second_half) == sorted(all_values), task.task_id
-        assert len(first_half) + len(second_half) == len(all_values), task.task_id
-
-
-def _worker_managed_order(task) -> list[str]:
-    """The managed worker basenames in manifest order, derived independently of the notes."""
-    return [
-        _name(path)
-        for path in sorted(
-            task.expected_files,
-            key=lambda p: int(re.search(r"worker-(\d+)\.ini", p).group(1)),
-        )
-    ]
-
-
-def test_batch_update_apply_phase_names_a_queue_head_then_transitions_to_verify() -> None:
-    """Apply-phase notes name a queue head, never a position to index: exactly one worker per
-    note, and the heads across the phase visit every managed worker once each in manifest
-    order. A ``transient`` retry may legitimately repeat the immediately preceding head (it is
-    the same call, retried unchanged), so only adjacent duplicates are collapsed before
-    comparing. The verify phase must announce its own start as a stated fact rather than
-    something to infer from the apply phase falling silent -- the second, independent bug this
-    family was rewritten to fix (it never transitioned and kept re-applying to the last
-    worker).
-    """
-    for task in [*make_tasks("train", 144), *make_tasks("valid", 36), *make_tasks("test", 60)]:
-        if task.family != "batch_update":
-            continue
-        supervised = [step for step in task.steps if step.supervise]
-
-        apply_steps = [step for step in supervised if step.action.name == "replace_text"]
-        assert apply_steps, task.task_id
-        heads = []
-        for step in apply_steps:
-            matches = re.findall(r"Next: (worker-\d+\.ini) mode=", step.thought)
-            assert len(matches) == 1, (task.task_id, step.thought)
-            heads.append(matches[0])
-        deduped = [head for i, head in enumerate(heads) if i == 0 or head != heads[i - 1]]
-        assert deduped == _worker_managed_order(task), task.task_id
-
-        last_apply_index = max(
-            i for i, step in enumerate(supervised) if step.action.name == "replace_text"
-        )
-        first_verify = supervised[last_apply_index + 1]
-        assert first_verify.action.name == "read_file", task.task_id
-        assert "phase verify begins" in first_verify.thought, (
-            task.task_id,
-            first_verify.thought,
-        )
-
-
-def test_conditional_update_note_before_replace_names_the_modified_service() -> None:
-    """The note attached to the (sole) ``replace_text`` step -- written immediately before that
-    call, in the same turn -- must already know the winner from the incrementally tracked
-    running best, and that winner must be the service actually modified. This replaces a
-    one-shot ``max()`` over a remembered list, the same class of bug that made a trained
-    checkpoint throttle the wrong worker.
-    """
-    for task in [*make_tasks("train", 144), *make_tasks("valid", 36), *make_tasks("test", 60)]:
-        if task.family != "conditional_update":
-            continue
-        supervised = [step for step in task.steps if step.supervise]
-        replace_steps = [step for step in supervised if step.action.name == "replace_text"]
-        assert len(replace_steps) == 1, task.task_id
-        replace_step = replace_steps[0]
-        match = re.search(r"highest so far: (service-\d+)=\d+ \(final\)", replace_step.thought)
-        assert match, (task.task_id, replace_step.thought)
-        modified = _name(replace_step.action.arguments["path"]).removesuffix(".ini")
-        assert match.group(1) == modified, task.task_id
 
 
 def test_simulator_verdict_reports_reasons_and_recovery() -> None:
