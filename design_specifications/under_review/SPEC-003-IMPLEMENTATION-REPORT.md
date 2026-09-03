@@ -61,5 +61,6 @@ did not alter those protected seams or artifacts.
 
 ## Changed paths and commit
 
-The explicit-path commit is recorded in the task execution report after commit. No pending spec,
-protected data/output/report artifact, model, or GPU operation was touched.
+Baseline: `18c4bd9`. Source implementation: `68e4dac feat: implement SPEC-003 Run D data
+recipe`. No pending spec, protected data/output/report artifact, model, or GPU operation was
+touched.
