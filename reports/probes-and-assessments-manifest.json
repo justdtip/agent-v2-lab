@@ -1,0 +1,680 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-09-03T18:20:43+1000",
+  "repository_root": "/Users/daniel.tipton/Desktop/An app",
+  "manifest_path": "reports/probes-and-assessments-manifest.json",
+  "purpose": "Complete static inventory of representation probes, companion interpretability probes, behavioral and system assessments, validation coverage, and saved assessment artifact families available in this repository.",
+  "scope": {
+    "included": [
+      "The six P-series designs in research/representation_probes.md",
+      "All runnable probe CLIs and their probe-specific support modules",
+      "The companion J-space/J-lens probe implementation and research sweep",
+      "Runnable behavioral, comparison, environment, reward, and report assessments exposed by the repository",
+      "Probe-specific test modules",
+      "Research documents that contain durable assessments or experimental decisions",
+      "Saved probe, J-lens, evaluation, selection, and transcript artifact families"
+    ],
+    "excluded": [
+      "Training and data-generation commands unless they are direct dependencies of an assessment",
+      "Generic unit tests unrelated to probe or assessment implementations",
+      "Individual per-task transcript files and individual live checkpoint shards; their parent collections and counts or patterns are inventoried instead",
+      "Python bytecode caches, .DS_Store files, model weights, and adapter weights"
+    ],
+    "method": "Static file discovery and inspection only. No probe, test, MLX import, model load, or model generation was run to create this manifest."
+  },
+  "status_vocabulary": {
+    "implemented": "A runnable implementation exists for all material parts of the stated repository-level interface.",
+    "partially_implemented": "A runnable implementation exists, but one or more design phases or controls are explicitly absent.",
+    "scaffold_only": "Reusable infrastructure exists, but no end-to-end probe command exists.",
+    "planned_only": "The method exists only in a research/design document.",
+    "complete_valid": "A saved result completed its implemented protocol and is not invalidated by a known confound.",
+    "complete_partial_design": "A saved result completed the implemented phases, but the implementation does not cover the full research design.",
+    "complete_invalid": "Files are complete, but the repository records a methodological failure that prevents the result from supporting the intended conclusion.",
+    "partial": "Some intermediate artifacts exist, but the expected final result set is absent.",
+    "in_progress_or_resumable_partial": "Checkpoint artifacts exist and were observed changing during inventory; no final result set was present at the final-file check."
+  },
+  "reference_specification": {
+    "path": "research/representation_probes.md",
+    "sha256": "02efb2e1693a5ee0ea2c832dc304d1d3df723ad421a4282133230552d41a96b0",
+    "title": "Representation probes: is the ceiling parameters or regimen?",
+    "date": "2026-09-03",
+    "relationship": "Canonical design and decision-rule source for P1 through P6; companion to research/jspace_probe.md.",
+    "global_requirements": [
+      "Capture activations in float32.",
+      "Use the model's own causal mask for every capture.",
+      "Report every probe with its control.",
+      "Write JSON and Markdown results under outputs/probes/<probe>/.",
+      "Interpret P2 using margin over the position-only baseline rather than raw accuracy.",
+      "Use mixed difficulties and recovery variants for corrected P2 data."
+    ]
+  },
+  "summary": {
+    "representation_probe_designs": 6,
+    "implemented_probe_clis": 3,
+    "probe_support_modules": 5,
+    "companion_jspace_probe_interfaces": 2,
+    "additional_planned_probe_designs": 4,
+    "broader_assessment_interfaces": 9,
+    "probe_validation_test_files": 3,
+    "durable_research_and_assessment_records": 4,
+    "p_series_coverage": {
+      "P1": "partially_implemented",
+      "P2": "implemented",
+      "P3": "planned_only",
+      "P4": "scaffold_only",
+      "P5": "partially_implemented",
+      "P6": "planned_only"
+    },
+    "decision_grade_saved_p_series_results": [
+      "P5 items 1-4 for adapters A/B/C; item 5 layer-block ablation is absent"
+    ],
+    "known_invalid_saved_p_series_results": [
+      "P1 first assistant-axis build",
+      "P2 first fixed-difficulty base build"
+    ],
+    "live_or_resumable_partial_result_sets": [
+      "outputs/probes/state-corrected-hardened-20260903T172549"
+    ]
+  },
+  "representation_probe_alignment": [
+    {
+      "id": "P1",
+      "name": "Assistant axis before and after agentic post-training",
+      "design_section": "research/representation_probes.md#4-probe-p1-the-assistant-axis-before-and-after-agentic-post-training",
+      "implementation_status": "partially_implemented",
+      "entrypoint": "agent-v2-probe-axis",
+      "entrypoint_target": "local_llm_lab.probes.assistant_axis:main",
+      "primary_source": "src/local_llm_lab/probes/assistant_axis.py",
+      "primary_source_sha256": "c55b893cd246485366ea93ea6c7ca591ab28225f340251021f07cef5866dd455",
+      "support_sources": [
+        "src/local_llm_lab/probes/capture.py",
+        "src/local_llm_lab/probes/stats.py",
+        "src/local_llm_lab/probes/policies.py",
+        "src/local_llm_lab/probes/guard.py"
+      ],
+      "commands": {
+        "build": "uv run agent-v2-probe-axis build --policy <base|A|B|C|adapter-dir> --output <dir>",
+        "project": "uv run agent-v2-probe-axis project --policy <base|A|B|C|adapter-dir> --axis <axis.npz> --eval <evaluation.json> --output <dir>"
+      },
+      "implemented_components": [
+        "Default-assistant and 24-role rollout generation",
+        "Strong multi-sentence in-character prompts",
+        "Optional one-shot role exemplars",
+        "Persisted rollout text before activation capture",
+        "Heuristic role-expression scoring and optional same-policy 0-3 judge",
+        "Filtering of non-expressive role responses",
+        "Per-layer axis construction from mean response-token residuals",
+        "PC1-alignment and split-half stability diagnostics",
+        "Per-turn trajectory position, drift, minimum, outcome, and failure-reason summaries"
+      ],
+      "missing_design_components": [
+        "Causal steering along the axis",
+        "Random matched-norm steering control",
+        "Activation capping at the 25th-percentile threshold",
+        "Broken-family reruns under steering/capping"
+      ],
+      "alignment_notes": [
+        "The current source explicitly records that it implements only the measurement half of design section 4.",
+        "The current strong prompts, exemplars, rollout persistence, expression filter, and fail-closed role-count gate were engineered in direct response to the invalid first build documented in representation_probes.md."
+      ],
+      "saved_artifacts": [
+        {
+          "root": "outputs/probes/axis",
+          "files": [
+            "outputs/probes/axis/axis-base.npz",
+            "outputs/probes/axis/axis-base.json",
+            "outputs/probes/axis/axis-base.md"
+          ],
+          "status": "complete_invalid",
+          "reason": "The one-line role prompts did not elicit role expression. PC1 alignment was 0.25-0.31 at middle layers versus the paper's >0.6 check, so the result measures prompt-format differences rather than persona.",
+          "json_sha256": "00b3b6d3c19ddc2fea50701df29495dc7baac34ccd4460582e53c9c3cc7def0e",
+          "markdown_sha256": "5d6da11a6512d21d3022b931f697326927a370548af6406dc0d92e4462e2d63c"
+        },
+        {
+          "root": "outputs/probes/axis-corrected",
+          "files": [
+            "outputs/probes/axis-corrected/rollouts-base.jsonl"
+          ],
+          "status": "partial",
+          "observed_records": 288,
+          "composition": "96 default-assistant responses plus 8 responses for each of 24 roles; 12 roles used available exemplars.",
+          "missing_expected_files": [
+            "outputs/probes/axis-corrected/axis-base.npz",
+            "outputs/probes/axis-corrected/axis-base.json",
+            "outputs/probes/axis-corrected/axis-base.md"
+          ],
+          "rollouts_sha256": "5ee61984e8d38a76c8772c46f2f6b6e161701a2dc0fb9112d2b1240df54b07cc"
+        },
+        {
+          "path": "outputs/probes/axis-chain-invalid.log",
+          "status": "diagnostic_log",
+          "sha256": "3d0703e2f1b19ba04e3e8b0e2afc03cd4137ccb70d5d0390e7bd096b1555d107",
+          "notes": "Contains the completed invalid base build followed by the start of a B build that was stopped."
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Internal environment model via linear state probes",
+      "design_section": "research/representation_probes.md#5-probe-p2-the-internal-environment-model-linear-state-probes",
+      "implementation_status": "implemented",
+      "entrypoint": "agent-v2-probe-state",
+      "entrypoint_target": "local_llm_lab.probes.state_probe:main",
+      "primary_source": "src/local_llm_lab/probes/state_probe.py",
+      "primary_source_sha256": "51380ab568fe0a4a53f8b73e41b0e48a26c630f3fe31327c9247e9249745da47",
+      "support_sources": [
+        "src/local_llm_lab/probes/capture.py",
+        "src/local_llm_lab/probes/stats.py",
+        "src/local_llm_lab/probes/policies.py",
+        "src/local_llm_lab/probes/guard.py",
+        "src/local_llm_lab/pipeline/data.py",
+        "src/local_llm_lab/pipeline/tasks.py"
+      ],
+      "command": "uv run agent-v2-probe-state --policy <base|A|B|C|adapter-dir> --mix-difficulty --within-position --limit 120 --layers 6,12,18,24,30,35 --mlx-cache-limit-mib 512 --output <dir>",
+      "targets": {
+        "pending_count": "regression",
+        "phase": "categorical",
+        "prev_error": "binary",
+        "next_tool": "categorical",
+        "running_max": "regression",
+        "first_bucket_count": "regression"
+      },
+      "implemented_components": [
+        "Generator-derived labels rather than labels parsed from notes",
+        "Residual capture at the last prompt token for configurable layers",
+        "Task-isolated train/test split",
+        "Ridge and multinomial/binary logistic probes",
+        "R2, MAE, accuracy, macro-F1, and AUC as appropriate",
+        "Shuffled-label controls",
+        "Position-only baseline keyed by family and step",
+        "Probe margin over the position-only baseline",
+        "Mixed train/p2mix/test difficulties and recovery variants",
+        "Leakage-free within-position analysis",
+        "Preflight rejection of insufficiently varying mixed designs",
+        "Intact-note and stripped-state-field conditions",
+        "Difficulty-stratified results",
+        "Per-task resumable checkpoint shards with artifact identity and task signatures",
+        "Bounded MLX cache and task-boundary cache reclamation"
+      ],
+      "alignment_notes": [
+        "The position baseline, mixed difficulties, recovery variants, and within-position analysis were engineered specifically to satisfy the two mandatory corrections added to design section 5 after the first confounded run.",
+        "A complete decision requires the intact-versus-stripped contrast for base and adapters, not a single raw-accuracy run."
+      ],
+      "saved_artifacts": [
+        {
+          "root": "outputs/probes/state",
+          "files": [
+            "outputs/probes/state/state-base.npz",
+            "outputs/probes/state/state-base.json",
+            "outputs/probes/state/state-base.md"
+          ],
+          "status": "complete_invalid",
+          "reason": "The train-only, fixed-difficulty design made state nearly deterministic from family and step. The activation scores cannot be interpreted as state decoding without the corrected position controls.",
+          "rows": 737,
+          "tasks": 120,
+          "policy": "base",
+          "notes": "intact",
+          "json_sha256": "5ec5c449294c3ba64b6948828fc54ffffecf365d0753546cbe42c478c8b36128",
+          "markdown_sha256": "ae6d0492cdc563ddb790ec61ea3246b73d1ac14d87c9127c0e30a5393022a248"
+        },
+        {
+          "path": "outputs/probes/chain-confounded.log",
+          "status": "diagnostic_log",
+          "sha256": "00e23e3d7a9f0b46445a15d6c7744421c6d5a4983da2a91d92385198cd06b700",
+          "notes": "Contains the completed confounded base capture/result and the beginning of a subsequent capture."
+        },
+        {
+          "root": "outputs/probes/state-corrected",
+          "status": "empty_placeholder",
+          "files": []
+        },
+        {
+          "root": "outputs/probes/state-corrected-hardened-20260903T172549",
+          "status": "in_progress_or_resumable_partial",
+          "invocation": "uv run agent-v2-probe-state --policy base --mix-difficulty --within-position --limit 120 --layers 6,12,18,24,30,35 --mlx-cache-limit-mib 512 --output outputs/probes/state-corrected-hardened-20260903T172549",
+          "expected_tasks": 360,
+          "checkpoint_pattern": "outputs/probes/state-corrected-hardened-20260903T172549/state-base-mix.checkpoints/NNNN.npz",
+          "expected_final_files": [
+            "outputs/probes/state-corrected-hardened-20260903T172549/state-base-mix.npz",
+            "outputs/probes/state-corrected-hardened-20260903T172549/state-base-mix.json",
+            "outputs/probes/state-corrected-hardened-20260903T172549/state-base-mix.md"
+          ],
+          "final_files_present_at_inspection": false,
+          "inventory_note": "Checkpoint contents changed during static inventory, so the live shard count is intentionally not frozen here. The shards are resumable inputs, not a completed assessment."
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Sense of being on track",
+      "design_section": "research/representation_probes.md#6-probe-p3-the-sense-of-being-on-track",
+      "implementation_status": "planned_only",
+      "entrypoint": null,
+      "primary_source": null,
+      "planned_components": [
+        "On-policy rollout collection on a fresh 120-task split",
+        "Per-turn eventual-success logistic probes at turns 1, 2, 3, and midpoint",
+        "Pre-loop and pre-budget-exhaustion early-warning AUC",
+        "Counterfactual verbalisation interruption",
+        "Calibration and agreement analysis",
+        "Shuffled-label and transcript-feature controls"
+      ],
+      "available_dependencies": [
+        "src/local_llm_lab/pipeline/rollout.py",
+        "src/local_llm_lab/pipeline/runner.py",
+        "src/local_llm_lab/probes/capture.py",
+        "src/local_llm_lab/probes/stats.py"
+      ],
+      "saved_artifacts": []
+    },
+    {
+      "id": "P4",
+      "name": "Introspective awareness under concept injection",
+      "design_section": "research/representation_probes.md#7-probe-p4-introspective-awareness-under-concept-injection",
+      "implementation_status": "scaffold_only",
+      "entrypoint": null,
+      "primary_source": null,
+      "planned_components": [
+        "Forty concept vectors at layer 24",
+        "Strengths 0, 2, 4, and 8 relative to mean residual norm",
+        "Detection, identification, false-positive, and coherence scoring",
+        "Raw transcripts and named-before-said judging",
+        "Task-grounded injection of P2 state directions",
+        "Matched random-direction and wrong-layer controls"
+      ],
+      "available_scaffolding": [
+        {
+          "path": "src/local_llm_lab/probes/capture.py",
+          "symbol": "InjectionHook",
+          "capability": "Temporarily adds alpha times a vector to one transformer block's output."
+        }
+      ],
+      "missing_for_end_to_end_probe": [
+        "Concept-vector construction",
+        "Multi-layer/response injection orchestration",
+        "Introspection prompts and judge",
+        "Task-state behavior measurement",
+        "CLI and result renderer"
+      ],
+      "saved_artifacts": []
+    },
+    {
+      "id": "P5",
+      "name": "Exact LoRA model diff",
+      "design_section": "research/representation_probes.md#8-probe-p5-what-the-adapters-wrote-exact-model-diff",
+      "implementation_status": "partially_implemented",
+      "entrypoint": "agent-v2-probe-delta",
+      "entrypoint_target": "local_llm_lab.probes.adapter_delta:main",
+      "primary_source": "src/local_llm_lab/probes/adapter_delta.py",
+      "primary_source_sha256": "131111939bf318001cfa5a2586445e984a93cda8cf2af7e5559e33237b6dc5c2",
+      "support_sources": [
+        "src/local_llm_lab/probes/capture.py",
+        "src/local_llm_lab/probes/guard.py",
+        "src/local_llm_lab/pipeline/jlens.py"
+      ],
+      "command": "uv run agent-v2-probe-delta --adapters outputs/agent-v2/best-adapter outputs/agent-v2b/best-adapter outputs/agent-v2c/best-adapter --readout-layers <layers> --output <dir>",
+      "implemented_components": [
+        "Exact low-rank delta orientation matching MLX-LM LoRALinear",
+        "Relative Frobenius update size per module and layer",
+        "Exact rank-16 singular spectrum without dense 10 GB materialization",
+        "Effective rank holding 90 percent of squared energy",
+        "Cross-run principal-angle cosine agreement",
+        "Matched random-subspace control",
+        "J-lens and logit-lens readout of signed top output directions"
+      ],
+      "missing_design_components": [
+        "Layer-block ablation evaluation. The CLI exposes --ablate but explicitly rejects it as not implemented."
+      ],
+      "available_scaffolding": [
+        {
+          "path": "src/local_llm_lab/probes/capture.py",
+          "symbol": "lora_block_mask",
+          "capability": "Reversibly zeros LoRA contributions outside selected layers, suitable for the missing block ablation."
+        }
+      ],
+      "saved_artifacts": [
+        {
+          "root": "outputs/probes/delta",
+          "files": [
+            "outputs/probes/delta/delta.json",
+            "outputs/probes/delta/delta.md"
+          ],
+          "status": "complete_partial_design",
+          "policies": [
+            "A",
+            "B",
+            "C"
+          ],
+          "modules_per_policy": 252,
+          "has_base_relative_norms": true,
+          "has_cross_run_random_control": true,
+          "has_direction_readouts": true,
+          "has_layer_block_ablation": false,
+          "json_sha256": "c3fb56bbec35b62a87509f41ed4c64aec47116c2ec7de048236808763d324f2d",
+          "markdown_sha256": "de8d7669ab8326d9bbbc3baaa27fa6c3a3dabc8dc135528b1fe763124843a51d"
+        }
+      ]
+    },
+    {
+      "id": "P6",
+      "name": "Causal tracing on a failing decision",
+      "design_section": "research/representation_probes.md#9-probe-p6-causal-tracing-on-a-failing-decision",
+      "implementation_status": "planned_only",
+      "entrypoint": null,
+      "primary_source": null,
+      "planned_components": [
+        "B-to-C or stripped-note-to-queue-note activation patching",
+        "Layer by token-group patch grid",
+        "System, task, note-value, observation, and final-token position groups",
+        "Correct-output flip heat map",
+        "Unrelated-task and random-position controls"
+      ],
+      "available_dependencies": [
+        "src/local_llm_lab/probes/capture.py",
+        "src/local_llm_lab/pipeline/jlens.py",
+        "src/local_llm_lab/pipeline/runner.py"
+      ],
+      "missing_for_end_to_end_probe": [
+        "Residual replacement/patching hook",
+        "Aligned failing/correct prompt construction",
+        "Patch sweep and output-flip scorer",
+        "Heat-map renderer and CLI"
+      ],
+      "saved_artifacts": []
+    }
+  ],
+  "additional_planned_probes": [
+    {
+      "id": "blueprint-in-prompt-generalisation",
+      "source": "research/agentic_paradigm.md",
+      "status": "planned_only",
+      "design": "Hold out a task family from training and evaluate it with and without a written blueprint in the user prompt.",
+      "purpose": "Measure transfer of the learned note discipline separately from memorisation of trained task families."
+    },
+    {
+      "id": "system-prompt-and-window-search",
+      "source": "research/agentic_paradigm.md",
+      "status": "planned_only",
+      "design": "Use successive halving on the validation split to search system-prompt templates and keep_last values 1, 2, and 3.",
+      "purpose": "Replace hand-tuned prompt/window choices with a controlled behavioral comparison."
+    },
+    {
+      "id": "v2-component-ablation-suite",
+      "source": "research/agentic_paradigm.md",
+      "status": "planned_only",
+      "design": "Compare no windowing, no notes, no recovery variants, single-phrasing prompts, and depth expansion on top of v2.",
+      "purpose": "Attribute performance to each regimen component and retest architectural capacity as a controlled ablation."
+    },
+    {
+      "id": "novel-family-holdout",
+      "source": "research/agentic_paradigm.md",
+      "status": "planned_only",
+      "design": "Add two task families that appear only in test.",
+      "purpose": "Measure generalisation of agent procedure beyond the twelve trained family templates."
+    }
+  ],
+  "probe_support_modules": [
+    {
+      "path": "src/local_llm_lab/probes/__init__.py",
+      "sha256": "8204d1ae562f204433519287bd386c46a5d2e8c5ed0a9ee4486b673d4d184ccf",
+      "role": "Declares the P1/P2/P5 interpretability probe suite and its relationship to representation_probes.md."
+    },
+    {
+      "path": "src/local_llm_lab/probes/capture.py",
+      "sha256": "79e9ebf32b9242f8f216a4d7e52f772c14480edf6bf8f68c526db585f3a2310b",
+      "role": "Float32 causal residual capture, response-token means, activation injection, reversible LoRA layer masking, and task-state note stripping."
+    },
+    {
+      "path": "src/local_llm_lab/probes/guard.py",
+      "sha256": "a3ce084e5bc2999240e15620343d3c38f1dec5c409d2c4d3c5469eda4e8b09a7",
+      "role": "Refuses model loading while known evaluation/rollout commands occupy the GPU unless explicitly overridden."
+    },
+    {
+      "path": "src/local_llm_lab/probes/policies.py",
+      "sha256": "65b8653077341711ad1db5620bd650aa87d32406a58fdaf63d1208d4f7cef824",
+      "role": "Maps base/A/B/C policy names to the three agent-v2 best adapters or an explicit adapter directory."
+    },
+    {
+      "path": "src/local_llm_lab/probes/stats.py",
+      "sha256": "382de699cdcaa447068b6919d36f7c518f74c4c7f179afb65ea4520c9355ad0b",
+      "role": "Dependency-light ranks, Mann-Whitney U, AUC, accuracy, macro-F1, R2, and MAE used by the probes."
+    }
+  ],
+  "companion_jspace_probes": [
+    {
+      "id": "jlens-single-decision",
+      "name": "J-lens versus logit-lens at a deterministic expert decision",
+      "entrypoint": "agent-v2-jlens",
+      "entrypoint_target": "local_llm_lab.pipeline.jlens:main",
+      "source": "src/local_llm_lab/pipeline/jlens.py",
+      "source_sha256": "79662f1a57a0facd48f0f27a1b5a438a7b0f7fc18ffce6c3cfe7f56822404861",
+      "relationship_to_representation_spec": "Explicit companion/predecessor. Supplies residual_at, jacobian_vector_product, jlens_map, readout, logit-lens controls, causal masking, and float32 numerical precedent used by P1, P2, and P5.",
+      "saved_artifacts": [
+        {
+          "path": "outputs/agent-v2/jlens-ledger-step3.json",
+          "sha256": "6bcb9bf5509fb5e1a1c9acc0b7e70e129d968cc02bcfb0a17a3d9253c188ccb0",
+          "status": "superseded_intermediate",
+          "notes": "Earlier step-3 readout; later analysis found shared-token and probe-position confounds."
+        },
+        {
+          "path": "outputs/agent-v2/jlens-forced-suffix.json",
+          "sha256": "cc25e1ebf44b95607e692afdf88cf6d997dc0a0fc4ba72954b904cdd7bf68f39",
+          "status": "supporting_result",
+          "notes": "Forced-suffix decision readout used in the corrected direct check described by research/jspace_probe.md."
+        }
+      ]
+    },
+    {
+      "id": "jlens-ledger-sweep",
+      "name": "Paired matched-versus-mismatched J-lens ledger sweep",
+      "command": "uv run python research/jspace_sweep.py",
+      "source": "research/jspace_sweep.py",
+      "source_sha256": "2187d0615d4a77f94e08fa88d7bad291be129b37454c2f2181b825f5a0fb19e0",
+      "relationship_to_representation_spec": "Companion mechanistic assessment supporting the P2 note-state hypothesis and supplying a positive-control precedent.",
+      "saved_artifacts": [
+        {
+          "path": "research/jspace_probe.md",
+          "status": "durable_summary_only",
+          "notes": "Records the 42-case paired sign-test results and World A conclusion; the sweep script prints results and does not persist raw machine-readable rows."
+        }
+      ]
+    }
+  ],
+  "broader_assessment_interfaces": [
+    {
+      "id": "v2-behavioral-evaluator",
+      "entrypoint": "agent-v2-eval",
+      "target": "local_llm_lab.pipeline.evaluate:main",
+      "source": "src/local_llm_lab/pipeline/evaluate.py",
+      "source_sha256": "a8552a8efdff8a8d8f67ef41a1a8fb9d71b4b7a71a054e705775fc4a21775960",
+      "purpose": "Deterministic or sampled v2 policy evaluation with exact environment verdicts, clean/stress modes, action/schema/executable-call metrics, failure reasons, latency, token use, and full transcripts.",
+      "relationship_to_representation_spec": "Supplies held-out behavior, failure labels, stored trajectories, and causal outcome metrics required by P1, P3, P5 ablation, and P6."
+    },
+    {
+      "id": "v2-checkpoint-selection",
+      "entrypoint": "agent-pipeline select",
+      "target": "local_llm_lab.pipeline.cli:stage_select",
+      "source": "src/local_llm_lab/pipeline/cli.py",
+      "purpose": "Screens saved checkpoints on held-out validation behavior and selects by success, clean rate, valid-action rate, then later step.",
+      "relationship_to_representation_spec": "Provides the selected A/B/C policy artifacts used by all P-series comparisons."
+    },
+    {
+      "id": "v2-evaluation-report",
+      "entrypoint": "agent-pipeline report",
+      "target": "local_llm_lab.pipeline.report:render",
+      "source": "src/local_llm_lab/pipeline/report.py",
+      "source_sha256": "1bad68eecd83088c9fe5ead02d2742f17eb6971b1a7d1adb11bbb92660c9e21e",
+      "purpose": "Aggregates evaluation JSON summaries into a cross-run table."
+    },
+    {
+      "id": "legacy-agent-evaluator",
+      "entrypoint": "agent-eval",
+      "target": "local_llm_lab.evaluate_agent:main",
+      "source": "src/local_llm_lab/evaluate_agent.py",
+      "source_sha256": "a32196f4544da72465a5bf9e4cba4b3c26d8551fb6fc7529f5458b808b9b5d93",
+      "purpose": "Evaluates the earlier native-tool-call agent task suite for base or adapter policies."
+    },
+    {
+      "id": "complex-agent-evaluator",
+      "entrypoint": "complex-agent-eval",
+      "target": "local_llm_lab.evaluate_complex_agent:main",
+      "source": "src/local_llm_lab/evaluate_complex_agent.py",
+      "source_sha256": "befb4dad4e4a04befea2b8f4e8161f8a92bb8f54c61a625f327b1a6bb1558361",
+      "purpose": "Compares base, earlier agent adapter, and depth-expanded policy on the long-horizon suite."
+    },
+    {
+      "id": "agent-trace-comparison",
+      "entrypoint": "agent-compare",
+      "target": "local_llm_lab.compare_agent:main",
+      "source": "src/local_llm_lab/compare_agent.py",
+      "source_sha256": "8b283b4e4fff81722df21379c3fb30b120f1adf5064dd16e4b354cef7b29f30f",
+      "purpose": "Prints base-versus-adapter action traces for one legacy agent task."
+    },
+    {
+      "id": "chat-retention-comparison",
+      "entrypoint": "compare-chat",
+      "target": "local_llm_lab.compare_chat:main",
+      "source": "src/local_llm_lab/compare_chat.py",
+      "source_sha256": "b0fb19a54d3a2a84c05f92d1dffa884cd15a7abad91b52cd516565e47a055352",
+      "purpose": "Interactive or one-prompt base-versus-adapter chat comparison, with optional tool schemas."
+    },
+    {
+      "id": "environment-check",
+      "entrypoint": "lab-check",
+      "target": "local_llm_lab.check_env:main",
+      "source": "src/local_llm_lab/check_env.py",
+      "source_sha256": "b175babf54a023e07669d77843eb0c5d8e41118166b558f4c538069d4ee56453",
+      "purpose": "Reports Python, macOS, memory, MLX device, an MLX compute smoke test, and installed package versions."
+    },
+    {
+      "id": "reward-inspector",
+      "entrypoint": "lab-rewards",
+      "target": "local_llm_lab.rewards:main",
+      "source": "src/local_llm_lab/rewards.py",
+      "source_sha256": "b1e15308570bd60171d80f5bfee91e62bc66ca653fc4380e34bd962feb9eb7d6",
+      "purpose": "Inspects exact, numeric, format, conciseness, and combined reward components for a supplied or example response."
+    }
+  ],
+  "standalone_system_assessments": [
+    {
+      "id": "kv-cache-equivalence",
+      "command": "uv run python research/cache_equivalence.py",
+      "source": "research/cache_equivalence.py",
+      "source_sha256": "a109e13d9d26490820c48c707800a8b53927031d06ae1baa6dd8bb36b60c794e",
+      "purpose": "Requires cached and uncached greedy trajectories to have identical raw text, actions, and verdicts, while reporting speedup.",
+      "saved_result": "research/agentic_paradigm.md records 6/6 identical and 37 percent faster; no standalone raw output file is present."
+    }
+  ],
+  "probe_validation_inventory": [
+    {
+      "path": "tests/test_probes.py",
+      "sha256": "b4d76cbdb15216c7671694730f629e7742b73f6034ed15d647ad5b49b28a2895",
+      "coverage": [
+        "P5 delta orientation against MLX-LM, thin SVD, norms, ranks, subspace controls, and renderers",
+        "P2 labels, split isolation, fits, shuffled and position controls, mixed-design preflight, within-position analysis, stripped notes, checkpoints, artifact identities, and cache limits",
+        "Shared residual capture, causal-mask equivalence, injection, LoRA masking, statistics, GPU guard, and policy resolution",
+        "P1 numerical helpers and trajectory projections"
+      ],
+      "execution_status_for_this_manifest": "not_run"
+    },
+    {
+      "path": "tests/test_probes_axis.py",
+      "sha256": "6219cc723459d60ada855b355cf9a73755be1a31b911a23ca09dbf43bf029a2b",
+      "coverage": [
+        "Strong role prompts",
+        "Role markers and exemplars",
+        "Heuristic and judge scoring",
+        "Fail-closed role filtering",
+        "Rollout persistence before activation capture",
+        "Axis verdict thresholds"
+      ],
+      "execution_status_for_this_manifest": "not_run"
+    },
+    {
+      "path": "tests/test_pipeline.py",
+      "sha256": "fbf3ec477ad8efa5808528c22399e5d266b42011e73cb632c0ae839c043876ff",
+      "coverage": [
+        "J-lens residual equivalence",
+        "Jacobian-vector products",
+        "J-lens averaging and approximate linearity",
+        "Readout and logit-lens controls",
+        "Candidate token evidence",
+        "Per-layer probe records"
+      ],
+      "execution_status_for_this_manifest": "not_run"
+    }
+  ],
+  "durable_research_and_assessment_records": [
+    {
+      "path": "research/representation_probes.md",
+      "sha256": "02efb2e1693a5ee0ea2c832dc304d1d3df723ad421a4282133230552d41a96b0",
+      "status": "active_design_and_running_assessment_log",
+      "contents": "P1-P6 designs, controls, decision rules, invalid-first-run corrections, scorecard, execution order, and limits."
+    },
+    {
+      "path": "research/jspace_probe.md",
+      "sha256": "7707325218e83caa179a261408d55d9788b3446451eda2ac9c0f51c767d04a9a",
+      "status": "completed_mechanistic_assessment",
+      "contents": "Single-decision J-lens design, confound corrections, direct suffix check, 42-case paired sweep, World A conclusion, and remaining limitations."
+    },
+    {
+      "path": "research/agentic_paradigm.md",
+      "sha256": "018037d2a1d097f453cb05e7568bfbeaccb86e5ddb2f9ce2e5d85756ecfec202",
+      "status": "working_system_assessment_and_plan",
+      "contents": "Failure analysis, v2 design, cache-equivalence result, evaluation protocol, run A/C assessment, roadmap, and literature-linked proposed probes."
+    },
+    {
+      "path": "research/architecture_review.md",
+      "sha256": "a8cc2c2dee6485d2937347c831718fb587f7d72ca69540595c6cc6af8dccb0c2",
+      "status": "superseded_architecture_assessment",
+      "contents": "Review and design for identity-preserving interleaved depth expansion; superseded by research/agentic_paradigm.md."
+    }
+  ],
+  "saved_behavioral_assessment_collections": [
+    {
+      "root": "outputs/agent-v2",
+      "evaluation_json_files": 7,
+      "selection_file": "outputs/agent-v2/selection.json",
+      "transcript_markdown_files": 204,
+      "transcript_jsonl_files": 7,
+      "notable_probe_files": [
+        "outputs/agent-v2/jlens-ledger-step3.json",
+        "outputs/agent-v2/jlens-forced-suffix.json"
+      ]
+    },
+    {
+      "root": "outputs/agent-v2b",
+      "evaluation_json_files": 6,
+      "selection_file": "outputs/agent-v2b/selection.json",
+      "transcript_markdown_files": 312,
+      "transcript_jsonl_files": 6,
+      "notes": "Includes the 180-task run-B evaluation used for comparison with run C."
+    },
+    {
+      "root": "outputs/agent-v2c",
+      "evaluation_json_files": 5,
+      "selection_file": "outputs/agent-v2c/selection.json",
+      "transcript_markdown_files": 252,
+      "transcript_jsonl_files": 5,
+      "notes": "Includes the native 180-task best-adapter evaluation."
+    }
+  ],
+  "related_repository_assessment": {
+    "path": "reports/agent-v2-python-source-provenance.md",
+    "sha256": "c5e06db984c1c02ec9a6ef9edf52d5e1a09db10685934df05c861dc5dd4b6a19",
+    "note": "Companion inventory of the Python source and artifact provenance for the agent-v2 adapter family."
+  },
+  "manifest_integrity": {
+    "related_repository_assessment_sha256": "c5e06db984c1c02ec9a6ef9edf52d5e1a09db10685934df05c861dc5dd4b6a19",
+    "pyproject_path": "pyproject.toml",
+    "pyproject_sha256": "2dc6cb82f13c1e6392c54945bfc21c3670fa2481592357a3a81a3aa2cf5b7a7e",
+    "readme_path": "README.md",
+    "readme_sha256": "a55275e1780caf3e1ca819ed9099231c341e51f7428e0b019a6eb279d15d38bf",
+    "limitations": [
+      "This workspace is not a Git checkout, so hashes identify only the currently present source files.",
+      "The live hardened P2 checkpoint directory was not exhaustively enumerated or hashed.",
+      "Saved NPZ arrays were not loaded or rehashed during this task.",
+      "No tests or runtime probes were executed for this manifest."
+    ]
+  }
+}

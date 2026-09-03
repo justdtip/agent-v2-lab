@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "local-llm-lab"
+version = "0.1.0"
+description = "Local Apple Silicon experiments for MLX inference, fine-tuning, and reward learning."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "datasets>=2.14,<4",
+  "mlx-lm[train]==0.31.3",
+  "mlx-tune==0.6.0",
+]
+
+[project.scripts]
+lab-check = "local_llm_lab.check_env:main"
+lab-chat = "local_llm_lab.chat:main"
+lab-sft = "local_llm_lab.train_sft:main"
+lab-rewards = "local_llm_lab.rewards:main"
+lab-grpo = "local_llm_lab.train_grpo:main"
+agent-data = "local_llm_lab.generate_agent_data:main"
+complex-agent-data = "local_llm_lab.generate_complex_data:main"
+chat-replay-data = "local_llm_lab.chat_replay:main"
+expanded-agent-data = "local_llm_lab.build_expanded_data:main"
+agent-eval = "local_llm_lab.evaluate_agent:main"
+complex-agent-eval = "local_llm_lab.evaluate_complex_agent:main"
+train-expanded-agent = "local_llm_lab.train_expanded:main"
+agent-compare = "local_llm_lab.compare_agent:main"
+compare-chat = "local_llm_lab.compare_chat:main"
+agent-pipeline = "local_llm_lab.pipeline.cli:main"
+agent-v2-eval = "local_llm_lab.pipeline.evaluate:main"
+agent-v2-rollout = "local_llm_lab.pipeline.rollout:main"
+agent-v2-branch = "local_llm_lab.pipeline.branch:main"
+agent-v2-prefer = "local_llm_lab.pipeline.prefer:main"
+agent-v2-jlens = "local_llm_lab.pipeline.jlens:main"
+agent-v2-probe-delta = "local_llm_lab.probes.adapter_delta:main"
+agent-v2-probe-state = "local_llm_lab.probes.state_probe:main"
+agent-v2-probe-axis = "local_llm_lab.probes.assistant_axis:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<10",
+  "ruff>=0.12,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/local_llm_lab"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Prompts, notes, and CLI help are long natural-language strings.
+"src/local_llm_lab/pipeline/*" = ["E501"]
+"src/local_llm_lab/probes/*" = ["E501"]
+"tests/test_pipeline.py" = ["E501"]
+"tests/test_probes.py" = ["E501"]

@@ -1,0 +1,39 @@
+# QLoRA recipe for the 3B agent model on a 24 GB M4 Pro.
+model: "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
+train: true
+fine_tune_type: lora
+optimizer: adamw
+data: "data/agent_sft"
+seed: 20260902
+
+# Adapt two-thirds of the 36 transformer layers. The base stays frozen/4-bit.
+num_layers: 24
+batch_size: 1
+grad_accumulation_steps: 4
+iters: 300
+learning_rate: 2.0e-5
+max_seq_length: 1024
+grad_checkpoint: true
+mask_prompt: true
+
+val_batches: 30
+steps_per_report: 5
+steps_per_eval: 50
+save_every: 50
+adapter_path: "outputs/agent-3b/adapters"
+test: true
+test_batches: 40
+
+lora_parameters:
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+    - "mlp.gate_proj"
+    - "mlp.up_proj"
+    - "mlp.down_proj"
+  rank: 16
+  scale: 32.0
+  dropout: 0.0
+
