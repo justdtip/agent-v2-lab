@@ -9,34 +9,36 @@ As of: `2405598` (R26 run logging committed for every probe CLI: P6/ablation/del
 state/axis `2405598`; position-groups fix `ac9c27a`; R25 `036e62c`), suite **754 passed, exit 0** bare.
 Updated: 2026-09-05 by the Deputy (after the R26 commits). Every probe run now writes
 `run.log` + `events.jsonl` beside its artifact and reports per outer unit (R26 g); a probe lift
-request cites those files by path and SHA-256.
+request cites those files by path and SHA-256. Exception: the third P6 attempt was launched
+before the R26 commits and ran the pre-instrumentation code to completion, so its artifact
+(B3) has no `run.log`/`events.jsonl`.
 
 ## The one distinction that matters
 
-**The hold applies to Qwen3.5, not to probes as such.** The 3B base and the B/C adapters are
-not held: block ablation and P6 patching are code-complete, take their inputs from artifacts
+**The hold applied to Qwen3.5, not to probes as such.** The 3B base and the B/C adapters were
+never held: block ablation and P6 patching are code-complete, take their inputs from artifacts
 already on disk, and are gated only by the single-execution rule and a per-run authorisation.
-They could run today. The Qwen3.5 hold stands until the preflight passes under R18a, because
-every probe runs decoder blocks by hand through the view, and the view is unverified on that
+The Qwen3.5 hold stood until the preflight passed under R18a — it now has (A2) — because
+every probe runs decoder blocks by hand through the view, and the view was unverified on that
 architecture until then.
 
 ## Part A — lifting the Qwen3.5 probe hold
 
 - [x] A1. **MET — R18a gate rewiring, committed `ed88c96` (issue #23).** *Shared with training
   checklist item A1.1.* `run_preflight` gates on `native_manual_vs_native` (derived floor AND
-  Frobenius ≤ 1e-4; `preflight.py:288-330`); the FP32 comparison is reported, never gated.
+  Frobenius ≤ 1e-4; `preflight.py:291-330`); the FP32 comparison is reported, never gated.
 - [x] A2. **MET — the Qwen3.5 probe hold is lifted.** `outputs/preflight/qwen35-4b.json`
   `passed: true` under R18a at 15:20 (native max_abs 0.0, Frobenius 0.0; SHA-256
   `8a6f4298…`), with the 3B control passing identically at 15:18. Terms of #15/#16 satisfied.
 - [x] A3. **Probe CLIs are model-aware** — layers from the registry with fraction support
   (`e53bd81`; `policies.py:96-99`, resolution recorded with `source`), per-model adapter
   resolution (`policies.py:46,53-54`), spec threading (`47751cf`), loader migration (wave 1,
-  ticks fully when Part 0 of the training list commits).
+  `a2f003c`; Part 0 of the training list is committed).
 - [ ] A4. **Interpretation caveat, Chief's decision, does not gate execution:** probe
   activations are FP32 by rule 1.5 while the model deploys BF16 — pre-existing, applies to the
   3B equally, surfaced on issue #15. The C7 refit (round FP32 activations in the saved npz to
   BF16, refit through the reanalysis pipeline, compare Holm flags) is offline, needs no model,
-  and would bound the effect with evidence. *Ruled — item 4 of R18 (the C7 refit clause; no separate "R18(c)" heading exists in the wiring map) on issue #15 — ruled; an offline implementer slice (no model), unassigned — corrected by the Chief 2026-09-05.*
+  and would bound the effect with evidence. *Ruled — item 4 of R18 (the C7 refit clause; no separate "R18(c)" heading exists in the wiring map) on issue #15 — ruled; an offline implementer slice (no model), unassigned — corrected by the Chief 2026-09-05. Issue #15 stays open for this C7 item only; its preflight question is closed by A2. Planned as slice B5 (#40).*
 
 ## Standing note, 2026-09-04 ~19:30 — two blockers found by live P6 attempts; one fixed and committed, one fixed in the tree, one ruling requested
 
@@ -47,6 +49,9 @@ regression-tested on wrapped fakes, suite 642 passed; **committed `89dfb56` afte
 read (#27)**. Base-only paths (both preflights, the render) were never affected. B2 is
 unblocked. Bound follow-up from #27: an adapter-wrapped variant in the standard arch fixtures,
 due before the B4 evaluation lift — not yet dispatched.
+
+- [ ] **Bound follow-up (#27), not a Section A gate:** an adapter-wrapped variant in the standard
+  arch fixtures (`tests/test_arch.py`), due before the B4 EVALUATION lift. Unassigned.
 
 The Director's second P6 attempt (after `07c6657`) then crashed in `position_groups`
 ("missing token span for observation"): `_groups_for` extracted observations from the full
@@ -60,8 +65,8 @@ counterfactual note is longer than the failing note by construction (663 vs 659 
 7 vs 5 value tokens — the extras are the dropped values) and the patcher requires equal
 source/target cardinality. Ruled as R25 on issue #28** (tail alignment with residue
 recorded; `note_value_tokens` → `shared_value_tokens` + `dropped_value_slot`; controls resample
-post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief-ratified).** B3 now waits only on the
-Director's third attempt with the unchanged command.
+post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief-ratified).** The third attempt completed
+(17:49–19:00 local, 2026-09-04); artifact and read under B3.
 
 ## Part B — SPEC-004 sections, in the spec's own priority
 

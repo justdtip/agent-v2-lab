@@ -594,3 +594,12 @@ recording the execution rule. No execution lane designated yet.
   "zero findings"); anchors `cli.py:46,519`, `:186-191`, config `:44-47`; A6.1 lane free after
   P6 (17:49–19:00); lift sentence "A1–A6 and A8"; the promised ratification section does not
   exist in either checklist (lost in the Chief's regeneration) — header wording fixed in both.
+
+## 2026-09-05 — probes checklist second audit applied
+
+- Auditor confirmed the artifact SHA-256s and the 754/exit-0 count; flagged (and I applied):
+  the header's run-log claim needs the pre-R26 P6 exception; A1 anchor `preflight.py:291-330`;
+  A3's "ticks when Part 0 commits" resolved; the hold paragraph rewritten in the past tense;
+  the standing note no longer says B3 waits on the third attempt; #15 stays open for C7 only;
+  the #27 fixture follow-up is now a discrete unticked line (bound follow-up, not a gate). The
+  `--judge` anchor had already been corrected. Both checklists are current to `e6500ba`.
