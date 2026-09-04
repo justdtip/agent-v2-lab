@@ -721,6 +721,23 @@ forget. Each has an integration check in §6.
 - **R26 amended (2026-09-05):** on non-training stages `incomplete_run` is an end-event field
   meaning "exited before writing its report", carrying no verdict.
 
+- **R37 amended (2026-09-05 night).** `outputs/` is untracked, so "land with the regeneration"
+  means the regenerated artifacts are recorded in the commit message and the readiness
+  checklists by path, snapshot revision and SHA-256 (as `f1230ac` does), never force-added.
+- **R38 (2026-09-05 night; proposed by the Deputy, ruled by the Chief) a reader is tested
+  against the real writer.** R31 extended from library seams to every seam: any test of code
+  that reads an artifact, a record, a configuration or a library object must build its fixture
+  through the real writer (the artifact's own `write_report`, the library's own class, the
+  real `ArchitectureView` over a real tiny model), never by hand. A hand-made fixture certifies
+  the reader's belief about the seam rather than the seam, and it passes exactly when the
+  reader is wrong in the way its author expected it to be right. Three misses on one night
+  had this shape: a period walk whose fake was not a `dict` subclass as `mlx.nn.Module` is; a
+  precision-block reader whose fake carried the key at the level the reader hoped for rather
+  than where the preflight writes it; and a stage nothing drove through its own entry point
+  (#64). At a gate the reviewer checks the fixture's provenance, not only the assertion.
+  Where a structural read and a configuration walk both exist, the structural read is
+  primary and the configuration is the cross-check.
+
 ## 8. Implementer amendments (append-only, dated)
 
 - PROPOSED (Deputy, 2026-09-04 00:20): §2.13/§2.14 amendments to match the disclosed Task 3
@@ -789,7 +806,7 @@ forget. Each has an integration check in §6.
   record the version used and the basis. Post-versioning artifacts get no such latitude: an
   absent field is a defect.
 
-- PROPOSED (Deputy, 2026-09-05 04:40): supersession, R32 stage 2 (K7). The analytic per-layer
+- RATIFIED by the Chief (2026-09-05 night; R38 applies) — proposed by the Deputy 2026-09-05 04:40: supersession, R32 stage 2 (K7). The analytic per-layer
   gated-delta **state-bytes model is superseded by the fitted empirical envelope in
   `pipeline/preflight.py`**, which is what actually gates a training arm; `chunkwise_state_bytes`
   had had no consumer since `f1230ac` replaced the state-shape-derived footprint estimate with a

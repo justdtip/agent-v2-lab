@@ -287,3 +287,101 @@ rewritten; a refused form no longer fails the command. Follow-up, not this commi
 operator output when `run_preflight` writes a failed or refused footprint and exits zero.
 Commit: the seven files plus `tests/test_cli.py`, with both regenerated artifacts named by
 snapshot revision; the Chief verifies the artifacts on disk before sending the green.
+
+## Gate: R32 stage 2, chunkwise gated delta rule, round 1 (algebra and wiring), 2026-09-05 night
+
+Main tree, uncommitted: `training/gated_delta_chunkwise.py`, its test file, the `training`
+package export, `configs/agent_v2b_qwen35_4b.yaml` (mode `chunkwise`). Commit held under the
+lane freeze. Read in full.
+
+**Algebra: correct, checked on my own derivation.** From the library's step (decay, delta
+update, post-update read; `gated_delta.py:127-168`, verified) the state recurrence is
+`S_t = g_t S_{t-1}(I - β_t k_t k_tᵀ) + β_t v_t k_tᵀ`; normalising by the cumulative gate gives
+a rank-one update per token whose coefficients are gate ratios `G_t/G_s ≤ 1`, so no `1/G`
+appears. The code's four lines match: the UT-transform matrix is `tril(β_i D_ij (KKᵀ)_ij, -1)`;
+the pseudo-values solve `(I+A)` against `β⊙V - β⊙G⊙(K S_inᵀ)`; the read is
+`G⊙(Q S_inᵀ) + (D_incl ⊙ QKᵀ) Ũ`, inclusive so a token sees its own update as the reference
+does; the outgoing state is `G_C S_in + (Ũ ⊙ G_C/G)ᵀ K`. The blockwise unit-lower inverse is
+exact (`Inv ← Inv - mask_s ⊙ Inv L Inv` writes only the (2,1) block, which equals
+`-Inv22 L21 Inv11`), and I traced chunk six through its three levels. The gate floor at the
+smallest normal is right. The padding step (unit gate, zero key, value, query and beta) is the
+identity on the state and yields zero outputs, sliced off. The head repeat and the float32
+policy mirror the reference (`gated_delta.py:240-244`, verified). The installer's patch point
+is stage 1's and reaches only the `use_kernel=False` branch (`gated_delta.py:282`, verified).
+The even-chunk restriction is a measured MLX Metal defect, characterised by process counts and
+error magnitudes, not asserted.
+
+**Mask fallback: not live on the trainer's path.** `create_ssm_mask` (`models/base.py:58-61`)
+returns `None` without a cache, so the full model in training mode hands no mask to the
+recurrence. The real-library test drives `GatedDeltaNet` directly and so does not cover the
+model's own forward; that is a coverage gap, closed under K6.
+
+**Conditions on the commit.**
+- **K6 (the Deputy's first gap, adopted).** `fallback_counts()` is read by nothing but tests,
+  and the train stage records the configured mode, not the form that ran. After the
+  `_training_backbone` block, `stage_train` reads the counts and writes them into
+  `health.json`, the provenance and the run log; a non-empty count on a chunkwise arm is a
+  logged warning naming the reason. Add one test that drives the real `qwen3_5` `Model`
+  forward in training mode under the installer with a tiny configuration and asserts
+  `fallback_counts() == {}`, so the model path (mask included) is covered, not only the layer.
+- **K7 (the Deputy's second gap).** `chunkwise_state_bytes` has no consumer: the calibrated
+  envelope (f1230ac) reads no state shape. Remove it and its two tests; a wiring-map §8 note
+  records that stage 2's analytic figure was superseded by the fitted envelope. If the
+  implementer prefers to keep it, its docstring must say it is a reference figure the preflight
+  does not read.
+
+**Arithmetic still to be confirmed** by running the test file (small tensors, Metal, since the
+odd-chunk defect is Metal-specific) in the gap between EXP-001 runs; the Deputy runs it with a
+captured exit code and reports the worst-error figures. The commit lands after the last
+EXP-001 artifact is written, per the freeze.
+
+**Round 2 (same night): K6 and K7 approved; R32 stage 2 cleared to commit after the last
+EXP-001 artifact.** Worktree `stage2` on `c349739`; delta read in full. K6 landed in a better
+shape than either option offered: `_training_backbone` yields a report and fills it in its own
+`finally`, binding the counter only on the chunkwise branch, so `stage_train` never touches the
+global; three distinguishable values (counts, "not applicable: checkpointed", "not applicable:
+no recurrence installed"); recorded in `health.json` (and so in provenance under `health`) and
+on the run log, a non-empty count warning; written from the stage's `finally`, so a run that
+died mid-training records the recurrence it was running. The model-forward test proves the mask
+fallback dormant in training through the real `qwen3_5` `Model`, with a control that forces a
+mask and counts one fallback per linear layer. K7: the analytic state-bytes function, its two
+tests, both re-exports and its three private constants are gone; stage 1's own constant and
+`training_state_bytes` are untouched; wiring-map §8 carries the supersession note (PROPOSED,
+ratified here; to be folded into the rulings when the commit lands). Arithmetic on Metal
+(Deputy, exit code captured): 66 passed; worst errors forward 2.0e-05, carried state 2.0e-06,
+gradients 3.9e-04, which pass on the relative term of the declared tolerances, as reassociated
+float32 sums should; recorded as relative agreement, not absolute. Full suite on Metal 1232
+passed. Four device-only CPU failures reproduced in the untouched tree and filed as #67.
+Implementer decisions accepted: one home for the fallback record; pre-existing ruff findings
+left alone; a dict-or-string value so not-applicable cannot read as an empty count.
+
+## Gate: EXP-001 instrument fix, five parts (issues #54, #68), 2026-09-05 ~05:15
+
+Worktree `wt-hybrid-period` off `c349739`; eight files; disjoint from stage 2. Read in full.
+**Approved to commit.**
+- Period: `hybrid_period` now inverts `is_linear` over the view's own blocks (first attention
+  block's index plus one), with the configuration walk as a cross-check that raises on
+  disagreement; the source names which route answered. `_member` reads the attribute first
+  and falls back to the Mapping, with the trap documented at the site. My reproduction on a
+  tiny real `qwen3_5` through the real `ArchitectureView` returns 4 and derives the expected
+  partners. Dense backbones return `None` with a stated reason.
+- Accessor audit: `preflight._module_candidates` returned after the Mapping branch, so plain
+  attributes were never yielded (a second live instance, surviving only because the
+  recurrence module is a registered submodule); fixed. Six sites marked safe with reasons,
+  including `_parameter_tree_bytes`, where Mapping-first is correct because it counts
+  parameter buffers.
+- #68: `NoTailBlocksError` (a subclass of the empty-window error, named apart) raises when
+  `future`/`all` is requested at `L == num_layers`; both CLIs compute only `self` and the logit
+  lens there; the exclusion, its reason and its Holm effect are recorded in the conformance
+  block; the Holm families are built from the layers scored. The jlens CLI's mirrored
+  `jlens_top_k` carries a per-layer `primary_readout` so the final-layer cell is self-describing.
+- Hard refusal: the sweep refuses a decoder with both block kinds that derived no partners,
+  naming the period read and `--layers` as the way past.
+- Precision block: read from `residual_equivalence.fp32_manual_vs_native` with a top-level
+  fallback; the reader-versus-writer diff found this the only key at the wrong level.
+- R38 applied: every new fixture is the real writer (`_preflight`), the real class
+  (`nn.Module`, a real tiny model) or the real view; the precision test pins the writer's
+  shape and the reader's behaviour in one, so it goes red if either moves. The old blockless
+  fake is kept under a name saying what it covers.
+- My run: 128 passed across the four suites in the worktree, ruff clean; the Deputy's full
+  suite 1177 passed (pre-stage-2 base). Citation for the reruns: the fix commit.

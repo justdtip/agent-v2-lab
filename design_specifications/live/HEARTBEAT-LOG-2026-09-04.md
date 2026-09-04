@@ -1153,3 +1153,106 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   Deputy before each start and the Deputy confirms the lane.
 
 - 2026-09-05 night (Chief): f1230ac verified (eight files, declared scope; artifacts recorded by revision and digest). EXP-001 GREEN sent to the Head of Interpretability; 3B comparator first.
+
+## 2026-09-05 pre-dawn — EXP-001 run 1 live; C1 confirmed on the instrument
+
+- **Run 1 started by the Head of Interpretability**, the 3B base comparator, citing `c349739`.
+  RunLog stamps HEAD at start, and the records commit landed between their verification and
+  their start, so the artifact cites the records commit rather than `f1230ac`. That is correct
+  behaviour: `c349739` is a documentation-only child of `f1230ac` and touched no source. Posted
+  once on #54 with the four-commit table so no reader goes looking for a source change that does
+  not exist. **Nothing further lands while the runs proceed**, so all four artifacts should share
+  that citation.
+- **The C1 cache is confirmed on the real instrument, not only on fakes.** Point 1 cost 2:14 and
+  point 2 cost 1:06. The first point maps two prompts; every later point maps one, because its
+  null is the previous point's treatment. The marginal cost is half the first, which is the same
+  halving measured before the slice landed as sixteen map computations becoming eight with
+  byte-identical results. The two measurements are **complements, not a repeat** (the Head's
+  precision, and the better statement): the harness showed the mechanism and byte-identity of
+  the results, which wall-clock cannot show; the instrument showed the saving is load-bearing on
+  a real model and a real corpus, which the harness cannot show. Neither alone establishes that
+  the cache is both correct and worth having.
+- **The schedule was wrong and the Head caught it.** The ten-minute figure for run 1 predated its
+  parameters: corpus 16 against 8, six layers against three, three sources against one is twelve
+  times the Jacobian-vector products, halved by the cache. Measured marginal rate 66 s per point,
+  so run 1 is about 48 minutes and the set is about three and a half hours, with the two runs
+  that answer the pre-registered question done first. The tool's own printed ETA smears the
+  expensive first point across the average and should not be planned off.
+- **Ruled: run all four in order, move no parameter.** Cutting corpus size or layers to save time
+  would make a different estimator variant and break R35 comparability, costing the whole night
+  rather than part of it. The Chief narrowed the stop rule further: not the clock at all, since
+  the Director's standing instruction was to get as far through the interpretability as the night
+  allows. Stop only on an instrument failure, a rate projecting a single run past about six
+  hours, or a health or memory signal in the log.
+- **R32 stage 2 reviewed by reading, commit held.** The algebra checks out term by term against
+  the docstring, the doubling masks handle a non-power-of-two chunk (traced by hand at chunk 6),
+  the padding is a true identity step, and the tests compare *gradients* against the library's
+  real reference loop, not only forward values. Two wiring gaps found. `fallback_counts` is read
+  by nothing but tests, so a run that fell back to stage 1 on a mask or on vectorised gating
+  would record the configured mode while executing the other recurrence, and B4 attempt 4 would
+  be gated against the wrong envelope and OOM as before with nothing saying why. That one is
+  offered to the Chief as a condition. `chunkwise_state_bytes` is likewise unreferenced outside
+  tests, its stated consumer having been superseded by `f1230ac`'s fitted envelope; weaker, and
+  not blocking. The numerical agreement check waits for a gap between runs.
+- **Two memory regimes, separated on the record before the confusion sets in** (Head of
+  Interpretability, from the two regenerated artifacts). A probe forward is parameters plus
+  activations: 3.09 GiB on the 3B and 3.85 GiB on the 4B, against a device working set of
+  17.76 GiB, which is what bound the budget on both rather than the registry's declared 22. The
+  19.22 GB that has haunted this lane was a *training step* with optimiser state and gradients on
+  a 2,874-token row. Conflating the two is how a lane rule becomes superstition. The one-lane
+  rule's real boundary is **the checkpoint, not the tensor size**: a tiny hand-built forward is
+  not a second model, an accidental full-size load from a config typo is.
+- **Stage-2 conditions ruled and dispatched.** K6: the recurrence a run actually took must reach
+  `health.json`, provenance and the run log, with the stale-global trap closed — the fallback
+  counter is a module global that only the chunkwise installer resets, so a checkpointed arm must
+  record an explicit not-applicable rather than another run's leftovers. Plus a test driving the
+  real model's forward in training mode, which nothing does today; the mask fallback is dormant
+  there because `create_ssm_mask` returns `None` without a cache, and the forward's
+  `cache = [None] * len(self.layers)` default is what makes that indexing safe. K7: remove
+  `chunkwise_state_bytes`, its tests and its re-exports, because an analytic memory model with no
+  consumer and nothing checking it against measurements is exactly the defect this work repaired.
+  The implementer runs on the CPU device while the lane is held, so the Head's per-point rate
+  carries no contention.
+
+## 2026-09-05 dawn — run 1 landed; run 2 stopped on an instrument failure
+
+- **Run 1 (3B base comparator) landed clean**: status ok, 46:03, all 42 points, five files
+  including provenance, citing `c349739`. Corpus median 136 tokens, median future window 67.5,
+  JVP `finite_difference` from the flag as B1 requires.
+- **Run 2 (4B) was stopped by the Chief on an instrument failure.** Its log line 4 read
+  `hybrid_period=-` with `selected=[5,11,16,21,27,32]`: six registry fractions, not the
+  pre-registered nine-layer kind-matched family. The sweep ran for minutes on the wrong
+  parameterisation.
+- **Root cause, reproduced three times independently** (Deputy, Chief, Head) on a tiny real
+  `qwen3_5` model through a real `ArchitectureView`: **`mlx.nn.Module` is a `dict` subclass.**
+  `jlens._member` tests `isinstance(node, Mapping)` *first* and returns `node.get(name)`, and an
+  MLX module's dict holds only registered parameters and submodules — never plain Python
+  attributes. So `_member(model, "args")` is `None` although `model.args` exists, and the walk
+  never reaches `language_model.args.full_attention_interval` or
+  `model.args.text_config["full_attention_interval"]`. The Mapping branch silently shadows
+  attribute access on every module in the library.
+- **The contrast inside our own class is the useful half of the diagnosis.**
+  `ArchitectureView.layer_kind` reads `getattr(block, "is_linear", False)` directly and was
+  correct all through the failed run — the log shows correct kinds beside a missing period. The
+  structural read stayed true while the configuration walk went stale silently, in a class whose
+  docstring says it discovers the decoder structurally without consulting a model-type string.
+  So the fix derives the period from the blocks (`is_linear = (i+1) % p != 0` puts attention
+  blocks at `p-1, 2p-1, …`) and treats the configuration as a cross-check, raising if the two
+  disagree.
+- **This is an R31 miss and worth naming as one.** The test that covered `hybrid_period` passed
+  while production failed, because its fake was not a `dict` subclass and so `_member`'s
+  attribute path worked there. Only the real class, or a fake that happens to subclass `dict`,
+  exposes it. R31 exists precisely to require the real library object at a library seam, and this
+  seam had a fake. The fix's test builds a real model and a real view; the grep for other
+  Mapping-first accessors that could meet an MLX module covers the class of bug rather than the
+  one site, with a recorded verdict for every site checked, safe ones included.
+- **#68 ruled with it**: at `L = num_layers` no block remains, so `future` is a structural zero,
+  its 0/42 sign test earns p=4.5e-13, and it takes the smallest rank in the Holm family. The
+  readout now raises there naming *blocks* rather than positions (a sibling of the empty-window
+  guard, which tests positions), the sweep computes only `self` and the logit lens at that layer
+  and records the exclusion in the conformance block, and the Holm families for `future` and
+  `all` are built without the final layer rather than adjusted afterwards.
+- **Rerun plan ruled**: the 3B comparator reruns first so both tables come from the same
+  instrument, which is the stronger reading of R35 — the alternative carries an unnamed
+  difference in the very machinery under test. Run 1's artifact stays on disk as the record of
+  the first instrument, with #68 noted on it. Then the 4B, adapter A, and the spot check.

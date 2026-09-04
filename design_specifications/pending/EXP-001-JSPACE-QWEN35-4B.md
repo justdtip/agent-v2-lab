@@ -46,8 +46,26 @@ family per readout, as the P2 tables do.
    suffix tokens coincide are skipped. Expect ~42 usable points, as before.
 2. **Readouts.** (a) The model's own next-token distribution (the direct measurement);
    (b) J-lens at the layer list of §3.5, JVP by the method the preflight recorded
-   (`finite_difference` on the hybrid), float32 tail, native-dtype residual capture
-   (`capture_dtype: native`, R18b) with the float32 deviation block copied into the artifact.
+   (`finite_difference` on the hybrid), float32 tail, and the residual capture described below,
+   with the float32 deviation block copied into the artifact.
+   **Capture dtype, corrected against run 1 (Head of Interpretability, 2026-09-05).** This step
+   previously claimed native-dtype residual capture. It is not achieved and cannot be through
+   this view. The registry requests `capture_dtype: native` (R18b) and that request is recorded,
+   but `ArchitectureView` casts every block output to float32 in `embed`, `run_block` and
+   `final_norm`, so the effective capture is **float32** and the artifact records
+   `view_supports_dtype: false`. Run 1's conformance block states exactly this, which is R34
+   working. Two consequences the reading must carry rather than the spec conceal. First, the
+   decisive measurement of §2, the model's own next-token distribution, is computed through a
+   forward pass the deployment never runs: the preflight's `residual_equivalence`
+   `fp32_manual_vs_native` block puts that at Frobenius relative 0.0042 on the 3B (native
+   float16) and 0.0285 on the 4B (native bfloat16), the gap being about sevenfold because
+   bfloat16's epsilon is eight times float16's. Neither gates, per R18a. Second, this is a
+   **model-dependent** difference and therefore an R35 axis: `fp32_manual_vs_native` must be
+   populated in every artifact's comparability block from the preflight record, since two
+   artifacts each carrying `null` compare as equal on an axis where they differ sevenfold. The
+   bound on what the float32 path could hide is the positive control, which on the 3B still
+   detected an in-context filename at p = 4.4e-7 through that same path; each reading states the
+   figure and the control together.
    **Estimator (B3):** from the one JVP per context, three readouts are taken at no extra cost
    and all three are reported: `self` (output tangent at the source position, the current
    implementation and the paper's self-only limiting case), `future` (sum over positions after
