@@ -880,3 +880,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   the Director's status question: untouched since `89dfb56`; now in R31 form (library's real
   `linear_to_lora_layers` over the fakes; view tests parametrised bare/wrapped; failure proof
   against the pre-fix `arch.py` loaded as a scratch module). One test file; no lane.
+- #27 follow-up delivered and read: `wrap_with_adapter` drives the library's real
+  `linear_to_lora_layers` over the fakes (view's own auto targets; `lora_b` zero so values
+  hold); 11 view tests + 2 new parametrised bare/wrapped; quantized fake added; pre-fix walker
+  fails 11 wrapped cases with the live error. Suite 1034 / exit 0. Work order filed.
+  Observed: `test_capture.py:229` uses a hand-made adapter stand-in (R31 gap; follow-up line).
