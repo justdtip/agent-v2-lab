@@ -51,6 +51,9 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
   generator-version context rather than preserving it.
 - Added artifact-consumer binding tests and independent `highest so far` row-label parsing.
 - Focused owned suite: `101 passed`; normal scoped Ruff: `All checks passed!`.
+- Exact R13 attempted at `2d2a60a95c7e400610c8f6ec187b77e0568e3f8c` is currently blocked by two
+  unclaimed patch-probe failures: `tests/test_patch.py::test_patch_cli_rejects_malformed_layers_before_model_loading`
+  and `tests/test_patch.py::test_patch_probe_uses_named_groups_full_captures_and_distinct_controls`.
 
 ## R13 full fake-only suite
 
