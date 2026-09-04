@@ -867,3 +867,12 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   throwaway worktree; pushed. A heredoc-order slip put the log text into the commit message
   and vice versa; the commit message was amended in place (force-with-lease, message only)
   and this entry restored. Lane 2 remains in the tree.
+
+## 2026-09-05 — third checklist audits applied (Director's request)
+
+- Both auditors re-measured every line at f43af91/e6992a5: all hashes, counts, margins,
+  config values, attempt records and issue states current; the refit's rounding error was
+  independently recomputed from the raw npz (1.5e-3–1.8e-3). Corrections: training list three
+  drifted anchors (preflight gate, cli.py ×2); probes list one anchor, #15 now closed, B4's
+  pre-fix anchors labelled historical, the v2 binding recorded as ruled, one artifact filename.
+  The lift request agrees with the checklist in every cross-checked figure.

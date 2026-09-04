@@ -7,7 +7,9 @@ file:line, or a checksummed artifact — re-measured, not re-read (Chief's stand
 
 As of: `0b5227e` (scorer `0862c01`, R30 `68c1990`, B1b `1604f38`, B5 `eca116b`, B1c `5e1f3b2`,
 R26 logging, position groups, R25), suite **1016 passed, exit 0** bare (combined tree).
-Updated: 2026-09-05 by the Deputy (after the R26 commits). Every probe run now writes
+Updated: 2026-09-05 evening by the Deputy — third currency audit applied (one anchor, one
+closed issue, historical B4 anchors labelled, one ruling recorded, one filename). Earlier: after
+the R26 commits. Every probe run now writes
 `run.log` + `events.jsonl` beside its artifact and reports per outer unit (R26 g); a probe lift
 request cites those files by path and SHA-256. Exception: the third P6 attempt was launched
 before the R26 commits and ran the pre-instrumentation code to completion, so its artifact
@@ -26,7 +28,8 @@ architecture until then.
 
 - [x] A1. **MET — R18a gate rewiring, committed `ed88c96` (issue #23).** *Shared with training
   checklist item A1.1.* `run_preflight` gates on `native_manual_vs_native` (derived floor AND
-  Frobenius ≤ 1e-4; `preflight.py:291-330`); the FP32 comparison is reported, never gated.
+  Frobenius ≤ 1e-4; `preflight.py:390-436` in the current tree — the R32 lane-2 edits shift
+  this file; cite `_native_gate_passed`/`_residual_equivalence` by name); the FP32 comparison is reported, never gated.
 - [x] A2. **MET — the Qwen3.5 probe hold is lifted.** `outputs/preflight/qwen35-4b.json`
   `passed: true` under R18a at 15:20 (native max_abs 0.0, Frobenius 0.0; SHA-256
   `8a6f4298…`), with the 3B control passing identically at 15:18. Terms of #15/#16 satisfied.
@@ -38,7 +41,7 @@ architecture until then.
   activations are FP32 by rule 1.5 while the model deploys BF16 — pre-existing, applies to the
   3B equally, surfaced on issue #15. The C7 refit (round FP32 activations in the saved npz to
   BF16, refit through the reanalysis pipeline, compare Holm flags) is offline, needs no model,
-  and would bound the effect with evidence. *Ruled — item 4 of R18 (the C7 refit clause; no separate "R18(c)" heading exists in the wiring map) on issue #15 — ruled; an offline implementer slice (no model), unassigned — corrected by the Chief 2026-09-05. Issue #15 stays open for this C7 item only; its preflight question is closed by A2. Planned as slice B5 (#40).*
+  and would bound the effect with evidence. *Ruled — item 4 of R18 (the C7 refit clause; no separate "R18(c)" heading exists in the wiring map) on issue #15 — ruled; an offline implementer slice (no model), unassigned — corrected by the Chief 2026-09-05. Issue #15 is CLOSED (at `eca116b`): the preflight question by A2, the C7 item by B5.*
 
 ## Standing note, 2026-09-04 ~19:30 — two blockers found by live P6 attempts; one fixed and committed, one fixed in the tree, one ruling requested
 
@@ -108,13 +111,12 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   **Scorer committed `0862c01` (#46) and R30 refinements `68c1990` (#49, schema `p6-patch-r30`).**
   **The ledger primary rerun is RUNNING** (Director-started 2026-09-05 ~21:38, own monitor;
   `outputs/probes/patch-C-r27-2026-09-05/`, 42 cells, ~1 h 20). Run 1's artifact stays as a record.
-- [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first**, none applied:
-  `outputs/probes/axis-corrected/CLOSED.md` absent (288 saved rollouts on disk); the
-  matched-design flaw (default persona gets the full `prompts` list, `assistant_axis.py:600-609`,
-  roles get `prompts[:role_prompts]`, `:610-623`); the exemplar imbalance — presence, not only
-  the 6/8/10 role counts at `:106-107`: 0 of 6 high, 8 of 8 low, 6 of 10 neutral roles carry
-  one; `--judge` defaulting to on (`assistant_axis.py:1378-1383`; `build_axis_run` default at
-  `:639`). Then a ~20-minute gated run, additionally behind A2. *Fixes and closure record **committed `3867cc6`** (#42, Chief-ratified): `CLOSED.md` written by the new `close` subcommand
+- [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first.** *Original text
+  (pre-`3867cc6`, anchors historical):* `CLOSED.md` absent; the matched-design flaw (default
+  persona got the full `prompts` list while roles got `prompts[:role_prompts]`); the exemplar
+  imbalance — presence: 0 of 6 high, 8 of 8 low, 6 of 10 neutral roles carried one; `--judge`
+  defaulting to on. *Now:* `CLOSED.md` present; both sides use `shared_prompts`
+  (`assistant_axis.py:595-620`); `ROLE_EXEMPLARS` empty; `use_model_judge` default False (`:635`). Then a ~20-minute gated run, additionally behind A2. *Fixes and closure record **committed `3867cc6`** (#42, Chief-ratified): `CLOSED.md` written by the new `close` subcommand
   (`outputs/probes/axis-corrected/CLOSED.md`, SHA-256 `fb66141c…`; measured best role 3 of 8,
   21 of 24 roles silent vs the spec's expected 19 — reported, not reconciled); matched prompts,
   exemplars dropped from all 24 roles (ruling 1), judge default off. Ticks on commit; the 4B
@@ -124,9 +126,10 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   (analysis, target, layer) cells keep both support flags, max absolute margin change 0.0054;
   rounding altered every stored activation at Frobenius-relative 1.5e-3 to 1.8e-3 per layer.
   Artifacts `outputs/probes/state-corrected-hardened-20260903T172549/refit-bf16/`
-  (`refit-comparison.json` SHA-256 `a99bcd59…`, `reanalysis-bf16.json` `fd0b0d83…`). At the
-  Deputy's review → Chief; one ruling needed: the pre-versioning capture was bound to generator
-  v2 on evidence (`--no-round` at v2 reproduces the baseline byte for byte; v4 flips 7 cells).*
+  (`refit-comparison.json` SHA-256 `a99bcd59…`, `state-base-mix.reanalysis-bf16.json`
+  `fd0b0d83…`). Ruled (R23 addendum, ratified on #44, `135c48d`): the pre-versioning capture
+  is bound to generator v2 — `--no-round` at v2 reproduces the baseline byte for byte (192
+  margin deltas exactly 0.0); v4 flips 7 cells.*
 
 ## Explicitly not on this list
 
