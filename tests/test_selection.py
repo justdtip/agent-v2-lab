@@ -94,9 +94,16 @@ def test_stage_select_aggregates_two_cells_and_writes_deterministic_metadata(
         adapter.mkdir()
         (adapter / "adapter_config.json").write_text("{}", encoding="utf-8")
         adapters.append((step, adapter))
-    (output / "train.log").parent.mkdir(parents=True)
-    (output / "train.log").write_text(
-        "Iter 100: Val loss 0.200, Val took 87.010s\nIter 200: Val loss 0.100, Val took 87.010s\n",
+    output.mkdir(parents=True)
+    (output / "metrics.jsonl").write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in (
+                {"step": 100, "train_loss": None, "val_loss": 0.2, "tokens": None, "elapsed": 1.0},
+                {"step": 200, "train_loss": None, "val_loss": 0.1, "tokens": None, "elapsed": 2.0},
+            )
+        )
+        + "\n",
         encoding="utf-8",
     )
     calls: list[dict[str, object]] = []
@@ -145,3 +152,17 @@ def test_stage_select_aggregates_two_cells_and_writes_deterministic_metadata(
     assert [cell["difficulty"] for cell in first["screen"]] == [1, 2]
     assert first["checkpoints"][0]["components"]["tasks"] == 48
     assert first["checkpoints"][0]["val_loss"] == pytest.approx(0.2)
+
+
+def test_validation_losses_ignores_train_rows_and_rejects_malformed_metrics(tmp_path: Path) -> None:
+    output = tmp_path / "run"
+    output.mkdir()
+    path = output / "metrics.jsonl"
+    path.write_text(
+        json.dumps({"step": 1, "train_loss": 1.0, "val_loss": None, "tokens": 8, "elapsed": 0.1})
+        + "\nnot json\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"metrics\.jsonl:2: invalid JSON"):
+        cli._validation_losses(output)

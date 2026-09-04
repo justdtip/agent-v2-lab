@@ -431,33 +431,25 @@ def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch)
     keep.parent.mkdir(parents=True)
     keep.write_text("preserve", encoding="utf-8")
 
-    resolved = SimpleNamespace(
-        spec=SimpleNamespace(hf_id="registry/hybrid"),
-        num_layers=7,
-        lora_keys=("layers.0.hybrid.q_proj",),
-    )
+    spec = _training_model_spec()
+    resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("layers.0.hybrid.q_proj",))
     calls = []
+    model, tokenizer = object(), object()
 
-    class FakeProcess:
-        stdout: list[str] = []
-
-        def __init__(self, code: int) -> None:
-            self.code = code
-
-        def wait(self) -> int:
-            return self.code
-
-    def fake_popen(*args, **kwargs):
+    def fake_trainer(args, received_model, train_set, valid_set, training_callback=None):
         assert not (output / "checkpoints").exists()
-        return FakeProcess(0)
 
     def capture_provenance(run_dir, *, resolved, spec, extra):
         calls.append((run_dir, resolved, spec, extra))
 
-    monkeypatch.setattr(cli, "configure_local_cache", lambda: None)
-    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
-    monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(cli, "_resolve_training_spec", lambda config: resolved, raising=False)
+    monkeypatch.setattr(cli, "_load_training_entry", lambda: (fake_trainer, {}))
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(cli, "_load_training_base", lambda hf_id: (model, tokenizer))
+    monkeypatch.setattr(ModelSpec, "resolve", lambda self, model, tokenizer: resolved)
+    monkeypatch.setattr(
+        cli, "load_rendered_splits", lambda *args, **kwargs: (object(), object(), object())
+    )
+    monkeypatch.setattr(cli, "_clear_model_cache", lambda: None)
     monkeypatch.setattr(cli, "write_provenance", capture_provenance)
 
     cli.stage_train(config, iters=1)
@@ -476,10 +468,93 @@ def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch)
         )
     ]
 
-    monkeypatch.setattr(cli.subprocess, "Popen", lambda *args, **kwargs: FakeProcess(1))
-    with pytest.raises(SystemExit, match="training failed"):
-        cli.stage_train(config, iters=1)
-    assert len(calls) == 1
+
+
+def test_training_entry_validates_pinned_five_argument_runtime(monkeypatch) -> None:
+    """Training must accept only R14's pinned trainer boundary before model loading."""
+    calls = []
+
+    def exact_train_model(args, model, train_set, valid_set, training_callback=None):
+        return None
+
+    package = SimpleNamespace(__version__="0.31.3")
+    module = SimpleNamespace(train_model=exact_train_model, CONFIG_DEFAULTS={"batch_size": 1})
+
+    def fake_import(name):
+        calls.append(name)
+        return package if name == "mlx_lm" else module
+
+    monkeypatch.setattr(cli.importlib, "import_module", fake_import, raising=False)
+
+    trainer, defaults = cli._load_training_entry()
+
+    assert trainer is exact_train_model
+    assert defaults == {"batch_size": 1}
+    assert calls == ["mlx_lm", "mlx_lm.lora"]
+
+
+def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The in-process trainer gets model and rendered train/valid sets, never a tokenizer."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    stale = output / "checkpoints" / "stale"
+    stale.mkdir(parents=True)
+    (output / "evals").mkdir(parents=True)
+    (output / "evals" / "keep").write_text("keep", encoding="utf-8")
+    spec = _training_model_spec()
+    model, tokenizer = object(), object()
+    resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("hybrid.q",))
+    train_set, valid_set, test_set = object(), object(), object()
+    trainer_calls = []
+    provenance = []
+
+    def exact_train_model(
+        args, received_model, received_train, received_valid, training_callback=None
+    ):
+        trainer_calls.append((vars(args).copy(), received_model, received_train, received_valid))
+        training_callback.on_val_loss_report({"iteration": 0, "val_loss": 1.25})
+        training_callback.on_train_loss_report(
+            {"iteration": 1, "train_loss": 1.0, "trained_tokens": 64}
+        )
+        print("Iter 1: Val loss 1.25")
+
+    monkeypatch.setattr(cli, "_load_training_entry", lambda: (exact_train_model, {"extra": 9}))
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(cli, "_load_training_base", lambda hf_id: (model, tokenizer))
+    monkeypatch.setattr(ModelSpec, "resolve", lambda self, model, tokenizer: resolved)
+    monkeypatch.setattr(
+        cli,
+        "load_rendered_splits",
+        lambda path, received_tokenizer, *, max_seq_length: (
+            train_set,
+            valid_set,
+            test_set,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(cli, "_clear_model_cache", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "write_provenance",
+        lambda run_dir, *, resolved, spec, extra: provenance.append(extra),
+    )
+
+    cli.stage_train(config, iters=1)
+
+    rendered = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
+    assert trainer_calls == [(rendered | {"extra": 9}, model, train_set, valid_set)]
+    assert not stale.exists() and (output / "evals" / "keep").is_file()
+    assert provenance == [{"stage": "train", "training_config": rendered}]
+    metrics = json.loads((output / "metrics.jsonl").read_text().splitlines()[0])
+    assert {key: value for key, value in metrics.items() if key != "elapsed"} == {
+        "step": 1,
+        "train_loss": None,
+        "val_loss": 1.25,
+        "tokens": None,
+    }
+    assert isinstance(metrics["elapsed"], float) and metrics["elapsed"] >= 0
 
 
 def test_stage_eval_writes_one_ordered_provenance_record(monkeypatch, tmp_path: Path) -> None:

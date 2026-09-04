@@ -8,7 +8,11 @@ from local_llm_lab.tuner_data import RenderedRowsDataset, load_rendered_splits
 
 
 class _MergingTokenizer:
+    def __init__(self) -> None:
+        self.calls = []
+
     def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        self.calls.append((text, add_special_tokens))
         assert not add_special_tokens
         return {
             "prompt": [11],
@@ -19,16 +23,15 @@ class _MergingTokenizer:
 
 
 def test_rendered_rows_dataset_tokenizes_each_side_before_the_joint_boundary_can_merge() -> None:
+    tokenizer = _MergingTokenizer()
     dataset = RenderedRowsDataset(
         [{"prompt": "prompt", "completion": "completion", "metadata": {}}],
-        _MergingTokenizer(),
+        tokenizer,
         max_seq_length=8,
     )
 
-    tokens, offset = dataset[0]
-
-    assert tokens == [11, 12]
-    assert offset == 1
+    assert dataset[0] == ([11, 12], 1)
+    assert tokenizer.calls == [("prompt", False), ("completion", False)]
 
 
 def test_rendered_rows_dataset_rejects_rows_that_would_mask_every_completion_token() -> None:

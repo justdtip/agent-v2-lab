@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import importlib
+import inspect
 import json
-import os
-import re
 import shutil
-import subprocess
 import sys
 import time
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, TextIO
 
 import yaml
 
-from local_llm_lab.models import LoraSpec, ResolvedSpec, load_model_spec
+from local_llm_lab.models import LoraSpec, ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.branch import run_branch_mining
 from local_llm_lab.pipeline.data import SplitSpec, write_dataset
 from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
@@ -27,8 +28,11 @@ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 from local_llm_lab.provenance import write_provenance
+from local_llm_lab.tuner_data import load_rendered_splits
 
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "agent_v2.yaml"
+_PINNED_MLX_LM_VERSION = "0.31.3"
+_TRAIN_MODEL_PARAMETERS = ("args", "model", "train_set", "valid_set", "training_callback")
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -129,12 +133,11 @@ def _clear_model_cache() -> None:
     mx.clear_cache()
 
 
-def _resolve_training_spec(config: dict[str, Any]) -> ResolvedSpec:
-    """Resolve LoRA targets from the declared base architecture and training overrides."""
+def _effective_training_spec(config: dict[str, Any]) -> ModelSpec:
     spec = load_model_spec(config["model"])
     train = config["train"]
     keys = "auto" if "lora_keys" not in train else tuple(train["lora_keys"])
-    effective = replace(
+    return replace(
         spec,
         lora=LoraSpec(
             keys=keys,
@@ -143,6 +146,65 @@ def _resolve_training_spec(config: dict[str, Any]) -> ResolvedSpec:
             dropout=train.get("dropout", 0.0),
         ),
     )
+
+
+def _load_training_entry() -> tuple[Any, dict[str, Any]]:
+    try:
+        package = importlib.import_module("mlx_lm")
+        installed = getattr(package, "__version__", None)
+        if installed != _PINNED_MLX_LM_VERSION:
+            raise SystemExit(f"mlx-lm {_PINNED_MLX_LM_VERSION} required; found {installed}")
+        module = importlib.import_module("mlx_lm.lora")
+    except ImportError as error:
+        raise SystemExit(f"cannot import pinned mlx_lm.lora: {error}") from error
+    trainer = module.train_model
+    parameters = tuple(inspect.signature(trainer).parameters.values())
+    actual = tuple(parameter.name for parameter in parameters)
+    if actual != _TRAIN_MODEL_PARAMETERS or parameters[-1].default is not None:
+        raise SystemExit(
+            f"mlx-lm train_model signature mismatch: expected {_TRAIN_MODEL_PARAMETERS} "
+            f"with training_callback=None; found {actual}"
+        )
+    defaults = module.CONFIG_DEFAULTS
+    if not isinstance(defaults, dict):
+        raise SystemExit("mlx_lm.lora.CONFIG_DEFAULTS must be a mapping")
+    return trainer, dict(defaults)
+
+
+def _effective_lora_args(lora: dict[str, Any], defaults: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(**{**defaults, **lora})
+
+
+class _TrainingMetrics:
+    def __init__(self, target: TextIO, started: float) -> None:
+        self.target = target
+        self.started = started
+
+    def _write(self, *, step: int, train_loss: Any, val_loss: Any, tokens: Any) -> None:
+        self.target.write(
+            json.dumps(
+                {
+                    "step": step,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "tokens": tokens,
+                    "elapsed": time.monotonic() - self.started,
+                }
+            )
+            + "\n"
+        )
+        self.target.flush()
+
+    def on_val_loss_report(self, metrics: dict[str, Any]) -> None:
+        self._write(step=int(metrics["iteration"]) + 1, train_loss=None, val_loss=metrics["val_loss"], tokens=None)
+
+    def on_train_loss_report(self, metrics: dict[str, Any]) -> None:
+        self._write(step=int(metrics["iteration"]), train_loss=metrics["train_loss"], val_loss=None, tokens=metrics["trained_tokens"])
+
+
+def _resolve_training_spec(config: dict[str, Any]) -> ResolvedSpec:
+    """Resolve LoRA targets from the declared base architecture and training overrides."""
+    effective = _effective_training_spec(config)
     model: Any | None = None
     tokenizer: Any | None = None
     try:
@@ -205,52 +267,60 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
     output: Path = config["output"]
     adapters = output / "adapters"
     checkpoints = output / "checkpoints"
-    if checkpoints.exists():
-        shutil.rmtree(checkpoints)
-    adapters.mkdir(parents=True, exist_ok=True)
-    resolved = _resolve_training_spec(config)
-    lora = lora_config(config, resolved, iters=iters, resume_from=resume_from)
-    config_path = output / "lora.yaml"
-    config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
-    print(f"Resolved {len(resolved.lora_keys)} LoRA targets: {list(resolved.lora_keys)}")
-    configure_local_cache()
-    command = [sys.executable, "-m", "mlx_lm", "lora", "--config", str(config_path)]
-    if shutil.which("mlx_lm.lora"):
-        command = ["mlx_lm.lora", "--config", str(config_path)]
-    _log("train: " + " ".join(command))
+    trainer, defaults = _load_training_entry()
+    model: Any | None = None
+    tokenizer: Any | None = None
+    train_set: Any | None = None
+    valid_set: Any | None = None
+    test_set: Any | None = None
+    callback: _TrainingMetrics | None = None
     started = time.monotonic()
-    log_path = output / "train.log"
-    with log_path.open("w", encoding="utf-8") as log:
-        # Without PYTHONUNBUFFERED the child block-buffers stdout when it is a pipe rather than a
-        # terminal, so training progress stays invisible (and train.log stays empty) for many
-        # minutes at a time even though the run is healthy.
-        process = subprocess.Popen(
-            command,
-            cwd=PROJECT_ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+    try:
+        effective = _effective_training_spec(config)
+        model, tokenizer = _load_training_base(effective.hf_id)
+        resolved = effective.resolve(model, tokenizer)
+        lora = lora_config(config, resolved, iters=iters, resume_from=resume_from)
+        args = _effective_lora_args(lora, defaults)
+        adapters.mkdir(parents=True, exist_ok=True)
+        config_path = output / "lora.yaml"
+        config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
+        train_set, valid_set, test_set = load_rendered_splits(
+            config["data"], tokenizer, max_seq_length=args.max_seq_length
         )
-        assert process.stdout is not None
-        for line in process.stdout:
-            print(line, end="", flush=True)
-            log.write(line)
-        code = process.wait()
-    if code != 0:
-        raise SystemExit(f"training failed with exit code {code}; see {log_path}")
-    write_provenance(
-        output,
-        resolved=resolved,
-        spec=resolved.spec,
-        extra={
-            "stage": "train",
-            "training_config": yaml.safe_load(config_path.read_text(encoding="utf-8")),
-        },
-    )
-    print(
-        f"Training finished in {(time.monotonic() - started) / 60:.1f} min; checkpoints in {adapters}"
-    )
+        if checkpoints.exists():
+            shutil.rmtree(checkpoints)
+        print(f"Resolved {len(resolved.lora_keys)} LoRA targets: {list(resolved.lora_keys)}")
+        _log("train: mlx_lm.lora.train_model")
+        with (output / "train.log").open("w", encoding="utf-8") as log, (
+            output / "metrics.jsonl"
+        ).open("w", encoding="utf-8") as metrics:
+            callback = _TrainingMetrics(metrics, started)
+            with contextlib.redirect_stdout(_Tee(sys.stdout, log)):
+                trainer(args, model, train_set, valid_set, callback)
+        write_provenance(
+            output,
+            resolved=resolved,
+            spec=resolved.spec,
+            extra={"stage": "train", "training_config": lora},
+        )
+        print(f"Training finished in {(time.monotonic() - started) / 60:.1f} min; checkpoints in {adapters}")
+    finally:
+        del callback, train_set, valid_set, test_set, model, tokenizer
+        _clear_model_cache()
+
+
+class _Tee:
+    def __init__(self, console: TextIO, log: TextIO) -> None:
+        self.console, self.log = console, log
+
+    def write(self, value: str) -> int:
+        self.console.write(value)
+        self.log.write(value)
+        return len(value)
+
+    def flush(self) -> None:
+        self.console.flush()
+        self.log.flush()
 
 
 def checkpoint_dirs(config: dict[str, Any]) -> list[tuple[int, Path]]:
@@ -282,18 +352,30 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-_VAL_LOSS = re.compile(r"Iter\s+(\d+):\s+Val loss\s+([0-9.eE+-]+)")
-
-
 def _validation_losses(output: Path) -> dict[int, float]:
-    """Read lightweight saved training-log loss values without loading any model artifact."""
-    path = output / "train.log"
+    """Read only typed validation records from the structured in-process metrics stream."""
+    path = output / "metrics.jsonl"
     if not path.is_file():
         return {}
-    return {
-        int(match.group(1)): float(match.group(2))
-        for match in _VAL_LOSS.finditer(path.read_text(encoding="utf-8"))
-    }
+    losses = {}
+    required = {"step", "train_loss", "val_loss", "tokens", "elapsed"}
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{path}:{line_number}: invalid JSON") from error
+        if not isinstance(record, dict) or set(record) != required:
+            raise ValueError(f"{path}:{line_number}: invalid metrics fields")
+        if isinstance(record["step"], bool) or not isinstance(record["step"], int):
+            raise ValueError(f"{path}:{line_number}: invalid step")
+        for key in ("train_loss", "val_loss", "elapsed"):
+            if record[key] is not None and (isinstance(record[key], bool) or not isinstance(record[key], (int, float))):
+                raise ValueError(f"{path}:{line_number}: invalid {key}")
+        if record["tokens"] is not None and (isinstance(record["tokens"], bool) or not isinstance(record["tokens"], int)):
+            raise ValueError(f"{path}:{line_number}: invalid tokens")
+        if record["val_loss"] is not None:
+            losses[record["step"]] = float(record["val_loss"])
+    return losses
 
 
 def _counts(summary: dict[str, Any], name: str, fallback: tuple[str, str]) -> tuple[int, int]:
