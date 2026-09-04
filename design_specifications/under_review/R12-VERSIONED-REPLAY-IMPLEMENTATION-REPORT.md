@@ -43,6 +43,15 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
   changes were made.  No model, tokenizer, MLX, probe, training, or evaluation workload was run.
 - The shared task board's parent-owned claim remains the authority; no second claim was created.
 
+## Review fix round 1
+
+- Replayed all five recovery variants for v1-v3, including transient duplicate calls,
+  unknown-tool recovery, v1 list-first wording, and historic failed-edit ordinary/recovery notes.
+- Reanalysis now rejects inconsistent per-row family metadata; checkpoint capture rejects a stale
+  generator-version context rather than preserving it.
+- Added artifact-consumer binding tests and independent `highest so far` row-label parsing.
+- Focused owned suite: `101 passed`; normal scoped Ruff: `All checks passed!`.
+
 ## R13 full fake-only suite
 
 - HEAD: `d94a9f07f88c0312dbfa809dd0abcbd5a041865d`

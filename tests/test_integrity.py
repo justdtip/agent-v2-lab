@@ -15,6 +15,7 @@ from local_llm_lab.pipeline.integrity import (
     Fact,
     IntegrityReport,
     Violation,
+    _analyse_evaluation,
     _artifact_generator_version,
     _render_evaluations,
     check_trajectory,
@@ -561,7 +562,15 @@ def test_rollout_retains_only_integrity_clean_successes(monkeypatch) -> None:
     assert clean.integrity["clean"] is True
 
 
-def _write_evaluation(path: Path, task, trace: list[dict], *, success: bool, label: str) -> None:
+def _write_evaluation(
+    path: Path,
+    task,
+    trace: list[dict],
+    *,
+    success: bool,
+    label: str,
+    generator_version: int | None = GENERATOR_VERSION,
+) -> None:
     trajectory = _trajectory(task, success=success)
     trajectory.steps = trace
     path.write_text(
@@ -571,7 +580,9 @@ def _write_evaluation(path: Path, task, trace: list[dict], *, success: bool, lab
                     "label": label,
                     "data_seed": 20260902,
                     "keep_last": 0,
-                    "generator_version": GENERATOR_VERSION,
+                    **(
+                        {} if generator_version is None else {"generator_version": generator_version}
+                    ),
                 },
                 "trajectories": [trajectory.as_dict()],
             }
@@ -613,6 +624,24 @@ def test_artifact_generator_version_rejects_invalid_bindings(
 ) -> None:
     with pytest.raises(ValueError, match="invalid recorded generator_version"):
         _artifact_generator_version(invalid, None, source=tmp_path / "source.json")
+
+
+def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(tmp_path: Path) -> None:
+    task = _task("read")
+    recorded = tmp_path / "recorded.json"
+    legacy = tmp_path / "legacy.json"
+    _write_evaluation(
+        recorded, task, _expert_trace(task), success=True, label="recorded", generator_version=2
+    )
+    _write_evaluation(
+        legacy, task, _expert_trace(task), success=True, label="legacy", generator_version=None
+    )
+    assert _analyse_evaluation(recorded, 20260902)["generator_version"] == 2
+    assert "generator version" in _render_evaluations([legacy], 20260902, generator_version=1)
+    with pytest.raises(ValueError, match="no generator_version"):
+        _render_evaluations([legacy], 20260902)
+    with pytest.raises(ValueError, match="conflicts"):
+        _render_evaluations([recorded], 20260902, generator_version=1)
 
 
 def test_cli_helper_renders_deterministic_offline_comparison(tmp_path: Path) -> None:

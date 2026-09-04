@@ -304,6 +304,10 @@ def _replay_recovery_notes(task: Task, version: int) -> Task:
     steps = list(task.steps)
     if task.variant == "wrong_path":
         _replay_wrong_path_notes(steps, version)
+    elif task.variant == "transient":
+        _replay_transient_notes(steps, task.faults)
+    elif task.variant == "unknown_tool":
+        _replay_unknown_tool_notes(steps)
     elif task.variant == "stale_path":
         _replay_stale_path_notes(steps, version)
     elif task.variant == "failed_edit":
@@ -314,6 +318,8 @@ def _replay_recovery_notes(task: Task, version: int) -> Task:
 def _with_historical_base_notes(task: Task, clean: Task) -> Task:
     """Put historical clean thoughts back onto the current recovery action sequence."""
     steps = list(task.steps)
+    if task.variant == "transient":
+        return _with_historical_transient_notes(task, clean)
     bad = next(index for index, step in enumerate(steps) if not step.supervise)
     skip = {bad}
     if task.variant in {"stale_path", "failed_edit"}:
@@ -333,12 +339,31 @@ def _with_historical_base_notes(task: Task, clean: Task) -> Task:
     raise RuntimeError(f"{task.task_id}: recovery omitted a clean action")
 
 
+def _with_historical_transient_notes(task: Task, clean: Task) -> Task:
+    """A transient fault duplicates one supervised call instead of adding a bad call."""
+    steps = list(task.steps)
+    fault_index = task.faults[0].call_index
+    for index, step in enumerate(steps):
+        source = clean.steps[fault_index] if index == fault_index + 1 else clean.steps[
+            index - (index > fault_index + 1)
+        ]
+        if step.action != source.action:
+            raise RuntimeError(f"{task.task_id}: transient no longer matches clean action structure")
+        steps[index] = replace(step, thought=source.thought)
+    return replace(task, steps=tuple(steps))
+
+
 def _replay_wrong_path_notes(steps: list[Step], version: int) -> None:
     bad = next(index for index, step in enumerate(steps) if not step.supervise)
     guess = steps[bad].action.arguments["path"]
     recovery = steps[bad + 1]
     if bad == 0:
-        steps[bad] = replace(steps[bad], thought=f"Trying guessed path {guess} before listing the directory.")
+        thought = (
+            steps[bad + 1].thought.replace("Listing.", "Trying a likely file first.")
+            if version == 1
+            else f"Trying guessed path {guess} before listing the directory."
+        )
+        steps[bad] = replace(steps[bad], thought=thought)
         steps[bad + 1] = replace(
             recovery,
             thought=(
@@ -393,9 +418,33 @@ def _replay_failed_edit_notes(steps: list[Step], _version: int) -> None:
         ),
     )
     recovered = steps[bad + 2]
+    steps[bad] = replace(steps[bad], thought=recovered.thought)
     steps[bad + 2] = replace(
         recovered,
         thought="The file's current text confirms the exact string to replace. " + recovered.thought,
+    )
+
+
+def _replay_transient_notes(steps: list[Step], faults: tuple[Fault, ...]) -> None:
+    retry = faults[0].call_index + 1
+    steps[retry] = replace(
+        steps[retry],
+        thought="The tool reported a transient failure; the call itself was correct, so retry it unchanged. "
+        + steps[retry].thought,
+    )
+
+
+def _replay_unknown_tool_notes(steps: list[Step]) -> None:
+    bad = next(index for index, step in enumerate(steps) if not step.supervise)
+    recovered = steps[bad + 1]
+    bogus = steps[bad].action.name
+    steps[bad] = replace(steps[bad], thought=recovered.thought)
+    steps[bad + 1] = replace(
+        recovered,
+        thought=(
+            f"{bogus} is not an available tool; the workspace exposes replace_text. Apply the same exact replacement with it. "
+            + recovered.thought
+        ),
     )
 
 

@@ -409,7 +409,9 @@ def build_probe_dataset(
         import mlx.core as mlx_runtime
 
     checkpoint_context = dict(checkpoint_context or {})
-    checkpoint_context.setdefault("generator_version", GENERATOR_VERSION)
+    if checkpoint_context.get("generator_version", GENERATOR_VERSION) != GENERATOR_VERSION:
+        raise ValueError("checkpoint context generator_version must match the current generator")
+    checkpoint_context["generator_version"] = GENERATOR_VERSION
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1533,7 +1535,9 @@ def _regenerate_tasks(
     for task_id, family, difficulty in zip(
         dataset.task_ids.tolist(), dataset.family.tolist(), dataset.difficulty.tolist(), strict=True
     ):
-        families.setdefault(task_id, family)
+        prior_family = families.setdefault(task_id, family)
+        if prior_family != family:
+            raise ValueError(f"saved task {task_id} has inconsistent families")
         saved_difficulty = int(difficulty)
         prior = difficulties.setdefault(task_id, None if saved_difficulty == -1 else saved_difficulty)
         if prior != (None if saved_difficulty == -1 else saved_difficulty):

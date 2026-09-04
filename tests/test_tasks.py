@@ -669,3 +669,27 @@ def test_replay_preserves_historical_recovery_injected_note_profiles(
         assert v2.steps[injected + 2].thought.startswith(
             "The file's current text confirms the exact string to replace. "
         )
+
+
+@pytest.mark.parametrize(
+    "variant", ["wrong_path", "transient", "unknown_tool", "stale_path", "failed_edit"]
+)
+def test_replay_rewrites_every_historical_recovery_step(variant: str) -> None:
+    task = next(item for item in make_tasks("train", 144, difficulty=1) if item.variant == variant)
+    v2 = replay_task_from_id(task.task_id, 20260902, 2, 1)
+    v3 = replay_task_from_id(task.task_id, 20260902, 3, 1)
+    assert len(v2.steps) == len(task.steps) == len(v3.steps)
+    assert [step.action for step in v2.steps] == [step.action for step in task.steps]
+    if variant == "transient":
+        retry = v2.faults[0].call_index + 1
+        assert v2.steps[retry].thought.startswith("The tool reported a transient failure;")
+    elif variant == "unknown_tool":
+        bad = next(i for i, step in enumerate(v2.steps) if not step.supervise)
+        assert v2.steps[bad + 1].thought.startswith(
+            f"{v2.steps[bad].action.name} is not an available tool;"
+        )
+    elif variant == "failed_edit":
+        bad = next(i for i, step in enumerate(v2.steps) if not step.supervise)
+        assert v2.steps[bad].thought == v2.steps[bad + 2].thought.removeprefix(
+            "The file's current text confirms the exact string to replace. "
+        )

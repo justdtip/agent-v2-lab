@@ -137,6 +137,18 @@ def test_reanalysis_generator_version_requires_a_recording_or_explicit_binding()
         state_probe._reanalysis_generator_version({"generator_version": 2}, 1)
 
 
+def test_capture_rejects_a_checkpoint_context_with_a_stale_generator_version() -> None:
+    with pytest.raises(ValueError, match="checkpoint context generator_version"):
+        state_probe.build_probe_dataset(
+            None,
+            None,
+            [],
+            [0],
+            checkpoint_context={"generator_version": 1},
+            mlx_runtime=object(),
+        )
+
+
 def test_saved_npz_replay_uses_the_recorded_historical_version_without_loaders(
     tmp_path, monkeypatch
 ) -> None:
@@ -155,6 +167,13 @@ def test_saved_npz_replay_uses_the_recorded_historical_version_without_loaders(
 
     assert saved.meta["generator_version"] == 1
     assert set(replayed) == set(saved.task_ids.tolist())
+
+
+def test_saved_npz_replay_rejects_inconsistent_family_metadata() -> None:
+    dataset = state_probe.build_label_dataset(make_tasks("test", 1))
+    dataset.family[1] = "search"
+    with pytest.raises(ValueError, match="inconsistent families"):
+        state_probe._regenerate_tasks(dataset, 20260902)
 
 
 def test_reanalyse_cli_forwards_explicit_generator_version(monkeypatch, tmp_path) -> None:
@@ -186,7 +205,7 @@ def test_reanalyse_cli_forwards_explicit_generator_version(monkeypatch, tmp_path
 def test_v4_row_labels_match_nonvacuous_progress_note_oracles() -> None:
     """Independent note parsing pins the v4 state labels to real generated progress."""
     assert GENERATOR_VERSION == 4
-    counts = {"pending": 0, "loads": 0, "values": 0, "batch": 0}
+    counts = {"pending": 0, "loads": 0, "highest": 0, "values": 0, "batch": 0}
     for task in make_tasks("test", 144, perturb=False, difficulty=2):
         for index, step in enumerate(task.steps):
             labels = state_probe.row_labels(task, index)
@@ -207,6 +226,13 @@ def test_v4_row_labels_match_nonvacuous_progress_note_oracles() -> None:
                 ]
                 assert labels["running_max"] == (max(values) if values else 0)
                 counts["loads"] += 1
+            if "highest so far: " in note:
+                highest = note.split("highest so far: ", 1)[1].split(".", 1)[0]
+                value = 0 if highest == "none" else int(
+                    highest.split("=", 1)[1].split(";", 1)[0].split(" ", 1)[0]
+                )
+                assert labels["running_max"] == value
+                counts["highest"] += 1
             if "values so far: " in note:
                 observed = note.split("values so far: ", 1)[1].split("; split after ", 1)[0]
                 values = [] if observed == "none" else observed.split(", ")
