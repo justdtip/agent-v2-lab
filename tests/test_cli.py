@@ -216,17 +216,24 @@ def test_stage_data_passes_the_exact_six_run_d_chunks_and_recovery_multipliers(
 
 
 def test_run_d_configs_are_literal_pairwise_recipes() -> None:
-    """Catch a data-recipe drift between D3/D4 or B/B4."""
+    """Catch a data-recipe drift between D3/D4 or B/B4, and pin the R21 render shape."""
     root = Path(__file__).parents[1] / "configs"
     d3 = load_config(root / "agent_v2d.yaml")
     d4 = load_config(root / "agent_v2d_qwen35_4b.yaml")
     b = load_config(root / "agent_v2b.yaml")
     b4 = load_config(root / "agent_v2b_qwen35_4b.yaml")
-    for left, right in ((d3, d4), (b, b4)):
+    for base, cross in ((d3, d4), (b, b4)):
         for key in ("model", "output"):
-            left.pop(key)
-            right.pop(key)
-        assert left == right
+            base.pop(key)
+            cross.pop(key)
+        # R21(c): the cross-model arm renders the base arm's rows into a NEW directory; it
+        # must never point its data output at the base arm's irreplaceable dataset.
+        assert cross.pop("source_rows") == base["data"]
+        base_data = base.pop("data")
+        cross_data = cross.pop("data")
+        assert cross_data.name == f"{base_data.name}-qwen35-4b"
+        assert cross_data != base_data
+        assert base == cross
     assert d3["splits"] == {
         "train": {"count": 240, "difficulty": 0, "perturb": True, "role": "train"},
         "train1": {"count": 120, "difficulty": 1, "perturb": True, "role": "train"},
@@ -235,6 +242,210 @@ def test_run_d_configs_are_literal_pairwise_recipes() -> None:
         "test": {"count": 180, "difficulty": 2, "perturb": False, "role": "test"},
         "test3": {"count": 60, "difficulty": 3, "perturb": False, "role": "test"},
     }
+
+
+def test_stage_data_with_source_rows_delegates_to_render_and_never_generates(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R21(c): a source_rows config re-renders existing rows; generation must be unreachable."""
+    received = []
+    config = {
+        "model": "registry-name",
+        "output": tmp_path / "out",
+        "data": tmp_path / "data" / "rendered",
+        "source_rows": tmp_path / "data" / "source",
+        "seed": 1,
+        "keep_last": 2,
+        "tasks": {"train": 1, "valid": 1, "test": 1},
+    }
+    monkeypatch.setattr(
+        cli, "stage_render", lambda **kwargs: received.append(kwargs), raising=False
+    )
+    monkeypatch.setattr(
+        cli, "write_dataset", lambda *args, **kwargs: pytest.fail("write_dataset was called")
+    )
+    monkeypatch.setattr(
+        cli,
+        "_load_data_tokenizer",
+        lambda hf_id: pytest.fail("delegation must not load a tokenizer twice"),
+    )
+
+    cli.stage_data(config, [], overwrite=True)
+
+    assert received == [
+        {
+            "source": config["source_rows"],
+            "output": config["data"],
+            "model": "registry-name",
+            "overwrite": True,
+        }
+    ]
+    with pytest.raises(SystemExit, match="--extra"):
+        cli.stage_data(config, [tmp_path / "extra"])
+
+
+def test_render_command_with_explicit_flags_skips_the_run_config(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The R21(b) form render --source/--output/--model must not require a YAML recipe."""
+    received = []
+    monkeypatch.setattr(
+        cli, "stage_render", lambda **kwargs: received.append(kwargs), raising=False
+    )
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda path: (_ for _ in ()).throw(AssertionError("run config must stay unloaded")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-pipeline",
+            "render",
+            "--source",
+            str(tmp_path / "src"),
+            "--output",
+            str(tmp_path / "dst"),
+            "--model",
+            "registry-name",
+            "--force-overwrite",
+        ],
+    )
+
+    cli.main()
+
+    assert received == [
+        {
+            "source": (tmp_path / "src").resolve(),
+            "output": (tmp_path / "dst").resolve(),
+            "model": "registry-name",
+            "overwrite": True,
+        }
+    ]
+
+
+def test_render_command_falls_back_to_config_source_rows(monkeypatch, tmp_path: Path) -> None:
+    """render --config alone reads source_rows/data/model from the run configuration."""
+    received = []
+    config = {
+        "model": "registry-name",
+        "data": tmp_path / "rendered",
+        "source_rows": tmp_path / "source",
+    }
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(
+        cli, "stage_render", lambda **kwargs: received.append(kwargs), raising=False
+    )
+    monkeypatch.setattr(sys, "argv", ["agent-pipeline", "render"])
+
+    cli.main()
+
+    assert received == [
+        {
+            "source": config["source_rows"],
+            "output": config["data"],
+            "model": "registry-name",
+            "overwrite": False,
+        }
+    ]
+
+    monkeypatch.setattr(cli, "load_config", lambda path: {"model": "m", "data": tmp_path})
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert len(received) == 1
+
+
+def test_stage_render_uses_registry_tokenizer_and_writes_render_provenance(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Rendering loads the registered tokenizer only, and its provenance names the stage."""
+    spec = SimpleNamespace(hf_id="registry/hf-id")
+    tokenizer = object()
+    manifest = {"outputs": {"train": {"rows": 2, "sha256": "x"}}, "source": {"directory": "s"}}
+    renders = []
+    provenance = []
+    tokenizer_loads = []
+
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(
+        cli, "_load_data_tokenizer", lambda hf_id: tokenizer_loads.append(hf_id) or tokenizer
+    )
+    monkeypatch.setattr(cli, "_load_training_base", lambda *_: pytest.fail("loaded weights"))
+    monkeypatch.setattr(
+        cli,
+        "render_dataset",
+        lambda *args, **kwargs: renders.append((args, kwargs)) or manifest,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_provenance",
+        lambda run_dir, *, resolved, spec, extra: provenance.append(
+            (run_dir, resolved, spec, extra)
+        ),
+    )
+
+    cli.stage_render(
+        source=tmp_path / "src", output=tmp_path / "dst", model="registry-name", overwrite=True
+    )
+
+    assert tokenizer_loads == ["registry/hf-id"]
+    assert renders == [
+        ((tmp_path / "src", tmp_path / "dst", tokenizer), {"spec": spec, "overwrite": True})
+    ]
+    assert provenance == [
+        (
+            tmp_path / "dst",
+            None,
+            spec,
+            {"stage": "render", "dataset_manifest": manifest},
+        )
+    ]
+
+
+@pytest.mark.parametrize(("arguments", "overwrite"), [([], False), (["--force-overwrite"], True)])
+def test_data_command_propagates_force_overwrite_to_the_stage(
+    monkeypatch, tmp_path: Path, arguments: list[str], overwrite: bool
+) -> None:
+    received = []
+    monkeypatch.setattr(cli, "load_config", lambda path: {"output": tmp_path})
+    monkeypatch.setattr(
+        cli,
+        "stage_data",
+        lambda config, extra, *, overwrite: received.append((extra, overwrite)),
+    )
+    monkeypatch.setattr(sys, "argv", ["agent-pipeline", "data", *arguments])
+
+    cli.main()
+
+    assert received == [([], overwrite)]
+
+
+def test_stage_rollout_refuses_a_manifest_holding_target(monkeypatch, tmp_path: Path) -> None:
+    """The R21 guard covers every stage that writes under data/, not only the data stage."""
+    from local_llm_lab.pipeline.data import DatasetWriteGuardError
+
+    target = tmp_path / "data" / "rollouts" / "iter1"
+    target.mkdir(parents=True)
+    (target / "manifest.json").write_text("{}\n", encoding="utf-8")
+    config = {
+        "output": tmp_path / "output",
+        "model": "fake-model",
+        "seed": 17,
+        "keep_last": 2,
+        "eval": {"max_steps": 2, "max_tokens": 3},
+        "rollout": {"limit": 4, "samples": 2, "temperature": 0.7},
+    }
+    monkeypatch.setattr(cli, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
+    monkeypatch.setattr(cli, "run_rollout", lambda **kwargs: pytest.fail("rollout ran"))
+
+    with pytest.raises(DatasetWriteGuardError, match="manifest.json") as excinfo:
+        cli.stage_rollout(config, None, "iter1", limit=None, samples=None, quiet=True)
+    assert "--force-overwrite" not in str(excinfo.value), (
+        "the refusal must not advertise a flag the rollout stage does not expose"
+    )
 
 
 def test_stage_select_writes_provenance_after_selection_json(monkeypatch, tmp_path: Path) -> None:
@@ -720,7 +931,7 @@ def test_stage_eval_second_policy_failure_writes_no_partial_provenance(
 
 
 def test_stage_rollout_writes_one_post_run_provenance_record(monkeypatch, tmp_path: Path) -> None:
-    """Rollout provenance captures the returned summary after the sampling call succeeds."""
+    """Rollout provenance and its guard-arming manifest land after the sampling succeeds."""
     output = tmp_path / "output"
     adapter = output / "best-adapter"
     config = {
@@ -736,6 +947,7 @@ def test_stage_rollout_writes_one_post_run_provenance_record(monkeypatch, tmp_pa
     calls = []
     lookups = []
 
+    monkeypatch.setattr(cli, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
     monkeypatch.setattr(cli, "run_rollout", lambda **kwargs: summary)
     monkeypatch.setattr(cli, "load_model_spec", lambda model: lookups.append(model) or spec)
@@ -749,6 +961,64 @@ def test_stage_rollout_writes_one_post_run_provenance_record(monkeypatch, tmp_pa
 
     assert calls == [(output, None, spec, {"stage": "rollout", "summary": summary})]
     assert lookups == [config["model"]]
+    manifest_path = tmp_path / "data" / "rollouts" / "iter1" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest == {
+        "stage": "rollout",
+        "generator_version": cli.GENERATOR_VERSION,
+        "model": "fake-model",
+        "split": "iter1",
+        "seed": 17,
+        "adapter": str(adapter),
+        "summary": summary,
+    }
+    from local_llm_lab.pipeline.data import DatasetWriteGuardError
+
+    with pytest.raises(DatasetWriteGuardError, match="manifest.json"):
+        cli.stage_rollout(config, adapter, "iter1", limit=None, samples=None, quiet=True)
+
+
+def test_branch_command_stamps_its_output_so_the_guard_is_live(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Branch mining writes a manifest next to its summary; a rerun then refuses."""
+    from local_llm_lab.pipeline.data import DatasetWriteGuardError
+
+    config = {
+        "output": tmp_path / "output",
+        "model": "fake-model",
+        "seed": 17,
+        "keep_last": 2,
+        "eval": {"max_steps": 2, "max_tokens": 3},
+    }
+    summary = {"pairs": 5}
+    runs = []
+
+    monkeypatch.setattr(cli, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
+    monkeypatch.setattr(
+        cli, "run_branch_mining", lambda **kwargs: runs.append(kwargs) or summary
+    )
+    monkeypatch.setattr(sys, "argv", ["agent-pipeline", "branch", "--split", "pref1"])
+
+    cli.main()
+
+    manifest_path = tmp_path / "data" / "preferences" / "pref1" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest == {
+        "stage": "branch",
+        "generator_version": cli.GENERATOR_VERSION,
+        "model": "fake-model",
+        "split": "pref1",
+        "seed": 17,
+        "adapter": str(config["output"] / "best-adapter"),
+        "summary": summary,
+    }
+    assert len(runs) == 1
+    with pytest.raises(DatasetWriteGuardError, match="manifest.json"):
+        cli.main()
+    assert len(runs) == 1, "the guard must fire before mining runs again"
 
 
 @pytest.mark.parametrize(

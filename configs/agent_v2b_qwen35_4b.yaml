@@ -1,7 +1,11 @@
-# Run B recipe on the Qwen3.5-4B base; only model and output differ from agent_v2b.yaml.
+# Run B recipe on the Qwen3.5-4B base; only model, output, and data location differ from
+# agent_v2b.yaml. R21: the dataset is run B's rows re-rendered for this model's template
+# (stage_data delegates to render via source_rows); it is never regenerated, because run B's
+# generator revision is unrecoverable and regeneration would break the controlled comparison.
 model: qwen35-4b
 output: "outputs/agent-v2b-qwen35-4b"
-data: "data/agent_v2b"
+data: "data/agent_v2b-qwen35-4b"
+source_rows: "data/agent_v2b"
 seed: 20260902
 
 keep_last: 2

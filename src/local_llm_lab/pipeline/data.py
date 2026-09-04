@@ -15,6 +15,7 @@ from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
+    ActionParseError,
     assistant_message,
     build_prompt,
     generation_suffix,
@@ -25,6 +26,92 @@ from local_llm_lab.pipeline.protocol import (
     window_messages,
 )
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
+from local_llm_lab.project import PROJECT_ROOT
+
+# Ruling R21: these datasets are irreplaceable (runs A and B cannot be regenerated from the
+# current source; the generator revision that produced them is unrecoverable). No write path
+# may target them, with or without an override flag.
+PROTECTED_DATASETS: frozenset[str] = frozenset(
+    {
+        "data/agent_v2",
+        "data/agent_v2b",
+        "data/agent_v2c",
+        "data/chat_replay",
+    }
+)
+
+_ROLES = ("train", "valid", "test")
+
+# The only row sources whose assistant target may legally lack a tool call and render
+# verbatim. Every data/chat_replay row carries exactly this tag (240/48/60 verified), and the
+# ratified R21 round requires an explicit allowlist: any other unparseable target fails
+# loudly, because in a controlled arm silent is the failure mode to fear.
+CHAT_COMPLETION_SOURCES: frozenset[str] = frozenset({"pre-expansion-policy-replay"})
+
+
+class DatasetWriteGuardError(RuntimeError):
+    """A dataset write was refused because the target already holds a manifest."""
+
+
+class ProtectedDatasetError(DatasetWriteGuardError):
+    """A dataset write targeted an irreplaceable directory; no override exists."""
+
+
+class DatasetRenderError(RuntimeError):
+    """A render request named a source that is not a readable dataset directory."""
+
+
+def _names_same_directory(candidate: Path, protected: Path) -> bool:
+    """Compare by on-disk identity, because case-insensitive filesystems alias paths.
+
+    ``resolve()`` canonicalises symlinks but preserves the case the caller typed, so on a
+    case-insensitive filesystem a mis-cased alias of a protected directory compares unequal
+    as a path while naming the same directory on disk. ``samefile`` (st_dev + st_ino) closes
+    that hole; plain path equality remains the fallback when either path does not exist yet.
+    """
+    try:
+        return os.path.samefile(candidate, protected)
+    except OSError:
+        return candidate == protected
+
+
+def guard_dataset_write(
+    output: Path, *, overwrite: bool = False, override_flag: str | None = "--force-overwrite"
+) -> bool:
+    """Refuse to clobber an existing dataset at the write boundary (ruling R21).
+
+    Returns True when an existing ``manifest.json`` is being replaced under an explicit
+    override, so the caller can record that fact in the new manifest. Directories listed in
+    ``PROTECTED_DATASETS`` refuse unconditionally — matched by file identity, not path
+    spelling, and covering every subpath, because pollution of an irreplaceable directory
+    must be impossible, not merely refused at its root. ``override_flag`` names the
+    caller's overwrite flag in the refusal message; a stage with no override passes ``None``.
+    """
+    resolved = Path(output).resolve()
+    protected_roots = [
+        (name, (PROJECT_ROOT / name).resolve()) for name in sorted(PROTECTED_DATASETS)
+    ]
+    for candidate in (resolved, *resolved.parents):
+        for name, protected in protected_roots:
+            if _names_same_directory(candidate, protected):
+                raise ProtectedDatasetError(
+                    f"refusing to write into {resolved}: it is {name} or lies inside it — "
+                    "an irreplaceable dataset (PROTECTED_DATASETS) that can never be "
+                    "written to; no override exists. Write to a new directory instead."
+                )
+    if (resolved / "manifest.json").is_file():
+        if not overwrite:
+            hint = (
+                f"Pass {override_flag} to replace the existing dataset, or choose"
+                if override_flag
+                else "This stage has no overwrite path; choose"
+            )
+            raise DatasetWriteGuardError(
+                f"refusing to write into {resolved}: it already contains manifest.json. "
+                f"{hint} a new output directory."
+            )
+        return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -108,7 +195,12 @@ def build_rows(task: Task, *, keep_last: int = DEFAULT_KEEP_LAST) -> list[dict[s
 def render_rows(
     rows: list[dict[str, Any]], tokenizer: Any, *, spec: ModelSpec
 ) -> list[dict[str, Any]]:
-    """Add non-mutating canonical prompt/completion fields for in-process training."""
+    """Add non-mutating canonical prompt/completion fields for in-process training.
+
+    Only rows whose metadata source is in ``CHAT_COMPLETION_SOURCES`` may lack a tool call
+    and render their content verbatim; any other unparseable target raises — in a
+    controlled arm, silent is the failure mode to fear.
+    """
     training_spec = _training_spec(spec)
     rendered: list[dict[str, Any]] = []
     for row in rows:
@@ -122,10 +214,23 @@ def render_rows(
         if not isinstance(content, str):
             raise ValueError("assistant target content must be a string")
         thinking, remainder = strip_thinking(content)
-        turn = parse_turn(remainder)
-        completion = render_completion(turn.thought, turn.action, spec=training_spec)
-        if thinking is not None and spec.chat.thinking == "trained":
-            completion = f"<think>{thinking}</think>\n\n{completion}"
+        try:
+            turn = parse_turn(remainder)
+        except ActionParseError as error:
+            metadata = row.get("metadata")
+            source = metadata.get("source") if isinstance(metadata, dict) else None
+            if source not in CHAT_COMPLETION_SOURCES:
+                raise ValueError(
+                    f"row from source {source!r} has no parseable tool call; only "
+                    f"{sorted(CHAT_COMPLETION_SOURCES)} rows may render verbatim"
+                ) from error
+            # Replayed chat rows end in a plain assistant turn with no tool call; their
+            # completion is the verbatim content under the model's turn terminator.
+            completion = content + training_spec.chat.end_of_turn + "\n"
+        else:
+            completion = render_completion(turn.thought, turn.action, spec=training_spec)
+            if thinking is not None and spec.chat.thinking == "trained":
+                completion = f"<think>{thinking}</think>\n\n{completion}"
         copy_row = copy.deepcopy(row)
         copy_row["prompt"] = build_prompt(
             tokenizer, messages[:-1], spec=training_spec, generation=True
@@ -188,6 +293,7 @@ def write_dataset(
     extra_dirs: list[Path] | None = None,
     tokenizer: Any | None = None,
     spec: ModelSpec | None = None,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """Write role JSONL files from deterministic, declaration-ordered logical chunks.
 
@@ -196,7 +302,11 @@ def write_dataset(
     after a stale path, re-read after a failed edit) are hosted by only a few families, and the
     run is shorter than one epoch, so without oversampling a given target may never be visited.
     Held-out splits are never reweighted.
+
+    The R21 write guard runs before any work: an existing dataset is only replaced under an
+    explicit ``overwrite``, recorded in the new manifest, and protected datasets never are.
     """
+    overridden = guard_dataset_write(output, overwrite=overwrite)
     if (tokenizer is None) != (spec is None):
         raise ValueError("tokenizer and spec must be provided together for rendered rows")
     rendering_spec = _training_spec(spec) if spec is not None else None
@@ -208,6 +318,8 @@ def write_dataset(
         "recovery_repeats": recovery_repeats,
         "splits": {},
     }
+    if overridden:
+        manifest["force_overwrite"] = True
     if rendering_spec is not None:
         manifest["model"] = asdict(spec)
         manifest["rendering"] = {
@@ -257,6 +369,68 @@ def write_dataset(
         same_role = [name for name, spec in normalized.items() if spec.role == info["role"]]
         if same_role == [split]:
             info["sha256"] = manifest["outputs"][info["role"]]["sha256"]
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def render_dataset(
+    source: Path,
+    output: Path,
+    tokenizer: Any,
+    *,
+    spec: ModelSpec,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Re-render an existing dataset's rows for ``spec`` without regenerating any task (R21).
+
+    Task content (``messages`` and ``metadata``) is carried byte-identical from the source and
+    only the ``prompt``/``completion`` rendering changes, so a cross-model training arm stays a
+    controlled comparison. The generator is never invoked; the source manifest's
+    ``generator_version`` is carried through unchanged (``None`` when the source predates
+    generator versioning), never replaced with the current one.
+    """
+    source = Path(source).resolve()
+    overridden = guard_dataset_write(output, overwrite=overwrite)
+    if not source.is_dir():
+        raise DatasetRenderError(f"render source {source} is not a directory")
+    missing = [role for role in _ROLES if not (source / f"{role}.jsonl").is_file()]
+    if missing:
+        names = ", ".join(f"{role}.jsonl" for role in missing)
+        raise DatasetRenderError(f"render source {source} is missing {names}")
+    rendering_spec = _training_spec(spec)
+    source_block: dict[str, Any] = {"directory": str(source)}
+    source_manifest: dict[str, Any] = {}
+    manifest_path = source / "manifest.json"
+    if manifest_path.is_file():
+        source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        source_block["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    source_block["sha256"] = {}
+    rendered_roles: dict[str, list[dict[str, Any]]] = {}
+    for role in _ROLES:
+        path = source / f"{role}.jsonl"
+        source_block["sha256"][role] = hashlib.sha256(path.read_bytes()).hexdigest()
+        rendered_roles[role] = render_rows(read_jsonl(path), tokenizer, spec=spec)
+    manifest: dict[str, Any] = {
+        "stage": "render",
+        "generator_version": source_manifest.get("generator_version"),
+        "seed": source_manifest.get("seed"),
+        "keep_last": source_manifest.get("keep_last"),
+        "protocol": source_manifest.get("protocol"),
+        "model": asdict(spec),
+        "rendering": {
+            "thinking": rendering_spec.chat.thinking,
+            "template_kwargs": rendering_spec.chat.template_kwargs,
+            "generation_suffix": generation_suffix(rendering_spec),
+        },
+        "source": source_block,
+        "outputs": {},
+    }
+    if overridden:
+        manifest["force_overwrite"] = True
+    for role, rows in rendered_roles.items():
+        digest = write_jsonl(output / f"{role}.jsonl", rows)
+        manifest["outputs"][role] = {"rows": len(rows), "sha256": digest}
     output.mkdir(parents=True, exist_ok=True)
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest

@@ -18,7 +18,12 @@ import yaml
 
 from local_llm_lab.models import LoraSpec, ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.branch import run_branch_mining
-from local_llm_lab.pipeline.data import SplitSpec, write_dataset
+from local_llm_lab.pipeline.data import (
+    SplitSpec,
+    guard_dataset_write,
+    render_dataset,
+    write_dataset,
+)
 from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.preflight import require_preflight, run_preflight
@@ -37,7 +42,7 @@ _TRAIN_MODEL_PARAMETERS = ("args", "model", "train_set", "valid_set", "training_
 
 def load_config(path: Path) -> dict[str, Any]:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    for key in ("output", "data", "chat_replay"):
+    for key in ("output", "data", "chat_replay", "source_rows"):
         if key in config and config[key]:
             config[key] = (PROJECT_ROOT / config[key]).resolve()
     return config
@@ -87,7 +92,21 @@ def dataset_splits(config: dict[str, Any]) -> dict[str, SplitSpec]:
 # --------------------------------------------------------------------------- stages
 
 
-def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
+def stage_data(config: dict[str, Any], extra: list[Path], *, overwrite: bool = False) -> None:
+    if config.get("source_rows"):
+        # Ruling R21(c): a config with source_rows names a cross-model arm whose dataset is
+        # the source rows re-rendered, never regenerated; the data stage delegates to render.
+        if extra:
+            raise SystemExit(
+                "source_rows configs re-render existing rows; --extra mixing does not apply"
+            )
+        stage_render(
+            source=config["source_rows"],
+            output=config["data"],
+            model=config["model"],
+            overwrite=overwrite,
+        )
+        return
     _log("data: generating expert trajectories with state-carrying notes")
     spec = load_model_spec(config["model"])
     tokenizer = _load_data_tokenizer(spec.hf_id)
@@ -102,6 +121,7 @@ def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
         chat_repeats=config.get("chat_repeats", 1),
         recovery_repeats=config.get("recovery_repeats", 1),
         extra_dirs=extra,
+        overwrite=overwrite,
     )
     write_provenance(
         config["output"],
@@ -120,6 +140,37 @@ def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
             f"horizon {info['min_horizon']}-{info['max_horizon']}; variants {info['variants']}"
         )
     print(f"Wrote {config['data']}")
+
+
+def stage_render(*, source: Path, output: Path, model: str, overwrite: bool = False) -> None:
+    """Re-render existing rows for the named model's template; never regenerates tasks (R21).
+
+    Loading the registered tokenizer here is not model execution (issue #12): no weights are
+    touched, and the guarded ``render_dataset`` write carries the source rows through verbatim.
+    """
+    _log(f"render: applying the {model} template to existing rows from {source}")
+    spec = load_model_spec(model)
+    tokenizer = _load_data_tokenizer(spec.hf_id)
+    manifest = render_dataset(source, output, tokenizer, spec=spec, overwrite=overwrite)
+    write_provenance(
+        output,
+        resolved=None,
+        spec=spec,
+        extra={"stage": "render", "dataset_manifest": manifest},
+    )
+    for role, info in manifest["outputs"].items():
+        print(f"{role:5s}: {info['rows']:4d} rows re-rendered")
+    print(f"Wrote {output} (source rows carried verbatim from {manifest['source']['directory']})")
+
+
+def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
+    """Stamp a stage's data output with manifest.json after it succeeds.
+
+    The R21 guard fires only on this file, so without it the rollout/branch guard calls
+    would be inert; the stamp also gives those outputs the provenance they were missing.
+    """
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _load_training_base(hf_id: str) -> tuple[Any, Any]:
@@ -616,6 +667,8 @@ def stage_rollout(
     output: Path = config["output"]
     rollout = config["rollout"]
     adapter = adapter or output / "best-adapter"
+    rollout_output = PROJECT_ROOT / "data" / "rollouts" / split
+    guard_dataset_write(rollout_output, override_flag=None)
     transcript_dir = output / "transcripts" / f"rollout-{split}"
     Transcript.start_run(transcript_dir)
     _log(f"rollout: sampling {adapter.name} on fresh split '{split}'")
@@ -627,7 +680,7 @@ def stage_rollout(
         limit=limit or rollout["limit"],
         samples=samples or rollout["samples"],
         temperature=rollout["temperature"],
-        output=PROJECT_ROOT / "data" / "rollouts" / split,
+        output=rollout_output,
         transcript_dir=transcript_dir,
         keep_per_task=rollout.get("keep_per_task", 2),
         max_steps=config["eval"]["max_steps"],
@@ -635,6 +688,18 @@ def stage_rollout(
         keep_last=config["keep_last"],
         quiet=quiet,
         seed=config["seed"],
+    )
+    _write_stage_manifest(
+        rollout_output,
+        {
+            "stage": "rollout",
+            "generator_version": GENERATOR_VERSION,
+            "model": config["model"],
+            "split": split,
+            "seed": config["seed"],
+            "adapter": str(adapter),
+            "summary": summary,
+        },
     )
     write_provenance(
         output,
@@ -668,6 +733,24 @@ def main() -> None:
         action="append",
         default=[],
         help="Rollout directory whose train.jsonl is mixed in.",
+    )
+    data.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        help="Replace an existing non-protected dataset; recorded in the new manifest.",
+    )
+
+    render = stages.add_parser(
+        "render",
+        help="Re-render existing dataset rows for a model's template; never regenerates tasks.",
+    )
+    render.add_argument("--source", type=Path, help="Dataset directory holding the existing rows.")
+    render.add_argument("--output", type=Path, help="New dataset directory for the rendered rows.")
+    render.add_argument("--model", help="Registry model whose template renders the rows.")
+    render.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        help="Replace an existing non-protected dataset; recorded in the new manifest.",
     )
 
     train = stages.add_parser("train", help="QLoRA-train the base model on the generated data.")
@@ -741,9 +824,32 @@ def main() -> None:
     if args.stage == "preflight":
         run_preflight(args.model)
         return
+    if args.stage == "render" and args.source and args.output and args.model:
+        # R21(b) form: render --source/--output/--model needs no run configuration.
+        stage_render(
+            source=args.source.resolve(),
+            output=args.output.resolve(),
+            model=args.model,
+            overwrite=args.force_overwrite,
+        )
+        return
     config = load_config(args.config.resolve())
-    if args.stage == "data":
-        stage_data(config, [path.resolve() for path in args.extra])
+    if args.stage == "render":
+        source = args.source.resolve() if args.source else config.get("source_rows")
+        if source is None:
+            parser.error("render needs --source/--output/--model or a config with source_rows")
+        stage_render(
+            source=source,
+            output=args.output.resolve() if args.output else config["data"],
+            model=args.model or config["model"],
+            overwrite=args.force_overwrite,
+        )
+    elif args.stage == "data":
+        stage_data(
+            config,
+            [path.resolve() for path in args.extra],
+            overwrite=args.force_overwrite,
+        )
     elif args.stage == "train":
         _require_config_preflight(config, skip=args.skip_preflight_check)
         resume_from: Path | None = args.resume_from
@@ -774,22 +880,37 @@ def main() -> None:
     elif args.stage == "branch":
         if args.split in {"train", "valid", "test"}:
             parser.error("branch mining must use a fresh split name, e.g. pref1")
+        branch_output = PROJECT_ROOT / "data" / "preferences" / args.split
+        guard_dataset_write(branch_output, override_flag=None)
         transcript_dir = config["output"] / "transcripts" / f"branch-{args.split}"
         Transcript.start_run(transcript_dir)
-        run_branch_mining(
+        branch_adapter = args.adapter or config["output"] / "best-adapter"
+        branch_summary = run_branch_mining(
             model_name=config["model"],
-            adapter=args.adapter or config["output"] / "best-adapter",
+            adapter=branch_adapter,
             split=args.split,
             limit=args.limit,
             branches=args.branches,
             temperature=config.get("branch", {}).get("temperature", 0.9),
-            output=PROJECT_ROOT / "data" / "preferences" / args.split,
+            output=branch_output,
             transcript_dir=transcript_dir,
             max_steps=config["eval"]["max_steps"],
             max_tokens=config["eval"]["max_tokens"],
             keep_last=config["keep_last"],
             quiet=args.quiet,
             seed=config["seed"],
+        )
+        _write_stage_manifest(
+            branch_output,
+            {
+                "stage": "branch",
+                "generator_version": GENERATOR_VERSION,
+                "model": config["model"],
+                "split": args.split,
+                "seed": config["seed"],
+                "adapter": str(branch_adapter),
+                "summary": branch_summary,
+            },
         )
     elif args.stage == "prefer":
         prefer_cfg = config.get("prefer") or {}

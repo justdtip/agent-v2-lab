@@ -11,16 +11,24 @@ import pytest
 
 from local_llm_lab.agent_protocol import Action
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, load_model_spec
+from local_llm_lab.pipeline import data as data_module
 from local_llm_lab.pipeline.data import (
+    PROTECTED_DATASETS,
+    DatasetRenderError,
+    DatasetWriteGuardError,
+    ProtectedDatasetError,
     SplitSpec,
     build_rows,
+    guard_dataset_write,
     read_jsonl,
+    render_dataset,
     render_rows,
     write_dataset,
     write_jsonl,
 )
-from local_llm_lab.pipeline.protocol import assistant_message
+from local_llm_lab.pipeline.protocol import assistant_message, generation_suffix
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks
+from local_llm_lab.project import PROJECT_ROOT
 from local_llm_lab.tuner_data import RenderedRowsDataset
 
 
@@ -82,6 +90,36 @@ class _ThinkingTokenizer(_LegacyTokenizer):
             if kwargs["enable_thinking"] is False
             else suffix
         )
+
+
+def _target_spec() -> ModelSpec:
+    """A second registry-shaped spec whose rendering is visibly different from ``_legacy_spec``."""
+    return ModelSpec(
+        name="target",
+        hf_id="target",
+        family="target",
+        chat=ChatSpec("unsupported", {}, "<eot2>", ()),
+        lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+        train={},
+        cache_strategy="none",
+        probe_layer_fractions=(1.0,),
+        memory_budget_gib=1.0,
+        policies={},
+        cache_equivalence_verified=None,
+    )
+
+
+class _TargetTokenizer(_LegacyTokenizer):
+    """A chat template unlike the legacy one, so a re-render is detectable in the prompt.
+
+    The generation prompt still ends with the protocol's generation suffix, which
+    ``build_prompt`` asserts for every non-compatibility specification.
+    """
+
+    def apply_chat_template(self, messages, *, add_generation_prompt, tokenize, **kwargs) -> str:
+        assert not tokenize and not kwargs
+        rendered = "".join(f"[{message['role']}]{message['content']}\n" for message in messages)
+        return rendered + (generation_suffix(_target_spec()) if add_generation_prompt else "")
 
 
 class _Qwen25TemplateTokenizer:
@@ -216,6 +254,31 @@ def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens(
     tokenizer = _Qwen25TemplateTokenizer()
     spec = load_model_spec("qwen25-coder-3b")
     row = build_rows(make_tasks("train", 12, seed=20260902)[0])[0]
+    legacy_render = _legacy_qwen25_messages(row["messages"])
+    legacy_tokens = list(legacy_render.encode("utf-8"))
+
+    rendered = render_rows([row], tokenizer, spec=spec)[0]
+    dataset = RenderedRowsDataset(
+        [rendered], tokenizer, max_seq_length=len(legacy_tokens) + 1
+    )
+    tokens, offset = dataset[0]
+
+    assert rendered["prompt"] + rendered["completion"] == legacy_render
+    assert tokens == legacy_tokens
+    assert offset == len(rendered["prompt"].encode("utf-8"))
+
+
+def test_chat_rows_migrate_to_identical_rendered_tokens_under_the_template() -> None:
+    """The verbatim chat fallback reproduces the legacy template render, like expert rows do."""
+    tokenizer = _Qwen25TemplateTokenizer()
+    spec = load_model_spec("qwen25-coder-3b")
+    row = {
+        "messages": [
+            {"role": "user", "content": "please summarise the log"},
+            {"role": "assistant", "content": "A plain reply with no tool call."},
+        ],
+        "metadata": {"source": "pre-expansion-policy-replay"},
+    }
     legacy_render = _legacy_qwen25_messages(row["messages"])
     legacy_tokens = list(legacy_render.encode("utf-8"))
 
@@ -442,3 +505,248 @@ def test_split_specs_add_role_replay_once_and_reject_invalid_values(tmp_path) ->
         SplitSpec(1, difficulty=-1)
     with pytest.raises(ValueError):
         SplitSpec(1, perturb="yes")  # type: ignore[arg-type]
+
+
+def test_write_dataset_refuses_an_existing_manifest_unless_forced_and_records_it(tmp_path) -> None:
+    """R21(a): the write boundary itself refuses to clobber a dataset that has a manifest."""
+    target = tmp_path / "out"
+    first = write_dataset(target, {"train": 1, "valid": 1, "test": 1})
+    assert "force_overwrite" not in first
+
+    with pytest.raises(DatasetWriteGuardError, match="--force-overwrite"):
+        write_dataset(target, {"train": 1, "valid": 1, "test": 1})
+
+    replaced = write_dataset(target, {"train": 1, "valid": 1, "test": 1}, overwrite=True)
+    assert replaced["force_overwrite"] is True
+    written = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+    assert written["force_overwrite"] is True
+
+
+def test_protected_datasets_refuse_writes_even_with_the_override(monkeypatch, tmp_path) -> None:
+    """The four irreplaceable directories have no override path through any writer."""
+    monkeypatch.setattr(data_module, "PROJECT_ROOT", tmp_path)
+    source = tmp_path / "safe-src"
+    write_dataset(source, {"train": 1, "valid": 1, "test": 1})
+    for name in sorted(PROTECTED_DATASETS):
+        target = tmp_path / name
+        with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+            write_dataset(target, {"train": 1}, overwrite=True)
+        with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+            render_dataset(source, target, _TargetTokenizer(), spec=_target_spec(), overwrite=True)
+        assert not target.exists(), "the refusal must fire before anything is written"
+
+
+def test_protected_datasets_guard_the_real_repository_paths() -> None:
+    """Pin the R21 protected list and prove the guard rejects the real directories."""
+    assert PROTECTED_DATASETS == {
+        "data/agent_v2",
+        "data/agent_v2b",
+        "data/agent_v2c",
+        "data/chat_replay",
+    }
+    for name in sorted(PROTECTED_DATASETS):
+        with pytest.raises(ProtectedDatasetError):
+            guard_dataset_write(PROJECT_ROOT / name, overwrite=True)
+        with pytest.raises(ProtectedDatasetError):
+            guard_dataset_write(PROJECT_ROOT / name / "any" / "subpath", overwrite=True)
+
+
+def test_protected_guard_refuses_subpaths_of_protected_datasets(monkeypatch, tmp_path) -> None:
+    """Any child of a protected directory refuses even when forced: pollution is impossible.
+
+    The parent walk uses the same file-identity comparison, so a mis-cased parent on a
+    case-insensitive filesystem is caught too. Temp protected-root fixture only.
+    """
+    monkeypatch.setattr(data_module, "PROJECT_ROOT", tmp_path)
+    real = tmp_path / "data" / "agent_v2b"
+    real.mkdir(parents=True)
+
+    child = real / "nested" / "deeper"
+    with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+        guard_dataset_write(child, overwrite=True)
+    with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+        write_dataset(child, {"train": 1}, overwrite=True)
+
+    miscased_parent = tmp_path / "data" / "AGENT_V2B"
+    if miscased_parent.exists():
+        # Case-insensitive filesystem: the mis-cased parent names the protected directory.
+        with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+            guard_dataset_write(miscased_parent / "sub", overwrite=True)
+    assert list(real.iterdir()) == [], "no refusal may leave anything behind in the dataset"
+
+
+def test_protected_guard_refuses_aliased_paths_by_file_identity(monkeypatch, tmp_path) -> None:
+    """A mis-cased or symlinked alias of a protected directory refuses even when forced.
+
+    ``resolve()`` preserves the case the caller typed, so on a case-insensitive filesystem a
+    mis-cased path names the protected directory while comparing unequal as a path; the
+    guard must match by on-disk identity. Exercised against a temp protected root only —
+    never the real data/.
+    """
+    monkeypatch.setattr(data_module, "PROJECT_ROOT", tmp_path)
+    real = tmp_path / "data" / "agent_v2b"
+    real.mkdir(parents=True)
+
+    miscased = tmp_path / "data" / "AGENT_V2B"
+    if miscased.exists():
+        # Case-insensitive filesystem: the mis-cased alias names the same directory.
+        with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+            guard_dataset_write(miscased, overwrite=True)
+        with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+            write_dataset(miscased, {"train": 1}, overwrite=True)
+    else:
+        # Case-sensitive filesystem: a genuinely different directory stays writable.
+        assert guard_dataset_write(miscased) is False
+
+    link = tmp_path / "aliased-by-symlink"
+    link.symlink_to(real)
+    with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+        guard_dataset_write(link, overwrite=True)
+    with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+        write_dataset(link, {"train": 1}, overwrite=True)
+    assert list(real.iterdir()) == [], "no refusal may leave anything behind in the dataset"
+
+
+def test_render_dataset_carries_task_content_verbatim_and_rerenders_only(
+    monkeypatch, tmp_path
+) -> None:
+    """R21(b): rendering changes prompt/completion only; rows and generator version carry over."""
+    source = tmp_path / "src"
+    write_dataset(
+        source,
+        {"train": 1, "valid": 1, "test": 1},
+        tokenizer=_LegacyTokenizer(),
+        spec=_legacy_spec(),
+    )
+    manifest_path = source / "manifest.json"
+    source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source_manifest["generator_version"] = 2  # simulate a source from an older generator
+    manifest_path.write_text(json.dumps(source_manifest, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        data_module, "make_tasks", lambda *args, **kwargs: pytest.fail("render regenerated tasks")
+    )
+
+    output = tmp_path / "dst"
+    manifest = render_dataset(source, output, _TargetTokenizer(), spec=_target_spec())
+
+    assert manifest["generator_version"] == 2
+    assert manifest["generator_version"] != GENERATOR_VERSION
+    assert manifest["seed"] == source_manifest["seed"]
+    assert manifest["source"]["directory"] == str(source.resolve())
+    assert (
+        manifest["source"]["manifest_sha256"]
+        == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    )
+    assert manifest["model"] == asdict(_target_spec())
+    assert manifest["rendering"]["generation_suffix"] == generation_suffix(_target_spec())
+    assert "force_overwrite" not in manifest
+    for role in ("train", "valid", "test"):
+        source_bytes = (source / f"{role}.jsonl").read_bytes()
+        assert manifest["source"]["sha256"][role] == hashlib.sha256(source_bytes).hexdigest()
+        source_rows = read_jsonl(source / f"{role}.jsonl")
+        rendered_rows = read_jsonl(output / f"{role}.jsonl")
+        assert len(rendered_rows) == len(source_rows) == manifest["outputs"][role]["rows"]
+        for original, rendered in zip(source_rows, rendered_rows):
+            payloads = []
+            for row in (original, rendered):
+                stripped = {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"prompt", "completion"}
+                }
+                payloads.append(
+                    json.dumps(stripped, ensure_ascii=False, separators=(",", ":"))
+                )
+            assert payloads[0] == payloads[1], "task content must carry over byte-identical"
+            assert rendered["prompt"].startswith("[system]")
+            assert rendered["prompt"].endswith(generation_suffix(_target_spec()))
+            assert rendered["prompt"] != original["prompt"]
+            assert rendered["completion"].endswith("<eot2>\n")
+        assert (
+            manifest["outputs"][role]["sha256"]
+            == hashlib.sha256((output / f"{role}.jsonl").read_bytes()).hexdigest()
+        )
+
+
+def test_render_dataset_guards_output_and_requires_a_complete_source(tmp_path) -> None:
+    """The render output obeys the same guard, and a partial source fails before any write."""
+    source = tmp_path / "src"
+    write_dataset(source, {"train": 1, "valid": 1, "test": 1})
+    output = tmp_path / "dst"
+    render_dataset(source, output, _TargetTokenizer(), spec=_target_spec())
+
+    with pytest.raises(DatasetWriteGuardError, match="manifest.json"):
+        render_dataset(source, output, _TargetTokenizer(), spec=_target_spec())
+    forced = render_dataset(
+        source, output, _TargetTokenizer(), spec=_target_spec(), overwrite=True
+    )
+    assert forced["force_overwrite"] is True
+    persisted = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert persisted["force_overwrite"] is True
+
+    incomplete = tmp_path / "incomplete"
+    incomplete.mkdir()
+    write_jsonl(incomplete / "train.jsonl", [{"messages": [], "metadata": {}}])
+    fresh = tmp_path / "fresh"
+    with pytest.raises(DatasetRenderError, match="valid.jsonl"):
+        render_dataset(incomplete, fresh, _TargetTokenizer(), spec=_target_spec())
+    assert not fresh.exists()
+    with pytest.raises(DatasetRenderError, match="not a directory"):
+        render_dataset(tmp_path / "absent", fresh, _TargetTokenizer(), spec=_target_spec())
+
+
+def test_render_dataset_without_a_source_manifest_records_unknown_provenance(tmp_path) -> None:
+    """A pre-versioning source renders, carrying explicit nulls instead of current values."""
+    source = tmp_path / "src"
+    row = {
+        "messages": [
+            {"role": "system", "content": "rules"},
+            {"role": "user", "content": "task"},
+            assistant_message("note", Action("finish", {"answer": "done"})),
+        ],
+        "metadata": {"task_id": "fake", "source": "expert"},
+    }
+    for role in ("train", "valid", "test"):
+        write_jsonl(source / f"{role}.jsonl", [row])
+
+    manifest = render_dataset(source, tmp_path / "dst", _TargetTokenizer(), spec=_target_spec())
+
+    assert manifest["generator_version"] is None
+    assert "manifest_sha256" not in manifest["source"]
+    assert manifest["outputs"]["train"]["rows"] == 1
+
+
+def test_render_rows_verbatim_chat_fallback_is_an_explicit_allowlist() -> None:
+    """Only allowlisted replay sources render verbatim; anything else fails loudly.
+
+    In a controlled arm, silent is the failure mode to fear: a rollout or expert row that
+    somehow lost its tool call must raise, never be rendered as chat.
+    """
+    assert data_module.CHAT_COMPLETION_SOURCES == {"pre-expansion-policy-replay"}
+    chat_row = {
+        "messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "plain reply with no tool call"},
+        ],
+        "metadata": {"source": "pre-expansion-policy-replay"},
+    }
+
+    rendered = render_rows([chat_row], _LegacyTokenizer(), spec=_legacy_spec())[0]
+
+    assert rendered["completion"] == "plain reply with no tool call<eot>\n"
+    assert rendered["messages"] == chat_row["messages"]
+
+    for source in ("expert", "rollout", "chat", None):
+        broken = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "no call here either"},
+            ],
+            "metadata": {"source": source, "task_id": "train-read-0000-clean"},
+        }
+        with pytest.raises(ValueError, match="parseable tool call"):
+            render_rows([broken], _LegacyTokenizer(), spec=_legacy_spec())
+    with pytest.raises(ValueError, match="parseable tool call"):
+        render_rows(
+            [{"messages": chat_row["messages"]}], _LegacyTokenizer(), spec=_legacy_spec()
+        )
