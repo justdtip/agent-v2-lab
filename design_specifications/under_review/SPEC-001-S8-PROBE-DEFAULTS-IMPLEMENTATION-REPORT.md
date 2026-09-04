@@ -7,8 +7,7 @@ Mode: fake/offline implementation only
 ## Status
 
 The model-aware policy and layer-selection implementation is complete through its focused,
-adjacent, repository-rule, Ruff, C901, and diff gates. The exact committed-HEAD R13 result is
-recorded in the final section after the implementation commit.
+adjacent, repository-rule, Ruff, C901, diff, and exact committed-HEAD R13 gates.
 
 No checkpoint, tokenizer, model, probe, J-lens computation, inference, training, evaluation,
 preflight, or agent/probe/pipeline CLI was run. Pytest invoked CLI `main()` functions only with
@@ -138,4 +137,13 @@ source of that default but did not rerun preflight or any model-backed operation
 
 ## R13 committed-HEAD gate
 
-Pending the exact post-implementation-commit `uv run pytest -q` run.
+Implementation commit HEAD: `e53bd810d5204541efb56ebd5b9c1682120c9cbf`
+
+```text
+uv run pytest -q
+```
+
+Exit 0: 579 passed, 0 failed, 0 xfailed; failing node IDs: none. The output contained only
+passing progress markers. A separate read-only collection command independently counted 579
+tests. The implementation commit contains exactly the 13 authorized tracked paths; no protected
+or foreign path appears in it.
