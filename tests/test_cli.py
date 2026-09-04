@@ -526,6 +526,43 @@ def test_training_entry_validates_pinned_five_argument_runtime(monkeypatch) -> N
     assert calls == ["mlx_lm", "mlx_lm.lora"]
 
 
+def test_training_entry_rejects_adversarial_signature_before_model_load(monkeypatch) -> None:
+    def wrong_train_model(
+        *args, model=None, train_set=None, valid_set=None, training_callback=None
+    ):
+        return None
+
+    package = SimpleNamespace(__version__="0.31.3")
+    module = SimpleNamespace(train_model=wrong_train_model, CONFIG_DEFAULTS={})
+    monkeypatch.setattr(
+        cli.importlib, "import_module", lambda name: package if name == "mlx_lm" else module
+    )
+    monkeypatch.setattr(cli, "_load_training_base", lambda *_: pytest.fail("loaded model"))
+
+    with pytest.raises(SystemExit, match="signature mismatch"):
+        cli._load_training_entry()
+
+
+def test_data_tokenizer_uses_pinned_utils_loader_in_order(monkeypatch) -> None:
+    events = []
+    package = SimpleNamespace(__version__="0.31.3")
+    tokenizer = object()
+    utils = SimpleNamespace(
+        load_tokenizer=lambda hf_id: events.append(("tokenizer", hf_id)) or tokenizer
+    )
+    monkeypatch.setattr(cli, "configure_local_cache", lambda: events.append("cache"))
+    monkeypatch.setattr(
+        cli.importlib,
+        "import_module",
+        lambda name: events.append(("import", name)) or (package if name == "mlx_lm" else utils),
+    )
+
+    assert cli._load_data_tokenizer("registry/hf") is tokenizer
+    assert events == [
+        "cache", ("import", "mlx_lm"), ("import", "mlx_lm.utils"), ("tokenizer", "registry/hf")
+    ]
+
+
 def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -577,7 +614,7 @@ def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
     cli.stage_train(config, iters=1)
 
     rendered = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
-    assert trainer_calls == [(rendered | {"extra": 9}, model, train_set, valid_set)]
+    assert trainer_calls == [(rendered, model, train_set, valid_set)]
     assert not stale.exists() and (output / "evals" / "keep").is_file()
     assert provenance == [{"stage": "train", "training_config": rendered}]
     metrics = json.loads((output / "metrics.jsonl").read_text().splitlines()[0])

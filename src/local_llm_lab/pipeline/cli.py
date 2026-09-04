@@ -179,7 +179,15 @@ def _load_training_entry() -> tuple[Any, dict[str, Any]]:
     trainer = module.train_model
     parameters = tuple(inspect.signature(trainer).parameters.values())
     actual = tuple(parameter.name for parameter in parameters)
-    if actual != _TRAIN_MODEL_PARAMETERS or parameters[-1].default is not None:
+    expected_kinds = (inspect.Parameter.POSITIONAL_OR_KEYWORD,) * len(_TRAIN_MODEL_PARAMETERS)
+    valid_defaults = len(parameters) == len(_TRAIN_MODEL_PARAMETERS) and all(
+        parameter.default is inspect.Parameter.empty for parameter in parameters[:-1]
+    ) and parameters[-1].default is None
+    if (
+        actual != _TRAIN_MODEL_PARAMETERS
+        or tuple(parameter.kind for parameter in parameters) != expected_kinds
+        or not valid_defaults
+    ):
         raise SystemExit(
             f"mlx-lm train_model signature mismatch: expected {_TRAIN_MODEL_PARAMETERS} "
             f"with training_callback=None; found {actual}"
@@ -298,8 +306,8 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
         effective = _effective_training_spec(config)
         model, tokenizer = _load_training_base(effective.hf_id)
         resolved = effective.resolve(model, tokenizer)
-        lora = lora_config(config, resolved, iters=iters, resume_from=resume_from)
-        args = _effective_lora_args(lora, defaults)
+        lora = {**defaults, **lora_config(config, resolved, iters=iters, resume_from=resume_from)}
+        args = _effective_lora_args(lora, {})
         adapters.mkdir(parents=True, exist_ok=True)
         config_path = output / "lora.yaml"
         config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
