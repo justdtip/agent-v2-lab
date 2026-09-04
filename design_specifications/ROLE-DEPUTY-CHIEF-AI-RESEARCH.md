@@ -109,59 +109,37 @@ Chief promotes it to §7 or deletes it. Never write into §7 yourself.
 - When the Director asks for a document, write it to disk once and give the path; do not
   paste long content into chat.
 
-## 9. Current state of play (as of 2026-09-05; update as things land)
+## 9. Current state of play (as of 2026-09-05 evening; update as things land)
 
-HEAD `2d9445c`+docs, pushed (branch in sync with origin). Suite **807 passed, exit 0** bare
-(P1 closure + fixes `3867cc6`, P2 splits + R28 test `2d9445c`).
-Source tree clean. **R26 run logging is in** (four lane commits `c1f7d51`, `88ecac0`,
-`0a79788`, `2405598`): every training and probe run writes `run.log` + `events.jsonl`;
-training adds `health.json`; training condition 8 (A8) met — B4 trains with the health record
-from iteration one. **P6 run 1 completed** (2026-09-04 19:00 local; `outputs/probes/patch-C-2026-09-04/`,
-patch.json SHA `34542df5…`) — Chief's verdict: valid run record, flip rates not interpretable
-(stale-field coverage scored wrong numbers as flips); **R27** strict scorer slice dispatched
-(#41); rerun after B4 training. The lane is free; B4 training waits only on the Director's
-condition 6. Section B (probes) approved on #40: scorer → C7 refit (dispatched) → P1 closure +
-fixes, exemplars dropped (dispatched) → P2 redesign in three sub-slices (two rulings open). Documents reorganised per `DOCUMENT-MOVES-2026-09-05.md` (`3842e9d`): live
-instruments under `live/`, ratified reports under `complete/`, closed notes under `records/`.
+HEAD `112648b`+docs, pushed. Suite at the last clean gate **807 passed, exit 0** bare; the tree
+carries two in-flight lanes' uncommitted edits (R27 scorer in `patch.py`; the training-fix
+slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.py`.
 
-- **Both preflights passed under the R18a gate** (Director-run, 15:18 and 15:20): native-dtype
-  max_abs 0.0 and Frobenius 0.0 on both the 3B and Qwen3.5-4B; fp32 gap measured, never gated
-  (3B 4.2e-3, 4B 2.8e-2). **The Qwen3.5 probe hold is lifted.**
-- **Training arm B4:** render on disk (`data/agent_v2b-qwen35-4b`, 1915/284/494, parity with
-  run B); R15 conditions 1, 2, 3, 5, 7 met with evidence, 4 met per R15's text (R20 debt slice
-  bound), 6 is the Director's cost acceptance. Lift request drafted
-  (`live/B4-TRAINING-LIFT-REQUEST-2026-09-04.md`, command verified against `--help`),
-  held until P6 completes because the two runs share the single execution lane.
-- **Committed and pushed today:** R17 scanner (`afc0905`, #21), wave 1 (`a2f003c`, #19), R18a
-  gate (`ed88c96`, #23), R21 guard + render (`94c920e`, #24), adapter-wrapper fix (`89dfb56`,
-  #27), `criteria:` blocks (`7dd251d`, #18), P6 evidence binding with R22/R23/R24 (`07c6657`,
-  #26; five stable cases, steps 7/7/7/7/6).
-- **P6, the critical path.** Lift approved by the Director; two live attempts failed on code:
-  wrapper visibility (fixed `89dfb56`) and position groups (windowing + trailing boundary
-  merge; **fixed `ac9c27a`**, #29 ratified with a one-token boundary guard, closed). Behind it, verified on real data: the counterfactual note is longer than the failing
-  note by construction, so the patcher's equal-cardinality rule fails; **ruled R25 on #28**
-  (tail alignment with residue; `shared_value_tokens` + `dropped_value_slot` with mean-pooled
-  source rows on the separator slot; controls resample post-alignment; seven cells). **The R25
-  slice is committed `036e62c`** (#30; Director-expedited chain: implementer → Deputy's direct
-  review → Chief). The Director's command is unchanged; **the third attempt is unblocked.** Both readiness checklists re-audited line by line and corrected (~19:40).
-- Rulings R1 to R27. Governance: Deputy dispatches implementers, R19 reviewer between
-  implementer and Deputy verdict, Chief gates commits (rulings and reviews rest on the
-  governing code read directly), Deputy commits and pushes; momentum standing order; execution
-  = loading a model and running inference, one lane, one task; tokeniser loads are not
-  execution. Event-driven watch, no cron.
-- Backup: `~/Desktop/agent-v2-lab-BACKUP-2026-09-04`, 3.6 GB, 1,249 files, hashes verified.
-  git-lfs for `data/` remains the Director's open decision.
-- Bound follow-ups: adapter-wrapped variant in the standard arch fixtures (due before the B4
-  evaluation lift, #27); condition-4 completion slice (training-path loader via `load_policy`,
-  expires `DEBT(R20)`); stale `train.num_layers: 36` in cross-model configs (never read);
-  manifest writes through the atomic path; legacy unguarded writers; secondary P6 condition on
-  `aggregate_report` with the generator-v4 note; two drifted briefing §3 anchors; the C7 BF16
-  refit (item 4 of R18, #15, Director-assigned).
-
-## 11. Directory layout (2026-09-05)
-
-`pending/` specs; `under_review/` implementations awaiting Chief ratification; `complete/`
-ratified report + review pairs; `live/` instruments re-derived every commit (checklists,
-heartbeat log, lift requests); `records/` closed logs, superseded drafts, one-time notes.
-Move plan and rationale: `DOCUMENT-MOVES-2026-09-05.md`. The wiring map §7 is the rulings
-register; rulings are never re-homed.
+- **Training arm B4: not yet run.** Two live attempts failed before iteration one on our own
+  code: (1) the train stage loaded the unused test split, 15 of whose rows exceed the 2688
+  ceiling under the Qwen3.5 tokenizer; (2) `RenderedRowsDataset` lacks the `process` method
+  mlx_lm 0.31.3's `CacheDataset` requires. Both, plus the R26 error-path gap (a crashed run read
+  "healthy"), are in one fix slice in flight. The Director's ceiling change (7f11288) was
+  reverted (112648b): it broke the literal-pairwise-recipe test, and the loader fix removes the
+  need. Condition 6 is accepted (Director: "Go"); attempt 3 starts when the slice clears the
+  Chief's gate. Health logging worked on both failures (R26 in place: `c1f7d51`…`2405598`).
+- **P6.** Run 1 artifact valid, rates uninterpretable (Chief's review; R27). Strict scorer
+  implemented, R19-reviewed, two blocking findings fixed; work order **#46**: ledger primary
+  READY; the `aggregate_report` secondary blocked on the #41 ruling (extractor for run C's
+  `first half complete:` style; HEAD-alone eligibility, n = 2 vs 15). Rerun ~1.5 h after B4.
+- **Probes Section B.** Committed: P1 closure + three fixes (`3867cc6`, #42), P2 splits + R28
+  test (`2d9445c`, #43). At the Chief's gate: C7 refit **#44** (supported set unchanged, 96/96
+  cells, max margin change 0.0054; ratify generator_version = 2 for the hardened capture) and
+  `compare` + R29 sidecar **#45** (rebased onto B5; Holm-across-cells point for the Chief). In
+  flight: B1b capture sub-slice (conditions, dual capture, R18b `capture_dtype`, the
+  `task_difficulties` fix) in a worktree on top of B5.
+- Rulings R1 to R29 (R28 disjointness, R29 compare pairing). Governance: Deputy dispatches;
+  R19 round where the Chief asks (R27 had one); Deputy's direct review; Chief gates; Deputy
+  commits and pushes; one lane, one task; tokeniser loads are not execution. Lesson relogged
+  today: never gate a commit on a piped test run.
+- Backup `~/Desktop/agent-v2-lab-BACKUP-2026-09-04` (3.6 GB, verified). git-lfs for `data/`
+  still the Director's open decision.
+- Bound follow-ups: #27 adapter-wrapped fixture (before the B4 evaluation lift); condition-4
+  completion slice (`_load_training_base` via `load_policy`, expires DEBT(R20)); stale
+  `train.num_layers: 36`; manifest atomic writes; legacy unguarded writers; R27 review notes
+  12–15; Holm across `compare` cells; `build_axis_run` rollout progress; #15 closes on #44.
