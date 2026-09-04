@@ -51,11 +51,11 @@ exit 0
 
 ## R13 full fake-only suite
 
-- Tested integrated commit: `f0c2f280f7d987fbe1a52d0c0dda8f34d3fcece3`
+- Tested integrated commit: `53a49eddfd17fb101bdf44c88f031e37ffa7e4ce`
 - Required command: `uv run pytest -q`
 - Exit code: 0
 - Summary-enabled equivalent: `uv run pytest -q -o addopts='' --tb=no` (exit 0)
-- Counts: 506 passed, 0 failed, 0 xfailed
+- Counts: 525 passed, 0 failed, 0 xfailed
 - Failing nodes: none
 
 ## No-model and protected-path evidence
@@ -79,6 +79,7 @@ were written by this lane; all test files use `tmp_path`.
 - `dd036a48ce22dd47ed4623d02bfc676f5887d81e` — `feat: add fake-tested P6 causal patching`
 - `a0b88a976639caf243b9f38bded53929d67f6eb7` — `fix: correct P6 causal patch controls`
 - `d75415dd566fbb7ea41312a346bc744f36bbdbf0` — `fix: enforce P6 control cardinality`
+- `53a49eddfd17fb101bdf44c88f031e37ffa7e4ce` — `fix: extract canonical P6 note values`
 - This report is committed separately after its final evidence update.
 
 ## Fix Round 1
@@ -155,4 +156,35 @@ uv run pytest -q
 exit 0
 uv run pytest -q -o addopts='' --tb=no
 505 passed in 7.26s
+```
+
+## Fix Round 3
+
+Structured note-value extraction now recognizes canonical `values so far:` lists and exact
+`First subtotal =` totals for `aggregate_report`, while preserving numeric `approved:` values for
+`ledger_reconcile`. It returns numeric fact tokens only: split/step ordinals, held values, labels,
+punctuation, and calculator-expression operands are excluded.
+
+```text
+uv run pytest -q tests/test_patch.py -k canonical_family
+RED: 2 failed
+- aggregate_report produced an empty note_value_tokens group
+- ledger_reconcile captured "12, 18" including punctuation rather than numeric token spans
+
+uv run pytest -q tests/test_patch.py -k canonical_family
+GREEN: 2 passed
+uv run pytest -q tests/test_capture.py tests/test_patch.py
+31 passed
+uv run ruff check src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py tests/test_capture.py tests/test_patch.py
+All checks passed!
+uv run ruff check --select C901 src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py
+All checks passed!
+python3 -m py_compile src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py tests/test_capture.py tests/test_patch.py
+exit 0
+git diff --check 53a49ed^ 53a49ed -- src/local_llm_lab/probes/patch.py tests/test_patch.py
+exit 0
+uv run pytest -q
+exit 0
+uv run pytest -q -o addopts='' --tb=no
+525 passed in 7.61s
 ```
