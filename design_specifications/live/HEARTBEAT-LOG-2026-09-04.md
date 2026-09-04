@@ -665,3 +665,14 @@ recording the execution rule. No execution lane designated yet.
 - B5 work order #44 filed (READY; ratify generator_version = 2 for the hardened capture).
   R16 correction posted: the added tests use the seed literal as the file already does; source
   is clean; scanner scopes source only.
+
+## 2026-09-05 — B1c (compare + sidecar) delivered; rebase onto B5 in progress
+
+- Read in the worktree: refusal matrix covers R29's five conditions plus two content checks;
+  one resample seed list from the CLI seed via SeedSequence; identical task draws on both
+  sides; difference = right − left per draw on the same draw (paired at task and resample);
+  pooled and per-difficulty scopes (R7); sidecar stores test-half rows and per-control
+  prediction vectors with baselines shared across layers. Patch conflicts with B5's edits in
+  `__all__`/dispatch and the test file; implementer rebasing onto a1016df + B5 diff. Ruling to
+  request with the work order: Holm across the comparison's cells (implementer reports the
+  interval flag only).
