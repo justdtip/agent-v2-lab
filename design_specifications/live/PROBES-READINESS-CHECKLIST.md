@@ -73,9 +73,11 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
 - [ ] B1. **§2 P2 redesign — 0%, and the spec calls it "where the remaining probe budget
   goes".** Nothing exists: `capture.stub_observations`, `--stub-observations`, the
   `p2-d0/p2-d1/p2-d2` splits plan, the `compare` subcommand, dual-position capture, the
-  SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices
-  (#40); B1a waits on the disjointness-fingerprint ruling, B1b/B1c on the `compare` pairing
-  ruling and on B5 landing in `state_probe.py`; ordered after the R27 scorer and B4.*
+  SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices (#40; R28/R29 ruled). **B1a implemented, Deputy-reviewed
+  READY** (work order filed): `P2_SPLITS`, `make_p2_tasks`, `task_fingerprint`, six-config
+  sweep regenerated from tables, zero collisions at full size. B1c (`compare` + sidecar) in an
+  isolated worktree; B1b (conditions, dual capture, R18b `capture_dtype`, and the
+  `task_difficulties` mislabel fix) dispatches when B5 leaves `state_probe.py`.*
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.

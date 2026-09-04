@@ -640,3 +640,11 @@ recording the execution rule. No execution lane designated yet.
   3/8 best (pirate), 21/24 silent (spec expected 19) — reported side by side; default assistant
   96/96 labelled a pass-through of a marker-less heuristic (pre-existing). In-scope tests 133;
   scanner green; suite red only in `test_patch.py` from the R27 implementer's live edits.
+
+## 2026-09-05 — B1a (P2 splits + R28 test) reviewed READY; work order filed
+
+- Read both diffs: fingerprint fields = R28's list; normalisation completeness tested; six
+  configs pinned and regenerated (incl. screen splits, source_rows resolved); zero collisions
+  at full size in 0.47 s; positive rename control. Suite 807 / exit 0 with all lanes present.
+  Defect flagged for B1b: `task_difficulties` (`state_probe.py:324-332`) mislabels unknown
+  split names — into the B1b brief. R28 anchor drift `tasks.py:111` → `:130` reported.
