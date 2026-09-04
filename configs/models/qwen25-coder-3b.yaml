@@ -25,6 +25,8 @@ probes:
   # R18: native block execution during capture; float32 only on the J-lens tail.
   capture_dtype: native
 memory:
+  # Declared intent, and a cap only: preflight resolves the effective budget as
+  # min(this value, the device's recommended working set) and records both (R32b).
   budget_gib: 22
 policies:
   A: outputs/agent-v2/best-adapter

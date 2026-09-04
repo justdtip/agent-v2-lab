@@ -48,6 +48,15 @@ from local_llm_lab.tuner_data import load_rendered_splits
 
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "agent_v2.yaml"
 _PINNED_MLX_LM_VERSION = "0.31.3"
+# R32: the two approved forms of the training-time gated-delta recurrence, and the installer
+# each one enters. "checkpointed" is stage 1 (bit-exact against mlx-lm's loop) and stays the
+# default, so an arm that names no mode trains exactly as it did before stage 2 existed.
+GATED_DELTA_CHECKPOINTED = "checkpointed"
+GATED_DELTA_CHUNKWISE = "chunkwise"
+_GATED_DELTA_INSTALLERS = {
+    GATED_DELTA_CHECKPOINTED: "install_chunked_gated_delta",
+    GATED_DELTA_CHUNKWISE: "install_chunkwise_gated_delta",
+}
 _TRAIN_MODEL_PARAMETERS = ("args", "model", "train_set", "valid_set", "training_callback")
 
 
@@ -464,6 +473,10 @@ def lora_config(
     # Absent on a dense backbone, which has no recurrence to chunk.
     if "gated_delta_chunk" in train:
         lora["gated_delta_chunk"] = int(train["gated_delta_chunk"])
+        # R32 stage 2: which form of the recurrence the chunk length belongs to. Recorded
+        # beside it because the two have different step time and different numerics — stage 1
+        # is bit-exact against the library's loop, stage 2 agrees to a tolerance.
+        lora["gated_delta_mode"] = str(train.get("gated_delta_mode", GATED_DELTA_CHECKPOINTED))
     if resume_from is not None:
         lora["resume_adapter_file"] = str(Path(resume_from).resolve())
     return lora
@@ -506,20 +519,46 @@ def _kernel_path_validation() -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def _training_backbone(chunk: int | None) -> Iterator[None]:
-    """Library patches that live exactly as long as the trainer call (R32(a)).
+def _training_backbone(
+    chunk: int | None, mode: str = GATED_DELTA_CHECKPOINTED
+) -> Iterator[None]:
+    """Library patches that live exactly as long as the trainer call (R32(a), stage 2).
 
-    ``chunk`` installs the chunked, checkpointed gated-delta recurrence for training-mode
-    calls, so the autograd graph retains chunk-boundary states instead of one per token;
-    ``None`` — a dense backbone, with no recurrence to chunk — installs nothing. The
-    validation wrapper is unconditional: on a backbone whose forward does not branch on the
+    ``chunk`` installs a gated-delta recurrence for training-mode calls; ``None`` — a dense
+    backbone, with no recurrence to chunk — installs nothing. ``mode`` chooses the form:
+
+    * ``"checkpointed"`` (R32(a) stage 1, the default so an arm that names no mode is
+      unchanged): the library's own per-token loop, run in chunks under ``mx.checkpoint``, so
+      the autograd graph retains chunk-boundary states instead of one per token. Bit-exact.
+    * ``"chunkwise"`` (R32 stage 2): the chunkwise-parallel form, matmul-bound inside a chunk
+      with states passed between chunks. Exact in exact arithmetic, so it agrees with the
+      library's loop to a tolerance rather than bit for bit.
+
+    The validation wrapper is unconditional: on a backbone whose forward does not branch on the
     training flag it changes nothing.
     """
+    if mode not in _GATED_DELTA_INSTALLERS:
+        raise ValueError(
+            f"train.gated_delta_mode must be one of "
+            f"{sorted(_GATED_DELTA_INSTALLERS)}; got {mode!r}"
+        )
     with contextlib.ExitStack() as stack:
         if chunk is not None:
             from local_llm_lab import training
 
-            stack.enter_context(training.install_chunked_gated_delta(int(chunk)))
+            name = _GATED_DELTA_INSTALLERS[mode]
+            # A named mode whose installer is not in the tree: R32 stage 2 is a separate slice,
+            # so ``chunkwise`` reaches here before it lands. Say which function is missing and
+            # where it comes from, rather than letting a bare AttributeError surface at train
+            # start. Falling back to another mode's installer is not an option — an arm that
+            # asked for the chunkwise form may not silently train under the chunked one.
+            installer = getattr(training, name, None)
+            if installer is None:
+                raise ValueError(
+                    f"train.gated_delta_mode={mode!r} needs local_llm_lab.training.{name}, "
+                    f"which this tree does not provide; it lands with R32 stage 2"
+                )
+            stack.enter_context(installer(int(chunk)))
         stack.enter_context(_kernel_path_validation())
         yield
 
@@ -636,6 +675,7 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 steps_per_eval=lora["steps_per_eval"],
                 save_every=lora["save_every"],
                 gated_delta_chunk=lora.get("gated_delta_chunk"),
+                gated_delta_mode=lora.get("gated_delta_mode"),
             )
             _log("train: mlx_lm.lora.train_model")
             with (output / "train.log").open("w", encoding="utf-8") as log, (
@@ -653,7 +693,10 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 # stage — and no later inference — ever sees them (R32(a)).
                 with contextlib.redirect_stdout(
                     _Tee(runlog.tee(sys.stdout), log)
-                ), _training_backbone(lora.get("gated_delta_chunk")):
+                ), _training_backbone(
+                    lora.get("gated_delta_chunk"),
+                    mode=lora.get("gated_delta_mode", GATED_DELTA_CHECKPOINTED),
+                ):
                     trainer(args, model, train_set, valid_set, callback)
             # R26(c): a trainer that returned early or saved nothing produced an adapter that
             # nothing downstream may select from; on_finish records that and never raises.
@@ -1099,6 +1142,33 @@ def main() -> None:
 
     preflight = stages.add_parser("preflight", help="Inspect a registered base model before loading stages.")
     preflight.add_argument("--model", required=True)
+    # R32(d): without a row count the training-footprint gate records why it was skipped, so
+    # `preflight --model <name>` keeps working and an arm's gate is one flag away.
+    preflight.add_argument(
+        "--data",
+        type=Path,
+        default=None,
+        help="Dataset directory whose longest trained row sizes the training footprint.",
+    )
+    preflight.add_argument(
+        "--max-row-tokens",
+        type=int,
+        default=None,
+        help="Longest training row in tokens, when the dataset is not on disk to be read.",
+    )
+    preflight.add_argument(
+        "--gated-delta-chunk",
+        type=int,
+        default=None,
+        help="The arm's train.gated_delta_chunk; without it the library's unrolled loop is estimated.",
+    )
+    # Issue #51 lane 2: the estimate is calibrated per recurrence form, and which form runs is
+    # a configuration choice, so the gate has to be told the same thing the trainer is told.
+    preflight.add_argument(
+        "--gated-delta-mode",
+        default=None,
+        help="The arm's train.gated_delta_mode; the calibrated estimate for that form is what gates.",
+    )
 
     rollout = stages.add_parser(
         "rollout", help="Sample the policy on fresh tasks and keep verified trajectories."
@@ -1139,7 +1209,13 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.stage == "preflight":
-        run_preflight(args.model)
+        run_preflight(
+            args.model,
+            data_dir=args.data,
+            max_row_tokens=args.max_row_tokens,
+            gated_delta_chunk=args.gated_delta_chunk,
+            gated_delta_mode=args.gated_delta_mode,
+        )
         return
     if args.stage == "render" and args.source and args.output and args.model:
         # R21(b) form: render --source/--output/--model needs no run configuration.

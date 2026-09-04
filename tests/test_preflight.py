@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,28 +11,49 @@ import pytest
 
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, ResolvedSpec
 from local_llm_lab.pipeline.preflight import (
+    _CALIBRATION_POINTS,
+    _ENVELOPES,
+    _TRAINING_HEADROOM_FRACTION,
+    _estimated_peak_gib,
+    _linear_attention_state_shape,
     _native_gate_passed,
     _residual_metrics,
+    longest_row_tokens,
     require_preflight,
     run_preflight,
     run_residual_control,
 )
+from local_llm_lab.training.gated_delta_chunked import training_state_bytes
 
 
-def _spec() -> ModelSpec:
+def _spec(*, memory_budget_gib: float = 1.0, train: dict[str, object] | None = None) -> ModelSpec:
     return ModelSpec(
         name="fake-model",
         hf_id="org/fake-model",
         family="fake",
         chat=ChatSpec("off", {"chat_template": "fake"}, "<eot>", ()),
         lora=LoraSpec("attention+mlp", 2, 4.0, 0.0),
-        train={"batch_size": 2, "max_seq_length": 5},
+        train={"batch_size": 2, "max_seq_length": 5} if train is None else train,
         cache_strategy="auto",
         cache_equivalence_verified={"date": "2026-09-04", "sha256": "a" * 64},
         probe_layer_fractions=(0.5,),
-        memory_budget_gib=1.0,
+        memory_budget_gib=memory_budget_gib,
         policies={},
     )
+
+
+# Reported by ``mx.device_info()`` on the M4 Pro this project runs on: 17.759765625 GiB, well
+# under the 22 GiB the registry declares, which is the whole point of R32(b).
+_DEVICE_WORKING_SET_BYTES = 19069665280
+_DEVICE_WORKING_SET_GIB = _DEVICE_WORKING_SET_BYTES / 1024**3
+
+
+def _device_info(working_set_bytes: int = _DEVICE_WORKING_SET_BYTES) -> dict[str, object]:
+    return {
+        "device_name": "fake-gpu",
+        "max_recommended_working_set_size": working_set_bytes,
+        "memory_size": working_set_bytes * 2,
+    }
 
 
 class _Tokenizer:
@@ -105,6 +127,50 @@ class _View:
         assert keys == ("layers.0.q_proj", "layers.3.down_proj")
         assert rank == 2
         return 42
+
+
+class _Recurrence:
+    """The library's ``GatedDeltaNet`` exposes exactly these three ints (qwen3_5.py:88-92)."""
+
+    num_v_heads = 4
+    head_v_dim = 8
+    head_k_dim = 8
+
+
+class _HybridBlock(dict):
+    """mlx's ``nn.Module`` subclasses ``dict``, so a block's members are its values."""
+
+    def __init__(self, recurrence: object | None = None) -> None:
+        super().__init__()
+        self.is_linear = recurrence is not None
+        if recurrence is not None:
+            self["linear_attn"] = recurrence
+
+
+class _HybridView(_View):
+    """A view whose two linear-attention blocks expose the recurrence state shape."""
+
+    blocks = [
+        _HybridBlock(),
+        _HybridBlock(_Recurrence()),
+        _HybridBlock(),
+        _HybridBlock(_Recurrence()),
+    ]
+
+
+class _ConfigTextModule(_TextModule):
+    """A text module whose ``args`` carry the shape, as ``TextModel`` does (qwen3_5.py:281)."""
+
+    args = SimpleNamespace(
+        linear_num_value_heads=4, linear_value_head_dim=8, linear_key_head_dim=8
+    )
+
+
+class _ConfigShapeView(_View):
+    """No recurrence module attributes: the shape has to come from the text module's config."""
+
+    blocks = [_HybridBlock(), _HybridBlock(object()), _HybridBlock(), _HybridBlock(object())]
+    text_module = _ConfigTextModule()
 
 
 class _MismatchingTextModule(_TextModule):
@@ -251,9 +317,19 @@ def _resolved(spec: ModelSpec) -> ResolvedSpec:
     )
 
 
-def _complete_artifact(*, passed: bool = True, residual_passed: bool = True) -> dict[str, object]:
+def _complete_artifact(
+    *,
+    passed: bool = True,
+    residual_passed: bool = True,
+    footprint: dict[str, object] | None = None,
+) -> dict[str, object]:
+    # The default footprint is a computed estimate that fits, which is what the training
+    # consumer requires: every other case here then fails for the reason it names rather
+    # than for a footprint that was never run.
+    if footprint is None:
+        footprint = {"passed": True, "refused": False, "skipped": False}
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "model_name": "fake-model",
         "hf_id": "org/fake-model",
         "snapshot_revision": "current",
@@ -266,6 +342,7 @@ def _complete_artifact(*, passed: bool = True, residual_passed: bool = True) -> 
         "lora": {"keys": ["layers.0.q_proj"], "trainable_parameters": 1},
         "residual_equivalence": {"passed": residual_passed},
         "jvp": {"finite": True},
+        "training_footprint": footprint,
     }
 
 
@@ -308,7 +385,7 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
     assert path == tmp_path / "fake-model.json"
     assert first == second
     assert calls == [spec.hf_id, spec.hf_id]
-    assert report["schema_version"] == 2
+    assert report["schema_version"] == 3
     assert report["model_name"] == spec.name
     assert report["hf_id"] == spec.hf_id
     assert report["snapshot_revision"] == "cached-revision"
@@ -369,11 +446,17 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
     assert report["memory"] == {
         "activation_bytes": 480,
         "budget_gib": 1.0,
+        "budget_source": "registry",
+        "device_working_set_gib": None,
+        "device_working_set_note": "no device info source available; the registry value stands",
         "parameter_bytes": 16,
+        "registry_budget_gib": 1.0,
         "total_bytes": 496,
         "total_gib": 496 / 1024**3,
         "within_budget": True,
     }
+    assert report["training_footprint"]["skipped"] is True
+    assert report["training_footprint"]["passed"] is True
     assert [entry["mode"] for entry in report["thinking_prompts"]] == [
         "unsupported",
         "off",
@@ -546,7 +629,7 @@ def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_pat
 
     assert path == output_path
     assert calls == [(spec.hf_id, True)]
-    assert report["schema_version"] == 2
+    assert report["schema_version"] == 3
     assert report["model_name"] == spec.name
     assert report["hf_id"] == spec.hf_id
     assert report["snapshot_revision"] == "cached-revision"
@@ -727,10 +810,10 @@ def test_run_preflight_defaults_use_the_loader_view_and_resolved_spec(
     [
         (None, "preflight artifact is missing"),
         ("not json", "preflight artifact is malformed"),
-        ({"schema_version": 2, "model_name": "wrong"}, "model name"),
-        ({"schema_version": 2, "model_name": "fake-model", "hf_id": "wrong"}, "hf_id"),
+        ({"schema_version": 3, "model_name": "wrong"}, "model name"),
+        ({"schema_version": 3, "model_name": "fake-model", "hf_id": "wrong"}, "hf_id"),
         (
-            {"schema_version": 2, "model_name": "fake-model", "hf_id": "org/fake-model"},
+            {"schema_version": 3, "model_name": "fake-model", "hf_id": "org/fake-model"},
             "snapshot revision",
         ),
         (
@@ -745,7 +828,7 @@ def test_run_preflight_defaults_use_the_loader_view_and_resolved_spec(
         ),
         (
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "old",
@@ -756,7 +839,7 @@ def test_run_preflight_defaults_use_the_loader_view_and_resolved_spec(
         ),
         (
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "current",
@@ -767,7 +850,7 @@ def test_run_preflight_defaults_use_the_loader_view_and_resolved_spec(
         ),
         (
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "current",
@@ -898,3 +981,911 @@ def test_default_loader_is_the_one_shared_policy_loader(monkeypatch) -> None:
 
     assert preflight._default_loader(spec, None, lazy=True) == loaded
     assert calls == [(spec, None, True)]
+
+
+# ------------------------------------------------------------------ R32: budget and footprint
+
+
+def _preflight(spec: ModelSpec, view: object, tmp_path: Path, **overrides: object):
+    """Run one fake preflight; overrides carry only the R32 inputs a test is about."""
+    kwargs: dict[str, object] = {
+        "loader": lambda given, adapter, *, lazy: (
+            _Model(),
+            _Tokenizer(),
+            view,
+            _resolved(given),
+        ),
+        "output_root": tmp_path,
+        "spec_loader": lambda name: spec,
+        "jvp": lambda *args, **kwargs: np.ones((1, 64, 3), dtype=np.float32),
+        "revision_reader": lambda given: "cached-revision",
+        "array_api": np,
+    }
+    kwargs.update(overrides)
+    return json.loads(run_preflight(spec.name, **kwargs).read_text(encoding="utf-8"))
+
+
+def test_memory_budget_is_the_device_working_set_when_it_undercuts_the_registry(
+    tmp_path: Path,
+) -> None:
+    """R32(b): the registry value is a cap, and this machine grants less than it declares."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    report = _preflight(spec, _View(), tmp_path, device_info=lambda: _device_info())
+
+    assert report["memory"]["registry_budget_gib"] == 22.0
+    assert report["memory"]["device_working_set_gib"] == _DEVICE_WORKING_SET_GIB
+    assert report["memory"]["budget_gib"] == _DEVICE_WORKING_SET_GIB
+    assert report["memory"]["budget_source"] == "device"
+    assert report["memory"]["within_budget"] is True
+
+
+def test_memory_budget_keeps_the_registry_value_when_it_is_the_smaller(tmp_path: Path) -> None:
+    """The minimum runs both ways: a registry cap under the device's grant still binds."""
+    spec = _spec(memory_budget_gib=16.0)
+
+    report = _preflight(spec, _View(), tmp_path, device_info=lambda: _device_info())
+
+    assert report["memory"]["registry_budget_gib"] == 16.0
+    assert report["memory"]["device_working_set_gib"] == _DEVICE_WORKING_SET_GIB
+    assert report["memory"]["budget_gib"] == 16.0
+    assert report["memory"]["budget_source"] == "registry"
+
+
+def test_memory_budget_falls_back_to_the_registry_with_a_recorded_note(tmp_path: Path) -> None:
+    """A runtime that reports no working set must not silently produce a budget of zero."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    report = _preflight(spec, _View(), tmp_path, device_info=lambda: {"device_name": "fake-gpu"})
+
+    assert report["memory"]["device_working_set_gib"] is None
+    assert report["memory"]["budget_gib"] == 22.0
+    assert report["memory"]["budget_source"] == "registry"
+    assert "no device working set" in report["memory"]["device_working_set_note"]
+
+
+def test_within_budget_is_judged_against_the_device_minimum_not_the_registry(
+    tmp_path: Path,
+) -> None:
+    """The B4 defect exactly: 3.85 GiB passed a 22 GiB registry cap the device never granted."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    with pytest.raises(SystemExit, match="preflight failed"):
+        _preflight(spec, _View(), tmp_path, device_info=lambda: _device_info(400))
+
+    report = json.loads((tmp_path / "fake-model.json").read_text(encoding="utf-8"))
+    assert report["memory"]["budget_gib"] == 400 / 1024**3
+    assert report["memory"]["within_budget"] is False
+    assert report["passed"] is False
+
+
+def test_training_footprint_is_the_calibrated_envelope_for_the_configured_form(
+    tmp_path: Path,
+) -> None:
+    """R32(d): the peak is the measured envelope for the form the arm runs, evaluated here.
+
+    The architecture evidence beside it - how many linear-attention layers there are, the
+    recurrence state's shape, what gradient checkpointing bounds - is still introspected and
+    still recorded; it just no longer computes the number the gate judges.
+    """
+    spec = _spec(
+        memory_budget_gib=22.0,
+        train={"batch_size": 1, "max_seq_length": 5, "grad_checkpoint": True},
+    )
+
+    report = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        device_info=lambda: _device_info(),
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )
+    footprint = report["training_footprint"]
+
+    assert footprint["skipped"] is False
+    assert footprint["refused"] is False
+    assert footprint["max_row_tokens"] == 997
+    assert footprint["max_row_tokens_source"] == "max_row_tokens"
+    assert footprint["linear_attention_layers"] == 2
+    assert footprint["linear_attention_state_shape"] == {"heads_v": 4, "dim_v": 8, "dim_k": 8}
+    assert footprint["linear_attention_state_shape_source"] == "recurrence module"
+    assert footprint["retained_recurrence_layers"] == 1
+    assert footprint["calibration_domain_departures"] == []
+    assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] == _estimated_peak_gib(
+        "chunked", 997
+    )
+    assert footprint["estimates"]["chunked"]["estimated_train_peak_bytes"] == round(
+        _estimated_peak_gib("chunked", 997) * 1024**3
+    )
+    # Every measured chunked peak at this row length is under the envelope, and the envelope
+    # is not the analytic sum's near-zero recurrence term.
+    assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] >= max(
+        point.peak_gib
+        for point in _CALIBRATION_POINTS
+        if point.mode == "chunked" and point.tokens == 997
+    )
+    assert footprint["gated_estimate"] == "chunked"
+    assert footprint["estimates"]["chunked"]["gates"] is True
+    assert footprint["estimates"]["unrolled"]["gates"] is False
+    assert footprint["passed"] is True
+
+
+def test_training_footprint_reads_the_state_shape_from_the_text_module_config(
+    tmp_path: Path,
+) -> None:
+    """A block that hides the recurrence still declares the shape on the text module's args."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    report = _preflight(
+        spec,
+        _ConfigShapeView(),
+        tmp_path,
+        device_info=lambda: _device_info(),
+        max_row_tokens=100,
+        gated_delta_chunk=10,
+    )
+    footprint = report["training_footprint"]
+
+    assert footprint["linear_attention_state_shape"] == {"heads_v": 4, "dim_v": 8, "dim_k": 8}
+    assert footprint["linear_attention_state_shape_source"] == "text module config"
+    assert footprint["skipped"] is False
+
+
+def test_a_failed_footprint_keeps_its_evidence_without_failing_the_command(
+    tmp_path: Path,
+) -> None:
+    """An arm may not pass preflight and die at step one; the estimate must be inspectable.
+
+    The failure belongs to the arm's training configuration, not to the model, so it is
+    ``require_preflight(consumer="training")`` that refuses it.  ``report["passed"]`` carries
+    model-level evidence only, and the command still exits zero with its artifact written.
+    """
+    spec = _spec(memory_budget_gib=1.0)
+
+    # ``_preflight`` reads the path ``run_preflight`` returned, so getting a report back at
+    # all is the command completing normally rather than raising ``SystemExit``.
+    report = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )
+
+    assert report == json.loads((tmp_path / "fake-model.json").read_text(encoding="utf-8"))
+    assert report["memory"]["within_budget"] is True
+    assert report["residual_equivalence"]["passed"] is True
+    assert report["training_footprint"]["passed"] is False
+    assert report["training_footprint"]["estimates"]["chunked"]["fits_with_headroom"] is False
+    assert report["passed"] is True
+
+
+def test_the_alternative_forms_are_recorded_beside_the_one_that_gates(
+    tmp_path: Path,
+) -> None:
+    """The unrolled reality that OOMs at 997 tokens stays visible next to what will run."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    report = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )
+    footprint = report["training_footprint"]
+
+    assert sorted(footprint["estimates"]) == ["chunked", "chunkwise", "floor", "unrolled"]
+    assert footprint["estimates"]["unrolled"]["gates"] is False
+    assert footprint["estimates"]["chunked"]["gates"] is True
+    assert footprint["gated_estimate"] == "chunked"
+    # The comparison the calibration lane was run to make: at run D's shorter rows the
+    # unrolled loop costs more than the chunked form, and the chunkwise form costs least.
+    assert (
+        footprint["estimates"]["chunkwise"]["estimated_train_peak_gib"]
+        < footprint["estimates"]["chunked"]["estimated_train_peak_gib"]
+        < footprint["estimates"]["unrolled"]["estimated_train_peak_gib"]
+    )
+    assert footprint["passed"] is True
+    assert report["passed"] is True
+
+
+def test_unrolled_estimate_gates_when_no_chunk_is_configured(tmp_path: Path) -> None:
+    """Without a chunk the library runs the unrolled loop, so that is the estimate that binds."""
+    spec = _spec(memory_budget_gib=1.0)
+
+    footprint = _preflight(spec, _HybridView(), tmp_path, max_row_tokens=997)[
+        "training_footprint"
+    ]
+    assert footprint["chunk"] is None
+    assert footprint["gated_estimate"] == "unrolled"
+    assert footprint["estimates"]["unrolled"]["gates"] is True
+    assert footprint["estimates"]["chunked"]["gates"] is False
+    assert footprint["passed"] is False
+
+
+def test_training_footprint_is_skipped_with_a_reason_without_a_row_count(
+    tmp_path: Path,
+) -> None:
+    """The existing `preflight --model` command must keep working, and say what it skipped."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    report = _preflight(spec, _HybridView(), tmp_path, device_info=lambda: _device_info())
+    footprint = report["training_footprint"]
+
+    assert footprint["skipped"] is True
+    assert footprint["max_row_tokens"] is None
+    assert footprint["max_row_tokens_source"] is None
+    assert footprint["estimates"] == {}
+    assert footprint["gated_estimate"] is None
+    assert "--data" in footprint["skip_reason"]
+    assert "--max-row-tokens" in footprint["skip_reason"]
+    assert footprint["passed"] is True
+    assert report["passed"] is True
+
+
+def test_an_undiscoverable_state_shape_no_longer_blocks_the_gate(tmp_path: Path) -> None:
+    """The envelope is fitted to measured peaks, so it never reads the recurrence's shape.
+
+    The shape stays introspected and recorded as architecture evidence - with its reason when
+    it cannot be found - but a gate that no longer needs it may not skip for want of it.
+    """
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(spec, _View(), tmp_path, max_row_tokens=997, gated_delta_chunk=64)[
+        "training_footprint"
+    ]
+
+    assert footprint["linear_attention_state_shape"] is None
+    assert "neither" in footprint["linear_attention_state_shape_source"]
+    assert footprint["skipped"] is False
+    assert footprint["gated_estimate"] == "chunked"
+    assert footprint["passed"] is True
+
+
+def test_running_without_gradient_checkpointing_is_recorded_not_scaled_for(
+    tmp_path: Path,
+) -> None:
+    """Every point was measured with checkpointing on, so its absence is named, never modelled.
+
+    How many layers would retain their graph is still recorded, because it is what makes the
+    departure serious; the envelope simply has no measurement to extrapolate from.
+    """
+    spec = _spec(
+        memory_budget_gib=22.0,
+        train={"batch_size": 1, "max_seq_length": 5, "grad_checkpoint": False},
+    )
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+
+    assert footprint["grad_checkpoint"] is False
+    assert footprint["retained_recurrence_layers"] == 2
+    assert footprint["calibration"]["grad_checkpoint"] is True
+    assert len(footprint["calibration_domain_departures"]) == 1
+    assert "checkpointing is off" in footprint["calibration_domain_departures"][0]
+    # The estimate is unchanged: the fit is in the row length alone.
+    assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] == _estimated_peak_gib(
+        "chunked", 997
+    )
+
+
+def test_preflight_artifact_stays_json_safe_at_schema_version_three(tmp_path: Path) -> None:
+    """A schema bump is only useful if every new field survives the round trip unchanged."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    path = tmp_path / "fake-model.json"
+    report = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        device_info=lambda: _device_info(),
+        max_row_tokens=100,
+        gated_delta_chunk=10,
+    )
+
+    assert report["schema_version"] == 3
+    assert json.loads(path.read_text(encoding="utf-8")) == report
+    assert json.loads(json.dumps(report)) == report
+
+
+def test_a_failed_footprint_stops_training_and_leaves_the_view_consumer_alone(
+    tmp_path: Path,
+) -> None:
+    """R32(d) joins R15 condition 1: training may not start on a failed footprint estimate.
+
+    A probe is the other half of the same ruling.  It loads no optimiser, takes no gradient
+    through a training step and never reaches ``max_seq_length``, so a training peak it will
+    never allocate is not evidence against it.
+    """
+    artifact = _complete_artifact(footprint={"passed": False, "refused": False, "skipped": False})
+    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    action: list[str] = []
+
+    with pytest.raises(SystemExit, match="training footprint"):
+        require_preflight(
+            _spec(),
+            consumer="training",
+            output_root=tmp_path,
+            revision_reader=lambda spec: "current",
+            action=lambda: action.append("loaded"),
+        )
+    assert action == []
+    assert (
+        require_preflight(_spec(), output_root=tmp_path, revision_reader=lambda spec: "current")
+        == artifact
+    )
+
+
+def test_a_skipped_footprint_serves_a_view_consumer_and_stops_training(tmp_path: Path) -> None:
+    """The bare ``preflight --model`` artifact estimated no training peak at all.
+
+    Its footprint block records ``passed`` so the standalone command keeps its meaning, but a
+    training run must not clear the gate on an estimate that was never computed, and the
+    rejection has to say which input was missing.
+    """
+    artifact = _complete_artifact(
+        footprint={
+            "passed": True,
+            "refused": False,
+            "skipped": True,
+            "skip_reason": "no training row token count; pass --data <dir> or --max-row-tokens",
+        }
+    )
+    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    action: list[str] = []
+
+    assert (
+        require_preflight(_spec(), output_root=tmp_path, revision_reader=lambda spec: "current")
+        == artifact
+    )
+    with pytest.raises(SystemExit, match="row count"):
+        require_preflight(
+            _spec(),
+            consumer="training",
+            output_root=tmp_path,
+            revision_reader=lambda spec: "current",
+            action=lambda: action.append("loaded"),
+        )
+    assert action == []
+
+
+@pytest.mark.parametrize(
+    ("footprint", "expected"),
+    [
+        # A refused block returns before the line that clears ``skipped``, so a guard that read
+        # ``skipped`` first would blame a missing row count for an unmeasured recurrence form.
+        ({"passed": False, "refused": True, "skipped": True}, "recurrence form"),
+        (None, "no training footprint block"),
+    ],
+)
+def test_training_says_which_footprint_it_cannot_accept_and_view_reads_none_of_it(
+    tmp_path: Path, footprint: dict[str, object] | None, expected: str
+) -> None:
+    """The reason must name the real defect, and the view consumer must not consult the block."""
+    artifact = _complete_artifact()
+    if footprint is None:
+        del artifact["training_footprint"]
+    else:
+        artifact["training_footprint"] = footprint
+    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+
+    with pytest.raises(SystemExit, match=expected):
+        require_preflight(
+            _spec(),
+            consumer="training",
+            output_root=tmp_path,
+            revision_reader=lambda spec: "current",
+        )
+    assert (
+        require_preflight(_spec(), output_root=tmp_path, revision_reader=lambda spec: "current")
+        == artifact
+    )
+
+
+# ------------------------------------------------- issue #51 lane 2: the calibrated envelope
+
+
+def _calibration_point(mode: str, tokens: int, chunk: int | None = None):
+    """The one table entry for a mode, row length and chunk, so no test restates a number."""
+    matches = [
+        point
+        for point in _CALIBRATION_POINTS
+        if point.mode == mode and point.tokens == tokens and point.chunk == chunk
+    ]
+    assert len(matches) == 1, f"expected exactly one {mode} point at {tokens} tokens"
+    return matches[0]
+
+
+def _point_id(point) -> str:
+    return f"{point.mode}-{point.tokens}-{point.chunk}-{point.outcome}"
+
+
+@pytest.mark.parametrize("point", _CALIBRATION_POINTS, ids=_point_id)
+def test_the_envelope_sits_above_every_measured_calibration_point(point) -> None:
+    """The decisive property: the estimate is never optimistic where a measurement exists.
+
+    An ``ok`` point is an observed peak, so the envelope must sit at or above it.  An ``oom``
+    point is a *lower bound* — the run died at that allocation and its true peak is unknown
+    but larger — so it constrains the envelope from below and the estimate must clear it.
+    """
+    prediction = _estimated_peak_gib(point.mode, point.tokens)
+
+    if point.outcome == "ok":
+        assert prediction >= point.peak_gib
+    else:
+        assert prediction > point.peak_gib
+
+
+@pytest.mark.parametrize("point", _CALIBRATION_POINTS, ids=_point_id)
+def test_the_gate_reaches_the_measured_verdict_at_every_calibration_point(point) -> None:
+    """The gate would have refused every run that died, and admitted the ones that lived.
+
+    Judged against this machine's own working set, the same budget the memory block resolves.
+    A point's verdict is what its *measured* peak decides under the same 10% headroom, so the
+    estimate is being asked to agree with the measurement, not with a hand-picked threshold.
+    """
+    headroom = 1.0 + _TRAINING_HEADROOM_FRACTION
+    predicted_fits = _estimated_peak_gib(point.mode, point.tokens) * headroom
+    measured_fits = point.peak_gib * headroom
+
+    assert (predicted_fits <= _DEVICE_WORKING_SET_GIB) is (
+        measured_fits <= _DEVICE_WORKING_SET_GIB
+    )
+    if point.outcome == "oom":
+        assert predicted_fits > _DEVICE_WORKING_SET_GIB
+
+
+def test_the_estimate_does_not_swing_with_chunk_length_the_way_the_analytic_sum_does() -> None:
+    """Defect 1: the analytic sum makes chunk dominate; measurement says it barely moves.
+
+    ``training_state_bytes`` is left alone (it is still the analytic description of retained
+    state); this test pins why it may not be the gate's estimate.
+    """
+    at_one_row = [
+        _calibration_point("chunked", 997, chunk) for chunk in (32, 64, 128)
+    ]
+    analytic = [
+        training_state_bytes(
+            batch=1, heads_v=1, dim_v=1, dim_k=1, tokens=point.tokens, chunk=point.chunk
+        )
+        for point in at_one_row
+    ]
+    measured = [point.peak_gib for point in at_one_row]
+
+    assert max(analytic) / min(analytic) > 2.0
+    assert max(measured) / min(measured) < 1.1
+    # The envelope reads only the row length, so every chunk gets the one estimate.
+    assert _estimated_peak_gib("chunked", 997) >= max(measured)
+
+
+def test_the_recorded_estimate_is_the_same_at_every_measured_chunk_length(
+    tmp_path: Path,
+) -> None:
+    """The gate itself, not just the model: three chunks, one number."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    peaks = {
+        chunk: _preflight(
+            spec,
+            _HybridView(),
+            tmp_path,
+            max_row_tokens=997,
+            gated_delta_chunk=chunk,
+        )["training_footprint"]["estimates"]["chunked"]["estimated_train_peak_gib"]
+        for chunk in (32, 64, 128)
+    }
+
+    assert len(set(peaks.values())) == 1
+
+
+def test_the_unrolled_envelope_cannot_take_the_no_recurrence_floors_slope() -> None:
+    """Why ``unrolled`` is fitted proportional to the row and not flat like ``chunkwise``.
+
+    One retained state per token is the library loop's own shape, and the 997-token OOM is
+    the evidence: a flat fit anchored at the single 495-token point predicts a peak the run
+    demonstrably blew past.
+    """
+    measured = _calibration_point("unrolled", 495)
+    died = _calibration_point("unrolled", 997)
+    floor_slope = _ENVELOPES["floor"].slope_gib_per_token
+    flat_anchor = measured.peak_gib - floor_slope * measured.tokens
+
+    assert floor_slope * died.tokens + flat_anchor < died.peak_gib
+    assert _estimated_peak_gib("unrolled", died.tokens) > died.peak_gib
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [("chunkwise", "chunkwise"), ("checkpointed", "chunked"), (None, "chunked")],
+)
+def test_the_gating_estimate_is_the_mode_the_arm_configures(
+    tmp_path: Path, configured: str | None, expected: str
+) -> None:
+    """Defect 2: the form the run will take is a configuration choice, not a chunk's presence."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+        gated_delta_mode=configured,
+    )["training_footprint"]
+
+    assert footprint["recurrence_mode"] == expected
+    assert footprint["gated_estimate"] == expected
+    assert footprint["estimates"][expected]["gates"] is True
+    assert [name for name, entry in footprint["estimates"].items() if entry["gates"]] == [expected]
+
+
+def test_without_a_configured_chunk_the_librarys_unrolled_loop_is_what_gates(
+    tmp_path: Path,
+) -> None:
+    """Nothing is installed, so the reference loop runs whatever the mode field says."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=495,
+        gated_delta_mode="chunkwise",
+    )["training_footprint"]
+
+    assert footprint["chunk"] is None
+    assert footprint["recurrence_mode"] == "unrolled"
+    assert footprint["estimates"]["unrolled"]["gates"] is True
+
+
+def test_a_backbone_with_no_recurrence_gates_on_the_floor_alone(tmp_path: Path) -> None:
+    """A dense backbone has no recurrence to charge, so the no-recurrence floor is the estimate."""
+
+    class _AttentionOnlyView(_View):
+        def layer_kind(self, index: int) -> str:
+            del index
+            return "attention"
+
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(
+        spec,
+        _AttentionOnlyView(),
+        tmp_path,
+        max_row_tokens=2874,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+
+    assert footprint["linear_attention_layers"] == 0
+    assert footprint["recurrence_mode"] == "floor"
+    assert footprint["estimates"]["floor"]["gates"] is True
+    assert footprint["estimates"]["floor"]["estimated_train_peak_gib"] == _estimated_peak_gib(
+        "floor", 2874
+    )
+
+
+def test_the_gate_refuses_a_mode_with_no_calibration_points(tmp_path: Path) -> None:
+    """R32(d): a form nobody measured must be refused by name, never guessed at.
+
+    The refusal is the arm's configured recurrence form, not the model, so it lands in the
+    block for the training consumer to read and leaves the command's exit code alone.
+    """
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+        gated_delta_mode="fused",
+    )["training_footprint"]
+
+    assert footprint["refused"] is True
+    assert footprint["passed"] is False
+    assert footprint["recurrence_mode"] is None
+    assert footprint["gated_estimate"] is None
+    assert footprint["estimates"] == {}
+    assert "fused" in footprint["skip_reason"]
+    assert "chunkwise" in footprint["skip_reason"]
+
+
+def test_the_calibrated_headroom_boundary_fits_at_exactly_one_point_one(
+    tmp_path: Path,
+) -> None:
+    """10% headroom, at the boundary: exactly 1.10x fits and the next float down does not."""
+    peak = _estimated_peak_gib("chunked", 997)
+    exactly = peak * (1.0 + _TRAINING_HEADROOM_FRACTION)
+
+    fits = _preflight(
+        _spec(memory_budget_gib=exactly),
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+    over = _preflight(
+        _spec(memory_budget_gib=math.nextafter(exactly, 0.0)),
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+
+    assert fits["estimates"]["chunked"]["estimated_train_peak_gib"] == peak
+    assert fits["estimates"]["chunked"]["fits_with_headroom"] is True
+    assert fits["headroom_fraction"] == 0.10
+    assert fits["passed"] is True
+    assert over["estimates"]["chunked"]["fits_with_headroom"] is False
+    assert over["passed"] is False
+
+
+def test_the_artifact_records_the_coefficients_and_the_points_they_came_from(
+    tmp_path: Path,
+) -> None:
+    """A reader must be able to re-derive the gated number from the artifact alone."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=1591,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+    chunked = footprint["estimates"]["chunked"]
+    coefficients = chunked["coefficients"]
+
+    assert footprint["recurrence_mode"] == "chunked"
+    assert footprint["chunk"] == 64
+    assert chunked["chunk"] == 64
+    assert (
+        coefficients["slope_gib_per_token"] * footprint["max_row_tokens"]
+        + coefficients["intercept_gib"]
+    ) == chunked["estimated_train_peak_gib"]
+    assert coefficients["shape"] == "affine"
+    assert [(point["tokens"], point["chunk"], point["outcome"]) for point in chunked["points"]] == [
+        (997, 32, "ok"),
+        (997, 64, "ok"),
+        (997, 128, "ok"),
+        (1591, 64, "ok"),
+        (2085, 64, "oom"),
+        (2874, 64, "oom"),
+    ]
+    assert [
+        (point["tokens"], point["outcome"])
+        for point in footprint["calibration"]["floor_points"]
+    ] == [(997, "ok"), (1591, "ok"), (2085, "ok"), (2874, "ok")]
+    assert footprint["calibration"]["batch_size"] == 1
+    assert footprint["calibration"]["grad_checkpoint"] is True
+
+
+def test_the_chunkwise_envelope_says_it_rests_on_a_single_observation(
+    tmp_path: Path,
+) -> None:
+    """R32(d) honesty: one point is not a well-determined curve, and must not read as one."""
+    spec = _spec(memory_budget_gib=22.0)
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=2874,
+        gated_delta_chunk=64,
+        gated_delta_mode="chunkwise",
+    )["training_footprint"]
+    chunkwise = footprint["estimates"]["chunkwise"]
+
+    assert chunkwise["single_observation"] is True
+    assert "single observation" in chunkwise["caveat"]
+    assert str(_calibration_point("chunkwise", 2874, 64).tokens) in chunkwise["caveat"]
+    assert "extrapolation" in chunkwise["caveat"]
+    assert chunkwise["coefficients"]["shape"] == "flat"
+    assert (
+        chunkwise["coefficients"]["slope_gib_per_token"]
+        == footprint["estimates"]["floor"]["coefficients"]["slope_gib_per_token"]
+    )
+    assert footprint["estimates"]["chunked"]["single_observation"] is False
+    assert footprint["estimates"]["chunked"]["caveat"] is None
+
+
+def test_the_artifact_names_where_the_arm_leaves_the_calibrated_conditions(
+    tmp_path: Path,
+) -> None:
+    """Every point was measured at batch 1 with checkpointing on; a departure is not modelled."""
+    spec = _spec(
+        memory_budget_gib=22.0,
+        train={"batch_size": 2, "max_seq_length": 5, "grad_checkpoint": False},
+    )
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        max_row_tokens=997,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+    departures = " ".join(footprint["calibration_domain_departures"])
+
+    assert "batch" in departures
+    assert "checkpoint" in departures
+
+
+class _WordTokenizer(_Tokenizer):
+    """Counts tokens as whitespace-separated words so row lengths are hand-checkable."""
+
+    def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        del add_special_tokens
+        return list(range(len(text.split())))
+
+
+def _write_rows(path: Path, rows: list[tuple[int, int]]) -> None:
+    path.write_text(
+        "".join(
+            json.dumps({"prompt": "p " * prompt, "completion": "c " * completion}) + "\n"
+            for prompt, completion in rows
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_longest_row_tokens_reads_both_splits_through_the_real_dataset(tmp_path: Path) -> None:
+    """The gate's row length must be the trainer's own, so it reads the trainer's dataset."""
+    _write_rows(tmp_path / "train.jsonl", [(3, 2), (10, 7)])
+    _write_rows(tmp_path / "valid.jsonl", [(4, 4), (20, 9)])
+    _write_rows(tmp_path / "test.jsonl", [(500, 500)])
+
+    assert longest_row_tokens(tmp_path, _WordTokenizer(), max_seq_length=64) == 29
+
+
+def test_longest_row_tokens_reports_the_length_the_trainer_sees_after_truncation(
+    tmp_path: Path,
+) -> None:
+    """`max_seq_length` clamps a row before the trainer ever sees it, so the estimate uses it."""
+    _write_rows(tmp_path / "train.jsonl", [(10, 100)])
+    _write_rows(tmp_path / "valid.jsonl", [(2, 2)])
+
+    assert longest_row_tokens(tmp_path, _WordTokenizer(), max_seq_length=32) == 32
+
+
+def test_run_preflight_reads_the_longest_row_from_a_data_directory(tmp_path: Path) -> None:
+    """`--data` must resolve the same count `--max-row-tokens` would be given by hand."""
+    data = tmp_path / "data"
+    data.mkdir()
+    _write_rows(data / "train.jsonl", [(3, 2), (10, 7)])
+    _write_rows(data / "valid.jsonl", [(4, 4)])
+    spec = _spec(memory_budget_gib=22.0, train={"batch_size": 1, "max_seq_length": 64})
+
+    footprint = _preflight(
+        spec,
+        _HybridView(),
+        tmp_path,
+        loader=lambda given, adapter, *, lazy: (
+            _Model(),
+            _WordTokenizer(),
+            _HybridView(),
+            _resolved(given),
+        ),
+        data_dir=data,
+        gated_delta_chunk=64,
+    )["training_footprint"]
+
+    assert footprint["max_row_tokens"] == 17
+    assert footprint["max_row_tokens_source"] == f"data:{data}"
+    # The row count the dataset produced is the row count the envelope was evaluated at.
+    assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] == _estimated_peak_gib(
+        "chunked", 17
+    )
+
+
+def test_preflight_cli_threads_the_row_count_chunk_and_data_directory(monkeypatch) -> None:
+    """The Deputy's regeneration command has to reach `run_preflight` unchanged."""
+    from local_llm_lab.pipeline import cli
+
+    calls: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        cli, "run_preflight", lambda name, **kwargs: calls.append((name, kwargs))
+    )
+    monkeypatch.setattr(
+        cli.sys,
+        "argv",
+        [
+            "agent-pipeline",
+            "preflight",
+            "--model",
+            "qwen35-4b",
+            "--data",
+            "data/agent_v2b-qwen35-4b",
+            "--max-row-tokens",
+            "2257",
+            "--gated-delta-chunk",
+            "64",
+            "--gated-delta-mode",
+            "chunkwise",
+        ],
+    )
+
+    cli.main()
+
+    assert calls == [
+        (
+            "qwen35-4b",
+            {
+                "data_dir": Path("data/agent_v2b-qwen35-4b"),
+                "max_row_tokens": 2257,
+                "gated_delta_chunk": 64,
+                "gated_delta_mode": "chunkwise",
+            },
+        )
+    ]
+
+
+def test_preflight_cli_keeps_working_with_only_a_model(monkeypatch) -> None:
+    """R32 must not break `agent-pipeline preflight --model <name>`."""
+    from local_llm_lab.pipeline import cli
+
+    calls: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        cli, "run_preflight", lambda name, **kwargs: calls.append((name, kwargs))
+    )
+    monkeypatch.setattr(cli.sys, "argv", ["agent-pipeline", "preflight", "--model", "qwen35-4b"])
+
+    cli.main()
+
+    assert calls == [
+        (
+            "qwen35-4b",
+            {
+                "data_dir": None,
+                "max_row_tokens": None,
+                "gated_delta_chunk": None,
+                "gated_delta_mode": None,
+            },
+        )
+    ]
+
+
+def test_the_state_shape_is_read_off_the_librarys_own_decoder_layer() -> None:
+    """R31: the introspection route is judged against mlx-lm's real module and its real args.
+
+    A renamed attribute upstream would otherwise skip the footprint gate silently, which is
+    the failure mode the gate exists to prevent.
+    """
+    from mlx_lm.models.qwen3_5 import DecoderLayer, TextModelArgs
+
+    args = TextModelArgs(
+        model_type="qwen3_5",
+        hidden_size=16,
+        linear_num_value_heads=4,
+        linear_num_key_heads=2,
+        linear_key_head_dim=8,
+        linear_value_head_dim=8,
+        linear_conv_kernel_dim=4,
+        full_attention_interval=4,
+    )
+
+    class _LibraryView:
+        num_layers = 1
+        text_module = SimpleNamespace(args=args)
+        blocks = [DecoderLayer(args, 0)]
+
+        def layer_kind(self, index: int) -> str:
+            return "linear_attention" if self.blocks[index].is_linear else "attention"
+
+    class _HiddenRecurrenceView(_LibraryView):
+        blocks = [SimpleNamespace(is_linear=True)]
+
+    expected = {"heads_v": 4, "dim_v": 8, "dim_k": 8}
+
+    assert _linear_attention_state_shape(_LibraryView(), 1) == (expected, "recurrence module")
+    assert _linear_attention_state_shape(_HiddenRecurrenceView(), 1) == (
+        expected,
+        "text module config",
+    )

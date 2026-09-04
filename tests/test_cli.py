@@ -293,6 +293,7 @@ def test_run_d_configs_are_literal_pairwise_recipes() -> None:
                 continue
             assert _has_gated_delta_recurrence(models[role]), models[role]
             chunk = arm.pop("gated_delta_chunk")
+            arm.pop("gated_delta_mode", None)  # R32 stage 2: the form that chunk belongs to.
             assert isinstance(chunk, int) and chunk >= 1
         assert base_train == cross_train
         assert base == cross
@@ -1163,6 +1164,46 @@ def test_the_validation_wrapper_restores_the_flag_when_evaluate_raises() -> None
 
     assert model.training is True
     assert trainer.evaluate is library
+
+
+def test_the_chunkwise_backbone_names_the_installer_stage_two_has_not_landed(
+    monkeypatch,
+) -> None:
+    """An arm configuring a form this tree cannot install must be told which one is missing.
+
+    ``install_chunkwise_gated_delta`` lands with R32 stage 2, a separate slice.  Until then the
+    attribute lookup would fail with a bare ``AttributeError`` at train start, hours into a
+    queued run, saying nothing about which slice supplies it.
+    """
+    installed: list[int] = []
+
+    @contextlib.contextmanager
+    def install_chunked_gated_delta(chunk: int):
+        installed.append(chunk)
+        yield
+
+    # The training package exactly as this commit ships it: the stage-1 installer alone.
+    monkeypatch.setattr(
+        "local_llm_lab.training",
+        SimpleNamespace(install_chunked_gated_delta=install_chunked_gated_delta),
+        raising=False,
+    )
+
+    with (
+        pytest.raises(ValueError, match="install_chunkwise_gated_delta") as error,
+        cli._training_backbone(64, mode=cli.GATED_DELTA_CHUNKWISE),
+    ):
+        raise AssertionError("the guard must refuse before the trainer call")
+    assert "R32 stage 2" in str(error.value)
+    # No silent fallback: an arm that asked for the chunkwise form must not train under the
+    # chunked one, so nothing may have been installed on the way out.
+    assert installed == []
+
+    # The mode that IS in the tree still installs, so the guard cannot be satisfied by
+    # breaking the working path.
+    with cli._training_backbone(64, mode=cli.GATED_DELTA_CHECKPOINTED):
+        pass
+    assert installed == [64]
 
 
 def test_stage_train_installs_the_chunked_recurrence_and_records_the_chunk(

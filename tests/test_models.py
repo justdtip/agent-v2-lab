@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 from types import SimpleNamespace
 
 import pytest
@@ -287,3 +287,16 @@ def test_explicit_cache_resolution_records_declared_strategy(monkeypatch, strate
         strategy,
         f"explicit:{strategy}",
     )
+
+
+@pytest.mark.parametrize("name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"])
+def test_registry_budget_stays_the_declared_cap_the_device_resolves(name: str) -> None:
+    """R32(b): the minimum is resolved at preflight, so the registry keeps its declared intent.
+
+    Rewriting the YAML to this machine's working set would bind every other machine to it and
+    lose the distinction the preflight artifact now records.
+    """
+    spec = load_model_spec(name)
+
+    assert spec.memory_budget_gib == 22.0
+    assert not any("device" in field.name for field in fields(spec))
