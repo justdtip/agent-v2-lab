@@ -662,3 +662,6 @@ recording the execution rule. No execution lane designated yet.
   At the Deputy's review.
 - B1b dispatched in an isolated worktree on top of B5's diff (B5 has left the file). Running:
   R27 independent reviewer, B1c, B1b. Director on power: B4 training may start.
+- B5 work order #44 filed (READY; ratify generator_version = 2 for the hardened capture).
+  R16 correction posted: the added tests use the seed literal as the file already does; source
+  is clean; scanner scopes source only.
