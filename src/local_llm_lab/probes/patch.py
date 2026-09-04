@@ -7,7 +7,7 @@ import json
 import random
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,7 +25,14 @@ from local_llm_lab.pipeline.protocol import (
     tool_message,
     turn_is_complete,
 )
-from local_llm_lab.pipeline.tasks import Task, render_expert_note, task_from_id
+from local_llm_lab.pipeline.tasks import (
+    GENERATOR_VERSION,
+    Task,
+    difficulty,
+    render_expert_note,
+    replay_task_from_id,
+    task_from_id,
+)
 from local_llm_lab.probes.capture import InjectionHook, capture_residuals
 from local_llm_lab.probes.policies import resolve_layers, resolve_policy, validate_layer_syntax
 
@@ -42,38 +49,217 @@ _FAMILIES = frozenset({"aggregate_report", "ledger_reconcile"})
 
 
 @dataclass(frozen=True)
+class DropJudgement:
+    """One integrity judgement of a failing trajectory (R24).
+
+    ``decision_step`` is the earliest value-drop step, ``dropped_values`` the values that
+    step is missing (``None`` when the judging source records no values, which can never
+    count as identical to anything), and ``judged_under`` names the generator version or
+    saved source the judgement came from.
+    """
+
+    decision_step: int | None
+    dropped_values: tuple[str, ...] | None
+    judged_under: str
+
+
+def scoring_version_stable(bound: DropJudgement, head: DropJudgement) -> bool:
+    """R24: HEAD flip scoring is admissible for a case only when the bound-version and
+    HEAD judgements name the same decision step and the same dropped-value set."""
+    return (
+        bound.decision_step is not None
+        and bound.decision_step == head.decision_step
+        and bound.dropped_values is not None
+        and head.dropped_values is not None
+        and set(bound.dropped_values) == set(head.dropped_values)
+    )
+
+
+@dataclass(frozen=True)
 class PatchCase:
     task: Task
     decision_step: int
     failing_steps: tuple[dict[str, Any], ...]
+    passing_steps: tuple[dict[str, Any], ...] | None = None
+    bound_judgement: DropJudgement | None = None
+    head_judgement: DropJudgement | None = None
+
+    @property
+    def scoring_version_stable(self) -> bool:
+        """Whether HEAD flip scoring is admissible for this case (R24); fails closed when a
+        case carries no judgements rather than guessing."""
+        if self.bound_judgement is None or self.head_judgement is None:
+            raise ValueError(
+                f"{self.task.task_id}: case carries no bound/HEAD value-drop judgements"
+            )
+        return scoring_version_stable(self.bound_judgement, self.head_judgement)
+
+    def scoring_record(self) -> dict[str, Any]:
+        """The artifact's per-case R24 fields: the flag beside both judgements, so a reader
+        sees why a case is unstable instead of trusting the flag."""
+        stable = self.scoring_version_stable
+        bound, head = self.bound_judgement, self.head_judgement
+        assert bound is not None and head is not None
+        return {
+            "scoring_version_stable": stable,
+            "decision_step_bound": bound.decision_step,
+            "decision_step_head": head.decision_step,
+            "dropped_values_bound": _listed(bound.dropped_values),
+            "dropped_values_head": _listed(head.dropped_values),
+            "judged_under_bound": bound.judged_under,
+            "judged_under_head": head.judged_under,
+        }
 
 
-def _records(payload: dict[str, Any], name: str) -> tuple[list[dict[str, Any]], int]:
+def _listed(values: tuple[str, ...] | None) -> list[str] | None:
+    return list(values) if values is not None else None
+
+
+def _records(
+    payload: dict[str, Any], name: str, *, data_seed: int | None = None
+) -> tuple[list[dict[str, Any]], int, str]:
+    """Return trajectories plus the resolved data seed and its source (R22a).
+
+    The evaluation's own ``data_seed`` field wins when present; the ``data_seed`` override is
+    used only when the field is absent; a present field that disagrees with the override is an
+    error naming both values, and absence of both is an error.
+    """
+    if isinstance(data_seed, bool) or (data_seed is not None and not isinstance(data_seed, int)):
+        raise ValueError("--data-seed override must be an integer")
     if not isinstance(payload, dict):
         raise ValueError(f"{name} evaluation must be a mapping")
     records = payload.get("trajectories")
-    seed = payload.get("data_seed")
     if not isinstance(records, list):
         raise ValueError(f"{name} evaluation must contain trajectories")
-    if isinstance(seed, bool) or not isinstance(seed, int):
-        raise ValueError(f"{name} evaluation must contain integer data_seed")
     if not all(isinstance(record, dict) for record in records):
         raise ValueError(f"{name} trajectories must be mappings")
-    return records, seed
+    if "data_seed" not in payload:
+        if data_seed is None:
+            raise ValueError(
+                f"{name} evaluation lacks data_seed and no --data-seed override was given"
+            )
+        return records, data_seed, "flag"
+    seed = payload.get("data_seed")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError(f"{name} evaluation must contain integer data_seed")
+    if data_seed is not None and data_seed != seed:
+        raise ValueError(
+            f"{name} evaluation data_seed {seed} conflicts with --data-seed {data_seed}"
+        )
+    return records, seed, "evaluation"
 
 
-def _value_drop_step(record: dict[str, Any]) -> int | None:
+def _derived_difficulty(task_id: str) -> int:
+    """Derive the pipeline difficulty from the task id when the evaluation omits the field.
+
+    The tool adapts, the evidence is never edited: ``difficulty(split, index)`` is the
+    pipeline's source of truth for the split/index encoded in the id.
+    """
+    try:
+        split, _family, index_text, _variant = task_id.rsplit("-", 3)
+        return difficulty(split, int(index_text))
+    except ValueError as error:
+        raise ValueError(f"{task_id}: cannot derive difficulty from task id") from error
+
+
+def _generator_version_binding(
+    payload: dict[str, Any], name: str, override: int | None
+) -> tuple[int | None, str]:
+    """Resolve the generator version an integrity recomputation must replay under (R12).
+
+    The evaluation's recorded version wins (``summary.generator_version``, else the
+    top-level field); an explicit ``--generator-version`` binding is used only when the
+    evaluation records none, and a conflict is an error naming both values. Returns
+    ``(None, "")`` when neither exists — the caller fails closed if a recomputation is
+    actually needed, never defaulting to HEAD.
+    """
+    if isinstance(override, bool) or (override is not None and not isinstance(override, int)):
+        raise ValueError("--generator-version binding must be an integer")
+    if override is not None and not 1 <= override <= GENERATOR_VERSION:
+        raise ValueError(f"--generator-version {override} must be in [1, {GENERATOR_VERSION}]")
+    summary = payload.get("summary")
+    recorded = summary.get("generator_version") if isinstance(summary, dict) else None
+    if recorded is None:
+        recorded = payload.get("generator_version")
+    if recorded is None:
+        return (override, "flag") if override is not None else (None, "")
+    if (
+        isinstance(recorded, bool)
+        or not isinstance(recorded, int)
+        or not 1 <= recorded <= GENERATOR_VERSION
+    ):
+        raise ValueError(f"{name} evaluation records invalid generator_version {recorded!r}")
+    if override is not None and override != recorded:
+        raise ValueError(
+            f"{name} evaluation generator_version {recorded} conflicts with "
+            f"--generator-version {override}"
+        )
+    return recorded, "evaluation"
+
+
+_VALUE_DROP_DETAIL = "missing required values: "
+
+
+def _dropped_values(detail: Any) -> tuple[str, ...] | None:
+    """Parse the value list ``integrity`` writes into a value-drop violation's detail;
+    ``None`` when the detail is absent or not in that form."""
+    if not isinstance(detail, str) or not detail.startswith(_VALUE_DROP_DETAIL):
+        return None
+    values = tuple(value for value in detail[len(_VALUE_DROP_DETAIL) :].split(", ") if value)
+    return values or None
+
+
+def _violation_fields(violation: Any) -> tuple[Any, Any, Any]:
+    if isinstance(violation, dict):
+        return violation.get("kind"), violation.get("step"), violation.get("detail")
+    return (
+        getattr(violation, "kind", None),
+        getattr(violation, "step", None),
+        getattr(violation, "detail", None),
+    )
+
+
+def _judgement(violations: Iterable[Any], judged_under: str) -> DropJudgement:
+    """The earliest value-drop step and its dropped values, from ``Violation`` objects or
+    the saved dicts an evaluation's ``integrity`` block carries."""
+    drops: dict[int, Any] = {}
+    for violation in violations:
+        kind, step, detail = _violation_fields(violation)
+        if (
+            kind == "value_drop"
+            and isinstance(step, int)
+            and not isinstance(step, bool)
+            and step >= 0
+        ):
+            drops.setdefault(step, detail)
+    if not drops:
+        return DropJudgement(None, None, judged_under)
+    step = min(drops)
+    return DropJudgement(step, _dropped_values(drops[step]), judged_under)
+
+
+def _recomputed_judgement(
+    task: Task, steps: list[dict[str, Any]], *, keep_last: int, judged_under: str
+) -> DropJudgement:
+    """Recompute the value-drop judgement from the saved steps.
+
+    For eligibility ``task`` must be the version-bound replay of the trajectory's
+    generation (R12/R22): the judgement compares old notes against that version's
+    canonical notes, never HEAD's, so a template-style drift cannot manufacture a value
+    drop. The same call over the HEAD task is exactly what ``_is_flip`` later scores
+    against, which is what R24 compares it with.
+    """
+    report = check_trajectory(task, steps, keep_last=keep_last)
+    return _judgement(report.violations, judged_under)
+
+
+def _saved_judgement(record: dict[str, Any]) -> DropJudgement:
     integrity = record.get("integrity")
     violations = integrity.get("violations") if isinstance(integrity, dict) else None
+    judged_under = "saved evaluation integrity"
     if not isinstance(violations, list):
-        return None
-    found: list[int] = []
-    for violation in violations:
-        if isinstance(violation, dict) and violation.get("kind") == "value_drop":
-            step = violation.get("step")
-            if isinstance(step, int) and not isinstance(step, bool) and step >= 0:
-                found.append(step)
-    return min(found) if found else None
+        return DropJudgement(None, None, judged_under)
+    return _judgement(violations, judged_under)
 
 
 def select_patch_cases(
@@ -81,41 +267,142 @@ def select_patch_cases(
     failing_payload: dict[str, Any],
     *,
     keep_last: int,
-) -> list[PatchCase]:
-    """Select eligible B-pass/C-value-drop task ids and reconstruct C's task declaration."""
+    data_seed: int | None = None,
+    generator_version: int | None = None,
+) -> tuple[list[PatchCase], dict[str, Any]]:
+    """Select the SPEC-004 §5 universe — task ids that pass under B and fail under C —
+    restricted to value-drop decisions, and reconstruct C's task declaration.
+
+    Returns the cases plus provenance: per-input data-seed sources (R22a) under
+    ``data_seeds`` and per-input eligibility sources under ``eligibility``. A failing
+    trajectory that carries ``difficulty``/``integrity`` uses the saved values untouched;
+    when a field is absent the tool adapts — difficulty is derived from the task id, and
+    integrity is recomputed from the saved steps via ``check_trajectory`` over the
+    trajectory's generation version replayed through ``replay_task_from_id`` (R12; the
+    binding comes from the evaluation or the explicit ``generator_version``, and its
+    absence fails closed rather than defaulting to HEAD) — for selection only, with the
+    source recorded so a reader can weight the judgement. Each case carries the passing
+    run's saved trajectory steps when they are well formed, so the counterfactual note
+    can prefer the note that empirically produced a pass (R22b), and both value-drop
+    judgements — the bound one that selected it and the HEAD one flip scoring will use —
+    so ``scoring_version_stable`` is a recorded fact per case (R24).
+    """
     if keep_last < 0:
         raise ValueError("keep_last must be non-negative")
-    passing, _passing_seed = _records(passing_payload, "passing")
-    failing, failing_seed = _records(failing_payload, "failing")
-    successful = {
-        record.get("task_id")
+    passing, passing_seed, passing_source = _records(passing_payload, "passing", data_seed=data_seed)
+    failing, failing_seed, failing_source = _records(failing_payload, "failing", data_seed=data_seed)
+    replay_version, version_source = _generator_version_binding(
+        failing_payload, "failing", generator_version
+    )
+    seeds = {
+        "passing": {"data_seed": passing_seed, "data_seed_source": passing_source},
+        "failing": {"data_seed": failing_seed, "data_seed_source": failing_source},
+    }
+    successful: dict[str, dict[str, Any]] = {
+        record["task_id"]: record
         for record in passing
         if isinstance(record.get("task_id"), str)
         and isinstance(record.get("verdict"), dict)
         and record["verdict"].get("success") is True
     }
     selected: list[PatchCase] = []
+    integrity_counts = {"evaluation": 0, "recomputed": 0}
+    difficulty_counts = {"evaluation": 0, "recomputed": 0}
     for record in failing:
         task_id = record.get("task_id")
-        difficulty = record.get("difficulty")
         steps = record.get("steps")
-        dropped = _value_drop_step(record)
+        verdict = record.get("verdict")
         if (
             not isinstance(task_id, str)
             or task_id not in successful
-            or isinstance(difficulty, bool)
-            or not isinstance(difficulty, int)
             or not isinstance(steps, list)
-            or dropped is None
+            # SPEC-004 §5 universe: the task must FAIL under C, not merely drop a value.
+            or not isinstance(verdict, dict)
+            or verdict.get("success") is not False
         ):
             continue
-        task = task_from_id(task_id, failing_seed, difficulty)
+        if "difficulty" in record:
+            level = record["difficulty"]
+            if isinstance(level, bool) or not isinstance(level, int):
+                continue
+            difficulty_source = "evaluation"
+        else:
+            level = _derived_difficulty(task_id)
+            difficulty_source = "recomputed"
+        task = task_from_id(task_id, failing_seed, level)
         if task.family not in _FAMILIES:
             continue
-        if dropped >= len(steps) or not all(isinstance(step, dict) for step in steps):
+        if not all(isinstance(step, dict) for step in steps):
             raise ValueError(f"{task_id}: malformed failing steps")
-        selected.append(PatchCase(task, dropped, tuple(dict(step) for step in steps)))
-    return selected
+        difficulty_counts[difficulty_source] += 1
+        if "integrity" in record:
+            bound = _saved_judgement(record)
+            integrity_counts["evaluation"] += 1
+        else:
+            if replay_version is None:
+                raise ValueError(
+                    "failing evaluation records no generator_version and no "
+                    "--generator-version binding was given; integrity recomputation "
+                    "must replay the trajectory's generation version (R12), never HEAD"
+                )
+            replayed = replay_task_from_id(task_id, failing_seed, replay_version, level)
+            bound = _recomputed_judgement(
+                replayed,
+                steps,
+                keep_last=keep_last,
+                judged_under=f"generator_v{replay_version} replay",
+            )
+            integrity_counts["recomputed"] += 1
+        dropped = bound.decision_step
+        if dropped is None:
+            continue
+        if dropped >= len(steps):
+            raise ValueError(f"{task_id}: malformed failing steps")
+        # R24: flip scoring judges the HEAD task these steps were built for (``_is_flip``);
+        # judge it here too, so the artifact records whether that seam is admissible.
+        head = _recomputed_judgement(
+            task, steps, keep_last=keep_last, judged_under=f"generator_v{GENERATOR_VERSION} HEAD"
+        )
+        saved = successful[task_id].get("steps")
+        passing_steps = (
+            tuple(dict(step) for step in saved)
+            if isinstance(saved, list) and all(isinstance(step, dict) for step in saved)
+            else None
+        )
+        selected.append(
+            PatchCase(
+                task, dropped, tuple(dict(step) for step in steps), passing_steps, bound, head
+            )
+        )
+    recomputed_total = integrity_counts["recomputed"] + difficulty_counts["recomputed"]
+    saved_total = integrity_counts["evaluation"] + difficulty_counts["evaluation"]
+    failing_eligibility: dict[str, Any] = {
+        "eligibility_source": (
+            "evaluation"
+            if recomputed_total == 0
+            else "recomputed"
+            if saved_total == 0
+            else "mixed"
+        ),
+        "integrity": integrity_counts,
+        "difficulty": difficulty_counts,
+    }
+    if integrity_counts["recomputed"]:
+        failing_eligibility["recomputed_generator_version"] = replay_version
+        failing_eligibility["generator_version_source"] = version_source
+        failing_eligibility["generator_version_basis"] = (
+            "recorded in the failing evaluation"
+            if version_source == "evaluation"
+            else "explicit --generator-version binding; the evaluation records no generator_version"
+        )
+    provenance = {
+        "data_seeds": seeds,
+        "eligibility": {
+            "passing": {"eligibility_source": "evaluation"},
+            "failing": failing_eligibility,
+        },
+    }
+    return selected, provenance
 
 
 def _find_once(ids: Sequence[int], needle: Sequence[int], *, start: int, label: str) -> tuple[int, ...]:
@@ -256,8 +543,62 @@ def _action(record: dict[str, Any]) -> Any:
     raise ValueError("failing step is missing an action")
 
 
-def replay_counterfactual(case: PatchCase) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Replay C before the decision, replacing only its immediately prior note."""
+def counterfactual_note(case: PatchCase) -> tuple[str | None, dict[str, Any]]:
+    """Choose the note substituted before the decision step (R22b).
+
+    The primary source is the passing run's saved note at ``decision_step - 1``, used when the
+    passing trajectory's actions (name and arguments) equal the failing run's at every step
+    before the decision — the criterion under which the saved note is the one that empirically
+    led to a pass over the same prefix. Otherwise ``render_expert_note`` at HEAD is the
+    fallback, and the returned provenance records the reason so a reader can weight the case.
+    """
+    if case.decision_step < 1:
+        return None, {
+            "counterfactual_source": None,
+            "counterfactual_basis": "decision step 0 has no prior note to substitute",
+        }
+    position = case.decision_step - 1
+
+    def fallback(reason: str) -> tuple[str, dict[str, Any]]:
+        return render_expert_note(case.task, position), {
+            "counterfactual_source": f"generator_v{GENERATOR_VERSION}",
+            "counterfactual_basis": reason,
+        }
+
+    if case.passing_steps is None:
+        return fallback("passing trajectory steps unavailable")
+    if len(case.passing_steps) < case.decision_step:
+        return fallback(
+            f"passing trajectory has {len(case.passing_steps)} steps, shorter than the "
+            f"{case.decision_step}-step decision prefix"
+        )
+    for index in range(case.decision_step):
+        try:
+            passing_action = _action(case.passing_steps[index])
+        except ValueError:
+            return fallback(f"passing step {index} is missing an action")
+        if passing_action != _action(case.failing_steps[index]):
+            return fallback(f"passing and failing actions diverge at step {index}")
+    note = case.passing_steps[position].get("thought")
+    if not isinstance(note, str) or not note:
+        return fallback(f"passing step {position} has no saved note text")
+    return note, {
+        "counterfactual_source": "passing_transcript",
+        "counterfactual_basis": (
+            f"passing actions equal failing actions at steps 0..{position} (name and arguments)"
+        ),
+    }
+
+
+def replay_counterfactual(
+    case: PatchCase,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Replay C before the decision, replacing only its immediately prior note (R22b).
+
+    Returns the failing and counterfactual message lists plus the substituted note's
+    provenance (``counterfactual_source`` and ``counterfactual_basis``).
+    """
+    note, provenance = counterfactual_note(case)
     failing = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": case.task.prompt}]
     counterfactual = [dict(message) for message in failing]
     for position, record in enumerate(case.failing_steps[: case.decision_step]):
@@ -266,9 +607,7 @@ def replay_counterfactual(case: PatchCase) -> tuple[list[dict[str, Any]], list[d
         if not isinstance(thought, str):
             raise ValueError("failing step is missing thought")
         replacement = (
-            render_expert_note(case.task, position)
-            if position == case.decision_step - 1
-            else thought
+            note if position == case.decision_step - 1 and note is not None else thought
         )
         failing.append(assistant_message(thought, action))
         counterfactual.append(assistant_message(replacement, action))
@@ -277,7 +616,7 @@ def replay_counterfactual(case: PatchCase) -> tuple[list[dict[str, Any]], list[d
             message = tool_message(action.name, observation)
             failing.append(message)
             counterfactual.append(dict(message))
-    return failing, counterfactual
+    return failing, counterfactual, provenance
 
 
 def _is_flip(task: Task, steps: list[dict[str, Any]], decision_step: int, *, keep_last: int) -> bool:
@@ -447,6 +786,8 @@ def run_patch_probe(
 ) -> dict[str, Any]:
     """Run the P6 cells and return aggregate-only, JSON-safe records.
 
+    The headline cells run over scoring-version-stable cases only (R24); unstable cases
+    are listed under ``excluded_cases`` with both judgements and never merged into a cell.
     This seam is deliberately composed from fakes in tests; the CLI is the only real-model
     entry point and remains gated by its GPU guard.
     """
@@ -455,11 +796,36 @@ def run_patch_probe(
         raise ValueError("no eligible patch cases")
     if not layers or any(layer < 1 or layer > view.num_layers for layer in layers):
         raise ValueError("layers must be residual indices in [1, num_layers]")
-    if len(cases) < 2:
-        raise ValueError("P6 unrelated-task control requires at least two patch cases")
+    stable = [case for case in cases if case.scoring_version_stable]
+    unstable = [case for case in cases if not case.scoring_version_stable]
+    if len(stable) < 2:
+        raise ValueError(
+            "P6 unrelated-task control requires at least two scoring-version-stable patch "
+            f"cases (R24); {len(stable)} stable, {len(unstable)} unstable"
+        )
+
+    def case_record(case: PatchCase, provenance: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "task_id": case.task.task_id,
+            "decision_step": case.decision_step,
+            **provenance,
+            **case.scoring_record(),
+        }
+
+    excluded: list[dict[str, Any]] = []
+    for case in unstable:
+        _failing, _counterfactual, provenance = replay_counterfactual(case)
+        excluded.append(
+            {**case_record(case, provenance), "excluded_reason": "scoring_version_unstable"}
+        )
     prepared: list[dict[str, Any]] = []
-    for case in cases:
-        failing, counterfactual = replay_counterfactual(case)
+    case_provenance: list[dict[str, Any]] = []
+    source_counts: dict[str, int] = {}
+    for case in stable:
+        failing, counterfactual, provenance = replay_counterfactual(case)
+        case_provenance.append(case_record(case, provenance))
+        source = provenance.get("counterfactual_source") or "none"
+        source_counts[source] = source_counts.get(source, 0) + 1
         failing_prompt = build_prompt(tokenizer, failing, spec=spec)
         counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec)
         failing_ids = list(tokenizer.encode(failing_prompt, add_special_tokens=False))
@@ -535,14 +901,34 @@ def run_patch_probe(
         "groups": list(POSITION_GROUPS),
         "controls": list(CONTROLS),
         "selected_task_ids": [case.task.task_id for case in cases],
+        "scoring_generator_version": GENERATOR_VERSION,
+        "stable_cases": len(stable),
+        "unstable_cases": len(unstable),
+        "headline_task_ids": [case.task.task_id for case in stable],
+        "cases": case_provenance,
+        "excluded_cases": excluded,
+        "counterfactual_sources": source_counts,
         "cells": cells,
     }
 
 
 def render_markdown(payload: dict[str, Any]) -> str:
-    """Render a compact layer×group treatment table and named-control tables."""
+    """Render a compact layer×group treatment table and named-control tables.
+
+    The heat map covers scoring-version-stable cases only; unstable cases get their own
+    table so they are never read as part of the headline (R24).
+    """
     groups = payload["groups"]
-    lines = ["# P6 causal patching", "", "## Treatment flip rate", "", "| layer | " + " | ".join(groups) + " |", "|---|" + "|".join("---" for _ in groups) + "|"]
+    lines = ["# P6 causal patching", "", "## Treatment flip rate", ""]
+    if "stable_cases" in payload:
+        lines.extend(
+            [
+                f"Headline over {payload['stable_cases']} scoring-version-stable case(s); "
+                f"{payload['unstable_cases']} unstable case(s) excluded (R24).",
+                "",
+            ]
+        )
+    lines.extend(["| layer | " + " | ".join(groups) + " |", "|---|" + "|".join("---" for _ in groups) + "|"])
     for layer in payload["layers"]:
         values = []
         for group in groups:
@@ -556,7 +942,36 @@ def render_markdown(payload: dict[str, Any]) -> str:
             summary = cell["controls"][control]
             low, high = summary["wilson_95"]
             lines.append(f"| {key} | {summary['rate']:.3f} | [{low:.3f}, {high:.3f}] |")
+    sources = payload.get("counterfactual_sources")
+    if sources:
+        lines.extend(["", "## Counterfactual note sources", ""])
+        lines.extend(f"- {name}: {sources[name]}" for name in sorted(sources))
+    if "stable_cases" in payload:
+        lines.extend(["", "## Scoring version stability (R24)", ""])
+        lines.extend(_stability_table(payload.get("cases", []), "headline"))
+        lines.extend(["", "### Unstable cases (excluded from the headline)", ""])
+        if payload.get("excluded_cases"):
+            lines.extend(_stability_table(payload["excluded_cases"], "excluded"))
+        else:
+            lines.append("None.")
     return "\n".join(lines)
+
+
+def _stability_table(records: Sequence[dict[str, Any]], population: str) -> list[str]:
+    def values(listed: Any) -> str:
+        return ", ".join(listed) if isinstance(listed, list) else "unknown"
+
+    lines = [
+        f"| task ({population}) | stable | decision step bound / HEAD | dropped values bound / HEAD |",
+        "|---|---|---|---|",
+    ]
+    for record in records:
+        lines.append(
+            f"| {record['task_id']} | {'yes' if record['scoring_version_stable'] else 'no'} | "
+            f"{record['decision_step_bound']} / {record['decision_step_head']} | "
+            f"{values(record['dropped_values_bound'])} / {values(record['dropped_values_head'])} |"
+        )
+    return lines
 
 
 def _load_payload(path: Path) -> dict[str, Any]:
@@ -582,6 +997,21 @@ def main() -> None:
     parser.add_argument("--keep-last", type=int, default=2)
     parser.add_argument("--max-tokens", type=int, default=200)
     parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument(
+        "--data-seed",
+        type=int,
+        default=None,
+        help="data seed override, used only when an evaluation lacks the data_seed field (R22a)",
+    )
+    parser.add_argument(
+        "--generator-version",
+        type=int,
+        default=None,
+        help=(
+            "generator version the integrity recomputation replays under, used only when "
+            "the failing evaluation records no generator_version (R12/R22)"
+        ),
+    )
     add_gpu_arguments(parser)
     args = parser.parse_args()
     if not args.passing_eval.is_file() or not args.failing_eval.is_file():
@@ -594,8 +1024,12 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
     try:
-        cases = select_patch_cases(
-            _load_payload(args.passing_eval), _load_payload(args.failing_eval), keep_last=args.keep_last
+        cases, selection_provenance = select_patch_cases(
+            _load_payload(args.passing_eval),
+            _load_payload(args.failing_eval),
+            keep_last=args.keep_last,
+            data_seed=args.data_seed,
+            generator_version=args.generator_version,
         )
     except ValueError as error:
         parser.error(str(error))
@@ -625,6 +1059,8 @@ def main() -> None:
     if not isinstance(payload, dict) or "cells" not in payload:
         parser.error("run_patch_probe returned an invalid payload")
     payload["layer_selection"] = selection.as_dict()
+    payload["data_seeds"] = selection_provenance["data_seeds"]
+    payload["eligibility"] = selection_provenance["eligibility"]
     markdown = render_markdown(payload)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "patch.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

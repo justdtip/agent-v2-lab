@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 
 import mlx.core as mx
@@ -21,6 +22,41 @@ def _payload(trajectories, *, data_seed=17):
     return {"data_seed": data_seed, "trajectories": trajectories}
 
 
+def _drop_report(step, values=None):
+    """A fake integrity report with one value_drop, in the detail form integrity writes."""
+    violation = SimpleNamespace(kind="value_drop", step=step)
+    if values is not None:
+        violation.detail = f"missing required values: {values}"
+    return SimpleNamespace(violations=(violation,))
+
+
+def _judgements(step, values="42", *, head_step=None, head_values=None):
+    """A (bound, head) judgement pair; stable unless a head_* override disagrees."""
+    from local_llm_lab.probes import patch
+
+    bound = patch.DropJudgement(step, (values,), "generator_v1 replay")
+    head = patch.DropJudgement(
+        step if head_step is None else head_step,
+        (values if head_values is None else head_values,),
+        f"generator_v{patch.GENERATOR_VERSION} HEAD",
+    )
+    return bound, head
+
+
+def _scoring_record(step, values="42"):
+    from local_llm_lab.probes import patch
+
+    return {
+        "scoring_version_stable": True,
+        "decision_step_bound": step,
+        "decision_step_head": step,
+        "dropped_values_bound": [values],
+        "dropped_values_head": [values],
+        "judged_under_bound": "generator_v1 replay",
+        "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+    }
+
+
 def test_select_patch_cases_intersects_saved_evaluations(monkeypatch) -> None:
     from local_llm_lab.probes import patch
 
@@ -35,9 +71,14 @@ def test_select_patch_cases_intersects_saved_evaluations(monkeypatch) -> None:
             tasks[task_id] if seed == 19 and difficulty == 2 else None
         ),
     )
+    # The HEAD scoring judgement (R24) runs at selection; the saved integrity carries no
+    # detail here, so the bound values are unknown and the case cannot be stable.
+    monkeypatch.setattr(
+        patch, "check_trajectory", lambda task, steps, *, keep_last: _drop_report(1, "7")
+    )
     passing = _payload(
         [
-            {"task_id": key, "verdict": {"success": True}}
+            {"task_id": key, "verdict": {"success": True}, "steps": [{"thought": "saved note"}]}
             for key in tasks
         ]
         + [{"task_id": "test-other-2-clean", "verdict": {"success": True}}],
@@ -49,6 +90,7 @@ def test_select_patch_cases_intersects_saved_evaluations(monkeypatch) -> None:
                 "task_id": key,
                 "family": task.family,
                 "difficulty": 2,
+                "verdict": {"success": False},
                 "steps": [{"thought": "before"}, {"thought": "drop"}],
                 "integrity": {"violations": [{"kind": "value_drop", "step": 1}]},
             }
@@ -57,13 +99,24 @@ def test_select_patch_cases_intersects_saved_evaluations(monkeypatch) -> None:
         data_seed=19,
     )
 
-    cases = patch.select_patch_cases(passing, failing, keep_last=2)
+    cases, provenance = patch.select_patch_cases(passing, failing, keep_last=2)
 
     assert [(case.task.task_id, case.decision_step) for case in cases] == [
         ("test-aggregate_report-0-clean", 1),
         ("test-ledger_reconcile-1-clean", 1),
     ]
     assert cases[0].failing_steps[0]["thought"] == "before"
+    assert cases[0].passing_steps == ({"thought": "saved note"},)
+    assert cases[0].bound_judgement == patch.DropJudgement(1, None, "saved evaluation integrity")
+    assert cases[0].head_judgement == patch.DropJudgement(
+        1, ("7",), f"generator_v{patch.GENERATOR_VERSION} HEAD"
+    )
+    assert cases[0].scoring_version_stable is False
+    assert provenance["data_seeds"] == {
+        "passing": {"data_seed": 11, "data_seed_source": "evaluation"},
+        "failing": {"data_seed": 19, "data_seed_source": "evaluation"},
+    }
+    assert provenance["eligibility"]["failing"]["eligibility_source"] == "evaluation"
 
 
 def test_select_patch_cases_rejects_malformed_or_mismatched_payloads() -> None:
@@ -73,6 +126,597 @@ def test_select_patch_cases_rejects_malformed_or_mismatched_payloads() -> None:
         patch.select_patch_cases({}, {}, keep_last=2)
     with pytest.raises(ValueError, match="data_seed"):
         patch.select_patch_cases(_payload([], data_seed="bad"), _payload([]), keep_last=2)
+
+
+def test_data_seed_override_is_refused_when_it_conflicts_with_the_saved_field() -> None:
+    from local_llm_lab.probes import patch
+
+    with pytest.raises(ValueError, match=r"passing evaluation data_seed 17 conflicts with --data-seed 23"):
+        patch.select_patch_cases(_payload([]), _payload([]), keep_last=2, data_seed=23)
+
+
+def test_data_seed_is_required_from_exactly_one_source() -> None:
+    from local_llm_lab.probes import patch
+
+    with pytest.raises(ValueError, match=r"passing evaluation lacks data_seed and no --data-seed"):
+        patch.select_patch_cases({"trajectories": []}, _payload([]), keep_last=2)
+    with pytest.raises(ValueError, match=r"--data-seed override must be an integer"):
+        patch.select_patch_cases(_payload([]), _payload([]), keep_last=2, data_seed=True)
+
+
+def test_data_seed_override_fills_only_the_absent_field_and_records_the_source(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    seen = []
+    monkeypatch.setattr(
+        patch,
+        "task_from_id",
+        lambda task_id, seed, difficulty: seen.append(seed)
+        or _Task("test-aggregate_report-0-clean", "aggregate_report"),
+    )
+    monkeypatch.setattr(patch, "check_trajectory", lambda *_args, **_kwargs: _drop_report(1))
+    passing = {
+        "trajectories": [
+            {"task_id": "test-aggregate_report-0-clean", "verdict": {"success": True}}
+        ]
+    }
+    failing = _payload(
+        [
+            {
+                "task_id": "test-aggregate_report-0-clean",
+                "difficulty": 2,
+                "verdict": {"success": False},
+                "steps": [{"thought": "before"}, {"thought": "drop"}],
+                "integrity": {"violations": [{"kind": "value_drop", "step": 1}]},
+            }
+        ],
+        data_seed=31,
+    )
+
+    cases, provenance = patch.select_patch_cases(passing, failing, keep_last=2, data_seed=31)
+
+    assert provenance["data_seeds"] == {
+        "passing": {"data_seed": 31, "data_seed_source": "flag"},
+        "failing": {"data_seed": 31, "data_seed_source": "evaluation"},
+    }
+    assert seen == [31]
+    assert len(cases) == 1 and cases[0].passing_steps is None
+
+
+def _pre_schema_payloads():
+    passing = {
+        "trajectories": [
+            {"task_id": "test-aggregate_report-0-clean", "verdict": {"success": True}}
+        ]
+    }
+    failing = {
+        "trajectories": [
+            {
+                "task_id": "test-aggregate_report-0-clean",
+                "verdict": {"success": False},
+                "steps": [{"thought": "before"}, {"thought": "drop"}],
+            }
+        ]
+    }
+    return passing, failing
+
+
+def test_select_recomputes_missing_eligibility_fields_under_the_bound_version(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    head_task = _Task("test-aggregate_report-0-clean", "aggregate_report")
+    replayed_task = _Task("test-aggregate_report-0-clean", "aggregate_report", prompt="v1")
+    monkeypatch.setattr(patch, "task_from_id", lambda *_args: head_task)
+    replays = []
+    monkeypatch.setattr(
+        patch,
+        "replay_task_from_id",
+        lambda task_id, seed, version, difficulty: replays.append(
+            (task_id, seed, version, difficulty)
+        )
+        or replayed_task,
+    )
+    checked = []
+
+    def fake_check(task, steps, *, keep_last):
+        checked.append((task, len(steps), keep_last))
+        return _drop_report(1, "12")
+
+    monkeypatch.setattr(patch, "check_trajectory", fake_check)
+    passing, failing = _pre_schema_payloads()
+
+    cases, provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=31, generator_version=1
+    )
+
+    assert [(case.task, case.decision_step) for case in cases] == [(head_task, 1)]
+    assert replays == [("test-aggregate_report-0-clean", 31, 1, 2)]
+    # Eligibility is judged under the replayed task, never HEAD; the HEAD judgement that
+    # follows is the R24 scoring check over exactly the task ``_is_flip`` will see.
+    assert checked == [(replayed_task, 2, 2), (head_task, 2, 2)]
+    assert cases[0].bound_judgement == patch.DropJudgement(1, ("12",), "generator_v1 replay")
+    assert cases[0].head_judgement == patch.DropJudgement(
+        1, ("12",), f"generator_v{patch.GENERATOR_VERSION} HEAD"
+    )
+    assert cases[0].scoring_version_stable is True
+    assert provenance["eligibility"] == {
+        "passing": {"eligibility_source": "evaluation"},
+        "failing": {
+            "eligibility_source": "recomputed",
+            "integrity": {"evaluation": 0, "recomputed": 1},
+            "difficulty": {"evaluation": 0, "recomputed": 1},
+            "recomputed_generator_version": 1,
+            "generator_version_source": "flag",
+            "generator_version_basis": (
+                "explicit --generator-version binding; the evaluation records no "
+                "generator_version"
+            ),
+        },
+    }
+
+
+def test_recompute_excludes_head_only_drops_judged_under_the_bound_version(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    head_task = _Task("test-aggregate_report-0-clean", "aggregate_report")
+    replayed_task = _Task("test-aggregate_report-0-clean", "aggregate_report", prompt="v1")
+    monkeypatch.setattr(patch, "task_from_id", lambda *_args: head_task)
+    monkeypatch.setattr(
+        patch, "replay_task_from_id", lambda *_args: replayed_task
+    )
+
+    def fake_check(task, steps, *, keep_last):
+        # A v4-only artifact: under the bound v1 replay there is NO value drop.
+        assert task is replayed_task
+        return SimpleNamespace(violations=())
+
+    monkeypatch.setattr(patch, "check_trajectory", fake_check)
+    passing, failing = _pre_schema_payloads()
+
+    cases, provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=31, generator_version=1
+    )
+
+    assert cases == []
+    assert provenance["eligibility"]["failing"]["integrity"] == {
+        "evaluation": 0,
+        "recomputed": 1,
+    }
+    assert provenance["eligibility"]["failing"]["recomputed_generator_version"] == 1
+
+
+def test_generator_version_binding_resolves_records_conflicts_and_fails_closed(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    head_task = _Task("test-aggregate_report-0-clean", "aggregate_report")
+    replayed_task = _Task("test-aggregate_report-0-clean", "aggregate_report", prompt="v2")
+    monkeypatch.setattr(patch, "task_from_id", lambda *_args: head_task)
+    replays = []
+    monkeypatch.setattr(
+        patch,
+        "replay_task_from_id",
+        lambda task_id, seed, version, difficulty: replays.append(version) or replayed_task,
+    )
+    monkeypatch.setattr(
+        patch,
+        "check_trajectory",
+        lambda task, steps, *, keep_last: SimpleNamespace(
+            violations=(SimpleNamespace(kind="value_drop", step=1),)
+        ),
+    )
+    passing, failing = _pre_schema_payloads()
+
+    recorded = {**failing, "summary": {"generator_version": 2}}
+    _cases, provenance = patch.select_patch_cases(
+        passing, recorded, keep_last=2, data_seed=31
+    )
+    assert replays == [2]
+    assert provenance["eligibility"]["failing"]["recomputed_generator_version"] == 2
+    assert provenance["eligibility"]["failing"]["generator_version_source"] == "evaluation"
+    assert (
+        provenance["eligibility"]["failing"]["generator_version_basis"]
+        == "recorded in the failing evaluation"
+    )
+
+    with pytest.raises(
+        ValueError, match=r"generator_version 2 conflicts with --generator-version 1"
+    ):
+        patch.select_patch_cases(
+            passing, recorded, keep_last=2, data_seed=31, generator_version=1
+        )
+
+    with pytest.raises(
+        ValueError, match=r"records no generator_version and no --generator-version"
+    ):
+        patch.select_patch_cases(passing, failing, keep_last=2, data_seed=31)
+
+    with pytest.raises(ValueError, match=r"--generator-version binding must be an integer"):
+        patch.select_patch_cases(
+            passing, failing, keep_last=2, data_seed=31, generator_version=True
+        )
+
+
+def test_verdict_filter_restricts_selection_to_the_spec_universe(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    monkeypatch.setattr(
+        patch,
+        "task_from_id",
+        lambda task_id, seed, difficulty: _Task(task_id, "aggregate_report"),
+    )
+    monkeypatch.setattr(patch, "check_trajectory", lambda *_args, **_kwargs: _drop_report(1))
+    record = {
+        "difficulty": 2,
+        "steps": [{"thought": "before"}, {"thought": "drop"}],
+        "integrity": {"violations": [{"kind": "value_drop", "step": 1}]},
+    }
+    passing = _payload(
+        [
+            {"task_id": task_id, "verdict": {"success": True}}
+            for task_id in (
+                "test-aggregate_report-0-clean",
+                "test-aggregate_report-1-clean",
+                "test-aggregate_report-2-clean",
+            )
+        ]
+    )
+    failing = _payload(
+        [
+            # Dropped a value but ultimately succeeded: outside SPEC-004 §5's universe.
+            {**record, "task_id": "test-aggregate_report-0-clean", "verdict": {"success": True}},
+            # No verdict at all: not provably failing, excluded.
+            {**record, "task_id": "test-aggregate_report-1-clean"},
+            {**record, "task_id": "test-aggregate_report-2-clean", "verdict": {"success": False}},
+        ],
+        data_seed=31,
+    )
+
+    cases, provenance = patch.select_patch_cases(passing, failing, keep_last=2)
+
+    assert [case.task.task_id for case in cases] == ["test-aggregate_report-2-clean"]
+    assert provenance["eligibility"]["failing"]["integrity"] == {
+        "evaluation": 1,
+        "recomputed": 0,
+    }
+
+
+def test_saved_eligibility_fields_win_and_recomputation_never_runs(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    monkeypatch.setattr(
+        patch,
+        "task_from_id",
+        lambda task_id, seed, difficulty: _Task(task_id, "aggregate_report"),
+    )
+    monkeypatch.setattr(
+        patch,
+        "replay_task_from_id",
+        lambda *_args, **_kwargs: pytest.fail("recomputation must not run for saved fields"),
+    )
+    checked = []
+
+    def fake_check(task, steps, *, keep_last):
+        checked.append(task)
+        return _drop_report(1, "12")
+
+    monkeypatch.setattr(patch, "check_trajectory", fake_check)
+    passing = {
+        "trajectories": [
+            {"task_id": "test-aggregate_report-0-clean", "verdict": {"success": True}}
+        ]
+    }
+    failing = {
+        "trajectories": [
+            {
+                "task_id": "test-aggregate_report-0-clean",
+                "difficulty": 2,
+                "verdict": {"success": False},
+                "steps": [{"thought": "before"}, {"thought": "drop"}],
+                "integrity": {
+                    "violations": [
+                        {"kind": "value_drop", "step": 1, "detail": "missing required values: 12"}
+                    ]
+                },
+            }
+        ]
+    }
+
+    cases, provenance = patch.select_patch_cases(passing, failing, keep_last=2, data_seed=31)
+
+    assert len(cases) == 1 and cases[0].decision_step == 1
+    # The only checker call is the R24 HEAD scoring judgement over the case's own task;
+    # the bound judgement came from the saved integrity block, detail included.
+    assert checked == [cases[0].task]
+    assert cases[0].bound_judgement == patch.DropJudgement(
+        1, ("12",), "saved evaluation integrity"
+    )
+    assert cases[0].scoring_version_stable is True
+    assert provenance["eligibility"]["failing"] == {
+        "eligibility_source": "evaluation",
+        "integrity": {"evaluation": 1, "recomputed": 0},
+        "difficulty": {"evaluation": 1, "recomputed": 0},
+    }
+
+
+def test_mixed_eligibility_sources_are_summarised_and_counted(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    monkeypatch.setattr(
+        patch,
+        "task_from_id",
+        lambda task_id, seed, difficulty: _Task(task_id, "aggregate_report"),
+    )
+    monkeypatch.setattr(
+        patch,
+        "replay_task_from_id",
+        lambda task_id, seed, version, difficulty: _Task(task_id, "aggregate_report"),
+    )
+    monkeypatch.setattr(
+        patch,
+        "check_trajectory",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            violations=(SimpleNamespace(kind="value_drop", step=0),)
+        ),
+    )
+    passing = {
+        "trajectories": [
+            {"task_id": "test-aggregate_report-0-clean", "verdict": {"success": True}},
+            {"task_id": "test-aggregate_report-0001-clean", "verdict": {"success": True}},
+        ]
+    }
+    failing = {
+        "trajectories": [
+            {
+                "task_id": "test-aggregate_report-0-clean",
+                "difficulty": 2,
+                "verdict": {"success": False},
+                "steps": [{"thought": "before"}, {"thought": "drop"}],
+                "integrity": {"violations": [{"kind": "value_drop", "step": 1}]},
+            },
+            {
+                "task_id": "test-aggregate_report-0001-clean",
+                "verdict": {"success": False},
+                "steps": [{"thought": "drop"}],
+            },
+        ]
+    }
+
+    cases, provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=31, generator_version=1
+    )
+
+    assert [case.decision_step for case in cases] == [1, 0]
+    assert provenance["eligibility"]["failing"] == {
+        "eligibility_source": "mixed",
+        "integrity": {"evaluation": 1, "recomputed": 1},
+        "difficulty": {"evaluation": 1, "recomputed": 1},
+        "recomputed_generator_version": 1,
+        "generator_version_source": "flag",
+        "generator_version_basis": (
+            "explicit --generator-version binding; the evaluation records no "
+            "generator_version"
+        ),
+    }
+
+
+def test_scoring_stability_records_both_judgements_and_flags_disagreement(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    monkeypatch.setattr(
+        patch, "task_from_id", lambda task_id, *_args: _Task(task_id, "aggregate_report")
+    )
+    monkeypatch.setattr(
+        patch,
+        "replay_task_from_id",
+        lambda task_id, *_args: _Task(task_id, "aggregate_report", prompt="v1"),
+    )
+    verdicts = {
+        # (bound step, bound values), (head step, head values)
+        "test-aggregate_report-0-clean": ((1, "12"), (1, "12")),  # identical: stable
+        "test-aggregate_report-1-clean": ((1, "12"), (2, "12")),  # decision step differs
+        "test-aggregate_report-2-clean": ((1, "12"), (1, "13")),  # dropped value differs
+    }
+
+    def fake_check(task, steps, *, keep_last):
+        bound, head = verdicts[task.task_id]
+        return _drop_report(*(bound if task.prompt == "v1" else head))
+
+    monkeypatch.setattr(patch, "check_trajectory", fake_check)
+    steps = [{"thought": "a"}, {"thought": "b"}, {"thought": "c"}]
+    passing = {
+        "trajectories": [{"task_id": key, "verdict": {"success": True}} for key in verdicts]
+    }
+    failing = {
+        "trajectories": [
+            {"task_id": key, "verdict": {"success": False}, "steps": steps} for key in verdicts
+        ]
+    }
+
+    cases, _provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=31, generator_version=1
+    )
+
+    assert [case.decision_step for case in cases] == [1, 1, 1]
+    assert [case.scoring_version_stable for case in cases] == [True, False, False]
+    assert cases[1].scoring_record() == {
+        "scoring_version_stable": False,
+        "decision_step_bound": 1,
+        "decision_step_head": 2,
+        "dropped_values_bound": ["12"],
+        "dropped_values_head": ["12"],
+        "judged_under_bound": "generator_v1 replay",
+        "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+    }
+    assert cases[2].scoring_record()["dropped_values_head"] == ["13"]
+    assert cases[0].scoring_record() == {**_scoring_record(1, "12")}
+
+
+def test_scoring_stability_fails_closed_without_recorded_values_or_judgements() -> None:
+    from local_llm_lab.probes import patch
+
+    head = patch.DropJudgement(1, ("12",), "head")
+    assert patch.scoring_version_stable(patch.DropJudgement(1, ("12",), "bound"), head)
+    assert not patch.scoring_version_stable(patch.DropJudgement(1, None, "bound"), head)
+    assert not patch.scoring_version_stable(patch.DropJudgement(None, None, "bound"), head)
+    assert not patch.scoring_version_stable(
+        patch.DropJudgement(1, ("12", "13"), "bound"), head
+    )
+    assert patch.scoring_version_stable(
+        patch.DropJudgement(1, ("13", "12"), "bound"),
+        patch.DropJudgement(1, ("12", "13"), "head"),
+    )
+    with pytest.raises(ValueError, match="carries no bound/HEAD value-drop judgements"):
+        patch.PatchCase(_Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ()).scoring_version_stable
+
+
+def test_dry_selection_recomputes_eligibility_for_evaluations_shaped_like_the_saved_runs() -> None:
+    import re
+
+    from local_llm_lab.pipeline.env import Simulator
+    from local_llm_lab.pipeline.tasks import make_tasks
+    from local_llm_lab.probes import patch
+
+    task = next(item for item in make_tasks("test", 12, 11) if item.family == "ledger_reconcile")
+    trace = []
+    simulator = Simulator.for_task(task)
+    for index, step in enumerate(task.steps):
+        observation = simulator.execute(step.action)
+        trace.append(
+            {
+                "index": index,
+                "thought": step.thought,
+                "action": {"name": step.action.name, "arguments": step.action.arguments},
+                "observation": observation,
+                "raw": None,
+            }
+        )
+    mutated = [dict(step) for step in trace]
+    mutated_index, match = next(
+        (index, found)
+        for index, step in enumerate(mutated)
+        if (found := re.search(r"approved:\s*(\d+), ", str(step["thought"])))
+    )
+    thought = str(mutated[mutated_index]["thought"])
+    mutated[mutated_index]["thought"] = thought[: match.start(1)] + thought[match.end(1) + 2 :]
+    passing = {
+        "trajectories": [
+            {
+                "task_id": task.task_id,
+                "family": task.family,
+                "variant": "clean",
+                "verdict": {"success": True},
+                "steps": trace,
+            }
+        ]
+    }
+    failing = {
+        "trajectories": [
+            {
+                "task_id": task.task_id,
+                "family": task.family,
+                "variant": "clean",
+                "verdict": {"success": False},
+                "steps": mutated,
+            }
+        ]
+    }
+
+    # The fixture was generated at HEAD, so its generation-version binding is HEAD's.
+    cases, provenance = patch.select_patch_cases(
+        passing, failing, keep_last=1, data_seed=11, generator_version=patch.GENERATOR_VERSION
+    )
+
+    assert [(case.task.task_id, case.decision_step) for case in cases] == [
+        (task.task_id, mutated_index)
+    ]
+    assert provenance["data_seeds"] == {
+        "passing": {"data_seed": 11, "data_seed_source": "flag"},
+        "failing": {"data_seed": 11, "data_seed_source": "flag"},
+    }
+    assert provenance["eligibility"]["failing"] == {
+        "eligibility_source": "recomputed",
+        "integrity": {"evaluation": 0, "recomputed": 1},
+        "difficulty": {"evaluation": 0, "recomputed": 1},
+        "recomputed_generator_version": patch.GENERATOR_VERSION,
+        "generator_version_source": "flag",
+        "generator_version_basis": (
+            "explicit --generator-version binding; the evaluation records no "
+            "generator_version"
+        ),
+    }
+    _failing, counterfactual, note_provenance = patch.replay_counterfactual(cases[0])
+    assert note_provenance["counterfactual_source"] == "passing_transcript"
+    assert task.steps[mutated_index - 1].thought in counterfactual[2 * mutated_index]["content"]
+    # Bound and HEAD are the same generator here, so the real checker's detail must parse to
+    # the removed value on both sides and the case must be scoring-version stable.
+    assert cases[0].scoring_version_stable is True
+    assert cases[0].bound_judgement.dropped_values == cases[0].head_judgement.dropped_values
+    assert match.group(1) in cases[0].bound_judgement.dropped_values
+
+
+_SAVED_EVALS = (
+    Path("outputs/agent-v2b/evals/runB-test180.json"),
+    Path("outputs/agent-v2c/evals/best-adapter-test.json"),
+)
+
+
+@pytest.mark.skipif(
+    not all(path.is_file() for path in _SAVED_EVALS),
+    reason="protected saved evaluations not present on this checkout",
+)
+def test_real_saved_evaluations_select_exactly_the_spec_universe() -> None:
+    """Pin the Director's retry selection: SPEC-004 §5's five cases under the v1 binding.
+
+    Reads the protected evidence read-only. The seed and version literals here are
+    fixture data: the runs' recorded configuration, not constants used by the tool.
+    """
+    import json
+
+    from local_llm_lab.probes import patch
+
+    passing = json.loads(_SAVED_EVALS[0].read_text(encoding="utf-8"))
+    failing = json.loads(_SAVED_EVALS[1].read_text(encoding="utf-8"))
+
+    cases, provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=20260902, generator_version=1
+    )
+
+    assert len(cases) == 5
+    assert sorted(case.decision_step for case in cases) == [6, 7, 7, 7, 7]
+    assert provenance["data_seeds"]["failing"]["data_seed_source"] == "flag"
+    assert provenance["eligibility"]["failing"]["eligibility_source"] == "recomputed"
+    assert provenance["eligibility"]["failing"]["integrity"] == {
+        "evaluation": 0,
+        "recomputed": 5,
+    }
+    assert provenance["eligibility"]["failing"]["recomputed_generator_version"] == 1
+    assert provenance["eligibility"]["failing"]["generator_version_source"] == "flag"
+    for case in cases:
+        _failing, _counterfactual, note_provenance = patch.replay_counterfactual(case)
+        assert note_provenance["counterfactual_source"] == "passing_transcript"
+    # R24, as measured on these files: every case's decision step and dropped value are
+    # identical under the v1 replay and HEAD, so all five are scoring-version stable.
+    records = {case.task.task_id: case.scoring_record() for case in cases}
+    assert {task_id: record["scoring_version_stable"] for task_id, record in records.items()} == {
+        "test-ledger_reconcile-0031-clean": True,
+        "test-ledger_reconcile-0127-clean": True,
+        "test-ledger_reconcile-0139-clean": True,
+        "test-ledger_reconcile-0163-clean": True,
+        "test-ledger_reconcile-0175-clean": True,
+    }
+    assert {
+        task_id: (record["decision_step_bound"], record["decision_step_head"], record["dropped_values_bound"])
+        for task_id, record in records.items()
+    } == {
+        "test-ledger_reconcile-0031-clean": (7, 7, ["85"]),
+        "test-ledger_reconcile-0127-clean": (7, 7, ["89"]),
+        "test-ledger_reconcile-0139-clean": (7, 7, ["100"]),
+        "test-ledger_reconcile-0163-clean": (7, 7, ["32"]),
+        "test-ledger_reconcile-0175-clean": (6, 6, ["54"]),
+    }
+    assert all(
+        record["dropped_values_bound"] == record["dropped_values_head"] for record in records.values()
+    )
 
 
 def test_position_groups_are_exact_and_fail_closed() -> None:
@@ -303,13 +947,115 @@ def test_replay_replaces_only_the_immediately_previous_note(monkeypatch) -> None
     )
     monkeypatch.setattr(patch, "render_expert_note", lambda _task, index: f"expert {index}")
 
-    failing, counterfactual = patch.replay_counterfactual(case)
+    failing, counterfactual, provenance = patch.replay_counterfactual(case)
 
     assert failing[:2] == counterfactual[:2]
     assert failing[2]["content"] == counterfactual[2]["content"]
     assert "old one" in failing[4]["content"]
     assert "expert 1" in counterfactual[4]["content"]
     assert failing[5:] == counterfactual[5:]
+    assert provenance == {
+        "counterfactual_source": f"generator_v{patch.GENERATOR_VERSION}",
+        "counterfactual_basis": "passing trajectory steps unavailable",
+    }
+
+
+def _case_with_passing_steps(passing_steps):
+    from local_llm_lab.probes import patch
+
+    failing_steps = (
+        {
+            "thought": "old zero",
+            "action": {"name": "read_file", "arguments": {"path": "a"}},
+            "observation": "A",
+        },
+        {
+            "thought": "old one",
+            "action": {"name": "read_file", "arguments": {"path": "b"}},
+            "observation": "B",
+        },
+        {
+            "thought": "drop",
+            "action": {"name": "calculate", "arguments": {"expression": "1 + 1"}},
+        },
+    )
+    return patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"),
+        2,
+        failing_steps,
+        passing_steps,
+    )
+
+
+def test_counterfactual_note_prefers_the_passing_runs_saved_note() -> None:
+    from local_llm_lab.probes import patch
+
+    case = _case_with_passing_steps(
+        (
+            {"thought": "pass zero", "action": {"name": "read_file", "arguments": {"path": "a"}}},
+            {"thought": "pass one", "action": {"name": "read_file", "arguments": {"path": "b"}}},
+            {"thought": "good decision", "action": {"name": "finish", "arguments": {}}},
+        )
+    )
+
+    failing, counterfactual, provenance = patch.replay_counterfactual(case)
+
+    assert "old one" in failing[4]["content"]
+    assert "pass one" in counterfactual[4]["content"]
+    assert failing[2]["content"] == counterfactual[2]["content"]
+    assert provenance == {
+        "counterfactual_source": "passing_transcript",
+        "counterfactual_basis": (
+            "passing actions equal failing actions at steps 0..1 (name and arguments)"
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    ("passing_steps", "reason"),
+    [
+        (
+            (
+                {"thought": "pass zero", "action": {"name": "read_file", "arguments": {"path": "a"}}},
+                {"thought": "pass one", "action": {"name": "read_file", "arguments": {"path": "z"}}},
+            ),
+            "passing and failing actions diverge at step 1",
+        ),
+        (
+            ({"thought": "pass zero", "action": {"name": "read_file", "arguments": {"path": "a"}}},),
+            "passing trajectory has 1 steps, shorter than the 2-step decision prefix",
+        ),
+        (
+            (
+                {"thought": "pass zero"},
+                {"thought": "pass one", "action": {"name": "read_file", "arguments": {"path": "b"}}},
+            ),
+            "passing step 0 is missing an action",
+        ),
+        (
+            (
+                {"thought": "pass zero", "action": {"name": "read_file", "arguments": {"path": "a"}}},
+                {"action": {"name": "read_file", "arguments": {"path": "b"}}},
+            ),
+            "passing step 1 has no saved note text",
+        ),
+    ],
+)
+def test_counterfactual_note_falls_back_to_the_generator_and_records_why(
+    monkeypatch, passing_steps, reason
+) -> None:
+    from local_llm_lab.probes import patch
+
+    monkeypatch.setattr(patch, "render_expert_note", lambda _task, index: f"expert {index}")
+    case = _case_with_passing_steps(passing_steps)
+
+    note, provenance = patch.counterfactual_note(case)
+
+    assert note == "expert 1"
+    assert provenance == {
+        "counterfactual_source": f"generator_v{patch.GENERATOR_VERSION}",
+        "counterfactual_basis": reason,
+    }
 
 
 def test_patch_cli_is_registered_and_validates_before_loading(monkeypatch, tmp_path) -> None:
@@ -350,8 +1096,28 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1, 2)),
     )
     case = patch.PatchCase(_Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ())
+    seeds = {
+        "passing": {"data_seed": 41, "data_seed_source": "flag"},
+        "failing": {"data_seed": 41, "data_seed_source": "evaluation"},
+    }
+    eligibility = {
+        "passing": {"eligibility_source": "evaluation"},
+        "failing": {
+            "eligibility_source": "recomputed",
+            "integrity": {"evaluation": 0, "recomputed": 1},
+            "difficulty": {"evaluation": 0, "recomputed": 1},
+            "recomputed_generator_version": patch.GENERATOR_VERSION,
+        },
+    }
     seen = []
-    monkeypatch.setattr(patch, "select_patch_cases", lambda *_args, **_kwargs: [case])
+    monkeypatch.setattr(
+        patch,
+        "select_patch_cases",
+        lambda *_args, **kwargs: seen.append(
+            ("select", kwargs["data_seed"], kwargs["generator_version"])
+        )
+        or ([case], {"data_seeds": seeds, "eligibility": eligibility}),
+    )
     monkeypatch.setattr(
         patch,
         "load_model_spec",
@@ -392,16 +1158,23 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         "1,0.5",
         "--seed",
         "9",
+        "--data-seed",
+        "41",
+        "--generator-version",
+        "1",
     ]
     monkeypatch.setattr("sys.argv", argv)
 
     patch.main()
 
     assert seen[0] == ("spec", "qwen35-4b")
+    assert ("select", 41, 1) in seen
     assert ("policy", "base", selected) in seen and ("load", "fake/hf", None) in seen
     assert seen[-1] == ("probe", selected, argv)
     assert (tmp_path / "patch.json").is_file() and (tmp_path / "patch.md").read_text() == "# fake\n"
     payload = json.loads((tmp_path / "patch.json").read_text(encoding="utf-8"))
+    assert payload["data_seeds"] == seeds
+    assert payload["eligibility"] == eligibility
     assert payload["layer_selection"] == {
         "source": "cli",
         "requested": ["1", "0.5"],
@@ -418,7 +1191,11 @@ def test_patch_cli_rejects_malformed_layers_before_model_loading(monkeypatch, tm
     failing = tmp_path / "failing.json"
     passing.write_text("{}", encoding="utf-8")
     failing.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(patch, "select_patch_cases", lambda *_args, **_kwargs: [object()])
+    monkeypatch.setattr(
+        patch,
+        "select_patch_cases",
+        lambda *_args, **_kwargs: ([object()], {"data_seeds": {}, "eligibility": {}}),
+    )
     loads = []
     monkeypatch.setattr(patch, "load_policy", lambda *_args: loads.append(True))
     monkeypatch.setattr(
@@ -447,10 +1224,18 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
 
     cases = [
         patch.PatchCase(
-            _Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ({"thought": "bad"},)
+            _Task("test-aggregate_report-0-clean", "aggregate_report"),
+            0,
+            ({"thought": "bad"},),
+            None,
+            *_judgements(0),
         ),
         patch.PatchCase(
-            _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"), 0, ({"thought": "bad"},)
+            _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"),
+            0,
+            ({"thought": "bad"},),
+            None,
+            *_judgements(0),
         ),
     ]
     failing_groups = {
@@ -500,6 +1285,14 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
         lambda case: (
             [{"role": "user", "content": f"f{0 if '-0-' in case.task.task_id else 1}"}],
             [{"role": "user", "content": f"c{0 if '-0-' in case.task.task_id else 1}"}],
+            {
+                "counterfactual_source": (
+                    "passing_transcript"
+                    if "-0-" in case.task.task_id
+                    else f"generator_v{patch.GENERATOR_VERSION}"
+                ),
+                "counterfactual_basis": "fixture",
+            },
         ),
     )
     monkeypatch.setattr(
@@ -586,6 +1379,30 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
     assert payload["cells"]["1:system_prompt"]["controls"]["random_positions"]["rate"] == 0.0
     assert payload["cells"]["1:final_token"]["treatment"]["denominator"] == 2
     assert set(payload["cells"]["1:final_token"]["controls"]) == set(patch.CONTROLS)
+    assert payload["cases"] == [
+        {
+            "task_id": "test-aggregate_report-0-clean",
+            "decision_step": 0,
+            "counterfactual_source": "passing_transcript",
+            "counterfactual_basis": "fixture",
+            **_scoring_record(0),
+        },
+        {
+            "task_id": "test-ledger_reconcile-1-clean",
+            "decision_step": 0,
+            "counterfactual_source": f"generator_v{patch.GENERATOR_VERSION}",
+            "counterfactual_basis": "fixture",
+            **_scoring_record(0),
+        },
+    ]
+    assert payload["counterfactual_sources"] == {
+        "passing_transcript": 1,
+        f"generator_v{patch.GENERATOR_VERSION}": 1,
+    }
+    assert (payload["stable_cases"], payload["unstable_cases"]) == (2, 0)
+    assert payload["excluded_cases"] == []
+    assert payload["headline_task_ids"] == payload["selected_task_ids"]
+    assert payload["scoring_generator_version"] == patch.GENERATOR_VERSION
 
 
 def test_patch_probe_rejects_unequal_treatment_group_cardinality(monkeypatch) -> None:
@@ -596,11 +1413,15 @@ def test_patch_probe_rejects_unequal_treatment_group_cardinality(monkeypatch) ->
             _Task("test-aggregate_report-0-clean", "aggregate_report"),
             0,
             ({"thought": "bad"},),
+            None,
+            *_judgements(0),
         ),
         patch.PatchCase(
             _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"),
             0,
             ({"thought": "bad"},),
+            None,
+            *_judgements(0),
         ),
     ]
     groups = {name: (0,) for name in patch.POSITION_GROUPS}
@@ -618,7 +1439,11 @@ def test_patch_probe_rejects_unequal_treatment_group_cardinality(monkeypatch) ->
     monkeypatch.setattr(
         patch,
         "replay_counterfactual",
-        lambda _case: ([{"role": "user", "content": "f"}], [{"role": "user", "content": "c"}]),
+        lambda _case: (
+            [{"role": "user", "content": "f"}],
+            [{"role": "user", "content": "c"}],
+            {"counterfactual_source": "passing_transcript", "counterfactual_basis": "fixture"},
+        ),
     )
     monkeypatch.setattr(
         patch,
@@ -652,3 +1477,189 @@ def test_patch_probe_rejects_unequal_treatment_group_cardinality(monkeypatch) ->
             policy="base",
             keep_last=2, max_tokens=1, seed=7, command=["patch"],
         )
+
+
+def _probe_fixture(monkeypatch, cases):
+    """Wire every model seam of run_patch_probe to fakes; returns the capture log."""
+    from local_llm_lab.probes import patch
+
+    captures = []
+
+    class View:
+        num_layers = 1
+
+    class Tokenizer:
+        def encode(self, text, add_special_tokens=False):
+            del add_special_tokens
+            return list(range(10)) if text == "f" else list(range(1, 11))
+
+    class Hook:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(patch.ArchitectureView, "from_model", lambda _model: View())
+    monkeypatch.setattr(
+        patch,
+        "replay_counterfactual",
+        lambda case: (
+            [{"role": "user", "content": "f"}],
+            [{"role": "user", "content": "c"}],
+            {"counterfactual_source": "passing_transcript", "counterfactual_basis": "fixture"},
+        ),
+    )
+    monkeypatch.setattr(
+        patch, "build_prompt", lambda _tokenizer, messages, **_kwargs: messages[0]["content"]
+    )
+    monkeypatch.setattr(
+        patch,
+        "position_groups",
+        lambda _tokenizer, _ids, **_kwargs: {name: (0,) for name in patch.POSITION_GROUPS},
+    )
+
+    def capture(_view, ids, layers, *, positions):
+        captures.append(tuple(ids))
+        return {layer: mx.zeros((10, 1)) for layer in layers}
+
+    monkeypatch.setattr(patch, "capture_residuals", capture)
+    monkeypatch.setattr(patch, "InjectionHook", Hook)
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "x")
+    monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
+    monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
+    monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: True)
+    return Tokenizer(), captures
+
+
+def _probe_case(index, *, judgements):
+    from local_llm_lab.probes import patch
+
+    return patch.PatchCase(
+        _Task(f"test-ledger_reconcile-{index}-clean", "ledger_reconcile"),
+        1,
+        ({"thought": "a"}, {"thought": "drop"}),
+        None,
+        *judgements,
+    )
+
+
+def test_patch_probe_excludes_unstable_cases_from_the_headline_and_lists_them(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    cases = [
+        _probe_case(0, judgements=_judgements(1)),
+        _probe_case(1, judgements=_judgements(1, head_step=2)),
+        _probe_case(2, judgements=_judgements(1)),
+    ]
+    tokenizer, captures = _probe_fixture(monkeypatch, cases)
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1], policy="base",
+        keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    # Only the two stable cases were prepared (two captures each) and scored.
+    assert len(captures) == 4
+    assert (payload["stable_cases"], payload["unstable_cases"]) == (2, 1)
+    assert payload["selected_task_ids"] == [case.task.task_id for case in cases]
+    assert payload["headline_task_ids"] == [cases[0].task.task_id, cases[2].task.task_id]
+    assert [record["task_id"] for record in payload["cases"]] == payload["headline_task_ids"]
+    assert all(record["scoring_version_stable"] for record in payload["cases"])
+    for cell in payload["cells"].values():
+        assert cell["treatment"]["denominator"] == 2
+        assert all(control["denominator"] == 2 for control in cell["controls"].values())
+    assert payload["counterfactual_sources"] == {"passing_transcript": 2}
+    assert payload["excluded_cases"] == [
+        {
+            "task_id": "test-ledger_reconcile-1-clean",
+            "decision_step": 1,
+            "counterfactual_source": "passing_transcript",
+            "counterfactual_basis": "fixture",
+            "scoring_version_stable": False,
+            "decision_step_bound": 1,
+            "decision_step_head": 2,
+            "dropped_values_bound": ["42"],
+            "dropped_values_head": ["42"],
+            "judged_under_bound": "generator_v1 replay",
+            "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+            "excluded_reason": "scoring_version_unstable",
+        }
+    ]
+
+
+def test_patch_probe_requires_two_stable_cases_for_the_unrelated_task_control(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    cases = [
+        _probe_case(0, judgements=_judgements(1)),
+        _probe_case(1, judgements=_judgements(1, head_values="43")),
+    ]
+    tokenizer, _captures = _probe_fixture(monkeypatch, cases)
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    with pytest.raises(ValueError, match=r"scoring-version-stable.*1 stable, 1 unstable"):
+        patch.run_patch_probe(
+            object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1],
+            policy="base", keep_last=2, max_tokens=1, seed=7, command=["patch"],
+        )
+
+
+def test_render_markdown_splits_stable_and_unstable_cases() -> None:
+    from local_llm_lab.probes import patch
+
+    stable = {"task_id": "test-ledger_reconcile-0-clean", **_scoring_record(1, "12")}
+    unstable = {
+        "task_id": "test-ledger_reconcile-1-clean",
+        **_scoring_record(1, "12"),
+        "scoring_version_stable": False,
+        "decision_step_head": 2,
+        "dropped_values_head": None,
+        "excluded_reason": "scoring_version_unstable",
+    }
+    payload = {
+        "groups": ["system_prompt"],
+        "layers": [1],
+        "controls": [],
+        "cells": {"1:system_prompt": {"treatment": {"rate": 1.0, "wilson_95": [0.5, 1.0]}}},
+        "stable_cases": 1,
+        "unstable_cases": 1,
+        "cases": [stable],
+        "excluded_cases": [unstable],
+    }
+
+    text = patch.render_markdown(payload)
+    lines = text.splitlines()
+
+    assert "Headline over 1 scoring-version-stable case(s); 1 unstable case(s) excluded (R24)." in lines
+    assert lines.index("## Treatment flip rate") < lines.index("| 1 | 1.000 [0.500, 1.000] |")
+    assert "## Scoring version stability (R24)" in lines
+    assert "| test-ledger_reconcile-0-clean | yes | 1 / 1 | 12 / 12 |" in lines
+    unstable_header = lines.index("### Unstable cases (excluded from the headline)")
+    assert lines.index("| test-ledger_reconcile-1-clean | no | 1 / 2 | 12 / unknown |") > unstable_header
+    assert lines.index("| test-ledger_reconcile-0-clean | yes | 1 / 1 | 12 / 12 |") < unstable_header
+
+    without = patch.render_markdown({**payload, "excluded_cases": [], "unstable_cases": 0})
+    assert "None." in without.splitlines()
+
+
+def test_render_markdown_summarises_counterfactual_note_sources() -> None:
+    from local_llm_lab.probes import patch
+
+    payload = {
+        "groups": ["system_prompt"],
+        "layers": [1],
+        "controls": [],
+        "cells": {"1:system_prompt": {"treatment": {"rate": 1.0, "wilson_95": [0.5, 1.0]}}},
+        "counterfactual_sources": {"passing_transcript": 2, "generator_v4": 1},
+    }
+
+    text = patch.render_markdown(payload)
+
+    assert "## Counterfactual note sources" in text
+    assert "- passing_transcript: 2" in text
+    assert "- generator_v4: 1" in text
