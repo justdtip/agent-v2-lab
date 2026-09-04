@@ -341,7 +341,7 @@ def _jvp_result(view: Any, ids: Any, jvp: Callable[..., Any], array_api: Any) ->
         result = jvp(view, layer, primal, tangent, method=method)
         finite = _is_finite(result, array_api)
     if not finite:
-        raise SystemExit("preflight JVP is non-finite after finite-difference fallback")
+        return {"finite": False, "layer": layer, "method": method}
     return {"finite": True, "layer": layer, "method": method}
 
 

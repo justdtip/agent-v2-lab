@@ -112,3 +112,34 @@ artifact was rehashed after verification and remains
 Changed files are `src/local_llm_lab/arch.py`, `src/local_llm_lab/pipeline/preflight.py`,
 `tests/test_arch.py`, and `tests/test_preflight.py`. No checkpoint inference or model/weight/tokenizer
 load occurred. The implementation stops before all control, review, and retry steps.
+
+## Fix round 1: terminal non-finite JVP evidence
+
+Review found that `_jvp_result` previously raised before `run_preflight` built and wrote a report
+when both forward and finite-difference JVPs were non-finite. The smallest fix returns
+`{"finite": False, "layer": layer, "method": "finite_difference"}` instead. `run_preflight`
+then completes its normal report, writes it, and raises its existing `preflight failed` exit.
+
+RED at shared HEAD `a87124590417d5272dea119ced9ef2e5b5811f37`:
+
+```text
+.venv/bin/python -m pytest -q tests/test_preflight.py::test_nonfinite_jvp_writes_failed_evidence_then_exits_nonzero
+exit 1: expected preflight failed; got preflight JVP is non-finite after finite-difference fallback
+```
+
+The fake-only regression makes both JVP methods non-finite and asserts nonzero exit after the
+artifact exists with `jvp.finite is False`. GREEN evidence:
+
+```text
+.venv/bin/python -m pytest -q tests/test_preflight.py
+exit 0: 26 passed
+
+.venv/bin/python -m pytest -q tests/test_arch.py tests/test_preflight.py
+exit 0: 27 passed
+
+.venv/bin/ruff check src/local_llm_lab/arch.py src/local_llm_lab/pipeline/preflight.py tests/test_arch.py tests/test_preflight.py
+exit 0: All checks passed!
+```
+
+No model, checkpoint, tokenizer, preflight, or control command was run. Canonical artifact SHA-256
+remains `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`.

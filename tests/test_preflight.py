@@ -315,6 +315,35 @@ def test_run_preflight_uses_finite_difference_only_after_bad_forward_jvp(tmp_pat
     assert report["jvp"] == {"finite": True, "layer": 2, "method": "finite_difference"}
 
 
+def test_nonfinite_jvp_writes_failed_evidence_then_exits_nonzero(tmp_path: Path) -> None:
+    """A terminal JVP failure must remain inspectable after the preflight exits."""
+    spec = _spec()
+    methods: list[str] = []
+
+    def jvp(view, layer, primal, tangent, *, method: str) -> np.ndarray:
+        del view, layer, tangent
+        methods.append(method)
+        return np.full_like(primal, np.inf)
+
+    with pytest.raises(SystemExit, match="preflight failed"):
+        run_preflight(
+            spec.name,
+            loader=lambda hf_id, *, lazy: (_Model(), _Tokenizer()),
+            output_root=tmp_path,
+            spec_loader=lambda name: spec,
+            view_factory=lambda model: _View(),
+            resolver=lambda given, model, token: _resolved(given),
+            jvp=jvp,
+            revision_reader=lambda given: "cached-revision",
+            array_api=np,
+        )
+
+    report = json.loads((tmp_path / "fake-model.json").read_text(encoding="utf-8"))
+    assert methods == ["forward", "finite_difference"]
+    assert report["passed"] is False
+    assert report["jvp"] == {"finite": False, "layer": 2, "method": "finite_difference"}
+
+
 def test_residual_metrics_follow_the_reference_dtype_and_scale() -> None:
     """Changing the reference precision must change the derived error budget."""
     actual = _MetricArray([100.2], "float32")
