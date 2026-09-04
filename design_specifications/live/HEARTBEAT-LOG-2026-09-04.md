@@ -848,3 +848,6 @@ recording the execution rule. No execution lane designated yet.
   until the artifact is regenerated on the lane. Proposed: commit lane 1 now; calibrate, then
   lane 2, then regenerate the preflight. Combined tree 1016 / exit 0; stash list empty after
   the implementer's stray stash (second occurrence).
+- Director on the overlap: "call it a stress test". Recorded as such: the 3B P6 rerun kept
+  its per-cell cadence with the 4B loaded and stepping beside it for ~10 min (ETA drifted
+  1:07 → 1:13); no shared state, no writes near its artifact. The one-lane rule stands.
