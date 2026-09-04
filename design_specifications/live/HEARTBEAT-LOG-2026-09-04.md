@@ -603,3 +603,19 @@ recording the execution rule. No execution lane designated yet.
   the standing note no longer says B3 waits on the third attempt; #15 stays open for C7 only;
   the #27 fixture follow-up is now a discrete unticked line (bound follow-up, not a gate). The
   `--judge` anchor had already been corrected. Both checklists are current to `e6500ba`.
+
+## 2026-09-05 — Chief's P6 review (R27) and Section B decisions; three implementers out
+
+- Chief read `integrity.py:363-395` directly: `_contradictory_fields` + `_fact_covered_by_stale_field`
+  make any regenerated note with a wrong number score as "no value drop" → a flip. Run 1's
+  rates are not interpretable; the artifact stands as a record. R27: strict per-generation
+  outcome, notes recorded, visibility via the integrity extraction, content control,
+  `aggregate_report` secondary with the rerun. My read's "position-specific, content-
+  nonspecific" and its strict-flip/content-control recommendations adopted; the Chief's
+  review cites my first draft's visibility claim, which I had already corrected on #26 with the
+  checker's own functions before the review posted — same conclusion.
+- Section B order ruled: scorer (#41) → C7 refit → P1 closure + three fixes (exemplars
+  dropped) → P2 redesign ×3. Dispatched now on disjoint files: R27 scorer (`patch.py`, R19
+  chain per the Chief), C7 refit (`state_probe.py`, ends with one real CPU run), P1 closure +
+  fixes (`assistant_axis.py`; producer = `close` subcommand, my choice, stated on #40). B1a
+  waits on the fingerprint ruling; B1b/B1c on the `compare` ruling and B5 landing.

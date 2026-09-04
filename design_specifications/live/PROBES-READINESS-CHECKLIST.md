@@ -73,13 +73,13 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
 - [ ] B1. **§2 P2 redesign — 0%, and the spec calls it "where the remaining probe budget
   goes".** Nothing exists: `capture.stub_observations`, `--stub-observations`, the
   `p2-d0/p2-d1/p2-d2` splits plan, the `compare` subcommand, dual-position capture, the
-  SFT-disjointness test. All fake-only code, claimable now. *Planned in three sub-slices
-  (splits + disjointness; conditions + dual capture; `compare`) in the Section B brief at the
-  Chief's review (#40); `state_probe.py` work sequenced after the B5 refit lands in the same file.*
+  SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices
+  (#40); B1a waits on the disjointness-fingerprint ruling, B1b/B1c on the `compare` pairing
+  ruling and on B5 landing in `state_probe.py`; ordered after the R27 scorer and B4.*
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.
-- [x] B3. **§5 P6 patching run — artifact on disk** — the #22 slice is committed (`07c6657`: `--data-seed`
+- [ ] B3. **§5 P6 patching run — run 1 artifact on disk; rerun under R27 pending** — the #22 slice is committed (`07c6657`: `--data-seed`
   override used only when the field is absent, R22 note provenance per case, R23 generator-v1
   binding, R24 `scoring_version_stable`). K1 closed on real data: five cases selected, five
   stable, decision steps 7/7/7/7/6, dropped values 85/89/100/32/54. Lift request sent
@@ -94,20 +94,28 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   (`b740e17dd62e5f9dce1d7915bb8d17185e1d5d20eef99696b9dee605ad793fc6`); schema `p6-patch-r25`;
   five stable cases, none excluded; six layers × seven cells = 42; alignment table identical
   to the pre-run measurement (residue 4/4/5/4/4; slots on ";" ×4 and ","). Ran under the
-  pre-R26 code: no `run.log`. Interpretation is the Deputy's read → Chief (see the log).
-  The secondary condition remains the bound follow-up.
+  pre-R26 code: no `run.log`. **Chief's verdict (`under_review/P6-RESULT-REVIEW-round1-2026-09-05.md`,
+  R27):** valid as a run record; its flip rates are NOT interpretable — the scorer counted any
+  regenerated note with a wrong number as a flip through the stale-field coverage path
+  (`integrity.py:384-395`), which is the whole unrelated-control signal. Quotable meanwhile:
+  "the decision is perturbable only at the note positions in layers 6–18; specificity is not
+  established; rerun scheduled under R27." The memo's verdict does not move. **R27 scorer slice
+  (#41) dispatched**: strict per-generation outcome, every generated note recorded, visibility
+  computed with the integrity module's extraction, a content control, and the `aggregate_report`
+  secondary condition scheduled with the rerun (~1.5 h on the lane after B4 training).
 - [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first**, none applied:
   `outputs/probes/axis-corrected/CLOSED.md` absent (288 saved rollouts on disk); the
   matched-design flaw (default persona gets the full `prompts` list, `assistant_axis.py:600-609`,
   roles get `prompts[:role_prompts]`, `:610-623`); the exemplar imbalance — presence, not only
   the 6/8/10 role counts at `:106-107`: 0 of 6 high, 8 of 8 low, 6 of 10 neutral roles carry
   one; `--judge` defaulting to on (`assistant_axis.py:1378-1383`; `build_axis_run` default at
-  `:639`). Then a ~20-minute gated run, additionally behind A2. *Planned: Section B brief
-  `under_review/PROBES-SECTION-B-PLAN-2026-09-05.md`, at the Chief's review (#40).*
+  `:639`). Then a ~20-minute gated run, additionally behind A2. *Chief-approved (#40, 2026-09-05) with
+  exemplars dropped from all 24 roles; **implementer dispatched** (closure record via a `close`
+  subcommand, re-measured counts; three fixes red-first). The build waits for the lane after B4.*
 - [ ] B5. **C7 BF16 refit** — same item as A4's experiment, ruled as item 4 of R18; listed here
-  because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Planned as the first Section B slice — fully offline (the saved npz is float32 on six
-  layers; the baseline reanalysis carries `holm_supported` per target/layer) — in the Section B
-  brief at the Chief's review (#40).*
+  because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Chief-approved as specified (#40, 2026-09-05); **implementer dispatched** — fully offline (the
+  saved npz is float32 on six layers; the baseline reanalysis carries `holm_supported` per
+  target/layer); ends with one real CPU run writing `refit-bf16/` beside the baseline.*
 
 ## Explicitly not on this list
 
