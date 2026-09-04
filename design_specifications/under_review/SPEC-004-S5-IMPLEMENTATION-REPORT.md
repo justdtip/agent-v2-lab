@@ -51,11 +51,11 @@ exit 0
 
 ## R13 full fake-only suite
 
-- Tested code commit: `d75415dd566fbb7ea41312a346bc744f36bbdbf0`
+- Tested integrated commit: `f0c2f280f7d987fbe1a52d0c0dda8f34d3fcece3`
 - Required command: `uv run pytest -q`
 - Exit code: 0
 - Summary-enabled equivalent: `uv run pytest -q -o addopts='' --tb=no` (exit 0)
-- Counts: 505 passed, 0 failed, 0 xfailed
+- Counts: 506 passed, 0 failed, 0 xfailed
 - Failing nodes: none
 
 ## No-model and protected-path evidence
