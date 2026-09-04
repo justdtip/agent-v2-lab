@@ -182,7 +182,7 @@ git commit -m "fix: forward model spec through branch mining"
 
 ### Task 2: Migrate evaluation to resolved model and registry policy plumbing
 
-**Dependency gate:** Before editing, re-list the canonical board and verify that the owner of `src/local_llm_lab/probes/policies.py` has released its claim. The owner released commit `e53bd810d5204541efb56ebd5b9c1682120c9cbf` with `resolve_policy(name: str, spec: ModelSpec) -> Path | None` and model-scoped `policy_names(spec)`; re-read that committed file and report before implementation.
+**Dependency gate:** Before editing, re-list the canonical board and verify the explicit `RELEASED` contract notice from the owner of `src/local_llm_lab/probes/policies.py`. The owner released commit `e53bd810d5204541efb56ebd5b9c1682120c9cbf` with `resolve_policy(name: str, spec: ModelSpec) -> Path | None` and model-scoped `policy_names(spec)` while retaining its broader caller-migration claim; re-read that committed file and report before implementation.
 
 **Files:**
 
@@ -411,3 +411,20 @@ Update the report's exact `## R13 full fake-only suite` evidence against that co
 git add -- design_specifications/under_review/GITHUB-ISSUE-10-COMPATIBILITY-FOLLOWUP-REPORT.md
 git commit -m "docs: record issue 10 compatibility verification"
 ```
+
+- [ ] **Step 8: Publish the reviewed contracts to routed caller owners**
+
+After the independent task review and controller verification are clean, the controller sends one
+bounded `RELEASED` notice per routed owner, naming the committed signatures and no transcript or
+test output:
+
+```text
+01a066e6-99ae-7ef3-8955-37419c5b6689: pipeline/jlens.py, probes/assistant_axis.py, probes/patch.py, probes/state_probe.py, probes/adapter_delta.py
+01a06748-e8c7-7232-9062-e5c9c92e8f56: research/cache_equivalence.py
+01a06718-057a-7bb2-a62d-71f86e904d64: pipeline/rollout.py
+01a06858-d818-70c1-bde8-9803b0a892bd: pipeline/cli.py
+```
+
+The released boundary is the exact committed `load_policy(spec, adapter, *, lazy=False)` four-value
+return and `run_evaluation(spec=...)` keyword contract. These notices grant no authority and do not
+change this plan's path claim.
