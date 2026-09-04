@@ -697,3 +697,232 @@ def test_v4_row_labels_match_nonvacuous_progress_note_oracles() -> None:
                     assert labels["phase"] == "inspect"
                 counts["batch"] += 1
     assert all(count > 0 for count in counts.values())
+
+
+# ------------------------------------------------------------- C7 bfloat16 refit (SPEC-004 §1)
+
+
+_REFIT_SPLIT_SEEDS = (11, 13)
+_REFIT_RESAMPLES = 4
+_REFIT_LAYERS = (4, 8)
+_REFIT_FEATURE_SEED = 917
+
+
+def _refit_capture(*, data_seed: int = 20260902) -> Any:
+    """A small synthetic capture: real task ids, fake activations, no model anywhere."""
+    dataset = state_probe.build_label_dataset(make_tasks("test", 12))
+    rng = np.random.default_rng(_REFIT_FEATURE_SEED)
+    rows = len(dataset)
+    dataset.layers = list(_REFIT_LAYERS)
+    dataset.features = {
+        layer: rng.standard_normal((rows, 6)).astype(np.float32) for layer in _REFIT_LAYERS
+    }
+    dataset.meta.update({"layers": list(_REFIT_LAYERS), "data_seed": data_seed})
+    return dataset
+
+
+def _refit_baseline() -> dict[str, Any]:
+    """The baseline a refit is measured against, produced by the reanalysis itself."""
+    return state_probe.reanalyse_dataset(
+        _refit_capture(),
+        split_seeds=_REFIT_SPLIT_SEEDS,
+        bootstrap_resamples=_REFIT_RESAMPLES,
+        data_seed=20260902,
+    )
+
+
+def _canonical(payload: Any) -> str:
+    return json.dumps(
+        state_probe._json_compliant(payload), sort_keys=True, allow_nan=False, ensure_ascii=False
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        2.0,
+        1.5,  # exactly representable in bfloat16: unchanged
+        float(np.float32(np.uint32(0x3F808000).view(np.float32))),  # a tie: rounds to even
+        float(np.float32(np.uint32(0x3F818000).view(np.float32))),  # a tie the other way
+        float(np.float32(np.uint32(0x7F7FFFFF).view(np.float32))),  # largest float32
+        float(np.float32(np.uint32(0x00000001).view(np.float32))),  # smallest subnormal
+        float(np.float32(np.uint32(0x00800000).view(np.float32))),  # smallest normal: survives
+        float(np.float32(np.uint32(0x007FFFFF).view(np.float32))),  # largest subnormal: flushed
+        1e-40,
+        -1e-40,
+        -3.14159265,
+        65504.0,
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+    ],
+)
+def test_bfloat16_rounding_helper_matches_the_mlx_cast_on_edge_values(value: float) -> None:
+    """One rounding helper, pinned against the cast it stands in for (Section B plan §2)."""
+    mx = pytest.importorskip("mlx.core")
+    array = np.array([value], dtype=np.float32)
+    rounded = state_probe._round_to_bfloat16(array)
+    expected = np.array(mx.array(array).astype(mx.bfloat16).astype(mx.float32), dtype=np.float32)
+
+    assert rounded.dtype == np.float32
+    if np.isnan(expected[0]):
+        assert np.isnan(rounded[0])
+    else:
+        assert rounded.view(np.uint32)[0] == expected.view(np.uint32)[0]
+
+
+def test_bfloat16_rounding_helper_matches_the_mlx_cast_bitwise_on_a_random_array() -> None:
+    """Every bit of a wide random draw, not just the easy magnitudes."""
+    mx = pytest.importorskip("mlx.core")
+    rng = np.random.default_rng(_REFIT_FEATURE_SEED)
+    scales = np.float32(10.0) ** rng.integers(-44, 30, size=(64, 32)).astype(np.float32)
+    values = (rng.standard_normal((64, 32)).astype(np.float32) * scales).astype(np.float32)
+    assert np.any((values != 0) & (np.abs(values) < np.finfo(np.float32).tiny))  # subnormals
+    rounded = state_probe._round_to_bfloat16(values)
+    expected = np.array(mx.array(values).astype(mx.bfloat16).astype(mx.float32), dtype=np.float32)
+
+    assert np.array_equal(rounded.view(np.uint32), expected.view(np.uint32))
+    assert np.array_equal(state_probe._round_to_bfloat16(rounded), rounded)
+
+
+def test_refit_without_rounding_reproduces_the_baseline_exactly(tmp_path) -> None:
+    """The `--no-round` control: same seeds, same code, byte-identical analyses."""
+    baseline = _refit_baseline()
+    parameters = state_probe.baseline_reanalysis_parameters(baseline)
+    assert parameters["split_seeds"] == _REFIT_SPLIT_SEEDS
+    assert parameters["bootstrap_resamples"] == _REFIT_RESAMPLES
+    assert parameters["data_seed"] == 20260902
+    assert parameters["logistic_steps"] == 120
+
+    control = state_probe.refit_bf16(
+        _refit_capture(), parameters=parameters, round_activations=False
+    )
+
+    assert _canonical(control["analyses"]) == _canonical(baseline["analyses"])
+    assert control["readme"] == baseline["readme"]
+    assert control["metadata"]["bfloat16_refit"]["rounding"] is False
+
+
+def test_refit_rounding_changes_the_stored_activations_but_keeps_the_schema() -> None:
+    """Rounding is applied to every layer and only to the layers."""
+    baseline = _refit_baseline()
+    parameters = state_probe.baseline_reanalysis_parameters(baseline)
+    rounded = state_probe.refit_bf16(_refit_capture(), parameters=parameters)
+
+    assert rounded["metadata"]["bfloat16_refit"]["rounding"] is True
+    assert rounded["metadata"]["bfloat16_refit"]["rounding_helper"] == "_round_to_bfloat16"
+    assert sorted(rounded["analyses"]) == sorted(baseline["analyses"])
+    source = _refit_capture()
+    for values in source.features.values():
+        assert not np.array_equal(state_probe._round_to_bfloat16(values), values)
+
+
+def test_refit_comparison_marks_a_flipped_support_flag() -> None:
+    """A single perturbed flag is reported as a flip and counted; the rest stay unchanged."""
+    baseline = _refit_baseline()
+    refit = json.loads(json.dumps(state_probe._json_compliant(baseline)))
+    cells = state_probe._support_cells(refit)
+    key = next(key for key, entry in cells.items() if "holm_supported" in entry)
+    cells[key]["holm_supported"] = not cells[key]["holm_supported"]
+    cells[key]["intervals"]["margin_over_position"]["median"] += 0.25
+
+    comparison = state_probe.compare_refit(baseline, refit, rounding=True)
+
+    assert comparison["counts"]["flipped"] == 1
+    assert comparison["counts"]["unchanged"] == comparison["counts"]["compared"] - 1
+    flip = comparison["flips"][0]
+    assert (flip["analysis"], flip["target"], flip["layer"]) == key
+    assert flip["flipped_flags"] == ["holm_supported"]
+    assert comparison["max_absolute_margin_change"]["value"] == pytest.approx(0.25)
+    assert "flipped" in comparison["verdict"]
+
+    unchanged = state_probe.compare_refit(baseline, baseline, rounding=True)
+    assert unchanged["counts"]["flipped"] == 0
+    assert unchanged["flips"] == []
+    assert "supported set unchanged" in unchanged["verdict"].lower()
+
+
+def test_refit_cli_refuses_a_baseline_whose_data_seed_disagrees(tmp_path) -> None:
+    """Fail closed on provenance, like `reanalyse_dataset` itself."""
+    capture = state_probe.save_dataset(_refit_capture(data_seed=20260901), tmp_path / "cap.npz")
+    baseline_path = tmp_path / "cap.reanalysis.json"
+    baseline_path.write_text(
+        json.dumps(state_probe._json_compliant(_refit_baseline())), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="data seed"):
+        state_probe._main_refit_bf16(
+            [
+                "--input",
+                str(capture),
+                "--baseline",
+                str(baseline_path),
+                "--output",
+                str(tmp_path / "refit"),
+            ]
+        )
+
+
+def test_refit_cli_writes_both_artifact_pairs_with_a_run_log(monkeypatch, tmp_path, capsys) -> None:
+    """R26: identity with both input hashes, per-(analysis, target) progress, four files."""
+    import hashlib
+    import sys
+
+    capture = state_probe.save_dataset(_refit_capture(), tmp_path / "cap.npz")
+    baseline = _refit_baseline()
+    baseline_path = tmp_path / "cap.reanalysis.json"
+    baseline_path.write_text(json.dumps(state_probe._json_compliant(baseline)), encoding="utf-8")
+    output = tmp_path / "refit"
+    argv = [
+        "state-probe",
+        "refit-bf16",
+        "--input",
+        str(capture),
+        "--baseline",
+        str(baseline_path),
+        "--output",
+        str(output),
+        "--no-round",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+
+    state_probe._main_refit_bf16(sys.argv[2:])
+
+    out = capsys.readouterr().out
+    assert (output / "run.log").is_file()
+    assert (output / "cap.reanalysis-bf16.json").is_file()
+    assert (output / "cap.reanalysis-bf16.md").is_file()
+    assert (output / "refit-comparison.json").is_file()
+    assert (output / "refit-comparison.md").is_file()
+
+    events = _events(output)
+    start = _flat(events[0])
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "state-probe-refit-bf16"
+    assert start["input"] == str(capture)
+    assert start["input_sha256"] == hashlib.sha256(capture.read_bytes()).hexdigest()
+    assert start["baseline"] == str(baseline_path)
+    assert start["baseline_sha256"] == hashlib.sha256(baseline_path.read_bytes()).hexdigest()
+    assert start["rounding"] == "off"
+    assert isinstance(start["git_commit"], str)
+
+    progress = [item for item in map(_flat, events) if item["kind"] == "progress"]
+    assert len(progress) == 2 * len(state_probe.REANALYSIS_TARGETS)
+    assert {item["analysis"] for item in progress} == {"all_rows", "sft_disjoint"}
+    assert {item["target"] for item in progress} == set(state_probe.REANALYSIS_TARGETS)
+
+    comparison = json.loads((output / "refit-comparison.json").read_text(encoding="utf-8"))
+    assert comparison["rounding"] is False
+    assert comparison["rounding_helper"] == "_round_to_bfloat16"
+    assert comparison["input_sha256"] == start["input_sha256"]
+    assert comparison["baseline_sha256"] == start["baseline_sha256"]
+    assert comparison["baseline_metadata"]["split_seeds"] == list(_REFIT_SPLIT_SEEDS)
+    assert comparison["resolved_generator_version"] == GENERATOR_VERSION
+    assert comparison["counts"]["flipped"] == 0
+    assert comparison["verdict"] in out
+    assert "| max absolute margin change |" in (output / "refit-comparison.md").read_text(
+        encoding="utf-8"
+    )

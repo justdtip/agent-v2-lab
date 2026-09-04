@@ -39,6 +39,7 @@ import tempfile
 import time
 import warnings
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -56,8 +57,10 @@ __all__ = [
     "TARGETS",
     "ProbeDataset",
     "artifact_identity",
+    "baseline_reanalysis_parameters",
     "build_label_dataset",
     "build_probe_dataset",
+    "compare_refit",
     "derive_position_keys",
     "fit_probes",
     "load_dataset",
@@ -66,7 +69,9 @@ __all__ = [
     "position_determinism",
     "reanalyse_dataset",
     "reanalysis_row_labels",
+    "refit_bf16",
     "render_markdown",
+    "render_refit_comparison_markdown",
     "resolve_within_position",
     "row_labels",
     "save_dataset",
@@ -1898,6 +1903,7 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
     alpha: float,
     l2: float,
     logistic_steps: int,
+    progress: Callable[[str, int, int], None] | None = None,
 ) -> dict[str, Any]:
     selected_global = np.flatnonzero(mask)
     cohort = ProbeDataset(
@@ -1924,13 +1930,16 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
         "targets": {},
     }
     comparison_cells: list[dict[str, Any]] = []
-    for target, kind in REANALYSIS_TARGETS.items():
+    total_targets = len(REANALYSIS_TARGETS)
+    for position, (target, kind) in enumerate(REANALYSIS_TARGETS.items(), start=1):
         values = cohort.labels[target]
         defined = np.flatnonzero(_defined_kind(values, kind))
         entry: dict[str, Any] = {"kind": kind, "rows": int(len(defined)), "layers": {}}
         if len(defined) < 8:
             entry["skipped"] = "fewer than 8 labelled rows"
             result["targets"][target] = entry
+            if progress is not None:
+                progress(target, position, total_targets)
             continue
         distributions: dict[int, dict[str, list[float]]] = {
             layer: defaultdict(list) for layer in cohort.layers
@@ -2137,6 +2146,8 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
                 layer_entry["raw_p"] = float(max(p_position, p_surface))
             entry["layers"][str(layer)] = layer_entry
         result["targets"][target] = entry
+        if progress is not None:
+            progress(target, position, total_targets)
     adjusted = _holm_adjust([cell["raw_p"] for cell in comparison_cells])
     for layer_entry, p_value in zip(comparison_cells, adjusted, strict=True):
         intervals = layer_entry["intervals"]
@@ -2156,6 +2167,19 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
     return result
 
 
+def _cohort_progress(
+    progress: Callable[[str, str, int, int], None] | None, analysis: str
+) -> Callable[[str, int, int], None] | None:
+    """Bind a cohort's name into the caller's progress hook, or stay silent when there is none."""
+    if progress is None:
+        return None
+
+    def report(target: str, index: int, total: int) -> None:
+        progress(analysis, target, index, total)
+
+    return report
+
+
 def reanalyse_dataset(
     dataset: ProbeDataset,
     *,
@@ -2167,8 +2191,14 @@ def reanalyse_dataset(
     ridge_alpha: float = 10.0,
     logistic_l2: float = 0.01,
     logistic_steps: int = 120,
+    progress: Callable[[str, str, int, int], None] | None = None,
 ) -> dict[str, Any]:
-    """Run SPEC-004 §1 entirely from a saved activation capture and regenerated task truth."""
+    """Run SPEC-004 §1 entirely from a saved activation capture and regenerated task truth.
+
+    ``progress`` (R26 g, added for the C7 refit) is called ``(analysis, target, index, total)``
+    as each cohort finishes a target, so a long offline run is never silent for more than one
+    unit of work. Defaulted to ``None``: every existing caller and artifact is unchanged.
+    """
     if len(split_seeds) != len(set(split_seeds)) or not split_seeds:
         raise ValueError("split seeds must be non-empty and unique")
     if bootstrap_resamples < 1:
@@ -2201,6 +2231,7 @@ def reanalyse_dataset(
             alpha=ridge_alpha,
             l2=logistic_l2,
             logistic_steps=logistic_steps,
+            progress=_cohort_progress(progress, "all_rows"),
         ),
         "sft_disjoint": _analyse_cohort(
             dataset,
@@ -2212,6 +2243,7 @@ def reanalyse_dataset(
             alpha=ridge_alpha,
             l2=logistic_l2,
             logistic_steps=logistic_steps,
+            progress=_cohort_progress(progress, "sft_disjoint"),
         ),
     }
     for name, analysis in analyses.items():
@@ -2438,6 +2470,29 @@ def _captured_context(path: Path) -> dict[str, Any]:
     return dict(metadata.get("checkpoint", {}).get("context", {}))
 
 
+def _apply_capture_metadata(
+    results: dict[str, Any], capture_context: dict[str, Any], dataset: ProbeDataset
+) -> None:
+    """Stamp a reanalysis payload with the capture's provenance.
+
+    Shared by ``reanalyse`` and ``refit-bf16`` so the two artifacts carry byte-identical
+    provenance blocks; ``load_model_spec`` reads the registry only, never a checkpoint.
+    """
+    if capture_context:
+        results["metadata"]["model"] = {
+            "reference": capture_context.get("model"),
+            "artifact": capture_context.get("model_artifact"),
+        }
+        results["metadata"]["policy"] = capture_context.get("policy")
+        results["metadata"]["adapter_artifact"] = capture_context.get("adapter_artifact")
+        results["metadata"]["capture_context"] = capture_context
+    model_reference = capture_context.get("model", dataset.meta.get("model"))
+    if isinstance(model_reference, str):
+        from local_llm_lab.models import load_model_spec
+
+        results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
+
+
 def _main_reanalyse(argv: list[str]) -> None:
     started = time.perf_counter()
     parser = argparse.ArgumentParser(
@@ -2474,19 +2529,7 @@ def _main_reanalyse(argv: list[str]) -> None:
             generator_version=args.generator_version,
             logistic_steps=args.logistic_steps,
         )
-        if capture_context:
-            results["metadata"]["model"] = {
-                "reference": capture_context.get("model"),
-                "artifact": capture_context.get("model_artifact"),
-            }
-            results["metadata"]["policy"] = capture_context.get("policy")
-            results["metadata"]["adapter_artifact"] = capture_context.get("adapter_artifact")
-            results["metadata"]["capture_context"] = capture_context
-        model_reference = capture_context.get("model", dataset.meta.get("model"))
-        if isinstance(model_reference, str):
-            from local_llm_lab.models import load_model_spec
-
-            results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
+        _apply_capture_metadata(results, capture_context, dataset)
         results["metadata"]["command"] = shlex.join(sys.argv)
         results["metadata"]["input"] = str(args.input)
         results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
@@ -2503,6 +2546,564 @@ def _main_reanalyse(argv: list[str]) -> None:
         print(markdown)
         log.info("wrote", path=str(json_path))
         log.info("wrote", path=str(markdown_path))
+
+
+# --------------------------------------------------------------------------- C7 bfloat16 refit
+
+
+BF16_ROUNDING_HELPER = "_round_to_bfloat16"
+_SUPPORT_FLAGS = ("interval_supported", "holm_supported")
+_REFIT_MARGINS = ("margin_over_position", "margin_over_surface")
+
+
+def _round_to_bfloat16(values: np.ndarray) -> np.ndarray:
+    """Round float32 values to bfloat16 precision and back (SPEC-004 §1 C7, wiring map R18.4).
+
+    bfloat16 is the top sixteen bits of a float32, so the cast is a truncation of the low
+    sixteen mantissa bits with round-to-nearest-even: add ``0x7FFF`` plus the surviving bit's
+    own value, then mask. Done bit-wise in numpy rather than through ``mx.bfloat16`` so the
+    refit needs no accelerator and no model runtime; ``tests/test_state_probe.py`` pins every
+    bit of it against the MLX cast on edge values and on a random array.
+
+    Two cases are handled outside the bit arithmetic so that the numpy helper and the MLX cast
+    agree exactly. NaN is carried through untouched, because the rounding bias would otherwise
+    carry out of the mantissa field. Subnormal inputs (float32 exponent field zero, so
+    ``|x| < 2**-126``) flush to a signed zero, which is what MLX's cast does on this hardware
+    and what deployment therefore sees; captured residuals are of order 1 to 250, so no probe
+    feature is anywhere near that boundary.
+    """
+    array = np.ascontiguousarray(values, dtype=np.float32)
+    nan = np.isnan(array)
+    finite = np.ascontiguousarray(np.where(nan, np.zeros((), dtype=np.float32), array))
+    bits = finite.view(np.uint32)
+    lsb = (bits >> np.uint32(16)) & np.uint32(1)
+    rounded = (bits + np.uint32(0x7FFF) + lsb) & np.uint32(0xFFFF0000)
+    subnormal = (bits & np.uint32(0x7F800000)) == np.uint32(0)
+    flushed = np.where(subnormal, bits & np.uint32(0x80000000), rounded)
+    return np.where(nan, array, np.ascontiguousarray(flushed).view(np.float32)).astype(
+        np.float32, copy=False
+    )
+
+
+def baseline_reanalysis_parameters(baseline: dict[str, Any]) -> dict[str, Any]:
+    """The reanalysis parameters a saved reanalysis records, so a refit can repeat it exactly.
+
+    Fail closed: a baseline that does not record a seed is not a baseline anything can be
+    compared against, so this refuses rather than substituting a default. The three fit
+    constants fall back to :func:`reanalyse_dataset`'s own defaults, which is what a baseline
+    written before the ``fit`` block existed used.
+    """
+    metadata = baseline.get("metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("baseline has no metadata block; refusing to guess its parameters")
+    seeds = metadata.get("split_seeds")
+    if not isinstance(seeds, list) or not seeds:
+        raise ValueError("baseline records no split_seeds; refusing to guess them")
+    resamples = metadata.get("bootstrap_resamples")
+    if not isinstance(resamples, int) or isinstance(resamples, bool):
+        raise ValueError("baseline records no bootstrap_resamples; refusing to guess them")
+    data_seed = metadata.get("data_seed")
+    if not isinstance(data_seed, int) or isinstance(data_seed, bool):
+        raise ValueError("baseline records no data_seed; refusing to guess it")
+    fit = metadata.get("fit") or {}
+    return {
+        "split_seeds": tuple(int(value) for value in seeds),
+        "bootstrap_resamples": int(resamples),
+        "data_seed": int(data_seed),
+        "generator_version": metadata.get("generator_version"),
+        "ridge_alpha": float(fit.get("ridge_alpha", 10.0)),
+        "logistic_l2": float(fit.get("logistic_l2", 0.01)),
+        "logistic_steps": int(fit.get("logistic_steps", 120)),
+    }
+
+
+def refit_bf16(
+    dataset: ProbeDataset,
+    *,
+    parameters: dict[str, Any],
+    round_activations: bool = True,
+    captured_data_seed: int | None = None,
+    progress: Callable[[str, str, int, int], None] | None = None,
+) -> dict[str, Any]:
+    """Re-run the saved reanalysis with every layer's activations rounded through bfloat16.
+
+    ``round_activations=False`` is the control: nothing touches the features, so the result
+    must reproduce the baseline the parameters came from. No model is loaded and no capture is
+    rewritten -- the rounded features live only for the duration of the call.
+    """
+    features = dict(dataset.features)
+    if round_activations:
+        features = {layer: _round_to_bfloat16(values) for layer, values in features.items()}
+    refit = ProbeDataset(
+        layers=list(dataset.layers),
+        features=features,
+        labels=dict(dataset.labels),
+        task_ids=dataset.task_ids,
+        family=dataset.family,
+        step_index=dataset.step_index,
+        difficulty=dataset.difficulty,
+        meta=dict(dataset.meta),
+    )
+    results = reanalyse_dataset(
+        refit,
+        split_seeds=tuple(parameters["split_seeds"]),
+        bootstrap_resamples=parameters["bootstrap_resamples"],
+        data_seed=parameters["data_seed"],
+        captured_data_seed=captured_data_seed,
+        generator_version=parameters["generator_version"],
+        ridge_alpha=parameters["ridge_alpha"],
+        logistic_l2=parameters["logistic_l2"],
+        logistic_steps=parameters["logistic_steps"],
+        progress=progress,
+    )
+    results["metadata"]["bfloat16_refit"] = {
+        "rounding": bool(round_activations),
+        "rounding_helper": BF16_ROUNDING_HELPER,
+        "layers_rounded": [int(layer) for layer in dataset.layers] if round_activations else [],
+        "stored_dtype": "float32",
+    }
+    return results
+
+
+def _support_cells(results: dict[str, Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """Every (analysis, target, layer) cell of a reanalysis payload, keyed for comparison."""
+    cells: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for analysis, entry in (results.get("analyses") or {}).items():
+        for target, target_entry in (entry.get("targets") or {}).items():
+            for layer, layer_entry in (target_entry.get("layers") or {}).items():
+                cells[(str(analysis), str(target), str(layer))] = layer_entry
+    return cells
+
+
+def _support_flag(entry: dict[str, Any], flag: str) -> bool | None:
+    """A cell's support flag, or ``None`` when the cell was never in the Holm family."""
+    return None if flag not in entry else bool(entry[flag])
+
+
+def _median(entry: dict[str, Any], margin: str) -> float | None:
+    value = (entry.get("intervals") or {}).get(margin)
+    if not isinstance(value, dict) or "median" not in value:
+        return None
+    median = float(value["median"])
+    return median if np.isfinite(median) else None
+
+
+def _refit_cell_view(entry: dict[str, Any]) -> dict[str, Any]:
+    intervals = entry.get("intervals") or {}
+    return {
+        "margins": {margin: intervals[margin] for margin in _REFIT_MARGINS if margin in intervals},
+        "holm_adjusted_p": entry.get("holm_adjusted_p"),
+        "interval_supported": _support_flag(entry, "interval_supported"),
+        "holm_supported": _support_flag(entry, "holm_supported"),
+    }
+
+
+def _supported_set(results: dict[str, Any]) -> list[str]:
+    """The Holm-supported cells of a reanalysis, as sorted ``analysis/target@layer`` keys."""
+    return sorted(
+        f"{analysis}/{target}@{layer}"
+        for (analysis, target, layer), entry in _support_cells(results).items()
+        if entry.get("holm_supported")
+    )
+
+
+def compare_refit(
+    baseline: dict[str, Any],
+    refit: dict[str, Any],
+    *,
+    rounding: bool,
+    identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compare a refit against its baseline cell by cell: margins, both flags, and the flips.
+
+    The reportable quantity is the *flip set*: a cell whose ``interval_supported`` or
+    ``holm_supported`` differs between the two runs. An unchanged flip set bounds the precision
+    gap; any flip is a finding about how fragile that margin is (issue #15, R18 item 4).
+    """
+    before = _support_cells(baseline)
+    after = _support_cells(refit)
+    keys = sorted(set(before) | set(after))
+    cells: list[dict[str, Any]] = []
+    flips: list[dict[str, Any]] = []
+    compared = 0
+    unchanged = 0
+    missing = 0
+    largest: dict[str, Any] = {
+        "value": 0.0,
+        "margin": None,
+        "analysis": None,
+        "target": None,
+        "layer": None,
+    }
+    for analysis, target, layer in keys:
+        key = (analysis, target, layer)
+        left, right = before.get(key), after.get(key)
+        record: dict[str, Any] = {"analysis": analysis, "target": target, "layer": layer}
+        if left is None or right is None:
+            missing += 1
+            record["status"] = "refit_only" if left is None else "baseline_only"
+            record["flip"] = True
+            cells.append(record)
+            flips.append({**record, "flipped_flags": ["present"]})
+            continue
+        compared += 1
+        record["status"] = "compared"
+        record["metric"] = right.get("metric", left.get("metric"))
+        record["baseline"] = _refit_cell_view(left)
+        record["refit"] = _refit_cell_view(right)
+        changes: dict[str, float | None] = {}
+        for margin in _REFIT_MARGINS:
+            base_median, refit_median = _median(left, margin), _median(right, margin)
+            if base_median is None or refit_median is None:
+                changes[margin] = None
+                continue
+            delta = refit_median - base_median
+            changes[margin] = delta
+            if abs(delta) > abs(largest["value"]):
+                largest = {
+                    "value": float(delta),
+                    "margin": margin,
+                    "analysis": analysis,
+                    "target": target,
+                    "layer": layer,
+                }
+        record["margin_change"] = changes
+        flipped = [
+            flag
+            for flag in _SUPPORT_FLAGS
+            if _support_flag(left, flag) != _support_flag(right, flag)
+        ]
+        record["flip"] = bool(flipped)
+        record["flipped_flags"] = flipped
+        cells.append(record)
+        if flipped:
+            flips.append(
+                {
+                    "analysis": analysis,
+                    "target": target,
+                    "layer": layer,
+                    "flipped_flags": flipped,
+                    "baseline": {flag: _support_flag(left, flag) for flag in _SUPPORT_FLAGS},
+                    "refit": {flag: _support_flag(right, flag) for flag in _SUPPORT_FLAGS},
+                    "margin_change": changes,
+                }
+            )
+        else:
+            unchanged += 1
+    largest_value = abs(float(largest["value"]))
+    where = (
+        ""
+        if largest["margin"] is None
+        else (
+            f" ({largest['margin']} at {largest['analysis']}/{largest['target']}"
+            f" layer {largest['layer']})"
+        )
+    )
+    control = "" if rounding else " (control run: rounding disabled)"
+    if flips:
+        listed = "; ".join(
+            f"{item['analysis']}/{item['target']}@{item['layer']}"
+            f" [{', '.join(item['flipped_flags'])}]"
+            for item in flips
+        )
+        verdict = (
+            f"{len(flips)} of {compared} compared cells flipped a support flag{control}: "
+            f"{listed}. The largest absolute margin change is {largest_value:.6f}{where}."
+        )
+    else:
+        verdict = (
+            f"Supported set unchanged{control}: all {compared} compared (analysis, target, layer) "
+            f"cells agree on both support flags, and the largest absolute margin change is "
+            f"{largest_value:.6f}{where}."
+        )
+    payload: dict[str, Any] = {
+        "schema_version": 1,
+        "rounding": bool(rounding),
+        "rounding_helper": BF16_ROUNDING_HELPER,
+        "baseline_metadata": baseline.get("metadata", {}),
+        "counts": {
+            "compared": compared,
+            "unchanged": unchanged,
+            "flipped": len(flips) - missing,
+            "missing": missing,
+            "cells": len(keys),
+        },
+        "max_absolute_margin_change": {**largest, "value": largest_value},
+        "signed_margin_change": float(largest["value"]),
+        "supported": {
+            "baseline": _supported_set(baseline),
+            "refit": _supported_set(refit),
+            "baseline_readme": baseline.get("readme"),
+            "refit_readme": refit.get("readme"),
+        },
+        "flips": flips,
+        "cells": cells,
+        "verdict": verdict,
+    }
+    payload.update(identity or {})
+    return payload
+
+
+def render_refit_comparison_markdown(comparison: dict[str, Any], label: str) -> str:
+    """The human-readable half of the C7 comparison; the JSON beside it is authoritative."""
+    counts = comparison["counts"]
+    largest = comparison["max_absolute_margin_change"]
+    metadata = comparison.get("baseline_metadata") or {}
+    lines = [
+        f"# C7 bfloat16 refit comparison -- {label}",
+        "",
+        "SPEC-004 §1 correction C7 (wiring map R18 item 4, issue #15): the saved float32 "
+        "activations rounded to bfloat16 precision and back, refitted through the same "
+        "reanalysis, compared with the ratified table.",
+        "",
+        f"- rounding: {'on' if comparison['rounding'] else 'off (control)'} "
+        f"via `{comparison['rounding_helper']}`",
+    ]
+    for key in ("input", "input_sha256", "baseline", "baseline_sha256", "git_commit"):
+        if key in comparison:
+            lines.append(f"- {key}: `{comparison[key]}`")
+    lines.extend(
+        [
+            f"- baseline split seeds: {metadata.get('split_seeds')}",
+            f"- baseline bootstrap resamples: {metadata.get('bootstrap_resamples')}",
+            f"- baseline data seed: {metadata.get('data_seed')}; baseline generator version: "
+            f"{metadata.get('generator_version')}",
+            f"- generator version the refit resolved and used: "
+            f"{comparison.get('resolved_generator_version')}",
+            f"- baseline fit: {metadata.get('fit')}",
+            "",
+            "## Verdict",
+            "",
+            comparison["verdict"],
+            "",
+            "## Counts",
+            "",
+        ]
+    )
+    lines.extend(
+        _table(
+            ["quantity", "value"],
+            [
+                ["cells", str(counts["cells"])],
+                ["compared", str(counts["compared"])],
+                ["unchanged", str(counts["unchanged"])],
+                ["flipped", str(counts["flipped"])],
+                ["present in one run only", str(counts["missing"])],
+                ["max absolute margin change", f"{largest['value']:.6f}"],
+            ],
+        )
+    )
+    lines.extend(["", "## Flipped cells", ""])
+    if comparison["flips"]:
+        lines.extend(
+            _table(
+                ["analysis", "target", "layer", "flags", "baseline", "refit"],
+                [
+                    [
+                        item["analysis"],
+                        item["target"],
+                        item["layer"],
+                        ", ".join(item["flipped_flags"]),
+                        str(item.get("baseline")),
+                        str(item.get("refit")),
+                    ]
+                    for item in comparison["flips"]
+                ],
+            )
+        )
+    else:
+        lines.append("None: every cell keeps both support flags.")
+    ranked = sorted(
+        (cell for cell in comparison["cells"] if cell.get("status") == "compared"),
+        key=lambda cell: max(
+            (
+                abs(value)
+                for value in (cell.get("margin_change") or {}).values()
+                if value is not None
+            ),
+            default=0.0,
+        ),
+        reverse=True,
+    )[:10]
+    lines.extend(["", "## Largest margin changes (top 10)", ""])
+    lines.extend(
+        _table(
+            ["analysis", "target", "layer", "d position", "d surface", "flip"],
+            [
+                [
+                    cell["analysis"],
+                    cell["target"],
+                    cell["layer"],
+                    _refit_delta(cell, "margin_over_position"),
+                    _refit_delta(cell, "margin_over_surface"),
+                    "yes" if cell["flip"] else "no",
+                ]
+                for cell in ranked
+            ],
+        )
+    )
+    supported = comparison["supported"]
+    lines.extend(
+        [
+            "",
+            "## Supported set",
+            "",
+            f"- baseline ({len(supported['baseline'])} cells): "
+            f"{', '.join(supported['baseline']) or 'none'}",
+            f"- refit ({len(supported['refit'])} cells): {', '.join(supported['refit']) or 'none'}",
+            "",
+            "Baseline readme: " + str(supported.get("baseline_readme")),
+            "",
+            "Refit readme: " + str(supported.get("refit_readme")),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _refit_delta(cell: dict[str, Any], margin: str) -> str:
+    value = (cell.get("margin_change") or {}).get(margin)
+    return "n/a" if value is None else f"{value:+.6f}"
+
+
+def _main_refit_bf16(argv: list[str]) -> None:
+    started = time.perf_counter()
+    parser = argparse.ArgumentParser(
+        description="SPEC-004 §1 C7: refit a saved P2 capture at bfloat16 activation precision."
+    )
+    parser.add_argument("--input", type=Path, required=True, help="The saved capture .npz.")
+    parser.add_argument(
+        "--baseline", type=Path, required=True, help="The ratified <stem>.reanalysis.json."
+    )
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--round",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Round every layer through bfloat16 and back (default). --no-round is the control "
+        "that must reproduce the baseline exactly.",
+    )
+    parser.add_argument(
+        "--generator-version",
+        type=int,
+        help="Bind the task generator version when neither the baseline nor the capture records "
+        "one; a recorded version always wins and a conflict is refused.",
+    )
+    args = parser.parse_args(argv)
+    identity = {
+        "input": str(args.input),
+        "input_sha256": sha256_of(args.input) if args.input.is_file() else None,
+        "baseline": str(args.baseline),
+        "baseline_sha256": sha256_of(args.baseline) if args.baseline.is_file() else None,
+        "rounding": "on" if args.round else "off",
+        "git_commit": git_commit(),
+    }
+    with RunLog.open(
+        args.output, name="state-probe-refit-bf16", command=sys.argv, identity=identity
+    ) as log:
+        baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
+        parameters = baseline_reanalysis_parameters(baseline)
+        dataset = load_dataset(args.input)
+        capture_context = _captured_context(args.input)
+        if "generator_version" not in dataset.meta and "generator_version" in capture_context:
+            dataset.meta["generator_version"] = capture_context["generator_version"]
+        if parameters["generator_version"] is None:
+            parameters["generator_version"] = args.generator_version
+        elif args.generator_version is not None and (
+            int(parameters["generator_version"]) != args.generator_version
+        ):
+            raise ValueError(
+                f"baseline generator_version {parameters['generator_version']} conflicts with "
+                f"explicit {args.generator_version}"
+            )
+        captured_data_seed = capture_context.get("data_seed", dataset.meta.get("data_seed"))
+        if captured_data_seed is None:
+            raise ValueError(
+                "capture records no data seed; refusing to refit it against a baseline"
+            )
+        if int(captured_data_seed) != parameters["data_seed"]:
+            raise ValueError(
+                f"baseline data seed {parameters['data_seed']} does not match the capture's "
+                f"data seed {int(captured_data_seed)}"
+            )
+        log.info(
+            "parameters",
+            split_seeds=list(parameters["split_seeds"]),
+            bootstrap_resamples=parameters["bootstrap_resamples"],
+            data_seed=parameters["data_seed"],
+            generator_version=parameters["generator_version"],
+            logistic_steps=parameters["logistic_steps"],
+            rounding=identity["rounding"],
+        )
+        total = 2 * len(REANALYSIS_TARGETS)
+        done = 0
+
+        def report(analysis: str, target: str, index: int, count: int) -> None:
+            nonlocal done
+            done += 1
+            log.progress(done, total, "cell", analysis=analysis, target=target)
+
+        results = refit_bf16(
+            dataset,
+            parameters=parameters,
+            round_activations=args.round,
+            captured_data_seed=captured_data_seed,
+            progress=report,
+        )
+        _apply_capture_metadata(results, capture_context, dataset)
+        results["metadata"]["command"] = shlex.join(sys.argv)
+        results["metadata"]["input"] = str(args.input)
+        results["metadata"]["baseline"] = str(args.baseline)
+        results["metadata"]["bfloat16_refit"].update(
+            {
+                "input_sha256": identity["input_sha256"],
+                "baseline_sha256": identity["baseline_sha256"],
+                "git_commit": identity["git_commit"],
+            }
+        )
+        results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
+        stem = args.input.name.removesuffix(".npz") + ".reanalysis-bf16"
+        written: list[Path] = []
+        json_path = args.output / f"{stem}.json"
+        _atomic_text(
+            json_path,
+            json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
+            + "\n",
+        )
+        written.append(json_path)
+        markdown_path = args.output / f"{stem}.md"
+        _atomic_text(markdown_path, render_reanalysis_markdown(results, args.input.stem) + "\n")
+        written.append(markdown_path)
+        comparison = compare_refit(
+            baseline,
+            results,
+            rounding=args.round,
+            identity={
+                "input": identity["input"],
+                "input_sha256": identity["input_sha256"],
+                "baseline": identity["baseline"],
+                "baseline_sha256": identity["baseline_sha256"],
+                "git_commit": identity["git_commit"],
+                "command": shlex.join(sys.argv),
+                "resolved_generator_version": results["metadata"].get("generator_version"),
+                "refit": str(json_path),
+                "elapsed_seconds": time.perf_counter() - started,
+            },
+        )
+        comparison_json = args.output / "refit-comparison.json"
+        _atomic_text(
+            comparison_json,
+            json.dumps(_json_compliant(comparison), indent=2, ensure_ascii=False, allow_nan=False)
+            + "\n",
+        )
+        written.append(comparison_json)
+        markdown = render_refit_comparison_markdown(comparison, args.input.stem)
+        comparison_markdown = args.output / "refit-comparison.md"
+        _atomic_text(comparison_markdown, markdown + "\n")
+        written.append(comparison_markdown)
+        print(markdown)
+        for path in written:
+            log.info("wrote", path=str(path))
+        log.info("verdict", text=comparison["verdict"])
 
 
 # --------------------------------------------------------------------------- rendering
@@ -2843,6 +3444,9 @@ def _reuse_layer_selection(
 def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestration
     if len(sys.argv) > 1 and sys.argv[1] == "reanalyse":
         _main_reanalyse(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "refit-bf16":
+        _main_refit_bf16(sys.argv[2:])
         return
 
     from local_llm_lab.models import load_model_spec
