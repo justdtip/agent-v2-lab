@@ -34,7 +34,7 @@ train:
   batch_size: 2
   grad_accumulation_steps: 2
   learning_rate: 3.0e-5
-  max_seq_length: 2688
+  max_seq_length: 3200  # raised from 2688 on the Director's word (2026-09-05): no train or valid row exceeds 2688 under the Qwen3.5 tokenizer, but 15 test rows do (max 3103) and the loader read them eagerly; training-invariant by measurement, see issue #18
   grad_checkpoint: true
   val_batches: 24
   steps_per_report: 10
