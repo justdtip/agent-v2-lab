@@ -667,6 +667,16 @@ forget. Each has an integration check in §6.
   drives the library's real class on that side, with fakes only for weights and compute.
   Evidence: three defects (view walker vs `LoRALinear`, `RenderedRowsDataset` vs
   `CacheDataset`, health finish path) reached live runs because fakes stubbed both sides.
+- **R32 (2026-09-05 10:30) gated-delta training memory (issue #50).** (a) Training-time
+  chunked checkpointing of `gated_delta_ops` approved as a SPEC-001 backbone slice (stage 1,
+  bit-exact against the library's loop; installed only during `stage_train`), with the
+  chunkwise-parallel form as stage 2 gated on measured step time (tolerance-tested) and a kernel
+  VJP as stage 3. (b) `memory.budget_gib` = min(registry, device recommended working set)
+  resolved at preflight. (c) `train.gated_delta_chunk` is an arm-config field (default 64),
+  recorded. (d) Preflight's training footprint estimate (longest row, configured batch and
+  chunk) joins R15 condition 1 with 10% headroom. Validation runs on the kernel path via
+  `model.eval()` around the trainer's evaluate. Review:
+  `under_review/GATED-DELTA-TRAINING-MEMORY-REVIEW-round1-2026-09-05.md`.
 
 ## 8. Implementer amendments (append-only, dated)
 

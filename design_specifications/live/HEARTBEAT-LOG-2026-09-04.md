@@ -806,3 +806,13 @@ recording the execution rule. No execution lane designated yet.
   (`preflight.py`, `models.py`, registry: budget minimum, footprint gate with `--data`/
   `--max-row-tokens`). The Deputy runs the lane probe (peak AND step time; chunk sweep) when
   both are green. Director: no fallback model (Qwen3-4B) — stays a noted option only.
+
+## 2026-09-05 — #46/#49/#48 approved and committed; P6 rerun ready; R16 correction
+
+- Chief cleared all three after reading the decisive hunks. Committed in order on subset
+  gates (the full suite is momentarily uncollectable: the R32 preflight lane's test file is
+  ahead of its source): scorer `0862c01`, R30 `68c1990` (schema r30), B1b `1604f38`; pushed;
+  issues closed. Commit-message error corrected on #48: the registry YAMLs were already
+  tracked (an ignore pattern matched only the directory add).
+- P6 ledger rerun under R27/R30 needs only the Director's lift; lane free while B4 is
+  blocked. R32 stage 1 lanes in flight; the lane probe script is ready.

@@ -134,9 +134,9 @@ slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.p
 - **Probes Section B.** Committed: P1 closure + three fixes (`3867cc6`, #42), P2 splits + R28
   test (`2d9445c`, #43). Committed: C7 refit `eca116b` (#44; supported set unchanged 96/96, generator binding
   v1 labels / v2 reanalysis ratified; #15 closed) and `compare` + R29 sidecar `5e1f3b2` (#45).
-  At the Chief's gate: B1b capture sub-slice **#48** (conditions, dual capture with the
-  widening span, R18b `capture_dtype`, `task_difficulties` fix), R27 scorer **#46**, R30
-  refinements **#49** (after #46; F non-empty 8/15 deviation for the Chief).
+  Committed: R27 scorer `0862c01` (#46), R30 refinements `68c1990` (#49), B1b capture sub-slice
+  `1604f38` (#48). **P2 code complete; P6 ledger rerun ready for the Director's lift.** In
+  flight: R32 stage 1 (chunked recurrence lane; preflight budget/footprint lane).
 - Rulings R1 to R31 (R28 disjointness, R29 compare pairing, R30 P6 secondary + scorer
   refinements, **R31: any test of a library seam drives the library's real class on that
   side, fakes only for weights and compute** — drawn from three live-run defects that green

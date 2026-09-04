@@ -74,9 +74,10 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   goes".** Nothing exists: `capture.stub_observations`, `--stub-observations`, the
   `p2-d0/p2-d1/p2-d2` splits plan, the `compare` subcommand, dual-position capture, the
   SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices (#40; R28/R29 ruled). **B1a committed `2d9445c`** (#43): `P2_SPLITS`, `make_p2_tasks`, `task_fingerprint`, six-config
-  sweep regenerated from tables, zero collisions at full size. **B1c committed `5e1f3b2`** (#45; Holm across the comparison cells is a follow-up line).
-  B1b (conditions, dual capture, R18b `capture_dtype`, the `task_difficulties` fix) in flight
-  in a worktree.*
+  sweep regenerated from tables, zero collisions at full size. **B1c committed `5e1f3b2`** (#45; Holm across the comparison cells is a follow-up line);
+  **B1b committed `1604f38`** (#48: conditions, `layer_{L}_note_mean` with the widening span,
+  R18b `capture_dtype` native by default, `task_difficulties` fix). The P2 code is complete;
+  runs wait for the lane (65 min per policy-condition on the 3B).*
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.
@@ -104,9 +105,9 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   (#41) dispatched**: strict per-generation outcome, every generated note recorded, visibility
   computed with the integrity module's extraction, a content control, and the `aggregate_report`
   secondary condition scheduled with the rerun (~1.5 h on the lane after B4 training).
-  Scorer R19-reviewed, blocking findings fixed, work order #46; **R30** ruled (extractor accepts
-  run C's `first half complete:`; secondary eligibility under HEAD alone; four refinements) —
-  R30 slice in flight; ledger primary rerun first.
+  **Scorer committed `0862c01` (#46) and R30 refinements `68c1990` (#49, schema `p6-patch-r30`).**
+  The ledger primary rerun needs only these and the Director's lift; the lane is free while
+  B4 is blocked (#50). Output must go to a NEW directory (run 1's artifact is a record).
 - [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first**, none applied:
   `outputs/probes/axis-corrected/CLOSED.md` absent (288 saved rollouts on disk); the
   matched-design flaw (default persona gets the full `prompts` list, `assistant_axis.py:600-609`,
