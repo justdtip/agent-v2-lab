@@ -102,8 +102,10 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
         eval=tmp_path / "eval.json",
         limit=1,
         output=tmp_path,
+        skip_preflight_check=False,
     )
     parser = argparse.ArgumentParser()
+    monkeypatch.setattr(assistant_axis, "require_preflight", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         assistant_axis,
         "load_axis",
@@ -168,7 +170,9 @@ def test_project_writes_a_run_log_with_identity_and_progress(
         eval=eval_path,
         limit=1,
         output=tmp_path,
+        skip_preflight_check=False,
     )
+    monkeypatch.setattr(assistant_axis, "require_preflight", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(models, "load_model_spec", lambda _name: selected)
     monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
@@ -177,7 +181,11 @@ def test_project_writes_a_run_log_with_identity_and_progress(
         "load_axis",
         lambda *_args: ({18: np.array([1.0])}, {"layers": {"18": {}}}),
     )
-    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None, None, None))
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_args: (None, None, None, SimpleNamespace(as_dict=dict)),
+    )
     monkeypatch.setattr(
         assistant_axis,
         "trajectory_projections",
@@ -237,6 +245,7 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
     model = object()
     seen = []
     monkeypatch.setattr(models, "load_model_spec", lambda _name: selected)
+    monkeypatch.setattr(assistant_axis, "require_preflight", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
     monkeypatch.setattr(
         policies,
@@ -246,7 +255,12 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
     monkeypatch.setattr(
         evaluate,
         "load_policy",
-        lambda *_args: (model, object(), SimpleNamespace(num_layers=32), object()),
+        lambda *_args: (
+            model,
+            object(),
+            SimpleNamespace(num_layers=32),
+            SimpleNamespace(as_dict=dict),
+        ),
     )
     monkeypatch.setattr(assistant_axis, "load_chat_prompts", lambda _count: ["prompt"])
 
@@ -255,6 +269,7 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
         _kwargs["progress"](1, 2, "pirate")
         _kwargs["progress"](2, 2, "chef")
         return {layer: np.ones(1, dtype=np.float32) for layer in layers}, {"layers": {}}
+
 
     monkeypatch.setattr(assistant_axis, "build_axis_run", build)
     monkeypatch.setattr(assistant_axis, "save_axis", lambda path, *_args: path)
@@ -271,6 +286,7 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
         min_expression=0.34,
         exemplar=True,
         judge=False,
+        skip_preflight_check=False,
     )
 
     assistant_axis._build(args, argparse.ArgumentParser())
@@ -300,9 +316,10 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
     assert isinstance(start["git_commit"], str)
 
     progress = [_flat(event) for event in events if event["kind"] == "progress"]
+    # The label is now emitted by the library, which names the phase and the unit.
     assert [(item["step"], item["total"], item["label"]) for item in progress] == [
-        (1, 2, "role pirate"),
-        (2, 2, "role chef"),
+        (1, 2, "pirate"),
+        (2, 2, "chef"),
     ]
     npz_path = tmp_path / "axis-base.npz"
     wrote = [
@@ -313,7 +330,7 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
     assert [item["path"] for item in wrote] == [str(npz_path)]
     assert "default assistant prompts=1" in out
     assert str(npz_path) in out
-    assert "[role pirate 1/2 50%]" in out
+    assert "[pirate 1/2 50%]" in out
     assert "# fake" in out.splitlines()  # print(markdown) is still the CLI's own contract
 
 
@@ -344,6 +361,7 @@ def test_axis_build_rejects_malformed_layers_before_gpu_or_loader(
         min_expression=0.34,
         exemplar=True,
         judge=False,
+        skip_preflight_check=False,
     )
 
     with pytest.raises(SystemExit) as raised:
@@ -439,8 +457,9 @@ def test_build_axis_succeeds_with_synthetic_filtered_vectors(monkeypatch) -> Non
         layers: list[int],
         *,
         stats: dict[str, int] | None = None,
+        dtype: str = "float32",
     ) -> dict[int, np.ndarray]:
-        del model, tokenizer, response
+        del model, tokenizer, response, dtype
         if stats is not None:
             stats["sequences"] = stats.get("sequences", 0) + 1
         if prompt.startswith("default"):
@@ -663,8 +682,10 @@ def test_build_axis_run_scores_with_the_heuristic_alone_by_default(
         *,
         min_expression: float = 0.34,
         use_model_judge: bool = False,
+        capture_dtype: str = "float32",
+        progress: Any = None,
     ):
-        del min_expression
+        del min_expression, capture_dtype, progress
         seen["use_model_judge"] = use_model_judge
         return {layer: np.ones(2, dtype=np.float32) for layer in layers}, {"layers": {}}
 
@@ -829,3 +850,254 @@ def test_axis_verdict_passes_and_fails_on_the_registered_thresholds() -> None:
     verdict = assistant_axis.axis_verdict(failing)
     assert verdict["status"] == "FAIL"
     assert verdict["pc1_cosine_abs"] == pytest.approx(0.80)
+
+
+# ------------------------------- SPEC-001 §9/§10 closure: preflight, provenance, R18a/R18b
+
+
+def _selected_spec(capture_dtype: str = "native") -> SimpleNamespace:
+    """A registry stand-in carrying only what the P1 CLI reads off a ``ModelSpec``."""
+    return SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.5, 1.0),
+        probes=SimpleNamespace(capture_dtype=capture_dtype),
+    )
+
+
+def _build_args(tmp_path: Path) -> argparse.Namespace:
+    return argparse.Namespace(
+        model="qwen35-4b",
+        policy="base",
+        output=tmp_path,
+        allow_busy_gpu=False,
+        prompts=1,
+        role_prompts=1,
+        max_tokens=1,
+        layers=None,
+        min_expression=0.34,
+        exemplar=True,
+        judge=False,
+        skip_preflight_check=False,
+    )
+
+
+def test_axis_build_refuses_to_load_without_preflight_evidence(monkeypatch, tmp_path) -> None:
+    """SPEC-001 §10: no preflight artifact for the resolved model, no model load."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, preflight
+    from local_llm_lab.probes import guard, policies
+
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: _selected_spec())
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", tmp_path / "preflight")
+    monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        assistant_axis._build(_build_args(tmp_path), argparse.ArgumentParser())
+
+    assert "qwen35-4b" in str(raised.value)
+    assert "preflight" in str(raised.value)
+
+
+def test_axis_project_refuses_to_load_without_preflight_evidence(monkeypatch, tmp_path) -> None:
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, preflight
+    from local_llm_lab.probes import guard, policies
+
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: _selected_spec())
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", tmp_path / "preflight")
+    monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+    args = argparse.Namespace(
+        model="qwen35-4b",
+        policy="base",
+        output=tmp_path,
+        allow_busy_gpu=False,
+        axis=tmp_path / "axis.npz",
+        eval=tmp_path / "eval.json",
+        layer=1,
+        limit=None,
+        skip_preflight_check=False,
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        assistant_axis._project(args, argparse.ArgumentParser())
+
+    assert "qwen35-4b" in str(raised.value)
+
+
+def test_axis_build_records_precision_capture_dtype_and_writes_provenance(
+    monkeypatch, tmp_path
+) -> None:
+    """R18a/R18b and SPEC-001 §9 in one completed fake build."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.probes import guard, policies
+
+    selected = _selected_spec()
+    block = {"frobenius_relative": 0.004, "elementwise_max": 0.02}
+    order: list[str] = []
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: selected)
+    monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        assistant_axis,
+        "require_preflight",
+        lambda spec, **kwargs: order.append(f"preflight:{spec.name}:{kwargs['skip']}"),
+    )
+    monkeypatch.setattr(assistant_axis, "preflight_precision_block", lambda _spec: dict(block))
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: order.append("guard"))
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_args: order.append("load")
+        or (object(), object(), SimpleNamespace(num_layers=4), SimpleNamespace(as_dict=dict)),
+    )
+    monkeypatch.setattr(assistant_axis, "load_chat_prompts", lambda _count: ["prompt"])
+
+    def build(_model, _tokenizer, _prompts, layers, *_args, **kwargs):
+        return (
+            {layer: np.ones(2, dtype=np.float32) for layer in layers},
+            {"layers": {}, "capture_dtype": kwargs["capture_dtype"]},
+        )
+
+    monkeypatch.setattr(assistant_axis, "build_axis_run", build)
+    monkeypatch.setattr(assistant_axis, "render_build_markdown", lambda *_args: "# fake")
+
+    assistant_axis._build(_build_args(tmp_path), argparse.ArgumentParser())
+
+    assert order == ["preflight:qwen35-4b:False", "guard", "load"]
+    diagnostics = json.loads((tmp_path / "axis-base.json").read_text(encoding="utf-8"))
+    assert diagnostics["fp32_manual_vs_native"] == block
+    assert diagnostics["capture_dtype"] == "native"
+    provenance = json.loads((tmp_path / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["extra"]["stage"] == "p1-axis-build"
+    assert provenance["extra"]["artifacts"] == [
+        str(tmp_path / "axis-base.npz"),
+        str(tmp_path / "axis-base.json"),
+        str(tmp_path / "axis-base.md"),
+    ]
+
+
+def test_build_axis_captures_at_the_requested_dtype_and_records_it(monkeypatch) -> None:
+    """R18b: the registry's capture dtype reaches P1's per-response means."""
+    seen: list[str] = []
+
+    def fake_response_mean(
+        _model, _tokenizer, prompt, _response, layers, *, stats=None, dtype="float32"
+    ):
+        del stats, prompt
+        seen.append(dtype)
+        return {layer: np.arange(4, dtype=np.float32) + layer for layer in layers}
+
+    monkeypatch.setattr(assistant_axis, "response_mean_activations", fake_response_mean)
+    role_responses = {
+        name: [(f"role:{name}:{run}", _marker_reply(name)) for run in range(3)]
+        for name, _system in assistant_axis.ROLES
+    }
+
+    _axis, diagnostics = assistant_axis.build_axis(
+        None,
+        None,
+        [("default:0", "assistant response")],
+        role_responses,
+        [1],
+        capture_dtype="native",
+    )
+
+    assert diagnostics["capture_dtype"] == "native"
+    assert set(seen) == {"native"}
+
+
+def test_save_axis_leaves_no_partial_file_when_the_write_fails(monkeypatch, tmp_path) -> None:
+    """R11: an interrupted array write never lands at the destination path."""
+    path = tmp_path / "axis-base.npz"
+
+    def explode(target, **_payload):
+        """Write a truncated archive the way an interrupted save would, then stop."""
+        if isinstance(target, (str, Path)):
+            with open(target, "wb") as handle:
+                handle.write(b"PK\x03\x04 truncated")
+        else:
+            target.write(b"PK\x03\x04 truncated")
+        raise KeyboardInterrupt("interrupted mid-write")
+
+    monkeypatch.setattr(assistant_axis.np, "savez_compressed", explode)
+
+    with pytest.raises(KeyboardInterrupt):
+        assistant_axis.save_axis(path, {1: np.ones(3, dtype=np.float32)}, {"layers": {}})
+
+    assert not path.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_collect_rollouts_reports_the_default_generation_before_the_roles(
+    monkeypatch, tmp_path
+) -> None:
+    """R26(g): the default rollout is a unit of work, and it is in the denominator."""
+    calls: list[tuple[int, int, str]] = []
+    monkeypatch.setattr(
+        assistant_axis,
+        "rollout_role",
+        lambda *_args, **kwargs: [("prompt", f"reply from {kwargs['role']}")],
+    )
+
+    assistant_axis.collect_rollouts(
+        None,
+        None,
+        ["prompt"],
+        tmp_path,
+        "base",
+        role_prompts=1,
+        progress=lambda step, total, label: calls.append((step, total, label)),
+    )
+
+    # The callback announces the unit it is starting, so the default rollout opens the run at
+    # zero and each role's line counts the default in its denominator and its step.
+    total = len(assistant_axis.ROLES) + 1
+    assert calls[0] == (0, total, "default")
+    assert calls[1] == (2, total, assistant_axis.ROLES[0][0])
+    assert calls[-1] == (total, total, assistant_axis.ROLES[-1][0])
+    assert len(calls) == total
+
+
+def test_build_axis_reports_progress_through_the_scoring_phase(monkeypatch) -> None:
+    """R26(g): the axis phase is not silent; every captured response is one unit."""
+    monkeypatch.setattr(
+        assistant_axis,
+        "response_mean_activations",
+        lambda _model, _tokenizer, _prompt, _response, layers, **_kwargs: {
+            layer: np.arange(4, dtype=np.float32) + layer for layer in layers
+        },
+    )
+    role_responses = {
+        name: [(f"role:{name}:{run}", _marker_reply(name)) for run in range(3)]
+        for name, _system in assistant_axis.ROLES
+    }
+    default = [("default:0", "assistant response")]
+    calls: list[tuple[int, int, str]] = []
+
+    assistant_axis.build_axis(
+        None,
+        None,
+        default,
+        role_responses,
+        [1],
+        progress=lambda step, total, label: calls.append((step, total, label)),
+    )
+
+    expected_total = len(default) + 3 * len(assistant_axis.ROLES)
+    assert calls[0] == (1, expected_total, "capture default")
+    assert [step for step, _total, _label in calls] == list(range(1, expected_total + 1))
+    assert {total for _step, total, _label in calls} == {expected_total}

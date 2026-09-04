@@ -213,6 +213,7 @@ def response_mean_activations(
     layers: Sequence[int],
     *,
     stats: dict[str, int] | None = None,
+    dtype: Literal["float32", "native"] = "float32",
 ) -> tuple[dict[int, Any], dict[str, Any]]:
     """Mean residual stream over the *response* tokens only, per layer.
 
@@ -224,6 +225,13 @@ def response_mean_activations(
     ``encode(prompt) + encode(response)`` and the failure is counted in ``stats`` (keys
     ``"sequences"`` and ``"prefix_mismatch"``) so a caller can tell a clean run from one whose
     spans were repaired.
+
+    ``dtype`` (R18b) is handed straight to :func:`capture_residuals` and defaults to
+    ``"float32"`` so no existing caller moves. The mean is taken in float32 either way, so a
+    ``"native"`` capture returns the same number for half the captured bytes: widening
+    bfloat16 to float32 is exact, and the single cast simply moves from the capture to the
+    pooling step. The registry's own value (``ModelSpec.probes.capture_dtype``) is what the
+    P1 CLI passes.
     """
     import mlx.core as mx
 
@@ -236,7 +244,7 @@ def response_mean_activations(
         details["prefix_mismatch"] = int(details.get("prefix_mismatch", 0)) + 1
     details["sequences"] = int(details.get("sequences", 0)) + 1
 
-    captured = capture_residuals(view, joint_ids, layers, positions="all")
+    captured = capture_residuals(view, joint_ids, layers, positions="all", dtype=dtype)
     means = {
         layer: mx.mean(activation[start:].astype(mx.float32), axis=0)
         for layer, activation in captured.items()

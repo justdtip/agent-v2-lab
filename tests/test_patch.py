@@ -1167,6 +1167,11 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         "load_model_spec",
         lambda name: seen.append(("spec", name)) or selected,
     )
+    monkeypatch.setattr(
+        patch,
+        "require_preflight",
+        lambda given, **kwargs: seen.append(("preflight", given.name, kwargs["skip"])),
+    )
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: seen.append(("guard", None)))
     monkeypatch.setattr(
         patch,
@@ -1177,7 +1182,7 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         patch,
         "load_policy",
         lambda given, adapter: seen.append(("load", given.hf_id, adapter))
-        or (object(), object(), SimpleNamespace(num_layers=4), object()),
+        or (object(), object(), SimpleNamespace(num_layers=4), SimpleNamespace(as_dict=dict)),
     )
     monkeypatch.setattr(
         patch,
@@ -1214,6 +1219,9 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
     assert seen[0] == ("spec", "qwen35-4b")
     assert ("select", 41, 1) in seen
     assert ("policy", "base", selected) in seen and ("load", "fake/hf", None) in seen
+    # SPEC-001 §10: the gate runs, and it runs before the guard and the load.
+    assert seen.index(("preflight", "qwen35-4b", False)) < seen.index(("guard", None))
+    assert seen.index(("preflight", "qwen35-4b", False)) < seen.index(("load", "fake/hf", None))
     assert seen[-1] == ("probe", selected, argv)
     assert (tmp_path / "patch.json").is_file() and (tmp_path / "patch.md").read_text() == "# fake\n"
     payload = json.loads((tmp_path / "patch.json").read_text(encoding="utf-8"))
@@ -1416,7 +1424,8 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
             else (counter_groups, {name: 0 for name in patch.PROMPT_GROUPS}, counter_values)
         ),
     )
-    def capture(_view, ids, layers, *, positions):
+    def capture(_view, ids, layers, *, positions, dtype="float32"):
+        del dtype
         captures.append((tuple(ids), positions))
         assert positions == "all"
         base = {10: 100, 20: 200, 110: 300, 120: 400}[ids[0]]
@@ -1780,7 +1789,8 @@ def _probe_fixture(monkeypatch, cases):
         ),
     )
 
-    def capture(_view, ids, layers, *, positions):
+    def capture(_view, ids, layers, *, positions, dtype="float32"):
+        del dtype
         captures.append(tuple(ids))
         return {layer: mx.zeros((10, 1)) for layer in layers}
 
@@ -3439,12 +3449,18 @@ def test_patch_cli_accepts_the_secondary_condition_flag(monkeypatch, tmp_path) -
 
     monkeypatch.setattr(patch, "select_patch_cases", select)
     monkeypatch.setattr(patch, "load_model_spec", lambda _name: spec)
+    monkeypatch.setattr(patch, "require_preflight", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
     monkeypatch.setattr(patch, "resolve_policy", lambda _name, _spec: None)
     monkeypatch.setattr(
         patch,
         "load_policy",
-        lambda _spec, _adapter: (object(), object(), SimpleNamespace(num_layers=4), object()),
+        lambda _spec, _adapter: (
+            object(),
+            object(),
+            SimpleNamespace(num_layers=4),
+            SimpleNamespace(as_dict=dict),
+        ),
     )
     monkeypatch.setattr(patch, "run_patch_probe", run)
     monkeypatch.setattr(
@@ -4031,3 +4047,155 @@ def test_secondary_eligibility_is_judged_under_head_alone_with_the_basis_recorde
         primary_provenance["eligibility"]["failing"]["eligibility_basis"]
         == patch.BOUND_VS_HEAD_BASIS
     )
+
+
+# ------------------------------- SPEC-001 §9/§10 closure: preflight, provenance, R18a/R18b
+
+
+def _p6_cli_fixture(monkeypatch, tmp_path: Path, capture_dtype: str = "native"):
+    """The P6 CLI reduced to files and fakes: no eval payload parsing, no model."""
+    from local_llm_lab.probes import patch
+
+    passing = tmp_path / "passing.json"
+    failing = tmp_path / "failing.json"
+    passing.write_text("{}", encoding="utf-8")
+    failing.write_text("{}", encoding="utf-8")
+    selected = SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.25, 0.5),
+        probes=SimpleNamespace(capture_dtype=capture_dtype),
+    )
+    case = patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"),
+        0,
+        (),
+        None,
+        *_judgements(0),
+    )
+    monkeypatch.setattr(
+        patch,
+        "select_patch_cases",
+        lambda *_args, **_kwargs: ([case], {"data_seeds": {}, "eligibility": {}}),
+    )
+    monkeypatch.setattr(patch, "load_model_spec", lambda _name: selected)
+    monkeypatch.setattr(patch, "resolve_policy", lambda _name, _spec: None)
+    argv = [
+        "agent-v2-probe-patch",
+        "--passing-eval",
+        str(passing),
+        "--failing-eval",
+        str(failing),
+        "--output",
+        str(tmp_path / "p6"),
+        "--model",
+        "qwen35-4b",
+        "--policy",
+        "base",
+        "--layers",
+        "1",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    return selected
+
+
+def test_patch_cli_refuses_to_load_without_preflight_evidence(monkeypatch, tmp_path) -> None:
+    """SPEC-001 §10: no preflight artifact for the resolved model, no model load."""
+    from local_llm_lab.pipeline import preflight
+    from local_llm_lab.probes import guard, patch
+
+    _p6_cli_fixture(monkeypatch, tmp_path)
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", tmp_path / "preflight")
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        patch, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        patch.main()
+
+    assert "qwen35-4b" in str(raised.value)
+    assert "preflight" in str(raised.value)
+
+
+def test_patch_cli_writes_provenance_beside_the_artifact(monkeypatch, tmp_path) -> None:
+    """SPEC-001 §9: a completed P6 run records what produced it."""
+    from local_llm_lab.probes import guard, patch
+
+    order: list[str] = []
+    _p6_cli_fixture(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        patch,
+        "require_preflight",
+        lambda spec, **kwargs: order.append(f"preflight:{spec.name}:{kwargs['skip']}"),
+    )
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: order.append("guard"))
+    monkeypatch.setattr(
+        patch,
+        "load_policy",
+        lambda *_args: order.append("load")
+        or (
+            object(),
+            object(),
+            SimpleNamespace(num_layers=4),
+            SimpleNamespace(as_dict=dict),
+        ),
+    )
+    monkeypatch.setattr(
+        patch,
+        "run_patch_probe",
+        lambda *_args, **_kwargs: {"groups": [], "layers": [], "controls": [], "cells": {}},
+    )
+    monkeypatch.setattr(patch, "render_markdown", lambda _payload: "# fake")
+
+    patch.main()
+
+    assert order == ["preflight:qwen35-4b:False", "guard", "load"]
+    output = tmp_path / "p6"
+    provenance = json.loads((output / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["extra"]["stage"] == "p6-patch"
+    assert provenance["extra"]["artifacts"] == [
+        str(output / "patch.json"),
+        str(output / "patch.md"),
+    ]
+
+
+def test_patch_probe_records_the_precision_block_and_capture_dtype(monkeypatch) -> None:
+    """R18a/R18b: P6 captures at the registry dtype and carries the preflight deviation."""
+    from local_llm_lab.probes import patch
+
+    dtypes: list[str] = []
+    block = {"frobenius_relative": 0.004, "elementwise_max": 0.02}
+    # Two stable cases: the unrelated-task control needs a second case to draw from.
+    cases = [_probe_case(0, judgements=_judgements(1)), _probe_case(1, judgements=_judgements(1))]
+    tokenizer, _captures = _probe_fixture(monkeypatch, cases)
+    monkeypatch.setattr(patch, "preflight_precision_block", lambda _spec: dict(block))
+
+    def capture(_view, ids, layers, *, positions, dtype):
+        del positions
+        dtypes.append(dtype)
+        return {layer: mx.zeros((len(ids), 1)) for layer in layers}
+
+    monkeypatch.setattr(patch, "capture_residuals", capture)
+    spec = SimpleNamespace(name="qwen35-4b", probes=SimpleNamespace(capture_dtype="native"))
+
+    payload = patch.run_patch_probe(
+        object(),
+        tokenizer,
+        cases,
+        spec=spec,
+        resolved=SimpleNamespace(as_dict=dict),
+        layers=[1],
+        policy="base",
+        keep_last=2,
+        max_tokens=1,
+        seed=7,
+        command=["patch"],
+    )
+
+    assert payload["fp32_manual_vs_native"] == block
+    assert payload["capture_dtype"] == "native"
+    assert set(dtypes) == {"native"}

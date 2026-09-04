@@ -561,6 +561,7 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
     resolved = Resolved()
 
     class Spec:
+        name = "fake-model"
         hf_id = "fake/hf"
 
         @staticmethod
@@ -593,6 +594,7 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
         return Spec() if name == "fake-model" else None
 
     monkeypatch.setattr(guard, "require_idle_gpu", fake_require_idle_gpu)
+    monkeypatch.setattr(adapter_delta, "require_preflight", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(models, "load_model_spec", fake_load_model_spec)
     monkeypatch.setattr(evaluate, "load_policy", fake_load_policy)
     monkeypatch.setattr(evaluate, "run_evaluation", fake_run_evaluation)
@@ -677,3 +679,185 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
     ]
     assert events[-1]["kind"] == "end" and events[-1]["status"] == "ok"
     assert "ledger_reconcile" in markdown
+
+
+# --------------------------- SPEC-001 §8/§9/§10 closure: base identity, preflight, provenance
+
+
+def _adapter_dir(directory: Path, *, base: str | None = None, revision: str | None = None) -> Path:
+    """One adapter directory, optionally declaring the base it was trained on."""
+    from safetensors.numpy import save_file
+
+    name = "model.layers.0.mlp.down_proj"
+    local = np.random.default_rng(3)
+    directory.mkdir(parents=True)
+    save_file(
+        {
+            f"{name}.lora_a": local.normal(size=(8, 2)).astype(np.float32),
+            f"{name}.lora_b": local.normal(size=(2, 6)).astype(np.float32),
+        },
+        str(directory / "adapters.safetensors"),
+    )
+    config: dict[str, Any] = {"lora_parameters": {"scale": 32.0, "rank": 2}}
+    if base is not None:
+        config["model"] = base
+    (directory / "adapter_config.json").write_text(json.dumps(config), encoding="utf-8")
+    if revision is not None:
+        (directory.parent / "provenance.json").write_text(
+            json.dumps({"model": {"snapshot_revision": revision}}), encoding="utf-8"
+        )
+    return directory
+
+
+def test_compare_adapters_refuses_two_adapters_trained_on_different_bases(tmp_path) -> None:
+    """SPEC-001 §8: cross-run comparison asserts an identical base, by name."""
+    left = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base-one")
+    right = _adapter_dir(tmp_path / "agent-v2c" / "best-adapter", base="fake/base-two")
+
+    with pytest.raises(ValueError) as raised:
+        adapter_delta.compare_adapters([left, right], top=2)
+
+    message = str(raised.value)
+    assert "agent-v2b" in message and "agent-v2c" in message
+    assert "fake/base-one" in message and "fake/base-two" in message
+
+
+def test_compare_adapters_refuses_two_snapshot_revisions_of_one_base(tmp_path) -> None:
+    left = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base", revision="aaa")
+    right = _adapter_dir(tmp_path / "agent-v2c" / "best-adapter", base="fake/base", revision="bbb")
+
+    with pytest.raises(ValueError) as raised:
+        adapter_delta.compare_adapters([left, right], top=2)
+
+    message = str(raised.value)
+    assert "agent-v2b" in message and "agent-v2c" in message
+    assert "aaa" in message and "bbb" in message
+
+
+def test_compare_adapters_accepts_one_base_and_records_the_identity(tmp_path) -> None:
+    left = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base", revision="aaa")
+    right = _adapter_dir(tmp_path / "agent-v2c" / "best-adapter", base="fake/base", revision="aaa")
+
+    comparison = adapter_delta.compare_adapters([left, right], top=2)
+
+    assert comparison["base_identity"] == {
+        "agent-v2b": {"hf_id": "fake/base", "snapshot_revision": "aaa"},
+        "agent-v2c": {"hf_id": "fake/base", "snapshot_revision": "aaa"},
+    }
+
+
+def test_static_delta_cli_refuses_to_load_without_preflight_evidence(monkeypatch, tmp_path) -> None:
+    """SPEC-001 §10: the base-model arm of P5 is gated like every other model load."""
+    from local_llm_lab.pipeline import preflight
+    from local_llm_lab.probes import guard
+
+    adapter = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base")
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", tmp_path / "preflight")
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-delta",
+            "--adapters",
+            str(adapter),
+            "--model",
+            "qwen35-4b",
+            "--output",
+            str(tmp_path / "delta"),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        adapter_delta.main()
+
+    assert "qwen35-4b" in str(raised.value)
+    assert "preflight" in str(raised.value)
+
+
+def test_ablation_cli_refuses_to_load_without_preflight_evidence(monkeypatch, tmp_path) -> None:
+    from local_llm_lab.pipeline import preflight
+    from local_llm_lab.probes import guard
+
+    adapter = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base")
+    screen_path = tmp_path / "screen.yaml"
+    screen_path.write_text(
+        "keep_last: 2\n"
+        "select:\n"
+        "  screen:\n"
+        "    - {split: valid, difficulty: 1, per_family: {default: 1}}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", tmp_path / "preflight")
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-delta",
+            "--ablate",
+            "--adapter",
+            str(adapter),
+            "--screen",
+            str(screen_path),
+            "--model",
+            "qwen35-4b",
+            "--output",
+            str(tmp_path / "ablation"),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        adapter_delta.main()
+
+    assert "qwen35-4b" in str(raised.value)
+
+
+def test_static_delta_cli_records_the_precision_block_and_writes_provenance(
+    monkeypatch, tmp_path
+) -> None:
+    """R18a and SPEC-001 §9 on the arm that loads nothing."""
+    from local_llm_lab.probes import guard
+
+    adapter = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base")
+    block = {"frobenius_relative": 0.004, "elementwise_max": 0.02}
+    monkeypatch.setattr(adapter_delta, "preflight_precision_block", lambda _spec: dict(block))
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("--no-base reached the GPU guard")
+    )
+    output = tmp_path / "delta"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-delta",
+            "--adapters",
+            str(adapter),
+            "--no-base",
+            "--model",
+            "fake-model",
+            "--output",
+            str(output),
+        ],
+    )
+
+    adapter_delta.main()
+
+    payload = json.loads((output / "delta.json").read_text(encoding="utf-8"))
+    assert payload["fp32_manual_vs_native"] == block
+    provenance = json.loads((output / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["extra"]["stage"] == "p5-adapter-delta"
+    assert provenance["extra"]["artifacts"] == [
+        str(output / "delta.json"),
+        str(output / "delta.md"),
+    ]

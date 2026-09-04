@@ -28,8 +28,10 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import os
 import re
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,8 +40,11 @@ from typing import Any
 import numpy as np
 
 from local_llm_lab.compare_chat import CHAT_SYSTEM_PROMPT
+from local_llm_lab.pipeline.preflight import require_preflight
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import response_mean_activations
+from local_llm_lab.probes.state_probe import preflight_precision_block, spec_capture_dtype
+from local_llm_lab.provenance import write_provenance
 from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
 __all__ = [
@@ -593,6 +598,11 @@ def collect_rollouts(
     rollout_path.write_text("", encoding="utf-8")
 
     shared_prompts = prompts[:role_prompts]
+    # R26(g): the default rollout is a full batch of generations, so it is one unit of work
+    # and it counts in the denominator; reporting only the roles left it silent and short.
+    total = len(ROLES) + 1
+    if progress is not None:
+        progress(0, total, "default")
     default = rollout_role(
         model,
         tokenizer,
@@ -606,7 +616,7 @@ def collect_rollouts(
     role_responses: dict[str, list[tuple[str, str]]] = {}
     for number, (name, system) in enumerate(ROLES, 1):
         if progress is not None:
-            progress(number, len(ROLES), name)
+            progress(number + 1, total, name)
         role_responses[name] = rollout_role(
             model,
             tokenizer,
@@ -633,6 +643,7 @@ def build_axis_run(
     exemplar: bool = True,
     min_expression: float = 0.34,
     use_model_judge: bool = False,
+    capture_dtype: str = "float32",
     progress: Any = None,
 ) -> tuple[dict[int, Any], dict[str, Any]]:
     """Persist all generations, then score/filter them and compute the axis.
@@ -661,6 +672,8 @@ def build_axis_run(
         layers,
         min_expression=min_expression,
         use_model_judge=use_model_judge,
+        capture_dtype=capture_dtype,
+        progress=progress,
     )
     diagnostics["rollouts_path"] = str(rollout_path.resolve())
     diagnostics["exemplar"] = exemplar
@@ -677,15 +690,30 @@ def _mean_vectors(
     pairs: list[tuple[str, str]],
     layers: list[int],
     stats_out: dict[str, int],
+    *,
+    capture_dtype: str = "float32",
+    report: Any = None,
 ) -> dict[int, np.ndarray]:
-    """Stack of per-response mean activations, ``(n, d)`` per layer."""
+    """Stack of per-response mean activations, ``(n, d)`` per layer.
+
+    ``report`` is a no-argument callback fired once per response, which is how the scoring
+    phase reports progress (R26(g)); an empty response is skipped but still counted, so the
+    caller's denominator stays the number of responses it handed over.
+
+    ``capture_dtype`` is forwarded only when it is not ``response_mean_activations``' own
+    default, so passing it is never a no-op keyword: an existing caller or fixture written
+    against the pre-R18b signature keeps working, and the float32 path is byte-identical.
+    """
     collected: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
+    precision = {} if capture_dtype == "float32" else {"dtype": capture_dtype}
     for prompt, response in pairs:
+        if report is not None:
+            report()
         if not response.strip():
             stats_out["empty_responses"] = stats_out.get("empty_responses", 0) + 1
             continue
         means = response_mean_activations(
-            model, tokenizer, prompt, response, layers, stats=stats_out
+            model, tokenizer, prompt, response, layers, stats=stats_out, **precision
         )
         for layer in layers:
             collected[layer].append(np.array(means[layer], dtype=np.float32))
@@ -749,6 +777,8 @@ def build_axis(
     *,
     min_expression: float = 0.34,
     use_model_judge: bool = False,
+    capture_dtype: str = "float32",
+    progress: Any = None,
 ) -> tuple[dict[int, Any], dict[str, Any]]:
     """The filtered assistant axis per layer, plus expression and sanity diagnostics.
 
@@ -757,6 +787,11 @@ def build_axis(
     enters the axis when at least three of its rollouts meet ``min_expression``; fewer than 12
     such roles is an invalid construction and raises. Unknown names retain the old unfiltered
     behaviour so callers using synthetic fixtures remain API-compatible.
+
+    ``capture_dtype`` (R18b) is the registry's ``probes.capture_dtype``; it is recorded in the
+    diagnostics because a reader cannot otherwise tell which precision the vectors came back
+    at. ``progress`` is a ``(step, total, label)`` callback fired once per captured response so
+    the scoring phase is not silent (R26(g)); it is reporting only and changes no number.
     """
     import mlx.core as mx
 
@@ -809,10 +844,42 @@ def build_axis(
     if not filtered_responses:
         raise ValueError("no usable role responses remained after expression filtering")
     capture_stats: dict[str, int] = {}
-    default = _mean_vectors(model, tokenizer, default_responses, layers, capture_stats)
+    captured = 0
+    capture_total = len(default_responses) + sum(
+        len(pairs) for pairs in filtered_responses.values()
+    )
+
+    def report(label: str) -> Any:
+        if progress is None:
+            return None
+
+        def fire() -> None:
+            nonlocal captured
+            captured += 1
+            progress(captured, capture_total, label)
+
+        return fire
+
+    default = _mean_vectors(
+        model,
+        tokenizer,
+        default_responses,
+        layers,
+        capture_stats,
+        capture_dtype=capture_dtype,
+        report=report("capture default"),
+    )
     roles = list(filtered_responses)
     role_matrices = {
-        name: _mean_vectors(model, tokenizer, pairs, layers, capture_stats)
+        name: _mean_vectors(
+            model,
+            tokenizer,
+            pairs,
+            layers,
+            capture_stats,
+            capture_dtype=capture_dtype,
+            report=report(f"capture {name}"),
+        )
         for name, pairs in filtered_responses.items()
     }
     axis: dict[int, Any] = {}
@@ -823,6 +890,7 @@ def build_axis(
         "min_expression": min_expression,
         "role_expression": expression,
         "capture": capture_stats,
+        "capture_dtype": capture_dtype,
         "layers": {},
     }
     for layer in layers:
@@ -874,13 +942,31 @@ def project(activation: Any, axis: Any) -> float:
 
 
 def save_axis(path: Path, axis: dict[int, Any], diagnostics: dict[str, Any]) -> Path:
+    """Write the axis archive atomically (R11): temp file in the same directory, fsync, replace.
+
+    An axis npz carries arrays, so an interrupted write must not leave a truncated archive at
+    the destination -- ``load_axis`` would fail on it and a rerun would look like a fresh
+    build. This is the pattern ``state_probe.save_dataset`` and ``data.write_dataset`` use.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         f"layer_{layer}": np.asarray(vector, dtype=np.float32) for layer, vector in axis.items()
     }
     payload["layers"] = np.array(sorted(axis), dtype=np.int64)
     payload["diagnostics"] = np.array(json.dumps(diagnostics))
-    np.savez_compressed(path, **payload)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=f".{path.name}.", suffix=".tmp", dir=path.parent, delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            np.savez_compressed(handle, **payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return path
 
 
@@ -1504,17 +1590,22 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     with RunLog.open(
         args.output, name="assistant-axis-build", command=sys.argv, identity=identity
     ) as log:
+        # SPEC-001 §10: the gate sits before the GPU guard and the load, so a model with no
+        # preflight evidence is refused by name without ever reaching the weights.
+        require_preflight(spec, skip=args.skip_preflight_check)
         require_idle_gpu(parser, args, "generating role rollouts")
-        model, tokenizer, view, _resolved = load_policy(spec, adapter)
+        model, tokenizer, view, resolved = load_policy(spec, adapter)
         try:
             selection = resolve_layers(args.layers, spec, view.num_layers)
         except ValueError as error:
             parser.error(str(error))
         layers = list(selection.indices)
         prompts = load_chat_prompts(args.prompts)
+        capture_dtype = spec_capture_dtype(spec)
         # Matched design: the default persona now generates against the roles' prompt list,
         # taken from this pool, so the count it is rolled out on is `role_prompts`.
         log.info("default assistant", prompts=args.role_prompts, pool=len(prompts))
+        log.info("capture dtype", dtype=capture_dtype)
         try:
             axis, diagnostics = build_axis_run(
                 model,
@@ -1528,7 +1619,10 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
                 exemplar=args.exemplar,
                 min_expression=args.min_expression,
                 use_model_judge=args.judge,
-                progress=lambda number, total, name: log.progress(number, total, f"role {name}"),
+                capture_dtype=capture_dtype,
+                # The label now names the phase and the unit (default rollout, role, capture),
+                # so the run log stays readable across the two phases (R26(g)).
+                progress=log.progress,
             )
         except ValueError as error:
             parser.error(str(error))
@@ -1539,6 +1633,10 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
                 "prompts": len(prompts),
                 "role_prompts": args.role_prompts,
                 "layer_selection": selection.as_dict(),
+                # R18b: the precision the vectors were captured at, resolved from the registry.
+                "capture_dtype": capture_dtype,
+                # R18a: the preflight's float32-vs-native deviation, copied never recomputed.
+                "fp32_manual_vs_native": preflight_precision_block(spec),
             }
         )
         args.output.mkdir(parents=True, exist_ok=True)
@@ -1551,6 +1649,20 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
         (args.output / f"axis-{policy_stem}.md").write_text(markdown + "\n", encoding="utf-8")
         print(markdown)
         log.info("wrote", path=str(args.output / f"axis-{policy_stem}.npz"))
+        write_provenance(
+            args.output,
+            resolved=resolved,
+            spec=spec,
+            extra={
+                "stage": "p1-axis-build",
+                "policy": args.policy,
+                "artifacts": [
+                    str(args.output / f"axis-{policy_stem}.npz"),
+                    str(args.output / f"axis-{policy_stem}.json"),
+                    str(args.output / f"axis-{policy_stem}.md"),
+                ],
+            },
+        )
 
 
 def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -1581,11 +1693,12 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     with RunLog.open(
         args.output, name="assistant-axis-project", command=sys.argv, identity=identity
     ) as log:
+        require_preflight(spec, skip=args.skip_preflight_check)
         require_idle_gpu(parser, args, "projecting trajectories")
         axis, diagnostics = load_axis(args.axis)
         if args.layer not in axis:
             parser.error(f"axis file has layers {sorted(axis)}, not {args.layer}")
-        model, tokenizer, _view, _resolved = load_policy(spec, adapter)
+        model, tokenizer, _view, resolved = load_policy(spec, adapter)
         records = trajectory_projections(
             model,
             tokenizer,
@@ -1605,6 +1718,8 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
             "chat_projection": diagnostics["layers"]
             .get(str(args.layer), {})
             .get("chat_projection_mean"),
+            # R18a: every probe artifact carries the preflight's float32-path deviation.
+            "fp32_manual_vs_native": preflight_precision_block(spec),
             "summary": summary,
             "trajectories": records,
         }
@@ -1619,6 +1734,19 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
         (args.output / f"{stem}.md").write_text(markdown + "\n", encoding="utf-8")
         print(markdown)
         log.info("wrote", path=str(args.output / f"{stem}.json"))
+        write_provenance(
+            args.output,
+            resolved=resolved,
+            spec=spec,
+            extra={
+                "stage": "p1-axis-project",
+                "policy": args.policy,
+                "artifacts": [
+                    str(args.output / f"{stem}.json"),
+                    str(args.output / f"{stem}.md"),
+                ],
+            },
+        )
 
 
 def main() -> None:
@@ -1632,6 +1760,11 @@ def main() -> None:
         help="a policy named by the selected model or an explicit adapter directory",
     )
     common.add_argument("--output", type=Path, required=True)
+    common.add_argument(
+        "--skip-preflight-check",
+        action="store_true",
+        help="run without the model's preflight evidence (SPEC-001 §10 override)",
+    )
     add_gpu_arguments(common)
 
     parser = argparse.ArgumentParser(description="P1: build and apply the assistant axis.")

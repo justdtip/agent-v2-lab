@@ -52,7 +52,9 @@ def test_response_mean_activations_returns_metadata_for_view_callers(monkeypatch
     monkeypatch.setattr(
         capture,
         "capture_residuals",
-        lambda _view, _ids, _layers, *, positions: {1: mx.array([[1.0], [3.0]], dtype=mx.float32)},
+        lambda _view, _ids, _layers, *, positions, dtype: {
+            1: mx.array([[1.0], [3.0]], dtype=mx.float32)
+        },
     )
 
     means, metadata = capture.response_mean_activations(view, _Tokenizer(), "a", "b", [1])
@@ -66,7 +68,9 @@ def test_response_mean_activations_keeps_mapping_for_legacy_model_callers(monkey
     monkeypatch.setattr(
         capture,
         "capture_residuals",
-        lambda _view, _ids, _layers, *, positions: {1: mx.array([[1.0], [3.0]], dtype=mx.float32)},
+        lambda _view, _ids, _layers, *, positions, dtype: {
+            1: mx.array([[1.0], [3.0]], dtype=mx.float32)
+        },
     )
 
     means = capture.response_mean_activations(legacy_model, _Tokenizer(), "a", "b", [1])
@@ -386,3 +390,39 @@ def test_note_token_span_refuses_a_boundary_that_would_move_more_than_one_token(
 def test_note_token_span_rejects_an_empty_note() -> None:
     with pytest.raises(ValueError, match="empty"):
         capture.note_token_span(_Tokenizer(), "prompt", "")
+
+
+def test_response_mean_activations_forwards_the_registry_capture_dtype(monkeypatch) -> None:
+    """R18b: P1's capture precision is the registry's, not this function's own default."""
+    seen: list[str] = []
+
+    def fake_capture(_view, _ids, _layers, *, positions, dtype):
+        del positions
+        seen.append(dtype)
+        return {1: mx.array([[1.0], [3.0]], dtype=mx.float32)}
+
+    monkeypatch.setattr(capture, "capture_residuals", fake_capture)
+    view = _View()
+
+    capture.response_mean_activations(view, _Tokenizer(), "a", "b", [1])
+    capture.response_mean_activations(view, _Tokenizer(), "a", "b", [1], dtype="native")
+
+    assert seen == ["float32", "native"]
+
+
+def test_response_mean_activations_dtype_is_keyword_only_and_defaults_to_float32() -> None:
+    parameter = inspect.signature(capture.response_mean_activations).parameters["dtype"]
+
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default == "float32"
+
+
+def test_response_mean_activations_pools_a_native_capture_in_float32() -> None:
+    """The single float32 cast moves to the pooling step, so the mean is unchanged."""
+    view = _NativeView()
+
+    native, _ = capture.response_mean_activations(view, _Tokenizer(), "a", "b", [1], dtype="native")
+    upcast, _ = capture.response_mean_activations(view, _Tokenizer(), "a", "b", [1])
+
+    assert native[1].dtype == mx.float32
+    assert float(native[1].item()) == float(upcast[1].item())

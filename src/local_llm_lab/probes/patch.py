@@ -23,6 +23,7 @@ from local_llm_lab.pipeline.integrity import (
     _policy_index,
     check_trajectory,
 )
+from local_llm_lab.pipeline.preflight import require_preflight
 from local_llm_lab.pipeline.protocol import (
     SYSTEM_PROMPT,
     assistant_message,
@@ -43,6 +44,8 @@ from local_llm_lab.pipeline.tasks import (
 )
 from local_llm_lab.probes.capture import InjectionHook, capture_residuals
 from local_llm_lab.probes.policies import resolve_layers, resolve_policy, validate_layer_syntax
+from local_llm_lab.probes.state_probe import preflight_precision_block, spec_capture_dtype
+from local_llm_lab.provenance import write_provenance
 
 PROMPT_GROUPS = (
     "system_prompt",
@@ -1718,6 +1721,10 @@ def run_patch_probe(
         raise ValueError("no eligible patch cases")
     if not layers or any(layer < 1 or layer > view.num_layers for layer in layers):
         raise ValueError("layers must be residual indices in [1, num_layers]")
+    # R18b: the registry decides the capture precision. Every consumer here already casts to
+    # float32 -- the pooled slot mean in ``_alignment_rows`` and ``InjectionHook`` itself --
+    # so ``native`` halves the captured bytes without moving a single injected number.
+    capture_dtype = spec_capture_dtype(spec)
     stable = [case for case in cases if case.scoring_version_stable]
     unstable = [case for case in cases if not case.scoring_version_stable]
     visibility = {
@@ -1823,8 +1830,12 @@ def run_patch_probe(
                 "counter_groups": counter_groups,
                 "alignment": alignment,
                 "alignment_record": alignment_record,
-                "failing_residuals": capture_residuals(view, failing_ids, layers, positions="all"),
-                "counter_residuals": capture_residuals(view, counter_ids, layers, positions="all"),
+                "failing_residuals": capture_residuals(
+                    view, failing_ids, layers, positions="all", dtype=capture_dtype
+                ),
+                "counter_residuals": capture_residuals(
+                    view, counter_ids, layers, positions="all", dtype=capture_dtype
+                ),
             }
         )
         if progress is not None:
@@ -1966,6 +1977,10 @@ def run_patch_probe(
         "model": resolved.as_dict(),
         "policy": policy,
         "layers": list(layers),
+        # R18b: the precision the residuals were captured at; R18a: the preflight's measured
+        # float32-vs-native deviation, copied verbatim so the cells are read beside it.
+        "capture_dtype": capture_dtype,
+        "fp32_manual_vs_native": preflight_precision_block(spec),
         "seed": seed,
         "command": list(command),
         "condition": condition_of(cases),
@@ -2241,6 +2256,11 @@ def main() -> None:
             "into the headline"
         ),
     )
+    parser.add_argument(
+        "--skip-preflight-check",
+        action="store_true",
+        help="run without the model's preflight evidence (SPEC-001 §10 override)",
+    )
     add_gpu_arguments(parser)
     args = parser.parse_args()
     if not args.passing_eval.is_file() or not args.failing_eval.is_file():
@@ -2309,6 +2329,9 @@ def main() -> None:
             unstable=len(cases) - stable,
             decision_steps=[case.decision_step for case in cases],
         )
+        # SPEC-001 §10: the preflight gate sits before the GPU guard and the load, so a model
+        # without evidence is refused by name and no weights are touched.
+        require_preflight(spec, skip=args.skip_preflight_check)
         require_idle_gpu(parser, args, "running P6 causal patching")
         log.info("loading policy", model=args.model, policy=args.policy)
         model, tokenizer, view, resolved = load_policy(spec, adapter)
@@ -2381,4 +2404,17 @@ def main() -> None:
             "wrote",
             json=str(args.output / "patch.json"),
             md=str(args.output / "patch.md"),
+        )
+        write_provenance(
+            args.output,
+            resolved=resolved,
+            spec=spec,
+            extra={
+                "stage": "p6-patch",
+                "policy": args.policy,
+                "artifacts": [
+                    str(args.output / "patch.json"),
+                    str(args.output / "patch.md"),
+                ],
+            },
         )

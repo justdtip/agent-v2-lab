@@ -38,9 +38,13 @@ import numpy as np
 
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import ResolvedSpec
+from local_llm_lab.pipeline.preflight import require_preflight
+from local_llm_lab.probes.state_probe import preflight_precision_block
+from local_llm_lab.provenance import write_provenance
 
 __all__ = [
     "DEFAULT_SCALE",
+    "adapter_base_identity",
     "analyse_adapter",
     "compare_adapters",
     "delta_from_factors",
@@ -81,6 +85,63 @@ def adapter_scale(adapter_dir: Path) -> float:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     parameters = config.get("lora_parameters") or {}
     return float(parameters.get("scale", DEFAULT_SCALE))
+
+
+def adapter_base_identity(adapter_dir: str | Path) -> dict[str, str | None]:
+    """The base this adapter was trained on: ``{"hf_id": ..., "snapshot_revision": ...}``.
+
+    The hf id is ``adapter_config.json``'s ``model`` field, which the trainer writes for every
+    run. The snapshot revision is not in that file, so it comes from the run's
+    ``provenance.json`` (SPEC-001 §9) beside the adapter or in its run directory; runs that
+    predate provenance report ``None``, which is why an unknown value never refuses a
+    comparison -- only two *known* and different values do (see :func:`compare_adapters`).
+    """
+    directory = Path(adapter_dir)
+    identity: dict[str, str | None] = {"hf_id": None, "snapshot_revision": None}
+    config_path = directory / "adapter_config.json"
+    if config_path.is_file():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            config = {}
+        base = config.get("model") if isinstance(config, dict) else None
+        identity["hf_id"] = base if isinstance(base, str) and base else None
+    for candidate in (directory / "provenance.json", directory.parent / "provenance.json"):
+        if not candidate.is_file():
+            continue
+        try:
+            record = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        model = record.get("model") if isinstance(record, dict) else None
+        if not isinstance(model, dict):
+            continue
+        revision = model.get("snapshot_revision")
+        if isinstance(revision, str) and revision:
+            identity["snapshot_revision"] = revision
+        spec = model.get("spec")
+        recorded = spec.get("hf_id") if isinstance(spec, dict) else None
+        if identity["hf_id"] is None and isinstance(recorded, str) and recorded:
+            identity["hf_id"] = recorded
+        break
+    return identity
+
+
+def _refuse_mixed_bases(identities: dict[str, dict[str, str | None]]) -> None:
+    """SPEC-001 §8: two adapters are comparable only on one base at one revision."""
+    for field in ("hf_id", "snapshot_revision"):
+        known = {
+            label: identity[field]
+            for label, identity in identities.items()
+            if identity[field] is not None
+        }
+        if len(set(known.values())) > 1:
+            named = ", ".join(f"{label}={known[label]}" for label in sorted(known))
+            raise ValueError(
+                f"compare_adapters refuses adapters trained on different bases: {field} "
+                f"differs ({named}); a principal-angle comparison across two bases has no "
+                "meaning (SPEC-001 §8)"
+            )
 
 
 def delta_from_factors(lora_a: Any, lora_b: Any, scale: float) -> Any:
@@ -361,11 +422,21 @@ def compare_adapters(paths: list[str | Path], *, top: int = 16) -> dict[str, Any
     update are compared pairwise; the reported number is the mean cosine of the principal
     angles (1.0 = the same subspace, 0.0 = orthogonal). Compare the reported values with the
     random-subspace control at the actual output dimension rather than a fixed reference size.
+
+    SPEC-001 §8: the comparison asserts an identical base ``hf_id`` and snapshot revision
+    first and refuses by name when they differ, because two adapters over different bases
+    live in unrelated weight spaces and their principal angles mean nothing. The identity
+    that was checked is recorded in the result.
     """
     directories = [Path(path) for path in paths]
     if len(directories) < 2:
         raise ValueError("compare_adapters needs at least two adapters")
     labels = _unique_labels(directories)
+    identities = {
+        label: adapter_base_identity(directory)
+        for label, directory in zip(labels, directories, strict=True)
+    }
+    _refuse_mixed_bases(identities)
     bases: dict[str, dict[str, np.ndarray]] = {}
     for label, directory in zip(labels, directories, strict=True):
         vectors = {}
@@ -404,6 +475,7 @@ def compare_adapters(paths: list[str | Path], *, top: int = 16) -> dict[str, Any
     null["all"] = float(np.mean(list(null.values())))
     return {
         "adapters": labels,
+        "base_identity": identities,
         "modules": per_module,
         "mean_cosine_by_type": summary,
         "null_mean_cosine_by_type": null,
@@ -967,6 +1039,8 @@ def _run_ablation_cli(
             blocks=args.blocks,
             screen_cells=len(screen),
         )
+        # SPEC-001 §10: evidence before weights, ahead of the GPU guard and the load.
+        require_preflight(spec, skip=args.skip_preflight_check)
         require_idle_gpu(parser, args, "loading the adapter policy for block ablation")
         log.info("loading policy", model=args.model, policy=str(args.adapter))
         model, tokenizer, view, resolved_spec = evaluate.load_policy(spec, args.adapter)
@@ -1018,6 +1092,8 @@ def _run_ablation_cli(
             "screen": {"path": str(args.screen.resolve()), "cells": screen},
             "block_count": args.blocks,
             "control": "full_adapter success rate",
+            # R18a: the preflight's float32-vs-native deviation, in every probe artifact.
+            "fp32_manual_vs_native": preflight_precision_block(spec),
             **result,
         }
         (args.output / "ablation.json").write_text(
@@ -1030,6 +1106,19 @@ def _run_ablation_cli(
             "wrote",
             json=str(args.output / "ablation.json"),
             md=str(args.output / "ablation.md"),
+        )
+        write_provenance(
+            args.output,
+            resolved=resolved_spec,
+            spec=spec,
+            extra={
+                "stage": "p5-block-ablation",
+                "adapter": str(args.adapter.resolve()),
+                "artifacts": [
+                    str(args.output / "ablation.json"),
+                    str(args.output / "ablation.md"),
+                ],
+            },
         )
 
 
@@ -1071,6 +1160,11 @@ def main() -> None:
     )
     parser.add_argument("--blocks", type=int, help="Consecutive blocks for --ablate (default: 6).")
     parser.add_argument("--screen", type=Path, help="Pipeline config whose select.screen is evaluated.")
+    parser.add_argument(
+        "--skip-preflight-check",
+        action="store_true",
+        help="run without the model's preflight evidence (SPEC-001 §10 override)",
+    )
     add_gpu_arguments(parser)
     args = parser.parse_args()
 
@@ -1094,11 +1188,16 @@ def main() -> None:
     args.readout_layers = "" if args.readout_layers is None else args.readout_layers
     readout_layers = [int(part) for part in args.readout_layers.split(",") if part.strip()]
 
+    from local_llm_lab.models import load_model_spec
     from local_llm_lab.runlog import RunLog, git_commit
 
     adapters = [str(Path(adapter).resolve()) for adapter in args.adapters]
-    # R26(e), issue #35: opened before the GPU guard and the base-model load; `--no-base`
-    # never resolves a ModelSpec, so the model string is recorded as the CLI gave it.
+    # Resolving the declaration reads a registry YAML (or the safe defaults for an unknown
+    # id); it loads nothing. Both arms need it now: `--no-base` still writes provenance and
+    # the R18a precision block, which are keyed by the model the adapters belong to.
+    spec = load_model_spec(args.model)
+    # R26(e), issue #35: opened before the GPU guard and the base-model load; the identity
+    # keeps recording the model string exactly as the CLI gave it.
     with RunLog.open(
         args.output,
         name="adapter-delta",
@@ -1120,14 +1219,15 @@ def main() -> None:
             no_base=args.no_base,
         )
         model = tokenizer = None
+        resolved = None
         if not args.no_base:
-            require_idle_gpu(parser, args, "loading the base model for relative norms")
-            from local_llm_lab.models import load_model_spec
             from local_llm_lab.pipeline.evaluate import load_policy
 
-            spec = load_model_spec(args.model)
+            # SPEC-001 §10: only this arm loads weights, and only after the gate passes.
+            require_preflight(spec, skip=args.skip_preflight_check)
+            require_idle_gpu(parser, args, "loading the base model for relative norms")
             log.info("loading policy", model=args.model, policy="base", hf_id=spec.hf_id)
-            model, tokenizer, _view, _resolved = load_policy(spec, None)
+            model, tokenizer, _view, resolved = load_policy(spec, None)
 
         runs = []
         norm_cache: dict[str, float] = {}
@@ -1145,6 +1245,8 @@ def main() -> None:
         payload: dict[str, Any] = {
             "model": args.model,
             "has_base": model is not None,
+            # R18a: the preflight's float32-vs-native deviation, in every probe artifact.
+            "fp32_manual_vs_native": preflight_precision_block(spec),
             "runs": runs,
             "comparison": compare_adapters(args.adapters, top=args.top)
             if len(args.adapters) > 1
@@ -1167,4 +1269,17 @@ def main() -> None:
             "wrote",
             json=str(args.output / "delta.json"),
             md=str(args.output / "delta.md"),
+        )
+        write_provenance(
+            args.output,
+            resolved=resolved,
+            spec=spec,
+            extra={
+                "stage": "p5-adapter-delta",
+                "adapters": adapters,
+                "artifacts": [
+                    str(args.output / "delta.json"),
+                    str(args.output / "delta.md"),
+                ],
+            },
         )
