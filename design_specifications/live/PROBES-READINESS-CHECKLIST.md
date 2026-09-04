@@ -54,7 +54,10 @@ unblocked. Bound follow-up from #27: an adapter-wrapped variant in the standard 
 due before the B4 evaluation lift — not yet dispatched.
 
 - [ ] **Bound follow-up (#27), not a Section A gate:** an adapter-wrapped variant in the standard
-  arch fixtures (`tests/test_arch.py`), due before the B4 EVALUATION lift. Unassigned.
+  arch fixtures (`tests/test_arch.py`), due before the B4 EVALUATION lift. **Dispatched
+  2026-09-05 evening** (fake-only; R31 form: the shared fakes wrapped with mlx-lm's own
+  `linear_to_lora_layers`, existing view tests parametrised over bare/wrapped; proof against
+  the pre-fix `arch.py` in a scratch module).
 
 The Director's second P6 attempt (after `07c6657`) then crashed in `position_groups`
 ("missing token span for observation"): `_groups_for` extracted observations from the full

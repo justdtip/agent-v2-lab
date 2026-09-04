@@ -876,3 +876,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   drifted anchors (preflight gate, cli.py ×2); probes list one anchor, #15 now closed, B4's
   pre-fix anchors labelled historical, the v2 binding recorded as ruled, one artifact filename.
   The lift request agrees with the checklist in every cross-checked figure.
+- #27's bound follow-up (adapter-wrapped variant of the shared arch fixtures) dispatched on
+  the Director's status question: untouched since `89dfb56`; now in R31 form (library's real
+  `linear_to_lora_layers` over the fakes; view tests parametrised bare/wrapped; failure proof
+  against the pre-fix `arch.py` loaded as a scratch module). One test file; no lane.

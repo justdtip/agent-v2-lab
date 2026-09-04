@@ -97,7 +97,8 @@ Evidence: `cli.py:47,614` consumes `load_rendered_splits` (import, call site); b
 
 **Bound follow-up (not a condition):** wave 1 broke every adapter-loaded path (the view could
 not see `LoRALinear` wrappers); fixed `89dfb56` (issue #27). #27 binds an adapter-wrapped
-variant in the standard arch fixtures **before the B4 evaluation lift** — not yet dispatched.
+variant in the standard arch fixtures **before the B4 evaluation lift** — dispatched
+2026-09-05 evening (fake-only, R31 form).
 
 **A8. Run logging in place (R26, Director's amendment 2026-09-05 03:40).** Training does not
 start until lane A (`src/local_llm_lab/runlog.py`) and lane B (training integration:
