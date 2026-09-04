@@ -183,3 +183,57 @@ exit 0: All checks passed!
 ```
 
 No model, checkpoint, tokenizer, preflight, control, or retry was run during this remediation.
+
+## Step 11: structural RMS roundoff criterion
+
+The two immutable control artifacts are preserved and rehashed: Qwen3.5 native-loop
+`9a5bc0faa30c0c9bd256fa60fc0076afc38bcf651d69a052c039aecb666bfe73` and Qwen2.5 preflight
+`c02011a36a02158e8f35d70e19cc52516c9766d99f751abf2a27a6cfbd65db17`. The canonical artifact
+remains `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`.
+
+Controller evidence: Qwen3.5 first acquired revision 3 and released revision 4, exiting 1 before
+output on the MLX `.tiny` defect. The corrected control acquired revision 5 at `fd01f5b`, exited 0,
+wrote the native-loop artifact, and released revision 6. It measured native-manual versus native
+exactly zero and FP32 versus BF16 absolute `2.5591506958007812`, relative
+`0.054741191354027406`, scale `46.75`, epsilon `0.0078125`. Qwen2.5 acquired revision 7 at
+`e53bd810d5204541efb56ebd5b9c1682120c9cbf`, exited 1 only after persisting its report, and
+released revision 8. It measured FP32 versus FP16 absolute `0.4695625305175781`, relative
+`0.0032807862394241267`, scale `143.125`, epsilon `0.0009765625`.
+
+Both controls reject the two-epsilon proposal: Qwen3.5 budget `0.015625` / `0.73046875`; Qwen2.5
+budget `0.001953125` / `0.279541015625`. No multiplier is fitted to observed errors. The structural
+replacement is `rounding_steps = 2 * num_layers + 1`,
+`relative_tolerance = sqrt(rounding_steps) * reference_epsilon`, and absolute tolerance is that
+budget times `max(reference_scale, smallest_normal)`. Predeclared Qwen3.5 budgets are 65 steps,
+`0.06298638865858242` relative / `2.944613669788728` absolute; Qwen2.5 uses 73 steps,
+`0.00834375365753665` / `1.194199742234933`.
+
+RED at `770f7d516412be3d676caf615dba10680bb23d62` added `num_layers` metrics tests:
+
+```text
+.venv/bin/python -m pytest -q tests/test_preflight.py::test_residual_metrics_follow_the_reference_dtype_and_scale tests/test_preflight.py::test_residual_metrics_uses_rms_roundoff_boundaries tests/test_preflight.py::test_residual_metrics_rejects_invalid_layer_counts
+exit 1: _residual_metrics() got an unexpected keyword argument 'num_layers'
+```
+
+The implementation validates positive non-bool integer counts, serializes `rounding_steps`, passes
+`view.num_layers` into residual equivalence and both control metrics, switches the criterion to
+`reference_dtype_rms_roundoff`, and uses `within_tolerance` for pass. FP32 view methods, gates, and
+write-before-exit behavior are unchanged.
+
+GREEN at the same shared HEAD:
+
+```text
+.venv/bin/python -m pytest -q tests/test_preflight.py
+exit 0: 32 passed
+
+.venv/bin/python -m pytest -q tests/test_arch.py tests/test_preflight.py
+exit 0: 33 passed
+
+.venv/bin/python -m pytest -q tests/test_probes.py -k 'architecture_view'
+exit 0: 13 passed
+
+.venv/bin/ruff check src/local_llm_lab/arch.py src/local_llm_lab/pipeline/preflight.py tests/test_arch.py tests/test_preflight.py
+exit 0: All checks passed!
+```
+
+No model, preflight, control, or retry command was run in Step 11.

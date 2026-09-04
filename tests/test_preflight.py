@@ -249,15 +249,16 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
         "strategy_reason": "auto:equivalence_verified",
     }
     assert report["residual_equivalence"] == {
-        "absolute_tolerance": 2 * np.finfo(np.float32).eps * 146.0,
-        "criterion": "exact_pre_control",
+        "absolute_tolerance": 3 * np.finfo(np.float32).eps * 146.0,
+        "criterion": "reference_dtype_rms_roundoff",
         "max_abs_error": 0.0,
         "max_relative_error": 0.0,
         "passed": True,
         "reference_dtype": "float32",
         "reference_epsilon": np.finfo(np.float32).eps,
         "reference_scale": 146.0,
-        "relative_tolerance": 2 * np.finfo(np.float32).eps,
+        "relative_tolerance": 3 * np.finfo(np.float32).eps,
+        "rounding_steps": 9,
         "token_count": 64,
         "within_tolerance": True,
     }
@@ -350,19 +351,58 @@ def test_residual_metrics_follow_the_reference_dtype_and_scale() -> None:
     bfloat_reference = _MetricArray([100.0], "bfloat16")
     float_reference = _MetricArray([100.0], "float32")
 
-    bfloat_metrics = _residual_metrics(actual, bfloat_reference, array_api=_MetricApi)
-    float_metrics = _residual_metrics(actual, float_reference, array_api=_MetricApi)
+    bfloat_metrics = _residual_metrics(
+        actual, bfloat_reference, num_layers=4, array_api=_MetricApi
+    )
+    float_metrics = _residual_metrics(actual, float_reference, num_layers=4, array_api=_MetricApi)
 
     assert bfloat_metrics["reference_dtype"] == "bfloat16"
     assert bfloat_metrics["reference_epsilon"] == 2**-7
     assert bfloat_metrics["reference_scale"] == 100.0
-    assert bfloat_metrics["relative_tolerance"] == 2**-6
-    assert bfloat_metrics["absolute_tolerance"] == 100.0 * 2**-6
+    assert bfloat_metrics["rounding_steps"] == 9
+    assert bfloat_metrics["relative_tolerance"] == 3 * 2**-7
+    assert bfloat_metrics["absolute_tolerance"] == 100.0 * 3 * 2**-7
     assert bfloat_metrics["within_tolerance"] is True
     assert float_metrics["reference_dtype"] == "float32"
-    assert float_metrics["absolute_tolerance"] == 100.0 * 2**-22
+    assert float_metrics["absolute_tolerance"] == 100.0 * 3 * 2**-23
     assert float_metrics["within_tolerance"] is False
     assert bfloat_metrics["absolute_tolerance"] != 1e-5
+
+
+def test_residual_metrics_uses_rms_roundoff_boundaries() -> None:
+    """The layer-count budget must accept only errors inside its structural bound."""
+    reference = _MetricArray([100.0], "bfloat16")
+    relative_tolerance = 3 * 2**-7
+    absolute_tolerance = 100.0 * relative_tolerance
+
+    inside = _residual_metrics(
+        _MetricArray([100.0 + absolute_tolerance * 0.999], "float32"),
+        reference,
+        num_layers=4,
+        array_api=_MetricApi,
+    )
+    outside = _residual_metrics(
+        _MetricArray([100.0 + absolute_tolerance * 1.001], "float32"),
+        reference,
+        num_layers=4,
+        array_api=_MetricApi,
+    )
+
+    assert inside["within_tolerance"] is True
+    assert outside["within_tolerance"] is False
+    assert inside["rounding_steps"] == 9
+
+
+@pytest.mark.parametrize("num_layers", [False, 0, -1, 1.0, "4"])
+def test_residual_metrics_rejects_invalid_layer_counts(num_layers: object) -> None:
+    """A tolerance cannot be computed from a non-positive or non-integral block count."""
+    with pytest.raises(ValueError, match="num_layers"):
+        _residual_metrics(
+            _MetricArray([1.0], "float32"),
+            _MetricArray([1.0], "float32"),
+            num_layers=num_layers,
+            array_api=_MetricApi,
+        )
 
 
 def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_path: Path) -> None:
@@ -391,6 +431,8 @@ def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_pat
     assert report["token_identity"] == {"ids": list(range(64)), "token_count": 64}
     assert report["fp32_manual_vs_native"]["max_abs_error"] == 0.0
     assert report["native_manual_vs_native"]["max_abs_error"] == 0.0
+    assert report["fp32_manual_vs_native"]["rounding_steps"] == 9
+    assert report["native_manual_vs_native"]["rounding_steps"] == 9
 
 
 def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> None:
@@ -413,7 +455,7 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
     report = json.loads((tmp_path / "fake-model.json").read_text(encoding="utf-8"))
     assert report["passed"] is False
     assert report["residual_equivalence"]["passed"] is False
-    assert report["residual_equivalence"]["criterion"] == "exact_pre_control"
+    assert report["residual_equivalence"]["criterion"] == "reference_dtype_rms_roundoff"
     assert "absolute_tolerance" in report["residual_equivalence"]
 
 

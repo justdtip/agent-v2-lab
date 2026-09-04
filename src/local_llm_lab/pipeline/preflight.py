@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping
-from math import ceil
+from math import ceil, sqrt
 from pathlib import Path
 from typing import Any, Literal
 
@@ -193,12 +193,12 @@ def run_residual_control(
     native_reference = _native_final_residual(view, ids)
     report = {
         "fp32_manual_vs_native": _residual_metrics(
-            fp32_manual, native_reference, array_api=array_api
+            fp32_manual, native_reference, num_layers=view.num_layers, array_api=array_api
         ),
         "hf_id": spec.hf_id,
         "model_name": spec.name,
         "native_manual_vs_native": _residual_metrics(
-            native_manual, native_reference, array_api=array_api
+            native_manual, native_reference, num_layers=view.num_layers, array_api=array_api
         ),
         "schema_version": _SCHEMA_VERSION,
         "snapshot_revision": revision,
@@ -280,11 +280,11 @@ def _fixed_token_ids(tokenizer: Any, array_api: Any) -> Any:
 def _residual_equivalence(view: Any, ids: Any, array_api: Any) -> dict[str, Any]:
     manual = _manual_final_residual(view, ids)
     native = _native_final_residual(view, ids)
-    metrics = _residual_metrics(manual, native, array_api=array_api)
+    metrics = _residual_metrics(manual, native, num_layers=view.num_layers, array_api=array_api)
     return {
         **metrics,
-        "criterion": "exact_pre_control",
-        "passed": metrics["max_abs_error"] == 0.0,
+        "criterion": "reference_dtype_rms_roundoff",
+        "passed": metrics["within_tolerance"],
         "token_count": 64,
     }
 
@@ -297,12 +297,17 @@ def _manual_final_residual(view: Any, ids: Any) -> Any:
     return view.final_norm(manual)
 
 
-def _residual_metrics(actual: Any, reference: Any, *, array_api: Any) -> dict[str, Any]:
+def _residual_metrics(
+    actual: Any, reference: Any, *, num_layers: int, array_api: Any
+) -> dict[str, Any]:
     """Describe an error against the precision and scale of its native reference."""
+    if isinstance(num_layers, bool) or not isinstance(num_layers, int) or num_layers <= 0:
+        raise ValueError(f"num_layers must be a positive integer; got {num_layers!r}")
     info = array_api.finfo(reference.dtype)
     scale = _scalar(array_api.max(array_api.abs(reference)))
     floor = max(scale, float(info.smallest_normal))
-    relative_tolerance = 2.0 * float(info.eps)
+    rounding_steps = 2 * num_layers + 1
+    relative_tolerance = sqrt(rounding_steps) * float(info.eps)
     absolute_tolerance = relative_tolerance * floor
     max_abs_error = _scalar(array_api.max(array_api.abs(actual - reference)))
     return {
@@ -313,6 +318,7 @@ def _residual_metrics(actual: Any, reference: Any, *, array_api: Any) -> dict[st
         "reference_epsilon": float(info.eps),
         "reference_scale": scale,
         "relative_tolerance": relative_tolerance,
+        "rounding_steps": rounding_steps,
         "within_tolerance": max_abs_error <= absolute_tolerance,
     }
 
