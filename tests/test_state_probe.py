@@ -137,6 +137,12 @@ def test_reanalysis_generator_version_requires_a_recording_or_explicit_binding()
         state_probe._reanalysis_generator_version({"generator_version": 2}, 1)
 
 
+@pytest.mark.parametrize("invalid", [True, 0, GENERATOR_VERSION + 1, "2"])
+def test_reanalysis_generator_version_rejects_invalid_bindings(invalid: object) -> None:
+    with pytest.raises(ValueError, match="invalid"):
+        state_probe._reanalysis_generator_version({"generator_version": invalid}, None)
+
+
 def test_capture_rejects_a_checkpoint_context_with_a_stale_generator_version() -> None:
     with pytest.raises(ValueError, match="checkpoint context generator_version"):
         state_probe.build_probe_dataset(
@@ -167,6 +173,25 @@ def test_saved_npz_replay_uses_the_recorded_historical_version_without_loaders(
 
     assert saved.meta["generator_version"] == 1
     assert set(replayed) == set(saved.task_ids.tolist())
+
+
+def test_saved_recovery_npz_offline_rows_use_historical_version_and_difficulty(tmp_path) -> None:
+    task = next(
+        item
+        for item in make_tasks("train", 144, difficulty=3)
+        if item.variant == "wrong_path"
+    )
+    dataset = state_probe.build_label_dataset([task], {task.task_id: 3})
+    dataset.meta.update({"generator_version": 2, "data_seed": 20260902, "keep_last": 2})
+    saved = state_probe.load_dataset(state_probe.save_dataset(dataset, tmp_path / "recovery.npz"))
+    labels, surface, _metadata = state_probe._offline_rows(saved, data_seed=20260902)
+    assert saved.difficulty.tolist() == [3] * len(saved)
+    assert labels["pending_count"].shape[0] == len(saved)
+    assert surface.shape[0] == len(saved)
+    legacy = state_probe._regenerate_tasks(saved, 20260902)[task.task_id]
+    assert legacy.steps != task.steps
+    saved.meta.pop("generator_version")
+    assert state_probe._offline_rows(saved, data_seed=20260902, generator_version=2)[1].shape == surface.shape
 
 
 def test_saved_npz_replay_rejects_inconsistent_family_metadata() -> None:

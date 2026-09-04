@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from local_llm_lab.pipeline import evaluate, report
+from local_llm_lab.pipeline import evaluate, integrity as integrity_module, report
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.integrity import (
     Fact,
@@ -626,7 +626,7 @@ def test_artifact_generator_version_rejects_invalid_bindings(
         _artifact_generator_version(invalid, None, source=tmp_path / "source.json")
 
 
-def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(tmp_path: Path) -> None:
+def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(tmp_path: Path, monkeypatch) -> None:
     task = _task("read")
     recorded = tmp_path / "recorded.json"
     legacy = tmp_path / "legacy.json"
@@ -636,12 +636,44 @@ def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(tmp_path
     _write_evaluation(
         legacy, task, _expert_trace(task), success=True, label="legacy", generator_version=None
     )
+    versions = []
+    original_replay = integrity_module.replay_task_from_id
+    monkeypatch.setattr(
+        integrity_module,
+        "replay_task_from_id",
+        lambda task_id, seed, version, difficulty=None: versions.append(version)
+        or original_replay(task_id, seed, version, difficulty),
+    )
+    analysed = _analyse_evaluation(recorded, 20260902)
+    assert analysed["generator_version"] == 2
+    assert versions == [2]
+    rendered = _render_evaluations([legacy], 20260902, generator_version=1)
+    assert "generator version" in rendered
+    assert "FAIL" in rendered  # explicit binding must reach v1 replay, not silently use HEAD
+    payload = json.loads(recorded.read_text())
+    payload["generator_version"] = payload["summary"].pop("generator_version")
+    recorded.write_text(json.dumps(payload))
     assert _analyse_evaluation(recorded, 20260902)["generator_version"] == 2
-    assert "generator version" in _render_evaluations([legacy], 20260902, generator_version=1)
     with pytest.raises(ValueError, match="no generator_version"):
         _render_evaluations([legacy], 20260902)
     with pytest.raises(ValueError, match="conflicts"):
         _render_evaluations([recorded], 20260902, generator_version=1)
+
+
+def test_integrity_main_forwards_explicit_generator_version(monkeypatch, tmp_path: Path) -> None:
+    seen = []
+    monkeypatch.setattr(
+        integrity_module,
+        "_render_evaluations",
+        lambda paths, seed, *, generator_version=None: seen.append(generator_version) or "report",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["agent-v2-integrity", "--eval", str(tmp_path / "run.json"), "--output", str(tmp_path / "x.md"), "--generator-version", "2"],
+    )
+    integrity_module.main()
+    assert seen == [2]
 
 
 def test_cli_helper_renders_deterministic_offline_comparison(tmp_path: Path) -> None:
