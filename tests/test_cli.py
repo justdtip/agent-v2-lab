@@ -15,6 +15,91 @@ from local_llm_lab.pipeline.cli import load_config, stage_data
 from local_llm_lab.pipeline.data import SplitSpec
 
 
+def test_preflight_stage_dispatches_from_registry_without_loading_run_config(monkeypatch) -> None:
+    """The standalone preflight command must not require a YAML training recipe."""
+    received = []
+    monkeypatch.setattr(cli, "run_preflight", lambda name: received.append(name), raising=False)
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda path: (_ for _ in ()).throw(AssertionError("run config must stay unloaded")),
+    )
+    monkeypatch.setattr(sys, "argv", ["agent-pipeline", "preflight", "--model", "qwen35-4b"])
+
+    cli.main()
+
+    assert received == ["qwen35-4b"]
+
+
+@pytest.mark.parametrize(
+    ("stage", "arguments", "first_stage"),
+    [
+        ("train", [], "train"),
+        ("select", [], "select"),
+        ("eval", ["--base"], "eval"),
+        ("all", [], "train"),
+    ],
+)
+def test_model_loading_stages_require_preflight_once_before_loading(
+    monkeypatch, tmp_path: Path, stage: str, arguments: list[str], first_stage: str
+) -> None:
+    """A missing guard before any model-loading stage would permit stale architecture evidence."""
+    events: list[str] = []
+    config = {
+        "model": "registry-name",
+        "output": tmp_path / "out",
+        "data": tmp_path / "data",
+        "eval": {"max_steps": 1, "max_tokens": 1, "split": "test", "limit": 1},
+        "keep_last": 1,
+        "seed": 1,
+    }
+    spec = _training_model_spec()
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(
+        cli,
+        "require_preflight",
+        lambda received, *, skip: events.append(f"guard-{skip}") or {},
+        raising=False,
+    )
+    monkeypatch.setattr(cli, "stage_data", lambda *args, **kwargs: events.append("data"))
+    monkeypatch.setattr(cli, "stage_train", lambda *args, **kwargs: events.append("train"))
+    monkeypatch.setattr(cli, "stage_select", lambda *args, **kwargs: events.append("select"))
+    monkeypatch.setattr(cli, "stage_eval", lambda *args, **kwargs: events.append("eval"))
+    monkeypatch.setattr(sys, "argv", ["agent-pipeline", stage, *arguments])
+
+    cli.main()
+
+    assert events.count("guard-False") == 1
+    assert events.index("guard-False") < events.index(first_stage)
+
+
+def test_skip_preflight_check_propagates_to_the_central_guard(monkeypatch, tmp_path: Path) -> None:
+    """The explicit override must reach the one guard before training can load a model."""
+    config = {
+        "model": "registry-name",
+        "output": tmp_path / "out",
+        "data": tmp_path / "data",
+        "eval": {"max_steps": 1, "max_tokens": 1, "split": "test", "limit": 1},
+        "keep_last": 1,
+        "seed": 1,
+    }
+    received = []
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: _training_model_spec())
+    monkeypatch.setattr(
+        cli, "require_preflight", lambda spec, *, skip: received.append(skip), raising=False
+    )
+    monkeypatch.setattr(cli, "stage_train", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sys, "argv", ["agent-pipeline", "train", "--skip-preflight-check"]
+    )
+
+    cli.main()
+
+    assert received == [True]
+
+
 @pytest.mark.parametrize("name", ("agent_v2.yaml", "agent_v2b.yaml", "agent_v2c.yaml"))
 def test_shipped_configs_define_only_the_complete_two_cell_selection_screen(name: str) -> None:
     """Catch a stale legacy split/limit selector in any shipped run configuration."""
@@ -538,6 +623,7 @@ def test_main_all_wires_one_best_adapter_evaluation(
     calls = []
 
     monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(cli, "_require_config_preflight", lambda config, *, skip: None)
     monkeypatch.setattr(cli, "stage_data", lambda config, extra: calls.append(("data", extra)))
     monkeypatch.setattr(cli, "stage_train", lambda config, iters: calls.append(("train", iters)))
     monkeypatch.setattr(

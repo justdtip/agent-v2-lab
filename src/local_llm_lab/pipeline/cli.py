@@ -20,6 +20,7 @@ from local_llm_lab.pipeline.branch import run_branch_mining
 from local_llm_lab.pipeline.data import SplitSpec, write_dataset
 from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
+from local_llm_lab.pipeline.preflight import require_preflight, run_preflight
 from local_llm_lab.pipeline.report import load_summaries, render
 from local_llm_lab.pipeline.rollout import run_rollout
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
@@ -40,6 +41,11 @@ def load_config(path: Path) -> dict[str, Any]:
 
 def _log(message: str) -> None:
     print(f"\n### {time.strftime('%H:%M:%S')} {message}", flush=True)
+
+
+def _require_config_preflight(config: dict[str, Any], *, skip: bool) -> None:
+    """Validate the declared base model before a stage can load it."""
+    require_preflight(load_model_spec(config["model"]), skip=skip)
 
 
 def dataset_splits(config: dict[str, Any]) -> dict[str, SplitSpec]:
@@ -555,6 +561,7 @@ def main() -> None:
 
     train = stages.add_parser("train", help="QLoRA-train the base model on the generated data.")
     train.add_argument("--iters", type=int)
+    train.add_argument("--skip-preflight-check", action="store_true")
     train.add_argument(
         "--resume-from",
         type=Path,
@@ -565,6 +572,7 @@ def main() -> None:
         "select", help="Screen every checkpoint behaviourally on the validation split."
     )
     select.add_argument("--limit", type=int)
+    select.add_argument("--skip-preflight-check", action="store_true")
 
     evaluate = stages.add_parser(
         "eval", help="Evaluate on the held-out test split with transcripts."
@@ -576,6 +584,10 @@ def main() -> None:
     evaluate.add_argument("--split")
     evaluate.add_argument("--limit", type=int)
     evaluate.add_argument("--stress", action="store_true")
+    evaluate.add_argument("--skip-preflight-check", action="store_true")
+
+    preflight = stages.add_parser("preflight", help="Inspect a registered base model before loading stages.")
+    preflight.add_argument("--model", required=True)
 
     rollout = stages.add_parser(
         "rollout", help="Sample the policy on fresh tasks and keep verified trajectories."
@@ -612,12 +624,17 @@ def main() -> None:
     everything.add_argument("--base", action="store_true")
     everything.add_argument("--stress", action="store_true")
     everything.add_argument("--limit", type=int, default=180)
+    everything.add_argument("--skip-preflight-check", action="store_true")
 
     args = parser.parse_args()
+    if args.stage == "preflight":
+        run_preflight(args.model)
+        return
     config = load_config(args.config.resolve())
     if args.stage == "data":
         stage_data(config, [path.resolve() for path in args.extra])
     elif args.stage == "train":
+        _require_config_preflight(config, skip=args.skip_preflight_check)
         resume_from: Path | None = args.resume_from
         if resume_from is not None:
             if not resume_from.is_file():
@@ -626,8 +643,10 @@ def main() -> None:
                 parser.error(f"--resume-from {resume_from} must be a .safetensors adapter file")
         stage_train(config, args.iters, resume_from=resume_from)
     elif args.stage == "select":
+        _require_config_preflight(config, skip=args.skip_preflight_check)
         stage_select(config, args.limit, args.quiet)
     elif args.stage == "eval":
+        _require_config_preflight(config, skip=args.skip_preflight_check)
         stage_eval(
             config,
             args.adapter,
@@ -687,6 +706,7 @@ def main() -> None:
         print(render(load_summaries(config["output"] / "evals")))
     elif args.stage == "all":
         stage_data(config, [])
+        _require_config_preflight(config, skip=args.skip_preflight_check)
         stage_train(config, args.iters)
         stage_select(config, None, args.quiet)
         stage_eval(
