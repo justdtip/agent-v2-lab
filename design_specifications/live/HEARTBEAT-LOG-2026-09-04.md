@@ -716,3 +716,13 @@ recording the execution rule. No execution lane designated yet.
 - B1c rebased onto B5 (eight source hunks, one test hunk, both features intact; counts
   reconcile 749 → 774 → 786); patch applies to the main tree; work order filed. Chief's point:
   Holm across the comparison cells (recommend a follow-up line).
+
+## 2026-09-05 — ceiling restored (my piped-test error); R27 F10 verified; work order filed
+
+- 7f11288's ceiling broke the pairwise-recipe test; I had committed on a piped run (the trap
+  I logged on 09-04). Restored 2688 (`112648b`), pairwise test green bare, #18 corrected. The
+  loader fix in review removes the need.
+- R27: F10 fixed (foreign replacement pooled via `_alignment_rows`; test asserts float32 mean
+  and two distinct row sets at the slot cell); F11 corrected (three secondary cases disagree
+  on the step). Slice tests 85 green. Work order filed: primary READY; secondary blocked on the
+  #41 ruling (extractor + HEAD eligibility).
