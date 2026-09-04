@@ -190,3 +190,7 @@ Exit 0: 481 passed, 0 failed, 0 xfailed; failing nodes: none. A separate read-on
 count confirmed 481 tests. No model, tokenizer, checkpoint, probe, GPU/MLX computation, real
 evaluation, or `agent-v2-*` command ran. The review's aggregation-oracle observation remains a
 deferred Minor and was not expanded into this fix round.
+
+A peer commit landed before the exact-path fix commit. The focused file and exact R13 command
+were therefore rerun at actual fix commit `ffc6665656551dbf22acef64047196009c772b35` and again
+exited 0 with 15 focused passes and 481 full-suite passes; no failing or xfailed nodes.
