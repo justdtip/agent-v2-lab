@@ -2,19 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the subprocess MLX-LM training entry with a fail-closed, in-process `train_model(args, model, train_set, valid_set, training_callback=None)` call over repository-owned rendered datasets, persist structured training metrics, and preserve effective configuration, provenance, preflight protection, and memory cleanup.
+**Goal:** Replace the subprocess MLX-LM training entry with a fail-closed, in-process `train_model(args, model, train_set, valid_set, training_callback=None)` call over repository-owned rendered datasets, persist structured training metrics, and wire issue #17's tokenizer-only data rendering so generated rows are valid trainer input.
 
-**Architecture:** `pipeline/cli.py` will lazily validate the installed `mlx-lm` version and exact trainer parameter names, load the base model once, resolve its architecture, construct one effective `SimpleNamespace`, serialize that namespace to `lora.yaml`, and call the validated trainer with rendered train/valid datasets plus a repository-owned metrics callback. A `finally` boundary drops all model-associated references and clears the MLX cache on success or failure; trainer output is teed to the console and `train.log`, while checkpoint selection reads validation loss only from structured `metrics.jsonl` records.
+**Architecture:** `pipeline/cli.py` will share one lazy `mlx-lm==0.31.3` import guard between tokenizer-only data rendering and the exact trainer boundary. `stage_data` loads the registry `ModelSpec` plus only `mlx_lm.utils.load_tokenizer(hf_id)` and passes both to `write_dataset`; `stage_train` loads the base model once, resolves its architecture, constructs one effective `SimpleNamespace`, serializes it to `lora.yaml`, and calls the validated trainer with rendered train/valid datasets plus a repository-owned metrics callback. A `finally` boundary drops all model-associated references and clears the MLX cache on success or failure; trainer output is teed to the console and `train.log`, while checkpoint selection reads validation loss only from structured `metrics.jsonl` records.
 
 **Tech Stack:** Python 3.13, `mlx-lm==0.31.3`, PyYAML, pytest, Ruff.
 
-**Spec:** `design_specifications/pending/SPEC-001-model-agnostic-backbone.md` §7 and §9, as corrected by ratified R14 on GitHub issue #1; `design_specifications/pending/02-INTERFACE-AND-WIRING-MAP.md` §2.6, §2.11, and R14; `design_specifications/pending/01-IMPLEMENTER-BRIEFING.md` standing rules; GitHub issue #14.
+**Spec:** `design_specifications/pending/SPEC-001-model-agnostic-backbone.md` §7 and §9, as corrected by ratified R14 on GitHub issue #1; `design_specifications/pending/02-INTERFACE-AND-WIRING-MAP.md` §2.5, §2.6, §2.11, and R14; `design_specifications/pending/01-IMPLEMENTER-BRIEFING.md` standing rules; GitHub issues #14 and #17.
 
 ## Global Constraints
 
 - Do not load model weights or run training, inference, preflight, selection, evaluation, rollout, branch mining, preference training, or gated research commands; tests use fakes only.
 - Do not modify `src/local_llm_lab/arch.py`, `src/local_llm_lab/pipeline/preflight.py`, their tests, pending specifications, research records, model registry files, lockfiles, `outputs/`, `data/`, or `reports/`.
 - Keep the current CLI preflight guard and `--skip-preflight-check` behavior unchanged until issue #15 releases a stage-scoped API.
+- Issue #17 data rendering loads the unresolved registry `ModelSpec` and tokenizer metadata only. It must not call `mlx_lm.load`, `_load_training_base`, `ModelSpec.resolve`, or otherwise load model weights.
 - The only accepted trainer call contract is the R14-corrected `mlx_lm.lora.train_model(args, model, train_set, valid_set, training_callback=None)`. Abort before checkpoint cleanup or model loading when the installed distribution is not `mlx-lm==0.31.3`, when the import fails, or when the ordered parameter names or callback default differ.
 - The tokenizer belongs only to `load_rendered_splits`; it must not be passed to `train_model` or added to the dependency signature.
 - `RenderedRowsDataset.__getitem__` remains `(tokens: list[int], offset: int)`, with prompt and completion tokenized separately, the offset equal to the prompt-token count, completion-only truncation, and stable length ordering.
@@ -195,3 +196,69 @@
   ```
 
   Include `src/local_llm_lab/tuner_data.py` in the explicit path list only if Step 5 found and fixed a real production defect. Never stage foreign files or broad paths.
+
+- [ ] **Step 10: Add issue #17 failing stage-data tests**
+
+  Extend `tests/test_cli.py` with fakes that prove the data stage loads one registry spec, loads a tokenizer for exactly `spec.hf_id`, passes the identical `tokenizer` and `spec` objects to `write_dataset`, and passes the identical spec to provenance. Make `_load_training_base` and `ModelSpec.resolve` raise if called so a mutation that loads model weights fails the test.
+
+  Add a focused tokenizer-loader test with fake imports:
+
+  ```python
+  package = SimpleNamespace(__version__="0.31.3")
+  tokenizer = object()
+  utils = SimpleNamespace(load_tokenizer=lambda hf_id: tokenizer)
+  ```
+
+  Assert local cache configuration happens before imports, the pinned package is checked, `mlx_lm.utils` is imported, and `load_tokenizer` receives only the registry HF id.
+
+- [ ] **Step 11: Run issue #17 tests and verify RED**
+
+  Run:
+
+  ```bash
+  uv run pytest -o addopts='' -q tests/test_cli.py -k 'stage_data or data_tokenizer'
+  ```
+
+  Expected: tests fail because `stage_data` omits `tokenizer=`/`spec=` and no pinned tokenizer-only loader exists.
+
+- [ ] **Step 12: Implement tokenizer-only rendering wiring**
+
+  Refactor the already-tested package version check into one helper used by both `_load_training_entry` and a new tokenizer-only loader:
+
+  ```python
+  def _load_data_tokenizer(hf_id: str) -> Any:
+      configure_local_cache()
+      _import_pinned_mlx_lm()
+      try:
+          utils = importlib.import_module("mlx_lm.utils")
+      except ImportError as error:
+          raise SystemExit(f"cannot import pinned mlx_lm.utils: {error}") from error
+      return utils.load_tokenizer(hf_id)
+  ```
+
+  At the start of `stage_data`, load `spec = load_model_spec(config["model"])` and `tokenizer = _load_data_tokenizer(spec.hf_id)`. Pass both as named arguments to `write_dataset` and reuse the same `spec` object for provenance. Do not resolve the spec or touch the training-base loader.
+
+- [ ] **Step 13: Verify issue #17 and all prior Task 1 behavior**
+
+  Run:
+
+  ```bash
+  uv run pytest -o addopts='' -q tests/test_cli.py -k 'stage_data or data_tokenizer or training_entry or stage_train or resolve_training_spec or lora_config'
+  uv run ruff check src/local_llm_lab/pipeline/cli.py tests/test_cli.py
+  git diff --check
+  uv run pytest -o addopts='' -q
+  ```
+
+  Expected: focused checks and the complete R13 fake-only suite pass; no model/runtime workload runs.
+
+- [ ] **Step 14: Commit the issue #17 addendum**
+
+  Stage only the exact addendum files, inspect the staged patch and names, then commit:
+
+  ```bash
+  git add src/local_llm_lab/pipeline/cli.py tests/test_cli.py
+  git diff --cached --check
+  git commit -m "Render pipeline data with registered tokenizer"
+  ```
+
+  Do not stage the foreign Run D data/report, pending documents, or any §8/preflight files.
