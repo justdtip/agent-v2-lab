@@ -51,12 +51,11 @@ exit 0
 
 ## R13 full fake-only suite
 
-- Tested integrated commit: `ffc6665656551dbf22acef64047196009c772b35`
-  (`git rev-parse ffc6665`)
+- Tested code commit: `a0b88a976639caf243b9f38bded53929d67f6eb7`
 - Required command: `uv run pytest -q`
 - Exit code: 0
 - Summary-enabled equivalent: `uv run pytest -q -o addopts='' --tb=no` (exit 0)
-- Counts: 481 passed, 0 failed, 0 xfailed
+- Counts: 498 passed, 0 failed, 0 xfailed
 - Failing nodes: none
 
 ## No-model and protected-path evidence
@@ -78,4 +77,47 @@ were written by this lane; all test files use `tmp_path`.
 ## Commit
 
 - `dd036a48ce22dd47ed4623d02bfc676f5887d81e` — `feat: add fake-tested P6 causal patching`
+- `a0b88a976639caf243b9f38bded53929d67f6eb7` — `fix: correct P6 causal patch controls`
 - This report is committed separately after its final evidence update.
+
+## Fix Round 1
+
+The correction derives named source and target groups from each rendered replay, captures every
+requested residual layer exactly once for each failing/counterfactual prompt, and replaces each
+failing group with its counterpart. `unrelated_task` rotates the selected cases and deterministically
+truncates/cycles rows; `random_positions` uses seeded, non-treatment positions and fails closed when
+the required cardinality cannot be drawn. Each path is generated and scored independently. Layer
+syntax (including non-finite values) is rejected before policy/model loading; resolved bounds remain
+validated after model resolution. The flip oracle now checks the exact decision step.
+
+RED evidence:
+
+```text
+uv run pytest -q tests/test_patch.py -k 'malformed_layers or named_groups or flip_scoring'
+.FF
+- malformed --layers reached load_policy before raising
+- vertical capture received positions=(5,) instead of positions="all"
+```
+
+GREEN and verification evidence on `a0b88a9`:
+
+```text
+uv run pytest -q tests/test_patch.py -k 'malformed_layers or named_groups or flip_scoring'
+3 passed
+uv run pytest -q tests/test_patch.py
+13 passed
+uv run pytest -q tests/test_capture.py tests/test_patch.py
+28 passed
+uv run ruff check src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py tests/test_capture.py tests/test_patch.py
+All checks passed!
+uv run ruff check --select C901 src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py
+All checks passed!
+python3 -m py_compile src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py tests/test_capture.py tests/test_patch.py
+exit 0
+git diff --check a0b88a9^ a0b88a9 -- src/local_llm_lab/probes/patch.py tests/test_patch.py
+exit 0
+uv run pytest -q
+exit 0
+uv run pytest -q -o addopts='' --tb=no
+498 passed in 7.40s
+```
