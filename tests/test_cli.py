@@ -697,7 +697,7 @@ def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch)
     monkeypatch.setattr(cli, "_load_training_base", lambda hf_id: (model, tokenizer))
     monkeypatch.setattr(ModelSpec, "resolve", lambda self, model, tokenizer: resolved)
     monkeypatch.setattr(
-        cli, "load_rendered_splits", lambda *args, **kwargs: (object(), object(), object())
+        cli, "load_rendered_splits", lambda *args, **kwargs: (object(), object())
     )
     monkeypatch.setattr(cli, "_clear_model_cache", lambda: None)
     monkeypatch.setattr(cli, "write_provenance", capture_provenance)
@@ -792,7 +792,8 @@ def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
     spec = _training_model_spec()
     model, tokenizer = object(), object()
     resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("hybrid.q",))
-    train_set, valid_set, test_set = object(), object(), object()
+    train_set, valid_set = object(), object()
+    requested_splits = []
     trainer_calls = []
     provenance = []
 
@@ -813,10 +814,8 @@ def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
     monkeypatch.setattr(
         cli,
         "load_rendered_splits",
-        lambda path, received_tokenizer, *, max_seq_length: (
-            train_set,
-            valid_set,
-            test_set,
+        lambda path, received_tokenizer, *, max_seq_length, splits: (
+            requested_splits.append(tuple(splits)) or (train_set, valid_set)
         ),
         raising=False,
     )
@@ -831,6 +830,8 @@ def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
 
     rendered = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
     assert trainer_calls == [(rendered, model, train_set, valid_set)]
+    # lora["test"] is False, so the stage must not pay for a split it never trains on.
+    assert requested_splits == [("train", "valid")]
     assert not stale.exists() and (output / "evals" / "keep").is_file()
     (extra,) = provenance
     assert extra["stage"] == "train" and extra["training_config"] == rendered
@@ -864,10 +865,15 @@ def _report(iteration: int, loss: float) -> dict[str, object]:
     }
 
 
-def _patch_stage_train(monkeypatch, trainer) -> SimpleNamespace:
-    """Wire stage_train to fakes only: no trainer entry point, no model, no dataset on disk."""
+def _patch_stage_train(monkeypatch, trainer, *, tokenizer=None, splits=None) -> SimpleNamespace:
+    """Wire stage_train to fakes only: no trainer entry point, no model, no dataset on disk.
+
+    ``splits`` replaces the loader with a fake returning it; pass ``keep`` to leave the real
+    ``load_rendered_splits`` in place and read the rendered rows the test wrote to disk.
+    """
     spec = _training_model_spec()
-    model, tokenizer = object(), object()
+    model = object()
+    tokenizer = object() if tokenizer is None else tokenizer
     resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("hybrid.q",))
     record = SimpleNamespace(provenance=[], loads=[], resolved=resolved, spec=spec)
 
@@ -885,12 +891,14 @@ def _patch_stage_train(monkeypatch, trainer) -> SimpleNamespace:
     monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
     monkeypatch.setattr(cli, "_load_training_base", fake_load_base)
     monkeypatch.setattr(ModelSpec, "resolve", lambda self, model, tokenizer: resolved)
-    monkeypatch.setattr(
-        cli,
-        "load_rendered_splits",
-        lambda path, received_tokenizer, *, max_seq_length: (["a", "b", "c"], ["d", "e"], ["f"]),
-        raising=False,
-    )
+    if splits != "keep":
+        loaded = (["a", "b", "c"], ["d", "e"]) if splits is None else splits
+        monkeypatch.setattr(
+            cli,
+            "load_rendered_splits",
+            lambda path, received_tokenizer, **kwargs: loaded,
+            raising=False,
+        )
     monkeypatch.setattr(cli, "_clear_model_cache", lambda: None)
     monkeypatch.setattr(cli, "write_provenance", fake_provenance)
     return record
@@ -1053,6 +1061,123 @@ def test_stage_train_flags_a_run_that_stops_short_or_saves_no_checkpoint(
     assert "incomplete_run" in {flag["flag"] for flag in unsaved["flags"]}
 
 
+class _WordTokenizer:
+    """One token per whitespace-separated word: a row's length is readable in the source."""
+
+    def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        assert not add_special_tokens
+        return [1] * len(text.split())
+
+
+def _write_rendered_splits(data_dir: Path, *, prompt_words: dict[str, int]) -> None:
+    """Write one rendered row per split, the prompt sized in words the fake tokenizer counts."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+    for split, words in prompt_words.items():
+        (data_dir / f"{split}.jsonl").write_text(
+            json.dumps({"prompt": " ".join(["w"] * words), "completion": "c"}) + "\n",
+            encoding="utf-8",
+        )
+
+
+def test_stage_train_loads_only_the_splits_it_trains_on(monkeypatch, tmp_path: Path) -> None:
+    """An over-long TEST row must not stop a run that never trains on the test split.
+
+    This is the B4 start failure: ``lora["test"]`` is False, yet the stage loaded and
+    tokenized test.jsonl and died on row 37 before iteration one.
+    """
+    config = _training_config(tmp_path)
+    config["train"]["max_seq_length"] = 4
+    output = config["output"]
+    _write_rendered_splits(
+        config["data"], prompt_words={"train": 1, "valid": 1, "test": 9}
+    )
+    _patch_stage_train(monkeypatch, _healthy_trainer, tokenizer=_WordTokenizer(), splits="keep")
+
+    cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["verdict"] == "healthy" and health["status"] == "ok"
+    # The splits line still reports all three names: the one that was not loaded reads None
+    # in events.jsonl, and RunLog renders that as "-" on the console side.
+    splits = [
+        json.loads(line)
+        for line in (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["message"] == "splits"
+    ]
+    assert [event["fields"] for event in splits] == [{"train": 1, "valid": 1, "test": None}]
+    lines = (output / "run.log").read_text(encoding="utf-8").splitlines()
+    ((splits_line,)) = [line for line in lines if "splits" in line]
+    assert "train=1 valid=1 test=-" in splits_line
+
+
+def test_stage_train_still_fails_closed_on_an_over_long_training_row(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A row the trainer would actually read is still refused, with the same message."""
+    config = _training_config(tmp_path)
+    config["train"]["max_seq_length"] = 4
+    _write_rendered_splits(
+        config["data"], prompt_words={"train": 9, "valid": 1, "test": 1}
+    )
+    _patch_stage_train(monkeypatch, _healthy_trainer, tokenizer=_WordTokenizer(), splits="keep")
+
+    with pytest.raises(ValueError, match="prompt leaves no room for a completion token"):
+        cli.stage_train(config, iters=2)
+
+
+def _exploding_loader(path, tokenizer, **kwargs):
+    """The loader failure that started this: it raises before the trainer is ever reached."""
+    raise ValueError("row 37: prompt leaves no room for a completion token")
+
+
+def _raising_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+    """A trainer that dies partway through, after one report and with no checkpoint saved."""
+    training_callback.on_train_loss_report(_report(1, 1.0))
+    raise RuntimeError("the training loop died")
+
+
+def test_stage_train_records_an_incomplete_run_when_the_loader_raises(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(c): a run that never reached iteration one can never read healthy."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    record = _patch_stage_train(monkeypatch, _healthy_trainer, splits="keep")
+    monkeypatch.setattr(cli, "load_rendered_splits", _exploding_loader, raising=False)
+
+    with pytest.raises(ValueError, match="row 37"):
+        cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["status"] == "error" and health["verdict"] == "incomplete"
+    assert health["iterations_done"] == 0 and health["final_checkpoint"] is False
+    incomplete = [flag for flag in health["flags"] if flag["flag"] == "incomplete_run"]
+    assert len(incomplete) == 1 and incomplete[0]["severity"] == "fatal"
+    assert incomplete[0]["detail"] == {
+        "iterations_done": 0,
+        "iters_planned": 2,
+        "final_checkpoint": False,
+    }
+    assert record.provenance == []
+
+
+def test_stage_train_records_an_incomplete_run_when_the_trainer_raises(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The same rule must produce the same record whichever call raised."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _raising_trainer)
+
+    with pytest.raises(RuntimeError, match="the training loop died"):
+        cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["status"] == "error" and health["verdict"] == "incomplete"
+    assert health["iterations_done"] == 1
+    assert "incomplete_run" in {flag["flag"] for flag in health["flags"]}
+
+
 def test_stage_train_aborts_on_a_non_finite_loss_without_writing_provenance(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
@@ -1074,6 +1199,8 @@ def test_stage_train_aborts_on_a_non_finite_loss_without_writing_provenance(
     assert str(output / "health.json") in str(error.value)
     health = json.loads((output / "health.json").read_text(encoding="utf-8"))
     assert health["verdict"] == "aborted" and health["status"] == "aborted"
+    # The abort path also runs the finish rule, and non_finite_loss outranks what it records.
+    assert "incomplete_run" in {flag["flag"] for flag in health["flags"]}
     assert record.provenance == []
     assert not (output / "provenance.json").exists()
 

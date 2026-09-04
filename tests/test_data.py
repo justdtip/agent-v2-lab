@@ -261,7 +261,7 @@ def test_current_generator_qwen25_messages_migrate_to_identical_rendered_tokens(
     dataset = RenderedRowsDataset(
         [rendered], tokenizer, max_seq_length=len(legacy_tokens) + 1
     )
-    tokens, offset = dataset[0]
+    tokens, offset = dataset.process(dataset[0])
 
     assert rendered["prompt"] + rendered["completion"] == legacy_render
     assert tokens == legacy_tokens
@@ -286,7 +286,7 @@ def test_chat_rows_migrate_to_identical_rendered_tokens_under_the_template() -> 
     dataset = RenderedRowsDataset(
         [rendered], tokenizer, max_seq_length=len(legacy_tokens) + 1
     )
-    tokens, offset = dataset[0]
+    tokens, offset = dataset.process(dataset[0])
 
     assert rendered["prompt"] + rendered["completion"] == legacy_render
     assert tokens == legacy_tokens

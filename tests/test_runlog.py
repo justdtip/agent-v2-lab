@@ -828,6 +828,19 @@ def test_on_finish_does_not_raise_and_verdict_precedence_keeps_aborted() -> None
     assert health.verdict == "aborted"
 
 
+def test_on_finish_is_idempotent_so_every_exit_path_may_call_it() -> None:
+    """The training stage calls it on the normal path and again from its ``finally``."""
+    health = _health(iters=10)
+    _train(health, 3)
+
+    assert health.on_finish(iterations_done=3, final_checkpoint=False) == ["incomplete_run"]
+    assert health.on_finish(iterations_done=9, final_checkpoint=True) == []
+
+    assert [flag["flag"] for flag in health.flags] == ["incomplete_run"]
+    summary = health.summary(elapsed=1.0, status="error")
+    assert summary["iterations_done"] == 3 and summary["final_checkpoint"] is False
+
+
 def test_verdict_precedence_incomplete_outranks_warnings() -> None:
     health = _health(iters=10, memory_budget_gib=1.0)
     _train(health, 1, memory=99.0)

@@ -716,12 +716,17 @@ class TrainingHealth:
         return raised
 
     def on_finish(self, *, iterations_done: int, final_checkpoint: bool) -> list[str]:
-        """Called once after the trainer returns normally (R26(c), issue #35).
+        """Called once on whichever path the training stage leaves by (R26(c), issue #35).
 
-        A trainer that returns without completing its iterations, or without leaving a
-        final checkpoint, produced an adapter nothing downstream may select from; that is
-        fatal for the run's verdict but does not raise, because the run has already ended.
+        A run that ends without completing its iterations, or without leaving a final
+        checkpoint, produced an adapter nothing downstream may select from; that is fatal for
+        the run's verdict but does not raise, because the run has already ended. It holds
+        just as much when an exception ended the run, so the caller may call this from the
+        normal path and again from its ``finally``: the first call wins and every later one
+        is a no-op returning no flags, so one exit records one ``incomplete_run``.
         """
+        if self._finished is not None:
+            return []
         done = int(iterations_done)
         complete_checkpoint = bool(final_checkpoint)
         self._finished = {"iterations_done": done, "final_checkpoint": complete_checkpoint}

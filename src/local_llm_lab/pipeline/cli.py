@@ -278,6 +278,35 @@ def _health_flags(log: RunLog, health: TrainingHealth, names: list[str], iterati
         log.warn("health flag", flag=name, iteration=iteration, **_flag_detail(latest.get(name, {})))
 
 
+def _finish_health(
+    log: RunLog,
+    health: TrainingHealth,
+    callback: _TrainingMetrics | None,
+    *,
+    adapters: Path,
+    since: float,
+) -> None:
+    """Close the run's health record, whichever way the training stage is leaving (R26(c)).
+
+    The rule is the same on every exit path, so the record is the same whether the trainer
+    returned, the trainer raised, the loader raised, or the stage returned early: iterations
+    done comes from the last report the callback saw (none at all is zero) and the final
+    checkpoint from the fresh-checkpoint check. ``TrainingHealth.on_finish`` is idempotent,
+    so the normal path's call and the ``finally``'s fallback record one flag between them,
+    and a run that crashed before iteration one can never read ``healthy``.
+    """
+    iteration = callback.last_iteration if callback is not None else 0
+    _health_flags(
+        log,
+        health,
+        health.on_finish(
+            iterations_done=iteration,
+            final_checkpoint=_fresh_checkpoint(adapters / "adapters.safetensors", since=since),
+        ),
+        iteration,
+    )
+
+
 class _TrainingMetrics:
     """Write ``metrics.jsonl`` and mirror every trainer report to the run log and health rules.
 
@@ -516,8 +545,16 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
             adapters.mkdir(parents=True, exist_ok=True)
             config_path = output / "lora.yaml"
             config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
-            train_set, valid_set, test_set = load_rendered_splits(
-                config["data"], tokenizer, max_seq_length=args.max_seq_length
+            # ``lora["test"]`` is False: this stage never trains on or evaluates the test
+            # split, so it does not load one. Reading it costs a full tokenization pass and
+            # fails closed on rows the trainer would never see — the B4 start failure, where
+            # one over-long test row ended the run before iteration one. ``test_set`` stays
+            # None, and the splits line below reports it as such.
+            train_set, valid_set = load_rendered_splits(
+                config["data"],
+                tokenizer,
+                max_seq_length=args.max_seq_length,
+                splits=("train", "valid"),
             )
             runlog.info(
                 "splits",
@@ -553,17 +590,8 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                     trainer(args, model, train_set, valid_set, callback)
             # R26(c): a trainer that returned early or saved nothing produced an adapter that
             # nothing downstream may select from; on_finish records that and never raises.
-            _health_flags(
-                runlog,
-                health,
-                health.on_finish(
-                    iterations_done=callback.last_iteration,
-                    final_checkpoint=_fresh_checkpoint(
-                        adapters / "adapters.safetensors", since=started_wall
-                    ),
-                ),
-                callback.last_iteration,
-            )
+            # Called here, before provenance, so the copy provenance carries is the final one.
+            _finish_health(runlog, health, callback, adapters=adapters, since=started_wall)
             summary = health.summary(elapsed=time.monotonic() - started, status="ok")
             # R26(f): provenance carries the same health record health.json does, written
             # after on_finish so the verdict recorded there is the final one.
@@ -599,6 +627,10 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
             status = "error"
             raise
         finally:
+            # R26(c) on the error path: an exception before or during training leaves a run
+            # that did fewer iterations than it planned, so the finish rule must run here too
+            # or a crashed run's health.json reads ``healthy`` beside its ``error`` status.
+            _finish_health(runlog, health, callback, adapters=adapters, since=started_wall)
             if summary is None or status != "ok":
                 summary = health.summary(elapsed=time.monotonic() - started, status=status)
             (output / "health.json").write_text(
