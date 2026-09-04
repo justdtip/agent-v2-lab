@@ -27,6 +27,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
+import sys
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +50,7 @@ __all__ = [
     "principal_angle_cosines",
     "random_subspace_cosine",
     "readout_update_directions",
+    "run_block_ablation",
     "run_label",
     "relative_norm",
     "weight_norm",
@@ -405,6 +410,167 @@ def compare_adapters(paths: list[str | Path], *, top: int = 16) -> dict[str, Any
     }
 
 
+# --------------------------------------------------------------------------- block ablation
+
+
+def _layer_blocks(num_layers: int, blocks: int) -> list[tuple[int, ...]]:
+    """Partition every layer into consecutive near-equal non-empty blocks."""
+    if not 1 <= blocks <= num_layers:
+        raise ValueError("blocks must be between 1 and num_layers")
+    width, remainder = divmod(num_layers, blocks)
+    result: list[tuple[int, ...]] = []
+    start = 0
+    for index in range(blocks):
+        stop = start + width + int(index < remainder)
+        result.append(tuple(range(start, stop)))
+        start = stop
+    return result
+
+
+def _success_record(successes: int, tasks: int) -> dict[str, Any]:
+    """Return exact counts, their rate, and the repository-standard Wilson interval."""
+    from local_llm_lab.pipeline.evaluate import wilson
+
+    lower, upper = wilson(successes, tasks)
+    return {
+        "successes": successes,
+        "tasks": tasks,
+        "success_rate": successes / tasks if tasks else 0.0,
+        "wilson_95": (lower, upper),
+    }
+
+
+def _aggregate_screen_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    successes = sum(int(summary["successes"]) for summary in summaries)
+    tasks = sum(int(summary["tasks"]) for summary in summaries)
+    family_counts: dict[str, list[int]] = {}
+    for summary in summaries:
+        for family, values in summary.get("by_family", {}).items():
+            counts = family_counts.setdefault(str(family), [0, 0])
+            counts[0] += int(values["successes"])
+            counts[1] += int(values["tasks"])
+    return {
+        "overall": _success_record(successes, tasks),
+        "by_family": {
+            family: _success_record(counts[0], counts[1])
+            for family, counts in sorted(family_counts.items())
+        },
+    }
+
+
+def _evaluate_ablation_condition(
+    view: ArchitectureView,
+    *,
+    name: str,
+    block_index: int | None,
+    kept_layers: tuple[int, ...],
+    removed_layers: tuple[int, ...],
+    screen: list[dict[str, Any]],
+    evaluate_condition: Callable[[str, int, dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    from local_llm_lab.probes.capture import lora_block_mask
+
+    evaluations: list[dict[str, Any]] = []
+    with lora_block_mask(view, kept_layers) as masked_modules:
+        for cell_index, cell in enumerate(screen):
+            summary = evaluate_condition(name, cell_index, cell)
+            evaluations.append(
+                {"cell_index": cell_index, "screen": dict(cell), "summary": summary}
+            )
+    aggregate = _aggregate_screen_summaries(
+        [evaluation["summary"] for evaluation in evaluations]
+    )
+    return {
+        "name": name,
+        "block_index": block_index,
+        "kept_layers": list(kept_layers),
+        "removed_layers": list(removed_layers),
+        "masked_modules": int(masked_modules),
+        **aggregate,
+        "evaluations": evaluations,
+    }
+
+
+def run_block_ablation(
+    view: ArchitectureView,
+    *,
+    blocks: int,
+    screen: list[dict[str, Any]],
+    evaluate_condition: Callable[[str, int, dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    """Evaluate full, empty, and leave-one-block-out adapter conditions on one screen."""
+    if not screen:
+        raise ValueError("screen must contain at least one evaluation cell")
+    partitions = _layer_blocks(int(view.num_layers), blocks)
+    all_layers = tuple(range(int(view.num_layers)))
+    full = _evaluate_ablation_condition(
+        view,
+        name="full_adapter",
+        block_index=None,
+        kept_layers=all_layers,
+        removed_layers=(),
+        screen=screen,
+        evaluate_condition=evaluate_condition,
+    )
+    empty = _evaluate_ablation_condition(
+        view,
+        name="empty_adapter",
+        block_index=None,
+        kept_layers=(),
+        removed_layers=all_layers,
+        screen=screen,
+        evaluate_condition=evaluate_condition,
+    )
+    conditions = []
+    for block_index, removed in enumerate(partitions):
+        removed_set = set(removed)
+        kept = tuple(layer for layer in all_layers if layer not in removed_set)
+        conditions.append(
+            _evaluate_ablation_condition(
+                view,
+                name=f"remove_block_{block_index}",
+                block_index=block_index,
+                kept_layers=kept,
+                removed_layers=removed,
+                screen=screen,
+                evaluate_condition=evaluate_condition,
+            )
+        )
+    full_rate = float(full["overall"]["success_rate"])
+    most_costly = max(
+        conditions,
+        key=lambda condition: (
+            full_rate - float(condition["overall"]["success_rate"]),
+            -int(condition["block_index"]),
+        ),
+    )
+    return {
+        "blocks": [list(block) for block in partitions],
+        "controls": {"full_adapter": full, "empty_adapter": empty},
+        "conditions": conditions,
+        "most_costly_removal": {
+            "condition": most_costly["name"],
+            "block_index": most_costly["block_index"],
+            "removed_layers": most_costly["removed_layers"],
+            "success_rate_cost": full_rate
+            - float(most_costly["overall"]["success_rate"]),
+        },
+    }
+
+
+@contextmanager
+def _reuse_loaded_policy(model: Any, tokenizer: Any) -> Iterator[None]:
+    """Make evaluator cells reuse one loaded policy, restoring its loader even on failure."""
+    from local_llm_lab.pipeline import evaluate
+
+    original = evaluate.load_policy
+    evaluate.load_policy = lambda *_args, **_kwargs: (model, tokenizer)
+    try:
+        yield
+    finally:
+        evaluate.load_policy = original
+
+
 # --------------------------------------------------------------------------- direction readouts
 
 
@@ -533,6 +699,40 @@ def _table(header: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def _append_direction_readouts(out: list[str], readouts: list[dict[str, Any]]) -> None:
+    out.extend(
+        [
+            "## What the update writes (readout of an update *direction*)",
+            "",
+            "Singular vectors have an arbitrary sign, so both `+v` and `-v` are shown; neither "
+            "is privileged. These are directions the update writes, not activations the model "
+            "was observed to hold.\n",
+        ]
+    )
+    rows = []
+    for record in readouts:
+        for sign, lenses in record["readouts"].items():
+            rows.append(
+                [
+                    record["module"],
+                    str(record["direction"]),
+                    f"{record['singular_value']:.3f}",
+                    sign,
+                    ", ".join(repr(token) for token, _p, _i in lenses["jlens"][:8]),
+                    ", ".join(repr(token) for token, _p, _i in lenses["logit_lens"][:8]),
+                ]
+            )
+    out.extend(
+        [
+            _table(
+                ["module", "dir", "sigma", "sign", "j-lens top tokens", "logit-lens top tokens"],
+                rows,
+            ),
+            "",
+        ]
+    )
+
+
 def render_markdown(payload: dict[str, Any]) -> str:
     """Markdown summary: per-layer update size, rank use, cross-run agreement, readouts."""
     out: list[str] = ["# P5: adapter delta (design §8)", ""]
@@ -604,34 +804,184 @@ def render_markdown(payload: dict[str, Any]) -> str:
         )
     readouts = payload.get("readouts")
     if readouts:
-        out.append("## What the update writes (readout of an update *direction*)")
-        out.append("")
-        out.append(
-            "Singular vectors have an arbitrary sign, so both `+v` and `-v` are shown; neither "
-            "is privileged. These are directions the update writes, not activations the model "
-            "was observed to hold.\n"
-        )
-        rows = []
-        for record in readouts:
-            for sign, lenses in record["readouts"].items():
-                rows.append(
-                    [
-                        record["module"],
-                        str(record["direction"]),
-                        f"{record['singular_value']:.3f}",
-                        sign,
-                        ", ".join(repr(token) for token, _p, _i in lenses["jlens"][:8]),
-                        ", ".join(repr(token) for token, _p, _i in lenses["logit_lens"][:8]),
-                    ]
-                )
-        out.append(
-            _table(
-                ["module", "dir", "sigma", "sign", "j-lens top tokens", "logit-lens top tokens"],
-                rows,
-            )
-        )
-        out.append("")
+        _append_direction_readouts(out, readouts)
     return "\n".join(out)
+
+
+def _format_success(record: dict[str, Any]) -> str:
+    lower, upper = record["wilson_95"]
+    return (
+        f"{record['successes']}/{record['tasks']} ({record['success_rate']:.3f}; "
+        f"95% CI {lower:.3f}–{upper:.3f})"
+    )
+
+
+def _render_ablation_markdown(payload: dict[str, Any]) -> str:
+    """Render full/empty controls and leave-one-block-out family rates with intervals."""
+    controls = payload["controls"]
+    conditions = payload["conditions"]
+    out = [
+        "# P5 item 5: adapter layer-block ablation",
+        "",
+        "Removal cost is measured against the full adapter: full-adapter success rate minus "
+        "the success rate after removing one consecutive block.",
+        "",
+        "## Anchors",
+        "",
+        _table(
+            ["condition", "kept layers", "removed layers", "overall success (Wilson 95%)"],
+            [
+                [
+                    "Full adapter",
+                    ", ".join(str(layer) for layer in controls["full_adapter"]["kept_layers"]),
+                    "none",
+                    _format_success(controls["full_adapter"]["overall"]),
+                ],
+                [
+                    "Empty adapter",
+                    "none",
+                    ", ".join(str(layer) for layer in controls["empty_adapter"]["removed_layers"]),
+                    _format_success(controls["empty_adapter"]["overall"]),
+                ],
+            ],
+        ),
+        "",
+        "## Leave-one-block-out conditions",
+        "",
+    ]
+    rows: list[list[str]] = []
+    for condition in conditions:
+        rows.append(
+            [
+                condition["name"],
+                ", ".join(str(layer) for layer in condition["removed_layers"]),
+                "overall",
+                _format_success(condition["overall"]),
+            ]
+        )
+        for family, record in condition["by_family"].items():
+            rows.append(
+                [
+                    condition["name"],
+                    ", ".join(str(layer) for layer in condition["removed_layers"]),
+                    family,
+                    _format_success(record),
+                ]
+            )
+    out.extend(
+        [
+            _table(["condition", "removed layers", "family", "success (Wilson 95%)"], rows),
+            "",
+        ]
+    )
+    costly = payload["most_costly_removal"]
+    out.extend(
+        [
+            "## Most costly removal",
+            "",
+            f"`{costly['condition']}` (layers {costly['removed_layers']}) reduced success by "
+            f"{costly['success_rate_cost']:.3f} relative to the full adapter.",
+            "",
+        ]
+    )
+    return "\n".join(out)
+
+
+def _screen_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
+    select = config.get("select")
+    screen = select.get("screen") if isinstance(select, dict) else None
+    if not isinstance(screen, list) or not screen:
+        raise ValueError("screen config must define a non-empty select.screen list")
+    cells: list[dict[str, Any]] = []
+    for index, cell in enumerate(screen):
+        valid = (
+            isinstance(cell, dict)
+            and isinstance(cell.get("split"), str)
+            and isinstance(cell.get("difficulty"), int)
+            and isinstance(cell.get("per_family"), dict)
+        )
+        if not valid:
+            raise ValueError(
+                f"select.screen[{index}] must define split, difficulty, and per_family"
+            )
+        cells.append(dict(cell))
+    return cells
+
+
+def _run_ablation_cli(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    require_idle_gpu: Callable[[argparse.ArgumentParser, argparse.Namespace, str], None],
+) -> None:
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.pipeline.cli import load_config
+
+    require_idle_gpu(parser, args, "loading the adapter policy for block ablation")
+    config = load_config(args.screen)
+    try:
+        screen = _screen_from_config(config)
+    except ValueError as error:
+        parser.error(str(error))
+    spec = load_model_spec(args.model)
+    model, tokenizer = evaluate.load_policy(spec.hf_id, args.adapter)
+    view = ArchitectureView.from_model(model)
+    try:
+        _layer_blocks(int(view.num_layers), args.blocks)
+    except ValueError as error:
+        parser.error(str(error))
+    resolved = spec.resolve(model, tokenizer).as_dict()
+    eval_config = config.get("eval") if isinstance(config.get("eval"), dict) else {}
+    args.output.mkdir(parents=True, exist_ok=True)
+
+    def evaluate_condition(
+        condition: str, cell_index: int, cell: dict[str, Any]
+    ) -> dict[str, Any]:
+        evaluation_dir = args.output / "evaluations" / condition
+        filename = f"{cell_index:02d}-{cell['split']}-d{cell['difficulty']}.json"
+        return evaluate.run_evaluation(
+            model_name=spec.hf_id,
+            adapter=args.adapter,
+            label=f"{args.adapter.name}-{condition}-{cell_index:02d}",
+            split=cell["split"],
+            limit=None,
+            output=evaluation_dir / filename,
+            transcript_dir=None,
+            stress=False,
+            temperature=0.0,
+            max_steps=int(eval_config.get("max_steps", 24)),
+            max_tokens=int(eval_config.get("max_tokens", 200)),
+            keep_last=int(config.get("keep_last", 2)),
+            quiet=True,
+            use_cache=True,
+            seed=int(config.get("seed", 20260902)),
+            difficulty=int(cell["difficulty"]),
+            family_quotas=dict(cell["per_family"]),
+        )
+
+    with _reuse_loaded_policy(model, tokenizer):
+        result = run_block_ablation(
+            view,
+            blocks=args.blocks,
+            screen=screen,
+            evaluate_condition=evaluate_condition,
+        )
+    payload = {
+        "command": shlex.join(sys.argv),
+        "model": resolved,
+        "adapter": str(args.adapter.resolve()),
+        "screen": {"path": str(args.screen.resolve()), "cells": screen},
+        "block_count": args.blocks,
+        "control": "full_adapter success rate",
+        **result,
+    }
+    (args.output / "ablation.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    (args.output / "ablation.md").write_text(
+        _render_ablation_markdown(payload) + "\n", encoding="utf-8"
+    )
+    print(f"Wrote {args.output / 'ablation.json'} and {args.output / 'ablation.md'}")
 
 
 # --------------------------------------------------------------------------- CLI
@@ -643,7 +993,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="P5: analyse what each LoRA adapter wrote (exact model diff, design §8)."
     )
-    parser.add_argument("--adapters", nargs="+", required=True, type=Path)
+    parser.add_argument("--adapters", nargs="+", type=Path)
+    parser.add_argument("--adapter", type=Path, help="One adapter directory for --ablate.")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="mlx-community/Qwen2.5-Coder-3B-Instruct-4bit")
     parser.add_argument(
@@ -660,13 +1011,27 @@ def main() -> None:
     parser.add_argument(
         "--ablate",
         action="store_true",
-        help="Phase two: evaluate with the adapter zeroed in blocks of six layers.",
+        help="Evaluate full, empty, and leave-one-block-out adapter conditions.",
     )
+    parser.add_argument("--blocks", type=int, help="Consecutive blocks for --ablate (default: 6).")
+    parser.add_argument("--screen", type=Path, help="Pipeline config whose select.screen is evaluated.")
     add_gpu_arguments(parser)
     args = parser.parse_args()
 
     if args.ablate:
-        parser.error("--ablate is phase two and is not implemented")
+        if args.adapters:
+            parser.error("--adapters belongs to static analysis; use --adapter with --ablate")
+        if args.adapter is None or args.screen is None:
+            parser.error("--ablate requires --adapter and --screen")
+        args.blocks = 6 if args.blocks is None else args.blocks
+        if args.blocks < 1:
+            parser.error("--blocks must be positive")
+        _run_ablation_cli(parser, args, require_idle_gpu)
+        return
+    if args.adapter is not None or args.blocks is not None or args.screen is not None:
+        parser.error("--adapter, --blocks, and --screen require --ablate")
+    if not args.adapters:
+        parser.error("static analysis requires --adapters")
     readout_layers = [int(part) for part in args.readout_layers.split(",") if part.strip()]
 
     model = tokenizer = None
