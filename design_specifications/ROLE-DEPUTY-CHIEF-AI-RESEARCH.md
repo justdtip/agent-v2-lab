@@ -143,7 +143,7 @@ instruments under `live/`, ratified reports under `complete/`, closed notes unde
   source rows on the separator slot; controls resample post-alignment; seven cells). **The R25
   slice is committed `036e62c`** (#30; Director-expedited chain: implementer → Deputy's direct
   review → Chief). The Director's command is unchanged; **the third attempt is unblocked.** Both readiness checklists re-audited line by line and corrected (~19:40).
-- Rulings R1 to R25. Governance: Deputy dispatches implementers, R19 reviewer between
+- Rulings R1 to R27. Governance: Deputy dispatches implementers, R19 reviewer between
   implementer and Deputy verdict, Chief gates commits (rulings and reviews rest on the
   governing code read directly), Deputy commits and pushes; momentum standing order; execution
   = loading a model and running inference, one lane, one task; tokeniser loads are not
