@@ -987,6 +987,13 @@ def _run_ablation_cli(
 # --------------------------------------------------------------------------- CLI
 
 
+def _reject_ablation_static_flags(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    if args.no_base is not None or args.top is not None or args.readout_layers is not None:
+        parser.error("--no-base, --top, and --readout-layers require static analysis")
+
+
 def main() -> None:
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
 
@@ -1000,12 +1007,12 @@ def main() -> None:
     parser.add_argument(
         "--no-base",
         action="store_true",
+        default=None,
         help="Skip everything that needs the base model: relative norms and direction readouts.",
     )
-    parser.add_argument("--top", type=int, default=16, help="Singular vectors per module.")
+    parser.add_argument("--top", type=int, help="Singular vectors per module (default: 16).")
     parser.add_argument(
         "--readout-layers",
-        default="",
         help="Comma-separated blocks whose down_proj/o_proj update directions are read out.",
     )
     parser.add_argument(
@@ -1021,6 +1028,7 @@ def main() -> None:
     if args.ablate:
         if args.adapters:
             parser.error("--adapters belongs to static analysis; use --adapter with --ablate")
+        _reject_ablation_static_flags(parser, args)
         if args.adapter is None or args.screen is None:
             parser.error("--ablate requires --adapter and --screen")
         args.blocks = 6 if args.blocks is None else args.blocks
@@ -1032,6 +1040,9 @@ def main() -> None:
         parser.error("--adapter, --blocks, and --screen require --ablate")
     if not args.adapters:
         parser.error("static analysis requires --adapters")
+    args.no_base = False if args.no_base is None else args.no_base
+    args.top = 16 if args.top is None else args.top
+    args.readout_layers = "" if args.readout_layers is None else args.readout_layers
     readout_layers = [int(part) for part in args.readout_layers.split(",") if part.strip()]
 
     model = tokenizer = None

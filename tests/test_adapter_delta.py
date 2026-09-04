@@ -319,6 +319,17 @@ def test_reused_policy_loader_is_restored_after_an_exception(monkeypatch) -> Non
         ["--adapters", "plural", "--adapter", "one"],
         ["--adapters", "plural", "--blocks", "3"],
         ["--adapters", "plural", "--screen", "screen"],
+        ["--ablate", "--adapter", "one", "--screen", "screen", "--no-base"],
+        ["--ablate", "--adapter", "one", "--screen", "screen", "--top", "3"],
+        [
+            "--ablate",
+            "--adapter",
+            "one",
+            "--screen",
+            "screen",
+            "--readout-layers",
+            "1",
+        ],
     ],
 )
 def test_cli_rejects_missing_and_cross_mode_ablation_arguments(

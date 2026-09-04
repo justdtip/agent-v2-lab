@@ -30,8 +30,8 @@ No `agent-v2-*` command was invoked. No file below `outputs/`, `data/`, or `repo
 
 | File | Result | Lines | Diff at evidence capture |
 | --- | --- | ---: | ---: |
-| `src/local_llm_lab/probes/adapter_delta.py` | implementation and a green refactor of the pre-existing readout renderer | 1,074 | +393 / −28 |
-| `tests/test_adapter_delta.py` | fake-only literal-oracle, orchestration, restoration, validation, and CLI tests | 469 | +320 / −1 |
+| `src/local_llm_lab/probes/adapter_delta.py` | implementation and a green refactor of the pre-existing readout renderer | 1,085 | +406 / −30 |
+| `tests/test_adapter_delta.py` | fake-only literal-oracle, orchestration, restoration, validation, and CLI tests | 480 | +331 / −1 |
 | `docs/superpowers/plans/2026-09-04-spec-004-s3-block-ablation.md` | approved plan with completion marks/evidence | 99 | new |
 | `design_specifications/under_review/SPEC-004-S3-IMPLEMENTATION-REPORT.md` | this report | new | new |
 | `.superpowers/sdd/2026-09-04-spec-004-s3-block-ablation/` | ignored task report and append-only progress evidence | ignored | not committed |
@@ -160,3 +160,33 @@ the gate output contained only passing progress markers.
   on complete fakes only.
 - The four foreign R13 failures above were observed and not fixed because their files are outside
   this lane's claim.
+
+## Review fix round 1 — reject static-only flags in ablation mode
+
+The reviewer correctly identified that explicit `--no-base`, `--top`, and `--readout-layers`
+arguments were accepted with `--ablate`. The parser now keeps `None` sentinels for these options,
+rejects any explicit use before `_run_ablation_cli` (and therefore before the GPU guard), and
+applies the unchanged static defaults (`False`, `16`, and `""`) only after ablation validation.
+
+Focused RED command:
+
+```text
+uv run pytest tests/test_adapter_delta.py::test_cli_rejects_missing_and_cross_mode_ablation_arguments -q
+```
+
+Exit 1: 5 passed and the 3 new cases failed because `--no-base`, `--top 3`, and
+`--readout-layers 1` each reached the fake GPU guard. After the minimal sentinel/default change,
+the same command exited 0 with 8 passed. The full focused file then exited 0 with 15 passed.
+
+Both scoped Ruff commands (including `--select C901`) printed `All checks passed!`, and the
+scoped `git diff --check` exited 0 without output. Fresh exact R13 evidence at HEAD
+`7ed1973775c4dccfd812d44b74022e02cad616b1`:
+
+```text
+uv run pytest -q
+```
+
+Exit 0: 481 passed, 0 failed, 0 xfailed; failing nodes: none. A separate read-only collection
+count confirmed 481 tests. No model, tokenizer, checkpoint, probe, GPU/MLX computation, real
+evaluation, or `agent-v2-*` command ran. The review's aggregation-oracle observation remains a
+deferred Minor and was not expanded into this fix round.
