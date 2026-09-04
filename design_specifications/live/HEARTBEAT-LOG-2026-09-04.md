@@ -630,3 +630,13 @@ recording the execution rule. No execution lane designated yet.
   editing the same file in the main tree; rebase on landing). B1b (conditions, dual capture,
   `capture_dtype`) waits for B5 to land. In flight now: R27 scorer (#41), B5 refit, B4 P1
   closure + fixes, B1a, B1c. Training and the R27 rerun wait for the Director's power.
+
+## 2026-09-05 — B4 (P1 closure + fixes) reviewed READY; work order #42
+
+- Read the full diff and the produced record. Matched design via one shared prompt list;
+  exemplars removed from `Role`, `_role` and all 24 definitions (`ROLE_EXEMPLARS = {}`, schema
+  field kept, inert flag); `--judge` default False and `build_axis_run` default False; `close`
+  subcommand with RunLog, run-time-resolved scorer citation, per-role progress. Record measured
+  3/8 best (pirate), 21/24 silent (spec expected 19) — reported side by side; default assistant
+  96/96 labelled a pass-through of a marker-less heuristic (pre-existing). In-scope tests 133;
+  scanner green; suite red only in `test_patch.py` from the R27 implementer's live edits.

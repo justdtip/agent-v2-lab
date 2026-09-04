@@ -109,9 +109,12 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   roles get `prompts[:role_prompts]`, `:610-623`); the exemplar imbalance — presence, not only
   the 6/8/10 role counts at `:106-107`: 0 of 6 high, 8 of 8 low, 6 of 10 neutral roles carry
   one; `--judge` defaulting to on (`assistant_axis.py:1378-1383`; `build_axis_run` default at
-  `:639`). Then a ~20-minute gated run, additionally behind A2. *Chief-approved (#40, 2026-09-05) with
-  exemplars dropped from all 24 roles; **implementer dispatched** (closure record via a `close`
-  subcommand, re-measured counts; three fixes red-first). The build waits for the lane after B4.*
+  `:639`). Then a ~20-minute gated run, additionally behind A2. *Implemented and Deputy-reviewed READY
+  (work order #42 at the Chief's gate): `CLOSED.md` written by the new `close` subcommand
+  (`outputs/probes/axis-corrected/CLOSED.md`, SHA-256 `fb66141c…`; measured best role 3 of 8,
+  21 of 24 roles silent vs the spec's expected 19 — reported, not reconciled); matched prompts,
+  exemplars dropped from all 24 roles (ruling 1), judge default off. Ticks on commit; the 4B
+  `build` waits for the lane after B4 training.*
 - [ ] B5. **C7 BF16 refit** — same item as A4's experiment, ruled as item 4 of R18; listed here
   because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Chief-approved as specified (#40, 2026-09-05); **implementer dispatched** — fully offline (the
   saved npz is float32 on six layers; the baseline reanalysis carries `holm_supported` per

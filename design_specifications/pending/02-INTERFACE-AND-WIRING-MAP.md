@@ -627,6 +627,26 @@ forget. Each has an integration check in §6.
   the dropped value's positions swapped for an unrelated value's) added. Rationale: the
   stale-field coverage path in `integrity.py:384-395` scores any wrong number as "no value
   drop". Review: `under_review/P6-RESULT-REVIEW-round1-2026-09-05.md`.
+- **R28 (2026-09-05 06:20) P2 split disjointness.** Tasks are seeded by
+  `f"v2:{seed}:{split}:{index}"` (`tasks.py:111`) and embed the split name in every workspace
+  path and key token, so new split names are disjoint from every training split by
+  construction. The test asserts both the mechanism and the content: (a) no P2 split name
+  (`p2-d0/1/2`) appears in any `configs/*.yaml` `splits:`/`tasks:` block; (b) a content
+  fingerprint, SHA-256 over canonical JSON of (family, difficulty, variant, prompt with the
+  split root and `KEY-/REF-<SPLIT>` tokens normalised, sorted files with the split root
+  normalised, expected answer), collides with no fingerprint of any training split of any
+  config. Absent-data configs are **regenerated through `make_tasks` from their split table**
+  (deterministic, no files needed); the test never skips.
+- **R29 (2026-09-05 06:20) `compare` pairing.** `reanalyse` emits a per-row prediction sidecar
+  `<stem>.predictions.npz` (test-half rows: row id, task id, difficulty, label, and the probe,
+  position-baseline and surface-baseline predictions per target × layer × split seed).
+  `compare` computes the paired bootstrap of margin differences over **shared task ids** from
+  two sidecars with one resample seed list, refusing unless both share task ids, split seeds,
+  layers (as fractions), generator version and cohort; adapter-versus-base comparisons are
+  reported within difficulty (R7). Recomputing fits from two npz files is the fallback only
+  when a sidecar is absent, and is recorded as such.
+- **Assignment (2026-09-05 06:20):** `ModelSpec.probes.capture_dtype` (R18b) lands in the P2
+  redesign capture sub-slice (B1b), before any capture on Qwen3.5.
 
 ## 8. Implementer amendments (append-only, dated)
 
