@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import importlib
+import importlib.util
 import json
 import re
 import sys
@@ -20,7 +23,14 @@ from local_llm_lab.pipeline.data import SplitSpec
 def test_preflight_stage_dispatches_from_registry_without_loading_run_config(monkeypatch) -> None:
     """The standalone preflight command must not require a YAML training recipe."""
     received = []
-    monkeypatch.setattr(cli, "run_preflight", lambda name: received.append(name), raising=False)
+    monkeypatch.setattr(
+        cli,
+        "run_preflight",
+        # The optional R32(d) footprint arguments are the preflight lane's; what this test
+        # pins is the model name and that no run config is read to find it.
+        lambda name, **kwargs: received.append(name),
+        raising=False,
+    )
     monkeypatch.setattr(
         cli,
         "load_config",
@@ -217,14 +227,49 @@ def test_stage_data_passes_the_exact_six_run_d_chunks_and_recovery_multipliers(
     }
 
 
+def _has_gated_delta_recurrence(model: str) -> bool:
+    """True when mlx-lm's backbone for this registry model runs the gated-delta recurrence.
+
+    The registry entry names the model family; mlx-lm ships one backbone module per family,
+    and the hybrid ones are exactly those defining ``gated_delta_update``. A family mlx-lm
+    ships no module for is dense on either reading: the 3B arm's ``qwen2_5`` runs mlx-lm's
+    ``qwen2`` backbone, which has no recurrence.
+    """
+    family = cli.load_model_spec(model).family
+    if importlib.util.find_spec(f"mlx_lm.models.{family}") is None:
+        return False
+    return hasattr(importlib.import_module(f"mlx_lm.models.{family}"), "gated_delta_update")
+
+
+def _effective_batch(train: dict[str, object]) -> int:
+    return int(train["batch_size"]) * int(train["grad_accumulation_steps"])
+
+
 def test_run_d_configs_are_literal_pairwise_recipes() -> None:
-    """Catch a data-recipe drift between D3/D4 or B/B4, and pin the R21 render shape."""
+    """Catch a data-recipe drift between D3/D4 or B/B4, and pin the R21 render shape.
+
+    The arms remain literal pairwise recipes, with two exceptions ruled by R32. Both are
+    memory settings for this machine rather than changes to what is trained:
+
+    * ``batch_size`` and ``grad_accumulation_steps`` are compared on their product, the
+      EFFECTIVE batch, not literally. The 4B arm runs batch 1 x accumulation 4 where the 3B
+      arm runs 2 x 2: the same effective batch and the same optimiser steps, at half the
+      per-step attention and MLP activations (R32 efficiency item 2).
+    * ``train.gated_delta_chunk`` may appear on a hybrid arm only, and is not required to
+      match. It is the token length of one checkpointed segment of the training-time
+      gated-delta recurrence, whose outputs, final state and gradients are bit-exact against
+      mlx-lm's reference loop at every chunk length, so it trades memory against recompute
+      time and changes no number the run produces (R32(a), (c)).
+
+    Every other train key, and every other block, is still compared literally.
+    """
     root = Path(__file__).parents[1] / "configs"
     d3 = load_config(root / "agent_v2d.yaml")
     d4 = load_config(root / "agent_v2d_qwen35_4b.yaml")
     b = load_config(root / "agent_v2b.yaml")
     b4 = load_config(root / "agent_v2b_qwen35_4b.yaml")
     for base, cross in ((d3, d4), (b, b4)):
+        models = {"base": base["model"], "cross": cross["model"]}
         for key in ("model", "output"):
             base.pop(key)
             cross.pop(key)
@@ -239,6 +284,17 @@ def test_run_d_configs_are_literal_pairwise_recipes() -> None:
         cross_data = cross.pop("data")
         assert cross_data.name == f"{base_data.name}-qwen35-4b"
         assert cross_data != base_data
+        base_train = base.pop("train")
+        cross_train = cross.pop("train")
+        assert _effective_batch(cross_train) == _effective_batch(base_train)
+        for role, arm in (("base", base_train), ("cross", cross_train)):
+            del arm["batch_size"], arm["grad_accumulation_steps"]
+            if "gated_delta_chunk" not in arm:
+                continue
+            assert _has_gated_delta_recurrence(models[role]), models[role]
+            chunk = arm.pop("gated_delta_chunk")
+            assert isinstance(chunk, int) and chunk >= 1
+        assert base_train == cross_train
         assert base == cross
     assert d3["splits"] == {
         "train": {"count": 240, "difficulty": 0, "perturb": True, "role": "train"},
@@ -1039,6 +1095,135 @@ def test_stage_train_records_a_healthy_verdict_and_copies_it_into_provenance(
     assert extra["health"]["verdict"] == health["verdict"]
     assert extra["health"]["thresholds"] == health["thresholds"]
     assert extra["health_thresholds"] == health["thresholds"]
+
+
+# --------------------------------------------- the training-time backbone patches (R32, issue #50)
+
+
+class _FlagModel:
+    """The only thing the validation wrapper touches on a model: its training flag."""
+
+    def __init__(self) -> None:
+        self.training = True
+
+    def train(self, mode: bool = True) -> "_FlagModel":
+        self.training = bool(mode)
+        return self
+
+    def eval(self) -> "_FlagModel":
+        return self.train(False)
+
+
+def test_the_validation_wrapper_runs_evaluate_in_eval_mode_and_restores_the_flag() -> None:
+    """R32 efficiency item 1: validation takes the inference kernel, training mode resumes."""
+    trainer = importlib.import_module("mlx_lm.tuner.trainer")
+    library = trainer.evaluate
+    model = _FlagModel()
+    seen = []
+
+    def recording(*args, **kwargs):
+        seen.append((kwargs["model"] if "model" in kwargs else args[0]).training)
+        return 1.25
+
+    trainer.evaluate = recording
+    try:
+        with cli._kernel_path_validation():
+            assert trainer.evaluate is not recording
+            # ``trainer.train`` calls evaluate by keyword (trainer.py:290); positional works too.
+            assert trainer.evaluate(model=model, dataset=[]) == 1.25
+            assert model.training is True
+            assert trainer.evaluate(model, []) == 1.25
+            assert model.training is True
+        assert trainer.evaluate is recording
+    finally:
+        trainer.evaluate = library
+
+    # The model was in evaluation mode for the pass itself, both call styles.
+    assert seen == [False, False]
+    assert model.training is True
+
+
+def test_the_validation_wrapper_restores_the_flag_when_evaluate_raises() -> None:
+    """A validation pass that dies must not leave the model in eval mode for the next step."""
+    trainer = importlib.import_module("mlx_lm.tuner.trainer")
+    library = trainer.evaluate
+    model = _FlagModel()
+
+    def exploding(**kwargs):
+        assert kwargs["model"].training is False
+        raise RuntimeError("validation blew up")
+
+    trainer.evaluate = exploding
+    try:
+        with cli._kernel_path_validation():
+            with pytest.raises(RuntimeError, match="validation blew up"):
+                trainer.evaluate(model=model, dataset=[])
+    finally:
+        trainer.evaluate = library
+
+    assert model.training is True
+    assert trainer.evaluate is library
+
+
+def test_stage_train_installs_the_chunked_recurrence_and_records_the_chunk(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R32(a),(c): the arm's chunk installs the recurrence and is recorded where it is used."""
+    training = importlib.import_module("local_llm_lab.training")
+    trainer_module = importlib.import_module("mlx_lm.tuner.trainer")
+    library_evaluate = trainer_module.evaluate
+    config = _training_config(tmp_path)
+    config["train"]["gated_delta_chunk"] = 64
+    output = config["output"]
+    events: list[object] = []
+
+    @contextlib.contextmanager
+    def fake_installer(chunk):
+        events.append(("install", chunk))
+        try:
+            yield
+        finally:
+            events.append("restore")
+
+    def recording_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+        events.append(("train", args.gated_delta_chunk, trainer_module.evaluate is not library_evaluate))
+        _healthy_trainer(args, model, train_set, valid_set, training_callback)
+
+    monkeypatch.setattr(training, "install_chunked_gated_delta", fake_installer)
+    record = _patch_stage_train(monkeypatch, recording_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    # Installed before the trainer runs, restored after it returns; validation wrapped too.
+    assert events == [("install", 64), ("train", 64, True), "restore"]
+    assert trainer_module.evaluate is library_evaluate
+    lora = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
+    assert lora["gated_delta_chunk"] == 64
+    (extra,) = record.provenance
+    assert extra["training_config"]["gated_delta_chunk"] == 64
+
+
+def test_stage_train_installs_no_recurrence_patch_for_a_dense_arm(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A backbone with no gated-delta recurrence must be left exactly as the library ships it."""
+    training = importlib.import_module("local_llm_lab.training")
+    config = _training_config(tmp_path)
+    output = config["output"]
+    assert "gated_delta_chunk" not in config["train"]
+
+    def forbidden(chunk):
+        pytest.fail(f"a dense arm must not install the chunked recurrence (chunk={chunk})")
+
+    monkeypatch.setattr(training, "install_chunked_gated_delta", forbidden)
+    record = _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    lora = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
+    assert "gated_delta_chunk" not in lora
+    (extra,) = record.provenance
+    assert "gated_delta_chunk" not in extra["training_config"]
 
 
 def test_stage_train_flags_a_run_that_stops_short_or_saves_no_checkpoint(

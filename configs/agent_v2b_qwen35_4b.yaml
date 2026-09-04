@@ -31,10 +31,18 @@ train:
   scale: 32.0
   dropout: 0.0
   iters: 400
-  batch_size: 2
-  grad_accumulation_steps: 2
+  # R32 efficiency item 2: batch 1 x accumulation 4 is run B's effective batch of 4 with half
+  # the attention/MLP activations per step. Same optimiser steps, same numbers: a memory
+  # setting for this machine, not a recipe change.
+  batch_size: 1
+  grad_accumulation_steps: 4
   learning_rate: 3.0e-5
   max_seq_length: 2688
+  # R32(c): the token length of one checkpointed segment of the training-time gated-delta
+  # recurrence (default 64, recorded in lora.yaml and provenance). Memory falls and recompute
+  # time rises as it shrinks; the values it computes are bit-exact against mlx-lm's reference
+  # loop either way. Hybrid arms only — the 3B backbone has no gated-delta recurrence.
+  gated_delta_chunk: 64
   grad_checkpoint: true
   val_batches: 24
   steps_per_report: 10

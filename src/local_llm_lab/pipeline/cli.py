@@ -10,6 +10,7 @@ import math
 import shutil
 import sys
 import time
+from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -458,9 +459,69 @@ def lora_config(
             "dropout": train.get("dropout", 0.0),
         },
     }
+    # R32(c): the chunk length of the training-time gated-delta recurrence is an arm-config
+    # field, recorded here so lora.yaml and provenance carry the number the run actually used.
+    # Absent on a dense backbone, which has no recurrence to chunk.
+    if "gated_delta_chunk" in train:
+        lora["gated_delta_chunk"] = int(train["gated_delta_chunk"])
     if resume_from is not None:
         lora["resume_adapter_file"] = str(Path(resume_from).resolve())
     return lora
+
+
+@contextlib.contextmanager
+def _kernel_path_validation() -> Iterator[None]:
+    """Run the trainer's in-loop validation with the model in evaluation mode (R32, item 1).
+
+    A hybrid backbone dispatches on ``self.training``: ``GatedDeltaNet.__call__`` asks for
+    ``use_kernel=not self.training`` (``mlx_lm/models/qwen3_5.py:192``), so training mode
+    takes the differentiable Python recurrence and evaluation mode the exact Metal kernel.
+    Validation needs no gradient, and the two agree in the forward, so the pass belongs on
+    the kernel and the loss it reports is unchanged.
+
+    mlx-lm 0.31.3 already calls ``model.eval()`` on entry to ``evaluate``
+    (``mlx_lm/tuner/trainer.py:186``) and ``model.train()`` after it returns
+    (``trainer.py:299``). This wrapper makes the guarantee ours rather than a property of the
+    pinned release, and restores the mode the model was actually in even when ``evaluate``
+    raises, which the library's own path does not.
+    """
+    trainer = importlib.import_module("mlx_lm.tuner.trainer")
+    original = trainer.evaluate
+
+    def evaluate(*args: Any, **kwargs: Any) -> Any:
+        # ``train`` calls it by keyword (``trainer.py:290``); positional is accepted too.
+        model = kwargs["model"] if "model" in kwargs else args[0]
+        training_mode = bool(getattr(model, "training", False))
+        model.eval()
+        try:
+            return original(*args, **kwargs)
+        finally:
+            model.train(training_mode)
+
+    trainer.evaluate = evaluate
+    try:
+        yield
+    finally:
+        trainer.evaluate = original
+
+
+@contextlib.contextmanager
+def _training_backbone(chunk: int | None) -> Iterator[None]:
+    """Library patches that live exactly as long as the trainer call (R32(a)).
+
+    ``chunk`` installs the chunked, checkpointed gated-delta recurrence for training-mode
+    calls, so the autograd graph retains chunk-boundary states instead of one per token;
+    ``None`` — a dense backbone, with no recurrence to chunk — installs nothing. The
+    validation wrapper is unconditional: on a backbone whose forward does not branch on the
+    training flag it changes nothing.
+    """
+    with contextlib.ExitStack() as stack:
+        if chunk is not None:
+            from local_llm_lab import training
+
+            stack.enter_context(training.install_chunked_gated_delta(int(chunk)))
+        stack.enter_context(_kernel_path_validation())
+        yield
 
 
 def _fresh_checkpoint(path: Path, *, since: float) -> bool:
@@ -569,10 +630,12 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 entry="mlx_lm.lora.train_model",
                 iters=lora["iters"],
                 batch_size=lora["batch_size"],
+                grad_accumulation_steps=lora["grad_accumulation_steps"],
                 max_seq_length=lora["max_seq_length"],
                 steps_per_report=lora["steps_per_report"],
                 steps_per_eval=lora["steps_per_eval"],
                 save_every=lora["save_every"],
+                gated_delta_chunk=lora.get("gated_delta_chunk"),
             )
             _log("train: mlx_lm.lora.train_model")
             with (output / "train.log").open("w", encoding="utf-8") as log, (
@@ -586,7 +649,11 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                     iters=lora["iters"],
                     budget_gib=thresholds.memory_budget_gib,
                 )
-                with contextlib.redirect_stdout(_Tee(runlog.tee(sys.stdout), log)):
+                # The backbone patches wrap the trainer call and nothing else, so no other
+                # stage — and no later inference — ever sees them (R32(a)).
+                with contextlib.redirect_stdout(
+                    _Tee(runlog.tee(sys.stdout), log)
+                ), _training_backbone(lora.get("gated_delta_chunk")):
                     trainer(args, model, train_set, valid_set, callback)
             # R26(c): a trainer that returned early or saved nothing produced an adapter that
             # nothing downstream may select from; on_finish records that and never raises.
