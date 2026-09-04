@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import re
 from pathlib import Path
 
 import pytest
 
+from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline import tasks as task_module
-from local_llm_lab.pipeline.cli import dataset_splits, load_config, stage_data
+from local_llm_lab.pipeline.cli import (
+    _load_data_tokenizer,
+    dataset_splits,
+    load_config,
+    stage_data,
+)
 from local_llm_lab.pipeline.data import write_dataset
 from local_llm_lab.pipeline.tasks import (
     FAMILIES,
@@ -20,11 +27,30 @@ from local_llm_lab.pipeline.tasks import (
     task_from_id,
 )
 
-_REFERENCE_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "agent_v2c.yaml"
+_CONFIG_ROOT = Path(__file__).resolve().parents[1] / "configs"
+_REFERENCE_CONFIG = _CONFIG_ROOT / "agent_v2c.yaml"
+# R5: a determinism oracle belongs to every arm config a run's data is generated from, not
+# only to the historical reference. Run C is the reference the generator versions were
+# defined against; run D (SPEC-003 §3) is pinned from its first generation, so its rows can
+# never drift under a later generator change without the pin going red.
+_PINNED_CONFIGS = ("agent_v2c.yaml", "agent_v2d.yaml")
 _REPIN_MESSAGE = (
     "Intentional generator row change: bump GENERATOR_VERSION and re-pin both the "
-    "generator-only and configured-replay hash oracles."
+    "generator-only and configured-replay hash oracles for every config in _PINNED_CONFIGS."
 )
+
+
+def _pinned_digests(manifest: dict) -> dict[str, dict[str, str]]:
+    """The two hash surfaces a pin must cover: every logical split, and every written file.
+
+    A role file is the concatenation of its logical chunks in declaration order, so where a
+    config declares more splits than roles (run D writes six splits into three role files)
+    the chunk hashes alone do not determine the file bytes; the concatenation does.
+    """
+    return {
+        "splits": {name: info["sha256"] for name, info in manifest["splits"].items()},
+        "outputs": {role: info["sha256"] for role, info in manifest["outputs"].items()},
+    }
 
 
 def _first_read_for_each_path(steps):
@@ -212,78 +238,204 @@ def test_dataset_manifest_records_generator_version(tmp_path) -> None:
     assert written["generator_version"] == GENERATOR_VERSION
 
 
-def test_reference_generator_hashes_are_pinned_by_version(tmp_path) -> None:
+# Generator-only pins: no replay directory mixed in, so these hold on any checkout.
+_GENERATOR_ONLY_PINS: dict[str, dict[int, dict[str, dict[str, str]]]] = {
+    "agent_v2c.yaml": {
+        2: {
+            "splits": {
+                "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
+                "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
+                "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
+            },
+            "outputs": {
+                "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
+                "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
+                "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
+            },
+        },
+        3: {
+            "splits": {
+                "train": "6a2875aff061e7dcdde0b8a394fc3115ff5c6f2b4dbcb8f399db5af373c6970e",
+                "valid": "6df3a890d09e989c83baaf6078a27d56ec9da035807c8820e83b44c09a8259e3",
+                "test": "925f5b282885e4c52f2a20280372804a17dfc9c2f1d8039478de98211eee1303",
+            },
+            "outputs": {
+                "train": "6a2875aff061e7dcdde0b8a394fc3115ff5c6f2b4dbcb8f399db5af373c6970e",
+                "valid": "6df3a890d09e989c83baaf6078a27d56ec9da035807c8820e83b44c09a8259e3",
+                "test": "925f5b282885e4c52f2a20280372804a17dfc9c2f1d8039478de98211eee1303",
+            },
+        },
+        4: {
+            "splits": {
+                "train": "99176c0b378d85502e738f23b8d174dd8321cb48a51e10c3a9bcd7fd9db3f035",
+                "valid": "41ec07d6f122a123ee7780885d59ba2bc77ca5ce836e896ed8ddd2861f680deb",
+                "test": "8b8aeaf28460798e0863ab0e5cb217da25b8661b7b3a802d21182fcd36a294a7",
+            },
+            "outputs": {
+                "train": "99176c0b378d85502e738f23b8d174dd8321cb48a51e10c3a9bcd7fd9db3f035",
+                "valid": "41ec07d6f122a123ee7780885d59ba2bc77ca5ce836e896ed8ddd2861f680deb",
+                "test": "8b8aeaf28460798e0863ab0e5cb217da25b8661b7b3a802d21182fcd36a294a7",
+            },
+        },
+    },
+    # Run D (SPEC-003 §3) pinned at its first generation, 2026-09-05. Six logical splits
+    # concatenate into three role files, so both surfaces are pinned.
+    "agent_v2d.yaml": {
+        4: {
+            "splits": {
+                "train": "f0c78560f797dd9aad5ee6301f26be37c0cde27787897c345fcf07a455e5ae9f",
+                "train1": "4719e257391b79353ef8dabdd8214b76eb3f03b282a73ab7cd260762ddc8684c",
+                "valid": "da4c1cf6bc745e758ab95fa8847c0f0ce3cbed63595cc918e8864042245b8b0d",
+                "valid2": "b6c882ab48bf36aca5f7f4af140573e8e14d7e0264f3da952b0a6dcf9308d77b",
+                "test": "21419637e0f7511a91d98c0d42d7eb2c5c91a7b2ac3cc3136429d2676870e138",
+                "test3": "05346c2f2adc282ee0fd16a9e32d360b8a07587919411f8441eee65c07f1910b",
+            },
+            "outputs": {
+                "train": "15610b8a826324e23429326dff5d0b92e6f9d0007aa3891a0e3e78911858c7cf",
+                "valid": "93541214837237cdd699421a4b96a3e01c55dbf7d2eefc8918fec21dc939d0d5",
+                "test": "3f45fc086d150ecf96bcf0ac149fc499825a33e93bbe29b9740f693adc261466",
+            },
+        },
+    },
+}
+
+# Pins for the shipped replay mix, which needs the protected replay directory on disk.
+_CONFIGURED_REPLAY_PINS: dict[str, dict[int, dict[str, dict[str, str]]]] = {
+    "agent_v2c.yaml": {
+        2: {
+            "splits": {
+                "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
+                "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
+                "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
+            },
+            "outputs": {
+                "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
+                "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
+                "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
+            },
+        },
+        3: {
+            "splits": {
+                "train": "92f40d1868438553f306be192b09cace7b3d5efc8cff4a55c84fc3a96827ddf2",
+                "valid": "6e2617d5159e42fc7d26077e332a83e9f27fc0e755d50140d6336c75116c44b7",
+                "test": "f79d6fc673674719cc17664278a15ee8ba9fcb6de8f9418d9226b99b5d24de59",
+            },
+            "outputs": {
+                "train": "92f40d1868438553f306be192b09cace7b3d5efc8cff4a55c84fc3a96827ddf2",
+                "valid": "6e2617d5159e42fc7d26077e332a83e9f27fc0e755d50140d6336c75116c44b7",
+                "test": "f79d6fc673674719cc17664278a15ee8ba9fcb6de8f9418d9226b99b5d24de59",
+            },
+        },
+        4: {
+            "splits": {
+                "train": "67d49cddc00c95fafed9a0166b431021d405348354d029cb7941006d31117eec",
+                "valid": "27ec5981da0864f094de8e764a28140ec063443a1a20c89e4f7a40f489d6c6a2",
+                "test": "67e4ead6a0a899de82395cc8c3101fdd81d5b9b853328b8d3d53b2bde908f0a6",
+            },
+            "outputs": {
+                "train": "67d49cddc00c95fafed9a0166b431021d405348354d029cb7941006d31117eec",
+                "valid": "27ec5981da0864f094de8e764a28140ec063443a1a20c89e4f7a40f489d6c6a2",
+                "test": "67e4ead6a0a899de82395cc8c3101fdd81d5b9b853328b8d3d53b2bde908f0a6",
+            },
+        },
+    },
+    # The mix actually written to data/agent_v2d, pinned at its first generation 2026-09-05:
+    # 240/48/60 chat-replay rows join the train/valid/test role files.
+    "agent_v2d.yaml": {
+        4: {
+            "splits": {
+                "train": "6026b7715ad962e2d2b1f589867db3b3179b9ed79062f45c6b5501d4a6594556",
+                "train1": "4719e257391b79353ef8dabdd8214b76eb3f03b282a73ab7cd260762ddc8684c",
+                "valid": "9c48ec5c50adde5248a0f043a38ef7879f5563b3a749112b92a02ea008fffbd2",
+                "valid2": "b6c882ab48bf36aca5f7f4af140573e8e14d7e0264f3da952b0a6dcf9308d77b",
+                "test": "68de80f31c8d1308e99dbd719db7acb228976fd0db9b89aa6d8c5217e8ae5f50",
+                "test3": "05346c2f2adc282ee0fd16a9e32d360b8a07587919411f8441eee65c07f1910b",
+            },
+            "outputs": {
+                "train": "7eb3f2bb3d89a5f88a62fbcb287abb349268644a692dc98ee3603f415d82e444",
+                "valid": "8b2f4b5f2baa168797646cce7fef085a215e38af85777abe98373854608bacb6",
+                "test": "eac6150f93ee65aea34aba735a926f3058e5ef719f596d144d3aab2c4567de88",
+            },
+        },
+    },
+}
+
+
+@pytest.mark.parametrize("config_name", _PINNED_CONFIGS)
+def test_reference_generator_hashes_are_pinned_by_version(config_name, tmp_path) -> None:
     """A task/expert-row change must bump the generator version and both hash oracles."""
-    config = load_config(_REFERENCE_CONFIG)
+    config = load_config(_CONFIG_ROOT / config_name)
     manifest = write_dataset(
         tmp_path,
-        config["tasks"],
+        dataset_splits(config),
         seed=config["seed"],
         keep_last=config["keep_last"],
         chat_dir=None,
         recovery_repeats=config["recovery_repeats"],
     )
-    expected = {
-        2: {
-            "train": "e7fa63ef9a2fe70b3563a23fa5421b4a6b11d11971802d2c4b6bce5a0a3c5d58",
-            "valid": "816543d1dee8299b2dbf514e93a2de480b69f84d6e8c53bda955c20c79f6213f",
-            "test": "10042da5d9a4789f9a28fc6c0c9a8ea8efc59d090688f1e167c6de8d1de66877",
-        },
-        3: {
-            "train": "6a2875aff061e7dcdde0b8a394fc3115ff5c6f2b4dbcb8f399db5af373c6970e",
-            "valid": "6df3a890d09e989c83baaf6078a27d56ec9da035807c8820e83b44c09a8259e3",
-            "test": "925f5b282885e4c52f2a20280372804a17dfc9c2f1d8039478de98211eee1303",
-        },
-        4: {
-            "train": "99176c0b378d85502e738f23b8d174dd8321cb48a51e10c3a9bcd7fd9db3f035",
-            "valid": "41ec07d6f122a123ee7780885d59ba2bc77ca5ce836e896ed8ddd2861f680deb",
-            "test": "8b8aeaf28460798e0863ab0e5cb217da25b8661b7b3a802d21182fcd36a294a7",
-        },
-    }
 
     assert manifest["generator_version"] == GENERATOR_VERSION
-    assert {
-        split: info["sha256"] for split, info in manifest["splits"].items()
-    } == expected.get(GENERATOR_VERSION), _REPIN_MESSAGE
+    assert _pinned_digests(manifest) == _GENERATOR_ONLY_PINS.get(config_name, {}).get(
+        GENERATOR_VERSION
+    ), _REPIN_MESSAGE
 
 
-def test_reference_generator_hashes_include_configured_replay(tmp_path) -> None:
+@pytest.mark.parametrize("config_name", _PINNED_CONFIGS)
+def test_reference_generator_hashes_include_configured_replay(config_name, tmp_path) -> None:
     """The shipped replay mix stays pinned when its protected input directory is available."""
-    config = load_config(_REFERENCE_CONFIG)
+    config = load_config(_CONFIG_ROOT / config_name)
     replay_dir = config["chat_replay"]
     if not replay_dir.is_dir():
         pytest.skip(f"configured protected replay directory is absent: {replay_dir}")
     manifest = write_dataset(
         tmp_path,
-        config["tasks"],
+        dataset_splits(config),
         seed=config["seed"],
         keep_last=config["keep_last"],
         chat_dir=config["chat_replay"],
         chat_repeats=config["chat_repeats"],
         recovery_repeats=config["recovery_repeats"],
     )
-    expected = {
-        2: {
-            "train": "ad660e83cd89958dcee9fba2ab1e53115d1fb079813ea694cd4b0e89530b3a79",
-            "valid": "d6dbc53573744751d74565a0de6ca5c6d381cba6b488ff6410194bf9b0d4e6d8",
-            "test": "fc69b03fef8f423ee85a174214ad955fe3f4d324554217510b92f53435841ce3",
-        },
-        3: {
-            "train": "92f40d1868438553f306be192b09cace7b3d5efc8cff4a55c84fc3a96827ddf2",
-            "valid": "6e2617d5159e42fc7d26077e332a83e9f27fc0e755d50140d6336c75116c44b7",
-            "test": "f79d6fc673674719cc17664278a15ee8ba9fcb6de8f9418d9226b99b5d24de59",
-        },
-        4: {
-            "train": "67d49cddc00c95fafed9a0166b431021d405348354d029cb7941006d31117eec",
-            "valid": "27ec5981da0864f094de8e764a28140ec063443a1a20c89e4f7a40f489d6c6a2",
-            "test": "67e4ead6a0a899de82395cc8c3101fdd81d5b9b853328b8d3d53b2bde908f0a6",
-        },
-    }
 
     assert manifest["generator_version"] == GENERATOR_VERSION
-    assert {
-        split: info["sha256"] for split, info in manifest["splits"].items()
-    } == expected.get(GENERATOR_VERSION), _REPIN_MESSAGE
+    assert _pinned_digests(manifest) == _CONFIGURED_REPLAY_PINS.get(config_name, {}).get(
+        GENERATOR_VERSION
+    ), _REPIN_MESSAGE
+
+
+def test_run_d_dataset_on_disk_regenerates_byte_for_byte(tmp_path) -> None:
+    """SPEC-003 §3: the shipped run D dataset must be reproducible from its config alone.
+
+    The R5 oracles above pin the generator's rows; this pins the artifact a training arm
+    actually reads, rendering included. R31: the rendering seam is driven with the model's
+    real tokenizer (weights are never loaded), because the boundary-merge behaviour a fake
+    tokenizer would stub is exactly what decides the bytes.
+    """
+    config = load_config(_CONFIG_ROOT / "agent_v2d.yaml")
+    committed_path = config["data"] / "manifest.json"
+    if not committed_path.is_file():
+        pytest.skip(f"run D dataset is not present on this checkout: {config['data']}")
+    committed = json.loads(committed_path.read_text(encoding="utf-8"))
+    spec = load_model_spec(config["model"])
+    tokenizer = _load_data_tokenizer(spec.hf_id)
+
+    manifest = write_dataset(
+        tmp_path,
+        dataset_splits(config),
+        seed=config["seed"],
+        keep_last=config["keep_last"],
+        chat_dir=config.get("chat_replay"),
+        chat_repeats=config.get("chat_repeats", 1),
+        recovery_repeats=config["recovery_repeats"],
+        tokenizer=tokenizer,
+        spec=spec,
+    )
+
+    assert manifest["generator_version"] == committed["generator_version"]
+    assert _pinned_digests(manifest) == _pinned_digests(committed), _REPIN_MESSAGE
+    for role in ("train", "valid", "test"):
+        regenerated = hashlib.sha256((tmp_path / f"{role}.jsonl").read_bytes()).hexdigest()
+        assert regenerated == committed["outputs"][role]["sha256"], role
 
 
 def test_selection_tasks_preserve_difficulty_and_exact_reconstruction() -> None:

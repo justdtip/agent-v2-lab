@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 _PROJECTION_NAMES = frozenset(
     {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"}
@@ -45,6 +49,131 @@ def _discover_modern_python_sources(root: Path) -> set[Path]:
     candidates.update((root / "research").glob("*.py"))
     excluded = _SANCTIONED_SOURCE_PATHS | _LEGACY_SOURCE_PATHS
     return {path for path in candidates if path.relative_to(root).as_posix() not in excluded}
+
+
+# ------------------------------------------------------------------ arm configuration files
+#
+# Briefing §1.7 bans hard-coded model constants "outside `configs/models/` and
+# `src/local_llm_lab/arch.py`", but every scanner above walks Python only, so `configs/*.yaml`
+# sat outside the guard's universe entirely. That is how `train.num_layers: 36` — the 3B
+# layer count, never read, since `cli.py:450` writes `resolved.num_layers` from the
+# architecture view — survived in four arm configs. This pass closes the hole.
+
+# The registry: the one directory where a model's own constants belong.
+_SANCTIONED_CONFIG_DIRS = ("configs/models",)
+
+# Pre-SPEC-001 recipe files consumed by mlx-lm/mlx-tune directly (`model:` is an HF id,
+# `fine_tune_type`, `mask_prompt`), not by `pipeline/cli.py`. Their top-level `num_layers` is
+# the library's "adapt the last N blocks" argument — a recipe choice, not a claim about the
+# architecture — so the architecture-key rule does not apply to them.
+_LEGACY_CONFIG_PATHS = frozenset(
+    {
+        "configs/agent_lora.yaml",
+        "configs/lora.yaml",
+    }
+)
+
+# Owned by the uncommitted R32 stage-2 slice at the Chief's gate (`gated_delta_mode` lands in
+# `agent_v2b_qwen35_4b.yaml`, and `test_run_d_configs_are_literal_pairwise_recipes` compares
+# the B pair literally, so the two must lose the dead key together). Delete both entries with
+# that slice; the sweep below then covers all six arm configs.
+_DEFERRED_CONFIG_PATHS = frozenset(
+    {
+        "configs/agent_v2b.yaml",
+        "configs/agent_v2b_qwen35_4b.yaml",
+    }
+)
+
+# Key names that state the model's architecture. An arm config may not carry them at any
+# value: the architecture comes from the registry through `ArchitectureView`, so a config that
+# names one is duplicating a fact it does not own — whether or not the number is still 36.
+_MODEL_ARCHITECTURE_KEYS = frozenset(
+    {
+        "num_layers",
+        "n_layers",
+        "num_hidden_layers",
+        "hidden_size",
+        "head_dim",
+        "num_attention_heads",
+        "num_key_value_heads",
+        "vocab_size",
+        "max_position_embeddings",
+    }
+)
+
+# Blocks whose values are task counts by definition (SPEC-003 §3's split table). A count that
+# happens to equal a banned number — `tasks.valid: 36` in the run A/B/C configs — is a dataset
+# size, and re-pinning run C's generator hashes to dodge a scanner would be the real defect.
+_TASK_COUNT_BLOCKS = frozenset({"tasks", "splits"})
+
+
+def _discover_arm_config_sources(root: Path) -> set[Path]:
+    """Find the run-configuration YAML covered by the model-agnostic rule."""
+    candidates = set((root / "configs").rglob("*.yaml"))
+    excluded = _DEFERRED_CONFIG_PATHS | _LEGACY_CONFIG_PATHS
+    return {
+        path
+        for path in candidates
+        if (relative := path.relative_to(root).as_posix()) not in excluded
+        and not relative.startswith(tuple(f"{name}/" for name in _SANCTIONED_CONFIG_DIRS))
+    }
+
+
+def _config_scalars(
+    node: Any, prefix: tuple[str, ...] = ()
+) -> Iterator[tuple[tuple[str, ...], Any]]:
+    """Yield every scalar of a parsed YAML document with the key path that reaches it."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield from _config_scalars(value, (*prefix, str(key)))
+    elif isinstance(node, (list, tuple)):
+        for index, value in enumerate(node):
+            yield from _config_scalars(value, (*prefix, str(index)))
+    else:
+        yield prefix, node
+
+
+def _banned_config_model_assumptions(paths: set[Path], forbidden: tuple[str, ...]) -> list[str]:
+    """Report model assumptions written into run configuration.
+
+    Two rules, both keyed on what a value *means* rather than on where it sits in the file:
+
+    * A key from `_MODEL_ARCHITECTURE_KEYS` is a finding at any value, because the fact it
+      states belongs to the registry. This is the rule that cannot be dodged by editing 36 to
+      32 and leaving a second, silently stale source of truth behind.
+    * A banned constant appearing as a scalar value is a finding, under the same whole-number
+      rule the Python substring pass uses (`_contains_number_token`), so `qwen35-4b` and
+      `data/agent_v2b-qwen35-4b` stay quiet while `"6,12,18,24,30,36"` does not. Values inside
+      a `tasks:`/`splits:` table are exempt: those are task counts.
+
+    Comments are not read, exactly as docstrings are skipped in the Python pass: a comment can
+    never be loaded as a value.
+    """
+    findings: list[str] = []
+    for path in sorted(paths):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for key_path, value in _config_scalars(document):
+            dotted = ".".join(key_path)
+            for part in key_path:
+                if part in _MODEL_ARCHITECTURE_KEYS:
+                    findings.append(f"{path.name}:{dotted}:architecture-key")
+                    break
+            if value is None or isinstance(value, bool):
+                continue
+            if key_path and key_path[0] in _TASK_COUNT_BLOCKS:
+                continue
+            text = str(value)
+            for banned in forbidden:
+                if banned == text:
+                    findings.append(f"{path.name}:{dotted}:{banned}")
+                elif banned not in text:
+                    continue
+                elif banned.isdigit():
+                    if _contains_number_token(text, banned):
+                        findings.append(f"{path.name}:{dotted}:{banned}")
+                else:
+                    findings.append(f"{path.name}:{dotted}:{banned}")
+    return findings
 
 
 def _attribute_chain(node: ast.AST) -> str | None:
@@ -244,6 +373,103 @@ def test_banned_model_scanner_discovers_repository_wide_modern_sources() -> None
     assert root / "src/local_llm_lab/pipeline/jlens.py" in paths
     assert root / "research/jspace_sweep.py" in paths
     assert root / "src/local_llm_lab/arch.py" not in paths
+
+
+def test_banned_model_constants_are_absent_from_run_configuration() -> None:
+    """Briefing §1.7 applied to `configs/*.yaml`, which no Python scanner can reach."""
+    root = Path(__file__).resolve().parents[1]
+
+    assert (
+        _banned_config_model_assumptions(
+            _discover_arm_config_sources(root), _FORBIDDEN_MODEL_CONSTANTS
+        )
+        == []
+    )
+
+
+def test_config_scanner_sweeps_every_arm_config_and_exempts_only_the_registry() -> None:
+    """Catch an arm config joining the repository outside the sweep, or a stale exemption."""
+    root = Path(__file__).resolve().parents[1]
+    paths = _discover_arm_config_sources(root)
+
+    assert root / "configs/agent_v2d.yaml" in paths
+    assert root / "configs/agent_v2d_qwen35_4b.yaml" in paths
+    assert root / "configs/agent_v2.yaml" in paths
+    assert root / "configs/agent_v2c.yaml" in paths
+    assert root / "configs/models/qwen35-4b.yaml" not in paths
+    assert root / "configs/agent_lora.yaml" not in paths
+    # An exemption names a real file, so a rename cannot leave one silently in force.
+    for relative in _DEFERRED_CONFIG_PATHS | _LEGACY_CONFIG_PATHS:
+        assert (root / relative).is_file(), relative
+
+
+def test_config_scanner_reports_architecture_keys_and_embedded_constants(tmp_path) -> None:
+    """The class this pass exists for: a layer count written into an arm config."""
+    source = tmp_path / "arm.yaml"
+    source.write_text(
+        "\n".join(
+            (
+                "train:",
+                "  num_layers: 36",
+                "  iters: 400",
+                "probes:",
+                "  layers: '6,12,18,24,30,36'",
+                "protocol:",
+                "  stop: 'note<|im_end|>'",
+                "capture:",
+                "  hidden: 2048",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert _banned_config_model_assumptions({source}, _FORBIDDEN_MODEL_CONSTANTS) == [
+        "arm.yaml:train.num_layers:architecture-key",
+        "arm.yaml:train.num_layers:36",
+        "arm.yaml:probes.layers:36",
+        "arm.yaml:protocol.stop:<|im_end|>",
+        "arm.yaml:capture.hidden:2048",
+    ]
+
+
+def test_config_scanner_keeps_a_renamed_layer_count_from_laundering_the_rule(tmp_path) -> None:
+    """Editing 36 to the 4B's own count leaves the same duplicated fact behind."""
+    source = tmp_path / "arm.yaml"
+    source.write_text("train:\n  num_layers: 32\n", encoding="utf-8")
+
+    assert _banned_config_model_assumptions({source}, _FORBIDDEN_MODEL_CONSTANTS) == [
+        "arm.yaml:train.num_layers:architecture-key",
+    ]
+
+
+def test_config_scanner_ignores_task_counts_model_names_and_comments(tmp_path) -> None:
+    """Catches the config rule widening onto legitimate run configuration."""
+    source = tmp_path / "arm.yaml"
+    source.write_text(
+        "\n".join(
+            (
+                "# Adapt two-thirds of the 36 transformer layers.",
+                "model: qwen35-4b",
+                "data: 'data/agent_v2b-qwen35-4b'",
+                "output: 'outputs/agent-v2b-qwen35-4b'",
+                "seed: 20260902",
+                "tasks:",
+                "  valid: 36",
+                "splits:",
+                "  valid: {count: 36, difficulty: 1}",
+                "train:",
+                "  max_seq_length: 2688",
+                "  iters: 400",
+                "eval:",
+                "  limit: 180",
+                "criteria:",
+                "  criterion: 'total >= 150/180 with McNemar p < 0.05'",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert _banned_config_model_assumptions({source}, _FORBIDDEN_MODEL_CONSTANTS) == []
 
 
 def test_banned_model_scanner_reports_ast_assumptions_and_ignores_lookalikes(tmp_path) -> None:

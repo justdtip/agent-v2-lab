@@ -22,7 +22,6 @@ recovery_repeats:
   failed_edit: 6
 
 train:
-  num_layers: 36
   rank: 16
   scale: 32.0
   dropout: 0.0

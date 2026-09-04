@@ -20,7 +20,6 @@ chat_replay: "data/chat_replay"
 chat_repeats: 1
 
 train:
-  num_layers: 36
   rank: 16
   scale: 32.0
   dropout: 0.0
