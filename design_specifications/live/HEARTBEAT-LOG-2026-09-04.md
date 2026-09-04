@@ -537,3 +537,17 @@ recording the execution rule. No execution lane designated yet.
   retained. Pre-existing seed literal in the ablation CLI moved with indentation (scanner
   accepts). Suite 754 / exit 0 after edits; scanner green; diff-check clean.
 - Work orders: A #36, B #37, C and D filed now. Commit order A → B → C → D on ratification.
+
+## 2026-09-05 — R26 lanes ratified and committed; A8 met; B4 lift request re-issued
+
+- Chief ratified all four (#36–#39) with one condition on B: a stale `adapters.safetensors`
+  from an earlier run must not count as this run's final checkpoint. Fixed red-first
+  (`_fresh_checkpoint`: mtime ≥ floor(run start)); planted-stale-file test → `incomplete`.
+  Commits A `c1f7d51`, B `88ecac0`, C `0a79788`, D `2405598`; suite 754 / exit 0; pushed.
+- Director's amendment: logging is training condition 8 (A8), not only the evaluation lift;
+  my lane text said the latter — corrected in the design note and the lift request. A8.1/A8.2
+  ticked with hashes and test names (`a9c1535`). Lift request re-issued: conditions 1–5, 7, 8
+  met; 6 is the Director's; held only for P6 on the lane (51 min in, no artifact yet).
+- Chief's retrospective pass (#31–#33) moved eight more reports to `complete/`; committed in
+  `a9c1535` under the moves convention. Process note: a docs script aborted midway on a
+  changed anchor and the chain still committed — the remaining edits landed in the next commit.

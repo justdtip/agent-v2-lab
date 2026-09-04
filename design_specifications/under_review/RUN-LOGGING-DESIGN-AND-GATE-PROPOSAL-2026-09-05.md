@@ -65,7 +65,7 @@ literals absent (`tests/test_repository_rules.py` green); `metrics.jsonl` schema
 `train.log` content byte-identical; no new dependency; red-first per lane; only the lane's
 files change; `uv run pytest` bare with exit status reported; R16 in every report.
 
-## 4. Ruling requested: the health record as a training gate (proposed R26)
+## 4. Ruling requested: the health record as a training gate (proposed R26) — *as ruled: training condition 8 (checklist A8) by the Director's amendment; the evaluation lift additionally requires the verdict. See the Chief's ruling appended below and wiring map §7 R26(d).*
 
 The Director treats run health as a training gate. Proposed text, for the Chief to ratify,
 amend, or refuse — as an addition to R15's evidence format rather than an eighth condition:
@@ -129,8 +129,8 @@ class TrainingHealth:
 
 - **Implementation: now.** Fakes-only; P6 running on the lane is unaffected (it imported the
   old modules; nothing here executes a model or writes under `outputs/`).
-- **Commit:** after the Deputy's review and the Chief's review, as one commit per lane or one
-  squashed commit at the Chief's preference.
+- **Commit:** done — one commit per lane after the Deputy's direct review and the Chief's gate:
+  A `c1f7d51`, B `88ecac0` (with the stale-checkpoint condition), C `0a79788`, D `2405598`.
 - **First live use:** the B4 training run, which has not started; if the chain completes
   before P6 finishes, B4 trains with the health record from its first iteration. Probes pick
   it up on their next run; the current P6 attempt finishes silently, as before.

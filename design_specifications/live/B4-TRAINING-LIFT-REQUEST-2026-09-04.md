@@ -5,7 +5,7 @@ artifact paths and SHA-256s (recompute with `shasum -a 256 <path>`). Per the acc
 sequence this follows P6; it is drafted now because every condition except your own
 acceptance is already evidenced on origin at `07c6657`.
 
-**Status: READY FOR YOUR DECISION on condition 6; conditions 1 to 5 and 7 are met.**
+**Status (re-issued 2026-09-05 after R26): READY FOR YOUR DECISION on condition 6; conditions 1 to 5, 7 and 8 are met.**
 
 ## The command
 
@@ -56,6 +56,13 @@ preflight refuses the run before any weight loads.
    of 22, gradient checkpointing on. Writes only under `outputs/agent-v2b-qwen35-4b/`.
 7. **First arm is B4 — met by R15 itself.** Same data as run B, new base, thinking off,
    `all-linear` keys: the controlled comparison the decision memo §3 asked for.
+8. **Run logging in place (R26, Director's amendment; checklist A8) — met.** Lane A
+   `c1f7d51` (`runlog.py`, 70 tests) and lane B `88ecac0` (`stage_train` opens the run log
+   before the base loads; `health.json` on every exit path; `non_finite_loss` aborts with no
+   provenance; `incomplete_run` on a short run or a checkpoint older than the run's start;
+   `metrics.jsonl` byte-identical). This run will write `outputs/agent-v2b-qwen35-4b/run.log`,
+   `events.jsonl` and `health.json`; the evaluation lift will cite all three by path and
+   SHA-256 and list every warning with the Deputy's reading (R26 d).
 
 ## After training, before evaluation
 

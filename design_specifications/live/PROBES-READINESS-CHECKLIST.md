@@ -5,12 +5,11 @@ conventions: updated by the Deputy after every commit, an item ticks only on a c
 file:line, or a checksummed artifact — re-measured, not re-read (Chief's standard, #21). Covers when probes may run and what the probe programme
 (SPEC-004) still needs. Training's arm 1 has its own list; the one shared item is marked.
 
-As of: `036e62c` (R25 alignment slice committed, #30; position-groups fix `ac9c27a`, #29), suite
-**667 passed, exit 0** bare. Two independent auditors each saw one
-transient red run in `tests/test_patch.py` (`random control candidate pool cannot satisfy
-treatment cardinality`) during the implementer's edit window; not reproduced since — carried
-to the R19 reviewer as a question, not folded into the count.
-Updated: 2026-09-05 by the Deputy (after commit `036e62c`).
+As of: `2405598` (R26 run logging committed for every probe CLI: P6/ablation/delta `0a79788`,
+state/axis `2405598`; position-groups fix `ac9c27a`; R25 `036e62c`), suite **754 passed, exit 0** bare.
+Updated: 2026-09-05 by the Deputy (after the R26 commits). Every probe run now writes
+`run.log` + `events.jsonl` beside its artifact and reports per outer unit (R26 g); a probe lift
+request cites those files by path and SHA-256.
 
 ## The one distinction that matters
 
