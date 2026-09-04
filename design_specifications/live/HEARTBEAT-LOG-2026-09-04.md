@@ -676,3 +676,11 @@ recording the execution rule. No execution lane designated yet.
   `__all__`/dispatch and the test file; implementer rebasing onto a1016df + B5 diff. Ruling to
   request with the work order: Holm across the comparison's cells (implementer reports the
   interval flag only).
+
+## 2026-09-05 — B4 TRAINING STARTED (Deputy-run on the Director's instruction)
+
+- Director, away from the machine and on power: "Can you run it?" = condition 6 accepted.
+  Checked: no model process on the lane; preflight artifact present. Started
+  `uv run agent-pipeline --config configs/agent_v2b_qwen35_4b.yaml train` as a background
+  process; stdout/stderr also captured to `outputs/agent-v2b-qwen35-4b/train-stdout-stderr.txt`.
+  Recorded on #18. Expected ~100 min; health.json on exit gates the evaluation lift (R26).

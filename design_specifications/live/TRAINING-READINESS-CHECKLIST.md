@@ -69,7 +69,9 @@ Evidence: `cli.py:46,519` consumes `load_rendered_splits`; byte-identical migrat
 - [x] A5.2 **MET** — `criteria:` blocks recorded verbatim from SPEC-003 §5 in all three arm configs (B4 vs B, D3 vs B, D4 vs D3), committed `7dd251d` (issue #18); recorded, never used for selection.
 
 **A6. Execution claim free; cost stated and accepted.**
-- [x] A6.1 Claim free — the lane is free since the Director's third P6 attempt completed
+- [x] A6.1 **Lane in use by this run** — B4 training started 2026-09-05 by the Deputy on the
+  Director's instruction (condition 6 accepted verbally: "Can you run it?"); no other model
+  process. Previously: free since the Director's third P6 attempt completed
   (17:49–19:00 local, 2026-09-04, artifact `outputs/probes/patch-C-2026-09-04/`); earlier
   execution today: preflights 15:18/15:20, P6 attempts ~17:00 and ~18:30, all Director-run.
   No live agent holds `model-execution`. A P6 run and a training run cannot overlap.
