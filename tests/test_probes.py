@@ -166,7 +166,14 @@ class _ArchitectureMLP(nn.Module):
 
 
 class _ArchitectureBlock(nn.Module):
-    def __init__(self, dim: int, *, is_linear: bool, split_linear: bool = False) -> None:
+    def __init__(
+        self,
+        dim: int,
+        *,
+        is_linear: bool,
+        split_linear: bool = False,
+        intermediate: int = 12,
+    ) -> None:
         super().__init__()
         self.is_linear = is_linear
         if is_linear:
@@ -177,7 +184,7 @@ class _ArchitectureBlock(nn.Module):
             )
         else:
             self.self_attn = _ArchitectureAttention(dim)
-        self.mlp = _ArchitectureMLP(dim, intermediate=12)
+        self.mlp = _ArchitectureMLP(dim, intermediate=intermediate)
         self.calls = 0
 
     def __call__(self, x, mask=None, cache=None):
@@ -193,12 +200,21 @@ class _ArchitectureBlock(nn.Module):
 
 class _ArchitectureText(nn.Module):
     def __init__(
-        self, *, vocab: int, dim: int, kinds: tuple[bool, ...], split_linear: bool = False
+        self,
+        *,
+        vocab: int,
+        dim: int,
+        kinds: tuple[bool, ...],
+        split_linear: bool = False,
+        intermediate: int = 12,
     ) -> None:
         super().__init__()
         self.embed_tokens = nn.Embedding(vocab, dim)
         self.layers = [
-            _ArchitectureBlock(dim, is_linear=kind, split_linear=split_linear) for kind in kinds
+            _ArchitectureBlock(
+                dim, is_linear=kind, split_linear=split_linear, intermediate=intermediate
+            )
+            for kind in kinds
         ]
         self.norm = nn.RMSNorm(dim)
         self.mask_calls: list[tuple[str, object | None]] = []
@@ -256,10 +272,15 @@ class _ArchitectureFakeBase(nn.Module):
 
 
 class _ArchitectureDenseModel(_ArchitectureFakeBase):
-    def __init__(self, *, vocab: int = 23, dim: int = 8, n_layers: int = 4) -> None:
+    def __init__(
+        self, *, vocab: int = 23, dim: int = 8, n_layers: int = 4, intermediate: int = 12
+    ) -> None:
         super().__init__()
         self.model = _ArchitectureText(
-            vocab=vocab, dim=dim, kinds=tuple(False for _ in range(n_layers))
+            vocab=vocab,
+            dim=dim,
+            kinds=tuple(False for _ in range(n_layers)),
+            intermediate=intermediate,
         )
         self.text = self.model
 
@@ -307,11 +328,90 @@ def make_split_hybrid_fake() -> tuple[_ArchitectureHybridModel, mx.array]:
     return model, mx.array([[3, 1, 4, 6]], dtype=mx.int32)
 
 
+def make_quantized_dense_fake() -> tuple[_ArchitectureDenseModel, mx.array]:
+    """A 4-bit dense fake: the real base is quantized, so its projections are ``QuantizedLinear``.
+
+    ``mx.quantize`` accepts only group sizes 32/64/128, so this fake is wider than the others
+    (dim 64, MLP 128) and has fewer blocks to keep it cheap; the standard fakes' dim of 8 cannot
+    carry a quantized projection at all. Wrapped, it is the shape an adapter load produces over
+    the real 4-bit base: ``LoRALinear`` holding a ``QuantizedLinear``.
+    """
+    mx.random.seed(95)
+    model = _ArchitectureDenseModel(vocab=64, dim=64, n_layers=2, intermediate=128)
+    nn.quantize(model.text, group_size=64, bits=4)
+    return model, mx.array([[2, 5, 1, 7]], dtype=mx.int32)
+
+
+# ------------------------------------------------------- adapter-wrapped fixture variant (#27)
+
+ADAPTER_VARIANTS = ("bare", "wrapped")
+
+
+def wrap_with_adapter(
+    model: object,
+    *,
+    rank: int = 2,
+    scale: float = 20.0,
+    dropout: float = 0.0,
+    keys: tuple[str, ...] | None = None,
+) -> int:
+    """Wrap this fake's projections exactly as loading an adapter does, and return the count.
+
+    R31 (wiring map :665): the seam here is mlx-lm's adapter wrapper, so the *library's* own
+    converter runs and the library's own classes are produced -- the fake supplies only weights
+    and shapes. ``mlx_lm.tuner.utils.linear_to_lora_layers`` (:38-110) is the call the training
+    stage makes through ``lora_parameters`` (``pipeline/cli.py:454-459``); the same wrappers are
+    what ``mlx_lm.load(..., adapter_path=...)`` installs via ``load_adapters`` (:113-). Each
+    target projection becomes a ``LoRALinear`` (``mlx_lm/tuner/lora.py:11-33``) holding the
+    original at ``.linear``, which is the shape that made the view's discovery blind in the live
+    P6 run (issue #27). ``lora_b`` is initialised to zeros (``lora.py:91``), so a wrapped fake is
+    numerically identical to the bare one and every value assertion still holds.
+
+    Defaults to the view's own ``auto`` targets, so a dense fake gets ``self_attn.*``/``mlp.*``
+    and a hybrid fake also gets ``linear_attn.*``. No file is read or written; no model is loaded.
+    """
+    from mlx_lm.tuner.lora import LoRALinear
+    from mlx_lm.tuner.utils import linear_to_lora_layers
+
+    view = ArchitectureView.from_model(model)
+    text = view.text_module
+    target_keys = list(view.lora_targets("auto") if keys is None else keys)
+    linear_to_lora_layers(
+        text,
+        len(text.layers),
+        {"keys": target_keys, "rank": rank, "scale": scale, "dropout": dropout},
+    )
+    wrapped = [
+        path
+        for block in text.layers
+        for path, module in block.named_modules()
+        if isinstance(module, LoRALinear)
+    ]
+    if not wrapped:
+        raise AssertionError(f"no projection was wrapped; asked for {target_keys}")
+    return len(wrapped)
+
+
+def make_fake(factory, variant: str = "bare", **kwargs):
+    """Build one of the fakes above either bare or with real adapter wrappers over it.
+
+    The wrapped variant must give every structural answer the bare one gives: same blocks, same
+    projection paths, same masks, same residuals. That is the property #27's regression broke.
+    """
+    if variant not in ADAPTER_VARIANTS:
+        raise ValueError(f"unknown fixture variant {variant!r}; expected one of {ADAPTER_VARIANTS}")
+    model, ids = factory(**kwargs)
+    if variant == "wrapped":
+        wrap_with_adapter(model)
+    return model, ids
+
+
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
 @pytest.mark.parametrize(
     "fake_factory", [make_dense_fake, make_hybrid_fake], ids=["dense", "hybrid"]
 )
-def test_architecture_view_matches_model_forward(fake_factory) -> None:
-    model, ids = fake_factory()
+def test_architecture_view_matches_model_forward(fake_factory, variant) -> None:
+    model, ids = make_fake(fake_factory, variant)
     view = ArchitectureView.from_model(model)
     residuals = view.residuals(ids, tuple(range(view.num_layers + 1)))
     expected, recorded = model.recording_forward(ids)
@@ -325,9 +425,10 @@ def test_architecture_view_matches_model_forward(fake_factory) -> None:
     np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
 @pytest.mark.parametrize("fake_factory", [make_dense_fake, make_hybrid_fake])
-def test_architecture_view_tail_matches_full_tail_at_every_residual(fake_factory) -> None:
-    model, ids = fake_factory()
+def test_architecture_view_tail_matches_full_tail_at_every_residual(fake_factory, variant) -> None:
+    model, ids = make_fake(fake_factory, variant)
     view = ArchitectureView.from_model(model)
     residuals = view.residuals(ids, tuple(range(view.num_layers + 1)))
     expected = view.final_norm(residuals[view.num_layers])
@@ -338,17 +439,19 @@ def test_architecture_view_tail_matches_full_tail_at_every_residual(fake_factory
         np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
 
 
-def test_architecture_view_discovers_all_supported_text_module_locations() -> None:
-    dense, _ = make_dense_fake()
-    hybrid, _ = make_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_architecture_view_discovers_all_supported_text_module_locations(variant) -> None:
+    dense, _ = make_fake(make_dense_fake, variant)
+    hybrid, _ = make_fake(make_hybrid_fake, variant)
 
     assert ArchitectureView.from_model(dense.model).text_module is dense.model
     assert ArchitectureView.from_model(dense).text_module is dense.model
     assert ArchitectureView.from_model(hybrid).text_module is hybrid.language_model.model
 
 
-def test_hybrid_architecture_view_uses_per_kind_masks_and_caches() -> None:
-    model, ids = make_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_hybrid_architecture_view_uses_per_kind_masks_and_caches(variant) -> None:
+    model, ids = make_fake(make_hybrid_fake, variant)
     view = ArchitectureView.from_model(model)
     caches = view.make_cache()
     h = view.embed(ids)
@@ -372,9 +475,10 @@ def test_hybrid_architecture_view_uses_per_kind_masks_and_caches() -> None:
         view.run_block(0, view.embed(ids), {"linear_attention": None}, caches[0])
 
 
-def test_architecture_view_reports_cache_kinds_and_trimmability() -> None:
-    dense, _ = make_dense_fake()
-    hybrid, _ = make_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_architecture_view_reports_cache_kinds_and_trimmability(variant) -> None:
+    dense, _ = make_fake(make_dense_fake, variant)
+    hybrid, _ = make_fake(make_hybrid_fake, variant)
     dense_view = ArchitectureView.from_model(dense)
     hybrid_view = ArchitectureView.from_model(hybrid)
 
@@ -391,9 +495,10 @@ def test_architecture_view_reports_cache_kinds_and_trimmability() -> None:
     assert hybrid_view.cache_trimmable is False
 
 
-def test_architecture_view_supports_tied_and_untied_unembedding() -> None:
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_architecture_view_supports_tied_and_untied_unembedding(variant) -> None:
     for tied in (True, False):
-        model, ids = make_hybrid_fake(tied=tied)
+        model, ids = make_fake(make_hybrid_fake, variant, tied=tied)
         view = ArchitectureView.from_model(model)
         expected, recorded = model.recording_forward(ids)
 
@@ -403,8 +508,9 @@ def test_architecture_view_supports_tied_and_untied_unembedding() -> None:
         np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
 
 
-def test_architecture_view_runs_only_to_the_deepest_requested_residual() -> None:
-    model, ids = make_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_architecture_view_runs_only_to_the_deepest_requested_residual(variant) -> None:
+    model, ids = make_fake(make_hybrid_fake, variant)
     view = ArchitectureView.from_model(model)
     residuals = view.residuals(ids, (0, 2))
 
@@ -418,9 +524,10 @@ def test_architecture_view_runs_only_to_the_deepest_requested_residual() -> None
         view.residuals(ids, (view.num_layers + 1,))
 
 
-def test_architecture_view_lora_target_policies_select_only_existing_modules() -> None:
-    dense, _ = make_dense_fake()
-    hybrid, _ = make_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_architecture_view_lora_target_policies_select_only_existing_modules(variant) -> None:
+    dense, _ = make_fake(make_dense_fake, variant)
+    hybrid, _ = make_fake(make_hybrid_fake, variant)
     dense_view = ArchitectureView.from_model(dense)
     hybrid_view = ArchitectureView.from_model(hybrid)
     dense_keys = (
@@ -447,9 +554,10 @@ def test_architecture_view_lora_target_policies_select_only_existing_modules() -
     assert hybrid_view.lora_targets("auto") == hybrid_keys
 
 
-def test_architecture_view_validates_explicit_lora_targets_and_counts_shapes() -> None:
-    dense, _ = make_dense_fake()
-    hybrid, _ = make_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_architecture_view_validates_explicit_lora_targets_and_counts_shapes(variant) -> None:
+    dense, _ = make_fake(make_dense_fake, variant)
+    hybrid, _ = make_fake(make_hybrid_fake, variant)
     dense_view = ArchitectureView.from_model(dense)
     hybrid_view = ArchitectureView.from_model(hybrid)
     explicit = ("self_attn.q_proj", "mlp.down_proj")
@@ -467,8 +575,9 @@ def test_architecture_view_validates_explicit_lora_targets_and_counts_shapes() -
         hybrid_view.lora_parameter_count(explicit, rank=0)
 
 
-def test_split_hybrid_lora_targets_and_counts_use_only_actual_modules() -> None:
-    model, _ = make_split_hybrid_fake()
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_split_hybrid_lora_targets_and_counts_use_only_actual_modules(variant) -> None:
+    model, _ = make_fake(make_split_hybrid_fake, variant)
     view = ArchitectureView.from_model(model)
     expected = (
         "self_attn.q_proj",
@@ -517,10 +626,11 @@ def test_architecture_view_rejects_missing_or_bad_structural_shapes() -> None:
         ArchitectureView.from_model(object())
 
 
-def test_model_spec_resolve_populates_every_field_from_real_architecture_view() -> None:
+@pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+def test_model_spec_resolve_populates_every_field_from_real_architecture_view(variant) -> None:
     from local_llm_lab.models import load_model_spec
 
-    model, _ = make_hybrid_fake(tied=False)
+    model, _ = make_fake(make_hybrid_fake, variant, tied=False)
     spec = load_model_spec("qwen35-4b")
     tokenizer = type("Tokenizer", (), {"snapshot_revision": "fake-hybrid-revision"})()
     resolved = spec.resolve(model, tokenizer)
