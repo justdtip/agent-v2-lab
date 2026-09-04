@@ -73,9 +73,9 @@ def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(
     tokenizer = object()
     load_calls = []
 
-    def fake_load_policy(model_name, adapter):
-        load_calls.append((model_name, adapter))
-        return model, tokenizer
+    def fake_load_policy(given, adapter):
+        load_calls.append((given.hf_id, adapter))
+        return model, tokenizer, fake_view, given.resolve(model, tokenizer)
 
     fake_view = _FakeView()
     monkeypatch.setattr(evaluate, "load_policy", fake_load_policy)

@@ -33,6 +33,107 @@ def test_render_completion_preserves_legacy_end_token_bytes() -> None:
     )
 
 
+def test_continue_forwards_the_active_spec_to_prompt_rendering(monkeypatch) -> None:
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline import branch
+
+    spec = load_model_spec("qwen35-4b")
+    prompt_specs = []
+    turn = types.SimpleNamespace(action=Action("finish", {"answer": "done"}), thought="done")
+    simulator = types.SimpleNamespace(
+        execute=lambda _action: "finished",
+        verdict=lambda: types.SimpleNamespace(success=True),
+    )
+    monkeypatch.setattr(
+        branch,
+        "build_prompt",
+        lambda _tokenizer, _messages, **kwargs: prompt_specs.append(kwargs["spec"]) or "prompt",
+    )
+    monkeypatch.setattr(branch, "generate_turn", lambda *_args: "raw")
+    monkeypatch.setattr(branch, "parse_turn", lambda _raw: turn)
+
+    assert branch._continue(
+        object(),
+        object(),
+        object(),
+        [{"role": "user", "content": "task"}],
+        simulator,
+        spec=spec,
+        sampler=object(),
+        remaining_steps=1,
+        max_tokens=4,
+        keep_last=2,
+    )
+    assert prompt_specs == [spec]
+
+
+def test_mine_pairs_forwards_the_active_spec_to_seed_and_branch_paths(monkeypatch) -> None:
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.tasks import Task
+
+    spec = load_model_spec("qwen35-4b")
+    task = Task("pref-read-0000-clean", "read", "clean", "p", {}, (), "done", frozenset())
+    trajectory = types.SimpleNamespace(
+        success=True,
+        steps=[
+            {
+                "thought": "seed",
+                "raw": "seed raw",
+                "action": {"name": "read_file", "arguments": {"path": "a"}},
+            }
+        ],
+    )
+    seed_specs = []
+    prompt_specs = []
+    continuation_specs = []
+    simulator = types.SimpleNamespace(
+        execute=lambda _action: "observation",
+        verdict=lambda: types.SimpleNamespace(success=False),
+    )
+    monkeypatch.setattr(
+        branch,
+        "run_task",
+        lambda *_args, **kwargs: seed_specs.append(kwargs["spec"]) or trajectory,
+    )
+    monkeypatch.setattr(branch, "make_sampler", lambda _temperature: object())
+    monkeypatch.setattr(
+        branch,
+        "build_prompt",
+        lambda _tokenizer, _messages, **kwargs: prompt_specs.append(kwargs["spec"]) or "prompt",
+    )
+    monkeypatch.setattr(branch, "generate_turn", lambda *_args: "branch raw")
+    monkeypatch.setattr(
+        branch,
+        "parse_turn",
+        lambda _raw: types.SimpleNamespace(
+            action=Action("read_file", {"path": "b"}), thought="branch"
+        ),
+    )
+    monkeypatch.setattr(branch.Simulator, "for_task", lambda _task: simulator)
+    monkeypatch.setattr(
+        branch,
+        "_continue",
+        lambda *_args, **kwargs: continuation_specs.append(kwargs["spec"]) or False,
+    )
+
+    branch.mine_pairs(
+        object(),
+        object(),
+        task,
+        spec=spec,
+        branches=1,
+        temperature=0.9,
+        max_steps=2,
+        max_tokens=4,
+        keep_last=2,
+    )
+
+    assert seed_specs == [spec]
+    assert prompt_specs == [spec]
+    assert continuation_specs == [spec]
+
+
 def test_branch_pairs_keep_the_seed_step_raw_completion(monkeypatch) -> None:
     """Canonical re-rendering must not replace a saved trajectory's chosen raw bytes."""
     from local_llm_lab.pipeline import branch
@@ -57,7 +158,15 @@ def test_branch_pairs_keep_the_seed_step_raw_completion(monkeypatch) -> None:
     monkeypatch.setattr(branch, "generate_turn", lambda *args, **kwargs: rejected)
 
     pairs, _ = branch.mine_pairs(
-        None, None, task, branches=1, temperature=1.0, max_steps=1, max_tokens=20, keep_last=2
+        None,
+        None,
+        task,
+        spec=branch._LEGACY_SPEC,
+        branches=1,
+        temperature=1.0,
+        max_steps=1,
+        max_tokens=20,
+        keep_last=2,
     )
 
     assert pairs[0]["chosen"] == chosen
@@ -95,5 +204,13 @@ def test_branch_pairs_reject_seed_steps_without_raw_completion(monkeypatch) -> N
 
     with pytest.raises(ValueError, match="raw completion"):
         branch.mine_pairs(
-            None, None, task, branches=1, temperature=1.0, max_steps=1, max_tokens=20, keep_last=2
+            None,
+            None,
+            task,
+            spec=branch._LEGACY_SPEC,
+            branches=1,
+            temperature=1.0,
+            max_steps=1,
+            max_tokens=20,
+            keep_last=2,
         )

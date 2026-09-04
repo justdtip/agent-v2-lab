@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline import evaluate
 from local_llm_lab.pipeline.runner import Trajectory
 from local_llm_lab.pipeline.tasks import Task
@@ -79,7 +82,15 @@ def test_evaluate_tasks_passes_stress_faults_to_runner(
     )
 
     evaluate.evaluate_tasks(
-        object(), object(), [task], label="fake", stress=stress, quiet=True
+        object(),
+        object(),
+        [task],
+        spec=load_model_spec("qwen35-4b"),
+        view=object(),
+        resolved=object(),
+        label="fake",
+        stress=stress,
+        quiet=True,
     )
 
     assert captured["faults"] == expected_faults
@@ -185,10 +196,14 @@ def test_run_evaluation_records_explicit_difficulty_and_screen_metadata(
 ) -> None:
     """Catch a screen request that silently falls back to split defaults or loses provenance."""
     captured: dict[str, object] = {}
+    spec = load_model_spec("qwen35-4b")
+    resolved = SimpleNamespace(as_dict=lambda: {"spec": {"name": spec.name}})
 
-    def fake_load_policy(model_name: str, adapter: Path | None) -> tuple[object, object]:
-        captured["model"] = model_name
-        return object(), object()
+    def fake_load_policy(
+        given: object, adapter: Path | None
+    ) -> tuple[object, object, object, object]:
+        captured["model"] = given
+        return object(), object(), object(), resolved
 
     def fake_evaluate_tasks(_model, _tokenizer, tasks, **_kwargs):
         captured["tasks"] = tasks
@@ -208,7 +223,7 @@ def test_run_evaluation_records_explicit_difficulty_and_screen_metadata(
     monkeypatch.setattr(evaluate, "_seed_model_rng", lambda _seed: None)
     monkeypatch.setattr(evaluate, "_clear_model_cache", lambda: None)
     summary = evaluate.run_evaluation(
-        model_name="fake-model",
+        spec=spec,
         adapter=None,
         label="fake",
         split="valid2",
@@ -223,7 +238,8 @@ def test_run_evaluation_records_explicit_difficulty_and_screen_metadata(
 
     assert len(captured["tasks"]) == 24
     assert {task.difficulty for task in captured["tasks"]} == {2}
-    assert summary["model"] == "fake-model"
+    assert captured["model"] is spec
+    assert summary["model"] == resolved.as_dict()
     assert summary["difficulty"] == 2
     assert summary["data_seed"] == 17
     payload = (tmp_path / "eval.json").read_text(encoding="utf-8")
@@ -235,7 +251,11 @@ def test_run_evaluation_marks_mixed_default_difficulties_without_a_false_single_
 ) -> None:
     """Catch metadata that labels an alternating split as its first task's difficulty."""
 
-    monkeypatch.setattr(evaluate, "load_policy", lambda _model, _adapter: (object(), object()))
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda _spec, _adapter: (object(), object(), object(), SimpleNamespace(as_dict=dict)),
+    )
     monkeypatch.setattr(
         evaluate,
         "evaluate_tasks",
@@ -254,7 +274,7 @@ def test_run_evaluation_marks_mixed_default_difficulties_without_a_false_single_
     monkeypatch.setattr(evaluate, "_clear_model_cache", lambda: None)
 
     summary = evaluate.run_evaluation(
-        model_name="fake-model",
+        spec=load_model_spec("qwen35-4b"),
         adapter=None,
         label="mixed",
         split="valid2",
@@ -267,3 +287,136 @@ def test_run_evaluation_marks_mixed_default_difficulties_without_a_false_single_
 
     assert summary["difficulty"] is None
     assert summary["difficulties"] == [0, 1]
+
+
+class _RecordingSpec:
+    """Minimal stand-in that records what the loader asked of the declaration."""
+
+    hf_id = "org/fake-hf-id"
+
+    def __init__(self, resolved: object) -> None:
+        self.resolved = resolved
+        self.resolve_calls: list[tuple[object, object]] = []
+
+    def resolve(self, model: object, tokenizer: object) -> object:
+        self.resolve_calls.append((model, tokenizer))
+        return self.resolved
+
+
+def test_load_policy_returns_the_view_and_resolved_spec_from_one_load(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A bare (model, tokenizer) return leaves every stage without a resolved declaration."""
+    model, tokenizer, view, resolved = object(), object(), object(), object()
+    spec = _RecordingSpec(resolved)
+    adapter = tmp_path / "best-adapter"
+    events: list[object] = []
+
+    def fake_load(hf_id: str, *, adapter_path: str | None, lazy: bool) -> tuple[object, object]:
+        events.append(("load", hf_id, adapter_path, lazy))
+        return model, tokenizer
+
+    monkeypatch.setitem(sys.modules, "mlx_lm", SimpleNamespace(load=fake_load))
+    monkeypatch.setattr(evaluate, "configure_local_cache", lambda: events.append(("cache",)))
+    monkeypatch.setattr(
+        evaluate.ArchitectureView,
+        "from_model",
+        classmethod(lambda _cls, loaded: view if loaded is model else None),
+    )
+
+    assert evaluate.load_policy(spec, adapter) == (model, tokenizer, view, resolved)
+    assert evaluate.load_policy(spec, None, lazy=True) == (model, tokenizer, view, resolved)
+    assert events == [
+        ("cache",),
+        ("load", "org/fake-hf-id", str(adapter.resolve()), False),
+        ("cache",),
+        ("load", "org/fake-hf-id", None, True),
+    ]
+    assert spec.resolve_calls == [(model, tokenizer), (model, tokenizer)]
+
+
+def test_evaluate_tasks_carries_the_loaded_model_context_into_every_run(monkeypatch) -> None:
+    """Omitted model context silently disables the generation-suffix and cache-strategy paths."""
+    task = Task(
+        task_id="test-read-0000-clean",
+        family="read",
+        variant="clean",
+        prompt="read a file",
+        files={"a.txt": "x"},
+        steps=(),
+        expected_answer="x",
+        required_tools=frozenset(),
+    )
+    spec = load_model_spec("qwen35-4b")
+    view, resolved = object(), object()
+    seen: list[tuple[object, object, object]] = []
+
+    def fake_run_task(*_args, **kwargs):
+        seen.append((kwargs["spec"], kwargs["view"], kwargs["resolved"]))
+        return _trajectory(task.task_id, success=True, clean=True, difficulty=0)
+
+    monkeypatch.setattr(evaluate, "make_sampler", lambda _temperature: object())
+    monkeypatch.setattr(evaluate, "run_task", fake_run_task)
+    monkeypatch.setattr(
+        evaluate,
+        "check_trajectory",
+        lambda *_args, **_kwargs: SimpleNamespace(as_dict=lambda: {"clean": True, "counts": {}}),
+    )
+
+    evaluate.evaluate_tasks(
+        object(),
+        object(),
+        [task, task],
+        spec=spec,
+        view=view,
+        resolved=resolved,
+        label="fake",
+        quiet=True,
+    )
+
+    assert seen == [(spec, view, resolved)] * 2
+
+
+def test_run_evaluation_writes_the_resolved_model_spec_into_the_evaluation_json(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """SPEC-002 §6 requires the evaluation artifact to carry its resolved ModelSpec."""
+    spec = load_model_spec("qwen35-4b")
+    resolved_record = {"spec": {"name": spec.name}, "num_layers": 7, "cache_strategy": "none"}
+
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda _spec, _adapter: (
+            object(),
+            object(),
+            object(),
+            SimpleNamespace(as_dict=lambda: resolved_record),
+        ),
+    )
+    monkeypatch.setattr(
+        evaluate,
+        "evaluate_tasks",
+        lambda _model, _tokenizer, tasks, **_kwargs: [
+            _trajectory(task.task_id, success=True, clean=True, difficulty=task.difficulty)
+            for task in tasks
+        ],
+    )
+    monkeypatch.setattr(evaluate, "_seed_model_rng", lambda _seed: None)
+    monkeypatch.setattr(evaluate, "_clear_model_cache", lambda: None)
+
+    output = tmp_path / "eval.json"
+    summary = evaluate.run_evaluation(
+        spec=spec,
+        adapter=None,
+        label="resolved",
+        split="valid",
+        limit=2,
+        output=output,
+        transcript_dir=None,
+        quiet=True,
+        seed=17,
+    )
+
+    assert summary["model"] == resolved_record
+    assert json.loads(output.read_text(encoding="utf-8"))["summary"]["model"] == resolved_record

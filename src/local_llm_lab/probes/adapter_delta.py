@@ -37,6 +37,7 @@ from typing import Any
 import numpy as np
 
 from local_llm_lab.arch import ArchitectureView
+from local_llm_lab.models import ResolvedSpec
 
 __all__ = [
     "DEFAULT_SCALE",
@@ -559,12 +560,14 @@ def run_block_ablation(
 
 
 @contextmanager
-def _reuse_loaded_policy(model: Any, tokenizer: Any) -> Iterator[None]:
+def _reuse_loaded_policy(
+    model: Any, tokenizer: Any, view: ArchitectureView, resolved: ResolvedSpec
+) -> Iterator[None]:
     """Make evaluator cells reuse one loaded policy, restoring its loader even on failure."""
     from local_llm_lab.pipeline import evaluate
 
     original = evaluate.load_policy
-    evaluate.load_policy = lambda *_args, **_kwargs: (model, tokenizer)
+    evaluate.load_policy = lambda *_args, **_kwargs: (model, tokenizer, view, resolved)
     try:
         yield
     finally:
@@ -924,13 +927,12 @@ def _run_ablation_cli(
     except ValueError as error:
         parser.error(str(error))
     spec = load_model_spec(args.model)
-    model, tokenizer = evaluate.load_policy(spec.hf_id, args.adapter)
-    view = ArchitectureView.from_model(model)
+    model, tokenizer, view, resolved_spec = evaluate.load_policy(spec, args.adapter)
     try:
         _layer_blocks(int(view.num_layers), args.blocks)
     except ValueError as error:
         parser.error(str(error))
-    resolved = spec.resolve(model, tokenizer).as_dict()
+    resolved = resolved_spec.as_dict()
     eval_config = config.get("eval") if isinstance(config.get("eval"), dict) else {}
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -940,7 +942,7 @@ def _run_ablation_cli(
         evaluation_dir = args.output / "evaluations" / condition
         filename = f"{cell_index:02d}-{cell['split']}-d{cell['difficulty']}.json"
         return evaluate.run_evaluation(
-            model_name=spec.hf_id,
+            spec=spec,
             adapter=args.adapter,
             label=f"{args.adapter.name}-{condition}-{cell_index:02d}",
             split=cell["split"],
@@ -959,7 +961,7 @@ def _run_ablation_cli(
             family_quotas=dict(cell["per_family"]),
         )
 
-    with _reuse_loaded_policy(model, tokenizer):
+    with _reuse_loaded_policy(model, tokenizer, view, resolved_spec):
         result = run_block_ablation(
             view,
             blocks=args.blocks,
@@ -1048,9 +1050,10 @@ def main() -> None:
     model = tokenizer = None
     if not args.no_base:
         require_idle_gpu(parser, args, "loading the base model for relative norms")
+        from local_llm_lab.models import load_model_spec
         from local_llm_lab.pipeline.evaluate import load_policy
 
-        model, tokenizer = load_policy(args.model, None)
+        model, tokenizer, _view, _resolved = load_policy(load_model_spec(args.model), None)
 
     runs = []
     norm_cache: dict[str, float] = {}

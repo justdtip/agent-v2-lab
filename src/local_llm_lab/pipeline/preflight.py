@@ -55,7 +55,7 @@ def write_report(report: Mapping[str, Any], path: Path) -> Path:
 def run_preflight(
     model_name: str,
     *,
-    loader: Callable[..., tuple[Any, Any]] | None = None,
+    loader: Callable[..., tuple[Any, Any, Any, ResolvedSpec]] | None = None,
     output_root: Path | None = None,
     spec_loader: Callable[[str], ModelSpec] | None = None,
     view_factory: Callable[[Any], Any] | None = None,
@@ -68,19 +68,14 @@ def run_preflight(
 
     The optional collaborators make this model-loading stage wholly fake-testable.  The default
     loader and numerical runtime remain late imports so all ordinary CLI paths stay lightweight.
+    ``view_factory`` and ``resolver`` override what the loader already returns; leaving them
+    unset keeps preflight on exactly the view and resolved spec every other stage receives.
     """
     if spec_loader is None:
         spec_loader = load_model_spec
     spec = spec_loader(model_name)
     if loader is None:
         loader = _default_loader
-    if view_factory is None:
-        from local_llm_lab.arch import ArchitectureView
-
-        view_factory = ArchitectureView.from_model
-    if resolver is None:
-        def resolver(declared: ModelSpec, model: Any, tokenizer: Any) -> ResolvedSpec:
-            return declared.resolve(model, tokenizer)
     if jvp is None:
         from local_llm_lab.pipeline.jlens import jacobian_vector_product
 
@@ -92,9 +87,11 @@ def run_preflight(
 
         array_api = mx
 
-    model, tokenizer = loader(spec.hf_id, lazy=True)
-    view = view_factory(model)
-    resolved = resolver(spec, model, tokenizer)
+    model, tokenizer, view, resolved = loader(spec, None, lazy=True)
+    if view_factory is not None:
+        view = view_factory(model)
+    if resolver is not None:
+        resolved = resolver(spec, model, tokenizer)
     revision = resolved.snapshot_revision or revision_reader(spec)
     if not revision:
         raise SystemExit(
@@ -160,7 +157,7 @@ def run_residual_control(
     model_name: str,
     *,
     output_path: Path,
-    loader: Callable[..., tuple[Any, Any]] | None = None,
+    loader: Callable[..., tuple[Any, Any, Any, ResolvedSpec]] | None = None,
     spec_loader: Callable[[str], ModelSpec] | None = None,
     view_factory: Callable[[Any], Any] | None = None,
     revision_reader: Callable[[ModelSpec], str | None] | None = None,
@@ -172,18 +169,15 @@ def run_residual_control(
     spec = spec_loader(model_name)
     if loader is None:
         loader = _default_loader
-    if view_factory is None:
-        from local_llm_lab.arch import ArchitectureView
-
-        view_factory = ArchitectureView.from_model
     if revision_reader is None:
         revision_reader = cached_revision
     if array_api is None:
         import mlx.core as mx
 
         array_api = mx
-    model, tokenizer = loader(spec.hf_id, lazy=True)
-    view = view_factory(model)
+    model, tokenizer, view, _resolved = loader(spec, None, lazy=True)
+    if view_factory is not None:
+        view = view_factory(model)
     revision = revision_reader(spec)
     if not revision:
         raise SystemExit(f"no cached revision for {spec.name}; cannot write residual control")
@@ -259,11 +253,13 @@ def require_preflight(
     return record
 
 
-def _default_loader(hf_id: str, *, lazy: bool) -> tuple[Any, Any]:
-    configure_local_cache()
-    from mlx_lm import load
+def _default_loader(
+    spec: ModelSpec, adapter: Path | None, *, lazy: bool
+) -> tuple[Any, Any, Any, ResolvedSpec]:
+    """Route preflight through the one shared policy loader so both paths agree."""
+    from local_llm_lab.pipeline.evaluate import load_policy
 
-    return load(hf_id, lazy=lazy)
+    return load_policy(spec, adapter, lazy=lazy)
 
 
 def _fixed_token_ids(tokenizer: Any, array_api: Any) -> Any:

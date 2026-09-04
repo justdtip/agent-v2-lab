@@ -38,7 +38,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> None:
     import mlx.core as mx
 
-    from local_llm_lab.arch import ArchitectureView
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.evaluate import load_policy, make_sampler
     from local_llm_lab.pipeline.runner import run_task
@@ -47,9 +46,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     spec = load_model_spec(args.model)
     spec = replace(spec, cache_strategy=args.strategy)
-    model, tokenizer = load_policy(spec.hf_id, None)
-    view = ArchitectureView.from_model(model)
-    resolved = spec.resolve(model, tokenizer)
+    model, tokenizer, view, resolved = load_policy(spec, None)
     if resolved.cache_strategy == "none":
         raise SystemExit("cache equivalence requires a non-disabled resolved strategy")
     print(

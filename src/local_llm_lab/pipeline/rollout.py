@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from local_llm_lab.arch import ArchitectureView
+from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.data import write_jsonl
 from local_llm_lab.pipeline.evaluate import DEFAULT_MODEL, load_policy, make_sampler, summarize
 from local_llm_lab.pipeline.integrity import check_trajectory
@@ -22,6 +24,9 @@ def collect_rollouts(
     tokenizer: Any,
     tasks: list[Task],
     *,
+    spec: ModelSpec,
+    view: ArchitectureView,
+    resolved: ResolvedSpec,
     label: str,
     samples: int,
     temperature: float,
@@ -51,6 +56,9 @@ def collect_rollouts(
                 tokenizer,
                 task,
                 sampler=sampler,
+                spec=spec,
+                view=view,
+                resolved=resolved,
                 label=f"{label}-s{sample}",
                 max_steps=max_steps,
                 max_tokens=max_tokens,
@@ -116,13 +124,17 @@ def run_rollout(
 ) -> dict[str, Any]:
     import mlx.core as mx
 
-    model, tokenizer = load_policy(model_name, adapter)
+    spec = load_model_spec(model_name)
+    model, tokenizer, view, resolved = load_policy(spec, adapter)
     tasks = make_tasks(split, limit, seed)
     started = time.monotonic()
     trajectories, rows, summary = collect_rollouts(
         model,
         tokenizer,
         tasks,
+        spec=spec,
+        view=view,
+        resolved=resolved,
         label=label,
         samples=samples,
         temperature=temperature,
@@ -136,7 +148,7 @@ def run_rollout(
     )
     summary.update(
         {
-            "model": model_name,
+            "model": resolved.as_dict(),
             "adapter": None if adapter is None else str(adapter.resolve()),
             "split": split,
             "elapsed_seconds": round(time.monotonic() - started, 2),

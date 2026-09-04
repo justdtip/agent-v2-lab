@@ -31,7 +31,6 @@ from typing import Any
 
 import numpy as np
 
-from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.compare_chat import CHAT_SYSTEM_PROMPT
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import response_mean_activations
@@ -1215,8 +1214,7 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     except ValueError as error:
         parser.error(str(error))
     require_idle_gpu(parser, args, "generating role rollouts")
-    model, tokenizer = load_policy(spec.hf_id, adapter)
-    view = ArchitectureView.from_model(model)
+    model, tokenizer, view, _resolved = load_policy(spec, adapter)
     try:
         selection = resolve_layers(args.layers, spec, view.num_layers)
     except ValueError as error:
@@ -1279,7 +1277,7 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     axis, diagnostics = load_axis(args.axis)
     if args.layer not in axis:
         parser.error(f"axis file has layers {sorted(axis)}, not {args.layer}")
-    model, tokenizer = load_policy(spec.hf_id, adapter)
+    model, tokenizer, _view, _resolved = load_policy(spec, adapter)
     records = trajectory_projections(
         model,
         tokenizer,

@@ -2103,14 +2103,14 @@ def test_state_probe_cli_bounds_and_releases_mlx_before_fitting(monkeypatch, tmp
     monkeypatch.setattr(
         evaluate,
         "load_policy",
-        lambda _model, _adapter: (events.append("model loaded") or TrackedModel(), object()),
+        lambda _spec, _adapter: (
+            events.append("model loaded") or TrackedModel(),
+            object(),
+            SimpleNamespace(num_layers=1),
+            object(),
+        ),
     )
     monkeypatch.setattr(state_probe, "artifact_identity", lambda value: f"identity:{value}")
-    monkeypatch.setattr(
-        state_probe.ArchitectureView,
-        "from_model",
-        lambda _model: SimpleNamespace(num_layers=1),
-    )
     monkeypatch.setattr(
         state_probe,
         "build_probe_dataset",

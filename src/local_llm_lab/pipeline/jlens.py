@@ -561,8 +561,7 @@ def main() -> None:  # noqa: C901 - pre-existing probe CLI orchestration
     candidates = {"target": target_path, "already_read": already_read, "unseen": unseen_path}
 
     require_idle_gpu(parser, args, "loading the J-lens model")
-    model, tokenizer = load_policy(spec.hf_id, adapter)
-    view = ArchitectureView.from_model(model)
+    model, tokenizer, view, _resolved = load_policy(spec, adapter)
     try:
         selection = resolve_layers(args.layers, spec, view.num_layers)
     except ValueError as error:

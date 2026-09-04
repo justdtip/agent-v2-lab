@@ -45,7 +45,6 @@ from typing import Any
 
 import numpy as np
 
-from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.pipeline.data import build_rows
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt, parse_turn
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
@@ -2973,8 +2972,7 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
         checkpoint_dir = args.output / f"{stem}.checkpoints"
         latest_memory: dict[str, Any] = {}
         try:
-            model, tokenizer = load_policy(spec.hf_id, adapter)
-            view = ArchitectureView.from_model(model)
+            model, tokenizer, view, _resolved = load_policy(spec, adapter)
             try:
                 selection = resolve_layers(args.layers, spec, view.num_layers)
             except ValueError as error:

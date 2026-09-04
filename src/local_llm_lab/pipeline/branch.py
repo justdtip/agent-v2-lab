@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from local_llm_lab.agent_protocol import ActionParseError
-from local_llm_lab.models import load_model_spec
+from local_llm_lab.arch import ArchitectureView
+from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.data import write_jsonl
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.evaluate import DEFAULT_MODEL, load_policy, make_sampler
@@ -43,6 +44,7 @@ def _continue(
     messages: list[dict[str, Any]],
     simulator: Simulator,
     *,
+    spec: ModelSpec,
     sampler: Any,
     remaining_steps: int,
     max_tokens: int,
@@ -50,7 +52,7 @@ def _continue(
 ) -> bool:
     """Roll the policy forward from an arbitrary state; return whether the verifier passes."""
     for _ in range(remaining_steps):
-        prompt = build_prompt(tokenizer, messages, keep_last=keep_last)
+        prompt = build_prompt(tokenizer, messages, spec=spec, keep_last=keep_last)
         raw = generate_turn(model, tokenizer, prompt, sampler, max_tokens)
         try:
             turn = parse_turn(raw)
@@ -64,11 +66,17 @@ def _continue(
     return simulator.verdict().success
 
 
-def mine_pairs(
+def mine_pairs(  # noqa: C901 - branch outcome collection remains an established single transaction.
     model: Any,
     tokenizer: Any,
     task: Task,
     *,
+    spec: ModelSpec,
+    # DEBT(R20): required once the condition-4 slice threads branch.build_prompt. That slice
+    # drops both defaults and updates the two optional-path callers that omit them today,
+    # tests/test_branch.py:164 and :210.
+    view: ArchitectureView | None = None,
+    resolved: ResolvedSpec | None = None,
     branches: int,
     temperature: float,
     max_steps: int,
@@ -92,6 +100,9 @@ def mine_pairs(
         tokenizer,
         task,
         sampler=greedy,
+        spec=spec,
+        view=view,
+        resolved=resolved,
         label="seed",
         max_steps=max_steps,
         max_tokens=max_tokens,
@@ -121,7 +132,7 @@ def mine_pairs(
         if not isinstance(raw, str) or not raw:
             raise ValueError(f"seed trajectory step {point} is missing a raw completion")
         seed_completion = raw
-        prompt = build_prompt(tokenizer, messages, keep_last=keep_last)
+        prompt = build_prompt(tokenizer, messages, spec=spec, keep_last=keep_last)
         stats["branch_points"] += 1
         good: list[str] = [seed_completion]
         bad: list[str] = []
@@ -152,6 +163,7 @@ def mine_pairs(
                     task,
                     branch_messages,
                     branch_sim,
+                    spec=spec,
                     sampler=greedy,
                     remaining_steps=max_steps - point - 1,
                     max_tokens=max_tokens,
@@ -215,7 +227,8 @@ def run_branch_mining(
 ) -> dict[str, Any]:
     import mlx.core as mx
 
-    model, tokenizer = load_policy(model_name, adapter)
+    spec = load_model_spec(model_name)
+    model, tokenizer, view, resolved = load_policy(spec, adapter)
     tasks = make_tasks(split, limit, seed)
     started = time.monotonic()
     all_pairs: list[dict[str, Any]] = []
@@ -226,6 +239,9 @@ def run_branch_mining(
             model,
             tokenizer,
             task,
+            spec=spec,
+            view=view,
+            resolved=resolved,
             branches=branches,
             temperature=temperature,
             max_steps=max_steps,
@@ -244,7 +260,7 @@ def run_branch_mining(
     output.mkdir(parents=True, exist_ok=True)
     digest = write_jsonl(output / "pairs.jsonl", all_pairs)
     summary = {
-        "model": model_name,
+        "model": resolved.as_dict(),
         "adapter": None if adapter is None else str(adapter.resolve()),
         "split": split,
         "tasks": len(tasks),

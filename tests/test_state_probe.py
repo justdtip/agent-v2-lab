@@ -134,14 +134,13 @@ def test_state_probe_default_layers_use_actual_depth_and_persist_selection(
         "resolve_policy",
         lambda name, spec: seen.append(("policy", name, spec)) or None,
     )
-    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (model, object()))
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_args: (model, object(), SimpleNamespace(num_layers=32), object()),
+    )
     monkeypatch.setattr(state_probe, "artifact_identity", lambda *_args: {})
     monkeypatch.setattr(state_probe, "set_mlx_cache_limit", lambda *_args: 0)
-    monkeypatch.setattr(
-        state_probe.ArchitectureView,
-        "from_model",
-        lambda loaded: SimpleNamespace(num_layers=32) if loaded is model else None,
-    )
     fake_mlx = SimpleNamespace(clear_cache=lambda: None, set_cache_limit=lambda _value: None)
     monkeypatch.setitem(sys.modules, "mlx.core", fake_mlx)
 

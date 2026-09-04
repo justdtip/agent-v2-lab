@@ -606,9 +606,7 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
     require_idle_gpu(parser, args, "running P6 causal patching")
-    model, tokenizer = load_policy(spec.hf_id, adapter)
-    view = ArchitectureView.from_model(model)
-    resolved = spec.resolve(model, tokenizer)
+    model, tokenizer, view, resolved = load_policy(spec, adapter)
     try:
         selection = resolve_layers(args.layers, spec, view.num_layers)
     except ValueError as error:

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline import evaluate, report
 from local_llm_lab.pipeline import integrity as integrity_module
 from local_llm_lab.pipeline.env import Simulator
@@ -409,7 +410,16 @@ def test_evaluate_tasks_attaches_difficulty_and_integrity(monkeypatch) -> None:
     monkeypatch.setattr(evaluate, "make_sampler", lambda temperature: object())
     monkeypatch.setattr(evaluate, "run_task", lambda *args, **kwargs: trajectory)
 
-    result = evaluate.evaluate_tasks(None, None, [task], label="fake", quiet=True)
+    result = evaluate.evaluate_tasks(
+        None,
+        None,
+        [task],
+        spec=load_model_spec("qwen35-4b"),
+        view=object(),
+        resolved=object(),
+        label="fake",
+        quiet=True,
+    )
 
     assert result == [trajectory]
     assert trajectory.difficulty == task.difficulty
@@ -548,6 +558,9 @@ def test_rollout_retains_only_integrity_clean_successes(monkeypatch) -> None:
         None,
         None,
         [task],
+        spec=load_model_spec("qwen35-4b"),
+        view=object(),
+        resolved=object(),
         label="fake",
         samples=2,
         temperature=0.7,

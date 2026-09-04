@@ -366,10 +366,8 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
     monkeypatch.setattr(
         patch,
         "load_policy",
-        lambda name, adapter: seen.append(("load", name, adapter)) or (object(), object()),
-    )
-    monkeypatch.setattr(
-        patch.ArchitectureView, "from_model", lambda _model: SimpleNamespace(num_layers=4)
+        lambda given, adapter: seen.append(("load", given.hf_id, adapter))
+        or (object(), object(), SimpleNamespace(num_layers=4), object()),
     )
     monkeypatch.setattr(
         patch,

@@ -100,7 +100,9 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
         "resolve_policy",
         lambda name, spec: seen.append(("policy", name, spec)) or None,
     )
-    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None))
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: (None, None, None, None)
+    )
     monkeypatch.setattr(
         models,
         "load_model_spec",
@@ -145,11 +147,10 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
         "resolve_policy",
         lambda name, spec: seen.append(("policy", name, spec)) or None,
     )
-    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (model, object()))
     monkeypatch.setattr(
-        assistant_axis.ArchitectureView,
-        "from_model",
-        lambda loaded: SimpleNamespace(num_layers=32) if loaded is model else None,
+        evaluate,
+        "load_policy",
+        lambda *_args: (model, object(), SimpleNamespace(num_layers=32), object()),
     )
     monkeypatch.setattr(assistant_axis, "load_chat_prompts", lambda _count: ["prompt"])
 

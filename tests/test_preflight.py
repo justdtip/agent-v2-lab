@@ -123,6 +123,33 @@ class _ControlView(_View):
         raise AssertionError("residual controls must not capture JVP residuals")
 
 
+class _RecordingControlView(_ControlView):
+    """A control view that records which view instance the stage actually ran through."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def embed(self, ids: np.ndarray) -> np.ndarray:
+        self.calls.append("embed")
+        return super().embed(ids)
+
+    def masks(self, h: np.ndarray, cache) -> dict[str, object]:
+        self.calls.append("masks")
+        return super().masks(h, cache)
+
+    def run_block(self, index: int, h: np.ndarray, masks, cache) -> np.ndarray:
+        self.calls.append(f"run_block:{index}")
+        return super().run_block(index, h, masks, cache)
+
+    def final_norm(self, h: np.ndarray) -> np.ndarray:
+        self.calls.append("final_norm")
+        return super().final_norm(h)
+
+    def diagnostic_native_final_residual(self, ids: np.ndarray) -> np.ndarray:
+        self.calls.append("native_manual")
+        return super().diagnostic_native_final_residual(ids)
+
+
 class _MetricArray:
     def __init__(self, values: list[float], dtype: str) -> None:
         self.values = np.array(values, dtype=np.float64)
@@ -198,12 +225,12 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
     tokenizers: list[_Tokenizer] = []
     calls: list[str] = []
 
-    def loader(hf_id: str, *, lazy: bool) -> tuple[_Model, _Tokenizer]:
-        assert (hf_id, lazy) == (spec.hf_id, True)
-        calls.append(hf_id)
+    def loader(given, adapter, *, lazy: bool):
+        assert (given, adapter, lazy) == (spec, None, True)
+        calls.append(given.hf_id)
         tokenizer = _Tokenizer()
         tokenizers.append(tokenizer)
-        return _Model(), tokenizer
+        return _Model(), tokenizer, _View(), _resolved(spec)
 
     def forward_jvp(view, layer, primal, tangent, *, method: str) -> np.ndarray:
         assert view.num_layers == 4
@@ -301,7 +328,12 @@ def test_run_preflight_uses_finite_difference_only_after_bad_forward_jvp(tmp_pat
     report = json.loads(
         run_preflight(
             spec.name,
-            loader=lambda hf_id, *, lazy: (_Model(), _Tokenizer()),
+            loader=lambda given, adapter, *, lazy: (
+                _Model(),
+                _Tokenizer(),
+                _View(),
+                _resolved(given),
+            ),
             output_root=tmp_path,
             spec_loader=lambda name: spec,
             view_factory=lambda model: _View(),
@@ -329,7 +361,12 @@ def test_nonfinite_jvp_writes_failed_evidence_then_exits_nonzero(tmp_path: Path)
     with pytest.raises(SystemExit, match="preflight failed"):
         run_preflight(
             spec.name,
-            loader=lambda hf_id, *, lazy: (_Model(), _Tokenizer()),
+            loader=lambda given, adapter, *, lazy: (
+                _Model(),
+                _Tokenizer(),
+                _View(),
+                _resolved(given),
+            ),
             output_root=tmp_path,
             spec_loader=lambda name: spec,
             view_factory=lambda model: _View(),
@@ -414,7 +451,10 @@ def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_pat
     path = run_residual_control(
         spec.name,
         output_path=output_path,
-        loader=lambda hf_id, *, lazy: (calls.append((hf_id, lazy)) or (_Model(), _Tokenizer())),
+        loader=lambda given, adapter, *, lazy: (
+            calls.append((given.hf_id, lazy))
+            or (_Model(), _Tokenizer(), _ControlView(), _resolved(given))
+        ),
         spec_loader=lambda name: spec,
         view_factory=lambda model: _ControlView(),
         revision_reader=lambda given: "cached-revision",
@@ -435,6 +475,50 @@ def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_pat
     assert report["native_manual_vs_native"]["rounding_steps"] == 9
 
 
+def test_residual_control_without_a_view_factory_uses_the_loader_view(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Omitting `view_factory` is the production configuration; a rebuilt view would diverge."""
+    from local_llm_lab.arch import ArchitectureView
+
+    spec = _spec()
+    loaded_view = _RecordingControlView()
+    output_path = tmp_path / "loader-view.json"
+    monkeypatch.setattr(
+        ArchitectureView,
+        "from_model",
+        lambda model: pytest.fail("the residual control rebuilt a second view"),
+    )
+
+    path = run_residual_control(
+        spec.name,
+        output_path=output_path,
+        loader=lambda given, adapter, *, lazy: (
+            _Model(),
+            _Tokenizer(),
+            loaded_view,
+            _resolved(given),
+        ),
+        spec_loader=lambda name: spec,
+        revision_reader=lambda given: "cached-revision",
+        array_api=np,
+    )
+    report = json.loads(path.read_text(encoding="utf-8"))
+
+    assert loaded_view.calls == [
+        "embed",
+        "masks",
+        "run_block:0",
+        "run_block:1",
+        "run_block:2",
+        "run_block:3",
+        "final_norm",
+        "native_manual",
+    ]
+    assert report["fp32_manual_vs_native"]["max_abs_error"] == 0.0
+    assert report["native_manual_vs_native"]["max_abs_error"] == 0.0
+
+
 def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> None:
     """A failed equivalence check must preserve its diagnostic artifact before exiting."""
     spec = _spec()
@@ -442,7 +526,12 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
     with pytest.raises(SystemExit, match="preflight failed"):
         run_preflight(
             spec.name,
-            loader=lambda hf_id, *, lazy: (_Model(), _Tokenizer()),
+            loader=lambda given, adapter, *, lazy: (
+                _Model(),
+                _Tokenizer(),
+                _View(),
+                _resolved(given),
+            ),
             output_root=tmp_path,
             spec_loader=lambda name: spec,
             view_factory=lambda model: _MismatchingView(),
@@ -617,3 +706,21 @@ def test_require_preflight_rejects_unknown_consumer_before_actions(tmp_path: Pat
             action=lambda: action.append("loaded"),
         )
     assert action == []
+
+
+def test_default_loader_is_the_one_shared_policy_loader(monkeypatch) -> None:
+    """A second mlx_lm.load call site would let preflight and the stages disagree."""
+    from local_llm_lab.pipeline import evaluate, preflight
+
+    spec = _spec()
+    loaded = (object(), object(), object(), _resolved(spec))
+    calls: list[tuple[object, object, bool]] = []
+
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda given, adapter, *, lazy: calls.append((given, adapter, lazy)) or loaded,
+    )
+
+    assert preflight._default_loader(spec, None, lazy=True) == loaded
+    assert calls == [(spec, None, True)]

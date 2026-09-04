@@ -295,17 +295,24 @@ def test_block_ablation_exits_the_mask_when_a_screen_evaluation_raises(monkeypat
 def test_reused_policy_loader_is_restored_after_an_exception(monkeypatch) -> None:
     """Catches process-global loader leakage after one ablation condition fails."""
     def original(*_args, **_kwargs):
-        return "fresh-model", "fresh-tokenizer"
+        return "fresh-model", "fresh-tokenizer", "fresh-view", "fresh-resolved"
 
     monkeypatch.setattr(evaluate, "load_policy", original)
     model = object()
     tokenizer = object()
+    view = object()
+    resolved = object()
 
     with (
         pytest.raises(RuntimeError, match="evaluation failed"),
-        adapter_delta._reuse_loaded_policy(model, tokenizer),
+        adapter_delta._reuse_loaded_policy(model, tokenizer, view, resolved),
     ):
-        assert evaluate.load_policy("ignored", Path("ignored")) == (model, tokenizer)
+        assert evaluate.load_policy("ignored", Path("ignored")) == (
+            model,
+            tokenizer,
+            view,
+            resolved,
+        )
         raise RuntimeError("evaluation failed")
 
     assert evaluate.load_policy is original
@@ -388,17 +395,19 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
         def as_dict():
             return {"spec": {"name": "fake-model"}, "num_layers": 7}
 
+    resolved = Resolved()
+
     class Spec:
         hf_id = "fake/hf"
 
         @staticmethod
         def resolve(received_model, received_tokenizer):
             assert (received_model, received_tokenizer) == (model, tokenizer)
-            return Resolved()
+            return resolved
 
-    def fake_load_policy(model_name: str, adapter_path: Path | None):
-        load_calls.append((model_name, adapter_path))
-        return model, tokenizer
+    def fake_load_policy(given, adapter_path: Path | None):
+        load_calls.append((given.hf_id, adapter_path))
+        return model, tokenizer, view, given.resolve(model, tokenizer)
 
     @contextmanager
     def fake_mask(received_view, keep_layers):
@@ -406,7 +415,7 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
         yield 7 - len(tuple(keep_layers))
 
     def fake_run_evaluation(**kwargs):
-        assert evaluate.load_policy("ignored", None) == (model, tokenizer)
+        assert evaluate.load_policy("ignored", None) == (model, tokenizer, view, resolved)
         evaluation_calls.append(kwargs)
         return {
             "successes": 1,
@@ -450,7 +459,7 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
     assert evaluate.load_policy is fake_load_policy
     assert guard_calls == ["loading the adapter policy for block ablation"]
     assert len(evaluation_calls) == 16
-    assert evaluation_calls[0]["model_name"] == "fake/hf"
+    assert evaluation_calls[0]["spec"].hf_id == "fake/hf"
     assert evaluation_calls[0]["split"] == "valid"
     assert evaluation_calls[0]["difficulty"] == 1
     assert evaluation_calls[0]["family_quotas"] == {"default": 1}

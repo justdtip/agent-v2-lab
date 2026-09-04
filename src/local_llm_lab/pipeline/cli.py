@@ -468,6 +468,7 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
         raise SystemExit(
             f"no checkpoint directories found in {output / 'adapters'}; run the train stage first"
         )
+    spec = load_model_spec(config["model"])
     screen = select["screen"]
     losses = _validation_losses(output)
     results = []
@@ -480,7 +481,7 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
             _log(f"select: screening step-{step} on {split}")
             summaries.append(
                 run_evaluation(
-                    model_name=config["model"],
+                    spec=spec,
                     adapter=adapter,
                     label=f"step-{step}-{split}",
                     split=split,
@@ -529,7 +530,7 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
     write_provenance(
         output,
         resolved=None,
-        spec=load_model_spec(config["model"]),
+        spec=spec,
         extra={
             "stage": "select",
             "selection": json.loads(selection_path.read_text(encoding="utf-8")),
@@ -558,6 +559,7 @@ def stage_eval(
 ) -> None:
     output: Path = config["output"]
     evaluation = config["eval"]
+    spec = load_model_spec(config["model"])
     split = split or evaluation["split"]
     limit = limit or evaluation["limit"]
     policies: list[tuple[str, Path | None]] = []
@@ -580,7 +582,7 @@ def stage_eval(
         _log(f"eval: {label} on {split} ({limit} tasks{', stress' if stress else ''})")
         summaries.append(
             run_evaluation(
-                model_name=config["model"],
+                spec=spec,
                 adapter=path,
                 label=label,
                 split=split,
@@ -598,7 +600,7 @@ def stage_eval(
     write_provenance(
         output,
         resolved=None,
-        spec=load_model_spec(config["model"]),
+        spec=spec,
         extra={"stage": "eval", "evaluations": summaries},
     )
 

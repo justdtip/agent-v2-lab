@@ -253,7 +253,8 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
     monkeypatch.setattr(
         evaluate,
         "load_policy",
-        lambda name, adapter: seen.append(("model", name, adapter)) or (model, tokenizer),
+        lambda given, adapter: seen.append(("model", given.hf_id, adapter))
+        or (model, tokenizer, SimpleNamespace(num_layers=32), object()),
     )
     monkeypatch.setitem(
         __import__("sys").modules,
@@ -261,11 +262,6 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
         SimpleNamespace(
             load=lambda *_args, **_kwargs: pytest.fail("used the legacy direct MLX loader")
         ),
-    )
-    monkeypatch.setattr(
-        jlens.ArchitectureView,
-        "from_model",
-        lambda loaded: SimpleNamespace(num_layers=32) if loaded is model else None,
     )
     monkeypatch.setattr(
         jlens,
@@ -356,9 +352,10 @@ def test_jlens_rejects_depth_overflow_before_probe_execution(monkeypatch) -> Non
     monkeypatch.setattr(jlens, "render_probe_prompt", lambda *_args, **_kwargs: "prompt")
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
     monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
-    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (model, tokenizer))
     monkeypatch.setattr(
-        jlens.ArchitectureView, "from_model", lambda _model: SimpleNamespace(num_layers=32)
+        evaluate,
+        "load_policy",
+        lambda *_args: (model, tokenizer, SimpleNamespace(num_layers=32), object()),
     )
     monkeypatch.setattr(
         jlens, "probe_layers", lambda *_args, **_kwargs: pytest.fail("reached probe execution")

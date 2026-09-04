@@ -9,6 +9,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from local_llm_lab.arch import ArchitectureView
+from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.env import Fault
 from local_llm_lab.pipeline.integrity import check_trajectory
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
@@ -67,11 +69,27 @@ def _clear_model_cache() -> None:
     mx.clear_cache()
 
 
-def load_policy(model_name: str, adapter: Path | None) -> tuple[Any, Any]:
+def load_policy(
+    spec: ModelSpec,
+    adapter: Path | None,
+    *,
+    lazy: bool = False,
+) -> tuple[Any, Any, ArchitectureView, ResolvedSpec]:
+    """Load one declared policy together with its architecture view and resolved spec.
+
+    Resolution happens here so that no caller rebuilds an ``ArchitectureView`` or repeats
+    ``ModelSpec.resolve``; every stage then records the same resolved declaration. ``lazy``
+    loads parameters on demand for structural inspection only (the preflight stage).
+    """
     configure_local_cache()
     from mlx_lm import load
 
-    return load(model_name, adapter_path=None if adapter is None else str(adapter.resolve()))
+    model, tokenizer = load(
+        spec.hf_id,
+        adapter_path=None if adapter is None else str(adapter.resolve()),
+        lazy=lazy,
+    )
+    return model, tokenizer, ArchitectureView.from_model(model), spec.resolve(model, tokenizer)
 
 
 def make_sampler(temperature: float) -> Any:
@@ -85,6 +103,9 @@ def evaluate_tasks(
     tokenizer: Any,
     tasks: list[Task],
     *,
+    spec: ModelSpec,
+    view: ArchitectureView,
+    resolved: ResolvedSpec,
     label: str,
     temperature: float = 0.0,
     max_steps: int = 24,
@@ -95,6 +116,7 @@ def evaluate_tasks(
     quiet: bool = False,
     use_cache: bool = True,
 ) -> list[Trajectory]:
+    """Run every task under one loaded policy, carrying its model context into each rollout."""
     sampler = make_sampler(temperature)
     stream = None if quiet else sys.stdout
     trajectories = []
@@ -105,6 +127,9 @@ def evaluate_tasks(
             tokenizer,
             task,
             sampler=sampler,
+            spec=spec,
+            view=view,
+            resolved=resolved,
             label=label,
             max_steps=max_steps,
             max_tokens=max_tokens,
@@ -351,7 +376,7 @@ def write_report(path: Path, summary: dict[str, Any], trajectories: list[Traject
 
 def run_evaluation(
     *,
-    model_name: str,
+    spec: ModelSpec,
     adapter: Path | None,
     label: str,
     split: str,
@@ -370,7 +395,7 @@ def run_evaluation(
     family_quotas: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     _seed_model_rng(seed)
-    model, tokenizer = load_policy(model_name, adapter)
+    model, tokenizer, view, resolved = load_policy(spec, adapter)
     tasks = (
         family_balanced_tasks(
             split,
@@ -388,6 +413,9 @@ def run_evaluation(
         model,
         tokenizer,
         tasks,
+        spec=spec,
+        view=view,
+        resolved=resolved,
         label=label,
         temperature=temperature,
         max_steps=max_steps,
@@ -403,7 +431,7 @@ def run_evaluation(
     summary.update(
         {
             "label": label,
-            "model": model_name,
+            "model": resolved.as_dict(),
             "adapter": None if adapter is None else str(adapter.resolve()),
             "split": split,
             "difficulty": difficulties[0] if len(difficulties) == 1 else None,
@@ -469,7 +497,7 @@ def main() -> None:
     output = args.output or PROJECT_ROOT / "outputs" / "agent-v2" / "evals" / f"{stem}.json"
     transcripts = args.transcripts or PROJECT_ROOT / "outputs" / "agent-v2" / "transcripts" / stem
     run_evaluation(
-        model_name=args.model,
+        spec=load_model_spec(args.model),
         adapter=args.adapter,
         label=label,
         split=args.split,
