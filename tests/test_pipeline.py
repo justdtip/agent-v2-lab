@@ -1210,3 +1210,142 @@ def test_probe_layers_returns_one_record_per_layer_with_both_lenses() -> None:
         assert len(record["logit_lens_top_k"]) == 5
         assert set(record["jlens_evidence"]) == {"a", "b"}
         assert set(record["logit_lens_evidence"]) == {"a", "b"}
+
+
+# --------------------------------------------------------------------------- prefer run log
+
+
+def _prefer_events(directory) -> list[dict]:
+    """Parse ``events.jsonl`` strictly; a machine log a reader cannot parse is not one."""
+    import json as _json
+
+    text = (directory / "events.jsonl").read_text(encoding="utf-8")
+    return [_json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _write_numbered_pairs(path, count: int) -> None:
+    import json as _json
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"prompt": f"p{index}", "chosen": f"c{index}", "rejected": f"r{index}"}
+        for index in range(count)
+    ]
+    path.write_text("\n".join(_json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+
+def _write_source_adapter(directory) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "adapters.safetensors").write_bytes(b"fake-source-weights")
+    (directory / "adapter_config.json").write_text('{"lora_layers": 4}\n', encoding="utf-8")
+
+
+def _install_fake_dpo(monkeypatch, trained_dir) -> None:
+    """Fakes for weights and compute only (R10); ``DPOConfig`` stays the library's class."""
+    import mlx_tune.model as fake_model_module
+    import mlx_tune.rl_trainers as trainers
+
+    class _FakeInner:
+        def freeze(self) -> None:
+            self.frozen = True
+
+        def trainable_parameters(self) -> dict:
+            return {"layers": {"0": {"lora_a": 0.0, "lora_b": 1.0}}}
+
+    class _FakeModel:
+        def __init__(self) -> None:
+            self.model = _FakeInner()
+            self._lora_applied = False
+
+        def load_adapter(self, path: str) -> None:
+            self.loaded = path
+            self._lora_applied = True
+
+    class _FakeFastLanguageModel:
+        @staticmethod
+        def from_pretrained(name, max_seq_length, load_in_4bit):
+            return _FakeModel(), object()
+
+    class _FakeTrainer:
+        use_native = True
+
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def train(self) -> dict:
+            trained_dir.mkdir(parents=True, exist_ok=True)
+            (trained_dir / "adapters.safetensors").write_bytes(b"fake-trained-weights")
+            return {"adapter_path": str(trained_dir)}
+
+    monkeypatch.setattr(fake_model_module, "FastLanguageModel", _FakeFastLanguageModel)
+    monkeypatch.setattr(trainers, "DPOTrainer", _FakeTrainer)
+
+
+def test_run_prefer_writes_a_run_log_with_the_r26_identity_block(monkeypatch, tmp_path) -> None:
+    """R26(a)/(e)/(g), issue #35: agent-v2-prefer opened no RunLog at all before this lane."""
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.prefer import run_prefer
+    from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
+
+    adapter = tmp_path / "best-adapter"
+    _write_source_adapter(adapter)
+    pairs = tmp_path / "pairs.jsonl"
+    _write_numbered_pairs(pairs, 3)
+    output = tmp_path / "prefer"
+    _install_fake_dpo(monkeypatch, tmp_path / "trainer-out")
+    spec = load_model_spec("qwen35-4b")
+
+    run_prefer(
+        model_name=spec.hf_id,
+        adapter=adapter,
+        pairs_path=pairs,
+        output=output,
+        max_steps=2,
+        seed=17,
+    )
+
+    assert (output / "summary.json").is_file()
+    assert (output / "run.log").is_file()
+    events = _prefer_events(output)
+    fields = events[0]["fields"]
+    assert events[0]["kind"] == "start"
+    assert fields["model"] == spec.name and fields["hf_id"] == spec.hf_id
+    assert fields["policy"] == adapter.name
+    assert fields["adapter"] == str(adapter.resolve())
+    assert fields["split"] is None
+    assert fields["data_seed"] == 17
+    assert fields["generator_version"] == GENERATOR_VERSION
+    assert fields["git_commit"] and "git_dirty" in fields
+    progress = [event for event in events if event["kind"] == "progress"]
+    assert [event["step"] for event in progress] == [1, 2, 3]
+    assert all(event["total"] == 3 for event in progress)
+    end = events[-1]
+    assert end["kind"] == "end" and end["status"] == "ok"
+    assert end["fields"]["incomplete_run"] is False
+
+
+def test_run_prefer_closes_the_log_with_incomplete_run_when_the_run_aborts(
+    monkeypatch, tmp_path
+) -> None:
+    """R26(a): a run that stops before its work is done still leaves a closed log."""
+    import pytest as _pytest
+
+    from local_llm_lab.pipeline.prefer import run_prefer
+
+    adapter = tmp_path / "best-adapter"
+    adapter.mkdir(parents=True)
+    output = tmp_path / "prefer"
+
+    with _pytest.raises(FileNotFoundError, match="adapter directory"):
+        run_prefer(
+            model_name="mlx-community/does-not-load",
+            adapter=adapter,
+            pairs_path=tmp_path / "pairs.jsonl",
+            output=output,
+            max_steps=2,
+            seed=17,
+        )
+
+    end = _prefer_events(output)[-1]
+    assert end["kind"] == "end" and end["status"] == "error"
+    assert end["fields"]["incomplete_run"] is True

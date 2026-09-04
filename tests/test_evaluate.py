@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import sys
 from pathlib import Path
@@ -10,7 +11,8 @@ import pytest
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline import evaluate
 from local_llm_lab.pipeline.runner import Trajectory
-from local_llm_lab.pipeline.tasks import Task
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task
+from local_llm_lab.runlog import RunLog
 
 
 def _trajectory(
@@ -420,3 +422,156 @@ def test_run_evaluation_writes_the_resolved_model_spec_into_the_evaluation_json(
 
     assert summary["model"] == resolved_record
     assert json.loads(output.read_text(encoding="utf-8"))["summary"]["model"] == resolved_record
+
+
+def _events(directory: Path) -> list[dict]:
+    """Parse ``events.jsonl`` strictly; a machine log a reader cannot parse is not one."""
+    text = (directory / "events.jsonl").read_text(encoding="utf-8")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _fake_evaluation_policy(monkeypatch, spec) -> None:
+    """Fakes only (R10): no weights are loaded and no rollout is run."""
+    resolved = SimpleNamespace(as_dict=lambda: {"spec": {"name": spec.name}})
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda _spec, _adapter: (object(), object(), object(), resolved),
+    )
+    monkeypatch.setattr(
+        evaluate,
+        "evaluate_tasks",
+        lambda _model, _tokenizer, tasks, **_kwargs: [
+            _trajectory(task.task_id, success=True, clean=True, difficulty=task.difficulty)
+            for task in tasks
+        ],
+    )
+    monkeypatch.setattr(evaluate, "_seed_model_rng", lambda _seed: None)
+    monkeypatch.setattr(evaluate, "_clear_model_cache", lambda: None)
+
+
+def test_run_evaluation_writes_a_run_log_with_the_r26_identity_block(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(a)/(e), issue #35: agent-v2-eval opened no RunLog at all before this lane."""
+    spec = load_model_spec("qwen35-4b")
+    _fake_evaluation_policy(monkeypatch, spec)
+    adapter = tmp_path / "best-adapter"
+    adapter.mkdir()
+    output = tmp_path / "evals" / "eval.json"
+
+    evaluate.run_evaluation(
+        spec=spec,
+        adapter=adapter,
+        label="best-adapter",
+        split="valid",
+        limit=2,
+        output=output,
+        transcript_dir=None,
+        quiet=True,
+        seed=17,
+    )
+
+    directory = output.parent
+    assert (directory / "run.log").is_file()
+    events = _events(directory)
+    start = events[0]
+    assert start["kind"] == "start"
+    fields = start["fields"]
+    assert fields["model"] == spec.name
+    assert fields["hf_id"] == spec.hf_id
+    assert fields["policy"] == "best-adapter"
+    assert fields["adapter"] == str(adapter.resolve())
+    assert fields["split"] == "valid"
+    assert fields["data_seed"] == 17
+    assert fields["generator_version"] == GENERATOR_VERSION
+    assert fields["git_commit"] and "git_dirty" in fields
+    end = events[-1]
+    assert end["kind"] == "end" and end["status"] == "ok"
+    assert end["fields"]["incomplete_run"] is False
+    assert "start" in (directory / "run.log").read_text(encoding="utf-8")
+
+
+def test_run_evaluation_closes_the_log_with_incomplete_run_when_the_load_raises(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(a): the log opens before the model load, so a run that dies loading still logs."""
+    spec = load_model_spec("qwen35-4b")
+
+    def exploding_load(_spec, _adapter):
+        raise RuntimeError("weights unavailable")
+
+    monkeypatch.setattr(evaluate, "load_policy", exploding_load)
+    monkeypatch.setattr(evaluate, "_seed_model_rng", lambda _seed: None)
+    monkeypatch.setattr(evaluate, "_clear_model_cache", lambda: None)
+    output = tmp_path / "evals" / "eval.json"
+
+    with pytest.raises(RuntimeError, match="weights unavailable"):
+        evaluate.run_evaluation(
+            spec=spec,
+            adapter=None,
+            label="base",
+            split="valid",
+            limit=1,
+            output=output,
+            transcript_dir=None,
+            quiet=True,
+            seed=17,
+        )
+
+    assert not output.exists(), "a failed load must not leave an evaluation artifact"
+    events = _events(output.parent)
+    assert events[0]["kind"] == "start"
+    end = events[-1]
+    assert end["kind"] == "end" and end["status"] == "error"
+    assert end["fields"]["incomplete_run"] is True
+
+
+def test_evaluate_tasks_emits_one_progress_event_per_task(monkeypatch, tmp_path: Path) -> None:
+    """R26(g): no run stays silent for longer than one outer unit of work."""
+    tasks = [
+        Task(
+            task_id=f"test-read-000{index}-clean",
+            family="read",
+            variant="clean",
+            prompt="read a file",
+            files={"a.txt": "x"},
+            steps=(),
+            expected_answer="x",
+            required_tools=frozenset(),
+        )
+        for index in range(3)
+    ]
+    monkeypatch.setattr(evaluate, "make_sampler", lambda _temperature: object())
+    monkeypatch.setattr(
+        evaluate,
+        "run_task",
+        lambda *_args, **_kwargs: _trajectory(
+            tasks[0].task_id, success=True, clean=True, difficulty=0
+        ),
+    )
+    monkeypatch.setattr(
+        evaluate,
+        "check_trajectory",
+        lambda *_args, **_kwargs: SimpleNamespace(as_dict=lambda: {"clean": True, "counts": {}}),
+    )
+
+    log = RunLog.open(tmp_path, name="eval", stdout=io.StringIO(), stderr=io.StringIO())
+    evaluate.evaluate_tasks(
+        object(),
+        object(),
+        tasks,
+        spec=load_model_spec("qwen35-4b"),
+        view=object(),
+        resolved=object(),
+        label="fake",
+        quiet=True,
+        log=log,
+    )
+    log.close()
+
+    progress = [event for event in _events(tmp_path) if event["kind"] == "progress"]
+    assert len(progress) == len(tasks)
+    assert [event["step"] for event in progress] == [1, 2, 3]
+    assert all(event["total"] == len(tasks) for event in progress)
+    assert progress[0]["fields"]["task_id"] == tasks[0].task_id

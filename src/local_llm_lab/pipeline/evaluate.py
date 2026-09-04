@@ -12,12 +12,18 @@ from typing import Any
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.env import Fault
-from local_llm_lab.pipeline.integrity import check_trajectory
+from local_llm_lab.pipeline.integrity import check_trajectory, git_tree_dirty
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
 from local_llm_lab.pipeline.runner import Trajectory, run_task
-from local_llm_lab.pipeline.tasks import Task, family_balanced_tasks, make_tasks
+from local_llm_lab.pipeline.tasks import (
+    GENERATOR_VERSION,
+    Task,
+    family_balanced_tasks,
+    make_tasks,
+)
 from local_llm_lab.pipeline.transcript import Transcript, summary_table
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+from local_llm_lab.runlog import RunLog, git_commit
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
 STRESS_FAULTS = (Fault(call_index=1),)
@@ -115,8 +121,13 @@ def evaluate_tasks(
     transcript_dir: Path | None = None,
     quiet: bool = False,
     use_cache: bool = True,
+    log: RunLog | None = None,
 ) -> list[Trajectory]:
-    """Run every task under one loaded policy, carrying its model context into each rollout."""
+    """Run every task under one loaded policy, carrying its model context into each rollout.
+
+    ``log`` is optional so the function stays callable from a test or a notebook without a
+    run directory; when given, it receives one progress event per task (R26(g)).
+    """
     sampler = make_sampler(temperature)
     stream = None if quiet else sys.stdout
     trajectories = []
@@ -143,6 +154,19 @@ def evaluate_tasks(
             task, trajectory.steps, keep_last=keep_last
         ).as_dict()
         trajectories.append(trajectory)
+        if log is not None:
+            # R26(g): the evaluated task is this stage's outer unit of work, so the run is
+            # never silent for longer than one rollout.
+            log.progress(
+                number,
+                len(tasks),
+                "task",
+                task_id=task.task_id,
+                family=task.family,
+                difficulty=task.difficulty,
+                success=trajectory.success,
+                turns=trajectory.turns,
+            )
         if quiet:
             mark = "PASS" if trajectory.success else "FAIL"
             print(
@@ -374,6 +398,23 @@ def write_report(path: Path, summary: dict[str, Any], trajectories: list[Traject
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _evaluation_identity(
+    spec: ModelSpec, adapter: Path | None, label: str, split: str, seed: int
+) -> dict[str, Any]:
+    """R26(e), issue #35: what the start event names, so run.log alone identifies the run."""
+    return {
+        "model": spec.name,
+        "hf_id": spec.hf_id,
+        "policy": label,
+        "adapter": None if adapter is None else str(Path(adapter).resolve()),
+        "split": split,
+        "data_seed": seed,
+        "generator_version": GENERATOR_VERSION,
+        "git_commit": git_commit(),
+        "git_dirty": git_tree_dirty(),
+    }
+
+
 def run_evaluation(
     *,
     spec: ModelSpec,
@@ -394,65 +435,89 @@ def run_evaluation(
     difficulty: int | None = None,
     family_quotas: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    _seed_model_rng(seed)
-    model, tokenizer, view, resolved = load_policy(spec, adapter)
-    tasks = (
-        family_balanced_tasks(
-            split,
-            difficulty=difficulty if difficulty is not None else 0,
-            per_family=family_quotas,
-            seed=seed,
+    # R26(a): the log opens before the RNG seeding and the policy load, so a run that dies
+    # loading weights still leaves run.log and events.jsonl beside the evaluation it never
+    # wrote. The evaluation artifact is a file, so the run directory is its parent.
+    output = Path(output)
+    log = RunLog.open(
+        output.parent,
+        name="eval",
+        command=list(sys.argv),
+        identity=_evaluation_identity(spec, adapter, label, split, seed),
+    )
+    completed = False
+    try:
+        _seed_model_rng(seed)
+        log.info(
+            "loading policy",
+            hf_id=spec.hf_id,
+            adapter=None if adapter is None else str(adapter),
         )
-        if family_quotas is not None
-        else make_tasks(split, limit or 0, seed, difficulty=difficulty)
-    )
-    if limit is not None:
-        tasks = tasks[:limit]
-    started = time.monotonic()
-    trajectories = evaluate_tasks(
-        model,
-        tokenizer,
-        tasks,
-        spec=spec,
-        view=view,
-        resolved=resolved,
-        label=label,
-        temperature=temperature,
-        max_steps=max_steps,
-        max_tokens=max_tokens,
-        keep_last=keep_last,
-        stress=stress,
-        transcript_dir=transcript_dir,
-        quiet=quiet,
-        use_cache=use_cache,
-    )
-    summary = summarize(trajectories)
-    difficulties = sorted({task.difficulty for task in tasks})
-    summary.update(
-        {
-            "label": label,
-            "model": resolved.as_dict(),
-            "adapter": None if adapter is None else str(adapter.resolve()),
-            "split": split,
-            "difficulty": difficulties[0] if len(difficulties) == 1 else None,
-            "difficulties": difficulties,
-            "stress": stress,
-            "temperature": temperature,
-            "keep_last": keep_last,
-            "data_seed": seed,
-            "kv_cache": use_cache,
-            "elapsed_seconds": round(time.monotonic() - started, 2),
-        }
-    )
-    write_report(output, summary, trajectories)
-    print(f"\n{label} on {split} ({'stress' if stress else 'clean'}):")
-    print(summary_table(summary))
-    print(f"Wrote {output}")
-    if transcript_dir is not None:
-        print(f"Transcripts in {transcript_dir}")
-    del model
-    _clear_model_cache()
-    return summary
+        model, tokenizer, view, resolved = load_policy(spec, adapter)
+        tasks = (
+            family_balanced_tasks(
+                split,
+                difficulty=difficulty if difficulty is not None else 0,
+                per_family=family_quotas,
+                seed=seed,
+            )
+            if family_quotas is not None
+            else make_tasks(split, limit or 0, seed, difficulty=difficulty)
+        )
+        if limit is not None:
+            tasks = tasks[:limit]
+        log.info("tasks resolved", count=len(tasks), split=split, stress=stress)
+        started = time.monotonic()
+        trajectories = evaluate_tasks(
+            model,
+            tokenizer,
+            tasks,
+            spec=spec,
+            view=view,
+            resolved=resolved,
+            label=label,
+            temperature=temperature,
+            max_steps=max_steps,
+            max_tokens=max_tokens,
+            keep_last=keep_last,
+            stress=stress,
+            transcript_dir=transcript_dir,
+            quiet=quiet,
+            use_cache=use_cache,
+            log=log,
+        )
+        summary = summarize(trajectories)
+        difficulties = sorted({task.difficulty for task in tasks})
+        summary.update(
+            {
+                "label": label,
+                "model": resolved.as_dict(),
+                "adapter": None if adapter is None else str(adapter.resolve()),
+                "split": split,
+                "difficulty": difficulties[0] if len(difficulties) == 1 else None,
+                "difficulties": difficulties,
+                "stress": stress,
+                "temperature": temperature,
+                "keep_last": keep_last,
+                "data_seed": seed,
+                "kv_cache": use_cache,
+                "elapsed_seconds": round(time.monotonic() - started, 2),
+            }
+        )
+        write_report(output, summary, trajectories)
+        print(f"\n{label} on {split} ({'stress' if stress else 'clean'}):")
+        print(summary_table(summary))
+        print(f"Wrote {output}")
+        if transcript_dir is not None:
+            print(f"Transcripts in {transcript_dir}")
+        del model
+        _clear_model_cache()
+        completed = True
+        return summary
+    finally:
+        # R26(c)'s incomplete_run rule on a non-training stage: an evaluation that stopped
+        # before writing its report scored nothing anything downstream may select on.
+        log.close(status="ok" if completed else "error", incomplete_run=not completed)
 
 
 def main() -> None:

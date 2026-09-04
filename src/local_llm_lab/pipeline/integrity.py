@@ -3,13 +3,17 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
+import sys
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
+from local_llm_lab.runlog import RunLog, git_commit
 
 __all__ = [
     "Fact",
@@ -17,9 +21,40 @@ __all__ = [
     "Violation",
     "check_trajectory",
     "completion_patterns",
+    "git_tree_dirty",
     "main",
     "required_carry",
 ]
+
+_GIT_TIMEOUT = 10.0
+
+
+def git_tree_dirty(cwd: Path | None = None) -> bool | None:
+    """Whether the working tree carries uncommitted changes, for R26(e) identity blocks.
+
+    Lives here because this is the only module the three CLIs of the run-log lane
+    (``evaluate``, ``prefer``, ``integrity``) can all import without pulling in a model
+    dependency, and ``runlog.py`` -- which owns its sibling :func:`runlog.git_commit` --
+    belongs to another lane this cycle.
+
+    Mirrors ``git_commit``'s contract: provenance is a nice-to-have and must never be the
+    thing that kills a run, so any error (no git, not a repository, timeout) is reported as
+    ``None`` -- "not determined" -- rather than raised or silently read as clean.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=None if cwd is None else str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    return bool(completed.stdout.strip())
 
 
 @dataclass(frozen=True)
@@ -455,6 +490,46 @@ def _artifact_generator_version(recorded: object, explicit: int | None, *, sourc
     return int(recorded if recorded is not None else explicit)
 
 
+def _generator_version_basis(recorded: object, explicit: int | None) -> str:
+    """R23: why the version in force was chosen, recorded beside the version itself.
+
+    Called only after :func:`_artifact_generator_version` has accepted the pair, so an
+    unbound or conflicting artifact never reaches a basis string: the fail-closed R12 error
+    stands, and a refusal is never dressed up as a recorded rationale.  Shape follows
+    ``probes/patch.py:526``.
+    """
+    if recorded is not None and explicit is not None:
+        return "recorded in the evaluation artifact, confirmed by the explicit binding"
+    if recorded is not None:
+        return "recorded in the evaluation artifact"
+    if explicit == 1:
+        return (
+            "R23 pre-versioning binding: explicit --generator-version 1; R5 defines v1 as "
+            "the C-reproducing generator and no version field could exist before versioning"
+        )
+    return "explicit --generator-version binding; the artifact records no generator_version"
+
+
+def _artifact_identity(summary: Mapping[str, Any]) -> dict[str, Any]:
+    """R26(e): which policy produced this saved evaluation, and on what split.
+
+    ``run_evaluation`` writes ``model`` as the resolved spec record, so the registry name
+    and hf_id sit under ``model.spec``; an older artifact that recorded a bare string is
+    read as the model name with no hf_id rather than rejected.
+    """
+    model = summary.get("model")
+    spec = model.get("spec") if isinstance(model, dict) else None
+    legacy_name = model if isinstance(model, str) else None
+    name = spec.get("name") if isinstance(spec, dict) else legacy_name
+    return {
+        "model": name,
+        "hf_id": spec.get("hf_id") if isinstance(spec, dict) else None,
+        "policy": summary.get("label"),
+        "adapter": summary.get("adapter"),
+        "split": summary.get("split"),
+    }
+
+
 def _analyse_evaluation(
     path: Path, fallback_seed: int, *, generator_version: int | None = None
 ) -> dict[str, Any]:
@@ -463,11 +538,9 @@ def _analyse_evaluation(
     records = payload.get("trajectories", [])
     if not isinstance(summary, dict) or not isinstance(records, list):
         raise ValueError(f"{path}: expected summary object and trajectories list")
-    version = _artifact_generator_version(
-        summary.get("generator_version", payload.get("generator_version")),
-        generator_version,
-        source=path,
-    )
+    recorded_version = summary.get("generator_version", payload.get("generator_version"))
+    version = _artifact_generator_version(recorded_version, generator_version, source=path)
+    basis = _generator_version_basis(recorded_version, generator_version)
     seed = summary.get("data_seed", fallback_seed)
     keep_last = summary.get("keep_last")
     if not isinstance(seed, int) or not isinstance(keep_last, int) or keep_last < 0:
@@ -504,6 +577,10 @@ def _analyse_evaluation(
         "seed": seed,
         "keep_last": keep_last,
         "generator_version": version,
+        # R23: the version alone does not say why it is in force; a reader of the report or
+        # of events.jsonl must not have to infer a v1 binding from the absence of a field.
+        "generator_version_basis": basis,
+        "identity": _artifact_identity(summary),
         "records": analysed,
     }
 
@@ -549,6 +626,7 @@ def _source_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
             evaluation["seed"],
             evaluation["keep_last"],
             evaluation["generator_version"],
+            evaluation["generator_version_basis"],
             len(evaluation["records"]),
         ]
         for evaluation in evaluations
@@ -674,17 +752,42 @@ def _acceptance_rows(evaluation: dict[str, Any]) -> list[list[Any]]:
 
 
 def _render_evaluations(
-    paths: list[Path], seed: int, *, generator_version: int | None = None
+    paths: list[Path], seed: int, *, generator_version: int | None = None, log: RunLog | None = None
 ) -> str:
-    evaluations = [
-        _analyse_evaluation(path, seed, generator_version=generator_version) for path in paths
-    ]
+    evaluations = []
+    for number, path in enumerate(paths, 1):
+        evaluation = _analyse_evaluation(path, seed, generator_version=generator_version)
+        evaluations.append(evaluation)
+        if log is not None:
+            # R26(g): one progress event per checked artifact, carrying that artifact's R26(e)
+            # identity -- the run itself spans several policies, so there is no single one to
+            # put in the start line.
+            log.progress(
+                number,
+                len(paths),
+                "evaluation",
+                source=str(path),
+                **evaluation["identity"],
+                data_seed=evaluation["seed"],
+                keep_last=evaluation["keep_last"],
+                generator_version=evaluation["generator_version"],
+                generator_version_basis=evaluation["generator_version_basis"],
+                tasks=len(evaluation["records"]),
+            )
     task_ids = _validated_task_ids(evaluations)
 
     lines = ["# Offline note-integrity comparison", "", "## Sources and configuration", ""]
     lines.extend(
         _table(
-            ["run", "source", "data seed", "keep-last", "generator version", "tasks"],
+            [
+                "run",
+                "source",
+                "data seed",
+                "keep-last",
+                "generator version",
+                "generator version basis",
+                "tasks",
+            ],
             _source_rows(evaluations),
         )
     )
@@ -734,9 +837,35 @@ def main() -> None:
     parser.add_argument("--generator-version", type=int)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        _render_evaluations(
-            args.evaluations, args.seed, generator_version=args.generator_version
-        ),
-        encoding="utf-8",
+    # R26(a): the log opens before any artifact is read, so a run that dies on a malformed or
+    # unbound evaluation still leaves run.log and events.jsonl behind. The identity block
+    # carries what is known before the artifacts are opened; the per-artifact model, policy,
+    # adapter and split arrive with each progress event.
+    log = RunLog.open(
+        args.output.parent,
+        name="integrity",
+        command=list(sys.argv),
+        identity={
+            "evaluations": [str(path) for path in args.evaluations],
+            "output": str(args.output),
+            "data_seed": args.seed,
+            "generator_version": args.generator_version,
+            "git_commit": git_commit(),
+            "git_dirty": git_tree_dirty(),
+        },
     )
+    completed = False
+    try:
+        rendered = _render_evaluations(
+            args.evaluations, args.seed, generator_version=args.generator_version, log=log
+        )
+        args.output.write_text(rendered, encoding="utf-8")
+        completed = True
+    finally:
+        # R26(c)'s incomplete_run rule on a non-training stage: a run that ended before it
+        # scored every artifact produced no comparison anything downstream may read.
+        log.close(
+            status="ok" if completed else "error",
+            incomplete_run=not completed,
+            evaluations=len(args.evaluations),
+        )

@@ -694,7 +694,8 @@ def test_integrity_main_forwards_explicit_generator_version(monkeypatch, tmp_pat
     monkeypatch.setattr(
         integrity_module,
         "_render_evaluations",
-        lambda paths, seed, *, generator_version=None: seen.append(generator_version) or "report",
+        lambda paths, seed, *, generator_version=None, log=None: seen.append(generator_version)
+        or "report",
     )
     monkeypatch.setattr(
         sys,
@@ -784,3 +785,160 @@ def test_retroactive_saved_evaluations_match_memo_contract(tmp_path: Path) -> No
     ):
         assert row in rendered
     assert rendered.count("| PASS |") == 3
+
+
+def _events(directory: Path) -> list[dict]:
+    """Parse ``events.jsonl`` strictly; a machine log a reader cannot parse is not one."""
+    text = (directory / "events.jsonl").read_text(encoding="utf-8")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _write_identified_evaluation(
+    path: Path,
+    task,
+    *,
+    label: str,
+    generator_version: int | None,
+) -> None:
+    """A saved evaluation carrying the summary fields ``run_evaluation`` writes (R26(e))."""
+    spec = load_model_spec("qwen35-4b")
+    trajectory = _trajectory(task, success=True)
+    trajectory.steps = _expert_trace(task)
+    path.write_text(
+        json.dumps(
+            {
+                "summary": {
+                    "label": label,
+                    "data_seed": 20260902,
+                    "keep_last": 0,
+                    "split": "test",
+                    "adapter": f"/adapters/{label}",
+                    "model": {"spec": {"name": spec.name, "hf_id": spec.hf_id}},
+                    **(
+                        {}
+                        if generator_version is None
+                        else {"generator_version": generator_version}
+                    ),
+                },
+                "trajectories": [trajectory.as_dict()],
+            }
+        )
+    )
+
+
+def test_analysis_record_carries_the_r23_basis_beside_the_generator_version(
+    tmp_path: Path,
+) -> None:
+    """R23: a tool replaying an artifact records the version used AND why it is in force."""
+    task = _task("read")
+    recorded = tmp_path / "recorded.json"
+    legacy = tmp_path / "legacy.json"
+    _write_identified_evaluation(recorded, task, label="recorded", generator_version=2)
+    _write_identified_evaluation(legacy, task, label="legacy", generator_version=None)
+
+    analysed = _analyse_evaluation(recorded, 20260902)
+    assert analysed["generator_version"] == 2
+    assert analysed["generator_version_basis"] == "recorded in the evaluation artifact"
+
+    bound = _analyse_evaluation(legacy, 20260902, generator_version=1)
+    assert bound["generator_version"] == 1
+    assert "R23" in bound["generator_version_basis"]
+    assert "pre-versioning" in bound["generator_version_basis"]
+
+    identity = analysed["identity"]
+    spec = load_model_spec("qwen35-4b")
+    assert identity["model"] == spec.name and identity["hf_id"] == spec.hf_id
+    assert identity["policy"] == "recorded"
+    assert identity["adapter"] == "/adapters/recorded"
+    assert identity["split"] == "test"
+
+
+def test_missing_binding_still_fails_closed_without_a_basis(tmp_path: Path) -> None:
+    """R12/R23: the fail-closed refusal is unchanged; a basis is never invented for it."""
+    task = _task("read")
+    legacy = tmp_path / "legacy.json"
+    _write_identified_evaluation(legacy, task, label="legacy", generator_version=None)
+
+    with pytest.raises(ValueError) as caught:
+        _analyse_evaluation(legacy, 20260902)
+    assert str(caught.value) == f"{legacy}: artifact has no generator_version; bind one explicitly"
+
+
+def test_git_tree_dirty_reports_a_boolean_for_the_identity_block() -> None:
+    """R26(e): the identity block says whether the tree was dirty, and never raises."""
+    assert integrity_module.git_tree_dirty() in (True, False)
+    assert integrity_module.git_tree_dirty(Path("/")) is None
+
+
+def test_integrity_cli_writes_a_run_log_with_one_progress_event_per_artifact(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(a)/(g), issue #35: agent-v2-integrity opened no RunLog at all before this lane."""
+    task = _task("read")
+    left = tmp_path / "left.json"
+    right = tmp_path / "right.json"
+    _write_identified_evaluation(left, task, label="left", generator_version=None)
+    _write_identified_evaluation(right, task, label="right", generator_version=None)
+    output = tmp_path / "report" / "comparison.md"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-integrity",
+            "--eval",
+            str(left),
+            "--eval",
+            str(right),
+            "--output",
+            str(output),
+            "--generator-version",
+            "1",
+        ],
+    )
+
+    integrity_module.main()
+
+    assert output.is_file()
+    directory = output.parent
+    assert (directory / "run.log").is_file()
+    events = _events(directory)
+    start = events[0]
+    assert start["kind"] == "start"
+    assert start["fields"]["evaluations"] == [str(left), str(right)]
+    assert start["fields"]["data_seed"] == 20260902
+    assert start["fields"]["generator_version"] == 1
+    assert start["fields"]["git_commit"] and "git_dirty" in start["fields"]
+    progress = [event for event in events if event["kind"] == "progress"]
+    assert [event["step"] for event in progress] == [1, 2]
+    spec = load_model_spec("qwen35-4b")
+    assert progress[0]["fields"]["policy"] == "left"
+    assert progress[0]["fields"]["model"] == spec.name
+    assert progress[0]["fields"]["split"] == "test"
+    assert progress[0]["fields"]["generator_version"] == 1
+    assert "R23" in progress[0]["fields"]["generator_version_basis"]
+    end = events[-1]
+    assert end["kind"] == "end" and end["status"] == "ok"
+    assert end["fields"]["incomplete_run"] is False
+
+
+def test_integrity_cli_closes_the_log_with_incomplete_run_when_analysis_raises(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(a): an unbound legacy artifact aborts the run, and the abort is in the log."""
+    task = _task("read")
+    legacy = tmp_path / "legacy.json"
+    _write_identified_evaluation(legacy, task, label="legacy", generator_version=None)
+    output = tmp_path / "report" / "comparison.md"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["agent-v2-integrity", "--eval", str(legacy), "--output", str(output)],
+    )
+
+    with pytest.raises(ValueError, match="no generator_version"):
+        integrity_module.main()
+
+    assert not output.exists()
+    end = _events(output.parent)[-1]
+    assert end["kind"] == "end" and end["status"] == "error"
+    assert end["fields"]["incomplete_run"] is True

@@ -30,11 +30,17 @@ import argparse
 import json
 import random
 import shutil
+import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.integrity import git_tree_dirty
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+from local_llm_lab.runlog import RunLog, git_commit
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
 DEFAULT_ADAPTER = PROJECT_ROOT / "outputs" / "agent-v2" / "best-adapter"
@@ -47,8 +53,17 @@ PAIR_KEYS = ("prompt", "chosen", "rejected")
 # --------------------------------------------------------------------------- data
 
 
-def _read_pairs(path: Path, max_chars: int | None) -> tuple[list[dict[str, str]], int]:
-    """Validate ``pairs.jsonl``; return ``(kept rows, dropped-for-length count)``."""
+def _read_pairs(
+    path: Path,
+    max_chars: int | None,
+    *,
+    on_pair: Callable[[int, str, int], None] | None = None,
+) -> tuple[list[dict[str, str]], int]:
+    """Validate ``pairs.jsonl``; return ``(kept rows, dropped-for-length count)``.
+
+    ``on_pair(line number, "kept" | "dropped", characters)`` fires as each mined pair is
+    read, so a caller can log one progress event per pair (R26(g)) while the file streams.
+    """
     rows: list[dict[str, str]] = []
     dropped = 0
     with path.open("r", encoding="utf-8") as handle:
@@ -68,13 +83,15 @@ def _read_pairs(path: Path, max_chars: int | None) -> tuple[list[dict[str, str]]
             row = {key: payload[key] for key in PAIR_KEYS}
             if row["chosen"] == row["rejected"]:
                 raise ValueError(f"{path}:{number}: chosen and rejected are identical")
-            if max_chars is not None and (
-                len(row["prompt"]) + len(row["chosen"]) > max_chars
-                or len(row["prompt"]) + len(row["rejected"]) > max_chars
-            ):
+            longest = len(row["prompt"]) + max(len(row["chosen"]), len(row["rejected"]))
+            if max_chars is not None and longest > max_chars:
                 dropped += 1
+                if on_pair is not None:
+                    on_pair(number, "dropped", longest)
                 continue
             rows.append(row)
+            if on_pair is not None:
+                on_pair(number, "kept", longest)
     return rows, dropped
 
 
@@ -181,6 +198,81 @@ def run_prefer(
     """DPO-train the SFT adapter on mined pairs; write ``output/adapters`` + ``summary.json``."""
     adapter = adapter.resolve()
     pairs_path = pairs_path.resolve()
+    output = Path(output)
+    # R26(a): the log opens before the adapter check and long before the base-model load, so
+    # a run that dies on a missing adapter or during the load still leaves a closed record.
+    log = RunLog.open(
+        output,
+        name="prefer",
+        command=list(sys.argv),
+        identity=_prefer_identity(model_name, adapter, pairs_path, seed),
+    )
+    completed = False
+    try:
+        summary = _run_prefer(
+            log,
+            model_name=model_name,
+            adapter=adapter,
+            pairs_path=pairs_path,
+            output=output,
+            beta=beta,
+            learning_rate=learning_rate,
+            max_steps=max_steps,
+            batch_size=batch_size,
+            max_seq_length=max_seq_length,
+            grad_accumulation=grad_accumulation,
+            max_chars=max_chars,
+            seed=seed,
+        )
+        completed = True
+        return summary
+    finally:
+        # R26(c)'s incomplete_run rule on a non-training stage: a DPO run that stopped before
+        # writing its adapter left nothing an evaluation lift may cite.
+        log.close(status="ok" if completed else "error", incomplete_run=not completed)
+
+
+def _prefer_identity(model_name: str, adapter: Path, pairs_path: Path, seed: int) -> dict[str, Any]:
+    """R26(e), issue #35: what the start event names, so run.log alone identifies the run.
+
+    ``model_name`` is whatever the arm config gave -- a registry name or a bare hf id --
+    and ``load_model_spec`` resolves either back to the registered declaration, so the
+    start line always carries both the registry name and the hf id.  DPO trains on mined
+    pairs rather than a task split, so ``split`` is recorded as explicitly absent instead
+    of quietly omitted, and the pairs file is named beside it.
+    """
+    spec = load_model_spec(model_name)
+    return {
+        "model": spec.name,
+        "hf_id": spec.hf_id,
+        "policy": adapter.name,
+        "adapter": str(adapter),
+        "split": None,
+        "pairs": str(pairs_path),
+        "data_seed": seed,
+        "generator_version": GENERATOR_VERSION,
+        "git_commit": git_commit(),
+        "git_dirty": git_tree_dirty(),
+    }
+
+
+def _run_prefer(
+    log: RunLog,
+    *,
+    model_name: str,
+    adapter: Path,
+    pairs_path: Path,
+    output: Path,
+    beta: float,
+    learning_rate: float,
+    max_steps: int,
+    batch_size: int,
+    max_seq_length: int,
+    grad_accumulation: int,
+    max_chars: int | None,
+    seed: int,
+) -> dict[str, Any]:
+    """The DPO stage proper, with the run log already open (see :func:`run_prefer`)."""
     for name in ADAPTER_FILES:
         if not (adapter / name).is_file():
             raise FileNotFoundError(
@@ -189,13 +281,26 @@ def run_prefer(
     if not pairs_path.is_file():
         raise FileNotFoundError(f"pairs file not found: {pairs_path}")
 
-    rows, dropped = _read_pairs(pairs_path, max_chars)
+    # R26(g): the mined pair is this stage's outer unit of work. The line count is taken
+    # first so each pair's progress event carries a real denominator; the file is the small
+    # jsonl the branch stage wrote, not a dataset.
+    with pairs_path.open("r", encoding="utf-8") as handle:
+        total_pairs = sum(1 for line in handle if line.strip())
+    seen = 0
+
+    def _pair_progress(number: int, status: str, characters: int) -> None:
+        nonlocal seen
+        seen += 1
+        log.progress(seen, total_pairs, "pair", line=number, status=status, chars=characters)
+
+    rows, dropped = _read_pairs(pairs_path, max_chars, on_pair=_pair_progress)
     if not rows:
         raise ValueError(f"no usable preference pairs in {pairs_path}")
     random.Random(seed).shuffle(rows)  # the trainer iterates in file order without shuffling
     print(
         f"Loaded {len(rows)} preference pairs from {pairs_path} ({dropped} dropped by --max-chars)"
     )
+    log.info("pairs loaded", used=len(rows), dropped=dropped, max_chars=max_chars)
 
     configure_local_cache()
     import mlx.core as mx
@@ -206,6 +311,7 @@ def run_prefer(
     mx.random.seed(seed)
     started = time.monotonic()
     print(f"Loading {model_name} (pre-quantized; mlx_lm.load, no re-quantization)")
+    log.info("loading base", model=model_name, max_seq_length=max_seq_length)
     # `load_in_4bit` is accepted for API parity but unused by mlx-tune 0.6.0; the repo is
     # already 4-bit and `from_pretrained` only ever calls `mlx_lm.load`.
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -271,6 +377,12 @@ def run_prefer(
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    log.info(
+        "adapter written",
+        path=str(final_dir),
+        pairs_used=len(rows),
+        trainable_tensors=len(trainable),
+    )
     del trainer, model
     mx.clear_cache()
     return summary
