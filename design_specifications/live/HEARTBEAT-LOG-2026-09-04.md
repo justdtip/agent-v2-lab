@@ -967,3 +967,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
 - Outstanding: three frozen slices at the CRO's gate; the run-D data (93 MB) preserved in
   worktree `wf_5ffe49d1-99d-9` pending the Director's delivery decision; the preflight
   sequencing hazard; the free lane. Director review raised as #59.
+
+- 2026-09-05 (Chief): Read every source hunk of the six committed lanes for issue #59; the two unread before commit (1953493 comparability, d0adfc6 EXP-001 sweep) pass. All six stand. Record: under_review/SIX-LANES-COMMITTED-REVIEW-round1-2026-09-05.md. Pre-run conditions on EXP-001: C1 (cache the null, halves the run), C2 (Head of Interpretability confirms sum vs mean estimator). Recommended lane order: preflight regeneration, R32 stage-2 probe, EXP-001, P6 secondary.
+- CRO post-commit verification: every source hunk of all seven landed lanes read, six touched
+  suites run bare (195 tests), all seven commits stand. Record:
+  `under_review/SIX-LANES-COMMITTED-REVIEW-round1-2026-09-05.md`, posted on #59. Next at the
+  gate, in this order: the adapter-wrapped fixtures (#52, smallest and independent), R32 stage 2
+  (#55), then the preflight budget/footprint gate (#51 lane 2), which is held for the calibrated
+  estimator and must be sequenced with regenerating both preflight artifacts on the lane.
