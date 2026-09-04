@@ -21,6 +21,7 @@ import os
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ __all__ = [
     "TrainingAborted",
     "sha256_of",
     "git_commit",
+    "write_text_atomic",
 ]
 
 RUN_LOG_NAME = "run.log"
@@ -109,6 +111,32 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
     return value
+
+
+def write_text_atomic(path: Path, text: str) -> None:
+    """Replace ``path`` with ``text`` whole, or leave what was there untouched.
+
+    Provenance files are read as sentinels — ``manifest.json`` is the R21 dataset guard's own
+    (``pipeline/data.py``) — so a truncated one is worse than none: it can make a later write
+    look permitted over data that is in fact complete. Writing through a flushed, fsynced,
+    same-directory temporary file and renaming makes the swap a single filesystem operation,
+    the pattern ``pipeline.data.write_jsonl`` already uses for dataset rows.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(temporary_path), str(path))
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 def sha256_of(path: Path) -> str:

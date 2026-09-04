@@ -4,11 +4,14 @@ import copy
 import hashlib
 import json
 import os
+import sys
 from collections import Counter
 from dataclasses import asdict
 
 import pytest
 
+from local_llm_lab import generate_agent_data, generate_complex_data
+from local_llm_lab import runlog as runlog_module
 from local_llm_lab.agent_protocol import Action
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, load_model_spec
 from local_llm_lab.pipeline import data as data_module
@@ -29,6 +32,7 @@ from local_llm_lab.pipeline.data import (
 from local_llm_lab.pipeline.protocol import assistant_message, generation_suffix
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks
 from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.runlog import write_text_atomic
 from local_llm_lab.tuner_data import RenderedRowsDataset
 
 
@@ -750,3 +754,174 @@ def test_render_rows_verbatim_chat_fallback_is_an_explicit_allowlist() -> None:
         render_rows(
             [{"messages": chat_row["messages"]}], _LegacyTokenizer(), spec=_legacy_spec()
         )
+
+
+class _TruncatingWriter:
+    """A file object that writes a prefix and then fails, standing in for a full disk."""
+
+    def __init__(self, handle, limit: int) -> None:
+        self._handle = handle
+        self._limit = limit
+
+    def write(self, text: str) -> int:
+        self._handle.write(text[: self._limit])
+        raise OSError("no space left on device")
+
+    def flush(self) -> None:
+        self._handle.flush()
+
+    def fileno(self) -> int:
+        return self._handle.fileno()
+
+    def close(self) -> None:
+        self._handle.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> bool:
+        self._handle.close()
+        return False
+
+
+class _InterruptingOS:
+    """An ``os`` shim whose ``fdopen`` truncates, patched into runlog's namespace only.
+
+    Patching the module attribute rather than the real ``os`` keeps the interruption surgical:
+    ``pipeline.data`` keeps the real ``os`` for ``write_jsonl``, so the rows land normally and
+    only the manifest write — the R21 guard's own sentinel — is interrupted.
+    """
+
+    def __init__(self, real, limit: int) -> None:
+        self._real = real
+        self._limit = limit
+
+    def __getattr__(self, name: str):
+        return getattr(self._real, name)
+
+    def fdopen(self, descriptor, *args, **kwargs):
+        return _TruncatingWriter(self._real.fdopen(descriptor, *args, **kwargs), self._limit)
+
+
+def _leftovers(directory) -> list[str]:
+    return sorted(path.name for path in directory.iterdir() if path.name.startswith("."))
+
+
+def test_an_interrupted_manifest_write_leaves_the_previous_manifest_intact(
+    monkeypatch, tmp_path
+) -> None:
+    """manifest.json is the R21 guard's own sentinel, so a half-written one is a live hazard.
+
+    With rows complete and the sentinel truncated or absent, ``guard_dataset_write`` would wave
+    a later write straight over good data. The manifest write must therefore be atomic: either
+    the previous manifest survives whole, or the new one lands whole.
+    """
+    target = tmp_path / "out"
+    write_dataset(target, {"train": 1, "valid": 1, "test": 1})
+    original = (target / "manifest.json").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(runlog_module, "os", _InterruptingOS(os, 12))
+    with pytest.raises(OSError, match="no space left on device"):
+        write_dataset(target, {"train": 2, "valid": 1, "test": 1}, overwrite=True)
+    monkeypatch.undo()
+
+    assert (target / "manifest.json").read_text(encoding="utf-8") == original
+    assert _leftovers(target) == [], "no partial temporary file may survive at the destination"
+
+
+def test_the_guard_sentinel_still_refuses_after_an_interrupted_manifest_write(
+    monkeypatch, tmp_path
+) -> None:
+    """The directory never enters the rows-complete, sentinel-missing state the guard misreads."""
+    target = tmp_path / "out"
+    write_dataset(target, {"train": 1, "valid": 1, "test": 1})
+
+    monkeypatch.setattr(runlog_module, "os", _InterruptingOS(os, 12))
+    with pytest.raises(OSError, match="no space left on device"):
+        write_dataset(target, {"train": 2, "valid": 1, "test": 1}, overwrite=True)
+    monkeypatch.undo()
+
+    assert (target / "manifest.json").is_file()
+    with pytest.raises(DatasetWriteGuardError, match="--force-overwrite"):
+        guard_dataset_write(target)
+    with pytest.raises(DatasetWriteGuardError, match="--force-overwrite"):
+        write_dataset(target, {"train": 1, "valid": 1, "test": 1})
+
+
+def test_an_interrupted_render_manifest_write_leaves_the_previous_manifest_intact(
+    monkeypatch, tmp_path
+) -> None:
+    """The render stage's manifest is the same sentinel and takes the same atomic write."""
+    source = tmp_path / "src"
+    write_dataset(source, {"train": 1, "valid": 1, "test": 1})
+    output = tmp_path / "rendered"
+    render_dataset(source, output, _TargetTokenizer(), spec=_target_spec())
+    original = (output / "manifest.json").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(runlog_module, "os", _InterruptingOS(os, 12))
+    with pytest.raises(OSError, match="no space left on device"):
+        render_dataset(source, output, _TargetTokenizer(), spec=_target_spec(), overwrite=True)
+    monkeypatch.undo()
+
+    assert (output / "manifest.json").read_text(encoding="utf-8") == original
+    assert _leftovers(output) == []
+
+
+def test_write_text_atomic_replaces_a_file_whole_or_not_at_all(monkeypatch, tmp_path) -> None:
+    """The helper itself: interrupted mid-write it leaves neither a partial nor a temp file."""
+    target = tmp_path / "manifest.json"
+    target.write_text('{"kept": true}\n', encoding="utf-8")
+
+    monkeypatch.setattr(runlog_module, "os", _InterruptingOS(os, 4))
+    with pytest.raises(OSError, match="no space left on device"):
+        write_text_atomic(target, '{"replacement": true}\n')
+    monkeypatch.undo()
+
+    assert target.read_text(encoding="utf-8") == '{"kept": true}\n'
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["manifest.json"]
+
+    write_text_atomic(target, '{"replacement": true}\n')
+    assert target.read_text(encoding="utf-8") == '{"replacement": true}\n'
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["manifest.json"]
+
+
+def _legacy_project_root(monkeypatch, tmp_path):
+    """R10: a temp project root, so no legacy generator test can see the real ``data/``."""
+    monkeypatch.setattr(data_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(generate_agent_data, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(generate_complex_data, "PROJECT_ROOT", tmp_path)
+    protected = tmp_path / "data" / "agent_v2b"
+    protected.mkdir(parents=True)
+    return protected
+
+
+# The two legacy console-script writers live in modules whose own test files belong to other
+# lanes (tests/test_agent_tasks.py, tests/test_complex_agent_tasks.py), so their R21 guard
+# tests sit here, beside the guard they exercise.
+def test_legacy_generators_refuse_a_protected_target(monkeypatch, tmp_path) -> None:
+    """R21: the installed ``agent-data`` and ``complex-agent-data`` scripts are guarded too."""
+    protected = _legacy_project_root(monkeypatch, tmp_path)
+    for module, script in (
+        (generate_agent_data, "agent-data"),
+        (generate_complex_data, "complex-agent-data"),
+    ):
+        monkeypatch.setattr(sys, "argv", [script, "--output", str(protected)])
+        with pytest.raises(ProtectedDatasetError, match="irreplaceable"):
+            module.main()
+        assert list(protected.iterdir()) == []
+
+
+def test_legacy_generators_refuse_an_existing_manifest(monkeypatch, tmp_path) -> None:
+    """Neither stage has an override flag, so an existing manifest refuses outright."""
+    _legacy_project_root(monkeypatch, tmp_path)
+    for index, (module, script) in enumerate(
+        ((generate_agent_data, "agent-data"), (generate_complex_data, "complex-agent-data"))
+    ):
+        target = tmp_path / f"legacy-{index}"
+        target.mkdir()
+        (target / "manifest.json").write_text("{}\n", encoding="utf-8")
+        monkeypatch.setattr(sys, "argv", [script, "--output", str(target)])
+        with pytest.raises(DatasetWriteGuardError, match="no overwrite path"):
+            module.main()
+        assert (target / "manifest.json").read_text(encoding="utf-8") == "{}\n"
+        assert sorted(path.name for path in target.iterdir()) == ["manifest.json"]

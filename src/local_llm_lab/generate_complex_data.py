@@ -8,6 +8,7 @@ from typing import Any
 from local_llm_lab.complex_agent_protocol import COMPLEX_SYSTEM_PROMPT, COMPLEX_TOOL_SPECS
 from local_llm_lab.complex_agent_tasks import make_complex_tasks
 from local_llm_lab.generate_agent_data import file_sha256, write_split
+from local_llm_lab.pipeline.data import guard_dataset_write
 from local_llm_lab.project import PROJECT_ROOT
 
 
@@ -27,6 +28,9 @@ def main() -> None:
         parser.error("all split sizes must be positive")
 
     output = args.output.resolve()
+    # R21: refuse before the first split is written — a protected directory unconditionally, an
+    # existing dataset outright, because this stage has no override flag.
+    guard_dataset_write(output, override_flag=None)
     manifest: dict[str, Any] = {
         "seed": 20260902,
         "protocol_version": 2,

@@ -27,6 +27,13 @@ from local_llm_lab.pipeline.protocol import (
 )
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
 from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.runlog import write_text_atomic
+
+# DEBT(R21): the same non-atomic manifest write survives at three sites owned by other lanes
+# this cycle — `pipeline/cli.py:184` (`_write_stage_manifest`, which also stamps the rollout and
+# branch outputs at `cli.py:1009` and `cli.py:1224`) and `pipeline/cli.py:703` (health.json) —
+# and `probes/state_probe.py:2845` duplicates this helper. Route all four through
+# `runlog.write_text_atomic`; see design_specifications/complete/R21-RENDER-GUARD-REPORT.md.
 
 # Ruling R21: these datasets are irreplaceable (runs A and B cannot be regenerated from the
 # current source; the generator revision that produced them is unrecoverable). No write path
@@ -370,7 +377,7 @@ def write_dataset(
         if same_role == [split]:
             info["sha256"] = manifest["outputs"][info["role"]]["sha256"]
     output.mkdir(parents=True, exist_ok=True)
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(output / "manifest.json", json.dumps(manifest, indent=2) + "\n")
     return manifest
 
 
@@ -432,7 +439,7 @@ def render_dataset(
         digest = write_jsonl(output / f"{role}.jsonl", rows)
         manifest["outputs"][role] = {"rows": len(rows), "sha256": digest}
     output.mkdir(parents=True, exist_ok=True)
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(output / "manifest.json", json.dumps(manifest, indent=2) + "\n")
     return manifest
 
 

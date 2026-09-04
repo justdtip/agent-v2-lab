@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 from typing import Any
 
+from local_llm_lab.pipeline.data import guard_dataset_write
 from local_llm_lab.project import PROJECT_ROOT
 
 DECISION_REPEATS = {
@@ -63,6 +64,9 @@ def main() -> None:
         parser.error("chat-repeats must be positive")
 
     output = args.output.resolve()
+    # R21: refuse before the mkdir and before any source split is read — a protected directory
+    # unconditionally, an existing dataset outright, because this stage has no override flag.
+    guard_dataset_write(output, override_flag=None)
     output.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
         "seed": args.seed,

@@ -10,6 +10,7 @@ from typing import Any
 
 from local_llm_lab.compare_chat import CHAT_SYSTEM_PROMPT
 from local_llm_lab.evaluate_agent import DEFAULT_MODEL
+from local_llm_lab.pipeline.data import guard_dataset_write
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 
 
@@ -151,13 +152,19 @@ def main() -> None:
     if any(value < 1 for value in (*counts.values(), args.max_tokens)):
         parser.error("split sizes and max-tokens must be positive")
 
+    # R21: this script's own --output default is data/chat_replay, a PROTECTED_DATASETS member,
+    # so run with no arguments it aimed at an irreplaceable directory. The guard runs before the
+    # teacher is loaded: a refusal must cost nothing and must be impossible to reach a write past.
+    # This stage has no override flag, so an existing manifest refuses outright.
+    output = args.output.resolve()
+    guard_dataset_write(output, override_flag=None)
+
     configure_local_cache()
     from mlx_lm import generate, load
     from mlx_lm.sample_utils import make_sampler
 
     model, tokenizer = load(args.model, adapter_path=str(args.adapter.resolve()))
     sampler = make_sampler(temp=0.0)
-    output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
         "teacher_model": args.model,
@@ -193,6 +200,11 @@ def main() -> None:
             if index % 20 == 0 or index == count:
                 print(f"{split}: generated {index}/{count}", flush=True)
         path = output / f"{split}.jsonl"
+        # DEBT(R21): this legacy script writes its rows and its manifest non-atomically, so an
+        # interrupted run can leave rows without the sentinel the guard above reads. The rows
+        # want `pipeline.data.write_jsonl` and the manifest `runlog.write_text_atomic`; both are
+        # behind a weights-gated path no test can drive, so the change needs a run to verify.
+        # See design_specifications/complete/R21-RENDER-GUARD-REPORT.md.
         with path.open("w", encoding="utf-8") as handle:
             for row in rows:
                 handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")

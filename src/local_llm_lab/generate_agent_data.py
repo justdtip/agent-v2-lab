@@ -13,6 +13,7 @@ from local_llm_lab.agent_protocol import (
     tool_result_message,
 )
 from local_llm_lab.agent_tasks import AgentTask, ToolSimulator, make_tasks
+from local_llm_lab.pipeline.data import guard_dataset_write
 from local_llm_lab.project import PROJECT_ROOT
 
 
@@ -95,6 +96,9 @@ def main() -> None:
         parser.error("all split sizes must be positive")
 
     output = args.output.resolve()
+    # R21: refuse before the first split is written — a protected directory unconditionally, an
+    # existing dataset outright, because this stage has no override flag.
+    guard_dataset_write(output, override_flag=None)
     manifest: dict[str, Any] = {
         "seed": 20260902,
         "protocol_version": 1,
