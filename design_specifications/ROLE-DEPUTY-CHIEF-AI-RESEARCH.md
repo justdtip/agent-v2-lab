@@ -111,7 +111,8 @@ Chief promotes it to §7 or deletes it. Never write into §7 yourself.
 
 ## 9. Current state of play (as of 2026-09-05; update as things land)
 
-HEAD `2405598`+docs, pushed (branch in sync with origin). Suite **754 passed, exit 0** bare.
+HEAD `2d9445c`+docs, pushed (branch in sync with origin). Suite **807 passed, exit 0** bare
+(P1 closure + fixes `3867cc6`, P2 splits + R28 test `2d9445c`).
 Source tree clean. **R26 run logging is in** (four lane commits `c1f7d51`, `88ecac0`,
 `0a79788`, `2405598`): every training and probe run writes `run.log` + `events.jsonl`;
 training adds `health.json`; training condition 8 (A8) met — B4 trains with the health record

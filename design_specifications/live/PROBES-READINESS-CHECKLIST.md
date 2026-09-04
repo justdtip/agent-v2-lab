@@ -73,11 +73,9 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
 - [ ] B1. **§2 P2 redesign — 0%, and the spec calls it "where the remaining probe budget
   goes".** Nothing exists: `capture.stub_observations`, `--stub-observations`, the
   `p2-d0/p2-d1/p2-d2` splits plan, the `compare` subcommand, dual-position capture, the
-  SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices (#40; R28/R29 ruled). **B1a implemented, Deputy-reviewed
-  READY** (work order filed): `P2_SPLITS`, `make_p2_tasks`, `task_fingerprint`, six-config
-  sweep regenerated from tables, zero collisions at full size. B1c (`compare` + sidecar) in an
-  isolated worktree; B1b (conditions, dual capture, R18b `capture_dtype`, and the
-  `task_difficulties` mislabel fix) dispatches when B5 leaves `state_probe.py`.*
+  SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices (#40; R28/R29 ruled). **B1a committed `2d9445c`** (#43): `P2_SPLITS`, `make_p2_tasks`, `task_fingerprint`, six-config
+  sweep regenerated from tables, zero collisions at full size. B1c (`compare` + sidecar) and B1b (conditions, dual capture, R18b `capture_dtype`, the
+  `task_difficulties` mislabel fix) both in isolated worktrees on top of the B5 changes.*
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.
@@ -111,16 +109,19 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   roles get `prompts[:role_prompts]`, `:610-623`); the exemplar imbalance — presence, not only
   the 6/8/10 role counts at `:106-107`: 0 of 6 high, 8 of 8 low, 6 of 10 neutral roles carry
   one; `--judge` defaulting to on (`assistant_axis.py:1378-1383`; `build_axis_run` default at
-  `:639`). Then a ~20-minute gated run, additionally behind A2. *Implemented and Deputy-reviewed READY
-  (work order #42 at the Chief's gate): `CLOSED.md` written by the new `close` subcommand
+  `:639`). Then a ~20-minute gated run, additionally behind A2. *Fixes and closure record **committed `3867cc6`** (#42, Chief-ratified): `CLOSED.md` written by the new `close` subcommand
   (`outputs/probes/axis-corrected/CLOSED.md`, SHA-256 `fb66141c…`; measured best role 3 of 8,
   21 of 24 roles silent vs the spec's expected 19 — reported, not reconciled); matched prompts,
   exemplars dropped from all 24 roles (ruling 1), judge default off. Ticks on commit; the 4B
   `build` waits for the lane after B4 training.*
 - [ ] B5. **C7 BF16 refit** — same item as A4's experiment, ruled as item 4 of R18; listed here
-  because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Chief-approved as specified (#40, 2026-09-05); **implementer dispatched** — fully offline (the
-  saved npz is float32 on six layers; the baseline reanalysis carries `holm_supported` per
-  target/layer); ends with one real CPU run writing `refit-bf16/` beside the baseline.*
+  because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Implemented; real CPU run done (3 min 24 s): **supported set unchanged** — all 96
+  (analysis, target, layer) cells keep both support flags, max absolute margin change 0.0054;
+  rounding altered every stored activation at Frobenius-relative 1.5e-3 to 1.8e-3 per layer.
+  Artifacts `outputs/probes/state-corrected-hardened-20260903T172549/refit-bf16/`
+  (`refit-comparison.json` SHA-256 `a99bcd59…`, `reanalysis-bf16.json` `fd0b0d83…`). At the
+  Deputy's review → Chief; one ruling needed: the pre-versioning capture was bound to generator
+  v2 on evidence (`--no-round` at v2 reproduces the baseline byte for byte; v4 flips 7 cells).*
 
 ## Explicitly not on this list
 

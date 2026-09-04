@@ -628,7 +628,7 @@ forget. Each has an integration check in §6.
   stale-field coverage path in `integrity.py:384-395` scores any wrong number as "no value
   drop". Review: `under_review/P6-RESULT-REVIEW-round1-2026-09-05.md`.
 - **R28 (2026-09-05 06:20) P2 split disjointness.** Tasks are seeded by
-  `f"v2:{seed}:{split}:{index}"` (`tasks.py:111`) and embed the split name in every workspace
+  `f"v2:{seed}:{split}:{index}"` (`tasks.py:130` after the B1a insertions) and embed the split name in every workspace
   path and key token, so new split names are disjoint from every training split by
   construction. The test asserts both the mechanism and the content: (a) no P2 split name
   (`p2-d0/1/2`) appears in any `configs/*.yaml` `splits:`/`tasks:` block; (b) a content

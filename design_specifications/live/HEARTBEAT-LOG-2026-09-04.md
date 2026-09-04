@@ -648,3 +648,17 @@ recording the execution rule. No execution lane designated yet.
   at full size in 0.47 s; positive rename control. Suite 807 / exit 0 with all lanes present.
   Defect flagged for B1b: `task_difficulties` (`state_probe.py:324-332`) mislabels unknown
   split names — into the B1b brief. R28 anchor drift `tasks.py:111` → `:130` reported.
+
+## 2026-09-05 — #42/#43 ratified and committed; B5 refit landed; B1b dispatched; lane usable
+
+- Chief cleared #42 (P1) and #43 (B1a); committed `3867cc6` and `2d9445c` on a bare 807 /
+  exit 0; pushed; issues closed.
+- B5 C7 refit complete: `refit-bf16` subcommand + one real CPU run (3 min 24 s). Verdict:
+  supported set unchanged (96/96 cells, max margin change 0.0054); rounding perturbed every
+  activation at 1.5e-3–1.8e-3 Frobenius-relative. The FP32-vs-BF16 caveat is now bounded with
+  evidence. Deviation for the Chief: baseline predates R12 (no generator_version); implementer
+  added `--generator-version` and bound the artifact to v2 on evidence (v2 `--no-round`
+  reproduces byte for byte; v4 flips 7 cells) — an R23-style rational-basis binding to ratify.
+  At the Deputy's review.
+- B1b dispatched in an isolated worktree on top of B5's diff (B5 has left the file). Running:
+  R27 independent reviewer, B1c, B1b. Director on power: B4 training may start.
