@@ -647,6 +647,21 @@ forget. Each has an integration check in §6.
   when a sidecar is absent, and is recorded as such.
 - **Assignment (2026-09-05 06:20):** `ModelSpec.probes.capture_dtype` (R18b) lands in the P2
   redesign capture sub-slice (B1b), before any capture on Qwen3.5.
+- **R23 addendum (2026-09-05 08:20):** the hardened P2 capture `state-base-mix.npz` binds its
+  labels to generator v1 and its reanalysis/refit to generator v2 on the recorded basis that
+  `--no-round` at v2 reproduces the baseline byte for byte while v4 flips 7 cells.
+- **R26 amendment (2026-09-05 08:20):** on any exit before the planned iterations complete,
+  error path included, `health.json` records `incomplete_run`; a crashed run can never read
+  `healthy`. Evidence: the first live B4 attempt (0 iterations, status error, verdict healthy).
+- **R29 addendum (2026-09-05 08:20):** `compare` adds the Holm-adjusted flag beside the
+  interval flag on the difference table (follow-up line).
+- **R30 (2026-09-05 08:20) P6 secondary condition and scorer refinements.** `_note_values`
+  accepts words between `half` and the colon; the `aggregate_report` secondary condition's
+  eligibility is judged under HEAD alone with the basis recorded (no v1-bound side); the
+  expected set is field-scoped to the failing note's list field; `flip_unsatisfiable` cases are
+  marked and excluded from the headline; a parseable note with no values scores `empty`;
+  control rates are over applicable cases with n printed. Primary ledger rerun first (after the
+  pooled content-control fix), secondary after these land.
 
 ## 8. Implementer amendments (append-only, dated)
 

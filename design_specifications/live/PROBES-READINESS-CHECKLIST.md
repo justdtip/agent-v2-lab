@@ -34,7 +34,7 @@ architecture until then.
   (`e53bd81`; `policies.py:96-99`, resolution recorded with `source`), per-model adapter
   resolution (`policies.py:46,53-54`), spec threading (`47751cf`), loader migration (wave 1,
   `a2f003c`; Part 0 of the training list is committed).
-- [ ] A4. **Interpretation caveat, Chief's decision, does not gate execution:** probe
+- [x] A4. **CLOSED by the C7 refit (`eca116b`, #44; issue #15 closed): supported set unchanged across 96 cells, max margin change 0.0054 — the caveat is bounded as immaterial.** Original text: probe
   activations are FP32 by rule 1.5 while the model deploys BF16 — pre-existing, applies to the
   3B equally, surfaced on issue #15. The C7 refit (round FP32 activations in the saved npz to
   BF16, refit through the reanalysis pipeline, compare Holm flags) is offline, needs no model,
@@ -74,8 +74,9 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   goes".** Nothing exists: `capture.stub_observations`, `--stub-observations`, the
   `p2-d0/p2-d1/p2-d2` splits plan, the `compare` subcommand, dual-position capture, the
   SFT-disjointness test. All fake-only code, claimable now. *Chief-approved as three sub-slices (#40; R28/R29 ruled). **B1a committed `2d9445c`** (#43): `P2_SPLITS`, `make_p2_tasks`, `task_fingerprint`, six-config
-  sweep regenerated from tables, zero collisions at full size. B1c (`compare` + sidecar) and B1b (conditions, dual capture, R18b `capture_dtype`, the
-  `task_difficulties` mislabel fix) both in isolated worktrees on top of the B5 changes.*
+  sweep regenerated from tables, zero collisions at full size. **B1c committed `5e1f3b2`** (#45; Holm across the comparison cells is a follow-up line).
+  B1b (conditions, dual capture, R18b `capture_dtype`, the `task_difficulties` fix) in flight
+  in a worktree.*
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.
@@ -103,6 +104,9 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   (#41) dispatched**: strict per-generation outcome, every generated note recorded, visibility
   computed with the integrity module's extraction, a content control, and the `aggregate_report`
   secondary condition scheduled with the rerun (~1.5 h on the lane after B4 training).
+  Scorer R19-reviewed, blocking findings fixed, work order #46; **R30** ruled (extractor accepts
+  run C's `first half complete:`; secondary eligibility under HEAD alone; four refinements) —
+  R30 slice in flight; ledger primary rerun first.
 - [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first**, none applied:
   `outputs/probes/axis-corrected/CLOSED.md` absent (288 saved rollouts on disk); the
   matched-design flaw (default persona gets the full `prompts` list, `assistant_axis.py:600-609`,
@@ -114,7 +118,7 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   21 of 24 roles silent vs the spec's expected 19 — reported, not reconciled); matched prompts,
   exemplars dropped from all 24 roles (ruling 1), judge default off. Ticks on commit; the 4B
   `build` waits for the lane after B4 training.*
-- [ ] B5. **C7 BF16 refit** — same item as A4's experiment, ruled as item 4 of R18; listed here
+- [x] B5. **C7 BF16 refit — DONE, committed `eca116b` (#44)** — same item as A4's experiment, ruled as item 4 of R18; listed here
   because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Implemented; real CPU run done (3 min 24 s): **supported set unchanged** — all 96
   (analysis, target, layer) cells keep both support flags, max absolute margin change 0.0054;
   rounding altered every stored activation at Frobenius-relative 1.5e-3 to 1.8e-3 per layer.

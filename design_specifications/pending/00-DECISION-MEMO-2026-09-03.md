@@ -79,7 +79,8 @@ What this run cannot say, and why the remaining seven cells should not be run as
 **Precision caveat (added 2026-09-04, R18):** every P2 and J-space number above was captured
 through a float32 block path on a bfloat16 model; on the 3B the divergence from the native
 forward is 0.3% max relative, on Qwen3.5-4B 5.5%. The offline bfloat16-rounding refit (SPEC-004
-§1 C7) bounds the effect; until it reports, the numbers carry this caveat.
+§1 C7) reported on 2026-09-05: the supported set is unchanged across all 96 cells and the
+largest margin change is 0.005, so the precision gap is immaterial to these conclusions.
 
 ### 2.3 P5 adapter delta (items 1-4 complete; block ablation absent)
 

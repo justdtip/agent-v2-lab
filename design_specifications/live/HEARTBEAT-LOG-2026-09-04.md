@@ -726,3 +726,15 @@ recording the execution rule. No execution lane designated yet.
   and two distinct row sets at the slot cell); F11 corrected (three secondary cases disagree
   on the step). Slice tests 85 green. Work order filed: primary READY; secondary blocked on the
   #41 ruling (extractor + HEAD eligibility).
+
+## 2026-09-05 — Chief's four rulings applied: B5 and B1c committed; R30 and the fix slice
+
+- #44 approved (binding ratified: labels v1, reanalysis/refit v2) → `eca116b`; #45 approved
+  after it → B1c patch applied, suite 827 / exit 0, `5e1f3b2`; both pushed; #44/#45/#15
+  closed (C7 done). R30 ruled on #41 → dispatched to the scorer implementer as a separate
+  worktree slice on top of the reviewed scorer (#46 stays as reviewed). #35 amendment ratified
+  → already in the fix slice.
+- Training fix slice delivered and reviewed READY (protocol adapter with `__len__` = token
+  count so `CacheDataset.itemlen` sorts correctly; train/valid-only loading; `_finish_health`
+  on every exit path with idempotent `on_finish`; real `CacheDataset`/`iterate_batches` in
+  tests; suite 827 / exit 0). Work order filed; attempt 3 on ratification.
