@@ -117,9 +117,19 @@ notes. Two pipeline defects amplified it: the 18-task screen gives 12 of 18 slot
 that never fail (a 16/18 screen concealed two families at 0/15), and validation loss bottoms at
 step 300 in both B and C while the screen picked 400.
 
+### 2.6 P6 causal patching (complete, R27 rerun 2026-09-05)
+
+Patching run B's note-region residuals into run C at layers 6–18 restores the dropped value in
+4 of 5 ledger cases, with the unrelated-task, random-position and content-swap controls all at
+zero; swapping only the dropped value's rows for a foreign value's makes C write the foreign
+number in that slot. The error is in the early-layer representation of the note's value list,
+which data reaches; C's downstream computation is intact. This is the write-side half of the
+regimen verdict. Five cases, one family; the `aggregate_report` secondary condition extends it.
+Review: `under_review/P6-RESULT-REVIEW-round2-2026-09-05.md`.
+
 ## 3. Verdict on the regimen-versus-parameters question
 
-For the failures that exist, the answer is regimen-bound, with high confidence:
+For the failures that exist, the answer is regimen-bound, with high confidence, now supported from both the read side (P2) and the write side (P6):
 
 - the state is readable when written (P2), not held when unwritten (J-space);
 - the failures are in writing the note, and a data change caused them (§2.5);

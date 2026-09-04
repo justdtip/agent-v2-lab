@@ -127,7 +127,12 @@ slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.p
   (exact; boundary states only), registry budget 22 → 17.8, memory estimate at preflight.
   The recipe stays run B's (ceiling change reverted `112648b`). Health logging worked on every
   failure; the #35 amendment made attempt 3 read `incomplete`.
-- **P6.** Run 1 artifact valid, rates uninterpretable (Chief's review; R27). Strict scorer
+- **P6: RESULT.** Rerun under R27/R30 (2026-09-05, 1 h 19 min, first probe under the logging):
+  every control zero; B's note-region residuals at layers 6/12/18 make C write the dropped value
+  back (4/5); the content swap writes the foreign number into the slot (5/5 at layer 6); nothing
+  moves from layer 24. SPEC-004's "reading and representing" branch; memo verdict supported from
+  both sides (Chief, round 2). Next: the `aggregate_report` secondary (ten cases). Run 1 was
+  uninterpretable (Chief's review; R27). Strict scorer
   implemented, R19-reviewed, two blocking findings fixed; work order **#46**: ledger primary
   READY; the `aggregate_report` secondary blocked on the #41 ruling (extractor for run C's
   `first half complete:` style; HEAD-alone eligibility, n = 2 vs 15). Rerun ~1.5 h after B4.

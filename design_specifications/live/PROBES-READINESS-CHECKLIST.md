@@ -87,7 +87,7 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.
-- [ ] B3. **§5 P6 patching run — run 1 artifact on disk; rerun under R27 pending** — the #22 slice is committed (`07c6657`: `--data-seed`
+- [x] B3. **§5 P6 patching run — DONE: rerun under R27/R30 complete and read (Chief, round 2)** — the #22 slice is committed (`07c6657`: `--data-seed`
   override used only when the field is absent, R22 note provenance per case, R23 generator-v1
   binding, R24 `scoring_version_stable`). K1 closed on real data: five cases selected, five
   stable, decision steps 7/7/7/7/6, dropped values 85/89/100/32/54. Lift request sent
@@ -112,8 +112,19 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   computed with the integrity module's extraction, a content control, and the `aggregate_report`
   secondary condition scheduled with the rerun (~1.5 h on the lane after B4 training).
   **Scorer committed `0862c01` (#46) and R30 refinements `68c1990` (#49, schema `p6-patch-r30`).**
-  **The ledger primary rerun is RUNNING** (Director-started 2026-09-05 ~21:38, own monitor;
-  `outputs/probes/patch-C-r27-2026-09-05/`, 42 cells, ~1 h 20). Run 1's artifact stays as a record.
+  **Rerun COMPLETE** (Director-started 2026-09-05 21:38, 1 h 19 min, every cell logged):
+  `outputs/probes/patch-C-r27-2026-09-05/patch.json` SHA-256
+  `aa7cd5156d5ae0f7e53b956d5470beb3cb812a6b50b3f77e27050d1988de9314`, `patch.md`
+  `a0d139b04fad89455caf09cd73396cd219563f3a5d109f53a17c057445333284`, `run.log` `6456ba7b…`,
+  `events.jsonl` `d6a9d0a4…`; schema `p6-patch-r30`; 690 generations recorded; five headline
+  cases. **Result (Chief's reading, `under_review/P6-RESULT-REVIEW-round2-2026-09-05.md`, #41):**
+  every control 0.0 in every cell; `previous_notes` treatment 0.8 at layers 6/12/18 (four
+  flips, zero corruptions; the regenerated notes carry the dropped value in place), 0.0 from
+  layer 24; the content swap writes the FOREIGN number into the dropped slot five for five at
+  layer 6 — position matters, content matters, transfer finished by layer 18. SPEC-004's
+  "reading and representing" branch; the memo's verdict supported from both sides. Limits: five
+  cases, one family (0.8 → [0.38, 0.96]); the `aggregate_report` secondary (ten cases) is the
+  next run. Run 1's artifact stays as a record.
 - [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first.** *Original text
   (pre-`3867cc6`, anchors historical):* `CLOSED.md` absent; the matched-design flaw (default
   persona got the full `prompts` list while roles got `prompts[:role_prompts]`); the exemplar

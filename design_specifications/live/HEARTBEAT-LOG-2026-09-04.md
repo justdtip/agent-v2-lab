@@ -885,3 +885,13 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   hold); 11 view tests + 2 new parametrised bare/wrapped; quantized fake added; pre-fix walker
   fails 11 wrapped cases with the live error. Suite 1034 / exit 0. Work order filed.
   Observed: `test_capture.py:229` uses a hand-made adapter stand-in (R31 gap; follow-up line).
+
+## 2026-09-05 — P6 rerun COMPLETE and read (Chief, round 2): a real result
+
+- 1 h 19 min, every cell logged, status ok. Verified by the Deputy from the artifact: schema
+  r30, 690 generations on file, 42 cells; `previous_notes` 0.8 at 6/12/18 (flip 4, corrupted 0),
+  0.0 at 24+; every control 0.0 everywhere; `dropped_value_slot` treatment 0 with 4 corrupted
+  (digit fusion). Chief's reading ratified (round 2, #41): reading-and-representing branch;
+  content swap turns it into a mechanism (foreign number written into the slot 5/5 at L6);
+  memo updated. B3 ticked with hashes. Next run: the `aggregate_report` secondary (10 cases).
+- Stage-1 probe launched on the freed lane for the attempt-4 gates.
