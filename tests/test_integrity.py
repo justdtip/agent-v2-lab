@@ -9,7 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from local_llm_lab.pipeline import evaluate, integrity as integrity_module, report
+from local_llm_lab.pipeline import evaluate, report
+from local_llm_lab.pipeline import integrity as integrity_module
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.integrity import (
     Fact,
@@ -581,7 +582,9 @@ def _write_evaluation(
                     "data_seed": 20260902,
                     "keep_last": 0,
                     **(
-                        {} if generator_version is None else {"generator_version": generator_version}
+                        {}
+                        if generator_version is None
+                        else {"generator_version": generator_version}
                     ),
                 },
                 "trajectories": [trajectory.as_dict()],
@@ -626,7 +629,9 @@ def test_artifact_generator_version_rejects_invalid_bindings(
         _artifact_generator_version(invalid, None, source=tmp_path / "source.json")
 
 
-def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(tmp_path: Path, monkeypatch) -> None:
+def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(
+    tmp_path: Path, monkeypatch
+) -> None:
     task = _task("read")
     recorded = tmp_path / "recorded.json"
     legacy = tmp_path / "legacy.json"
@@ -670,7 +675,15 @@ def test_integrity_main_forwards_explicit_generator_version(monkeypatch, tmp_pat
     monkeypatch.setattr(
         sys,
         "argv",
-        ["agent-v2-integrity", "--eval", str(tmp_path / "run.json"), "--output", str(tmp_path / "x.md"), "--generator-version", "2"],
+        [
+            "agent-v2-integrity",
+            "--eval",
+            str(tmp_path / "run.json"),
+            "--output",
+            str(tmp_path / "x.md"),
+            "--generator-version",
+            "2",
+        ],
     )
     integrity_module.main()
     assert seen == [2]
