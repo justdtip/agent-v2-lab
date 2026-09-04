@@ -759,3 +759,11 @@ recording the execution rule. No execution lane designated yet.
   widening technique on the natural sequence with the repair counted (as `patch.py` does).
   Two questions for the Chief carried: strip the target note under notes-stripped? pool the
   thought or the whole content?
+
+## 2026-09-05 — B4 attempt 3 failed at the first optimiser step: Metal out of memory
+
+- Validation forward fit; backward did not (`Insufficient Memory` in `mx.eval` of the step).
+  health.json: status error, verdict incomplete, `incomplete_run` at 0 iterations — the #35
+  amendment working on its first exercise. Diagnostic: two-iteration run at batch 1 on the
+  free lane to read the peak; remedy candidate batch 1 × accumulation 2 (recipe deviation;
+  Director + Chief).
