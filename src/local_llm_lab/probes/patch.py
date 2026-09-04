@@ -363,6 +363,30 @@ def _match_rows(rows: Any, count: int) -> Any:
     return mx.take(rows, mx.array([index % rows.shape[0] for index in range(count)], dtype=mx.int32), axis=0)
 
 
+def _random_control_pair(
+    *,
+    source_length: int,
+    target_length: int,
+    source_treatment: Sequence[int],
+    target_treatment: Sequence[int],
+    cardinality: int,
+    seed: int,
+    task_id: str,
+    layer: int,
+    group: str,
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Draw independent non-treatment source/target groups from one exact P6 seed."""
+    source_candidates = sorted(set(range(source_length)) - set(source_treatment))
+    target_candidates = sorted(set(range(target_length)) - set(target_treatment))
+    if len(source_candidates) < cardinality or len(target_candidates) < cardinality:
+        raise ValueError("random control candidate pool cannot satisfy treatment cardinality")
+    rng = random.Random(f"{seed}:{task_id}:{layer}:{group}")
+    return (
+        tuple(sorted(rng.sample(source_candidates, cardinality))),
+        tuple(sorted(rng.sample(target_candidates, cardinality))),
+    )
+
+
 def _score_patch(
     view: ArchitectureView,
     tokenizer: Any,
@@ -445,7 +469,9 @@ def run_patch_probe(
                 case = item["case"]
                 target = item["failing_groups"][group]
                 source = item["counter_groups"][group]
-                treatment_rows = _match_rows(_take_rows(item["counter_residuals"][layer], source), len(target))
+                if len(source) != len(target):
+                    raise ValueError("treatment source and target group cardinality must match")
+                treatment_rows = _take_rows(item["counter_residuals"][layer], source)
                 outcomes["treatment"][case.task.task_id] = [_score_patch(
                     view, tokenizer, case, layer=layer, source_rows=treatment_rows,
                     target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
@@ -461,17 +487,18 @@ def run_patch_probe(
                     target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
                     max_tokens=max_tokens,
                 )]
-                random_target = random_control_positions(
-                    range(len(item["failing_ids"])), target, seed=seed,
-                    label=f"{case.task.task_id}:{layer}:{group}:target",
+                random_source, random_target = _random_control_pair(
+                    source_length=len(item["counter_ids"]),
+                    target_length=len(item["failing_ids"]),
+                    source_treatment=source,
+                    target_treatment=target,
+                    cardinality=len(target),
+                    seed=seed,
+                    task_id=case.task.task_id,
+                    layer=layer,
+                    group=group,
                 )
-                random_source = random_control_positions(
-                    range(len(item["counter_ids"])), source, seed=seed,
-                    label=f"{case.task.task_id}:{layer}:{group}:source",
-                )
-                random_rows = _match_rows(
-                    _take_rows(item["counter_residuals"][layer], random_source), len(random_target)
-                )
+                random_rows = _take_rows(item["counter_residuals"][layer], random_source)
                 outcomes["random_positions"][case.task.task_id] = [_score_patch(
                     view, tokenizer, case, layer=layer, source_rows=random_rows,
                     target_positions=random_target, failing_ids=item["failing_ids"], keep_last=keep_last,
