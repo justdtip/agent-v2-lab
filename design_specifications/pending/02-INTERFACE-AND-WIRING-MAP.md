@@ -686,6 +686,27 @@ forget. Each has an integration check in §6.
 - **R33 (2026-09-05 12:40) no stashing on the shared tree.** Implementers never run
   `git stash` on the shared tree (two incidents); `git show HEAD:path` and worktrees instead. A
   stash is reported as an incident and the Deputy re-verifies every other lane's edits.
+- **R34 (2026-09-05 23:50; proposed by the Head of Interpretability) J-lens conformance statement.** Every J-lens artifact and
+  `pipeline/jlens.py` state which variant of the source paper's recipe was computed: target
+  layer **and the index convention (layer L = residual after block L-1; kind = the block that
+  wrote it)**, source positions, output positions read (`self` / `future` / `all`), corpus
+  size and context length, median future window, JVP method (amended 2026-09-05 on the Head
+  of Interpretability's addendum). A reading resting on a null cites the variant. The current implementation is the
+  self-only limiting case at eight contexts; the 3B World A entry gains that footnote.
+- **R35 (2026-09-05 23:50; proposed by the Head of Interpretability) cross-model comparability.** Two probe tables are comparable only
+  where policy, derivative method, layer selection (as fractions and kinds), generator version,
+  prompt rendering (template kwargs) and estimator variant are equal, or every difference is
+  named in both artifacts. Base-versus-adapter is a named difference, not a comparison.
+- **R36 (2026-09-05) review chains by domain.** Interpretability slices (SPEC-004 and EXP
+  specs; anything touching `probes/`, `pipeline/jlens.py`, capture primitives, or a probe
+  artifact): implementer → independent conformance reviewer (R19: signatures, banned
+  constants, protected paths, no model loads, suite bare) → **Head of Interpretability's
+  domain review and readiness verdict** → Chief's gate. Pipeline and training slices
+  (SPEC-001 to 003, R32, logging): unchanged, implementer → R19 reviewer → Deputy's verdict →
+  Chief's gate, with the Head consulted when a slice touches capture, J-lens, or a probe
+  artifact. The Deputy dispatches and keeps the board for every lane. A correction the Head
+  makes directly comes to the Chief with the R19 pass and no domain review. Readings of probe
+  results are the Head's and ratified by the Chief.
 
 ## 8. Implementer amendments (append-only, dated)
 

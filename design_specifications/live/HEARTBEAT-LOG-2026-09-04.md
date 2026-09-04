@@ -924,3 +924,18 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   process: reproduced (odd tail: 2/4 processes wrong, error 6.3; even + padding: 0/9 incl. real
   shapes, 5e-5). Even-chunk guard + padding is the mitigation; upstream issue recommended.
 - Work order filed. Lane probe pending the Director's word (lane offered for the secondary).
+
+## 2026-09-05 late — two streams from the Director's other session: arm D4 (#53), EXP-001 (#54)
+
+- #53 (Chief, Part C of the training list): D4 = Qwen3.5-4B on run D. Dispatched C1–C3 now
+  (generate `data/agent_v2d` through the data stage + integrity; render for the 4B; D4 config
+  batch 1 × 4 + chunk 64; R5 hash pin for D). Lane items C4 (R32 probe on D's longest row),
+  C6 (D3 on the 3B, recommended first), D4 attempt — Director lifts.
+- #54 (EXP-001, Head of Interpretability — a new role): Chief opened the chain on the amended
+  spec (R34 conformance statement, R35 comparability). Code prerequisites dispatched (sweep CLI,
+  build_prompt rendering, self/future/all readouts from one JVP with explicit sources and
+  corpus length 128, kind-matched layer family, Holm, RunLog, artifacts with capture_dtype,
+  `jsweep` in the R28 test, R31 tests). Runs (Director lifts): 3B base FD comparator, 3B
+  adapter A, 4B sweep (~30 min), single-decision check — before D4 trains.
+- The Chief's documents from that session (Part C, R34/R35, the role manual, EXP-001 spec and
+  work order) are committed here under the moves convention.

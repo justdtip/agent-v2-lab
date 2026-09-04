@@ -121,6 +121,35 @@ fake-only tests green. Evidence when ticked: the two commit hashes and the test 
 paths, SHA-256s, the recompute command, and one evidence line per condition; the Director lifts
 per run. (Chief's standard, 2026-09-04.)
 
+## Part C — arm D4: Qwen3.5-4B on the run D recipe (Director's request, 2026-09-05 late)
+
+Same seven R15 conditions plus condition 8 (logging). Evidence lines are D4's own; nothing is
+inherited from B4 except the base model's preflight.
+
+- [ ] **C1. Run D data exists.** `agent-pipeline data --config configs/agent_v2d.yaml` →
+  `data/agent_v2d` (splits train/train1/valid/valid2/test/test3, manifest, provenance,
+  `GENERATOR_VERSION`); integrity invariants pass on the generated splits. No model.
+  Decision recorded: chat replay kept as-is for D3/D4 (comparability with B); fixing it is
+  a separate variable (SPEC-003 amendment pending).
+- [ ] **C2. Rendered for the 4B.** `agent-pipeline render --source data/agent_v2d --output
+  data/agent_v2d-qwen35-4b --model qwen35-4b` (tokenizer only); manifest hashes recorded.
+  Note the longest training row now comes from `train1` (difficulty 1): expect ~2,460 tokens
+  with completion, longer than B4's 2,257.
+- [ ] **C3. D4 config carries the R32 memory settings:** `batch_size: 1`,
+  `grad_accumulation_steps: 4`, `gated_delta_chunk: 64` (as `agent_v2b_qwen35_4b.yaml`);
+  recipe numbers otherwise unchanged; `criteria:` block present (D4 versus D3).
+- [ ] **C4. R32 probe covers D's longest row.** The lane probe must include the longest
+  `train`/`train1` row of `data/agent_v2d-qwen35-4b` (not only B4's 2,257) at batch 1 across
+  chunk 32/64/128, reporting peak and clean step time. Gate: steps under the working set
+  with 10% headroom, and 400 iterations project at ≤ 3 hours; otherwise stage 2 first.
+- [ ] **C5. Preflight artifact valid for the schema in force** (regenerated after lane 2
+  lands; schema 2 acceptable before that per the #51 ratification).
+- [ ] **C6. D3 has run (recommended, not required).** D4's criterion is paired against D3;
+  without D3 the only comparison is against run B, which changes two variables (base and
+  data). D3 costs ~2 h on the dense path and needs none of the R32 machinery.
+- [ ] **C7. Director's lift** with the evidence format: data manifest hashes, probe numbers,
+  config hash, preflight artifact hash, cost (expect ~1.4× B4's estimate at the longer rows).
+
 ## Part B — from one arm to the full matrix
 
 - [ ] B1. Run D data generated: `data/agent_v2d` with manifest + provenance (issue #17;

@@ -155,3 +155,13 @@ slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.p
   completion slice (`_load_training_base` via `load_policy`, expires DEBT(R20)); stale
   `train.num_layers: 36`; manifest atomic writes; legacy unguarded writers; R27 review notes
   12–15; Holm across `compare` cells; `build_axis_run` rollout progress; #15 closes on #44.
+
+## 12. Review chains by domain (ruling R36, 2026-09-05)
+
+You dispatch and keep the board for every lane. For interpretability slices (SPEC-004, EXP
+specs, anything touching `probes/`, `pipeline/jlens.py`, capture primitives, or a probe
+artifact) the chain is implementer → R19 conformance reviewer → Head of Interpretability's
+domain review and readiness verdict → Chief's gate; your verdict is not in that chain. For
+pipeline and training slices the chain is unchanged (implementer → R19 reviewer → your
+verdict → Chief), with the Head consulted when a slice touches capture, J-lens, or a probe
+artifact. Work orders name the chain they went through.
