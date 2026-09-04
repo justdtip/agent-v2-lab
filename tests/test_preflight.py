@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import pytest
 
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, ResolvedSpec
 from local_llm_lab.pipeline.preflight import (
+    _native_gate_passed,
     _residual_metrics,
     require_preflight,
     run_preflight,
@@ -111,7 +113,39 @@ class _MismatchingTextModule(_TextModule):
 
 
 class _MismatchingView(_View):
+    """Only the float32 manual loop deviates: a pure precision gap, not a structural defect."""
+
     text_module = _MismatchingTextModule()
+
+
+class _NativeDivergentView(_View):
+    """The native-dtype manual loop disagrees with the forward: a structural defect."""
+
+    def diagnostic_native_final_residual(self, ids: np.ndarray) -> np.ndarray:
+        return super().diagnostic_native_final_residual(ids) + 0.5
+
+
+class _RecordingPreflightView(_View):
+    """A full preflight view that records whether the loader's own instance did the work."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def embed(self, ids: np.ndarray) -> np.ndarray:
+        self.calls.append("embed")
+        return super().embed(ids)
+
+    def run_block(self, index: int, h: np.ndarray, masks, cache) -> np.ndarray:
+        self.calls.append(f"run_block:{index}")
+        return super().run_block(index, h, masks, cache)
+
+    def final_norm(self, h: np.ndarray) -> np.ndarray:
+        self.calls.append("final_norm")
+        return super().final_norm(h)
+
+    def diagnostic_native_final_residual(self, ids: np.ndarray) -> np.ndarray:
+        self.calls.append("native_manual")
+        return super().diagnostic_native_final_residual(ids)
 
 
 class _ControlView(_View):
@@ -158,8 +192,12 @@ class _MetricArray:
     def __sub__(self, other: _MetricArray) -> _MetricArray:
         return _MetricArray((self.values - other.values).tolist(), self.dtype)
 
+    def astype(self, dtype: str) -> _MetricArray:
+        return _MetricArray(self.values.tolist(), dtype)
+
 
 class _MetricApi:
+    float32 = "float32"
     _info = {
         "bfloat16": SimpleNamespace(eps=2**-7, smallest_normal=2**-126),
         "float32": SimpleNamespace(eps=2**-23, smallest_normal=2**-126),
@@ -172,6 +210,18 @@ class _MetricApi:
     @staticmethod
     def max(value: _MetricArray) -> float:
         return float(np.max(value.values))
+
+    @staticmethod
+    def square(value: _MetricArray) -> _MetricArray:
+        return _MetricArray((value.values**2).tolist(), value.dtype)
+
+    @staticmethod
+    def sum(value: _MetricArray) -> float:
+        return float(np.sum(value.values))
+
+    @staticmethod
+    def sqrt(value: float) -> float:
+        return float(np.sqrt(value))
 
     @classmethod
     def finfo(cls, dtype: str) -> SimpleNamespace:
@@ -203,7 +253,7 @@ def _resolved(spec: ModelSpec) -> ResolvedSpec:
 
 def _complete_artifact(*, passed: bool = True, residual_passed: bool = True) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "model_name": "fake-model",
         "hf_id": "org/fake-model",
         "snapshot_revision": "current",
@@ -258,7 +308,7 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
     assert path == tmp_path / "fake-model.json"
     assert first == second
     assert calls == [spec.hf_id, spec.hf_id]
-    assert report["schema_version"] == 1
+    assert report["schema_version"] == 2
     assert report["model_name"] == spec.name
     assert report["hf_id"] == spec.hf_id
     assert report["snapshot_revision"] == "cached-revision"
@@ -275,19 +325,41 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
         "strategy": "snapshot",
         "strategy_reason": "auto:equivalence_verified",
     }
-    assert report["residual_equivalence"] == {
+    exact_metrics = {
         "absolute_tolerance": 3 * np.finfo(np.float32).eps * 146.0,
-        "criterion": "reference_dtype_rms_roundoff",
+        "frobenius_relative_error": 0.0,
         "max_abs_error": 0.0,
         "max_relative_error": 0.0,
-        "passed": True,
         "reference_dtype": "float32",
         "reference_epsilon": np.finfo(np.float32).eps,
         "reference_scale": 146.0,
         "relative_tolerance": 3 * np.finfo(np.float32).eps,
         "rounding_steps": 9,
-        "token_count": 64,
         "within_tolerance": True,
+    }
+    assert report["residual_equivalence"] == {
+        "criterion": "native_dtype_rms_roundoff_and_frobenius_relative",
+        "fp32_manual_vs_native": {
+            **exact_metrics,
+            "gates": False,
+            "purpose": (
+                "precision-gap measurement: the float32 capture path against the native "
+                "forward, reported for the capture-dtype decision and never gated"
+            ),
+        },
+        "frobenius_relative_tolerance": 1e-4,
+        "gated_comparison": "native_manual_vs_native",
+        "native_manual_vs_native": {
+            **exact_metrics,
+            "gates": True,
+            "purpose": (
+                "structural equivalence: the manual block loop in the model's native dtype "
+                "against the native forward, expected exact or within both the derived "
+                "rounding floor and the Frobenius-relative bound"
+            ),
+        },
+        "passed": True,
+        "token_count": 64,
     }
     assert report["jvp"] == {"finite": True, "layer": 2, "method": "forward"}
     assert report["lora"] == {
@@ -382,8 +454,9 @@ def test_nonfinite_jvp_writes_failed_evidence_then_exits_nonzero(tmp_path: Path)
     assert report["jvp"] == {"finite": False, "layer": 2, "method": "finite_difference"}
 
 
-def test_residual_metrics_follow_the_reference_dtype_and_scale() -> None:
-    """Changing the reference precision must change the derived error budget."""
+def test_distributed_error_passes_the_derived_floor_but_fails_the_frobenius_gate() -> None:
+    """A 0.2% distributed deviation hides inside the bfloat16 rounding budget; R18a's
+    Frobenius-relative bound is the AND-condition that catches exactly that defect class."""
     actual = _MetricArray([100.2], "float32")
     bfloat_reference = _MetricArray([100.0], "bfloat16")
     float_reference = _MetricArray([100.0], "float32")
@@ -392,6 +465,9 @@ def test_residual_metrics_follow_the_reference_dtype_and_scale() -> None:
         actual, bfloat_reference, num_layers=4, array_api=_MetricApi
     )
     float_metrics = _residual_metrics(actual, float_reference, num_layers=4, array_api=_MetricApi)
+    exact_metrics = _residual_metrics(
+        _MetricArray([100.0], "bfloat16"), bfloat_reference, num_layers=4, array_api=_MetricApi
+    )
 
     assert bfloat_metrics["reference_dtype"] == "bfloat16"
     assert bfloat_metrics["reference_epsilon"] == 2**-7
@@ -400,9 +476,15 @@ def test_residual_metrics_follow_the_reference_dtype_and_scale() -> None:
     assert bfloat_metrics["relative_tolerance"] == 3 * 2**-7
     assert bfloat_metrics["absolute_tolerance"] == 100.0 * 3 * 2**-7
     assert bfloat_metrics["within_tolerance"] is True
+    assert bfloat_metrics["frobenius_relative_error"] == pytest.approx(0.002)
+    assert _native_gate_passed(bfloat_metrics) is False
     assert float_metrics["reference_dtype"] == "float32"
     assert float_metrics["absolute_tolerance"] == 100.0 * 3 * 2**-23
     assert float_metrics["within_tolerance"] is False
+    assert float_metrics["frobenius_relative_error"] == pytest.approx(0.002)
+    assert _native_gate_passed(float_metrics) is False
+    assert exact_metrics["frobenius_relative_error"] == 0.0
+    assert _native_gate_passed(exact_metrics) is True
     assert bfloat_metrics["absolute_tolerance"] != 1e-5
 
 
@@ -464,7 +546,7 @@ def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_pat
 
     assert path == output_path
     assert calls == [(spec.hf_id, True)]
-    assert report["schema_version"] == 1
+    assert report["schema_version"] == 2
     assert report["model_name"] == spec.name
     assert report["hf_id"] == spec.hf_id
     assert report["snapshot_revision"] == "cached-revision"
@@ -473,6 +555,22 @@ def test_run_residual_control_writes_only_the_three_residual_comparisons(tmp_pat
     assert report["native_manual_vs_native"]["max_abs_error"] == 0.0
     assert report["fp32_manual_vs_native"]["rounding_steps"] == 9
     assert report["native_manual_vs_native"]["rounding_steps"] == 9
+    assert report["fp32_manual_vs_native"]["frobenius_relative_error"] == 0.0
+    assert report["native_manual_vs_native"]["frobenius_relative_error"] == 0.0
+    metric_keys = {
+        "absolute_tolerance",
+        "frobenius_relative_error",
+        "max_abs_error",
+        "max_relative_error",
+        "reference_dtype",
+        "reference_epsilon",
+        "reference_scale",
+        "relative_tolerance",
+        "rounding_steps",
+        "within_tolerance",
+    }
+    assert set(report["fp32_manual_vs_native"]) == metric_keys
+    assert set(report["native_manual_vs_native"]) == metric_keys
 
 
 def test_residual_control_without_a_view_factory_uses_the_loader_view(
@@ -520,7 +618,7 @@ def test_residual_control_without_a_view_factory_uses_the_loader_view(
 
 
 def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> None:
-    """A failed equivalence check must preserve its diagnostic artifact before exiting."""
+    """A native-dtype structural divergence must fail the gate and preserve its evidence."""
     spec = _spec()
 
     with pytest.raises(SystemExit, match="preflight failed"):
@@ -534,7 +632,7 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
             ),
             output_root=tmp_path,
             spec_loader=lambda name: spec,
-            view_factory=lambda model: _MismatchingView(),
+            view_factory=lambda model: _NativeDivergentView(),
             resolver=lambda given, model, token: _resolved(given),
             jvp=lambda *args, **kwargs: np.ones((1, 64, 3), dtype=np.float32),
             revision_reader=lambda given: "cached-revision",
@@ -542,10 +640,86 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
         )
 
     report = json.loads((tmp_path / "fake-model.json").read_text(encoding="utf-8"))
+    residual = report["residual_equivalence"]
     assert report["passed"] is False
-    assert report["residual_equivalence"]["passed"] is False
-    assert report["residual_equivalence"]["criterion"] == "reference_dtype_rms_roundoff"
-    assert "absolute_tolerance" in report["residual_equivalence"]
+    assert residual["passed"] is False
+    assert residual["criterion"] == "native_dtype_rms_roundoff_and_frobenius_relative"
+    assert residual["gated_comparison"] == "native_manual_vs_native"
+    assert residual["native_manual_vs_native"]["within_tolerance"] is False
+    assert residual["native_manual_vs_native"]["max_abs_error"] == 0.5
+    assert residual["fp32_manual_vs_native"]["within_tolerance"] is True
+    assert residual["fp32_manual_vs_native"]["max_abs_error"] == 0.0
+
+
+def test_fp32_precision_gap_is_reported_but_never_gates(tmp_path: Path) -> None:
+    """A pure float32-path deviation is R18a evidence for capture_dtype, not a gate failure."""
+    spec = _spec()
+
+    path = run_preflight(
+        spec.name,
+        loader=lambda given, adapter, *, lazy: (
+            _Model(),
+            _Tokenizer(),
+            _View(),
+            _resolved(given),
+        ),
+        output_root=tmp_path,
+        spec_loader=lambda name: spec,
+        view_factory=lambda model: _MismatchingView(),
+        resolver=lambda given, model, token: _resolved(given),
+        jvp=lambda *args, **kwargs: np.ones((1, 64, 3), dtype=np.float32),
+        revision_reader=lambda given: "cached-revision",
+        array_api=np,
+    )
+
+    residual = json.loads(path.read_text(encoding="utf-8"))["residual_equivalence"]
+    assert residual["passed"] is True
+    assert residual["fp32_manual_vs_native"]["within_tolerance"] is False
+    assert residual["fp32_manual_vs_native"]["max_abs_error"] == 0.5
+    assert residual["fp32_manual_vs_native"]["gates"] is False
+    assert residual["native_manual_vs_native"]["within_tolerance"] is True
+    assert residual["native_manual_vs_native"]["gates"] is True
+
+
+def test_run_preflight_defaults_use_the_loader_view_and_resolved_spec(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """cli.py passes no view_factory or resolver; the loader's own view and spec must gate."""
+    from local_llm_lab.arch import ArchitectureView
+
+    spec = _spec()
+    loaded_view = _RecordingPreflightView()
+    resolved = dataclasses.replace(_resolved(spec), snapshot_revision="resolved-revision")
+    monkeypatch.setattr(
+        ArchitectureView,
+        "from_model",
+        lambda model: pytest.fail("the default preflight path rebuilt a second view"),
+    )
+
+    path = run_preflight(
+        spec.name,
+        loader=lambda given, adapter, *, lazy: (_Model(), _Tokenizer(), loaded_view, resolved),
+        output_root=tmp_path,
+        spec_loader=lambda name: spec,
+        jvp=lambda *args, **kwargs: np.ones((1, 64, 3), dtype=np.float32),
+        revision_reader=lambda given: pytest.fail("the loader's resolved revision was ignored"),
+        array_api=np,
+    )
+    report = json.loads(path.read_text(encoding="utf-8"))
+
+    assert loaded_view.calls[:6] == ["embed"] + [f"run_block:{i}" for i in range(4)] + [
+        "final_norm"
+    ]
+    assert "native_manual" in loaded_view.calls
+    assert report["passed"] is True
+    assert report["snapshot_revision"] == "resolved-revision"
+    assert report["cache"]["strategy"] == "snapshot"
+    assert report["cache"]["strategy_reason"] == "auto:equivalence_verified"
+    assert report["lora"] == {
+        "keys": ["layers.0.q_proj", "layers.3.down_proj"],
+        "trainable_parameters": 42,
+    }
+    assert report["residual_equivalence"]["gated_comparison"] == "native_manual_vs_native"
 
 
 @pytest.mark.parametrize(
@@ -553,10 +727,10 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
     [
         (None, "preflight artifact is missing"),
         ("not json", "preflight artifact is malformed"),
-        ({"schema_version": 1, "model_name": "wrong"}, "model name"),
-        ({"schema_version": 1, "model_name": "fake-model", "hf_id": "wrong"}, "hf_id"),
+        ({"schema_version": 2, "model_name": "wrong"}, "model name"),
+        ({"schema_version": 2, "model_name": "fake-model", "hf_id": "wrong"}, "hf_id"),
         (
-            {"schema_version": 1, "model_name": "fake-model", "hf_id": "org/fake-model"},
+            {"schema_version": 2, "model_name": "fake-model", "hf_id": "org/fake-model"},
             "snapshot revision",
         ),
         (
@@ -571,7 +745,7 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
         ),
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "old",
@@ -582,7 +756,7 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
         ),
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "current",
@@ -593,7 +767,7 @@ def test_failed_preflight_writes_evidence_then_exits_nonzero(tmp_path: Path) -> 
         ),
         (
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "current",

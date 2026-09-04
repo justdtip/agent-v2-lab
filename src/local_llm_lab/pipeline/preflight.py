@@ -21,7 +21,7 @@ __all__ = [
     "write_report",
 ]
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _OUTPUT_DIRECTORY = PROJECT_ROOT / "outputs" / "preflight"
 _FIXED_PROMPT = "Explain why a model preflight check protects a local training run."
 _FIXED_MESSAGES = [{"role": "user", "content": _FIXED_PROMPT}]
@@ -182,18 +182,12 @@ def run_residual_control(
     if not revision:
         raise SystemExit(f"no cached revision for {spec.name}; cannot write residual control")
     ids = _fixed_token_ids(tokenizer, array_api)
-    fp32_manual = _manual_final_residual(view, ids)
-    native_manual = view.diagnostic_native_final_residual(ids)
-    native_reference = _native_final_residual(view, ids)
+    comparisons = _residual_comparisons(view, ids, array_api)
     report = {
-        "fp32_manual_vs_native": _residual_metrics(
-            fp32_manual, native_reference, num_layers=view.num_layers, array_api=array_api
-        ),
+        "fp32_manual_vs_native": comparisons["fp32_manual_vs_native"],
         "hf_id": spec.hf_id,
         "model_name": spec.name,
-        "native_manual_vs_native": _residual_metrics(
-            native_manual, native_reference, num_layers=view.num_layers, array_api=array_api
-        ),
+        "native_manual_vs_native": comparisons["native_manual_vs_native"],
         "schema_version": _SCHEMA_VERSION,
         "snapshot_revision": revision,
         "token_identity": {
@@ -273,15 +267,72 @@ def _fixed_token_ids(tokenizer: Any, array_api: Any) -> Any:
     return array_api.array(ids).astype(array_api.int32)[None, :]
 
 
-def _residual_equivalence(view: Any, ids: Any, array_api: Any) -> dict[str, Any]:
-    manual = _manual_final_residual(view, ids)
-    native = _native_final_residual(view, ids)
-    metrics = _residual_metrics(manual, native, num_layers=view.num_layers, array_api=array_api)
+def _residual_comparisons(view: Any, ids: Any, array_api: Any) -> dict[str, dict[str, Any]]:
+    """Measure both R18a comparisons against the one native forward reference.
+
+    ``native_manual_vs_native`` shares the reference's dtype, so its derived tolerance is the
+    shared dtype's rounding budget and any structural defect lands far outside it.  The
+    ``fp32_manual_vs_native`` gap mixes a genuine precision difference into the error, which is
+    why it may be reported but never gated.
+    """
+    fp32_manual = _manual_final_residual(view, ids)
+    native_manual = view.diagnostic_native_final_residual(ids)
+    native_reference = _native_final_residual(view, ids)
     return {
-        **metrics,
-        "criterion": "reference_dtype_rms_roundoff",
-        "passed": metrics["within_tolerance"],
-        "token_count": 64,
+        "fp32_manual_vs_native": _residual_metrics(
+            fp32_manual, native_reference, num_layers=view.num_layers, array_api=array_api
+        ),
+        "native_manual_vs_native": _residual_metrics(
+            native_manual, native_reference, num_layers=view.num_layers, array_api=array_api
+        ),
+    }
+
+
+_NATIVE_FROBENIUS_TOLERANCE = 1e-4
+
+
+def _native_gate_passed(metrics: Mapping[str, Any]) -> bool:
+    """Both R18a conditions: the derived elementwise floor AND the Frobenius-relative bound.
+
+    The derived floor alone would pass a distributed deviation as large as its relative
+    tolerance (about 6e-2 on a deep bfloat16 model) - exactly the signature of a wrong norm
+    weight, a mis-scaled residual, or a mask defect.  Failing the floor implies failing the
+    bound, so the conjunction only closes that distributed band; it never loosens the gate.
+    """
+    return bool(
+        metrics["within_tolerance"]
+        and metrics["frobenius_relative_error"] <= _NATIVE_FROBENIUS_TOLERANCE
+    )
+
+
+def _residual_equivalence(view: Any, ids: Any, array_api: Any) -> dict[str, Any]:
+    """Gate on the native-dtype loop; record the float32 gap as evidence, never as a gate."""
+    comparisons = _residual_comparisons(view, ids, array_api)
+    fp32 = comparisons["fp32_manual_vs_native"]
+    native = comparisons["native_manual_vs_native"]
+    return {
+        "criterion": "native_dtype_rms_roundoff_and_frobenius_relative",
+        "fp32_manual_vs_native": {
+            **fp32,
+            "gates": False,
+            "purpose": (
+                "precision-gap measurement: the float32 capture path against the native "
+                "forward, reported for the capture-dtype decision and never gated"
+            ),
+        },
+        "frobenius_relative_tolerance": _NATIVE_FROBENIUS_TOLERANCE,
+        "gated_comparison": "native_manual_vs_native",
+        "native_manual_vs_native": {
+            **native,
+            "gates": True,
+            "purpose": (
+                "structural equivalence: the manual block loop in the model's native dtype "
+                "against the native forward, expected exact or within both the derived "
+                "rounding floor and the Frobenius-relative bound"
+            ),
+        },
+        "passed": _native_gate_passed(native),
+        "token_count": int(ids.shape[1]),
     }
 
 
@@ -296,7 +347,11 @@ def _manual_final_residual(view: Any, ids: Any) -> Any:
 def _residual_metrics(
     actual: Any, reference: Any, *, num_layers: int, array_api: Any
 ) -> dict[str, Any]:
-    """Describe an error against the precision and scale of its native reference."""
+    """Describe an error against the precision and scale of its native reference.
+
+    Frobenius norms accumulate in float32 so a low-precision reference cannot corrupt the
+    measurement of its own error (R18a reports Frobenius relative plus elementwise maxima).
+    """
     if isinstance(num_layers, bool) or not isinstance(num_layers, int) or num_layers <= 0:
         raise ValueError(f"num_layers must be a positive integer; got {num_layers!r}")
     info = array_api.finfo(reference.dtype)
@@ -305,9 +360,20 @@ def _residual_metrics(
     rounding_steps = 2 * num_layers + 1
     relative_tolerance = sqrt(rounding_steps) * float(info.eps)
     absolute_tolerance = relative_tolerance * floor
-    max_abs_error = _scalar(array_api.max(array_api.abs(actual - reference)))
+    delta = actual - reference
+    max_abs_error = _scalar(array_api.max(array_api.abs(delta)))
+    frobenius_error = _scalar(
+        array_api.sqrt(array_api.sum(array_api.square(delta.astype(array_api.float32))))
+    )
+    frobenius_scale = max(
+        _scalar(
+            array_api.sqrt(array_api.sum(array_api.square(reference.astype(array_api.float32))))
+        ),
+        float(info.smallest_normal),
+    )
     return {
         "absolute_tolerance": absolute_tolerance,
+        "frobenius_relative_error": frobenius_error / frobenius_scale,
         "max_abs_error": max_abs_error,
         "max_relative_error": max_abs_error / floor,
         "reference_dtype": str(reference.dtype),
