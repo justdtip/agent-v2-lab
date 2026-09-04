@@ -174,6 +174,44 @@ COMPARE_SCHEMA_VERSION = 1
 #: The paired bootstrap's default resample seed, derived from the ratified split-seed block
 #: rather than written as a fresh literal (briefing §1.8).
 DEFAULT_COMPARE_SEED = DEFAULT_REANALYSIS_SPLIT_SEEDS[0]
+#: R29 addendum: ``compare`` carries a Holm-adjusted flag beside the interval flag, at the
+#: same alpha the offline reanalysis uses for its own family (see ``_analyse_cohort``).
+COMPARE_HOLM_ALPHA = 0.05
+#: R29 addendum, as ruled on issue #57: ``compare`` corrects over the family the offline
+#: reanalysis already uses, so the two tools cannot disagree about what a family is. One family
+#: per (cohort, scope), spanning every (target, layer) cell of that scope; the two controls of a
+#: cell are one member, collapsed by the larger of their two p-values. ``_analyse_cohort``
+#: accumulates ``comparison_cells`` across every target and layer of its cohort and calls
+#: ``_holm_adjust`` once over them, after writing ``max(p_position, p_surface)`` into each cell.
+#: It computes a single p per cell from the pooled margins, so it has one scope; ``compare``
+#: computes a p per scope, so pooled and each within-difficulty scope are separate families.
+COMPARE_HOLM_FAMILY = "cohort x scope, spanning every (target, layer) cell in that scope"
+#: The single scope ``_analyse_cohort``'s family covers; ``compare``'s pooled scope is the same.
+_REANALYSIS_HOLM_SCOPE = "pooled"
+#: R35's comparability coordinates that R29's five refusal checks did not cover. ``policy``
+#: is a *named difference* -- SPEC-004 §2 exists to compare two policies, and R35 says
+#: base-versus-adapter is named rather than treated as a like-for-like comparison. The other
+#: three change how the number itself was produced, so a difference there refuses.
+R35_NAMED = "named_difference"
+R35_REFUSAL = "refusal"
+R35_DIMENSION_TABLE: tuple[tuple[str, str, str], ...] = (
+    ("policy", "policy", R35_NAMED),
+    ("derivative_method", "derivative method", R35_REFUSAL),
+    ("prompt_template_kwargs", "prompt rendering (template kwargs)", R35_REFUSAL),
+    ("estimator_variant", "estimator variant", R35_REFUSAL),
+)
+#: The keys a reanalysis artifact and its sidecar carry so ``compare`` can check R35.
+R35_DIMENSIONS: tuple[str, ...] = tuple(name for name, _label, _rule in R35_DIMENSION_TABLE)
+#: R23: how a bound generator version was arrived at, recorded beside the version itself in
+#: the shape ``patch.py`` already writes (``generator_version_basis``).
+GENERATOR_BASIS_RECORDED = "recorded in the capture metadata"
+GENERATOR_BASIS_EXPLICIT_PREVERSIONING = (
+    "explicit binding (R23): the capture predates generator versioning and records no "
+    "generator_version, and R5 defines version 1 as the generator that reproduces run C's data"
+)
+GENERATOR_BASIS_EXPLICIT = (
+    "explicit --generator-version binding; the capture records no generator_version"
+)
 _SURFACE_FEATURE_NAMES = [
     "prompt_token_count",
     "last_note_token_count",
@@ -1886,6 +1924,21 @@ def _reanalysis_generator_version(metadata: dict[str, Any], explicit: int | None
     return int(recorded if recorded is not None else explicit)
 
 
+def generator_version_basis(metadata: dict[str, Any], explicit: int | None) -> str:
+    """R23: the rational basis for the generator version a replay binds to.
+
+    Same shape as ``patch.py``'s ``generator_version_basis`` (``patch.py:526``): the version
+    alone does not say why it is the right one, and R23 requires a replay to record both. A
+    recorded version needs no argument beyond its provenance; an explicit binding of version 1
+    is the pre-versioning latitude R23 grants and names R5's definition of version 1.
+    """
+    if metadata.get("generator_version") is not None:
+        return GENERATOR_BASIS_RECORDED
+    if explicit == 1:
+        return GENERATOR_BASIS_EXPLICIT_PREVERSIONING
+    return GENERATOR_BASIS_EXPLICIT
+
+
 def _regenerate_tasks(
     dataset: ProbeDataset, data_seed: int, *, generator_version: int | None = None
 ) -> dict[str, Task]:
@@ -2224,6 +2277,25 @@ def _within_prediction(
     )
 
 
+def _cohort_holm_families(
+    cells: list[tuple[str, int, dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """The families ``_analyse_cohort`` corrects over: one per scope, over every cell of it.
+
+    Each record is ``(target, layer, cell)``. The target and the layer are received and
+    deliberately kept out of the key: a family spans every (target, layer) cell of the cohort,
+    which is what ``comparison_cells`` has always accumulated before its single
+    ``_holm_adjust``. The reanalysis takes one p per cell from the pooled margins, so every
+    cell falls in the one scope; ``compare`` mirrors this partition one scope at a time
+    (:func:`_compare_holm_families`), and the two are held equal by
+    ``test_compare_and_the_reanalysis_form_the_same_holm_families``.
+    """
+    families: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for _target, _layer, cell in cells:
+        families[_REANALYSIS_HOLM_SCOPE].append(cell)
+    return dict(families)
+
+
 def _holm_adjust(p_values: list[float]) -> list[float]:
     order = sorted(range(len(p_values)), key=lambda index: p_values[index])
     adjusted = [1.0] * len(p_values)
@@ -2323,7 +2395,7 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
         },
         "targets": {},
     }
-    comparison_cells: list[dict[str, Any]] = []
+    comparison_cells: list[tuple[str, int, dict[str, Any]]] = []
     total_targets = len(REANALYSIS_TARGETS)
     for position, (target, kind) in enumerate(REANALYSIS_TARGETS.items(), start=1):
         values = cohort.labels[target]
@@ -2553,24 +2625,29 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
                 p_surface = (1 + sum(value <= 0 for value in finite_surface)) / (
                     len(finite_surface) + 1
                 )
-                comparison_cells.append(layer_entry)
+                # The cell enters its family once, at the larger of the two controls'
+                # p-values, so a margin counts only if it holds against both baselines.
+                comparison_cells.append((target, layer, layer_entry))
                 layer_entry["raw_p"] = float(max(p_position, p_surface))
             entry["layers"][str(layer)] = layer_entry
         result["targets"][target] = entry
         if progress is not None:
             progress(target, position, total_targets)
-    adjusted = _holm_adjust([cell["raw_p"] for cell in comparison_cells])
-    for layer_entry, p_value in zip(comparison_cells, adjusted, strict=True):
-        intervals = layer_entry["intervals"]
-        interval_supported = (
-            intervals["margin_over_position"]["lower"] > 0
-            and intervals["margin_over_surface"]["lower"] > 0
-        )
-        layer_entry["holm_adjusted_p"] = float(p_value)
-        layer_entry["interval_supported"] = bool(interval_supported)
-        layer_entry["holm_supported"] = bool(interval_supported and p_value <= 0.05)
+    tested = 0
+    for cells in _cohort_holm_families(comparison_cells).values():
+        adjusted = _holm_adjust([cell["raw_p"] for cell in cells])
+        for layer_entry, p_value in zip(cells, adjusted, strict=True):
+            intervals = layer_entry["intervals"]
+            interval_supported = (
+                intervals["margin_over_position"]["lower"] > 0
+                and intervals["margin_over_surface"]["lower"] > 0
+            )
+            layer_entry["holm_adjusted_p"] = float(p_value)
+            layer_entry["interval_supported"] = bool(interval_supported)
+            layer_entry["holm_supported"] = bool(interval_supported and p_value <= 0.05)
+        tested += len(cells)
     result["multiple_comparisons"] = {
-        "tested_cells": len(comparison_cells),
+        "tested_cells": tested,
         "method": "Holm",
         "alpha": 0.05,
         "support_requires": "both paired margin intervals exclude zero and Holm-adjusted p <= 0.05",
@@ -2686,6 +2763,8 @@ def reanalyse_dataset(
             "surface_feature_details": surface_meta,
             "data_seed": data_seed,
             "generator_version": resolved_generator_version,
+            # R23: the version alone does not say why it is the right one.
+            "generator_version_basis": generator_version_basis(dataset.meta, generator_version),
             "position": position,
             "model": dataset.meta.get("model"),
             "source_metadata": dataset.meta,
@@ -2698,6 +2777,9 @@ def reanalyse_dataset(
         "analyses": analyses,
         "readme": readme,
     }
+    # R35: this artifact's own comparability coordinates, so a reader never has to infer
+    # them. ``_apply_capture_metadata`` refreshes the block once the model spec is known.
+    result["metadata"]["r35"] = r35_comparability(result["metadata"], dataset.meta)
     if return_predictions:
         return result, predictions
     return result
@@ -2909,6 +2991,77 @@ def _apply_capture_metadata(
         from local_llm_lab.models import load_model_spec
 
         results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
+    # R35 again: the policy and the chat template kwargs only exist once the capture context
+    # and the registry spec are stamped, so the block is recomputed here rather than guessed.
+    if "r35" in results.get("metadata", {}):
+        results["metadata"]["r35"] = r35_comparability(results["metadata"], dataset.meta)
+
+
+# ------------------------------------------------------- R35: comparability coordinates
+
+
+def r35_derivative_method(dataset_meta: dict[str, Any], position: str) -> dict[str, Any]:
+    """R35's derivative-method coordinate for a state probe.
+
+    A state probe takes no derivative -- it reads the residual stream directly -- so what
+    plays the same role, the rule that turns one forward pass into the number that is fitted,
+    is the capture read: which positions were captured, in which precision, and which of them
+    this analysis fits. Two tables that read different positions are not comparable even when
+    every other coordinate agrees, which is exactly what R35 asks to be named.
+    """
+    return {
+        "kind": "captured_residual",
+        "capture_positions": list(dataset_meta.get("capture_positions") or ["last"]),
+        "capture_dtype": dataset_meta.get("capture_dtype") or "float32",
+        "analysed_position": position,
+    }
+
+
+def r35_prompt_template_kwargs(
+    results_metadata: dict[str, Any], dataset_meta: dict[str, Any]
+) -> dict[str, Any]:
+    """R35's prompt-rendering coordinate: the kwargs and the windowing that made the text.
+
+    ``build_prompt`` (``pipeline/protocol.py:264-269``) renders with the spec's own
+    ``chat.template_kwargs`` over ``window_messages(messages, keep_last)``, so the rendering
+    is fixed by those kwargs together with the capture's condition and window.
+    """
+    chat = ((results_metadata.get("model_spec") or {}).get("chat")) or {}
+    return {
+        "template_kwargs": chat.get("template_kwargs"),
+        "thinking": chat.get("thinking"),
+        "keep_last": dataset_meta.get("keep_last"),
+        "strip": bool(dataset_meta.get("strip", False)),
+        "stub_observations": bool(dataset_meta.get("stub_observations", False)),
+        "condition": dataset_meta.get("condition"),
+    }
+
+
+def r35_estimator_variant(results_metadata: dict[str, Any]) -> dict[str, Any]:
+    """R35's estimator coordinate: the fit, its controls and the interval it reports."""
+    return {
+        "fit": results_metadata.get("fit"),
+        "controls": results_metadata.get("controls"),
+        "surface_features": results_metadata.get("surface_features"),
+        "bootstrap_unit": results_metadata.get("bootstrap_unit"),
+        "bootstrap_resamples": results_metadata.get("bootstrap_resamples"),
+        "interval_percentiles": results_metadata.get("interval_percentiles"),
+        "targets": dict(REANALYSIS_TARGETS),
+    }
+
+
+def r35_comparability(
+    results_metadata: dict[str, Any], dataset_meta: dict[str, Any]
+) -> dict[str, Any]:
+    """The four R35 coordinates R29's five refusal checks left unnamed."""
+    return {
+        "policy": results_metadata.get("policy"),
+        "derivative_method": r35_derivative_method(
+            dataset_meta, results_metadata.get("position") or "last"
+        ),
+        "prompt_template_kwargs": r35_prompt_template_kwargs(results_metadata, dataset_meta),
+        "estimator_variant": r35_estimator_variant(results_metadata),
+    }
 
 
 # ------------------------------------------------- R29: per-row sidecar and paired compare
@@ -3080,8 +3233,10 @@ def load_prediction_sidecar(path: str | Path) -> dict[str, Any]:
 class CompareRefusal(RuntimeError):
     """``compare`` refuses a pair it cannot honestly pair; every reason is carried."""
 
-    def __init__(self, reasons: list[str]) -> None:
+    def __init__(self, reasons: list[str], comparability: dict[str, Any] | None = None) -> None:
         self.reasons = [str(reason) for reason in reasons]
+        #: R35: the nine-dimension record, carried so the refused artifact names them too.
+        self.comparability = comparability
         super().__init__("; ".join(self.reasons))
 
 
@@ -3141,8 +3296,129 @@ def _prediction_index_keys(sidecar: dict[str, Any]) -> set[tuple[str, str, int, 
     }
 
 
+def _canonical_json(value: Any) -> str:
+    """A stable string for an equality test over nested metadata of unknown shape."""
+    return json.dumps(value, sort_keys=True, default=str, ensure_ascii=False)
+
+
+def _r35_differences(left_meta: dict[str, Any], right_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every R35 coordinate on which the two artifacts disagree, with its disposition."""
+    differences: list[dict[str, Any]] = []
+    for name, label, rule in R35_DIMENSION_TABLE:
+        left_value, right_value = left_meta.get(name), right_meta.get(name)
+        if _canonical_json(left_value) != _canonical_json(right_value):
+            differences.append(
+                {
+                    "dimension": name,
+                    "label": label,
+                    "disposition": rule,
+                    "left": left_value,
+                    "right": right_value,
+                }
+            )
+    return differences
+
+
+def _comparability_dimensions(left: dict[str, Any], right: dict[str, Any]) -> list[dict[str, Any]]:
+    """R29's five pairing dimensions and R35's four, each named with both sides' value.
+
+    Recorded whole -- not only the ones that differ -- so a reader can see that a table was
+    judged comparable on a stated list rather than pooled because nothing objected.
+    """
+    left_meta, right_meta = left["metadata"], right["metadata"]
+    left_groups, right_groups = _sidecar_groups(left), _sidecar_groups(right)
+
+    def tasks(groups: dict[tuple[str, str, int], dict[str, Any]]) -> dict[str, int]:
+        return {
+            f"{cohort}/{target}@{split_seed}": len(set(group["task_id"].tolist()))
+            for (cohort, target, split_seed), group in sorted(groups.items())
+        }
+
+    rows: list[dict[str, Any]] = [
+        (
+            "split_seeds",
+            "split seeds",
+            R35_REFUSAL,
+            left_meta.get("split_seeds"),
+            right_meta.get("split_seeds"),
+        ),
+        (
+            "layer_selection",
+            "layer selection (fractions and indices)",
+            R35_REFUSAL,
+            [left_meta.get("layer_fractions"), list(left_meta.get("layers", []))],
+            [right_meta.get("layer_fractions"), list(right_meta.get("layers", []))],
+        ),
+        (
+            "generator_version",
+            "generator version",
+            R35_REFUSAL,
+            left_meta.get("generator_version"),
+            right_meta.get("generator_version"),
+        ),
+        (
+            "cohort_labels",
+            "cohort labels",
+            R35_REFUSAL,
+            left_meta.get("cohort_labels"),
+            right_meta.get("cohort_labels"),
+        ),
+        (
+            "task_ids",
+            "shared task ids per group",
+            R35_REFUSAL,
+            tasks(left_groups),
+            tasks(right_groups),
+        ),
+    ]
+    entries = [
+        {
+            "dimension": name,
+            "label": label,
+            "disposition": rule,
+            "left": left_value,
+            "right": right_value,
+            "equal": _canonical_json(left_value) == _canonical_json(right_value),
+            "ruling": "R29",
+        }
+        for name, label, rule, left_value, right_value in rows
+    ]
+    entries.extend(
+        {
+            "dimension": name,
+            "label": label,
+            "disposition": rule,
+            "left": left_meta.get(name),
+            "right": right_meta.get(name),
+            "equal": _canonical_json(left_meta.get(name)) == _canonical_json(right_meta.get(name)),
+            "ruling": "R35",
+        }
+        for name, label, rule in R35_DIMENSION_TABLE
+    )
+    return entries
+
+
+def _comparability_block(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    """The nine-dimension comparability record written into the compare artifact (R35)."""
+    dimensions = _comparability_dimensions(left, right)
+    return {
+        "ruling": "R35 over R29's pairing checks",
+        "dimensions": dimensions,
+        "named_differences": [
+            {key: entry[key] for key in ("dimension", "label", "disposition", "left", "right")}
+            for entry in dimensions
+            if not entry["equal"]
+        ],
+        "statement": (
+            "Two probe tables are comparable only where every dimension above is equal, or the "
+            "difference is named here. A refusal disposition blocks the comparison outright; a "
+            "named_difference disposition is reported, never silently pooled."
+        ),
+    }
+
+
 def _compare_refusals(left: dict[str, Any], right: dict[str, Any]) -> list[str]:
-    """Every reason the two sidecars may not be paired (R29), reported together."""
+    """Every reason the two sidecars may not be paired (R29 and R35), reported together."""
     reasons: list[str] = []
     left_meta, right_meta = left["metadata"], right["metadata"]
     left_seeds = [int(value) for value in left_meta.get("split_seeds", [])]
@@ -3185,6 +3461,14 @@ def _compare_refusals(left: dict[str, Any], right: dict[str, Any]) -> list[str]:
                 f"task ids differ for {cohort}/{target} at split seed {split_seed}: "
                 f"{len(left_tasks)} vs {len(right_tasks)} tasks, "
                 f"{len(set(left_tasks) & set(right_tasks))} shared"
+            )
+    # R35: the four coordinates beyond R29's five. A method difference refuses; a policy
+    # difference is what SPEC-004 §2 compares, so it is named in the artifact instead.
+    for difference in _r35_differences(left_meta, right_meta):
+        if difference["disposition"] == R35_REFUSAL:
+            reasons.append(
+                f"R35 {difference['dimension']} differs ({difference['label']}): "
+                f"{_canonical_json(difference['left'])} vs {_canonical_json(difference['right'])}"
             )
     return reasons
 
@@ -3241,6 +3525,38 @@ def _compare_direction(interval: dict[str, float]) -> tuple[bool, str]:
     return False, "none"
 
 
+def _compare_raw_p(difference: list[float]) -> float | None:
+    """The two-sided bootstrap p of a margin difference, or ``None`` when it has no support.
+
+    The offline reanalysis takes a one-sided p because a margin over a baseline is supported
+    only when it is positive (``_analyse_cohort``); a *difference* of margins is supported in
+    either direction (``_compare_direction``), so the tail count is doubled. The ``+1`` is the
+    same conservative bootstrap correction the reanalysis uses.
+    """
+    finite = [value for value in difference if np.isfinite(value)]
+    if not finite:
+        return None
+    tail = min(sum(value <= 0 for value in finite), sum(value >= 0 for value in finite))
+    return float(min(1.0, 2 * (1 + tail) / (len(finite) + 1)))
+
+
+def _compare_cell_eligibility(counts: dict[str, int], raw_p: float | None) -> tuple[bool, str]:
+    """R8's minimum governs which cells enter a Holm family.
+
+    R8's test-row floor applies directly: a scope with fewer than
+    :data:`MIN_WITHIN_TEST_ROWS` held-out rows on a side reports ``n/a (n=...)`` rather than a
+    flag. R8's second floor -- varying within-position *cells* -- has no analogue here, because
+    a paired comparison does no within-position residualisation; only the row floor is applied,
+    and an ineligible cell keeps its interval flag and is left out of the family.
+    """
+    if raw_p is None:
+        return False, "no finite bootstrap difference"
+    rows = min(int(counts.get("n_rows_left", 0)), int(counts.get("n_rows_right", 0)))
+    if rows < MIN_WITHIN_TEST_ROWS:
+        return False, f"fewer than {MIN_WITHIN_TEST_ROWS} shared test rows on a side (n={rows})"
+    return True, ""
+
+
 def _compare_cell(
     difference: list[float],
     left_margin: list[float],
@@ -3249,14 +3565,103 @@ def _compare_cell(
 ) -> dict[str, Any]:
     interval = _interval(difference)
     supported, direction = _compare_direction(interval)
+    raw_p = _compare_raw_p(difference)
+    eligible, reason = _compare_cell_eligibility(counts, raw_p)
     return {
         "difference": interval,
         "left_margin": _interval(left_margin),
         "right_margin": _interval(right_margin),
         "supported": supported,
         "direction": direction,
+        "raw_p": raw_p,
+        "holm_eligible": eligible,
+        "holm_ineligible_reason": reason or None,
         **counts,
     }
+
+
+def _compare_holm_families(
+    cells: list[tuple[str, int, str, list[dict[str, Any]]]],
+) -> dict[str, list[list[dict[str, Any]]]]:
+    """The families ``compare`` corrects over: one per scope, over every cell of that scope.
+
+    Each record is ``(target, layer, scope, control rows)``. As in
+    :func:`_cohort_holm_families`, the target and the layer are received and deliberately kept
+    out of the key: a family spans every (target, layer) cell of its cohort, which is the
+    partition the offline reanalysis has always used. The caller is already per cohort, and the
+    scope is a family boundary here because ``compare`` computes a separate p per scope --
+    pooled and each within-difficulty scope are their own families (R7).
+    """
+    families: dict[str, list[list[dict[str, Any]]]] = defaultdict(list)
+    for _target, _layer, scope, controls in cells:
+        families[scope].append(controls)
+    return dict(families)
+
+
+def _compare_cell_holm_p(controls: list[dict[str, Any]]) -> float | None:
+    """One family member per cell: the LARGER of its two controls' p-values, or ``None``.
+
+    This is ``_analyse_cohort``'s ``layer_entry["raw_p"] = float(max(p_position, p_surface))``
+    -- a difference counts only if it holds against *both* baselines -- so ``compare`` and the
+    offline reanalysis collapse a cell the same way before a single ``_holm_adjust``. R8's
+    minimum still governs membership: a cell missing a control, or with a control R8 kept out,
+    has no member p and stays out of its family entirely.
+    """
+    if len(controls) != len(_COMPARE_CONTROLS):
+        return None
+    if not all(control["holm_eligible"] for control in controls):
+        return None
+    return max(float(control["raw_p"]) for control in controls)
+
+
+def _apply_compare_holm(
+    cells: list[tuple[str, int, str, list[dict[str, Any]]]], *, cohort: str
+) -> dict[str, Any]:
+    """R29 addendum, as ruled: correct over the family ``_analyse_cohort`` already uses.
+
+    One family per (cohort, scope), spanning every (target, layer) cell of that scope; the two
+    controls of a cell are collapsed into one member by :func:`_compare_cell_holm_p` before the
+    adjustment. The resulting adjusted p is attached to *both* control rows of the cell so the
+    difference table still reads per control while a cell is corrected once.
+
+    ``holm_supported`` is an *additional*, stricter flag: it requires the interval flag the
+    cell already carried **and** a Holm-adjusted p at or under :data:`COMPARE_HOLM_ALPHA`, so
+    no previously supported cell changes meaning and an old artifact stays readable.
+    ``supported`` is never rewritten here. A cell R8 kept out reports no Holm flag and keeps
+    the reason it was excluded for; when only one of its controls was excluded, the other names
+    the cell it was collapsed into rather than reporting a flag of its own.
+    """
+    record: dict[str, Any] = {}
+    for scope, members in sorted(_compare_holm_families(cells).items()):
+        collapsed = [(controls, _compare_cell_holm_p(controls)) for controls in members]
+        eligible = [(controls, value) for controls, value in collapsed if value is not None]
+        adjusted = _holm_adjust([value for _controls, value in eligible])
+        for (controls, _member_p), p_value in zip(eligible, adjusted, strict=True):
+            for control in controls:
+                control["holm_adjusted_p"] = float(p_value)
+                control["holm_supported"] = bool(
+                    control["supported"] and p_value <= COMPARE_HOLM_ALPHA
+                )
+        name = f"{cohort}/{scope}"
+        for controls, member_p in collapsed:
+            reasons = [control["holm_ineligible_reason"] for control in controls]
+            for control in controls:
+                control["holm_family"] = name
+                control["holm_family_size"] = len(eligible)
+                if member_p is not None:
+                    continue
+                control["holm_eligible"] = False
+                control["holm_adjusted_p"] = None
+                control["holm_supported"] = False
+                if control["holm_ineligible_reason"] is None:
+                    other = next((reason for reason in reasons if reason), "a control is missing")
+                    control["holm_ineligible_reason"] = f"the cell's other control: {other}"
+        record[scope] = {
+            "family": name,
+            "tested_cells": len(eligible),
+            "excluded_cells": len(collapsed) - len(eligible),
+        }
+    return record
 
 
 def _compare_scopes(
@@ -3296,7 +3701,7 @@ def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target
     """
     reasons = _compare_refusals(left, right)
     if reasons:
-        raise CompareRefusal(reasons)
+        raise CompareRefusal(reasons, _comparability_block(left, right))
     resample_seeds = compare_resample_seeds(seed, resamples)
     left_groups, right_groups = _sidecar_groups(left), _sidecar_groups(right)
     left_series, right_series = _sidecar_series(left), _sidecar_series(right)
@@ -3316,6 +3721,9 @@ def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target
         ordered.extend(sorted(target_names - set(ordered)))
         targets: dict[str, Any] = {}
         shared_tasks: set[str] = set()
+        # R29 addendum, as ruled: the Holm family is this cohort and one scope, so every
+        # (target, layer) cell of the cohort is gathered before any flag is set.
+        cohort_cells: list[tuple[str, int, str, list[dict[str, Any]]]] = []
         for target in ordered:
             pooled: dict[tuple[int, str, str], list[float]] = defaultdict(list)
             margins: dict[tuple[str, int, str, str], list[float]] = defaultdict(list)
@@ -3388,6 +3796,9 @@ def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target
             layer_entries: dict[str, Any] = {}
             for layer in layers:
                 controls: dict[str, Any] = {}
+                # The two controls of a (target, layer, scope) cell, in the order
+                # `_compare_cell_holm_p` collapses them.
+                cell_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
                 for control in _COMPARE_CONTROLS:
                     scopes = sorted(
                         {
@@ -3404,11 +3815,15 @@ def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target
                             margins[("right", layer, control, scope)],
                             counts[(layer, control, scope)],
                         )
+                        cell_rows[scope].append(entry)
                         if scope == "pooled":
                             cell["pooled"] = entry
                         else:
                             cell["by_difficulty"][scope] = entry
                     controls[_COMPARE_MARGIN_KEYS[control]] = cell
+                cohort_cells.extend(
+                    (target, layer, scope, rows) for scope, rows in cell_rows.items()
+                )
                 layer_entries[str(layer)] = controls
             targets[target] = {"kind": kind, "layers": layer_entries}
             done += 1
@@ -3418,6 +3833,8 @@ def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target
             "label": cohort_labels.get(cohort, cohort),
             "reportable_scope": _COHORT_REPORTABLE_SCOPE.get(cohort, "pooled"),
             "shared_tasks": len(shared_tasks),
+            # One record per scope, beside the targets it spans rather than inside one of them.
+            "multiple_comparisons": _apply_compare_holm(cohort_cells, cohort=cohort),
             "targets": targets,
         }
     return {
@@ -3440,11 +3857,60 @@ def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target
             "layers": list(metadata.get("layers", [])),
             "layer_fractions": metadata.get("layer_fractions"),
             "generator_version": metadata.get("generator_version"),
+            # R23: both sides' recorded basis for the version they replayed under.
+            "generator_version_basis": {
+                "left": metadata.get("generator_version_basis"),
+                "right": right["metadata"].get("generator_version_basis"),
+            },
             "cohort_labels": cohort_labels,
             "reportable_scope": dict(_COHORT_REPORTABLE_SCOPE),
+            # R29 addendum: the family definition and the method, beside the per-cell flags.
+            "multiple_comparisons": {
+                "method": "Holm",
+                "alpha": COMPARE_HOLM_ALPHA,
+                "family": COMPARE_HOLM_FAMILY,
+                "p_value": "two-sided bootstrap tail of the margin difference, (1 + tail) / (n + 1)",
+                "collapsed_cell": (
+                    "a cell's two controls are one member, entering at the larger of their two "
+                    "p-values, so a difference counts only if it holds against both baselines"
+                ),
+                "minimum_cell": (
+                    f"R8: a scope with fewer than {MIN_WITHIN_TEST_ROWS} shared test rows on a "
+                    "side is excluded from its family and reports no Holm flag"
+                ),
+                "support_requires": (
+                    "the interval flag (both margin-difference intervals exclude zero) and a "
+                    f"Holm-adjusted p <= {COMPARE_HOLM_ALPHA}"
+                ),
+            },
+            # R35: every dimension checked, and every difference named rather than pooled.
+            "comparability": _comparability_block(left, right),
         },
         "comparisons": comparisons,
     }
+
+
+#: The difference table's columns; the Holm column is the R29 addendum's follow-up line.
+_COMPARE_TABLE_HEADER = [
+    "layer",
+    "Δ margin vs position",
+    "Δ margin vs surface",
+    "supported",
+    "Holm support",
+    "n_tasks",
+]
+
+
+def _holm_support_text(cells: list[dict[str, Any]]) -> str:
+    """The Holm column: ``n/a (n=…)`` for a cell R8 kept out of its family (R8, R29 addendum)."""
+    ineligible = [cell for cell in cells if not cell.get("holm_eligible", False)]
+    if ineligible:
+        rows = min(
+            min(int(cell.get("n_rows_left", 0)), int(cell.get("n_rows_right", 0)))
+            for cell in ineligible
+        )
+        return f"n/a (n={rows})"
+    return "yes" if all(cell.get("holm_supported") for cell in cells) else "no"
 
 
 def _compare_row(layer: int, controls: dict[str, Any], scope: str) -> list[str] | None:
@@ -3460,8 +3926,42 @@ def _compare_row(layer: int, controls: dict[str, Any], scope: str) -> list[str] 
         str(layer),
         *[_format_interval(cell["difference"]) for cell in cells],
         "yes" if supported else "no",
+        _holm_support_text(cells),
         str(cells[0].get("n_tasks", 0)),
     ]
+
+
+def _comparability_section(results: dict[str, Any]) -> list[str]:
+    """R35: the dimensions judged, and every named difference, in the markdown too."""
+    block = results["metadata"].get("comparability")
+    if not block:
+        return []
+    out = ["## Comparability (R35)", "", block["statement"], ""]
+    rows = [
+        [
+            entry["dimension"],
+            entry["label"],
+            entry["ruling"],
+            entry["disposition"],
+            "equal" if entry["equal"] else "DIFFERS",
+        ]
+        for entry in block["dimensions"]
+    ]
+    out.extend(_table(["dimension", "meaning", "ruling", "disposition", "verdict"], rows))
+    out.append("")
+    named = block["named_differences"]
+    if named:
+        out.append("Named differences, reported and never silently pooled:")
+        out.append("")
+        out.extend(
+            f"- **{entry['dimension']}** ({entry['label']}): "
+            f"left `{_canonical_json(entry['left'])}` vs right `{_canonical_json(entry['right'])}`"
+            for entry in named
+        )
+    else:
+        out.append("No named difference: every dimension above is equal on both sides.")
+    out.append("")
+    return out
 
 
 def render_compare_markdown(results: dict[str, Any]) -> str:
@@ -3479,7 +3979,10 @@ def render_compare_markdown(results: dict[str, Any]) -> str:
         out.extend(["**refused**: no comparison was computed. Reasons:", ""])
         out.extend(f"- {reason}" for reason in results.get("reasons", []))
         out.append("")
+        out.extend(_comparability_section(results))
         return "\n".join(out)
+    holm = metadata.get("multiple_comparisons") or {}
+    basis = metadata.get("generator_version_basis") or {}
     out.extend(
         [
             f"{metadata['resamples']} resamples of the shared task ids per split seed "
@@ -3488,9 +3991,18 @@ def render_compare_markdown(results: dict[str, Any]) -> str:
             "Each cell is the bootstrap median and 95% interval of the difference of margins; "
             '"supported" means both margin-difference intervals exclude zero.',
             "",
+            f"generator version {metadata.get('generator_version')}; basis (R23) — "
+            f"left: {basis.get('left')}; right: {basis.get('right')}.",
+            "",
+            f'"Holm support" is the stricter flag the R29 addendum adds beside it: '
+            f"{holm.get('support_requires')}. The family corrected over is {holm.get('family')} "
+            f"({holm.get('method')}, alpha {holm.get('alpha')}); {holm.get('collapsed_cell')}; "
+            f"{holm.get('minimum_cell')}.",
+            "",
         ]
     )
-    header = ["layer", "Δ margin vs position", "Δ margin vs surface", "supported", "n_tasks"]
+    out.extend(_comparability_section(results))
+    header = list(_COMPARE_TABLE_HEADER)
     for cohort, analysis in results["comparisons"].items():
         scope_note = (
             "within difficulty (R7)"
@@ -3524,7 +4036,17 @@ def render_compare_markdown(results: dict[str, Any]) -> str:
                 if not rows:
                     continue
                 marker = " (reportable)" if scope != "pooled" and cohort == "sft_disjoint" else ""
+                # The family spans every target of the cohort, so both tables state the same one.
+                family = (analysis.get("multiple_comparisons") or {}).get(scope) or {}
                 out.extend([title + marker, ""])
+                if family:
+                    out.extend(
+                        [
+                            f"Holm family `{family['family']}`: {family['tested_cells']} cells "
+                            f"tested, {family['excluded_cells']} excluded by R8's row floor.",
+                            "",
+                        ]
+                    )
                 out.extend(_table(header, rows))
                 out.append("")
     return "\n".join(out)
@@ -3579,7 +4101,9 @@ def _main_compare(argv: list[str]) -> None:
                     progress=lambda step, total, label: log.progress(step, total, label),
                 )
             except CompareRefusal as refusal:
-                results = _refused_compare(sides, sidecars, args, refusal.reasons)
+                results = _refused_compare(
+                    sides, sidecars, args, refusal.reasons, refusal.comparability
+                )
         results["metadata"]["command"] = shlex.join(sys.argv)
         results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
         json_path = args.output / "compare.json"
@@ -3605,6 +4129,7 @@ def _refused_compare(
     sidecars: dict[str, Path],
     args: argparse.Namespace,
     reasons: list[str],
+    comparability: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": COMPARE_SCHEMA_VERSION,
@@ -3618,6 +4143,8 @@ def _refused_compare(
             "resamples": int(args.resamples),
             "seed": int(args.seed),
             "bootstrap_unit": "task_id",
+            # R35: a refused pair still names every dimension it was judged on.
+            **({"comparability": comparability} if comparability else {}),
         },
         "comparisons": {},
     }
@@ -3704,6 +4231,10 @@ def _main_reanalyse(argv: list[str]) -> None:
                     "layers": list(dataset.layers),
                     "layer_fractions": (dataset.meta.get("layer_selection") or {}).get("fractions"),
                     "generator_version": results["metadata"]["generator_version"],
+                    # R23: the basis travels with the version into everything downstream.
+                    "generator_version_basis": results["metadata"]["generator_version_basis"],
+                    # R35: the four coordinates `compare` checks beyond R29's five.
+                    **results["metadata"]["r35"],
                     "data_seed": args.data_seed,
                     "cohort_labels": dict(_COHORT_LABELS),
                     "controls": list(_PREDICTION_CONTROLS),
@@ -3713,7 +4244,6 @@ def _main_reanalyse(argv: list[str]) -> None:
                     "reanalysis_json": str(json_path),
                     "reanalysis_json_sha256": sha256_of(json_path),
                     "model": results["metadata"].get("model"),
-                    "policy": results["metadata"].get("policy"),
                     "command": shlex.join(sys.argv),
                 },
             )

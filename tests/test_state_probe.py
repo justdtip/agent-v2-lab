@@ -939,6 +939,7 @@ def _sidecar_records(
     layers: tuple[int, ...] = (4, 8),
     split_seeds: tuple[int, ...] = (20260903, 20260904),
     cohorts: tuple[str, ...] = ("all_rows", "sft_disjoint"),
+    targets: tuple[str, ...] = ("pending_count",),
     task_offset: int = 0,
 ) -> list[dict[str, Any]]:
     """Per-row prediction records shaped exactly as ``_analyse_cohort`` collects them.
@@ -954,25 +955,32 @@ def _sidecar_records(
     actual = np.arange(len(task_ids), dtype=float)
     error = np.array([(-1.0) ** index * (index % 5) for index in range(len(task_ids))])
     for cohort in cohorts:
-        for split_seed in split_seeds:
-            for layer in layers:
-                scale = 1.0 - advantage if layer == advantage_layer else 1.0
-                base = {
-                    "cohort": cohort,
-                    "target": "pending_count",
-                    "kind": "regression",
-                    "layer": layer,
-                    "split_seed": split_seed,
-                    "row_ids": np.arange(len(task_ids)),
-                    "task_ids": task_ids,
-                    "difficulty": difficulty,
-                    "actual": actual,
-                    "scores": None,
-                    "positive_label": None,
-                }
-                records.append({**base, "control": "probe", "predicted": actual + error * scale})
-                records.append({**base, "control": "position", "predicted": actual + error * 2.0})
-                records.append({**base, "control": "surface", "predicted": actual + error * 3.0})
+        for target in targets:
+            for split_seed in split_seeds:
+                for layer in layers:
+                    scale = 1.0 - advantage if layer == advantage_layer else 1.0
+                    base = {
+                        "cohort": cohort,
+                        "target": target,
+                        "kind": "regression",
+                        "layer": layer,
+                        "split_seed": split_seed,
+                        "row_ids": np.arange(len(task_ids)),
+                        "task_ids": task_ids,
+                        "difficulty": difficulty,
+                        "actual": actual,
+                        "scores": None,
+                        "positive_label": None,
+                    }
+                    records.append(
+                        {**base, "control": "probe", "predicted": actual + error * scale}
+                    )
+                    records.append(
+                        {**base, "control": "position", "predicted": actual + error * 2.0}
+                    )
+                    records.append(
+                        {**base, "control": "surface", "predicted": actual + error * 3.0}
+                    )
     return records
 
 
@@ -986,6 +994,13 @@ def _sidecar_metadata(**overrides: Any) -> dict[str, Any]:
         "data_seed": 20260902,
         "cohort_labels": dict(state_probe._COHORT_LABELS),
         "controls": list(state_probe._PREDICTION_CONTROLS),
+        # R23 and R35: the basis for the bound version, and the four comparability
+        # coordinates `compare` checks beyond R29's five.
+        "generator_version_basis": "recorded in the capture metadata",
+        "policy": "base",
+        "derivative_method": {"kind": "captured_residual", "analysed_position": "last"},
+        "prompt_template_kwargs": {"keep_last": 2, "condition": "intact"},
+        "estimator_variant": {"fit": {"ridge_alpha": 1.0}},
     }
     metadata.update(overrides)
     return metadata
@@ -1238,6 +1253,381 @@ def test_compare_cli_writes_the_pair_of_reports_and_a_run_log(
     assert start["left_predictions_sha256"] and start["right_predictions_sha256"]
     assert "# P2 paired comparison" in out
     assert (output / "compare.md").is_file()
+
+
+# ----------------- R29 addendum: Holm across the comparison cells (SPEC-004 §1.6 via §2)
+
+
+def _compare_cells(results: dict[str, Any], cohort: str = "all_rows") -> list[dict[str, Any]]:
+    """Every difference cell the comparison produced, pooled and within difficulty."""
+    cells: list[dict[str, Any]] = []
+    for entry in results["comparisons"][cohort]["targets"].values():
+        for controls in entry["layers"].values():
+            for margin in state_probe._COMPARE_MARGIN_KEYS.values():
+                cells.append(controls[margin]["pooled"])
+                cells.extend(controls[margin]["by_difficulty"].values())
+    return cells
+
+
+def test_compare_writes_holm_flags_and_records_the_family_on_every_cell(tmp_path) -> None:
+    """R29 addendum: the comparison cells carry a Holm family, not only an interval flag."""
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", advantage_layer=8, advantage=1.0)
+
+    results = state_probe.compare_predictions(left, right, resamples=32)
+
+    cells = _compare_cells(results)
+    assert cells
+    for cell in cells:
+        assert set(cell) >= {"holm_adjusted_p", "holm_supported", "holm_family", "holm_family_size"}
+    block = results["metadata"]["multiple_comparisons"]
+    assert block["method"] == "Holm"
+    assert block["family"] == "cohort x scope, spanning every (target, layer) cell in that scope"
+    assert block["family"] == state_probe.COMPARE_HOLM_FAMILY
+    families = results["comparisons"]["all_rows"]["multiple_comparisons"]
+    # One target x two layers; each cell is a single member, its two controls collapsed.
+    assert families["pooled"]["family"] == "all_rows/pooled"
+    assert families["pooled"]["tested_cells"] == 2
+    assert {
+        cell["holm_family_size"] for cell in cells if cell["holm_family"].endswith("/pooled")
+    } == {families["pooled"]["tested_cells"]}
+
+
+def test_compare_holm_support_is_stricter_than_the_interval_flag(tmp_path) -> None:
+    """A cell whose interval excludes zero is not Holm-supported at too few resamples."""
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", advantage_layer=8, advantage=1.0)
+
+    coarse = state_probe.compare_predictions(left, right, resamples=32)
+    planted = coarse["comparisons"]["all_rows"]["targets"]["pending_count"]["layers"]["8"][
+        "margin_over_position"
+    ]["pooled"]
+    assert planted["supported"] is True
+    assert planted["difference"]["lower"] > 0
+    assert planted["holm_supported"] is False
+    assert planted["holm_adjusted_p"] > state_probe.COMPARE_HOLM_ALPHA
+
+    fine = state_probe.compare_predictions(left, right, resamples=512)
+    resolved = fine["comparisons"]["all_rows"]["targets"]["pending_count"]["layers"]["8"][
+        "margin_over_position"
+    ]["pooled"]
+    # The interval flag is unchanged by the Holm addition; only the extra flag moves.
+    assert resolved["supported"] is True
+    assert resolved["holm_supported"] is True
+    assert resolved["holm_adjusted_p"] <= state_probe.COMPARE_HOLM_ALPHA
+
+
+def test_compare_markdown_renders_the_holm_support_column(tmp_path) -> None:
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", advantage_layer=8, advantage=1.0)
+
+    results = state_probe.compare_predictions(left, right, resamples=32)
+    markdown = state_probe.render_compare_markdown(results)
+
+    header = next(line for line in markdown.splitlines() if line.startswith("| layer |"))
+    assert "Holm support" in header
+    assert header.index("supported") < header.index("Holm support")
+    lines = markdown.splitlines()
+    start = lines.index(header)
+    body = [
+        line
+        for line in lines[start + 2 :]
+        if line.startswith("|") and line.split("|")[1].strip().isdigit()
+    ]
+    assert body
+    assert all(line.count("|") == header.count("|") for line in body)
+    column = header.split("|").index(" Holm support ")
+    values = {line.split("|")[column].strip() for line in body}
+    # At 32 resamples nothing clears Holm, and the within-difficulty scopes fall under R8's
+    # row floor, so both the flag and the n/a form appear.
+    assert "no" in values
+    assert all(value in {"yes", "no"} or value.startswith("n/a (n=") for value in values)
+
+
+def test_compare_and_the_reanalysis_form_the_same_holm_families() -> None:
+    """The ruled family: both tools partition one synthetic set of cells identically.
+
+    ``compare`` corrects over the family ``_analyse_cohort`` already uses, so the two tools
+    cannot disagree about what a family is. The partitions are compared as sets of cell
+    groupings, so this fails if either tool's shape changes: put the target back into either
+    key and one side's grouping splits; merge ``compare``'s scopes and its member counts move.
+    """
+    cells = [
+        (target, layer)
+        for target in ("pending_count", "first_bucket_count")
+        for layer in (4, 8)
+    ]
+    scopes = (state_probe._REANALYSIS_HOLM_SCOPE, "0", "1")
+
+    reanalysis = state_probe._cohort_holm_families(
+        [(target, layer, {"cell": (target, layer)}) for target, layer in cells]
+    )
+    compare = state_probe._compare_holm_families(
+        [
+            (target, layer, scope, [{"cell": (target, layer)}, {"cell": (target, layer)}])
+            for scope in scopes
+            for target, layer in cells
+        ]
+    )
+
+    # The reanalysis takes one p per (target, layer) from the pooled margins, so it has a
+    # single scope; `compare` takes a p per scope, so each scope is a family of its own.
+    assert set(reanalysis) == {state_probe._REANALYSIS_HOLM_SCOPE}
+    assert set(compare) == set(scopes)
+    # No family is merged across scopes, and none is split by target or by layer.
+    assert [len(members) for members in compare.values()] == [len(cells)] * len(scopes)
+    reanalysis_groupings = {
+        frozenset(entry["cell"] for entry in members) for members in reanalysis.values()
+    }
+    compare_groupings = {
+        frozenset(controls[0]["cell"] for controls in members) for members in compare.values()
+    }
+    assert compare_groupings == reanalysis_groupings
+    assert reanalysis_groupings == {frozenset(cells)}
+
+
+def test_compare_holm_collapses_a_cell_to_the_larger_of_its_two_control_p_values() -> None:
+    """A difference enters its family only if it holds against *both* baselines.
+
+    This is ``_analyse_cohort``'s ``max(p_position, p_surface)``: collapsing by the smaller p
+    would clear alpha on both cells here, and collapsing by the larger clears neither.
+    """
+    raw = {
+        (4, "position"): 0.01,
+        (4, "surface"): 0.30,
+        (8, "position"): 0.02,
+        (8, "surface"): 0.04,
+    }
+    cells = [
+        (
+            "pending_count",
+            layer,
+            "pooled",
+            [
+                {
+                    "supported": True,
+                    "raw_p": raw[(layer, control)],
+                    "holm_eligible": True,
+                    "holm_ineligible_reason": None,
+                }
+                for control in state_probe._COMPARE_CONTROLS
+            ],
+        )
+        for layer in (4, 8)
+    ]
+
+    record = state_probe._apply_compare_holm(cells, cohort="all_rows")
+
+    assert record["pooled"] == {
+        "family": "all_rows/pooled",
+        "tested_cells": 2,
+        "excluded_cells": 0,
+    }
+    names = state_probe._COMPARE_CONTROLS
+    larger = [max(raw[(layer, name)] for name in names) for layer in (4, 8)]
+    smaller = [min(raw[(layer, name)] for name in names) for layer in (4, 8)]
+    expected = state_probe._holm_adjust(larger)
+    for (_target, _layer, _scope, controls), adjusted in zip(cells, expected, strict=True):
+        # One adjusted p per cell, carried on both of its control rows.
+        assert {control["holm_adjusted_p"] for control in controls} == {adjusted}
+    alpha = state_probe.COMPARE_HOLM_ALPHA
+    flags = [control["holm_supported"] for _t, _l, _s, controls in cells for control in controls]
+    assert flags == [False] * len(flags)
+    assert all(value <= alpha for value in state_probe._holm_adjust(smaller))
+
+
+def test_compare_holm_excludes_a_whole_cell_when_r8_excludes_either_control() -> None:
+    """R8's minimum governs membership by cell, and an excluded cell keeps its reason."""
+    counts = {"n_tasks": 6, "n_rows_left": 12, "n_rows_right": 12}
+    _eligible, floor = state_probe._compare_cell_eligibility(counts, 0.4)
+    kept = {
+        "supported": True,
+        "raw_p": 0.01,
+        "holm_eligible": True,
+        "holm_ineligible_reason": None,
+    }
+    dropped = {
+        "supported": True,
+        "raw_p": 0.4,
+        "holm_eligible": False,
+        "holm_ineligible_reason": floor,
+    }
+
+    cells = [("pending_count", 4, "pooled", [kept, dropped])]
+
+    record = state_probe._apply_compare_holm(cells, cohort="all_rows")
+
+    assert record["pooled"] == {"family": "all_rows/pooled", "tested_cells": 0, "excluded_cells": 1}
+    assert kept["holm_eligible"] is False
+    assert kept["holm_adjusted_p"] is None
+    assert kept["holm_supported"] is False
+    assert floor in kept["holm_ineligible_reason"]
+    assert dropped["holm_ineligible_reason"] == floor
+
+
+def test_compare_holm_family_spans_every_target_of_the_cohort(tmp_path) -> None:
+    """One family per (cohort, scope): every target's cells are corrected together."""
+    targets = ("pending_count", "first_bucket_count")
+    left = _write_sidecar(tmp_path / "left.predictions.npz", targets=targets)
+    right = _write_sidecar(
+        tmp_path / "right.predictions.npz", targets=targets, advantage_layer=8, advantage=1.0
+    )
+
+    results = state_probe.compare_predictions(left, right, resamples=32)
+
+    analysis = results["comparisons"]["all_rows"]
+    families = analysis["multiple_comparisons"]
+    assert set(analysis["targets"]) == set(targets)
+    assert families["pooled"]["family"] == "all_rows/pooled"
+    # Two targets x two layers, each contributing one member rather than one per control.
+    assert families["pooled"]["tested_cells"] == len(targets) * 2
+    for target in targets:
+        for controls in analysis["targets"][target]["layers"].values():
+            rows = [
+                controls[margin]["pooled"] for margin in state_probe._COMPARE_MARGIN_KEYS.values()
+            ]
+            assert {row["holm_family"] for row in rows} == {"all_rows/pooled"}
+            assert {row["holm_family_size"] for row in rows} == {families["pooled"]["tested_cells"]}
+            assert len({row["holm_adjusted_p"] for row in rows}) == 1
+    # Either target's table states the same family, in the same words.
+    markdown = state_probe.render_compare_markdown(results)
+    stated = [line for line in markdown.splitlines() if "Holm family `all_rows/pooled`" in line]
+    assert len(stated) == len(targets)
+    assert len(set(stated)) == 1
+
+
+# -------------------------------------------------- R35 cross-model comparability dimensions
+
+
+@pytest.mark.parametrize(
+    ("dimension", "override", "refuses"),
+    [
+        ("policy", "B", False),
+        (
+            "derivative_method",
+            {"kind": "captured_residual", "analysed_position": "note_mean"},
+            True,
+        ),
+        ("prompt_template_kwargs", {"keep_last": 0, "condition": "both"}, True),
+        ("estimator_variant", {"fit": {"ridge_alpha": 2.0}}, True),
+    ],
+)
+def test_compare_names_every_r35_dimension(tmp_path, dimension, override, refuses) -> None:
+    """R35: each added dimension is either a named refusal or a named recorded difference."""
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", metadata={dimension: override})
+
+    if refuses:
+        with pytest.raises(state_probe.CompareRefusal) as raised:
+            state_probe.compare_predictions(left, right, resamples=4)
+        assert any(dimension in reason for reason in raised.value.reasons)
+        return
+
+    results = state_probe.compare_predictions(left, right, resamples=4)
+    comparability = results["metadata"]["comparability"]
+    assert [entry["dimension"] for entry in comparability["named_differences"]] == [dimension]
+    named = comparability["named_differences"][0]
+    assert named["left"] == _sidecar_metadata()[dimension]
+    assert named["right"] == override
+    assert dimension in state_probe.render_compare_markdown(results)
+
+
+def test_compare_records_all_nine_comparability_dimensions(tmp_path) -> None:
+    """The five R29 refusal dimensions plus the four R35 ones, named in the artifact."""
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz")
+
+    results = state_probe.compare_predictions(left, right, resamples=4)
+
+    dimensions = results["metadata"]["comparability"]["dimensions"]
+    assert [entry["dimension"] for entry in dimensions] == [
+        "split_seeds",
+        "layer_selection",
+        "generator_version",
+        "cohort_labels",
+        "task_ids",
+        "policy",
+        "derivative_method",
+        "prompt_template_kwargs",
+        "estimator_variant",
+    ]
+    assert all(entry["equal"] for entry in dimensions)
+    assert results["metadata"]["comparability"]["named_differences"] == []
+
+
+# ------------------------------------------------- R23: the basis for the bound version
+
+
+def test_reanalyse_metadata_records_the_generator_version_basis() -> None:
+    dataset = _reanalysis_fixture()
+
+    results = state_probe.reanalyse_dataset(dataset, split_seeds=(20260903,), bootstrap_resamples=2)
+
+    assert results["metadata"]["generator_version"] == GENERATOR_VERSION
+    assert "recorded" in results["metadata"]["generator_version_basis"]
+
+
+def test_reanalyse_metadata_names_an_explicit_binding_as_its_own_basis() -> None:
+    dataset = _reanalysis_fixture()
+    dataset.meta.pop("generator_version", None)
+
+    results = state_probe.reanalyse_dataset(
+        dataset, split_seeds=(20260903,), bootstrap_resamples=2, generator_version=1
+    )
+
+    basis = results["metadata"]["generator_version_basis"]
+    assert "R23" in basis and "explicit" in basis
+
+
+def test_compare_artifact_carries_both_sides_generator_version_basis(tmp_path) -> None:
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz")
+
+    results = state_probe.compare_predictions(left, right, resamples=4)
+
+    basis = results["metadata"]["generator_version_basis"]
+    assert basis["left"] == basis["right"] == _sidecar_metadata()["generator_version_basis"]
+    assert basis["left"] in state_probe.render_compare_markdown(results)
+
+
+def test_reanalyse_cli_stamps_the_r35_coordinates_and_basis_on_both_artifacts(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """The reanalysis JSON and its R29 sidecar both name what `compare` will check."""
+    import sys
+
+    capture_path = tmp_path / "cap.npz"
+    state_probe.save_dataset(_refit_capture(), capture_path)
+    output = tmp_path / "result"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "state-probe",
+            "reanalyse",
+            "--input",
+            str(capture_path),
+            "--output",
+            str(output),
+            "--split-seeds",
+            ",".join(map(str, _REFIT_SPLIT_SEEDS)),
+            "--bootstrap-resamples",
+            str(_REFIT_RESAMPLES),
+        ],
+    )
+
+    state_probe._main_reanalyse(sys.argv[2:])
+    capsys.readouterr()
+
+    payload = json.loads((output / "cap.reanalysis.json").read_text(encoding="utf-8"))
+    assert "recorded" in payload["metadata"]["generator_version_basis"]
+    assert set(payload["metadata"]["r35"]) == set(state_probe.R35_DIMENSIONS)
+    sidecar = state_probe.load_prediction_sidecar(output / "cap.predictions.npz")
+    metadata = sidecar["metadata"]
+    assert metadata["generator_version_basis"] == payload["metadata"]["generator_version_basis"]
+    for dimension in state_probe.R35_DIMENSIONS:
+        assert metadata[dimension] == payload["metadata"]["r35"][dimension]
+    assert metadata["derivative_method"]["analysed_position"] == "last"
+    assert metadata["estimator_variant"]["fit"] == payload["metadata"]["fit"]
 
 
 # ------------------------- B1b: P2 conditions, dual capture positions, capture dtype (R18b)
