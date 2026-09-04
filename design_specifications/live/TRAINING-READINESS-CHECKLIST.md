@@ -1,6 +1,6 @@
 # Training readiness checklist
 
-**RATIFIED by the Chief, 2026-09-04 16:00 (ratification section at the end; header restored 2026-09-05 after regeneration).** After ratification this document is updated by the
+**RATIFIED by the Chief, 2026-09-04 16:00, on the Director's relay (the ratification text was lost in the 2026-09-05 regeneration; header restored; no section follows).** After ratification this document is updated by the
 Deputy after every commit: the header's as-of line moves, and any item whose evidence changed
 gets its line re-derived, never assumed — re-measured, not re-read (Chief's standard, #21). An item is ticked only when its evidence line cites a
 commit, a file:line, or an artifact with a checksum. Structure follows ruling R15; nothing here
@@ -9,12 +9,14 @@ adds to or relaxes it.
 As of: `2405598`, suite **754 passed, exit 0** bare (green on every bare run since; earlier note: nine consecutive green runs including
 `tests/test_patch.py` alone and reversed file order; two auditors each saw one transient red in
 that file during an implementer's edit window, not reproduced since).
-Updated: 2026-09-05 by the Deputy (after the four R26 commits `c1f7d51`…`2405598`; A8 met).
+Updated: 2026-09-05 by the Deputy after the four R26 commits `c1f7d51`…`2405598` (A8 met; carried
+by docs commits `a9c1535`/`e6500ba`), then re-audited line by line (second audit).
 
 ## Part 0 — gate mechanics (before anything else can tick)
 
-- [x] **Commit wave 1 + its gate conditions** — committed `a2f003c` (2026-09-04 14:55),
-  condition review READY with zero blocking findings, suite 602 at commit. `cli.py` is free.
+- [x] **Commit wave 1 + its gate conditions** — committed `a2f003c` (2026-09-04 14:15),
+  condition review APPROVED TO COMMIT with conditions K1–K4, all satisfied per the commit
+  message (`complete/WAVE1-LOAD-POLICY-REVIEW-round1-2026-09-04.md`), suite 602 at commit.
 - [x] **Scanner slice through its own gate** — ratified #21, committed `afc0905`, suite 602.
 
 ## Part A — first arm B4, the seven R15 conditions
@@ -34,7 +36,7 @@ Updated: 2026-09-05 by the Deputy (after the four R26 commits `c1f7d51`…`24055
   models. fp32 gap measured, never gated: 3B Frobenius 4.2e-3, 4B 2.8e-2.
 
 **A2. In-repo rendered rows, rendering-equivalence green** — **MET** (R14).
-Evidence: `cli.py:36,365` consumes `load_rendered_splits`; byte-identical migration tests
+Evidence: `cli.py:46,519` consumes `load_rendered_splits`; byte-identical migration tests
 `tests/test_data.py:252,271`; committed at `a871245`.
 
 **A3. B4 dataset on disk with manifest hashes, `GENERATOR_VERSION`, `provenance.json`.**
@@ -57,19 +59,20 @@ Evidence: `cli.py:36,365` consumes `load_rendered_splits`; byte-identical migrat
   preserved). Evidence: `branch.py:55,135`.
 - [ ] A4.4 `_load_training_base` through `load_policy(adapter=None, lazy=False)` — the
   Chief-defined "condition-4 completion slice", which also expires `DEBT(R20)` and makes
-  `mine_pairs` view/resolved required. *Defined, unassigned.* Today `cli.py:176-181` still
+  `mine_pairs` view/resolved required. *Defined, unassigned.* Today `cli.py:186-191` still
   calls `mlx_lm.load` directly and `branch.py:75` carries the `DEBT(R20)` marker. Related, not
   gating: `train.num_layers: 36` in the B4 config is stale (the 3B count) and never read —
   `lora_config` writes `resolved.num_layers` (32); one-line cleanup across the cross-model configs.
 
 **A5. Screen present; criteria recorded.**
-- [x] A5.1 `select.screen` in the B4 config — `configs/agent_v2b_qwen35_4b.yaml:40-41`.
+- [x] A5.1 `select.screen` in the B4 config — `configs/agent_v2b_qwen35_4b.yaml:44-47`.
 - [x] A5.2 **MET** — `criteria:` blocks recorded verbatim from SPEC-003 §5 in all three arm configs (B4 vs B, D3 vs B, D4 vs D3), committed `7dd251d` (issue #18); recorded, never used for selection.
 
 **A6. Execution claim free; cost stated and accepted.**
-- [x] A6.1 Claim free — no execution since the Director's 15:20 preflight (4B; 3B at 15:18)
-  and the P6 attempts of ~17:00 and ~18:30, all Director-run; sole `model-execution` action
-  unheld by any live agent. Note: a P6 run and a training run cannot overlap (one lane, one task).
+- [x] A6.1 Claim free — the lane is free since the Director's third P6 attempt completed
+  (17:49–19:00 local, 2026-09-04, artifact `outputs/probes/patch-C-2026-09-04/`); earlier
+  execution today: preflights 15:18/15:20, P6 attempts ~17:00 and ~18:30, all Director-run.
+  No live agent holds `model-execution`. A P6 run and a training run cannot overlap.
 - [ ] A6.2 Cost accepted by the Director. Stated: ~100 min training (400 iters at the measured
   1.4×), ~70 min for the 180-task evaluation, memory 3.85 GiB against 22 (preflight artifact).
   The request is drafted — `B4-TRAINING-LIFT-REQUEST-2026-09-04.md`, command
@@ -100,7 +103,7 @@ fake-only tests green. Evidence when ticked: the two commit hashes and the test 
   `tests/test_cli.py` (`test_stage_train_keeps_the_metrics_stream_byte_identical`,
   `test_stage_train_aborts_on_a_non_finite_loss_without_writing_provenance`, …).
 
-**The lift itself:** when A1–A6 tick, the Deputy posts the request on issue #18 with artifact
+**The lift itself:** when A1–A6 and A8 tick (A7 is definitional), the Deputy posts the request on issue #18 with artifact
 paths, SHA-256s, the recompute command, and one evidence line per condition; the Director lifts
 per run. (Chief's standard, 2026-09-04.)
 

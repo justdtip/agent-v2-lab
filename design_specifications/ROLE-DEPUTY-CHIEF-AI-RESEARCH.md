@@ -115,7 +115,9 @@ HEAD `2405598`+docs, pushed (branch in sync with origin). Suite **754 passed, ex
 Source tree clean. **R26 run logging is in** (four lane commits `c1f7d51`, `88ecac0`,
 `0a79788`, `2405598`): every training and probe run writes `run.log` + `events.jsonl`;
 training adds `health.json`; training condition 8 (A8) met — B4 trains with the health record
-from iteration one once P6 releases the lane. Documents reorganised per `DOCUMENT-MOVES-2026-09-05.md` (`3842e9d`): live
+from iteration one. **P6 completed** (2026-09-04 19:00 local; `outputs/probes/patch-C-2026-09-04/`,
+patch.json SHA `34542df5…`): the lane is free; B4 training waits only on the Director's
+condition 6. Documents reorganised per `DOCUMENT-MOVES-2026-09-05.md` (`3842e9d`): live
 instruments under `live/`, ratified reports under `complete/`, closed notes under `records/`.
 
 - **Both preflights passed under the R18a gate** (Director-run, 15:18 and 15:20): native-dtype

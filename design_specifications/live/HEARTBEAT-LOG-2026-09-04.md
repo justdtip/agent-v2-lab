@@ -551,3 +551,46 @@ recording the execution rule. No execution lane designated yet.
 - Chief's retrospective pass (#31–#33) moved eight more reports to `complete/`; committed in
   `a9c1535` under the moves convention. Process note: a docs script aborted midway on a
   changed anchor and the chain still committed — the remaining edits landed in the next commit.
+
+## 2026-09-05 — Section B assessed; brief at the Chief's review (#40); auditors out
+
+- Director's task: audit checklist currency (two auditors dispatched, re-measuring every line
+  against HEAD), assess probes Section B, plan what can start. Read SPEC-004 §1/§2/§4/§7, R18
+  item 4 and #15's C7 definition directly; a code map supplied file:line anchors, all re-read.
+- Findings: three of five items can start now without the lane — B5 C7 refit (offline; npz
+  float32 on six layers; baseline `holm_supported` flags to compare), B4 closure record (288
+  rollouts, `heuristic_expression_score`) + three fake-only fixes, B1 P2 redesign code (three
+  sub-slices). Anchor corrections: `--judge` at `:1378-1383`; exemplar imbalance is presence
+  (0/6, 8/8, 6/10). Observed: R18's `capture_dtype` is unimplemented.
+- Brief `under_review/PROBES-SECTION-B-PLAN-2026-09-05.md` filed as #40 with four rulings
+  requested (exemplar policy, disjointness fingerprint, `compare` pairing, closure producer).
+  Dispatch waits on the Chief. P6 at ~1 h 10, no artifact yet.
+
+## 2026-09-05 — P6 third attempt COMPLETE; lane free
+
+- `outputs/probes/patch-C-2026-09-04/` written 19:00 local: `patch.json`
+  `34542df54136b66b4a2bff4d0396a55275626556ac2042d98fdc759a40146aa4`, `patch.md`
+  `b740e17dd62e5f9dce1d7915bb8d17185e1d5d20eef99696b9dee605ad793fc6`. Five stable cases, none
+  excluded; 42 cells; alignment table equals the pre-run measurement; R24 record all stable.
+  Headline treatment rates: `previous_notes` 1.0/1.0/0.8/0.2/0.2/0.0 at layers 6…36;
+  `dropped_value_slot` 0.8/0.8/0.2/0/0/0; every other cell 0. Controls: `unrelated_task` is
+  ALSO high on the note-region cells (previous_notes 0.8–1.0 at 6–30, shared_value_tokens
+  0.8–1.0, dropped_value_slot 0.6/0.8 at 6/12, last_two_observations 0.8); `random_positions`
+  low on the note cells (0–0.6). n = 5 → Wilson intervals span ~[0.38, 0.96] at 0.8. Reading
+  deferred until the flip definition is re-read from `_score_patch`.
+- B3 ticked as "artifact on disk"; §9 updated; the lane is free for B4 training.
+
+## 2026-09-05 — P6 read written and corrected once (R16); training checklist re-audited
+
+- Read: `under_review/P6-RESULT-READ-2026-09-05.md`, posted on #26. Flip = no `value_drop` at
+  the decision step after generation (`_is_flip`, `patch.py:741-746`). Decision localised to
+  note positions at layers 6–12; specificity not established: `unrelated_task` flips as often
+  as the treatment on every note-region cell. First draft claimed three dropped values were
+  visible in retained observations — wrong (a visible fact is never a drop,
+  `integrity.py:230-236`; my substring test matched other numbers). Re-measured with the
+  checker's own rules: dropped values referenced in an earlier failing note in 4/5 cases; in
+  0163 the value 32 has no text source at all (hidden observation only). Doc and #26 corrected.
+- Training checklist second audit applied: `a2f003c` at 14:15 with K1–K4 conditions (not
+  "zero findings"); anchors `cli.py:46,519`, `:186-191`, config `:44-47`; A6.1 lane free after
+  P6 (17:49–19:00); lift sentence "A1–A6 and A8"; the promised ratification section does not
+  exist in either checklist (lost in the Chief's regeneration) — header wording fixed in both.

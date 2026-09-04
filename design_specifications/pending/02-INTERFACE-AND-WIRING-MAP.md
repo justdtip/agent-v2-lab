@@ -618,6 +618,15 @@ forget. Each has an integration check in §6.
   run and changed only through the arm config's `train.health:` block; (i) `metrics.jsonl`
   and `train.log` stay byte-compatible (selection reads them). Contract in the proposal §5 is
   normative for the four lanes; lane A lands first.
+- **R27 (2026-09-05 05:40) P6 strict flip scoring.** A flip requires: parseable turn; the
+  note's value set contains every value present in the failing note and the dropped value
+  (digit-bounded) and no number outside the canonical set; per-generation outcome
+  `flip | corrupted | unchanged | parse_error` and the generated note text recorded in the
+  artifact; per-case `dropped_value_visible_in_retained_observations` computed with the
+  integrity module's fact extraction (True excludes the case); a content control (B's rows with
+  the dropped value's positions swapped for an unrelated value's) added. Rationale: the
+  stale-field coverage path in `integrity.py:384-395` scores any wrong number as "no value
+  drop". Review: `under_review/P6-RESULT-REVIEW-round1-2026-09-05.md`.
 
 ## 8. Implementer amendments (append-only, dated)
 

@@ -1,6 +1,6 @@
 # Probe readiness checklist
 
-**RATIFIED by the Chief, 2026-09-04 16:00 (ratification section at the end; header restored 2026-09-05 after regeneration).** Companion to `TRAINING-READINESS-CHECKLIST.md`, same
+**RATIFIED by the Chief, 2026-09-04 16:00, on the Director's relay (the ratification text was lost in the 2026-09-05 regeneration; header restored; no section follows).** Companion to `TRAINING-READINESS-CHECKLIST.md`, same
 conventions: updated by the Deputy after every commit, an item ticks only on a commit, a
 file:line, or a checksummed artifact — re-measured, not re-read (Chief's standard, #21). Covers when probes may run and what the probe programme
 (SPEC-004) still needs. Training's arm 1 has its own list; the one shared item is marked.
@@ -68,12 +68,13 @@ Director's third attempt with the unchanged command.
 - [ ] B1. **§2 P2 redesign — 0%, and the spec calls it "where the remaining probe budget
   goes".** Nothing exists: `capture.stub_observations`, `--stub-observations`, the
   `p2-d0/p2-d1/p2-d2` splits plan, the `compare` subcommand, dual-position capture, the
-  SFT-disjointness test. All fake-only code, claimable now; needs `state_probe.py` and
-  `capture.py`, so dispatch after the wave 1 boundary commits.
+  SFT-disjointness test. All fake-only code, claimable now. *Planned in three sub-slices
+  (splits + disjointness; conditions + dual capture; `compare`) in the Section B brief at the
+  Chief's review (#40); `state_probe.py` work sequenced after the B5 refit lands in the same file.*
 - [ ] B2. **§3 block ablation run** — code and tests complete (`adapter_delta.py:416-524`,
   reviewed twice); no `ablation.json` exists anywhere under `outputs/`. A 3B run on the B and C
   adapters: ~30 min per screen, execution authorisation only.
-- [ ] B3. **§5 P6 patching run** — the #22 slice is committed (`07c6657`: `--data-seed`
+- [x] B3. **§5 P6 patching run — artifact on disk** — the #22 slice is committed (`07c6657`: `--data-seed`
   override used only when the field is absent, R22 note provenance per case, R23 generator-v1
   binding, R24 `scoring_version_stable`). K1 closed on real data: five cases selected, five
   stable, decision steps 7/7/7/7/6, dropped values 85/89/100/32/54. Lift request sent
@@ -82,14 +83,26 @@ Director's third attempt with the unchanged command.
   position groups (fixed, `ac9c27a`), and the R25 alignment slice (fixed, `036e62c`). Nothing known stands between the code and the run.
   Bound secondary condition from #26's ratification: `aggregate_report` failures with the
   generator-v4 note as counterfactual, labelled designed-correct — after the primary run.
-  Ticks when the run's artifact exists under `outputs/probes/patch-C-2026-09-04/`.
+  **RUN COMPLETE (third attempt, Director-run, finished 2026-09-04 19:00 local):**
+  `outputs/probes/patch-C-2026-09-04/patch.json` (SHA-256
+  `34542df54136b66b4a2bff4d0396a55275626556ac2042d98fdc759a40146aa4`) and `patch.md`
+  (`b740e17dd62e5f9dce1d7915bb8d17185e1d5d20eef99696b9dee605ad793fc6`); schema `p6-patch-r25`;
+  five stable cases, none excluded; six layers × seven cells = 42; alignment table identical
+  to the pre-run measurement (residue 4/4/5/4/4; slots on ";" ×4 and ","). Ran under the
+  pre-R26 code: no `run.log`. Interpretation is the Deputy's read → Chief (see the log).
+  The secondary condition remains the bound follow-up.
 - [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first**, none applied:
-  `outputs/probes/axis-corrected/CLOSED.md` absent; the matched-design flaw (default persona
-  receives the full prompt list while roles are truncated, `assistant_axis.py:598-621`); the
-  6/8/10 exemplar imbalance (`assistant_axis.py:104`); `--judge` defaulting to on
-  (`assistant_axis.py:1346-1350`). Then a ~20-minute gated run, additionally behind A2.
+  `outputs/probes/axis-corrected/CLOSED.md` absent (288 saved rollouts on disk); the
+  matched-design flaw (default persona gets the full `prompts` list, `assistant_axis.py:600-609`,
+  roles get `prompts[:role_prompts]`, `:610-623`); the exemplar imbalance — presence, not only
+  the 6/8/10 role counts at `:106-107`: 0 of 6 high, 8 of 8 low, 6 of 10 neutral roles carry
+  one; `--judge` defaulting to on (`assistant_axis.py:1378-1383`; `build_axis_run` default at
+  `:639`). Then a ~20-minute gated run, additionally behind A2. *Planned: Section B brief
+  `under_review/PROBES-SECTION-B-PLAN-2026-09-05.md`, at the Chief's review (#40).*
 - [ ] B5. **C7 BF16 refit** — same item as A4's experiment, ruled as item 4 of R18; listed here
-  because its output is a probe-programme artifact (a sensitivity bound on every P2 margin).
+  because its output is a probe-programme artifact (a sensitivity bound on every P2 margin). *Planned as the first Section B slice — fully offline (the saved npz is float32 on six
+  layers; the baseline reanalysis carries `holm_supported` per target/layer) — in the Section B
+  brief at the Chief's review (#40).*
 
 ## Explicitly not on this list
 
