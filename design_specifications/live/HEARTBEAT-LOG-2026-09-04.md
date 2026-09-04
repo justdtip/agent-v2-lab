@@ -767,3 +767,8 @@ recording the execution rule. No execution lane designated yet.
   amendment working on its first exercise. Diagnostic: two-iteration run at batch 1 on the
   free lane to read the peak; remedy candidate batch 1 × accumulation 2 (recipe deviation;
   Director + Chief).
+- Machine: M4 Pro, 24 GiB; Metal recommended working set 17.8 GiB, max buffer 13.3 GiB;
+  registry budget 22 GiB exceeds the working set — registry correction to rule. Run B's recipe
+  is batch 2 × accumulation 2 (effective 4); the memory remedy keeping the effective batch is
+  batch 1 × accumulation 4. Diagnostic (batch 1 × 2, 3 iters, report every step) running to
+  read the per-step peak.
