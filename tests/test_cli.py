@@ -1267,6 +1267,122 @@ def test_stage_train_installs_no_recurrence_patch_for_a_dense_arm(
     assert "gated_delta_chunk" not in extra["training_config"]
 
 
+@contextlib.contextmanager
+def _null_installer(chunk: int):
+    """An installer that patches nothing: the recurrence form is not what these tests check."""
+    yield
+
+
+def test_stage_train_records_the_recurrence_a_chunkwise_run_actually_took(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """K6(a): the form the run TOOK must reach health.json, provenance and the run log.
+
+    ``lora.gated_delta_mode`` records the form the arm *configured*. A run that fell back to
+    stage 1's checkpointed loop has stage 1's memory and step time, so a record that says only
+    ``chunkwise`` would send the next attempt into the same out-of-memory wall with nothing
+    saying why. The counts are the correction, and a non-empty one is a warning.
+    """
+    training = importlib.import_module("local_llm_lab.training")
+    config = _training_config(tmp_path)
+    config["train"]["gated_delta_chunk"] = 64
+    config["train"]["gated_delta_mode"] = cli.GATED_DELTA_CHUNKWISE
+    output = config["output"]
+
+    monkeypatch.setattr(training, "install_chunkwise_gated_delta", _null_installer)
+    # The counts a fallen-back chunkwise run would leave behind, read through the same
+    # function the backbone reads, so the test pins the wiring and not a private detail.
+    monkeypatch.setattr(training, "fallback_counts", lambda: {"mask": 3})
+    record = _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["gated_delta_fallbacks"] == {"mask": 3}
+    (extra,) = record.provenance
+    assert extra["training_config"]["gated_delta_mode"] == cli.GATED_DELTA_CHUNKWISE
+    assert extra["health"]["gated_delta_fallbacks"] == {"mask": 3}
+
+    events = [
+        json.loads(line)
+        for line in (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    warnings = [event for event in events if event["kind"] == "warning"]
+    assert warnings, "a chunkwise arm that fell back must warn"
+    # The warning names which fallback fired and how many times, not merely that one did.
+    assert any(event["fields"] == {"fallback_mask": 3} for event in warnings), warnings
+    assert "fallback_mask=3" in (output / "run.log").read_text(encoding="utf-8")
+
+
+def test_stage_train_records_no_fallback_count_it_did_not_earn(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """K6(b), the stale-global trap: a checkpointed or dense arm may not report counts at all.
+
+    ``fallback_counts()`` reads a module-level dict that only the chunkwise installer resets.
+    On a checkpointed arm it therefore still holds whatever an earlier chunkwise run in the
+    same process left there — a number that looks like evidence and is not. The guard is that
+    the counts function is never called on those arms, so a stale value cannot be recorded
+    even in principle, and the record says explicitly that it does not apply.
+    """
+    training = importlib.import_module("local_llm_lab.training")
+
+    def forbidden() -> dict[str, int]:
+        pytest.fail("the fallback counter was read on an arm that never installed it")
+
+    monkeypatch.setattr(training, "fallback_counts", forbidden)
+    monkeypatch.setattr(training, "install_chunked_gated_delta", _null_installer)
+
+    checkpointed = _training_config(tmp_path / "checkpointed")
+    checkpointed["train"]["gated_delta_chunk"] = 64
+    _patch_stage_train(monkeypatch, _healthy_trainer)
+    cli.stage_train(checkpointed, iters=2)
+
+    dense = _training_config(tmp_path / "dense")
+    assert "gated_delta_chunk" not in dense["train"]
+    _patch_stage_train(monkeypatch, _healthy_trainer)
+    cli.stage_train(dense, iters=2)
+
+    for run, expected in (
+        (checkpointed, "not applicable: checkpointed"),
+        (dense, "not applicable: no recurrence installed"),
+    ):
+        health = json.loads((run["output"] / "health.json").read_text(encoding="utf-8"))
+        assert health["gated_delta_fallbacks"] == expected, run["output"]
+
+
+def test_stage_train_records_the_fallbacks_a_crashed_chunkwise_run_took(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The record is written on the error path too, where the diagnosis is worth the most.
+
+    ``health.json`` and the run log are both written from the stage's ``finally``; a run that
+    died inside the trainer is exactly the run whose next attempt needs to know which
+    recurrence it was running when it died, and it never reaches the success path at all.
+    """
+    training = importlib.import_module("local_llm_lab.training")
+    config = _training_config(tmp_path)
+    config["train"]["gated_delta_chunk"] = 64
+    config["train"]["gated_delta_mode"] = cli.GATED_DELTA_CHUNKWISE
+    output = config["output"]
+
+    def exploding_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+        training_callback.on_train_loss_report(_report(1, 1.0))
+        raise RuntimeError("out of memory")
+
+    monkeypatch.setattr(training, "install_chunkwise_gated_delta", _null_installer)
+    monkeypatch.setattr(training, "fallback_counts", lambda: {"vectorised_gating": 1})
+    _patch_stage_train(monkeypatch, exploding_trainer)
+
+    with pytest.raises(RuntimeError, match="out of memory"):
+        cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["status"] == "error"
+    assert health["gated_delta_fallbacks"] == {"vectorised_gating": 1}
+    assert "vectorised_gating=1" in (output / "run.log").read_text(encoding="utf-8")
+
+
 def test_stage_train_flags_a_run_that_stops_short_or_saves_no_checkpoint(
     monkeypatch, tmp_path: Path
 ) -> None:

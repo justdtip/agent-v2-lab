@@ -43,6 +43,16 @@ train:
   # time rises as it shrinks; the values it computes are bit-exact against mlx-lm's reference
   # loop either way. Hybrid arms only — the 3B backbone has no gated-delta recurrence.
   gated_delta_chunk: 64
+  # R32 stage 2: which form of the recurrence that chunk belongs to. Stage 1
+  # ("checkpointed", the default) failed both R32 gates on the lane at batch 1, one row, one
+  # step: 997 tokens cost 11.85 GB / 46 s and 1,591 cost 16.93 GB / 94 s, while the longest
+  # training row, 2,085 tokens, ran out of memory at 19.29 GB against a 17.8 GiB working set;
+  # with the recurrence's backward removed the same 997-token step is 5.36 GB / 7.9 s, so the
+  # recurrence's backward is ~6.5 GB and ~85% of the step. "chunkwise" solves each chunk with
+  # matrix products and passes states between chunks: O(T/C) retained state, matmul-bound, and
+  # exact in exact arithmetic, so it agrees with mlx-lm's loop to a tolerance rather than bit
+  # for bit. The chunk must be a positive even number of tokens.
+  gated_delta_mode: chunkwise
   grad_checkpoint: true
   val_batches: 24
   steps_per_report: 10

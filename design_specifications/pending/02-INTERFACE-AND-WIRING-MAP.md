@@ -788,3 +788,13 @@ forget. Each has an integration check in §6.
   uncertainty, and no version field could have existed before versioning did. Retroactive tools
   record the version used and the basis. Post-versioning artifacts get no such latitude: an
   absent field is a defect.
+
+- PROPOSED (Deputy, 2026-09-05 04:40): supersession, R32 stage 2 (K7). The analytic per-layer
+  gated-delta **state-bytes model is superseded by the fitted empirical envelope in
+  `pipeline/preflight.py`**, which is what actually gates a training arm; `chunkwise_state_bytes`
+  had had no consumer since `f1230ac` replaced the state-shape-derived footprint estimate with a
+  fit that reads no state shape at all, and it is removed with this slice. The reason is worth
+  keeping on the record: an analytic memory model that nothing checks against measurements is
+  what this work repaired — the old estimator's analytic retained-state sum predicted a 2.12x
+  spread across chunk lengths where the measurement is 1.07x. Do not re-derive one; the note in
+  `training/gated_delta_chunkwise.py`'s docstring says so at the site.

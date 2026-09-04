@@ -10,8 +10,8 @@ import math
 import shutil
 import sys
 import time
-from collections.abc import Iterator
-from dataclasses import replace
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, TextIO
@@ -57,6 +57,11 @@ _GATED_DELTA_INSTALLERS = {
     GATED_DELTA_CHECKPOINTED: "install_chunked_gated_delta",
     GATED_DELTA_CHUNKWISE: "install_chunkwise_gated_delta",
 }
+# K6(b): what the run record says about the fallback counters on an arm that never installed
+# the chunkwise recurrence. Only the chunkwise installer resets that counter, so reading it on
+# any other arm returns whatever an earlier chunkwise run in the same process left behind — a
+# number that looks like evidence and is not. These strings cannot be mistaken for a count.
+GATED_DELTA_NO_RECURRENCE = "not applicable: no recurrence installed"
 _TRAIN_MODEL_PARAMETERS = ("args", "model", "train_set", "valid_set", "training_callback")
 
 
@@ -518,10 +523,24 @@ def _kernel_path_validation() -> Iterator[None]:
         trainer.evaluate = original
 
 
+@dataclass
+class _BackboneReport:
+    """What the backbone block installed, and what that recurrence actually did (K6(b)).
+
+    ``fallbacks`` is written when the block exits: the chunkwise recurrence's own counts on a
+    chunkwise arm, and one of the not-applicable strings on any other. The block hands this
+    out rather than letting the caller read ``training.fallback_counts()`` itself, because
+    only the block knows which installer it entered, and that global is meaningless — stale,
+    not empty — on an arm whose installer never resets it.
+    """
+
+    fallbacks: dict[str, int] | str
+
+
 @contextlib.contextmanager
 def _training_backbone(
     chunk: int | None, mode: str = GATED_DELTA_CHECKPOINTED
-) -> Iterator[None]:
+) -> Iterator[_BackboneReport]:
     """Library patches that live exactly as long as the trainer call (R32(a), stage 2).
 
     ``chunk`` installs a gated-delta recurrence for training-mode calls; ``None`` — a dense
@@ -536,12 +555,19 @@ def _training_backbone(
 
     The validation wrapper is unconditional: on a backbone whose forward does not branch on the
     training flag it changes nothing.
+
+    Yields a ``_BackboneReport`` whose ``fallbacks`` field the block fills in on the way out,
+    so the caller records the recurrence the run TOOK and not merely the one it configured.
     """
     if mode not in _GATED_DELTA_INSTALLERS:
         raise ValueError(
             f"train.gated_delta_mode must be one of "
             f"{sorted(_GATED_DELTA_INSTALLERS)}; got {mode!r}"
         )
+    report = _BackboneReport(fallbacks=GATED_DELTA_NO_RECURRENCE)
+    # Bound only on the chunkwise branch, and the only route to the counter: on every other
+    # arm there is nothing to call, so a stale global cannot reach the record (K6(b)).
+    counts: Callable[[], dict[str, int]] | None = None
     with contextlib.ExitStack() as stack:
         if chunk is not None:
             from local_llm_lab import training
@@ -559,8 +585,21 @@ def _training_backbone(
                     f"which this tree does not provide; it lands with R32 stage 2"
                 )
             stack.enter_context(installer(int(chunk)))
+            # An installed recurrence that is not the chunkwise one has no counter of its own;
+            # say which form ran rather than leaving the field looking like an empty count.
+            report.fallbacks = f"not applicable: {mode}"
+            if mode == GATED_DELTA_CHUNKWISE:
+                counts = training.fallback_counts
         stack.enter_context(_kernel_path_validation())
-        yield
+        try:
+            yield report
+        finally:
+            # Read while the installer is still in place, so the counts are the ones this
+            # block accumulated and nothing between here and the caller can reset them. The
+            # exception path runs it too: a run that died mid-training is the one whose next
+            # attempt most needs to know which recurrence it was actually running.
+            if counts is not None:
+                report.fallbacks = counts()
 
 
 def _fresh_checkpoint(path: Path, *, since: float) -> bool:
@@ -597,6 +636,49 @@ def _training_identity(config: dict[str, Any], spec: ModelSpec) -> dict[str, Any
     }
 
 
+def _recorded_fallbacks(backbone: _BackboneReport | None) -> dict[str, int] | str:
+    """What the backbone block recorded; a run that never reached it installed no recurrence."""
+    return GATED_DELTA_NO_RECURRENCE if backbone is None else backbone.fallbacks
+
+
+def _health_record(
+    health: TrainingHealth,
+    *,
+    elapsed: float,
+    status: str,
+    fallbacks: dict[str, int] | str,
+) -> dict[str, Any]:
+    """The health summary plus the recurrence the run ACTUALLY took (K6(a)).
+
+    ``TrainingHealth`` watches losses and memory and knows nothing about the backbone, but
+    ``health.json`` is the record the next attempt's memory gate reads. A run that configured
+    the chunkwise form and fell back to stage 1's checkpointed loop carries stage 1's memory
+    and step time, so the gate has to be able to read that here rather than infer it from the
+    mode the arm asked for — which is the one thing the record already said.
+    """
+    return {
+        **health.summary(elapsed=elapsed, status=status),
+        "gated_delta_fallbacks": fallbacks,
+    }
+
+
+def _log_fallbacks(runlog: RunLog, fallbacks: dict[str, int] | str) -> None:
+    """Put the recurrence the run took on the run log; a fallback that fired is a warning."""
+    if isinstance(fallbacks, str):
+        runlog.info("gated delta recurrence", fallbacks=fallbacks)
+    elif not fallbacks:
+        runlog.info("gated delta recurrence", fallbacks="none: chunkwise throughout")
+    else:
+        # One field per reason, named and counted rather than merely announced: which fallback
+        # fired decides whether the cause is a mask reaching the recurrence or a gate shape the
+        # chunkwise form cannot express, and the count decides whether it was every call or one
+        # layer. Prefixed so a reason can never collide with a field this logger already has.
+        runlog.warn(
+            "gated delta fell back to the checkpointed loop",
+            **{f"fallback_{reason}": count for reason, count in sorted(fallbacks.items())},
+        )
+
+
 def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | None = None) -> None:
     output: Path = config["output"]
     adapters = output / "adapters"
@@ -617,6 +699,9 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
     valid_set: Any | None = None
     test_set: Any | None = None
     callback: _TrainingMetrics | None = None
+    # Bound by the backbone block's ``as`` clause, so it survives an exception raised inside
+    # it and the finally below can still record what the recurrence did (K6(a)).
+    backbone: _BackboneReport | None = None
     aborted: TrainingAborted | None = None
     summary: dict[str, Any] | None = None
     status = "ok"
@@ -696,13 +781,18 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 ), _training_backbone(
                     lora.get("gated_delta_chunk"),
                     mode=lora.get("gated_delta_mode", GATED_DELTA_CHECKPOINTED),
-                ):
+                ) as backbone:
                     trainer(args, model, train_set, valid_set, callback)
             # R26(c): a trainer that returned early or saved nothing produced an adapter that
             # nothing downstream may select from; on_finish records that and never raises.
             # Called here, before provenance, so the copy provenance carries is the final one.
             _finish_health(runlog, health, callback, adapters=adapters, since=started_wall)
-            summary = health.summary(elapsed=time.monotonic() - started, status="ok")
+            summary = _health_record(
+                health,
+                elapsed=time.monotonic() - started,
+                status="ok",
+                fallbacks=_recorded_fallbacks(backbone),
+            )
             # R26(f): provenance carries the same health record health.json does, written
             # after on_finish so the verdict recorded there is the final one.
             write_provenance(
@@ -741,8 +831,19 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
             # that did fewer iterations than it planned, so the finish rule must run here too
             # or a crashed run's health.json reads ``healthy`` beside its ``error`` status.
             _finish_health(runlog, health, callback, adapters=adapters, since=started_wall)
+            # K6(a): here rather than after the trainer call, so the line is emitted once on
+            # every path. The run that died mid-training is the one whose next attempt most
+            # needs to read which recurrence it was actually running, and that run never
+            # reaches the success path at all. Outside the stdout redirect on every path too,
+            # so it lands in run.log alone and not in the trainer's verbatim train.log.
+            _log_fallbacks(runlog, _recorded_fallbacks(backbone))
             if summary is None or status != "ok":
-                summary = health.summary(elapsed=time.monotonic() - started, status=status)
+                summary = _health_record(
+                    health,
+                    elapsed=time.monotonic() - started,
+                    status=status,
+                    fallbacks=_recorded_fallbacks(backbone),
+                )
             (output / "health.json").write_text(
                 json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
