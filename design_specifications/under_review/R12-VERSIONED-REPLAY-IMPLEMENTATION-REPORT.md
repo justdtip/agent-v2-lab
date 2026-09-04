@@ -55,7 +55,7 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 
 ## R13 full fake-only suite
 
-- HEAD: `7aed46a537e998e5b1b5be62027c7a98865fd4ca`
+- HEAD: `df0801639b35672ba2c3afd1655a8f2d7db5c880`
 - Command: `uv run pytest -q`
 - Exit code: `0`
 - Result: `526 passed, 0 failed, 0 xfailed`
@@ -65,6 +65,8 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 
 - Added replay-forwarding, top-level compatibility, explicit CLI, invalid-binding, and saved
   recovery NPZ/difficulty offline acceptance coverage.
+- The explicit-unversioned integrity oracle now uses a long-family trace and asserts the exact
+  v1 count mismatch versus a clean v4 control while observing both replay versions.
 - Historical recovery reanalysis now exercises real offline rows and `reanalyse_dataset` under
   hard-failing model/prompt seams, asserts a version-distinguishing lexical surface cell, and
   pins returned generator-version metadata plus non-default saved difficulty.
