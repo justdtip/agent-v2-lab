@@ -55,21 +55,27 @@ from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
 __all__ = [
     "TARGETS",
+    "CompareRefusal",
     "ProbeDataset",
     "artifact_identity",
     "baseline_reanalysis_parameters",
     "build_label_dataset",
     "build_probe_dataset",
+    "compare_predictions",
     "compare_refit",
+    "compare_resample_seeds",
     "derive_position_keys",
     "fit_probes",
     "load_dataset",
+    "load_prediction_sidecar",
     "main",
     "position_baseline",
     "position_determinism",
+    "prediction_sidecar_path",
     "reanalyse_dataset",
     "reanalysis_row_labels",
     "refit_bf16",
+    "render_compare_markdown",
     "render_markdown",
     "render_refit_comparison_markdown",
     "resolve_within_position",
@@ -79,6 +85,7 @@ __all__ = [
     "split_by_task",
     "task_difficulties",
     "validate_mixed_design",
+    "write_prediction_sidecar",
 ]
 
 # target -> kind. "regression" is fitted with ridge and scored by R^2/MAE; "categorical" and
@@ -120,6 +127,19 @@ _COHORT_LABELS = {
     "all_rows": "all_rows (reportable for base)",
     "sft_disjoint": "sft_disjoint (paired adapter comparisons, within difficulty only)",
 }
+#: R7: the scope whose table is the reportable one for each cohort in a paired comparison.
+_COHORT_REPORTABLE_SCOPE = {"all_rows": "pooled", "sft_disjoint": "by_difficulty"}
+#: The three controls R29 requires per (target, layer, split seed) row in the sidecar.
+_PREDICTION_CONTROLS = ("probe", "position", "surface")
+#: The two baselines a margin is taken over; ``compare`` bootstraps the difference of each.
+_COMPARE_CONTROLS = ("position", "surface")
+_COMPARE_MARGIN_KEYS = {"position": "margin_over_position", "surface": "margin_over_surface"}
+PREDICTION_SIDECAR_SCHEMA_VERSION = 1
+PREDICTION_SIDECAR_KIND = "state-probe-reanalysis-predictions"
+COMPARE_SCHEMA_VERSION = 1
+#: The paired bootstrap's default resample seed, derived from the ratified split-seed block
+#: rather than written as a fresh literal (briefing §1.8).
+DEFAULT_COMPARE_SEED = DEFAULT_REANALYSIS_SPLIT_SEEDS[0]
 _SURFACE_FEATURE_NAMES = [
     "prompt_token_count",
     "last_note_token_count",
@@ -1892,6 +1912,56 @@ def _holm_adjust(p_values: list[float]) -> list[float]:
     return adjusted
 
 
+def _scalar(value: Any) -> Any:
+    """A JSON-safe python scalar for a numpy 0-d array, scalar, or an already-plain value."""
+    if isinstance(value, np.ndarray):
+        return value.item()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _prediction_records(
+    *,
+    target: str,
+    kind: str,
+    layer: int,
+    split_seed: int,
+    row_ids: np.ndarray,
+    task_ids: np.ndarray,
+    difficulty: np.ndarray,
+    predictions: dict[str, dict[str, np.ndarray]],
+) -> list[dict[str, Any]]:
+    """One per-row record per control for a single (target, layer, split seed) fit (R29).
+
+    The baselines do not depend on the layer, so their arrays repeat across layers; the
+    sidecar writer stores each distinct array once and the index carries every layer.
+    """
+    base = {
+        "target": target,
+        "kind": kind,
+        "layer": int(layer),
+        "split_seed": int(split_seed),
+        "row_ids": np.asarray(row_ids),
+        "task_ids": np.asarray(task_ids, dtype=str),
+        "difficulty": np.asarray(difficulty),
+    }
+    records = []
+    for control in _PREDICTION_CONTROLS:
+        prediction = predictions[control]
+        records.append(
+            {
+                **base,
+                "control": control,
+                "actual": prediction["actual"],
+                "predicted": prediction["predicted"],
+                "scores": prediction.get("positive_scores"),
+                "positive_label": _scalar(prediction.get("positive_label")),
+            }
+        )
+    return records
+
+
 def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
     dataset: ProbeDataset,
     labels: dict[str, np.ndarray],
@@ -1904,6 +1974,7 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
     l2: float,
     logistic_steps: int,
     progress: Callable[[str, int, int], None] | None = None,
+    collect: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_global = np.flatnonzero(mask)
     cohort = ProbeDataset(
@@ -2003,6 +2074,23 @@ def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
                     "position": position,
                     "surface": surface_prediction,
                 }
+                if collect is not None:
+                    collect.extend(
+                        _prediction_records(
+                            target=target,
+                            kind=kind,
+                            layer=layer,
+                            split_seed=split_seed,
+                            row_ids=selected_global[test_rows],
+                            task_ids=cohort.task_ids[test_rows],
+                            difficulty=cohort.difficulty[test_rows],
+                            predictions={
+                                "probe": probe,
+                                "position": position,
+                                "surface": surface_prediction,
+                            },
+                        )
+                    )
                 boot = _bootstrap_bundle(
                     kind,
                     bundles,
@@ -2192,12 +2280,17 @@ def reanalyse_dataset(
     logistic_l2: float = 0.01,
     logistic_steps: int = 120,
     progress: Callable[[str, str, int, int], None] | None = None,
-) -> dict[str, Any]:
+    return_predictions: bool = False,
+) -> dict[str, Any] | tuple[dict[str, Any], list[dict[str, Any]]]:
     """Run SPEC-004 §1 entirely from a saved activation capture and regenerated task truth.
 
     ``progress`` (R26 g, added for the C7 refit) is called ``(analysis, target, index, total)``
     as each cohort finishes a target, so a long offline run is never silent for more than one
     unit of work. Defaulted to ``None``: every existing caller and artifact is unchanged.
+
+    ``return_predictions`` additionally returns the per-row test-half predictions R29's
+    sidecar records. It changes nothing about the JSON-safe result, which is returned
+    unchanged (and alone) when the flag is false.
     """
     if len(split_seeds) != len(set(split_seeds)) or not split_seeds:
         raise ValueError("split seeds must be non-empty and unique")
@@ -2220,32 +2313,25 @@ def reanalyse_dataset(
     train_prefix = np.array(
         [str(task_id).startswith("train-") for task_id in dataset.task_ids], dtype=bool
     )
-    analyses = {
-        "all_rows": _analyse_cohort(
+    predictions: list[dict[str, Any]] = []
+    analyses = {}
+    for name, cohort_mask in (("all_rows", all_rows), ("sft_disjoint", ~train_prefix)):
+        collected: list[dict[str, Any]] | None = [] if return_predictions else None
+        analyses[name] = _analyse_cohort(
             dataset,
             labels,
             surface,
-            all_rows,
+            cohort_mask,
             split_seeds=split_seeds,
             bootstrap_resamples=bootstrap_resamples,
             alpha=ridge_alpha,
             l2=logistic_l2,
             logistic_steps=logistic_steps,
-            progress=_cohort_progress(progress, "all_rows"),
-        ),
-        "sft_disjoint": _analyse_cohort(
-            dataset,
-            labels,
-            surface,
-            ~train_prefix,
-            split_seeds=split_seeds,
-            bootstrap_resamples=bootstrap_resamples,
-            alpha=ridge_alpha,
-            l2=logistic_l2,
-            logistic_steps=logistic_steps,
-            progress=_cohort_progress(progress, "sft_disjoint"),
-        ),
-    }
+            progress=_cohort_progress(progress, name),
+            collect=collected,
+        )
+        if collected is not None:
+            predictions.extend({**record, "cohort": name} for record in collected)
     for name, analysis in analyses.items():
         analysis["label"] = _COHORT_LABELS[name]
     supported = []
@@ -2260,7 +2346,7 @@ def reanalyse_dataset(
         + ("; ".join(supported) if supported else "none at Holm-adjusted 0.05 support")
         + ". Future adapter comparisons and all gated probe work remain deferred."
     )
-    return {
+    result = {
         "schema_version": 1,
         "metadata": {
             "split_seeds": list(split_seeds),
@@ -2283,6 +2369,9 @@ def reanalyse_dataset(
         "analyses": analyses,
         "readme": readme,
     }
+    if return_predictions:
+        return result, predictions
+    return result
 
 
 def _format_interval(value: dict[str, float]) -> str:
@@ -2493,6 +2582,718 @@ def _apply_capture_metadata(
         results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
 
 
+# ------------------------------------------------- R29: per-row sidecar and paired compare
+
+
+def prediction_sidecar_path(reanalysis_json: str | Path) -> Path:
+    """The prediction sidecar beside a reanalysis JSON: ``<capture stem>.predictions.npz``.
+
+    The reanalysis pair is written as ``<stem>.reanalysis.{json,md}``, so the sidecar R29
+    names ``<stem>.predictions.npz`` sits next to it under the capture's stem. A file written
+    under the JSON's own stem is accepted as well, so a rename cannot silently lose it.
+    """
+    path = Path(reanalysis_json)
+    stem = path.name.removesuffix(".json")
+    candidates = [
+        path.with_name(stem.removesuffix(".reanalysis") + ".predictions.npz"),
+        path.with_name(stem + ".predictions.npz"),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+def write_prediction_sidecar(
+    path: str | Path, records: list[dict[str, Any]], metadata: dict[str, Any]
+) -> Path:
+    """Write the R29 sidecar: test-half rows and their per-control predictions.
+
+    Three array families, so ``compare`` can pair by task id per split seed without refitting:
+
+    * ``rows_{g}_{row_id,task_id,difficulty,label}`` -- one *row group* per
+      (cohort, target, split seed); the test half of that fit, in fit order. ``row_id`` is the
+      row's index in the source capture, which is what a recompute fallback would need.
+    * ``pred_{a}_predicted`` and, for a binary fit, ``pred_{a}_score`` -- one *array* per
+      distinct prediction vector. The position and surface baselines do not depend on the
+      layer, so their vectors are stored once and shared by every layer's index entry.
+    * ``meta`` -- JSON: the caller's metadata plus ``row_groups``, ``arrays`` and
+      ``predictions``, the last being one entry per (cohort, target, layer, split seed,
+      control) naming its row group and its array.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {}
+    group_index: dict[tuple[str, str, int], int] = {}
+    groups: list[dict[str, Any]] = []
+    array_index: dict[tuple[int, str, int | None], int] = {}
+    arrays: list[dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
+    for record in records:
+        group_key = (record["cohort"], record["target"], int(record["split_seed"]))
+        if group_key not in group_index:
+            position = len(groups)
+            group_index[group_key] = position
+            groups.append(
+                {
+                    "index": position,
+                    "cohort": record["cohort"],
+                    "target": record["target"],
+                    "kind": record["kind"],
+                    "split_seed": int(record["split_seed"]),
+                    "rows": int(len(record["row_ids"])),
+                }
+            )
+            payload[f"rows_{position}_row_id"] = np.asarray(record["row_ids"]).astype(np.int64)
+            payload[f"rows_{position}_task_id"] = np.asarray(record["task_ids"], dtype=str)
+            payload[f"rows_{position}_difficulty"] = np.asarray(record["difficulty"]).astype(
+                np.int64
+            )
+            payload[f"rows_{position}_label"] = np.asarray(record["actual"])
+        group = group_index[group_key]
+        control = record["control"]
+        layer = int(record["layer"])
+        array_key = (group, control, layer if control == "probe" else None)
+        if array_key not in array_index:
+            position = len(arrays)
+            array_index[array_key] = position
+            arrays.append(
+                {
+                    "index": position,
+                    "row_group": group,
+                    "control": control,
+                    "layer": array_key[2],
+                    "positive_label": _scalar(record.get("positive_label")),
+                    "has_scores": record.get("scores") is not None,
+                }
+            )
+            payload[f"pred_{position}_predicted"] = np.asarray(record["predicted"])
+            if record.get("scores") is not None:
+                payload[f"pred_{position}_score"] = np.asarray(record["scores"]).astype(np.float64)
+        entries.append(
+            {
+                "cohort": record["cohort"],
+                "target": record["target"],
+                "kind": record["kind"],
+                "layer": layer,
+                "split_seed": int(record["split_seed"]),
+                "control": control,
+                "row_group": group,
+                "array": array_index[array_key],
+            }
+        )
+    header = {
+        "schema_version": PREDICTION_SIDECAR_SCHEMA_VERSION,
+        "kind": PREDICTION_SIDECAR_KIND,
+        **{key: value for key, value in metadata.items() if key not in ("kind",)},
+        "row_groups": groups,
+        "arrays": arrays,
+        "predictions": entries,
+    }
+    payload["meta"] = np.array(json.dumps(_json_compliant(header), allow_nan=False))
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=f".{path.name}.", suffix=".tmp", dir=path.parent, delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            np.savez_compressed(handle, **payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return path
+
+
+def load_prediction_sidecar(path: str | Path) -> dict[str, Any]:
+    """Read an R29 sidecar into its row groups, prediction arrays and index."""
+    path = Path(path)
+    with np.load(path, allow_pickle=False) as handle:
+        header = json.loads(str(handle["meta"]))
+        groups = []
+        for group in header["row_groups"]:
+            index = int(group["index"])
+            groups.append(
+                {
+                    **group,
+                    "row_id": handle[f"rows_{index}_row_id"],
+                    "task_id": handle[f"rows_{index}_task_id"],
+                    "difficulty": handle[f"rows_{index}_difficulty"],
+                    "label": handle[f"rows_{index}_label"],
+                }
+            )
+        arrays = []
+        for array in header["arrays"]:
+            index = int(array["index"])
+            arrays.append(
+                {
+                    **array,
+                    "predicted": handle[f"pred_{index}_predicted"],
+                    "score": (handle[f"pred_{index}_score"] if array.get("has_scores") else None),
+                }
+            )
+    metadata = {
+        key: value
+        for key, value in header.items()
+        if key not in ("row_groups", "arrays", "predictions")
+    }
+    return {
+        "path": str(path),
+        "metadata": metadata,
+        "row_groups": groups,
+        "arrays": arrays,
+        "predictions": header["predictions"],
+    }
+
+
+class CompareRefusal(RuntimeError):
+    """``compare`` refuses a pair it cannot honestly pair; every reason is carried."""
+
+    def __init__(self, reasons: list[str]) -> None:
+        self.reasons = [str(reason) for reason in reasons]
+        super().__init__("; ".join(self.reasons))
+
+
+def _compare_rng(seed: int) -> np.random.Generator:
+    """The only randomness in ``compare``: one call per resample, so a test can record it."""
+    return np.random.default_rng(int(seed))
+
+
+def compare_resample_seeds(seed: int, resamples: int) -> list[int]:
+    """One resample seed list, derived from the CLI seed and shared by every compared cell.
+
+    R29 requires a single resample seed list across cells so that the difference of margins is
+    paired at the resample as well as at the task. The list is derived from the CLI seed, never
+    written as a literal (briefing §1.8).
+    """
+    if int(resamples) < 1:
+        raise ValueError("resamples must be positive")
+    state = np.random.SeedSequence(int(seed)).generate_state(int(resamples))
+    return [int(value) for value in state]
+
+
+def _sidecar_groups(sidecar: dict[str, Any]) -> dict[tuple[str, str, int], dict[str, Any]]:
+    return {
+        (group["cohort"], group["target"], int(group["split_seed"])): group
+        for group in sidecar["row_groups"]
+    }
+
+
+def _sidecar_series(
+    sidecar: dict[str, Any],
+) -> dict[tuple[str, str, int], dict[tuple[str, int | None], dict[str, Any]]]:
+    """``(cohort, target, split seed) -> (control, layer) -> the array that control fitted``."""
+    arrays = sidecar["arrays"]
+    series: dict[tuple[str, str, int], dict[tuple[str, int | None], dict[str, Any]]] = defaultdict(
+        dict
+    )
+    for entry in sidecar["predictions"]:
+        key = (entry["cohort"], entry["target"], int(entry["split_seed"]))
+        control = entry["control"]
+        series[key][(control, int(entry["layer"]) if control == "probe" else None)] = arrays[
+            int(entry["array"])
+        ]
+    return series
+
+
+def _prediction_index_keys(sidecar: dict[str, Any]) -> set[tuple[str, str, int, int, str]]:
+    """Every (cohort, target, layer, split seed, control) the sidecar's index names."""
+    return {
+        (
+            entry["cohort"],
+            entry["target"],
+            int(entry["layer"]),
+            int(entry["split_seed"]),
+            entry["control"],
+        )
+        for entry in sidecar["predictions"]
+    }
+
+
+def _compare_refusals(left: dict[str, Any], right: dict[str, Any]) -> list[str]:
+    """Every reason the two sidecars may not be paired (R29), reported together."""
+    reasons: list[str] = []
+    left_meta, right_meta = left["metadata"], right["metadata"]
+    left_seeds = [int(value) for value in left_meta.get("split_seeds", [])]
+    right_seeds = [int(value) for value in right_meta.get("split_seeds", [])]
+    if left_seeds != right_seeds:
+        reasons.append(f"split seeds differ: {left_seeds} vs {right_seeds}")
+    left_layers = (left_meta.get("layer_fractions"), list(left_meta.get("layers", [])))
+    right_layers = (right_meta.get("layer_fractions"), list(right_meta.get("layers", [])))
+    if left_layers != right_layers:
+        reasons.append(f"layer fractions differ: {left_layers} vs {right_layers}")
+    if left_meta.get("generator_version") != right_meta.get("generator_version"):
+        reasons.append(
+            "generator version differs: "
+            f"{left_meta.get('generator_version')} vs {right_meta.get('generator_version')}"
+        )
+    if left_meta.get("cohort_labels") != right_meta.get("cohort_labels"):
+        reasons.append(
+            "cohort labels differ: "
+            f"{sorted(left_meta.get('cohort_labels') or {})} vs "
+            f"{sorted(right_meta.get('cohort_labels') or {})}"
+        )
+    left_groups, right_groups = _sidecar_groups(left), _sidecar_groups(right)
+    if set(left_groups) != set(right_groups):
+        missing = sorted(set(left_groups) ^ set(right_groups))
+        reasons.append(f"prediction cells differ: {len(missing)} unpaired, e.g. {missing[:3]}")
+    left_index = _prediction_index_keys(left)
+    right_index = _prediction_index_keys(right)
+    if left_index != right_index:
+        unpaired = sorted(left_index ^ right_index)
+        reasons.append(
+            "layer/control coverage differs: "
+            f"{len(unpaired)} unpaired index entries, e.g. {unpaired[:3]}"
+        )
+    for key in sorted(set(left_groups) & set(right_groups)):
+        left_tasks = sorted(set(left_groups[key]["task_id"].tolist()))
+        right_tasks = sorted(set(right_groups[key]["task_id"].tolist()))
+        if left_tasks != right_tasks:
+            cohort, target, split_seed = key
+            reasons.append(
+                f"task ids differ for {cohort}/{target} at split seed {split_seed}: "
+                f"{len(left_tasks)} vs {len(right_tasks)} tasks, "
+                f"{len(set(left_tasks) & set(right_tasks))} shared"
+            )
+    return reasons
+
+
+def _series_prediction(
+    group: dict[str, Any], array: dict[str, Any], kind: str
+) -> dict[str, np.ndarray]:
+    actual = group["label"]
+    prediction: dict[str, np.ndarray] = {
+        "actual": actual.astype(float) if kind == "regression" else actual,
+        "predicted": array["predicted"],
+    }
+    if array.get("score") is not None:
+        prediction["positive_scores"] = array["score"]
+        prediction["positive_label"] = np.array(array["positive_label"])
+    return prediction
+
+
+def _task_buckets(task_ids: np.ndarray, rows: np.ndarray) -> dict[str, np.ndarray]:
+    buckets: dict[str, list[int]] = defaultdict(list)
+    for row in rows.tolist():
+        buckets[str(task_ids[row])].append(int(row))
+    return {task: np.array(values, dtype=int) for task, values in buckets.items()}
+
+
+def _shared_task_draws(tasks: list[str], resample_seeds: list[int]) -> list[np.ndarray]:
+    """One task-id draw per resample seed, used identically on both sides -- this is the pairing."""
+    unique = np.array(tasks, dtype=str)
+    return [
+        unique[_compare_rng(seed).integers(0, len(unique), len(unique))] for seed in resample_seeds
+    ]
+
+
+def _draw_scores(
+    kind: str,
+    prediction: dict[str, np.ndarray],
+    buckets: dict[str, np.ndarray],
+    draws: list[np.ndarray],
+) -> list[float]:
+    return [
+        _primary_score(kind, prediction, np.concatenate([buckets[task] for task in draw.tolist()]))
+        for draw in draws
+    ]
+
+
+def _compare_direction(interval: dict[str, float]) -> tuple[bool, str]:
+    lower, upper = interval["lower"], interval["upper"]
+    if not (np.isfinite(lower) and np.isfinite(upper)):
+        return False, "undetermined"
+    if lower > 0:
+        return True, "right"
+    if upper < 0:
+        return True, "left"
+    return False, "none"
+
+
+def _compare_cell(
+    difference: list[float],
+    left_margin: list[float],
+    right_margin: list[float],
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    interval = _interval(difference)
+    supported, direction = _compare_direction(interval)
+    return {
+        "difference": interval,
+        "left_margin": _interval(left_margin),
+        "right_margin": _interval(right_margin),
+        "supported": supported,
+        "direction": direction,
+        **counts,
+    }
+
+
+def _compare_scopes(
+    left_group: dict[str, Any], right_group: dict[str, Any]
+) -> list[tuple[str, np.ndarray, np.ndarray]]:
+    """``pooled`` plus one scope per difficulty level shared by both sides (R7)."""
+    left_rows = np.arange(len(left_group["task_id"]), dtype=int)
+    right_rows = np.arange(len(right_group["task_id"]), dtype=int)
+    scopes: list[tuple[str, np.ndarray, np.ndarray]] = [("pooled", left_rows, right_rows)]
+    levels = sorted(
+        set(left_group["difficulty"].tolist()) & set(right_group["difficulty"].tolist())
+    )
+    for level in levels:
+        scopes.append(
+            (
+                str(level),
+                np.flatnonzero(left_group["difficulty"] == level),
+                np.flatnonzero(right_group["difficulty"] == level),
+            )
+        )
+    return scopes
+
+
+def compare_predictions(  # noqa: C901 - one paired bootstrap over cohort/target/layer/scope
+    left: dict[str, Any],
+    right: dict[str, Any],
+    *,
+    resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
+    seed: int = DEFAULT_COMPARE_SEED,
+    progress: Any = None,
+) -> dict[str, Any]:
+    """Paired bootstrap of the difference of margins, right minus left (SPEC-004 §2, R29).
+
+    Refuses unless task ids per split seed, split seeds, layer fractions, generator version and
+    cohort labels all match. Every cell resamples the *shared* task ids with the same seed
+    list, so probe and baseline, left and right, move together under one resample.
+    """
+    reasons = _compare_refusals(left, right)
+    if reasons:
+        raise CompareRefusal(reasons)
+    resample_seeds = compare_resample_seeds(seed, resamples)
+    left_groups, right_groups = _sidecar_groups(left), _sidecar_groups(right)
+    left_series, right_series = _sidecar_series(left), _sidecar_series(right)
+    metadata = left["metadata"]
+    split_seeds = [int(value) for value in metadata.get("split_seeds", [])]
+    cohort_labels = dict(metadata.get("cohort_labels") or {})
+    present = {key[0] for key in left_groups}
+    cohorts = [name for name in _COHORT_LABELS if name in present]
+    cohorts.extend(sorted(present - set(cohorts)))
+    comparisons: dict[str, Any] = {}
+    # R26(g): one progress line per (cohort, target), the outer unit of work here.
+    units = len({(cohort, target) for cohort, target, _ in left_groups if cohort in cohorts})
+    done = 0
+    for cohort in cohorts:
+        target_names = {key[1] for key in left_groups if key[0] == cohort}
+        ordered = [name for name in REANALYSIS_TARGETS if name in target_names]
+        ordered.extend(sorted(target_names - set(ordered)))
+        targets: dict[str, Any] = {}
+        shared_tasks: set[str] = set()
+        for target in ordered:
+            pooled: dict[tuple[int, str, str], list[float]] = defaultdict(list)
+            margins: dict[tuple[str, int, str, str], list[float]] = defaultdict(list)
+            counts: dict[tuple[int, str, str], dict[str, int]] = {}
+            kind = ""
+            layers: list[int] = []
+            for split_seed in split_seeds:
+                key = (cohort, target, split_seed)
+                if key not in left_groups or key not in right_groups:
+                    continue
+                left_group, right_group = left_groups[key], right_groups[key]
+                kind = left_group["kind"]
+                left_cells, right_cells = left_series[key], right_series[key]
+                layers = sorted(
+                    {
+                        layer
+                        for control, layer in left_cells
+                        if control == "probe" and layer is not None
+                    }
+                )
+                shared_tasks.update(left_group["task_id"].tolist())
+                for scope, left_rows, right_rows in _compare_scopes(left_group, right_group):
+                    left_buckets = _task_buckets(left_group["task_id"], left_rows)
+                    right_buckets = _task_buckets(right_group["task_id"], right_rows)
+                    tasks = sorted(set(left_buckets) & set(right_buckets))
+                    if not tasks:
+                        continue
+                    draws = _shared_task_draws(tasks, resample_seeds)
+                    scores: dict[tuple[str, tuple[str, int | None]], list[float]] = {}
+                    for side, group, cells, buckets in (
+                        ("left", left_group, left_cells, left_buckets),
+                        ("right", right_group, right_cells, right_buckets),
+                    ):
+                        for series_key, array in cells.items():
+                            scores[(side, series_key)] = _draw_scores(
+                                kind,
+                                _series_prediction(group, array, kind),
+                                buckets,
+                                draws,
+                            )
+                    for layer in layers:
+                        for control in _COMPARE_CONTROLS:
+                            probe_left = scores[("left", ("probe", layer))]
+                            probe_right = scores[("right", ("probe", layer))]
+                            base_left = scores[("left", (control, None))]
+                            base_right = scores[("right", (control, None))]
+                            left_margin = [
+                                probe - base
+                                for probe, base in zip(probe_left, base_left, strict=True)
+                            ]
+                            right_margin = [
+                                probe - base
+                                for probe, base in zip(probe_right, base_right, strict=True)
+                            ]
+                            pooled[(layer, control, scope)].extend(
+                                right - left_value
+                                for right, left_value in zip(right_margin, left_margin, strict=True)
+                            )
+                            margins[("left", layer, control, scope)].extend(left_margin)
+                            margins[("right", layer, control, scope)].extend(right_margin)
+                            counts[(layer, control, scope)] = {
+                                "n_tasks": len(tasks),
+                                "n_rows_left": int(sum(len(left_buckets[task]) for task in tasks)),
+                                "n_rows_right": int(
+                                    sum(len(right_buckets[task]) for task in tasks)
+                                ),
+                            }
+            if not layers:
+                continue
+            layer_entries: dict[str, Any] = {}
+            for layer in layers:
+                controls: dict[str, Any] = {}
+                for control in _COMPARE_CONTROLS:
+                    scopes = sorted(
+                        {
+                            scope
+                            for (found, name, scope) in pooled
+                            if found == layer and name == control
+                        }
+                    )
+                    cell: dict[str, Any] = {"by_difficulty": {}}
+                    for scope in scopes:
+                        entry = _compare_cell(
+                            pooled[(layer, control, scope)],
+                            margins[("left", layer, control, scope)],
+                            margins[("right", layer, control, scope)],
+                            counts[(layer, control, scope)],
+                        )
+                        if scope == "pooled":
+                            cell["pooled"] = entry
+                        else:
+                            cell["by_difficulty"][scope] = entry
+                    controls[_COMPARE_MARGIN_KEYS[control]] = cell
+                layer_entries[str(layer)] = controls
+            targets[target] = {"kind": kind, "layers": layer_entries}
+            done += 1
+            if progress is not None:
+                progress(done, units, f"{cohort}/{target}")
+        comparisons[cohort] = {
+            "label": cohort_labels.get(cohort, cohort),
+            "reportable_scope": _COHORT_REPORTABLE_SCOPE.get(cohort, "pooled"),
+            "shared_tasks": len(shared_tasks),
+            "targets": targets,
+        }
+    return {
+        "schema_version": COMPARE_SCHEMA_VERSION,
+        "refused": False,
+        "reasons": [],
+        "metadata": {
+            "left": left.get("path"),
+            "right": right.get("path"),
+            "resamples": int(resamples),
+            "seed": int(seed),
+            "resample_seeds_sha256": hashlib.sha256(
+                json.dumps(resample_seeds).encode("utf-8")
+            ).hexdigest(),
+            "bootstrap_unit": "task_id",
+            "interval_percentiles": [2.5, 50.0, 97.5],
+            "quantity": "difference of margins, right minus left",
+            "controls": list(_COMPARE_CONTROLS),
+            "split_seeds": split_seeds,
+            "layers": list(metadata.get("layers", [])),
+            "layer_fractions": metadata.get("layer_fractions"),
+            "generator_version": metadata.get("generator_version"),
+            "cohort_labels": cohort_labels,
+            "reportable_scope": dict(_COHORT_REPORTABLE_SCOPE),
+        },
+        "comparisons": comparisons,
+    }
+
+
+def _compare_row(layer: int, controls: dict[str, Any], scope: str) -> list[str] | None:
+    cells = []
+    for control in _COMPARE_CONTROLS:
+        entry = controls[_COMPARE_MARGIN_KEYS[control]]
+        found = entry.get("pooled") if scope == "pooled" else entry["by_difficulty"].get(scope)
+        if found is None:
+            return None
+        cells.append(found)
+    supported = all(cell["supported"] for cell in cells)
+    return [
+        str(layer),
+        *[_format_interval(cell["difference"]) for cell in cells],
+        "yes" if supported else "no",
+        str(cells[0].get("n_tasks", 0)),
+    ]
+
+
+def render_compare_markdown(results: dict[str, Any]) -> str:
+    """One table per target per cohort, pooled and within difficulty (R7)."""
+    metadata = results["metadata"]
+    out = [
+        "# P2 paired comparison — right minus left",
+        "",
+        f"left: `{metadata.get('left')}`",
+        "",
+        f"right: `{metadata.get('right')}`",
+        "",
+    ]
+    if results.get("refused"):
+        out.extend(["**refused**: no comparison was computed. Reasons:", ""])
+        out.extend(f"- {reason}" for reason in results.get("reasons", []))
+        out.append("")
+        return "\n".join(out)
+    out.extend(
+        [
+            f"{metadata['resamples']} resamples of the shared task ids per split seed "
+            f"({len(metadata['split_seeds'])} seeds), one resample seed list across every cell "
+            f"(seed {metadata['seed']}, list sha256 {metadata['resample_seeds_sha256'][:12]}). "
+            "Each cell is the bootstrap median and 95% interval of the difference of margins; "
+            '"supported" means both margin-difference intervals exclude zero.',
+            "",
+        ]
+    )
+    header = ["layer", "Δ margin vs position", "Δ margin vs surface", "supported", "n_tasks"]
+    for cohort, analysis in results["comparisons"].items():
+        scope_note = (
+            "within difficulty (R7)"
+            if analysis["reportable_scope"] == "by_difficulty"
+            else "pooled"
+        )
+        out.extend(
+            [
+                f"## {analysis['label']}",
+                "",
+                f"{analysis['shared_tasks']} shared tasks. Reportable scope: {scope_note}.",
+                "",
+            ]
+        )
+        for target, entry in analysis["targets"].items():
+            scopes = ["pooled"]
+            for controls in entry["layers"].values():
+                for control in _COMPARE_CONTROLS:
+                    scopes.extend(controls[_COMPARE_MARGIN_KEYS[control]]["by_difficulty"])
+            for scope in list(dict.fromkeys(scopes)):
+                title = (
+                    f"### {target} ({entry['kind']}) — pooled"
+                    if scope == "pooled"
+                    else f"### {target} ({entry['kind']}) — within difficulty {scope}"
+                )
+                rows = []
+                for layer, controls in entry["layers"].items():
+                    row = _compare_row(int(layer), controls, scope)
+                    if row is not None:
+                        rows.append(row)
+                if not rows:
+                    continue
+                marker = " (reportable)" if scope != "pooled" and cohort == "sft_disjoint" else ""
+                out.extend([title + marker, ""])
+                out.extend(_table(header, rows))
+                out.append("")
+    return "\n".join(out)
+
+
+def _compare_identity(side: str, json_path: Path, sidecar: Path) -> dict[str, Any]:
+    return {
+        f"{side}": str(json_path),
+        f"{side}_sha256": sha256_of(json_path) if json_path.is_file() else None,
+        f"{side}_predictions": str(sidecar),
+        f"{side}_predictions_sha256": sha256_of(sidecar) if sidecar.is_file() else None,
+    }
+
+
+def _main_compare(argv: list[str]) -> None:
+    """SPEC-004 §2's paired cross-policy comparison over two reanalysis sidecars (R29)."""
+    started = time.perf_counter()
+    parser = argparse.ArgumentParser(
+        description="Paired bootstrap of the difference of margins between two reanalyses."
+    )
+    parser.add_argument("--left", type=Path, required=True)
+    parser.add_argument("--right", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--resamples", type=int, default=DEFAULT_BOOTSTRAP_RESAMPLES)
+    parser.add_argument("--seed", type=int, default=DEFAULT_COMPARE_SEED)
+    args = parser.parse_args(argv)
+    sides = {"left": args.left, "right": args.right}
+    sidecars = {name: prediction_sidecar_path(path) for name, path in sides.items()}
+    identity = {"git_commit": git_commit()}
+    for name, path in sides.items():
+        identity.update(_compare_identity(name, path, sidecars[name]))
+    with RunLog.open(
+        args.output, name="state-probe-compare", command=sys.argv, identity=identity
+    ) as log:
+        missing = [
+            f"{name} has no prediction sidecar at {sidecars[name]}; R29's fallback is to "
+            f"recompute both fits from the two capture .npz files, which this tool does not do"
+            for name in sides
+            if not sidecars[name].is_file()
+        ]
+        results: dict[str, Any]
+        if missing:
+            results = _refused_compare(sides, sidecars, args, missing)
+        else:
+            loaded = {name: load_prediction_sidecar(sidecars[name]) for name in sides}
+            try:
+                results = compare_predictions(
+                    loaded["left"],
+                    loaded["right"],
+                    resamples=args.resamples,
+                    seed=args.seed,
+                    progress=lambda step, total, label: log.progress(step, total, label),
+                )
+            except CompareRefusal as refusal:
+                results = _refused_compare(sides, sidecars, args, refusal.reasons)
+        results["metadata"]["command"] = shlex.join(sys.argv)
+        results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
+        json_path = args.output / "compare.json"
+        markdown_path = args.output / "compare.md"
+        _atomic_text(
+            json_path,
+            json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
+            + "\n",
+        )
+        markdown = render_compare_markdown(results)
+        _atomic_text(markdown_path, markdown + "\n")
+        print(markdown)
+        log.info("wrote", path=str(json_path))
+        log.info("wrote", path=str(markdown_path))
+        if results["refused"]:
+            for reason in results["reasons"]:
+                log.error("refused", reason=reason)
+            raise SystemExit(2)
+
+
+def _refused_compare(
+    sides: dict[str, Path],
+    sidecars: dict[str, Path],
+    args: argparse.Namespace,
+    reasons: list[str],
+) -> dict[str, Any]:
+    return {
+        "schema_version": COMPARE_SCHEMA_VERSION,
+        "refused": True,
+        "reasons": list(reasons),
+        "metadata": {
+            "left": str(sides["left"]),
+            "right": str(sides["right"]),
+            "left_predictions": str(sidecars["left"]),
+            "right_predictions": str(sidecars["right"]),
+            "resamples": int(args.resamples),
+            "seed": int(args.seed),
+            "bootstrap_unit": "task_id",
+        },
+        "comparisons": {},
+    }
+
+
 def _main_reanalyse(argv: list[str]) -> None:
     started = time.perf_counter()
     parser = argparse.ArgumentParser(
@@ -2505,6 +3306,12 @@ def _main_reanalyse(argv: list[str]) -> None:
     parser.add_argument("--data-seed", type=int, default=20260902)
     parser.add_argument("--generator-version", type=int)
     parser.add_argument("--logistic-steps", type=int, default=120)
+    parser.add_argument(
+        "--predictions",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="write the R29 per-row prediction sidecar that `compare` pairs on.",
+    )
     args = parser.parse_args(argv)
     seeds = tuple(int(value) for value in args.split_seeds.split(",") if value.strip())
     identity = {
@@ -2520,7 +3327,7 @@ def _main_reanalyse(argv: list[str]) -> None:
         if "generator_version" not in dataset.meta and "generator_version" in capture_context:
             dataset.meta["generator_version"] = capture_context["generator_version"]
         captured_data_seed = capture_context.get("data_seed", dataset.meta.get("data_seed"))
-        results = reanalyse_dataset(
+        produced = reanalyse_dataset(
             dataset,
             split_seeds=seeds,
             bootstrap_resamples=args.bootstrap_resamples,
@@ -2528,7 +3335,9 @@ def _main_reanalyse(argv: list[str]) -> None:
             captured_data_seed=captured_data_seed,
             generator_version=args.generator_version,
             logistic_steps=args.logistic_steps,
+            return_predictions=args.predictions,
         )
+        results, predictions = produced if isinstance(produced, tuple) else (produced, [])
         _apply_capture_metadata(results, capture_context, dataset)
         results["metadata"]["command"] = shlex.join(sys.argv)
         results["metadata"]["input"] = str(args.input)
@@ -2546,6 +3355,30 @@ def _main_reanalyse(argv: list[str]) -> None:
         print(markdown)
         log.info("wrote", path=str(json_path))
         log.info("wrote", path=str(markdown_path))
+        if predictions:
+            sidecar_path = write_prediction_sidecar(
+                args.output / f"{args.input.name.removesuffix('.npz')}.predictions.npz",
+                predictions,
+                {
+                    "split_seeds": list(seeds),
+                    "bootstrap_resamples": args.bootstrap_resamples,
+                    "layers": list(dataset.layers),
+                    "layer_fractions": (dataset.meta.get("layer_selection") or {}).get("fractions"),
+                    "generator_version": results["metadata"]["generator_version"],
+                    "data_seed": args.data_seed,
+                    "cohort_labels": dict(_COHORT_LABELS),
+                    "controls": list(_PREDICTION_CONTROLS),
+                    "targets": dict(REANALYSIS_TARGETS),
+                    "generator_version_at_head": GENERATOR_VERSION,
+                    "input": str(args.input),
+                    "reanalysis_json": str(json_path),
+                    "reanalysis_json_sha256": sha256_of(json_path),
+                    "model": results["metadata"].get("model"),
+                    "policy": results["metadata"].get("policy"),
+                    "command": shlex.join(sys.argv),
+                },
+            )
+            log.info("wrote", path=str(sidecar_path))
 
 
 # --------------------------------------------------------------------------- C7 bfloat16 refit
@@ -3447,6 +4280,9 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
         return
     if len(sys.argv) > 1 and sys.argv[1] == "refit-bf16":
         _main_refit_bf16(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "compare":
+        _main_compare(sys.argv[2:])
         return
 
     from local_llm_lab.models import load_model_spec

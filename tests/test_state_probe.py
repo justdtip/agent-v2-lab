@@ -926,3 +926,314 @@ def test_refit_cli_writes_both_artifact_pairs_with_a_run_log(monkeypatch, tmp_pa
     assert "| max absolute margin change |" in (output / "refit-comparison.md").read_text(
         encoding="utf-8"
     )
+
+
+# ------------------------------------------------- SPEC-004 §2 / R29 compare and its sidecar
+
+
+def _sidecar_records(
+    *,
+    advantage_layer: int | None = None,
+    advantage: float = 0.0,
+    layers: tuple[int, ...] = (4, 8),
+    split_seeds: tuple[int, ...] = (20260903, 20260904),
+    cohorts: tuple[str, ...] = ("all_rows", "sft_disjoint"),
+    task_offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Per-row prediction records shaped exactly as ``_analyse_cohort`` collects them.
+
+    The truth is a ramp; the position and surface baselines carry a fixed error and the probe
+    carries the same error scaled by ``1 - advantage``, so an advantage of one makes the probe
+    exact on that layer and leaves every other cell identical between the two sides.
+    """
+    records: list[dict[str, Any]] = []
+    tasks = [f"p2-d0-read-{index + task_offset:04d}-clean" for index in range(12)]
+    task_ids = np.array([task for task in tasks for _ in range(2)], dtype=str)
+    difficulty = np.array([index % 2 for index, _ in enumerate(tasks) for _ in range(2)])
+    actual = np.arange(len(task_ids), dtype=float)
+    error = np.array([(-1.0) ** index * (index % 5) for index in range(len(task_ids))])
+    for cohort in cohorts:
+        for split_seed in split_seeds:
+            for layer in layers:
+                scale = 1.0 - advantage if layer == advantage_layer else 1.0
+                base = {
+                    "cohort": cohort,
+                    "target": "pending_count",
+                    "kind": "regression",
+                    "layer": layer,
+                    "split_seed": split_seed,
+                    "row_ids": np.arange(len(task_ids)),
+                    "task_ids": task_ids,
+                    "difficulty": difficulty,
+                    "actual": actual,
+                    "scores": None,
+                    "positive_label": None,
+                }
+                records.append({**base, "control": "probe", "predicted": actual + error * scale})
+                records.append({**base, "control": "position", "predicted": actual + error * 2.0})
+                records.append({**base, "control": "surface", "predicted": actual + error * 3.0})
+    return records
+
+
+def _sidecar_metadata(**overrides: Any) -> dict[str, Any]:
+    metadata = {
+        "schema_version": state_probe.PREDICTION_SIDECAR_SCHEMA_VERSION,
+        "split_seeds": [20260903, 20260904],
+        "layers": [4, 8],
+        "layer_fractions": [0.25, 0.5],
+        "generator_version": GENERATOR_VERSION,
+        "data_seed": 20260902,
+        "cohort_labels": dict(state_probe._COHORT_LABELS),
+        "controls": list(state_probe._PREDICTION_CONTROLS),
+    }
+    metadata.update(overrides)
+    return metadata
+
+
+def _write_sidecar(path: Path, **kwargs: Any) -> dict[str, Any]:
+    metadata_overrides = kwargs.pop("metadata", {})
+    records = kwargs.pop("records", None)
+    if records is None:
+        records = _sidecar_records(**kwargs)
+    state_probe.write_prediction_sidecar(path, records, _sidecar_metadata(**metadata_overrides))
+    return state_probe.load_prediction_sidecar(path)
+
+
+def _reanalysis_fixture() -> state_probe.ProbeDataset:
+    """A small real-generator capture with planted signal, for the sidecar contract tests."""
+    from local_llm_lab.pipeline.tasks import difficulty as task_difficulty
+
+    tasks = [*make_tasks("train", 8), *make_tasks("test", 8, perturb=False)]
+    difficulties = {}
+    for task in tasks:
+        split = task.task_id.split("-", 1)[0]
+        index = int(task.task_id.rsplit("-", 2)[1])
+        difficulties[task.task_id] = task_difficulty(split, index)
+    dataset = state_probe.build_label_dataset(tasks, difficulties)
+    pending = dataset.labels["pending_count"].astype(float)
+    inspect = (dataset.labels["phase"] == "inspect").astype(float)
+    rng = np.random.default_rng(417)
+    dataset.layers = [0]
+    dataset.features = {
+        0: np.column_stack(
+            [pending, inspect, pending + inspect, rng.normal(size=len(dataset))]
+        ).astype(np.float32)
+    }
+    dataset.meta.update(
+        {
+            "layers": [0],
+            "data_seed": 20260902,
+            "keep_last": 2,
+            "layer_selection": {"fractions": [0.5], "indices": [0], "num_layers": 2},
+        }
+    )
+    return dataset
+
+
+def test_reanalysis_predictions_are_optional_and_leave_the_result_unchanged() -> None:
+    """R29's sidecar is additive: the JSON result is identical with and without it."""
+    dataset = _reanalysis_fixture()
+    kwargs: dict[str, Any] = {"split_seeds": (20260903,), "bootstrap_resamples": 2}
+    plain = state_probe.reanalyse_dataset(dataset, **kwargs)
+    with_rows, predictions = state_probe.reanalyse_dataset(
+        dataset, **kwargs, return_predictions=True
+    )
+
+    def canonical(result: dict[str, Any]) -> str:
+        payload = {key: value for key, value in result.items() if key != "metadata"}
+        return json.dumps(state_probe._json_compliant(payload), sort_keys=True, allow_nan=False)
+
+    assert canonical(plain) == canonical(with_rows)
+    assert predictions
+
+
+def test_reanalysis_sidecar_records_test_half_rows_for_every_control(tmp_path) -> None:
+    dataset = _reanalysis_fixture()
+    _result, predictions = state_probe.reanalyse_dataset(
+        dataset,
+        split_seeds=(20260903, 20260904),
+        bootstrap_resamples=2,
+        return_predictions=True,
+    )
+    path = state_probe.write_prediction_sidecar(
+        tmp_path / "capture.predictions.npz", predictions, _sidecar_metadata(layers=[0])
+    )
+    sidecar = state_probe.load_prediction_sidecar(path)
+
+    controls = {entry["control"] for entry in sidecar["predictions"]}
+    assert controls == set(state_probe._PREDICTION_CONTROLS)
+    assert {entry["cohort"] for entry in sidecar["predictions"]} == set(state_probe._COHORT_LABELS)
+    assert {entry["split_seed"] for entry in sidecar["predictions"]} == {20260903, 20260904}
+    group = sidecar["row_groups"][0]
+    assert set(group) >= {"row_id", "task_id", "difficulty", "label", "cohort", "target", "kind"}
+    assert len(group["row_id"]) == len(group["task_id"]) == len(group["difficulty"])
+    # Test-half only: a proper subset of the cohort's rows, and every task id is a real one.
+    assert 0 < len(group["row_id"]) < len(dataset)
+    assert set(group["task_id"].tolist()) <= set(dataset.task_ids.tolist())
+    assert sidecar["metadata"]["generator_version"] == GENERATOR_VERSION
+
+
+def test_compare_supports_the_planted_layer_only(tmp_path) -> None:
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", advantage_layer=8, advantage=1.0)
+
+    results = state_probe.compare_predictions(left, right, resamples=32, seed=20260905)
+
+    cells = results["comparisons"]["all_rows"]["targets"]["pending_count"]["layers"]
+    planted = cells["8"]["margin_over_position"]["pooled"]
+    flat = cells["4"]["margin_over_position"]["pooled"]
+    assert planted["supported"] is True
+    assert planted["difference"]["median"] > 0
+    assert planted["direction"] == "right"
+    assert flat["supported"] is False
+    assert cells["8"]["margin_over_surface"]["pooled"]["supported"] is True
+
+
+def test_compare_uses_one_resample_seed_list_for_every_cell(tmp_path, monkeypatch) -> None:
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz")
+    seen: list[int] = []
+    original = state_probe._compare_rng
+
+    def recording(seed: int) -> Any:
+        seen.append(int(seed))
+        return original(seed)
+
+    monkeypatch.setattr(state_probe, "_compare_rng", recording)
+    resamples = 8
+    state_probe.compare_predictions(left, right, resamples=resamples, seed=20260905)
+
+    expected = state_probe.compare_resample_seeds(20260905, resamples)
+    chunks = [seen[start : start + resamples] for start in range(0, len(seen), resamples)]
+    assert len(chunks) > 1
+    assert all(chunk == expected for chunk in chunks)
+
+
+def test_compare_reports_within_difficulty_tables_and_marks_the_reportable_scope(
+    tmp_path,
+) -> None:
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", advantage_layer=8, advantage=1.0)
+
+    results = state_probe.compare_predictions(left, right, resamples=16, seed=20260905)
+
+    disjoint = results["comparisons"]["sft_disjoint"]
+    assert disjoint["reportable_scope"] == "by_difficulty"
+    assert results["comparisons"]["all_rows"]["reportable_scope"] == "pooled"
+    cell = disjoint["targets"]["pending_count"]["layers"]["8"]["margin_over_position"]
+    assert set(cell["by_difficulty"]) == {"0", "1"}
+    assert all(entry["n_tasks"] > 0 for entry in cell["by_difficulty"].values())
+    markdown = state_probe.render_compare_markdown(results)
+    assert "pending_count" in markdown
+    assert "within difficulty" in markdown
+
+
+@pytest.mark.parametrize(
+    ("overrides", "kwargs", "reason"),
+    [
+        ({"split_seeds": [20260903]}, {"split_seeds": (20260903,)}, "split seeds"),
+        ({"layer_fractions": [0.25, 0.75]}, {}, "layer"),
+        ({"generator_version": GENERATOR_VERSION - 1}, {}, "generator version"),
+        ({"cohort_labels": {"all_rows": "all_rows"}}, {"cohorts": ("all_rows",)}, "cohort"),
+        ({}, {"task_offset": 100}, "task ids"),
+    ],
+)
+def test_compare_refuses_on_every_mismatch(tmp_path, overrides, kwargs, reason) -> None:
+    left = _write_sidecar(tmp_path / "left.predictions.npz")
+    right = _write_sidecar(tmp_path / "right.predictions.npz", metadata=overrides, **kwargs)
+
+    with pytest.raises(state_probe.CompareRefusal) as raised:
+        state_probe.compare_predictions(left, right, resamples=4, seed=20260905)
+
+    assert any(reason in item for item in raised.value.reasons)
+
+
+def test_compare_cli_refuses_a_missing_sidecar_and_names_the_recompute_fallback(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    left_json = tmp_path / "left" / "a.reanalysis.json"
+    right_json = tmp_path / "right" / "b.reanalysis.json"
+    for path in (left_json, right_json):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n", encoding="utf-8")
+    state_probe.write_prediction_sidecar(
+        tmp_path / "left" / "a.predictions.npz", _sidecar_records(), _sidecar_metadata()
+    )
+    output = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "state-probe",
+            "compare",
+            "--left",
+            str(left_json),
+            "--right",
+            str(right_json),
+            "--output",
+            str(output),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        state_probe.main()
+
+    assert raised.value.code == 2
+    report = json.loads((output / "compare.json").read_text(encoding="utf-8"))
+    assert report["refused"] is True
+    assert any("b.predictions.npz" in reason for reason in report["reasons"])
+    fallback = " ".join(report["reasons"])
+    assert "recompute" in fallback and ".npz" in fallback
+    assert "refused" in (output / "compare.md").read_text(encoding="utf-8")
+    assert "refused" in capsys.readouterr().out
+
+
+def test_compare_cli_writes_the_pair_of_reports_and_a_run_log(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    import hashlib
+
+    paths = {}
+    for side, kwargs in (("left", {}), ("right", {"advantage_layer": 8, "advantage": 1.0})):
+        directory = tmp_path / side
+        directory.mkdir()
+        json_path = directory / f"{side}.reanalysis.json"
+        json_path.write_text("{}\n", encoding="utf-8")
+        state_probe.write_prediction_sidecar(
+            directory / f"{side}.predictions.npz",
+            _sidecar_records(**kwargs),
+            _sidecar_metadata(),
+        )
+        paths[side] = json_path
+    output = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "state-probe",
+            "compare",
+            "--left",
+            str(paths["left"]),
+            "--right",
+            str(paths["right"]),
+            "--output",
+            str(output),
+            "--resamples",
+            "16",
+            "--seed",
+            "20260905",
+        ],
+    )
+
+    state_probe.main()
+
+    out = capsys.readouterr().out
+    report = json.loads((output / "compare.json").read_text(encoding="utf-8"))
+    assert report["refused"] is False
+    assert report["metadata"]["resamples"] == 16
+    assert report["metadata"]["bootstrap_unit"] == "task_id"
+    events = _events(output)
+    start = _flat(events[0])
+    assert events[0]["run"] == "state-probe-compare"
+    assert start["left_sha256"] == hashlib.sha256(b"{}\n").hexdigest()
+    assert start["left_predictions_sha256"] and start["right_predictions_sha256"]
+    assert "# P2 paired comparison" in out
+    assert (output / "compare.md").is_file()
