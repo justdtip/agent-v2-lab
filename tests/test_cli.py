@@ -167,3 +167,67 @@ def test_stage_select_writes_provenance_after_selection_json(monkeypatch, tmp_pa
     selection = json.loads((output / "selection.json").read_text(encoding="utf-8"))
     assert calls == [(output, None, spec, {"stage": "select", "selection": selection})]
     assert model_lookups == [config["model"]]
+
+
+def test_lora_config_reflects_grad_checkpoint_and_resume(tmp_path) -> None:
+    from pathlib import Path
+
+    from local_llm_lab.pipeline.cli import DEFAULT_CONFIG, load_config, lora_config
+
+    config = load_config(DEFAULT_CONFIG)
+    assert isinstance(config["train"]["grad_checkpoint"], bool), "project config sets it explicitly"
+    lora = lora_config(config)
+    assert lora["grad_checkpoint"] is config["train"]["grad_checkpoint"]
+    assert "resume_adapter_file" not in lora
+    assert lora["iters"] == config["train"]["iters"]
+    assert lora["adapter_path"] == str(Path(config["output"]) / "adapters")
+
+    config["train"]["grad_checkpoint"] = True
+    assert lora_config(config, iters=7)["grad_checkpoint"] is True
+    assert lora_config(config, iters=7)["iters"] == 7
+    del config["train"]["grad_checkpoint"]
+    assert lora_config(config)["grad_checkpoint"] is True, "defaults to on when unset"
+
+    weights = tmp_path / "0000100_adapters.safetensors"
+    weights.write_bytes(b"")
+    resumed = lora_config(config, resume_from=Path("relative") / ".." / weights)
+    assert resumed["resume_adapter_file"] == str(weights.resolve())
+    assert Path(resumed["resume_adapter_file"]).is_absolute()
+    assert (
+        lora_config(config)["lora_parameters"]["keys"]
+        is not lora_config(config)["lora_parameters"]["keys"]
+    ), "each call returns a fresh key list"
+
+
+def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch) -> None:
+    """Starting a training run removes stale checkpoints without deleting sibling outputs."""
+    from local_llm_lab.pipeline import cli
+
+    config = cli.load_config(cli.DEFAULT_CONFIG)
+    output = tmp_path / "run"
+    config.update({"output": output, "data": tmp_path / "data"})
+    checkpoint = output / "checkpoints" / "step-1" / "adapters.safetensors"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"stale")
+    keep = output / "evals" / "prior.json"
+    keep.parent.mkdir(parents=True)
+    keep.write_text("preserve", encoding="utf-8")
+
+    class FakeProcess:
+        stdout: list[str] = []
+
+        def wait(self) -> int:
+            return 0
+
+    def fake_popen(*args, **kwargs):
+        assert not (output / "checkpoints").exists()
+        return FakeProcess()
+
+    monkeypatch.setattr(cli, "configure_local_cache", lambda: None)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+    monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
+
+    cli.stage_train(config, iters=1)
+
+    assert not (output / "checkpoints").exists()
+    assert keep.read_text(encoding="utf-8") == "preserve"
