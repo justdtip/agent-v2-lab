@@ -838,3 +838,13 @@ recording the execution rule. No execution lane designated yet.
   at its first point; P6 continues (6/42 cells at 11 min, ETA ~1 h 10).
 - First stage-1 measurement stands: chunk 64, batch 1, 997 tokens → OK, peak 11.86 GB,
   72.6 s step + one-row val (vs OOM at 19.17 GB unrolled). Remaining points after P6.
+
+## 2026-09-05 — R32 stage 1 lane 2 delivered; stage-1 work order filed with sequencing
+
+- Lane 2 read: budget = min(registry, device) with note; footprint block from the model
+  config's linear-attention shape; headroom 10%; schema 3; `--data`/`--max-row-tokens`/
+  `--gated-delta-chunk`. Estimator under-counts ~8× (states only; measured peaks include
+  temporaries) — must be calibrated from the probe before it gates; schema 3 blocks 4B stages
+  until the artifact is regenerated on the lane. Proposed: commit lane 1 now; calibrate, then
+  lane 2, then regenerate the preflight. Combined tree 1016 / exit 0; stash list empty after
+  the implementer's stray stash (second occurrence).
