@@ -98,12 +98,13 @@
   )
 
   def _load_training_entry() -> tuple[Any, dict[str, Any]]:
-      installed = distribution_version("mlx-lm")
-      if installed != _PINNED_MLX_LM_VERSION:
-          raise SystemExit(
-              f"mlx-lm {_PINNED_MLX_LM_VERSION} required; found {installed}"
-          )
       try:
+          package = importlib.import_module("mlx_lm")
+          installed = getattr(package, "__version__", None)
+          if installed != _PINNED_MLX_LM_VERSION:
+              raise SystemExit(
+                  f"mlx-lm {_PINNED_MLX_LM_VERSION} required; found {installed}"
+              )
           module = importlib.import_module("mlx_lm.lora")
       except ImportError as error:
           raise SystemExit(f"cannot import pinned mlx_lm.lora: {error}") from error
