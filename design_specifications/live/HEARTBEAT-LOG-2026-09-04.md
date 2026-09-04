@@ -738,3 +738,11 @@ recording the execution rule. No execution lane designated yet.
   count so `CacheDataset.itemlen` sorts correctly; train/valid-only loading; `_finish_health`
   on every exit path with idempotent `on_finish`; real `CacheDataset`/`iterate_batches` in
   tests; suite 827 / exit 0). Work order filed; attempt 3 on ratification.
+
+## 2026-09-05 — #47 approved; fix committed `9d5828c`; B4 attempt 3 STARTED; R31
+
+- Chief verified the protocol against the library itself and approved; R31 drawn from the
+  pattern (three live-run defects at mlx-lm seams that fakes stubbed on both sides): tests of
+  a library seam drive the library's real class on that side; fakes only for weights and
+  compute. Committed on a bare 827 / exit 0; pushed; #47 closed. Attempt 3 started as a
+  background process; attempts 1 and 2 kept on disk as records for the #35 amendment.

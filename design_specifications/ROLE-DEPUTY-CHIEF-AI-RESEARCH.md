@@ -133,7 +133,10 @@ slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.p
   `compare` + R29 sidecar **#45** (rebased onto B5; Holm-across-cells point for the Chief). In
   flight: B1b capture sub-slice (conditions, dual capture, R18b `capture_dtype`, the
   `task_difficulties` fix) in a worktree on top of B5.
-- Rulings R1 to R29 (R28 disjointness, R29 compare pairing). Governance: Deputy dispatches;
+- Rulings R1 to R31 (R28 disjointness, R29 compare pairing, R30 P6 secondary + scorer
+  refinements, **R31: any test of a library seam drives the library's real class on that
+  side, fakes only for weights and compute** — drawn from three live-run defects that green
+  fake-only suites missed: the adapter wrapper, the dataset protocol, the health path). Governance: Deputy dispatches;
   R19 round where the Chief asks (R27 had one); Deputy's direct review; Chief gates; Deputy
   commits and pushes; one lane, one task; tokeniser loads are not execution. Lesson relogged
   today: never gate a commit on a piped test run.

@@ -662,6 +662,11 @@ forget. Each has an integration check in §6.
   marked and excluded from the headline; a parseable note with no values scores `empty`;
   control rates are over applicable cases with n printed. Primary ledger rerun first (after the
   pooled content-control fix), secondary after these land.
+- **R31 (2026-09-05 09:05) library-protocol tests.** Any test of a seam with mlx-lm (dataset
+  protocol, trainer callback, cache classes, LoRA layer types, tokenizer boundary behaviour)
+  drives the library's real class on that side, with fakes only for weights and compute.
+  Evidence: three defects (view walker vs `LoRALinear`, `RenderedRowsDataset` vs
+  `CacheDataset`, health finish path) reached live runs because fakes stubbed both sides.
 
 ## 8. Implementer amendments (append-only, dated)
 

@@ -71,8 +71,9 @@ Evidence: `cli.py:46,519` consumes `load_rendered_splits`; byte-identical migrat
 **A6. Execution claim free; cost stated and accepted.**
 - [x] A6.1 **Lane free; condition 6 accepted** (Director: "Can you run it?" / "Go"). Two
   Deputy-run attempts on 2026-09-05 failed before iteration one on our code (unused test split
-  over the ceiling; mlx-lm 0.31.3 dataset protocol); fixes at the Chief's gate (work order
-  filed); attempt 3 follows the commit. The ceiling change was reverted (`112648b`). Previously: free since the Director's third P6 attempt completed
+  over the ceiling; mlx-lm 0.31.3 dataset protocol); fixes committed `9d5828c` (#47);
+  **attempt 3 running** (started 2026-09-05 by the Deputy). The ceiling change was reverted
+  (`112648b`); attempts 1 and 2 kept on disk as records. Previously: free since the Director's third P6 attempt completed
   (17:49–19:00 local, 2026-09-04, artifact `outputs/probes/patch-C-2026-09-04/`); earlier
   execution today: preflights 15:18/15:20, P6 attempts ~17:00 and ~18:30, all Director-run.
   No live agent holds `model-execution`. A P6 run and a training run cannot overlap.
