@@ -57,3 +57,10 @@ rollout:
   samples: 4
   temperature: 0.7
   keep_per_task: 2
+
+# R15 condition 5: the SPEC-003 §5 pre-registered success criterion for this arm, recorded
+# here before the run and never used for selection (recorded, not gated).
+criteria:
+  arm: D4
+  versus: D3
+  criterion: reported with intervals; no threshold

@@ -226,6 +226,10 @@ def test_run_d_configs_are_literal_pairwise_recipes() -> None:
         for key in ("model", "output"):
             base.pop(key)
             cross.pop(key)
+        # R15 condition 5: each arm records its own SPEC-003 §5 success criterion, so the
+        # criteria block is per-arm by design and is not part of the data recipe under test.
+        base.pop("criteria", None)
+        cross.pop("criteria", None)
         # R21(c): the cross-model arm renders the base arm's rows into a NEW directory; it
         # must never point its data output at the base arm's irreplaceable dataset.
         assert cross.pop("source_rows") == base["data"]

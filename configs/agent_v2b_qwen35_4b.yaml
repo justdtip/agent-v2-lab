@@ -57,3 +57,12 @@ rollout:
   samples: 4
   temperature: 0.7
   keep_per_task: 2
+
+# R15 condition 5: the SPEC-003 §5 pre-registered success criterion for this arm, recorded
+# here before the run and never used for selection (recorded, not gated).
+criteria:
+  arm: B4
+  versus: B
+  criterion: >-
+    total higher than run B with McNemar p < 0.05 on paired task ids, or a family-level gain
+    of at least five in one long-horizon family with no loss elsewhere
