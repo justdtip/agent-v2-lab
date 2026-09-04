@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
+import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -161,14 +163,12 @@ def position_groups(
     note_region = note_spans[-1] if note_spans else ()
     values: list[int] = []
     for value in note_values:
-        span = _find_once(
-            ids,
-            encoded(value),
-            start=note_region[0] if note_region else 0,
-            label="note_value",
-        )
-        if not set(span) <= set(note_region):
-            raise ValueError("note_value token span is outside the substituted note")
+        needle = encoded(value)
+        starts = range(note_region[0], note_region[-1] - len(needle) + 2) if note_region else ()
+        matches = [start for start in starts if ids[start : start + len(needle)] == needle]
+        if len(matches) != 1:
+            raise ValueError("note_value token span is missing or ambiguous in the substituted note")
+        span = tuple(range(matches[0], matches[0] + len(needle)))
         values.extend(span)
     observation_spans = [
         _find_once(ids, encoded(observation), start=task[-1] + 1 if task else 0, label="observation")
@@ -284,9 +284,113 @@ def replay_counterfactual(case: PatchCase) -> tuple[list[dict[str, Any]], list[d
 def _is_flip(task: Task, steps: list[dict[str, Any]], decision_step: int, *, keep_last: int) -> bool:
     report = check_trajectory(task, steps, keep_last=keep_last)
     return not any(
-        violation.kind == "value_drop" and getattr(violation, "step", decision_step) == decision_step
+        violation.kind == "value_drop" and violation.step == decision_step
         for violation in report.violations
     )
+
+
+def _message_contents(messages: Sequence[dict[str, Any]]) -> tuple[str, str, list[str], list[str]]:
+    """Extract canonical group inputs without altering the rendered prompt."""
+    system = next(
+        (message["content"] for message in messages if message.get("role") == "system"),
+        "",
+    )
+    task = next(
+        (message["content"] for message in messages if message.get("role") == "user"),
+        "",
+    )
+    notes = [
+        message["content"]
+        for message in messages
+        if message.get("role") == "assistant" and isinstance(message.get("content"), str)
+    ]
+    observations = [
+        message["content"]
+        for message in messages
+        if message.get("role") == "tool" and isinstance(message.get("content"), str)
+    ]
+    if not isinstance(system, str) or not isinstance(task, str):
+        raise ValueError("replayed messages must contain system and task text")
+    return system, task, notes, observations
+
+
+def _note_values(note: str) -> list[str]:
+    """Return explicit value clauses from a canonical expert note, if present."""
+    thought = note.split("\n```json", maxsplit=1)[0]
+    return [
+        match.group(1).strip()
+        for match in re.finditer(
+            r"\b(?:approved|first half|second half|highest so far)\s*:\s*"
+            r"(.*?)(?=;|\.\s+(?:Reading|Computing)|,\s+above threshold|$)",
+            thought,
+            flags=re.IGNORECASE,
+        )
+        if match.group(1).strip()
+    ]
+
+
+def _groups_for(tokenizer: Any, token_ids: Sequence[int], messages: Sequence[dict[str, Any]]) -> dict[str, tuple[int, ...]]:
+    system, task, notes, observations = _message_contents(messages)
+    values = _note_values(notes[-1]) if notes else []
+    groups = position_groups(
+        tokenizer,
+        token_ids,
+        system_text=system,
+        task_text=task,
+        previous_notes=notes,
+        note_values=values,
+        observations=observations,
+    )
+    if tuple(groups) != POSITION_GROUPS or any(not groups[name] for name in POSITION_GROUPS):
+        raise ValueError("each P6 position group must resolve to at least one token")
+    return groups
+
+
+def _take_rows(rows: Any, positions: Sequence[int]) -> Any:
+    import mlx.core as mx
+
+    if not positions:
+        raise ValueError("P6 position group must not be empty")
+    return mx.take(rows, mx.array(tuple(positions), dtype=mx.int32), axis=0)
+
+
+def _match_rows(rows: Any, count: int) -> Any:
+    """Deterministically truncate or cycle source rows to an injection target."""
+    import mlx.core as mx
+
+    if count <= 0 or rows.shape[0] <= 0:
+        raise ValueError("P6 source and target groups must not be empty")
+    return mx.take(rows, mx.array([index % rows.shape[0] for index in range(count)], dtype=mx.int32), axis=0)
+
+
+def _score_patch(
+    view: ArchitectureView,
+    tokenizer: Any,
+    case: PatchCase,
+    *,
+    layer: int,
+    source_rows: Any,
+    target_positions: Sequence[int],
+    failing_ids: Sequence[int],
+    keep_last: int,
+    max_tokens: int,
+) -> bool:
+    with InjectionHook(
+        view,
+        layer - 1,
+        source_rows,
+        at_positions=target_positions,
+        replace=True,
+    ):
+        raw = greedy_generate(view, tokenizer, failing_ids, max_tokens=max_tokens)
+    try:
+        _thinking, cleaned = strip_thinking(raw)
+        turn = parse_turn(cleaned)
+    except Exception:
+        return False
+    scored = [dict(step) for step in case.failing_steps]
+    scored[case.decision_step]["thought"] = turn.thought
+    return _is_flip(case.task, scored, case.decision_step, keep_last=keep_last)
 
 
 def run_patch_probe(
@@ -313,38 +417,73 @@ def run_patch_probe(
         raise ValueError("no eligible patch cases")
     if not layers or any(layer < 1 or layer > view.num_layers for layer in layers):
         raise ValueError("layers must be residual indices in [1, num_layers]")
+    if len(cases) < 2:
+        raise ValueError("P6 unrelated-task control requires at least two patch cases")
+    prepared: list[dict[str, Any]] = []
+    for case in cases:
+        failing, counterfactual = replay_counterfactual(case)
+        failing_prompt = build_prompt(tokenizer, failing, spec=spec)
+        counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec)
+        failing_ids = list(tokenizer.encode(failing_prompt, add_special_tokens=False))
+        counter_ids = list(tokenizer.encode(counter_prompt, add_special_tokens=False))
+        prepared.append(
+            {
+                "case": case,
+                "failing_ids": failing_ids,
+                "counter_ids": counter_ids,
+                "failing_groups": _groups_for(tokenizer, failing_ids, failing),
+                "counter_groups": _groups_for(tokenizer, counter_ids, counterfactual),
+                "failing_residuals": capture_residuals(view, failing_ids, layers, positions="all"),
+                "counter_residuals": capture_residuals(view, counter_ids, layers, positions="all"),
+            }
+        )
     cells: dict[str, dict[str, Any]] = {}
     for layer in layers:
         for group in POSITION_GROUPS:
-            # The detailed replay/capture data are intentionally kept local and never returned.
-            outcomes = {case.task.task_id: [] for case in cases}
-            for case in cases:
-                failing, counterfactual = replay_counterfactual(case)
-                failing_prompt = build_prompt(tokenizer, failing, spec=spec)
-                counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec)
-                failing_ids = list(tokenizer.encode(failing_prompt, add_special_tokens=False))
-                counter_ids = list(tokenizer.encode(counter_prompt, add_special_tokens=False))
-                target = tuple(range(len(failing_ids))) if group == "final_token" else (len(failing_ids) - 1,)
-                source = tuple(range(len(counter_ids))) if group == "final_token" else (len(counter_ids) - 1,)
-                source_rows = capture_residuals(view, counter_ids, [layer], positions=source)[layer]
-                with InjectionHook(view, layer - 1, source_rows, at_positions=target, replace=True):
-                    raw = greedy_generate(view, tokenizer, failing_ids, max_tokens=max_tokens)
-                try:
-                    _thinking, cleaned = strip_thinking(raw)
-                    turn = parse_turn(cleaned)
-                except Exception:
-                    outcomes[case.task.task_id].append(False)
-                    continue
-                scored = [dict(step) for step in case.failing_steps]
-                scored[case.decision_step]["thought"] = turn.thought
-                outcomes[case.task.task_id].append(
-                    _is_flip(case.task, scored, case.decision_step, keep_last=keep_last)
+            outcomes = {name: {} for name in ("treatment", *CONTROLS)}
+            for index, item in enumerate(prepared):
+                case = item["case"]
+                target = item["failing_groups"][group]
+                source = item["counter_groups"][group]
+                treatment_rows = _match_rows(_take_rows(item["counter_residuals"][layer], source), len(target))
+                outcomes["treatment"][case.task.task_id] = [_score_patch(
+                    view, tokenizer, case, layer=layer, source_rows=treatment_rows,
+                    target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
+                    max_tokens=max_tokens,
+                )]
+                unrelated = prepared[(index + 1) % len(prepared)]
+                unrelated_rows = _match_rows(
+                    _take_rows(unrelated["counter_residuals"][layer], unrelated["counter_groups"][group]),
+                    len(target),
                 )
+                outcomes["unrelated_task"][case.task.task_id] = [_score_patch(
+                    view, tokenizer, case, layer=layer, source_rows=unrelated_rows,
+                    target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
+                    max_tokens=max_tokens,
+                )]
+                random_target = random_control_positions(
+                    range(len(item["failing_ids"])), target, seed=seed,
+                    label=f"{case.task.task_id}:{layer}:{group}:target",
+                )
+                random_source = random_control_positions(
+                    range(len(item["counter_ids"])), source, seed=seed,
+                    label=f"{case.task.task_id}:{layer}:{group}:source",
+                )
+                random_rows = _match_rows(
+                    _take_rows(item["counter_residuals"][layer], random_source), len(random_target)
+                )
+                outcomes["random_positions"][case.task.task_id] = [_score_patch(
+                    view, tokenizer, case, layer=layer, source_rows=random_rows,
+                    target_positions=random_target, failing_ids=item["failing_ids"], keep_last=keep_last,
+                    max_tokens=max_tokens,
+                )]
             cells[f"{layer}:{group}"] = {
                 "layer": layer,
                 "group": group,
-                "treatment": aggregate_task_flips(outcomes),
-                "controls": {control: aggregate_task_flips(outcomes) for control in CONTROLS},
+                "treatment": aggregate_task_flips(outcomes["treatment"]),
+                "controls": {
+                    control: aggregate_task_flips(outcomes[control]) for control in CONTROLS
+                },
             }
     return {
         "model": resolved.as_dict(),
@@ -407,6 +546,22 @@ def _parse_layers(raw: str | None, resolved: ResolvedSpec) -> tuple[int, ...]:
     return tuple(dict.fromkeys(values))
 
 
+def _validate_layer_syntax(raw: str | None) -> None:
+    """Reject malformed layer text before any GPU or model-loading action."""
+    if raw is None:
+        return
+    parts = raw.split(",")
+    if not parts or any(not part.strip() for part in parts):
+        raise ValueError("--layers must be comma-separated indices or fractions")
+    for part in parts:
+        try:
+            number = float(part.strip())
+        except ValueError as error:
+            raise ValueError("--layers must be comma-separated indices or fractions") from error
+        if not math.isfinite(number) or number <= 0 or (number > 1 and not number.is_integer()):
+            raise ValueError("--layers must be positive indices or fractions in (0, 1]")
+
+
 def main() -> None:
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
 
@@ -426,6 +581,10 @@ def main() -> None:
         parser.error("--passing-eval and --failing-eval must name existing files")
     if args.keep_last < 0 or args.max_tokens <= 0:
         parser.error("--keep-last must be non-negative and --max-tokens must be positive")
+    try:
+        _validate_layer_syntax(args.layers)
+    except ValueError as error:
+        parser.error(str(error))
     try:
         cases = select_patch_cases(
             _load_payload(args.passing_eval), _load_payload(args.failing_eval), keep_last=args.keep_last

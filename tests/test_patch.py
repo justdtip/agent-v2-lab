@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import mlx.core as mx
+import numpy as np
 import pytest
 
 
@@ -181,6 +182,47 @@ def test_task_cell_aggregation_is_over_task_booleans_only() -> None:
     assert len(summary["wilson_95"]) == 2
 
 
+def test_flip_scoring_requires_the_decision_step_value_drop_to_disappear(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    task = _Task("test-aggregate_report-0-clean", "aggregate_report")
+    remaining = SimpleNamespace(violations=(SimpleNamespace(kind="value_drop", step=3),))
+    moved = SimpleNamespace(violations=(SimpleNamespace(kind="value_drop", step=2),))
+    monkeypatch.setattr(patch, "check_trajectory", lambda *_args, **_kwargs: remaining)
+    assert not patch._is_flip(task, [], 3, keep_last=2)
+    monkeypatch.setattr(patch, "check_trajectory", lambda *_args, **_kwargs: moved)
+    assert patch._is_flip(task, [], 3, keep_last=2)
+
+
+def test_patch_score_treats_an_unparseable_generation_as_non_flip(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    class Hook:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    case = patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"),
+        0,
+        ({"thought": "bad"},),
+    )
+    monkeypatch.setattr(patch, "InjectionHook", Hook)
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "not a turn")
+    monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
+    monkeypatch.setattr(patch, "parse_turn", lambda _raw: (_ for _ in ()).throw(ValueError("bad")))
+
+    assert not patch._score_patch(
+        object(), object(), case, layer=1, source_rows=object(), target_positions=(0,),
+        failing_ids=[1], keep_last=2, max_tokens=1,
+    )
+
+
 def test_replay_replaces_only_the_immediately_previous_note(monkeypatch) -> None:
     from local_llm_lab.probes import patch
 
@@ -299,3 +341,118 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
     assert ("policy", "base") in seen and ("load", "fake/hf", None) in seen
     assert seen[-1] == ("probe", selected, argv)
     assert (tmp_path / "patch.json").is_file() and (tmp_path / "patch.md").read_text() == "# fake\n"
+
+
+def test_patch_cli_rejects_malformed_layers_before_model_loading(monkeypatch, tmp_path) -> None:
+    from local_llm_lab.probes import patch
+
+    passing = tmp_path / "passing.json"
+    failing = tmp_path / "failing.json"
+    passing.write_text("{}", encoding="utf-8")
+    failing.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(patch, "select_patch_cases", lambda *_args, **_kwargs: [object()])
+    loads = []
+    monkeypatch.setattr(patch, "load_policy", lambda *_args: loads.append(True))
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-probe-patch",
+            "--passing-eval",
+            str(passing),
+            "--failing-eval",
+            str(failing),
+            "--output",
+            str(tmp_path),
+            "--layers",
+            "garbage",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        patch.main()
+
+    assert loads == []
+
+
+def test_patch_probe_uses_named_groups_full_captures_and_distinct_controls(monkeypatch) -> None:
+    from local_llm_lab.probes import patch
+
+    cases = [
+        patch.PatchCase(
+            _Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ({"thought": "bad"},)
+        ),
+        patch.PatchCase(
+            _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"), 0, ({"thought": "bad"},)
+        ),
+    ]
+    groups = {name: (index,) for index, name in enumerate(patch.POSITION_GROUPS)}
+    groups["final_token"] = (5,)
+    captures = []
+    injected = []
+
+    class View:
+        num_layers = 1
+
+    class Tokenizer:
+        def encode(self, text, add_special_tokens=False):
+            del add_special_tokens
+            if text.startswith("failing"):
+                return [10 if text.endswith("0") else 110, 11, 12, 13, 14, 15]
+            return [20 if text.endswith("0") else 120, 21, 22, 23, 24, 25]
+
+    class Hook:
+        def __init__(self, _view, _layer, vector, *, at_positions, replace):
+            assert replace
+            injected.append((tuple(np.asarray(vector).reshape(-1)), tuple(at_positions)))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(patch.ArchitectureView, "from_model", lambda _model: View())
+    monkeypatch.setattr(
+        patch,
+        "replay_counterfactual",
+        lambda case: (
+            [{"role": "user", "content": f"f{0 if '-0-' in case.task.task_id else 1}"}],
+            [{"role": "user", "content": f"c{0 if '-0-' in case.task.task_id else 1}"}],
+        ),
+    )
+    monkeypatch.setattr(
+        patch,
+        "build_prompt",
+        lambda _tokenizer, messages, **_kwargs: (
+            "failing" if messages[0]["content"].startswith("f") else "counter"
+        ) + messages[0]["content"][-1],
+    )
+    monkeypatch.setattr(patch, "position_groups", lambda *_args, **_kwargs: groups)
+    def capture(_view, ids, layers, *, positions):
+        captures.append((tuple(ids), positions))
+        assert positions == "all"
+        base = 100 if ids[0] < 100 else 200
+        return {
+            layer: mx.array([[base + layer + index] for index in range(6)], dtype=mx.float32)
+            for layer in layers
+        }
+    monkeypatch.setattr(patch, "capture_residuals", capture)
+    monkeypatch.setattr(patch, "InjectionHook", Hook)
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "raw")
+    monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
+    monkeypatch.setattr(patch, "parse_turn", lambda _raw: SimpleNamespace(thought="note"))
+    monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: True)
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), Tokenizer(), cases, spec=object(), resolved=resolved, layers=[1], policy="base",
+        keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    assert len(captures) == 4
+    assert len(injected) == len(cases) * len(groups) * 3
+    final_vectors = [vector for vector, positions in injected if positions == (5,)]
+    assert (106.0,) in final_vectors
+    assert (206.0,) in final_vectors
+    assert payload["cells"]["1:final_token"]["treatment"]["denominator"] == 2
+    assert set(payload["cells"]["1:final_token"]["controls"]) == set(patch.CONTROLS)
