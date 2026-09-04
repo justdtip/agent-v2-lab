@@ -903,3 +903,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   3 h). Chunk 32/128 points invalid (same process after an OOM; all failed at 997) — rerunning
   per process. Peak grows ~8.6 MB/token, far above the boundary states → isolation probe (no
   recurrence backward) running to locate the remaining cost before dispatching stage 2.
+- Isolation probe: no-recurrence-backward step at 997 tokens → 5.36 GB, 7.9 s (vs 11.85 GB /
+  46 s chunked; 19.17 GB unrolled). The recurrence backward is the cost. Stage 2 dispatched
+  (chunkwise-parallel gated delta; tolerance-tested against the library's step function;
+  `train.gated_delta_mode`). Remaining calibration points running one process each. The
+  earlier in-loop failures were the loop, not the script.
