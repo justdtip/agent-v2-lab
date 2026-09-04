@@ -38,12 +38,19 @@ def test_explicit_registered_specs_preserve_legacy_bytes_and_qwen35_template_pol
     assert tokenizer.kwargs[-1] == qwen35.chat.template_kwargs
 
 
-def test_build_probe_dataset_forwards_the_selected_spec_to_prompt_rendering(monkeypatch) -> None:
+def test_build_probe_dataset_forwards_the_selected_spec_to_prompt_rendering(
+    monkeypatch, tmp_path
+) -> None:
     selected = load_model_spec("qwen35-4b")
     task = SimpleNamespace(task_id="fake", family="read")
     seen = []
 
-    monkeypatch.setattr(state_probe, "_checkpoint_signature", lambda *_args, **_kwargs: "fake")
+    contexts = []
+    monkeypatch.setattr(
+        state_probe,
+        "_checkpoint_signature",
+        lambda *_args, context, **_kwargs: contexts.append(context) or "fake",
+    )
     monkeypatch.setattr(
         state_probe,
         "build_rows",
@@ -75,11 +82,21 @@ def test_build_probe_dataset_forwards_the_selected_spec_to_prompt_rendering(monk
 
     runtime = SimpleNamespace(reset_peak_memory=lambda: None, clear_cache=lambda: None)
     tokenizer = SimpleNamespace(encode=lambda *_args, **_kwargs: [1])
-    state_probe.build_probe_dataset(
-        None, tokenizer, [task], [0], spec=selected, mlx_runtime=runtime
+    dataset = state_probe.build_probe_dataset(
+        None,
+        tokenizer,
+        [task],
+        [0],
+        spec=selected,
+        mlx_runtime=runtime,
+        checkpoint_dir=tmp_path / "checkpoints",
     )
 
     assert seen == [selected]
+    assert dataset.meta["generator_version"] == GENERATOR_VERSION
+    assert contexts == [{"generator_version": GENERATOR_VERSION}]
+    shard = state_probe.load_dataset(tmp_path / "checkpoints" / "0001.npz")
+    assert shard.meta["generator_version"] == GENERATOR_VERSION
 
 
 def test_main_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path) -> None:
@@ -141,6 +158,8 @@ def test_reanalysis_generator_version_requires_a_recording_or_explicit_binding()
 def test_reanalysis_generator_version_rejects_invalid_bindings(invalid: object) -> None:
     with pytest.raises(ValueError, match="invalid"):
         state_probe._reanalysis_generator_version({"generator_version": invalid}, None)
+    with pytest.raises(ValueError, match="invalid"):
+        state_probe._reanalysis_generator_version({}, invalid)  # type: ignore[arg-type]
 
 
 def test_capture_rejects_a_checkpoint_context_with_a_stale_generator_version() -> None:
@@ -191,10 +210,15 @@ def test_saved_recovery_npz_offline_rows_use_historical_version_and_difficulty(t
     legacy = state_probe._regenerate_tasks(saved, 20260902)[task.task_id]
     assert legacy.steps != task.steps
     saved.meta.pop("generator_version")
-    assert state_probe._offline_rows(saved, data_seed=20260902, generator_version=2)[1].shape == surface.shape
+    assert (
+        state_probe._offline_rows(saved, data_seed=20260902, generator_version=2)[1].shape
+        == surface.shape
+    )
 
 
-def test_historical_recovery_reanalysis_reports_version_without_model_seams(tmp_path, monkeypatch) -> None:
+def test_historical_recovery_reanalysis_reports_version_without_model_seams(
+    tmp_path, monkeypatch
+) -> None:
     from local_llm_lab.pipeline import evaluate
 
     task = next(
@@ -206,7 +230,9 @@ def test_historical_recovery_reanalysis_reports_version_without_model_seams(tmp_
     dataset.meta.update({"generator_version": 2, "data_seed": 20260902, "keep_last": 2})
     saved = state_probe.load_dataset(state_probe.save_dataset(dataset, tmp_path / "legacy.npz"))
     monkeypatch.setattr(evaluate, "load_policy", lambda *_args: pytest.fail("offline loader"))
-    monkeypatch.setattr(state_probe, "build_prompt", lambda *_args, **_kwargs: pytest.fail("offline prompt"))
+    monkeypatch.setattr(
+        state_probe, "build_prompt", lambda *_args, **_kwargs: pytest.fail("offline prompt")
+    )
     monkeypatch.setattr(
         state_probe,
         "_analyse_cohort",
