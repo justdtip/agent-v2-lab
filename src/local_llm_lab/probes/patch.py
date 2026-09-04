@@ -217,6 +217,14 @@ def _records(
     The evaluation's own ``data_seed`` field wins when present; the ``data_seed`` override is
     used only when the field is absent; a present field that disagrees with the override is an
     error naming both values, and absence of both is an error.
+
+    ``data_seed`` is looked for under ``summary`` first and at the top level second, the same
+    two levels :func:`_generator_version_binding` reads. It was read at the top level alone,
+    which is not where ``evaluate.write_report`` puts it: the writer frames the payload as
+    ``{"summary": ..., "trajectories": ...}`` and ``evaluation_metadata`` puts the seed inside
+    the summary. So the recorded seed was invisible, the override was always "used only when
+    the field is absent", and an override disagreeing with the artifact was accepted in
+    silence — the one outcome the R22a conflict check exists to make impossible.
     """
     if isinstance(data_seed, bool) or (data_seed is not None and not isinstance(data_seed, int)):
         raise ValueError("--data-seed override must be an integer")
@@ -227,13 +235,16 @@ def _records(
         raise ValueError(f"{name} evaluation must contain trajectories")
     if not all(isinstance(record, dict) for record in records):
         raise ValueError(f"{name} trajectories must be mappings")
-    if "data_seed" not in payload:
+    summary = payload.get("summary")
+    levels = [summary, payload] if isinstance(summary, dict) else [payload]
+    recorded = next((level for level in levels if "data_seed" in level), None)
+    if recorded is None:
         if data_seed is None:
             raise ValueError(
                 f"{name} evaluation lacks data_seed and no --data-seed override was given"
             )
         return records, data_seed, "flag"
-    seed = payload.get("data_seed")
+    seed = recorded["data_seed"]
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError(f"{name} evaluation must contain integer data_seed")
     if data_seed is not None and data_seed != seed:
@@ -522,6 +533,16 @@ def select_patch_cases(
         # R30(2): what the eligibility judgement was made under, recorded beside the counts
         # so a reader never has to infer it from the condition name.
         "eligibility_basis": _CONDITION_ELIGIBILITY_BASES[condition],
+        # What the FAILING EVALUATION declares — a fact about the input file, never the
+        # version this section's eligibility was judged under. The two are different, and on
+        # the secondary condition they are deliberately unrelated: R30(2) judges it under HEAD
+        # alone, so the name has to say "evaluation" or the number would read as a bound
+        # version the section explicitly does not have. Written unconditionally, because the
+        # conditional block below fires only when a case was recomputed, and a run against an
+        # artifact this repository's writer produced recomputes nothing — every trajectory
+        # carries saved integrity — so the input's version was recorded exactly never.
+        "evaluation_generator_version": replay_version if version_source == "evaluation" else None,
+        "evaluation_generator_version_source": version_source or "unbound",
     }
     if integrity_counts["recomputed"]:
         failing_eligibility["recomputed_generator_version"] = replay_version

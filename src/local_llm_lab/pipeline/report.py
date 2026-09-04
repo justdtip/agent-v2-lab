@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -41,18 +42,40 @@ def _outcomes(trajectories: object, task_count: object) -> dict[tuple[str, int],
     return outcomes if len(outcomes) == task_count else {}
 
 
+def _skip_reason(payload: object) -> str | None:
+    """Why this file contributes no row, or ``None`` when it contributes one.
+
+    Every rejection here used to be a bare ``continue``, so a directory of eight evaluations
+    could render as five rows and say nothing about the other three. The table is read as the
+    run's result; a row missing from it is indistinguishable from a run that never happened.
+    """
+    if not isinstance(payload, dict):
+        return "top level is not a JSON object"
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        return "no summary object"
+    if "success_rate" not in summary:
+        return "summary records no success_rate"
+    return None
+
+
 def load_summaries(evals: Path) -> list[dict[str, Any]]:
+    """Every renderable summary in ``evals``, with each skipped file named on stderr.
+
+    stderr, not the table: the skipped file has no row to carry the note, and the report is
+    printed to stdout by the ``report`` stage, so a redirected run keeps the two apart.
+    """
     summaries = []
     for path in sorted(evals.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
+        reason = _skip_reason(payload)
+        if reason is not None:
+            print(f"report: skipped {path.name}: {reason}", file=sys.stderr)
             continue
-        summary = payload.get("summary")
-        if isinstance(summary, dict) and "success_rate" in summary:
-            summary = dict(summary)
-            summary["_file"] = path.name
-            summary["_outcomes"] = _outcomes(payload.get("trajectories"), summary.get("tasks"))
-            summaries.append(summary)
+        summary = dict(payload["summary"])
+        summary["_file"] = path.name
+        summary["_outcomes"] = _outcomes(payload.get("trajectories"), summary.get("tasks"))
+        summaries.append(summary)
     return summaries
 
 

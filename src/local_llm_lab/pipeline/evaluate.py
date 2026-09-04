@@ -421,6 +421,14 @@ def evaluation_metadata(
         "temperature": temperature,
         "keep_last": keep_last,
         "data_seed": seed,
+        # The generator that made these tasks, recorded beside the seed that placed them.
+        # Both readers of this artifact already prefer a recorded version over their
+        # ``--generator-version`` flag and refuse a conflicting one, but no writer recorded
+        # one, so the preference had nothing to prefer and every replay was bound by hand.
+        # ``_evaluation_identity`` has always put it in run.log; run.log is not the artifact
+        # an offline reader is handed.  Absence still fails closed, which is what keeps the
+        # saved pre-versioning evaluations requiring an explicit binding.
+        "generator_version": GENERATOR_VERSION,
         "kv_cache": use_cache,
         "elapsed_seconds": elapsed_seconds,
     }

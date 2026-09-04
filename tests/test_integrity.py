@@ -14,6 +14,8 @@ from local_llm_lab.pipeline import evaluate, report
 from local_llm_lab.pipeline import integrity as integrity_module
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.integrity import (
+    SEED_FROM_ARTIFACT,
+    SEED_FROM_CALLER,
     Fact,
     IntegrityReport,
     Violation,
@@ -618,14 +620,12 @@ def _write_evaluation(
     ``steps``/``verdict`` -- lands at the level and under the name a real run records it, and a
     key the writer stops writing takes this suite down with it.
 
-    ``generator_version`` is the exception, and it is written in afterwards: **no writer in
-    this repository records one**, at either level.  ``run_evaluation`` puts
-    ``GENERATOR_VERSION`` in the run log's identity block (``evaluate.py:_evaluation_identity``)
-    and nowhere in the artifact, and none of the eighteen saved evaluations under ``outputs/``
-    carries the field.  The reader's ``summary.get("generator_version", payload.get(...))`` is
-    therefore fed by nothing today; it is kept, and exercised here, because it is what would
-    read the field once a writer records it, and because the fail-closed path below is the one
-    that actually runs.
+    ``generator_version`` now comes from the writer too, so the default writes nothing of its
+    own.  A caller asking for a *different* version overwrites the recorded one afterwards --
+    no writer emits an artifact from a generator other than its own HEAD -- and ``None`` pops
+    it, which is the shape of the eighteen legacy evaluations saved under ``outputs/``: none of
+    them carries the field at either level, so the fail-closed path is still the one that runs
+    against everything already on disk.
     """
     trajectory = _trajectory(task, success=success)
     trajectory.steps = trace
@@ -648,10 +648,17 @@ def _write_evaluation(
         )
     )
     evaluate.write_report(path, summary, [trajectory])
-    if generator_version is not None:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+    assert json.loads(path.read_text(encoding="utf-8"))["summary"][
+        "generator_version"
+    ] == GENERATOR_VERSION, "the writer records the version; this suite must not supply it"
+    if generator_version == GENERATOR_VERSION:
+        return
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if generator_version is None:
+        payload["summary"].pop("generator_version")
+    else:
         payload["summary"]["generator_version"] = generator_version
-        path.write_text(json.dumps(payload), encoding="utf-8")
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_cli_treats_default_trajectory_difficulty_as_legacy(tmp_path: Path) -> None:
@@ -1022,3 +1029,125 @@ def test_integrity_cli_closes_the_log_with_incomplete_run_when_analysis_raises(
     end = _events(output.parent)[-1]
     assert end["kind"] == "end" and end["status"] == "error"
     assert end["fields"]["incomplete_run"] is True
+
+
+# --------------------- A1/A2: the two schema rulings, on the artifact the writer now writes
+
+
+def test_recorded_generator_version_is_preferred_over_the_flag_and_conflicts_are_refused(
+    tmp_path: Path,
+) -> None:
+    """A1: ``evaluation_metadata`` records the version, so this reader's first branch runs.
+
+    ``_artifact_generator_version`` has always preferred a recorded version, refused a
+    conflicting flag and refused an artifact with neither. No writer recorded one, so only
+    the third ever fired and ``--generator-version`` was mandatory on every replay. The
+    fixture is the writer's own output, so if the field moves or stops being written the
+    preference stops being tested rather than quietly passing.
+    """
+    task = _task("read")
+    recorded = tmp_path / "recorded.json"
+    _write_identified_evaluation(recorded, task, label="recorded", generator_version=None)
+    _write_identified_evaluation(
+        (current := tmp_path / "current.json"), task, label="current",
+        generator_version=GENERATOR_VERSION,
+    )
+    payload = json.loads(current.read_text(encoding="utf-8"))
+    assert payload["summary"]["generator_version"] == GENERATOR_VERSION
+
+    # Preferred with no flag, and confirmed by a matching one.
+    analysed = _analyse_evaluation(current, 20260902)
+    assert analysed["generator_version"] == GENERATOR_VERSION
+    assert analysed["generator_version_basis"] == "recorded in the evaluation artifact"
+    confirmed = _analyse_evaluation(current, 20260902, generator_version=GENERATOR_VERSION)
+    assert confirmed["generator_version_basis"] == (
+        "recorded in the evaluation artifact, confirmed by the explicit binding"
+    )
+
+    # A flag that disagrees is refused, naming both values and the artifact.
+    with pytest.raises(ValueError) as caught:
+        _analyse_evaluation(current, 20260902, generator_version=1)
+    assert str(caught.value) == (
+        f"{current}: recorded generator_version {GENERATOR_VERSION} conflicts with explicit 1"
+    )
+
+    # Absent still fails closed, which is what the eighteen saved evaluations rely on.
+    with pytest.raises(ValueError, match="no generator_version"):
+        _analyse_evaluation(recorded, 20260902)
+
+
+def test_analysis_records_whether_the_seed_came_from_the_artifact_or_the_caller(
+    tmp_path: Path,
+) -> None:
+    """A2: the ``data_seed`` fallback stays, and stops being invisible.
+
+    Refusing an artifact without ``data_seed`` would refuse every evaluation on disk, so the
+    fallback is not closed. What changes is that the analysis record says which seed it used
+    and why, because the two replay *different tasks* and only one of them is the one the
+    trajectory was produced against.
+    """
+    task = _task("read")
+    path = tmp_path / "recorded.json"
+    _write_identified_evaluation(path, task, label="recorded", generator_version=2)
+    original = json.loads(path.read_text(encoding="utf-8"))
+
+    analysed = _analyse_evaluation(path, 19999999)
+    assert analysed["seed"] == 20260902 and analysed["seed_source"] == SEED_FROM_ARTIFACT
+
+    legacy = json.loads(json.dumps(original))
+    legacy["summary"].pop("data_seed")
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    fallen_back = _analyse_evaluation(path, 19999999)
+    assert fallen_back["seed"] == 19999999 and fallen_back["seed_source"] == SEED_FROM_CALLER
+
+    # An explicit null is malformed, not a licence to substitute: it must still raise.
+    nulled = json.loads(json.dumps(original))
+    nulled["summary"]["data_seed"] = None
+    path.write_text(json.dumps(nulled), encoding="utf-8")
+    with pytest.raises(ValueError, match="data_seed"):
+        _analyse_evaluation(path, 19999999)
+
+
+def test_the_report_and_the_run_log_both_say_when_the_callers_seed_was_used(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A2's two surfaces: a column in the sources table and a warn event in events.jsonl."""
+    task = _task("read")
+    recorded = tmp_path / "recorded.json"
+    legacy = tmp_path / "legacy.json"
+    _write_identified_evaluation(recorded, task, label="recorded", generator_version=1)
+    _write_identified_evaluation(legacy, task, label="legacy", generator_version=1)
+    stripped = json.loads(legacy.read_text(encoding="utf-8"))
+    stripped["summary"].pop("data_seed")
+    legacy.write_text(json.dumps(stripped), encoding="utf-8")
+    output = tmp_path / "report" / "comparison.md"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-integrity",
+            "--eval",
+            str(recorded),
+            "--eval",
+            str(legacy),
+            "--output",
+            str(output),
+        ],
+    )
+
+    integrity_module.main()
+
+    rendered = output.read_text(encoding="utf-8")
+    assert "| run | source | data seed | data seed source | keep-last |" in rendered
+    assert f"| recorded | {recorded} | 20260902 | {SEED_FROM_ARTIFACT} |" in rendered
+    assert f"| legacy | {legacy} | 20260902 | {SEED_FROM_CALLER} |" in rendered
+
+    warnings = [event for event in _events(output.parent) if event["kind"] == "warning"]
+    assert [event["fields"]["source"] for event in warnings] == [str(legacy)]
+    assert warnings[0]["message"] == "replaying under the caller's seed"
+    assert warnings[0]["fields"]["reason"] == SEED_FROM_CALLER
+    progress = [event for event in _events(output.parent) if event["kind"] == "progress"]
+    assert [event["fields"]["data_seed_source"] for event in progress] == [
+        SEED_FROM_ARTIFACT,
+        SEED_FROM_CALLER,
+    ]

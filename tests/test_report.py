@@ -491,3 +491,54 @@ def test_render_preserves_legacy_only_and_mixed_integrity_layouts() -> None:
     # The legacy row has no integrity block, so its cell is the missing-metric dash.
     assert re.search(r"^legacy .*  -  ", mixed, re.MULTILINE)
     assert "1/2 (50%) [9%-91%]" in mixed
+
+
+def test_load_summaries_names_every_file_it_skipped_and_why(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A2: a dropped row is reported, because a missing row is invisible in the table.
+
+    Three rejections, each previously a bare ``continue``: a payload that is not an object, a
+    payload with no summary object, and a summary with no ``success_rate``. A directory of
+    four evaluations rendered as one row and said nothing about the other three, which is
+    indistinguishable from a run that only ever produced one.
+    """
+    _write_eval(tmp_path / "kept.json", _summary("kept", outcomes={"a": True}), {"a": True})
+    (tmp_path / "list.json").write_text(json.dumps([1, 2]), encoding="utf-8")
+    (tmp_path / "nosummary.json").write_text(json.dumps({"trajectories": []}), encoding="utf-8")
+    without_rate = _summary("norate", outcomes={"a": True})
+    without_rate.pop("success_rate")
+    _write_eval(tmp_path / "norate.json", without_rate, {"a": True})
+
+    summaries = load_summaries(tmp_path)
+
+    assert [summary["_file"] for summary in summaries] == ["kept.json"]
+    assert capsys.readouterr().err.splitlines() == [
+        "report: skipped list.json: top level is not a JSON object",
+        "report: skipped norate.json: summary records no success_rate",
+        "report: skipped nosummary.json: no summary object",
+    ]
+
+
+def test_load_summaries_keeps_a_summary_whose_success_rate_the_writer_produced(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """R38 guard on the skip rule: ``summarize`` is what puts ``success_rate`` in the summary.
+
+    If the writer renames or relevels that key, every artifact becomes a skipped row instead
+    of silently rendering nothing -- and this test says so rather than passing on an empty
+    directory.
+    """
+    _write_eval(tmp_path / "kept.json", _summary("kept", outcomes={"a": True}), {"a": True})
+    payload = json.loads((tmp_path / "kept.json").read_text(encoding="utf-8"))
+    assert "success_rate" in payload["summary"]
+
+    assert len(load_summaries(tmp_path)) == 1
+    assert capsys.readouterr().err == ""
+
+    payload["summary"]["rate"] = payload["summary"].pop("success_rate")
+    (tmp_path / "kept.json").write_text(json.dumps(payload), encoding="utf-8")
+    assert load_summaries(tmp_path) == []
+    assert capsys.readouterr().err.strip() == (
+        "report: skipped kept.json: summary records no success_rate"
+    )

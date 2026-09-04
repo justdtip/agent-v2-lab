@@ -47,28 +47,30 @@ def test_trajectory_projections_forwards_the_selected_spec_to_prompt_rendering(
 ) -> None:
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline import protocol
+    from local_llm_lab.pipeline.evaluate import write_report
+    from local_llm_lab.pipeline.runner import Trajectory
 
     selected = load_model_spec("qwen35-4b")
     eval_path = tmp_path / "eval.json"
-    eval_path.write_text(
-        json.dumps(
-            {
-                "trajectories": [
-                    {
-                        "task_id": "fake",
-                        "family": "read",
-                        "variant": "clean",
-                        "label": "x",
-                        "prompt": "task",
-                        "steps": [{"raw": "note"}],
-                        "verdict": {"success": True},
-                        "loop_detected": False,
-                        "exhausted": False,
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
+    # R38: the record goes through ``Trajectory`` and ``write_report``, the classes that make
+    # the file this reader parses. Hand-written, it carried nine of the nineteen fields the
+    # dataclass declares and still constructed, so it certified nothing about the seam --
+    # ``trajectory_projections`` ends every record with ``Trajectory(**record)``. The summary
+    # is left empty on purpose: this reader opens ``payload["trajectories"]`` and nothing else.
+    write_report(
+        eval_path,
+        {},
+        [
+            Trajectory(
+                task_id="fake",
+                family="read",
+                variant="clean",
+                label="x",
+                prompt="task",
+                steps=[{"raw": "note"}],
+                verdict={"success": True},
+            )
+        ],
     )
     seen = []
     monkeypatch.setattr(

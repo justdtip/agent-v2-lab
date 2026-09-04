@@ -925,3 +925,71 @@ def test_legacy_generators_refuse_an_existing_manifest(monkeypatch, tmp_path) ->
             module.main()
         assert (target / "manifest.json").read_text(encoding="utf-8") == "{}\n"
         assert sorted(path.name for path in target.iterdir()) == ["manifest.json"]
+
+
+# ------------- R38 slice 2: render_dataset's source-manifest reader against write_dataset
+
+_CARRIED_PROVENANCE = ("generator_version", "seed", "keep_last", "protocol")
+"""The four keys ``render_dataset`` copies out of the source manifest (data.py:420-423)."""
+
+
+def _rendered_from(source, output) -> dict:
+    return render_dataset(source, output, _TargetTokenizer(), spec=_target_spec())
+
+
+def test_render_carries_every_provenance_key_the_real_writer_records(tmp_path) -> None:
+    """R38 on ``data.py:413``: the source manifest is ``write_dataset``'s, not a stand-in.
+
+    ``generator_version`` and ``seed`` were already asserted; ``keep_last`` and ``protocol``
+    were copied and never checked, so the writer could have stopped emitting either and the
+    rendered dataset would have recorded ``null`` with nothing going red. All four are read
+    flat off the top of the manifest, which is where ``write_dataset`` writes all four.
+    """
+    source = tmp_path / "src"
+    write_dataset(source, {"train": 1, "valid": 1, "test": 1})
+    recorded = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
+    assert all(recorded.get(key) is not None for key in _CARRIED_PROVENANCE)
+
+    manifest = _rendered_from(source, tmp_path / "dst")
+
+    assert {key: manifest[key] for key in _CARRIED_PROVENANCE} == {
+        key: recorded[key] for key in _CARRIED_PROVENANCE
+    }
+    # A render's own manifest is itself a valid render source, so the four keys survive a
+    # second hop rather than resetting to null on the way through.
+    again = _rendered_from(tmp_path / "dst", tmp_path / "dst2")
+    assert {key: again[key] for key in _CARRIED_PROVENANCE} == {
+        key: recorded[key] for key in _CARRIED_PROVENANCE
+    }
+
+
+@pytest.mark.parametrize("key", _CARRIED_PROVENANCE)
+def test_render_carries_null_provenance_when_a_source_key_moves_off_its_level(
+    tmp_path, key: str
+) -> None:
+    """Move one key and the carried value changes: every one of the four is really read here.
+
+    The failure mode is the dangerous one R38 names. Each key is read with ``.get()``, so a
+    key one level from where the writer puts it is not refused -- it is carried as ``None``,
+    and ``None`` is the value ``render_dataset`` documents as "the source predates generator
+    versioning". A relevelled key therefore forges that claim rather than raising.
+    """
+    source = tmp_path / "src"
+    write_dataset(source, {"train": 1, "valid": 1, "test": 1})
+    manifest_path = source / "manifest.json"
+    recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
+    moved = {name: value for name, value in recorded.items() if name != key}
+    moved["dataset"] = {key: recorded[key]}
+    manifest_path.write_text(json.dumps(moved, indent=2) + "\n", encoding="utf-8")
+
+    manifest = _rendered_from(source, tmp_path / "dst")
+
+    assert manifest[key] is None
+    assert {name: manifest[name] for name in _CARRIED_PROVENANCE if name != key} == {
+        name: recorded[name] for name in _CARRIED_PROVENANCE if name != key
+    }
+    # The one thing that still distinguishes "no manifest" from "a manifest missing a key":
+    # a source with no manifest at all records no hash, and this one does.
+    assert manifest["source"]["manifest_sha256"] == hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()

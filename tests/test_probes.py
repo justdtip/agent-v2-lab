@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 import warnings
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from pathlib import Path
 
 import mlx.core as mx
@@ -2477,54 +2477,116 @@ def test_slope_is_least_squares_and_nan_for_one_turn() -> None:
     assert math.isnan(assistant_axis._slope([0.5]))
 
 
-def _eval_payload(tmp_path: Path) -> Path:
-    """A miniature evaluation JSON in exactly the layout ``pipeline.evaluate`` writes."""
+def _axis_step(index: int, name: str = "read_file") -> dict:
+    """One executed turn, with the keys ``runner.run_task`` appends (runner.py:464-472).
+
+    The runner needs a loaded policy to produce these, which this suite has none of, so the
+    dict is written here -- but only the dict. Everything around it, from the trajectory
+    record to the file's frame, comes from the real writer below.
+    """
+    return {
+        "index": index,
+        "thinking": "",
+        "think_tokens": 0,
+        "thought": f"note {index}",
+        "action": {"name": name, "arguments": {"path": "a.txt"}},
+        "observation": f"contents {index}",
+        "raw": f"note {index}\n```json\n{{}}\n```",
+    }
+
+
+def _axis_parse_step() -> dict:
+    """The step a turn that would not parse leaves behind (runner.py:441-448): no ``action``."""
+    return {
+        "index": 0,
+        "thinking": "",
+        "think_tokens": 0,
+        "raw": "no call here",
+        "parse_error": "boom",
+    }
+
+
+def _eval_trajectories() -> list:
+    """The three real ``Trajectory`` objects the artifact below is written from.
+
+    ``trajectory_projections`` calls ``Trajectory(**record)`` on every record it parses, so
+    the record has to be one this class round-trips: a hand-written dict proves only that its
+    author remembered the field list, and a field added to or renamed in ``Trajectory`` would
+    leave the reader raising ``TypeError`` on real files while the suite stayed green.
+    """
+    from local_llm_lab.pipeline.runner import Trajectory
 
     def trajectory(task_id, success, steps, **extra):
-        record = {
-            "task_id": task_id,
-            "family": "read",
-            "variant": "clean",
-            "label": "fake",
-            "prompt": f"do {task_id}",
-            "steps": steps,
-            "verdict": {"success": success, "reasons": [] if success else ["wrong answer: x"]},
-            "parse_error": None,
-            "turns": len(steps),
-            "valid_turns": len(steps),
-            "elapsed_seconds": 1.0,
-            "faults": [],
-            "generated_tokens": 10,
-            "loop_detected": False,
-            "exhausted": False,
-        }
-        record.update(extra)
-        return record
+        return Trajectory(
+            task_id=task_id,
+            family="read",
+            variant="clean",
+            label="fake",
+            prompt=f"do {task_id}",
+            steps=list(steps),
+            verdict={"success": success, "reasons": [] if success else ["wrong answer: x"]},
+            turns=len(steps),
+            valid_turns=len(steps),
+            elapsed_seconds=1.0,
+            generated_tokens=10,
+            difficulty=1,
+            **extra,
+        )
 
-    def step(index, name="read_file"):
-        return {
-            "index": index,
-            "thought": f"note {index}",
-            "action": {"name": name, "arguments": {"path": "a.txt"}},
-            "observation": f"contents {index}",
-            "raw": f"note {index}\n```json\n{{}}\n```",
-        }
+    return [
+        trajectory("t-good", True, [_axis_step(0), _axis_step(1), _axis_step(2, "finish")]),
+        trajectory("t-loop", False, [_axis_step(0), _axis_step(1)], loop_detected=True),
+        trajectory("t-parse", False, [_axis_parse_step()], parse_error="boom"),
+    ]
 
-    payload = {
-        "summary": {},
-        "trajectories": [
-            trajectory("t-good", True, [step(0), step(1), step(2, "finish")]),
-            trajectory("t-loop", False, [step(0), step(1)], loop_detected=True),
-            trajectory(
-                "t-parse",
-                False,
-                [{"index": 0, "raw": "no call here", "parse_error": "boom"}],
-                parse_error="boom",
+
+def _eval_payload(tmp_path: Path) -> Path:
+    """An evaluation JSON written by ``evaluate.write_report`` -- the writer this reader reads.
+
+    R38: ``assistant_axis.trajectory_projections`` parses an evaluation off disk, so the
+    fixture is the file a run leaves behind, not a dict laid out from memory. ``write_report``
+    frames the payload and overlays ``difficulty``/``integrity`` onto each ``as_dict``;
+    ``summarize`` and ``evaluation_metadata`` fill the summary, which this reader never opens
+    but which must be present for the file to be the one it will meet.
+    """
+    from local_llm_lab.models import ResolvedSpec, load_model_spec
+    from local_llm_lab.pipeline import evaluate
+
+    trajectories = _eval_trajectories()
+    summary = evaluate.summarize(trajectories)
+    summary.update(
+        evaluate.evaluation_metadata(
+            label="fake",
+            resolved=ResolvedSpec(
+                # ``ModelSpec.resolve`` needs loaded weights; the architecture numbers below
+                # are a stand-in and this reader consults none of them.
+                spec=load_model_spec("qwen35-4b"),
+                num_layers=4,
+                hidden_size=8,
+                vocab_size=32,
+                tie_word_embeddings=True,
+                layer_types=("full_attention",) * 4,
+                lora_keys=("self_attn.q_proj",),
+                trainable_parameters=64,
+                probe_layers=(1, 2, 3),
+                cache_strategy="none",
+                cache_strategy_reason="explicit:none",
+                snapshot_revision=None,
+                jvp_method="untested",
             ),
-        ],
-    }
+            adapter=None,
+            split="test",
+            difficulties=[1],
+            stress=False,
+            temperature=0.0,
+            keep_last=2,
+            seed=17,
+            use_cache=True,
+            elapsed_seconds=0.0,
+        )
+    )
     path = tmp_path / "eval.json"
-    path.write_text(json.dumps(payload))
+    evaluate.write_report(path, summary, trajectories)
     return path
 
 
@@ -2566,6 +2628,169 @@ def test_trajectory_projections_rebuild_prompts_like_the_runner(tmp_path) -> Non
         axis,
     )
     assert good["projections"][1] == pytest.approx(expected, abs=1e-6)
+
+
+_AXIS_RECORD_KEYS = (
+    "task_id",
+    "family",
+    "variant",
+    "prompt",
+    "steps",
+    "loop_detected",
+    "exhausted",
+)
+"""Trajectory-record keys ``trajectory_projections`` indexes with ``[]`` (assistant_axis.py:
+1029-1064). ``verdict`` is excluded: it is read with ``.get`` and covered separately below."""
+
+
+def _project(path: Path) -> list[dict]:
+    model = _model()
+    return assistant_axis.trajectory_projections(
+        model,
+        _ChatTokenizer(),
+        path,
+        np.array(model.model.embed_tokens.weight[3], dtype=np.float32),
+        layer=2,
+    )
+
+
+@pytest.mark.parametrize("key", _AXIS_RECORD_KEYS)
+def test_trajectory_projections_depend_on_each_record_key_the_writer_records(
+    tmp_path, key: str
+) -> None:
+    """R38 on ``assistant_axis.py:1023``: move a key the reader indexes and it must break.
+
+    The fixture is now written by ``evaluate.write_report``, so this parametrisation says
+    which keys that writer is actually holding up. Every one here is indexed with ``[]``, so
+    a rename fails loudly -- the good case. The two that matter are the ones a legacy artifact
+    can already be missing: ``outputs/agent-v2/evals/early-step-100-valid.json`` records
+    neither ``loop_detected`` nor ``exhausted``, so this reader raises ``KeyError`` on a file
+    that is on disk right now. Loud, not silent, so it is a hazard and not a wrong answer.
+    """
+    path = _eval_payload(tmp_path)
+    assert _project(path), "the unmoved fixture must project"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for record in payload["trajectories"]:
+        record[f"moved_{key}"] = record.pop(key)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises((KeyError, TypeError)):
+        _project(path)
+
+
+def test_trajectory_projections_reconstruct_the_writers_record_as_a_trajectory(
+    tmp_path,
+) -> None:
+    """``Trajectory(**record)`` must accept exactly what ``write_report`` serialises.
+
+    ``write_report`` overlays ``difficulty`` and ``integrity`` onto ``as_dict()`` before
+    writing, so the record carries every dataclass field and nothing else. One field added to
+    the file that ``Trajectory`` does not declare and this reader stops parsing real
+    evaluations -- which a hand-written fixture, carrying only the fields its author listed,
+    could never have shown.
+    """
+    path = _eval_payload(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    from local_llm_lab.pipeline.runner import Trajectory
+
+    declared = {field.name for field in fields(Trajectory)}
+    assert all(set(record) == declared for record in payload["trajectories"])
+
+    payload["trajectories"][0]["unexpected"] = 1
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(TypeError, match="unexpected"):
+        _project(path)
+
+
+def test_trajectory_projections_read_success_permissively_and_the_top_level_strictly(
+    tmp_path,
+) -> None:
+    """The one soft key, named rather than left to be discovered.
+
+    ``verdict.get("success")`` returns ``None`` for a verdict that lost the field, so the
+    trajectory is reported as a failure with a computed ``failure_reason`` instead of raising:
+    a plausible record rather than an error, which is the case R38 exists to surface. It is
+    reported, not changed -- the sibling readers of this artifact treat a missing ``success``
+    the same way, and tightening one of three here would be a schema ruling, not an audit.
+    """
+    path = _eval_payload(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for record in payload["trajectories"]:
+        record["verdict"].pop("success")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    records = _project(path)
+
+    assert [record["success"] for record in records] == [False, False, False]
+    assert records[0]["failure_reason"] is not None
+
+    # The top level is not soft: the reader indexes ``payload["trajectories"]``.
+    payload["records"] = payload.pop("trajectories")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(KeyError, match="trajectories"):
+        _project(path)
+
+
+def _move_step_key(path: Path, key: str) -> None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for record in payload["trajectories"]:
+        for step in record["steps"]:
+            if key in step:
+                step[f"moved_{key}"] = step.pop(key)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+@pytest.mark.parametrize("key", ["thought", "observation"])
+def test_trajectory_projections_depend_on_each_step_key_the_runner_writes(
+    tmp_path, key: str
+) -> None:
+    """The step keys that rebuild the next turn's prompt, both indexed with ``[]``."""
+    path = _eval_payload(tmp_path)
+    _move_step_key(path, key)
+
+    with pytest.raises(KeyError):
+        _project(path)
+
+
+def test_a_step_whose_action_key_moved_is_silently_read_as_the_end_of_the_trajectory(
+    tmp_path,
+) -> None:
+    """The second soft key, and the one with the largest effect: ``"action" not in step``.
+
+    That test is the reader's own signal for a turn that would not parse, so a renamed
+    ``action`` is not an error -- every trajectory is truncated after its first projected turn
+    and the record still looks well formed, with a mean, a slope and a min computed over the
+    single value that survived. Reported rather than tightened: the ``break`` is load-bearing
+    for real parse-error steps, and distinguishing "no action because the turn failed" from
+    "no action because the key moved" is a schema question about the step record, not
+    something this reader can settle on its own.
+    """
+    path = _eval_payload(tmp_path)
+    assert [record["turns"] for record in _project(path)] == [3, 2, 1]
+
+    _move_step_key(path, "action")
+
+    truncated = _project(path)
+    assert [record["turns"] for record in truncated] == [1, 1, 1]
+    assert all(not math.isnan(record["mean"]) for record in truncated)
+
+
+def test_trajectory_projections_skip_a_turn_whose_raw_generation_moved(tmp_path) -> None:
+    """``raw`` is read with ``.get``: a renamed key projects nothing, and says so in the turns.
+
+    Not an error, by design -- a turn that generated nothing is a real thing the runner
+    records -- so the evidence that this reader depends on the key is the turn count falling
+    to zero, not an exception.
+    """
+    path = _eval_payload(tmp_path)
+    assert [record["turns"] for record in _project(path)] == [3, 2, 1]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for record in payload["trajectories"]:
+        for step in record["steps"]:
+            step["moved_raw"] = step.pop("raw")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert [record["turns"] for record in _project(path)] == [0, 0, 0]
 
 
 def test_summarize_projections_separates_outcomes_and_reports_the_u_test() -> None:

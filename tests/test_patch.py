@@ -263,6 +263,10 @@ def test_select_recomputes_missing_eligibility_fields_under_the_bound_version(mo
                 "explicit --generator-version binding; the evaluation records no "
                 "generator_version"
             ),
+            # A pre-schema payload declares no version of its own, so the replay ran under
+            # the flag and the input's own declaration stays empty rather than borrowing it.
+            "evaluation_generator_version": None,
+            "evaluation_generator_version_source": "flag",
         },
     }
 
@@ -450,6 +454,11 @@ def test_saved_eligibility_fields_win_and_recomputation_never_runs(monkeypatch) 
         "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
         "integrity": {"evaluation": 1, "recomputed": 0, "head_alone": 0},
         "difficulty": {"evaluation": 1, "recomputed": 0},
+        # Nothing recomputed, so no bound version was needed; the artifact still says what
+        # the failing evaluation declared, which here -- a payload with no summary -- is
+        # nothing, from neither a record nor a flag.
+        "evaluation_generator_version": None,
+        "evaluation_generator_version_source": "unbound",
     }
 
 
@@ -512,6 +521,10 @@ def test_mixed_eligibility_sources_are_summarised_and_counted(monkeypatch) -> No
             "explicit --generator-version binding; the evaluation records no "
             "generator_version"
         ),
+        # The flag supplied the replay version; the evaluation itself declared none, and the
+        # artifact must not let the flag's value pass for a recorded one.
+        "evaluation_generator_version": None,
+        "evaluation_generator_version_source": "flag",
     }
 
 
@@ -661,6 +674,10 @@ def test_dry_selection_recomputes_eligibility_for_evaluations_shaped_like_the_sa
             "explicit --generator-version binding; the evaluation records no "
             "generator_version"
         ),
+        # This fixture's payload is a bare trajectory list with no summary, so the version in
+        # force came from the flag and the evaluation declared none of its own.
+        "evaluation_generator_version": None,
+        "evaluation_generator_version_source": "flag",
     }
     _failing, counterfactual, note_provenance = patch.replay_counterfactual(cases[0])
     assert note_provenance["counterfactual_source"] == "passing_transcript"
@@ -4199,3 +4216,384 @@ def test_patch_probe_records_the_precision_block_and_capture_dtype(monkeypatch) 
     assert payload["fp32_manual_vs_native"] == block
     assert payload["capture_dtype"] == "native"
     assert set(dtypes) == {"native"}
+
+
+# ------------------------- R38 slice 2: patch.py against evaluate.py, the real writer
+
+
+def _write_real_evaluation(path: Path, records, *, seed: int, label: str) -> dict:
+    """An evaluation artifact written by ``evaluate.write_report`` -- the writer patch.py reads.
+
+    ``_load_payload`` parses whatever ``run_evaluation`` left on disk, so the fixture has to be
+    that file and not a dict shaped like someone's memory of it. ``write_report`` frames the
+    payload, ``summarize`` fills the rates, ``evaluation_metadata`` fills the identity block,
+    and ``Trajectory`` is the record class whose ``as_dict`` becomes each trajectory -- so
+    every key ``_records``, ``_generator_version_binding`` and ``select_patch_cases`` reach for
+    lands where and only where a real run puts it.
+
+    ``records`` are ``(task_id, family, success, steps)``; the artifact is returned parsed, so
+    a test can move a key in it and write it back.
+    """
+    from local_llm_lab.models import ResolvedSpec, load_model_spec
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.pipeline.runner import Trajectory
+
+    resolved = ResolvedSpec(
+        # ``ModelSpec.resolve`` needs loaded weights; this suite has none, so the record is
+        # built directly over a real registry declaration. patch.py never reads these numbers.
+        spec=load_model_spec("qwen35-4b"),
+        num_layers=4,
+        hidden_size=8,
+        vocab_size=32,
+        tie_word_embeddings=True,
+        layer_types=("full_attention",) * 4,
+        lora_keys=("self_attn.q_proj",),
+        trainable_parameters=64,
+        probe_layers=(1, 2, 3),
+        cache_strategy="none",
+        cache_strategy_reason="explicit:none",
+        snapshot_revision=None,
+        jvp_method="untested",
+    )
+    trajectories = [
+        Trajectory(
+            task_id=task_id,
+            family=family,
+            variant="clean",
+            label=label,
+            prompt="p",
+            steps=list(steps),
+            turns=len(steps),
+            valid_turns=len(steps),
+            difficulty=2,
+            # ``evaluate_tasks`` stores an integrity block on every trajectory, so a real
+            # artifact always carries the key and ``select_patch_cases`` always takes its
+            # saved-judgement branch -- never the recomputing one the legacy files take.
+            integrity=_real_integrity(success),
+            verdict={
+                "success": success,
+                "clean": success,
+                "errors": 0,
+                "recovered_errors": 0,
+                "reasons": [],
+                "calls": len(steps),
+                "schema_failures": 0,
+                "executable_calls": len(steps),
+            },
+        )
+        for task_id, family, success, steps in records
+    ]
+    summary = evaluate.summarize(trajectories)
+    summary.update(
+        evaluate.evaluation_metadata(
+            label=label,
+            resolved=resolved,
+            adapter=None,
+            split="test",
+            difficulties=[2],
+            stress=False,
+            temperature=0.0,
+            keep_last=2,
+            seed=seed,
+            use_cache=True,
+            elapsed_seconds=0.0,
+        )
+    )
+    evaluate.write_report(path, summary, trajectories)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+_REAL_STEPS = ({"thought": "before"}, {"thought": "drop"})
+
+
+def _real_integrity(clean: bool) -> dict:
+    """The integrity block ``evaluate_tasks`` stores, built by the class that produces it.
+
+    ``evaluate.py:153`` assigns ``check_trajectory(...).as_dict()``, so ``patch._saved_judgement``
+    is reading ``IntegrityReport.as_dict()`` and not a shape invented here. Running the real
+    checker would need a real task and trace; the report it returns is built directly instead.
+    """
+    from local_llm_lab.pipeline.integrity import IntegrityReport, Violation
+
+    if clean:
+        return IntegrityReport((), None, {}, True).as_dict()
+    violation = Violation(1, "value_drop", "missing required values: 12")
+    return IntegrityReport((violation,), violation, {"value_drop": 1}, False).as_dict()
+
+
+def _real_pair(tmp_path: Path, *, seed: int) -> tuple[dict, dict]:
+    """A passing and a failing artifact over one task id, both written by ``write_report``."""
+    task_id = "test-aggregate_report-0-clean"
+    passing = _write_real_evaluation(
+        tmp_path / "passing.json",
+        [(task_id, "aggregate_report", True, _REAL_STEPS)],
+        seed=seed,
+        label="passing",
+    )
+    failing = _write_real_evaluation(
+        tmp_path / "failing.json",
+        [(task_id, "aggregate_report", False, _REAL_STEPS)],
+        seed=seed,
+        label="failing",
+    )
+    return passing, failing
+
+
+def test_records_finds_the_data_seed_where_the_writer_puts_it(tmp_path: Path) -> None:
+    """R38 on ``patch.py:_records``: the recorded seed is inside ``summary``, not beside it.
+
+    The reader looked at ``payload["data_seed"]`` alone. ``write_report`` frames the file as
+    ``{"summary": ..., "trajectories": ...}`` and ``evaluation_metadata`` puts ``data_seed``
+    in the summary, so the recorded seed was invisible to it: every real artifact took the
+    "field is absent" branch, demanded ``--data-seed``, and -- the part that matters -- took
+    the flag's value without ever comparing it to the one on disk. The R22a conflict check
+    could not fire, because nothing ever reached it.
+
+    The old hand-made ``_payload`` helper above builds ``{"data_seed": ..., ...}`` at the top
+    level, which is the shape that certified the belief rather than the seam.
+    """
+    from local_llm_lab.probes import patch
+
+    seed = 4242
+    _passing, failing = _real_pair(tmp_path, seed=seed)
+
+    assert failing["summary"]["data_seed"] == seed, "the writer records it inside the summary"
+    assert "data_seed" not in failing, "and nowhere else"
+
+    records, resolved_seed, source = patch._records(failing, "failing")
+    assert (resolved_seed, source) == (seed, "evaluation")
+    assert len(records) == 1
+
+    # The conflict the reader claimed to catch and could not reach.
+    conflict = rf"data_seed {seed} conflicts with --data-seed {seed + 1}"
+    with pytest.raises(ValueError, match=conflict):
+        patch._records(failing, "failing", data_seed=seed + 1)
+    assert patch._records(failing, "failing", data_seed=seed)[1:] == (seed, "evaluation")
+
+
+@pytest.mark.parametrize("level", ["summary", "top"])
+def test_records_data_seed_goes_red_when_the_key_moves_off_its_level(
+    tmp_path: Path, level: str
+) -> None:
+    """Move ``data_seed`` and the reader must change its answer, not keep the old one.
+
+    Removed entirely: the flag is required again, and its value is reported as the flag's.
+    Hoisted to the top level: still found, because a pre-``evaluation_metadata`` artifact put
+    it there and this reader must keep reading those.
+    """
+    from local_llm_lab.probes import patch
+
+    seed = 4242
+    _passing, failing = _real_pair(tmp_path, seed=seed)
+    moved = failing["summary"].pop("data_seed")
+    if level == "top":
+        failing["data_seed"] = moved
+        assert patch._records(failing, "failing")[1:] == (seed, "evaluation")
+        return
+    with pytest.raises(ValueError, match="lacks data_seed"):
+        patch._records(failing, "failing")
+    assert patch._records(failing, "failing", data_seed=seed + 1)[1:] == (seed + 1, "flag")
+
+
+def test_generator_version_binding_prefers_the_recorded_version_over_the_flag(
+    tmp_path: Path,
+) -> None:
+    """A1 red-first: this reader's recorded branch had no writer feeding it until now.
+
+    ``_generator_version_binding`` has always preferred the recorded version, refused a
+    conflicting flag and returned ``(None, "")`` when neither existed. Nothing in this
+    repository wrote the field, so only the last of the three ever ran and every P6 selection
+    was version-bound by hand. With ``evaluation_metadata`` recording it, all three do.
+    """
+    from local_llm_lab.probes import patch
+
+    _passing, failing = _real_pair(tmp_path, seed=4242)
+    assert failing["summary"]["generator_version"] == patch.GENERATOR_VERSION
+
+    # Preferred with no flag at all, and confirmed by a matching one.
+    assert patch._generator_version_binding(failing, "failing", None) == (
+        patch.GENERATOR_VERSION,
+        "evaluation",
+    )
+    assert patch._generator_version_binding(failing, "failing", patch.GENERATOR_VERSION) == (
+        patch.GENERATOR_VERSION,
+        "evaluation",
+    )
+
+    # A flag that disagrees is refused by name, so a v4 artifact can no longer be replayed
+    # under the v1 binding the Director's retry used on the legacy files.
+    conflict = rf"generator_version {patch.GENERATOR_VERSION} conflicts with --generator-version 1"
+    with pytest.raises(ValueError, match=conflict):
+        patch._generator_version_binding(failing, "failing", 1)
+
+    # Absent still fails closed: the eighteen saved evaluations record none.
+    legacy = json.loads(json.dumps(failing))
+    legacy["summary"].pop("generator_version")
+    assert patch._generator_version_binding(legacy, "failing", None) == (None, "")
+    assert patch._generator_version_binding(legacy, "failing", 1) == (1, "flag")
+
+
+def test_generator_version_binding_reads_the_legacy_top_level_when_the_summary_loses_it(
+    tmp_path: Path,
+) -> None:
+    """Moving the key one level up must still resolve; moving it out must stop resolving."""
+    from local_llm_lab.probes import patch
+
+    _passing, failing = _real_pair(tmp_path, seed=4242)
+    hoisted = json.loads(json.dumps(failing))
+    hoisted["generator_version"] = hoisted["summary"].pop("generator_version")
+    assert patch._generator_version_binding(hoisted, "failing", None) == (
+        patch.GENERATOR_VERSION,
+        "evaluation",
+    )
+    hoisted.pop("generator_version")
+    assert patch._generator_version_binding(hoisted, "failing", None) == (None, "")
+
+
+def test_selection_records_the_inputs_generator_version_in_both_conditions(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A1 in the patch artifact, on the primary AND the secondary path.
+
+    ``recomputed_generator_version`` is written only inside the ``integrity_counts`` branch, so
+    it reaches the artifact only when a case was recomputed -- never on the secondary path,
+    which counts ``head_alone`` and recomputes nothing, and never on any run against an
+    artifact this writer produced, because every trajectory it writes carries an ``integrity``
+    key and takes the saved branch. The input's own declaration is therefore recorded
+    unconditionally, and named for the input, because the secondary section declares
+    ``HEAD_ALONE_BASIS``: a bound version number under that basis would contradict it on the
+    face of the artifact.
+    """
+    from local_llm_lab.probes import patch
+
+    task = _Task("test-aggregate_report-0-clean", "aggregate_report")
+    monkeypatch.setattr(patch, "task_from_id", lambda task_id, seed, difficulty: task)
+    monkeypatch.setattr(
+        patch, "replay_task_from_id", lambda *_args, **_kwargs: pytest.fail("no replay expected")
+    )
+    monkeypatch.setattr(
+        patch, "check_trajectory", lambda *_args, **_kwargs: _drop_report(1, "12")
+    )
+    passing, failing = _real_pair(tmp_path, seed=4242)
+
+    primary, primary_provenance = patch.select_patch_cases(passing, failing, keep_last=2)
+    secondary, secondary_provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, secondary_condition="aggregate_report"
+    )
+
+    assert [case.task.task_id for case in primary] == [task.task_id]
+    assert [case.task.task_id for case in secondary] == [task.task_id]
+    for provenance, basis in (
+        (primary_provenance, patch.BOUND_VS_HEAD_BASIS),
+        (secondary_provenance, patch.HEAD_ALONE_BASIS),
+    ):
+        block = provenance["eligibility"]["failing"]
+        assert block["eligibility_basis"] == basis
+        assert block["evaluation_generator_version"] == patch.GENERATOR_VERSION
+        assert block["evaluation_generator_version_source"] == "evaluation"
+        # No recomputation happened on either path, so no bound version is claimed. Under
+        # HEAD_ALONE_BASIS one would be a contradiction; under BOUND_VS_HEAD it would be a
+        # replay that never ran.
+        assert "recomputed_generator_version" not in block
+    # The primary path judged from the artifact's own integrity block and the secondary under
+    # HEAD alone. Neither recomputed, which is why the conditional block writes nothing on
+    # either -- against an artifact this writer produced, it never will.
+    assert primary_provenance["eligibility"]["failing"]["integrity"] == {
+        "evaluation": 1,
+        "recomputed": 0,
+        "head_alone": 0,
+    }
+    assert secondary_provenance["eligibility"]["failing"]["integrity"] == {
+        "evaluation": 0,
+        "recomputed": 0,
+        "head_alone": 1,
+    }
+
+
+def test_written_patch_artifact_carries_the_recorded_version_in_both_sections(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The Chief's question, answered on the file rather than on the provenance dict.
+
+    ``main`` copies ``selection_provenance["eligibility"]`` into ``payload["eligibility"]``
+    and ``secondary_provenance["eligibility"]`` into ``payload["secondary"]["eligibility"]``,
+    so the field reaches both halves of ``patch.json``. The secondary block is assembled
+    before ``run_patch_probe`` is called for it, which is what makes the record survive a
+    secondary condition that refuses to score.
+
+    Only ``run_patch_probe`` is stubbed here -- it needs a loaded policy. ``select_patch_cases``
+    is the real one, reading the real artifact, so what is asserted is the field's route to
+    disk and not a fixture's echo of it.
+    """
+    from local_llm_lab.probes import guard, patch
+
+    task = _Task("test-aggregate_report-0-clean", "aggregate_report")
+    monkeypatch.setattr(patch, "task_from_id", lambda task_id, seed, difficulty: task)
+    monkeypatch.setattr(
+        patch, "check_trajectory", lambda *_args, **_kwargs: _drop_report(1, "12")
+    )
+    passing_path, failing_path = tmp_path / "passing.json", tmp_path / "failing.json"
+    _real_pair(tmp_path, seed=4242)
+    assert passing_path.is_file() and failing_path.is_file()
+
+    spec = SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.25,),
+        resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1,)),
+    )
+    monkeypatch.setattr(patch, "load_model_spec", lambda _name: spec)
+    monkeypatch.setattr(patch, "require_preflight", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(patch, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        patch,
+        "load_policy",
+        lambda _spec, _adapter: (
+            object(),
+            object(),
+            SimpleNamespace(num_layers=4),
+            SimpleNamespace(as_dict=dict),
+        ),
+    )
+    monkeypatch.setattr(
+        patch,
+        "run_patch_probe",
+        lambda *_args, **_kwargs: {
+            "cells": {},
+            "groups": [],
+            "layers": [],
+            "controls": [],
+            "condition": "x",
+            "scoring_generator_version": patch.GENERATOR_VERSION,
+        },
+    )
+    output = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-probe-patch",
+            "--passing-eval", str(passing_path),
+            "--failing-eval", str(failing_path),
+            "--output", str(output),
+            "--secondary-condition", "aggregate_report",
+        ],
+    )
+
+    patch.main()
+
+    written = json.loads((output / "patch.json").read_text(encoding="utf-8"))
+    for block, basis in (
+        (written["eligibility"]["failing"], patch.BOUND_VS_HEAD_BASIS),
+        (written["secondary"]["eligibility"]["failing"], patch.HEAD_ALONE_BASIS),
+    ):
+        assert block["evaluation_generator_version"] == patch.GENERATOR_VERSION
+        assert block["evaluation_generator_version_source"] == "evaluation"
+        assert block["eligibility_basis"] == basis
+        # A HEAD-alone section must not carry a bound version, and does not: nothing was
+        # replayed under one on either path.
+        assert "recomputed_generator_version" not in block
+    # HEAD is what the flip scoring ran under, recorded in both sections by run_patch_probe.
+    assert written["scoring_generator_version"] == patch.GENERATOR_VERSION
+    assert written["secondary"]["scoring_generator_version"] == patch.GENERATOR_VERSION

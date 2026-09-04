@@ -510,6 +510,19 @@ def _generator_version_basis(recorded: object, explicit: int | None) -> str:
     return "explicit --generator-version binding; the artifact records no generator_version"
 
 
+SEED_FROM_ARTIFACT = "recorded in the evaluation artifact"
+SEED_FROM_CALLER = "caller's --seed; the artifact records no data_seed"
+"""Why the seed the replay used is the seed it used.
+
+The generator version fails closed when the artifact records none; the data seed does not,
+because refusing an artifact without one would refuse every evaluation currently on disk.
+So the fallback stays and stops being silent: a replay under the caller's seed rebuilds a
+*different task* from the one the trajectory was run against, and every integrity verdict
+below it is then computed against that other task.  The basis is recorded per artifact and
+warned about in the run log, so nobody reads the comparison without seeing which it was.
+"""
+
+
 def _artifact_identity(summary: Mapping[str, Any]) -> dict[str, Any]:
     """R26(e): which policy produced this saved evaluation, and on what split.
 
@@ -541,7 +554,11 @@ def _analyse_evaluation(
     recorded_version = summary.get("generator_version", payload.get("generator_version"))
     version = _artifact_generator_version(recorded_version, generator_version, source=path)
     basis = _generator_version_basis(recorded_version, generator_version)
-    seed = summary.get("data_seed", fallback_seed)
+    # Key presence, not value: a summary carrying an explicit null ``data_seed`` is malformed
+    # and must reach the type check below, not be quietly swapped for the caller's seed.
+    seed_recorded = "data_seed" in summary
+    seed = summary["data_seed"] if seed_recorded else fallback_seed
+    seed_source = SEED_FROM_ARTIFACT if seed_recorded else SEED_FROM_CALLER
     keep_last = summary.get("keep_last")
     if not isinstance(seed, int) or not isinstance(keep_last, int) or keep_last < 0:
         raise ValueError(f"{path}: data_seed and non-negative keep_last are required")
@@ -575,6 +592,10 @@ def _analyse_evaluation(
         "path": path,
         "label": str(summary.get("label") or path.stem),
         "seed": seed,
+        # The seed alone cannot say whether it came from the artifact or from the caller, and
+        # those two replay different tasks. Recorded here so the report and events.jsonl carry
+        # the distinction instead of leaving a reader to assume the artifact supplied it.
+        "seed_source": seed_source,
         "keep_last": keep_last,
         "generator_version": version,
         # R23: the version alone does not say why it is in force; a reader of the report or
@@ -624,6 +645,7 @@ def _source_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
             evaluation["label"],
             evaluation["path"],
             evaluation["seed"],
+            evaluation["seed_source"],
             evaluation["keep_last"],
             evaluation["generator_version"],
             evaluation["generator_version_basis"],
@@ -769,11 +791,22 @@ def _render_evaluations(
                 source=str(path),
                 **evaluation["identity"],
                 data_seed=evaluation["seed"],
+                data_seed_source=evaluation["seed_source"],
                 keep_last=evaluation["keep_last"],
                 generator_version=evaluation["generator_version"],
                 generator_version_basis=evaluation["generator_version_basis"],
                 tasks=len(evaluation["records"]),
             )
+            if evaluation["seed_source"] == SEED_FROM_CALLER:
+                # The one silent substitution left in this stage, so it is said out loud: the
+                # tasks replayed below are the caller's-seed tasks, not necessarily the ones
+                # this artifact was produced against, and no error will be raised about it.
+                log.warn(
+                    "replaying under the caller's seed",
+                    source=str(path),
+                    data_seed=evaluation["seed"],
+                    reason=SEED_FROM_CALLER,
+                )
     task_ids = _validated_task_ids(evaluations)
 
     lines = ["# Offline note-integrity comparison", "", "## Sources and configuration", ""]
@@ -783,6 +816,7 @@ def _render_evaluations(
                 "run",
                 "source",
                 "data seed",
+                "data seed source",
                 "keep-last",
                 "generator version",
                 "generator version basis",
