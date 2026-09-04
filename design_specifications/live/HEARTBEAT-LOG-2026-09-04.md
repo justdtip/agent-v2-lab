@@ -913,3 +913,14 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   11.85, 64 11.85, 128 12.66 GB — chunk size barely matters, so the cost is inside the chunk
   recompute, not boundary states. Time gate is tight even at the floor (~2.5 h projected for
   400 iterations of 4 rows). Lane free; secondary P6 offered to the Director.
+
+## 2026-09-05 — R32 stage 2 delivered and read; MLX odd-chunk defect reproduced
+
+- Chunkwise gated delta (standard chunk form; masked blockwise inverse; identity-step padding):
+  2e-5 forward / 3.9e-4 gradient max error vs the library's loop; real GatedDeltaNet 6e-8;
+  10.9× faster, 5× less peak than stage 1 per layer at 997 tokens (microbenchmark). Suite
+  1101 / exit 0. `train.gated_delta_mode: chunkwise` on the 4B arm.
+- MLX 0.32.2 Metal evaluates the chunk graph wrongly at ODD chunk lengths, sporadically per
+  process: reproduced (odd tail: 2/4 processes wrong, error 6.3; even + padding: 0/9 incl. real
+  shapes, 5e-5). Even-chunk guard + padding is the mitigation; upstream issue recommended.
+- Work order filed. Lane probe pending the Director's word (lane offered for the secondary).
