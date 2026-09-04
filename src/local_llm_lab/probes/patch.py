@@ -76,10 +76,15 @@ CONTROLS = ("unrelated_task", "random_positions", "content_swap")
 replaced by an unrelated case's, which separates "this position gates the decision" from
 "this value's representation is what the injection carries"."""
 
-OUTCOMES = ("flip", "corrupted", "unchanged", "parse_error")
-"""R27(1): the strict per-generation outcome. A wrong number is never a flip."""
+OUTCOMES = ("flip", "corrupted", "unchanged", "empty", "parse_error")
+"""R27(1): the strict per-generation outcome. A wrong number is never a flip.
 
-ARTIFACT_SCHEMA = "p6-patch-r27"
+R30(5) splits ``empty`` out of ``parse_error``: a note that parses but restates no value is
+not a parse failure — the model wrote a turn, it simply did not carry the list — and folding
+the two together hid which of the two a cell's non-flip mass was made of.
+"""
+
+ARTIFACT_SCHEMA = "p6-patch-r30"
 """Names the artifact shape; the payload carried no schema/version field before R25."""
 _FAMILIES = frozenset({"aggregate_report", "ledger_reconcile"})
 
@@ -91,6 +96,20 @@ against the designed-correct generator note, kept in their own section of the ar
 _CONDITION_LABELS = {
     PRIMARY_CONDITION: "empirically_passing_preferred",
     "aggregate_report_secondary": "designed_correct",
+}
+
+BOUND_VS_HEAD_BASIS = (
+    "bound generator version vs HEAD (R24): the counterfactual is the passing run's own "
+    "note, so the judgement that selected the case and the judgement flip scoring uses must "
+    "name the same decision step and dropped-value set"
+)
+HEAD_ALONE_BASIS = (
+    "HEAD alone (R30): the counterfactual is a HEAD generator note, so there is no "
+    "version-bound side to compare with and no v1 replay is performed"
+)
+_CONDITION_ELIGIBILITY_BASES = {
+    PRIMARY_CONDITION: BOUND_VS_HEAD_BASIS,
+    "aggregate_report_secondary": HEAD_ALONE_BASIS,
 }
 
 _RAW_HEAD_CHARS = 200
@@ -145,6 +164,17 @@ class PatchCase:
         return _CONDITION_LABELS[self.condition]
 
     @property
+    def eligibility_basis(self) -> str:
+        """Under what the case's eligibility was judged (R30(2)), recorded per case.
+
+        The primary condition keeps R24's bound-vs-HEAD comparison.  The secondary condition
+        is judged under HEAD alone: its counterfactual is already a HEAD generator note, so
+        a version-bound judgement has nothing to bind to, and comparing one anyway excluded
+        cases for a disagreement that cannot reach the score.
+        """
+        return _CONDITION_ELIGIBILITY_BASES[self.condition]
+
+    @property
     def scoring_version_stable(self) -> bool:
         """Whether HEAD flip scoring is admissible for this case (R24); fails closed when a
         case carries no judgements rather than guessing."""
@@ -168,6 +198,7 @@ class PatchCase:
             "dropped_values_head": _listed(head.dropped_values),
             "judged_under_bound": bound.judged_under,
             "judged_under_head": head.judged_under,
+            "eligibility_basis": self.eligibility_basis,
         }
 
 
@@ -383,7 +414,7 @@ def select_patch_cases(
         and record["verdict"].get("success") is True
     }
     selected: list[PatchCase] = []
-    integrity_counts = {"evaluation": 0, "recomputed": 0}
+    integrity_counts = {"evaluation": 0, "recomputed": 0, "head_alone": 0}
     difficulty_counts = {"evaluation": 0, "recomputed": 0}
     for record in failing:
         task_id = record.get("task_id")
@@ -414,7 +445,17 @@ def select_patch_cases(
         if not all(isinstance(step, dict) for step in steps):
             raise ValueError(f"{task_id}: malformed failing steps")
         difficulty_counts[difficulty_source] += 1
-        if "integrity" in record:
+        head_judged_under = f"generator_v{GENERATOR_VERSION} HEAD"
+        if secondary_condition is not None:
+            # R30(2): the secondary condition is judged under HEAD ALONE. Its counterfactual
+            # is already a HEAD generator note, so no version-bound judgement applies and no
+            # v1 replay is performed; the basis is recorded per case and in the provenance.
+            # The two sides are the SAME judgement, not two that happen to agree.
+            bound = head = _recomputed_judgement(
+                task, steps, keep_last=keep_last, judged_under=head_judged_under
+            )
+            integrity_counts["head_alone"] += 1
+        elif "integrity" in record:
             bound = _saved_judgement(record)
             integrity_counts["evaluation"] += 1
         else:
@@ -437,11 +478,13 @@ def select_patch_cases(
             continue
         if dropped >= len(steps):
             raise ValueError(f"{task_id}: malformed failing steps")
-        # R24: flip scoring judges the HEAD task these steps were built for (``_is_flip``);
-        # judge it here too, so the artifact records whether that seam is admissible.
-        head = _recomputed_judgement(
-            task, steps, keep_last=keep_last, judged_under=f"generator_v{GENERATOR_VERSION} HEAD"
-        )
+        if secondary_condition is None:
+            # R24: flip scoring judges the HEAD task these steps were built for
+            # (``_is_flip``); judge it here too, so the artifact records whether that seam is
+            # admissible.  The secondary condition already holds this judgement (R30(2)).
+            head = _recomputed_judgement(
+                task, steps, keep_last=keep_last, judged_under=head_judged_under
+            )
         saved = successful[task_id].get("steps") if task_id in successful else None
         passing_steps = (
             tuple(dict(step) for step in saved)
@@ -473,6 +516,9 @@ def select_patch_cases(
         ),
         "integrity": integrity_counts,
         "difficulty": difficulty_counts,
+        # R30(2): what the eligibility judgement was made under, recorded beside the counts
+        # so a reader never has to infer it from the condition name.
+        "eligibility_basis": _CONDITION_ELIGIBILITY_BASES[condition],
     }
     if integrity_counts["recomputed"]:
         failing_eligibility["recomputed_generator_version"] = replay_version
@@ -883,17 +929,44 @@ def _message_contents(
     return system, task, notes, observations
 
 
+_NUMBER = r"-?\d+(?:\.\d+)?"
+
+_VALUE_FIELD = re.compile(
+    r"\b(approved|values so far|(?:first|second)\s+half(?:\s+\w+)*)\s*:\s*([^;.\n]+)",
+    re.IGNORECASE,
+)
+r"""The note's LIST fields: a label, a colon, and the values carried under it.
+
+R30(1) allows words between ``half`` and the colon — run C's ``aggregate_report`` notes read
+``first half complete: 67 + 16; second half complete: 71 + 26.``, which the pre-R30 form
+(colon immediately after ``half``) missed entirely, leaving F empty for those cases.  The
+allowance is ``\w`` only, so it cannot cross a ``;``, a ``.`` or a colon and therefore stays
+inside one clause.  A subtotal or ``highest so far`` expression is a value but is NOT a list
+field, which is the distinction R30(3)'s field scoping rests on.
+"""
+
+
+def _note_value_fields(note: str) -> dict[str, tuple[str, ...]]:
+    """Map each list-field label in the note to the values carried under it (R30(1)/(3)).
+
+    Labels are normalised (whitespace collapsed, case-folded) so ``First half complete`` and
+    ``first  half complete`` name the same field on both sides of a comparison.
+    """
+    thought = note.split("\n```json", maxsplit=1)[0]
+    fields: dict[str, tuple[str, ...]] = {}
+    for match in _VALUE_FIELD.finditer(thought):
+        label = " ".join(match.group(1).split()).casefold()
+        fields[label] = fields.get(label, ()) + tuple(re.findall(_NUMBER, match.group(2)))
+    return fields
+
+
 def _note_values(note: str) -> list[str]:
     """Return numeric fact values, excluding labels, ordinals, and action expressions."""
     thought = note.split("\n```json", maxsplit=1)[0]
-    number = r"-?\d+(?:\.\d+)?"
+    number = _NUMBER
     values: list[str] = []
-    for match in re.finditer(
-        r"\b(?:approved|values so far|first half|second half)\s*:\s*([^;.\n]+)",
-        thought,
-        flags=re.IGNORECASE,
-    ):
-        values.extend(re.findall(number, match.group(1)))
+    for match in _VALUE_FIELD.finditer(thought):
+        values.extend(re.findall(number, match.group(2)))
     values.extend(
         match.group(1)
         for match in re.finditer(
@@ -930,11 +1003,19 @@ class CaseScoring:
     The expected set E is ``canonical | dropped``: D is a ``required_carry`` fact and is
     expected at that step by construction, so a case whose canonical note happens to carry
     the value outside a value field still admits a flip instead of failing closed.
+
+    R30(3): ``canonical`` is FIELD-SCOPED — the canonical note's values under the same list
+    field(s) the failing note's values live in, not flattened across every field.  Flattening
+    admitted a computed subtotal from elsewhere in the canonical note as a legitimate value,
+    so a regenerated list that replaced a carried value with that subtotal escaped the
+    corruption test.  ``fields`` records the scope; empty means the failing note carried no
+    list field and the scope fell back to the canonical note's own list fields.
     """
 
     failing: tuple[str, ...]
     dropped: tuple[str, ...]
     canonical: tuple[str, ...]
+    fields: tuple[str, ...] = ()
 
     @property
     def expected(self) -> frozenset[str]:
@@ -946,12 +1027,25 @@ class CaseScoring:
         """F ∪ D: every number the regenerated note must carry to count as a flip."""
         return frozenset(self.failing) | frozenset(self.dropped)
 
+    @property
+    def flip_satisfiable(self) -> bool:
+        """R30(4): whether ANY generation could score ``flip`` for this case.
+
+        ``required ⊄ expected`` means the flip condition is unsatisfiable by construction —
+        typically a failing note whose only number is a computed subtotal the canonical value
+        list does not contain.  Such a case can only ever score ``corrupted``, so scoring it
+        would report a false 0.0; it is excluded from the headline with the reason recorded.
+        """
+        return self.required <= self.expected
+
     def record(self) -> dict[str, Any]:
         return {
             "failing_values": list(self.failing),
             "dropped_values_scored": list(self.dropped),
             "canonical_values": list(self.canonical),
             "expected_values": sorted(self.expected),
+            "expected_field_scope": list(self.fields),
+            "flip_satisfiable": self.flip_satisfiable,
             # A selected case's failing note is a subset of the canonical field by
             # construction — a foreign number there is scored ``stale_fact``, not
             # ``value_drop``, so the case would not have been selected.  A non-empty list
@@ -978,10 +1072,18 @@ def case_scoring(case: PatchCase) -> CaseScoring:
     note = record.get("thought")
     step = _policy_index(record, case.decision_step, len(case.task.steps))
     canonical = _canonical_note([_normalise(item.thought) for item in case.task.steps], step)
+    # R30(3): scope the expected set to the list field(s) the failing note's values live in.
+    # A failing note carrying no list field at all has no scope to take, so it falls back to
+    # every list field of the canonical note — still field-scoped, so a computed subtotal
+    # elsewhere in that note is still not expected.
+    canonical_fields = _note_value_fields(canonical)
+    scope = tuple(label for label in _note_value_fields(note or "") if label in canonical_fields)
+    labels = scope or tuple(canonical_fields)
     return CaseScoring(
         failing=_unique(_note_values(note) if isinstance(note, str) else ()),
         dropped=_unique(judgement.dropped_values),
-        canonical=_unique(_note_values(canonical)),
+        canonical=_unique(value for label in labels for value in canonical_fields[label]),
+        fields=scope,
     )
 
 
@@ -994,10 +1096,12 @@ def classify_generation(values: Sequence[str], scoring: CaseScoring) -> str:
     dropped one included, are then treated as covered, so the pre-R27 rule scored it as a
     flip.  ``flip`` when S carries every value the failing note already had plus every
     dropped value.  ``unchanged`` when S parses and stays inside E but does not restore D.
+    ``empty`` (R30(5)) when the note parses but restates no value at all: a real outcome, not
+    a parse failure, and one a reader must be able to tell apart from an unchanged list.
     """
     parsed = frozenset(values)
     if not parsed:
-        return "parse_error"
+        return "empty"
     if not parsed <= scoring.expected:
         return "corrupted"
     if scoring.required <= parsed:
@@ -1037,9 +1141,11 @@ class ScoredGeneration:
 def score_generation(raw: str, scoring: CaseScoring) -> ScoredGeneration:
     """Parse one generated turn and classify it (R27(1)).
 
-    A turn that does not parse, and a note whose value field yields no number at all, are
-    both ``parse_error``; the first 200 characters of the raw text are kept so the failure
-    is auditable offline instead of vanishing into a rate.
+    A turn that does not parse is ``parse_error``, and the first 200 characters of the raw
+    text are kept so the failure is auditable offline instead of vanishing into a rate.  A
+    turn that DOES parse but restates no value is ``empty`` (R30(5)), not a parse failure:
+    nothing is unaccounted for, so no raw head is kept and the legacy ``value_drop_cleared``
+    diagnostic is still measured for it.
     """
     head = raw[:_RAW_HEAD_CHARS]
     try:
@@ -1538,15 +1644,27 @@ _CONTENT_SWAP_NOT_APPLICABLE = (
 
 
 def _control_record(
-    control: str, task_outcomes: dict[str, Sequence[str]], swapped: dict[str, int]
+    control: str,
+    task_outcomes: dict[str, Sequence[str]],
+    swapped: dict[str, int],
+    *,
+    cases: int,
 ) -> dict[str, Any]:
-    """One control's cell entry; ``content_swap`` may be ``not_applicable`` (R27(5))."""
+    """One control's cell entry; ``content_swap`` may be ``not_applicable`` (R27(5)).
+
+    R30(6): a control's rate covers only the cases it could actually be run on, so the count
+    it was taken over (``applicable_cases``) and the cell's full population (``cases``) are
+    both recorded.  A rate of 0.4 over 5 cases and 0.4 over 2 are different claims, and the
+    reader must not have to infer which one a cell is making.
+    """
+    scope = {"applicable_cases": len(task_outcomes), "cases": cases}
     if control != "content_swap":
-        return aggregate_task_outcomes(task_outcomes)
+        return {**aggregate_task_outcomes(task_outcomes), **scope}
     if not task_outcomes:
-        return {"applicable": False, "reason": _CONTENT_SWAP_NOT_APPLICABLE}
+        return {"applicable": False, "reason": _CONTENT_SWAP_NOT_APPLICABLE, **scope}
     return {
         **aggregate_task_outcomes(task_outcomes),
+        **scope,
         "applicable": True,
         "swapped_rows": dict(sorted(swapped.items())),
     }
@@ -1611,13 +1729,21 @@ def run_patch_probe(
             visibility[case.task.task_id]["dropped_value_visible_in_retained_observations"]
         )
 
-    hidden = [case for case in stable if not _visible(case)]
-    exposed = [case for case in stable if _visible(case)]
+    visible_cases = [case for case in stable if _visible(case)]
+    measurable = [case for case in stable if not _visible(case)]
+    # R30(4): a case whose required set is not inside its expected set can never score a
+    # flip, so scoring it would report a false 0.0.  Mark it and keep it out of the headline.
+    scorings = {case.task.task_id: case_scoring(case) for case in measurable}
+    unsatisfiable = [
+        case for case in measurable if not scorings[case.task.task_id].flip_satisfiable
+    ]
+    hidden = [case for case in measurable if scorings[case.task.task_id].flip_satisfiable]
     if len(hidden) < 2:
         raise ValueError(
             "P6 unrelated-task control requires at least two scoring-version-stable patch "
-            f"cases (R24); {len(stable)} stable, {len(unstable)} unstable, {len(exposed)} "
-            "excluded for a dropped value visible in the retained observations (R27)"
+            f"cases (R24); {len(stable)} stable, {len(unstable)} unstable, "
+            f"{len(visible_cases)} excluded for a dropped value visible in the retained "
+            f"observations (R27), {len(unsatisfiable)} excluded as flip_unsatisfiable (R30)"
         )
 
     def case_record(case: PatchCase, provenance: dict[str, Any]) -> dict[str, Any]:
@@ -1638,11 +1764,18 @@ def run_patch_probe(
         }
 
     excluded: list[dict[str, Any]] = []
-    for case, reason in [(case, "scoring_version_unstable") for case in unstable] + [
-        (case, "dropped_value_visible_in_retained_observations") for case in exposed
-    ]:
+    for case, reason in (
+        [(case, "scoring_version_unstable") for case in unstable]
+        + [(case, "dropped_value_visible_in_retained_observations") for case in visible_cases]
+        + [(case, "flip_unsatisfiable") for case in unsatisfiable]
+    ):
         _failing, _counterfactual, provenance = replay_counterfactual(case)
-        excluded.append({**case_record(case, provenance), "excluded_reason": reason})
+        record = {**case_record(case, provenance), "excluded_reason": reason}
+        if case.task.task_id in scorings:
+            # R30(4): the excluded case shows the sets it was judged on, so "unsatisfiable"
+            # is a reader-checkable claim rather than a verdict.
+            record["value_sets"] = scorings[case.task.task_id].record()
+        excluded.append(record)
     prepared: list[dict[str, Any]] = []
     case_provenance: list[dict[str, Any]] = []
     source_counts: dict[str, int] = {}
@@ -1670,7 +1803,7 @@ def run_patch_probe(
             target_ids=failing_ids,
         )
         alignment_record = {group: cell.record() for group, cell in alignment.items()}
-        scoring = case_scoring(case)
+        scoring = scorings[case.task.task_id]
         case_provenance.append(
             {
                 **case_record(case, provenance),
@@ -1813,9 +1946,15 @@ def run_patch_probe(
                     item["case"].task.task_id: item["alignment_record"][group]
                     for item in prepared
                 },
-                "treatment": aggregate_task_outcomes(outcomes["treatment"]),
+                "treatment": {
+                    **aggregate_task_outcomes(outcomes["treatment"]),
+                    "applicable_cases": len(outcomes["treatment"]),
+                    "cases": len(prepared),
+                },
                 "controls": {
-                    control: _control_record(control, outcomes[control], swapped)
+                    control: _control_record(
+                        control, outcomes[control], swapped, cases=len(prepared)
+                    )
                     for control in CONTROLS
                 },
             }
@@ -1838,7 +1977,8 @@ def run_patch_probe(
         "stable_cases": len(stable),
         "unstable_cases": len(unstable),
         "headline_cases": len(hidden),
-        "visibility_excluded_cases": len(exposed),
+        "visibility_excluded_cases": len(visible_cases),
+        "flip_unsatisfiable_cases": len(unsatisfiable),
         "headline_task_ids": [case.task.task_id for case in hidden],
         "cases": case_provenance,
         "generations": generations,
@@ -1846,6 +1986,15 @@ def run_patch_probe(
         "counterfactual_sources": source_counts,
         "cells": cells,
     }
+
+
+def _applicable_n(summary: dict[str, Any]) -> str:
+    """``n=<applicable>/<cases>`` for a cell entry (R30(6)); ``n=?`` when a payload predates it."""
+    applicable = summary.get("applicable_cases")
+    cases = summary.get("cases")
+    if applicable is None or cases is None:
+        return "n=?"
+    return f"n={applicable}/{cases}"
 
 
 def _outcome_counts_table(payload: dict[str, Any]) -> list[str]:
@@ -1856,18 +2005,23 @@ def _outcome_counts_table(payload: dict[str, Any]) -> list[str]:
     """
     names = payload.get("outcomes") or list(OUTCOMES)
     lines = [
-        "| layer/group | condition | " + " | ".join(names) + " |",
-        "|---|---|" + "|".join("---:" for _ in names) + "|",
+        "| layer/group | condition | n | " + " | ".join(names) + " |",
+        "|---|---|---|" + "|".join("---:" for _ in names) + "|",
     ]
     for key, cell in payload["cells"].items():
         for condition in ("treatment", *payload["controls"]):
             summary = cell["treatment"] if condition == "treatment" else cell["controls"][condition]
+            scope = _applicable_n(summary)
             if not summary.get("applicable", True):
-                lines.append(f"| {key} | {condition} | " + " | ".join("n/a" for _ in names) + " |")
+                lines.append(
+                    f"| {key} | {condition} | {scope} | "
+                    + " | ".join("n/a" for _ in names)
+                    + " |"
+                )
                 continue
             counts = summary.get("outcomes", {})
             lines.append(
-                f"| {key} | {condition} | "
+                f"| {key} | {condition} | {scope} | "
                 + " | ".join(str(counts.get(name, 0)) for name in names)
                 + " |"
             )
@@ -1912,14 +2066,29 @@ def render_markdown(payload: dict[str, Any]) -> str:
             values.append(f"{summary['rate']:.3f} [{low:.3f}, {high:.3f}]")
         lines.append(f"| {layer} | " + " | ".join(values) + " |")
     for control in payload["controls"]:
-        lines.extend(["", f"## Control: {control}", "", "| layer/group | rate | 95% Wilson |", "|---|---:|---|"])
+        # R30(6): every control row prints the n its rate was taken over, beside the cell's
+        # full population, so a rate is never read as covering more cases than it does.
+        lines.extend(
+            [
+                "",
+                f"## Control: {control}",
+                "",
+                "| layer/group | n | rate | 95% Wilson |",
+                "|---|---|---:|---|",
+            ]
+        )
         for key, cell in payload["cells"].items():
             summary = cell["controls"][control]
+            scope = _applicable_n(summary)
             if not summary.get("applicable", True):
-                lines.append(f"| {key} | not_applicable | {summary.get('reason', '')} |")
+                lines.append(
+                    f"| {key} | {scope} | not_applicable | {summary.get('reason', '')} |"
+                )
                 continue
             low, high = summary["wilson_95"]
-            lines.append(f"| {key} | {summary['rate']:.3f} | [{low:.3f}, {high:.3f}] |")
+            lines.append(
+                f"| {key} | {scope} | {summary['rate']:.3f} | [{low:.3f}, {high:.3f}] |"
+            )
     if payload.get("cells"):
         lines.extend(["", "## Outcome counts per cell (R27)", ""])
         lines.extend(_outcome_counts_table(payload))

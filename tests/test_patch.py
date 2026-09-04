@@ -24,8 +24,11 @@ _FIXTURE_SEED = 17
 generator is seeded by it and any value yields a well-formed task."""
 
 
-def _payload(trajectories, *, data_seed=_FIXTURE_SEED):
-    return {"data_seed": data_seed, "trajectories": trajectories}
+def _payload(trajectories, *, data_seed=_FIXTURE_SEED, generator_version=None):
+    payload = {"data_seed": data_seed, "trajectories": trajectories}
+    if generator_version is not None:
+        payload["generator_version"] = generator_version
+    return payload
 
 
 def _drop_report(step, values=None):
@@ -60,6 +63,8 @@ def _scoring_record(step, values="42"):
         "dropped_values_head": [values],
         "judged_under_bound": "generator_v1 replay",
         "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+        # R30(2): every case records what its eligibility was judged under.
+        "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
     }
 
 
@@ -249,7 +254,8 @@ def test_select_recomputes_missing_eligibility_fields_under_the_bound_version(mo
         "passing": {"eligibility_source": "evaluation"},
         "failing": {
             "eligibility_source": "recomputed",
-            "integrity": {"evaluation": 0, "recomputed": 1},
+            "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
+            "integrity": {"evaluation": 0, "recomputed": 1, "head_alone": 0},
             "difficulty": {"evaluation": 0, "recomputed": 1},
             "recomputed_generator_version": 1,
             "generator_version_source": "flag",
@@ -287,6 +293,7 @@ def test_recompute_excludes_head_only_drops_judged_under_the_bound_version(monke
     assert provenance["eligibility"]["failing"]["integrity"] == {
         "evaluation": 0,
         "recomputed": 1,
+        "head_alone": 0,
     }
     assert provenance["eligibility"]["failing"]["recomputed_generator_version"] == 1
 
@@ -383,6 +390,7 @@ def test_verdict_filter_restricts_selection_to_the_spec_universe(monkeypatch) ->
     assert provenance["eligibility"]["failing"]["integrity"] == {
         "evaluation": 1,
         "recomputed": 0,
+        "head_alone": 0,
     }
 
 
@@ -439,7 +447,8 @@ def test_saved_eligibility_fields_win_and_recomputation_never_runs(monkeypatch) 
     assert cases[0].scoring_version_stable is True
     assert provenance["eligibility"]["failing"] == {
         "eligibility_source": "evaluation",
-        "integrity": {"evaluation": 1, "recomputed": 0},
+        "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
+        "integrity": {"evaluation": 1, "recomputed": 0, "head_alone": 0},
         "difficulty": {"evaluation": 1, "recomputed": 0},
     }
 
@@ -494,7 +503,8 @@ def test_mixed_eligibility_sources_are_summarised_and_counted(monkeypatch) -> No
     assert [case.decision_step for case in cases] == [1, 0]
     assert provenance["eligibility"]["failing"] == {
         "eligibility_source": "mixed",
-        "integrity": {"evaluation": 1, "recomputed": 1},
+        "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
+        "integrity": {"evaluation": 1, "recomputed": 1, "head_alone": 0},
         "difficulty": {"evaluation": 1, "recomputed": 1},
         "recomputed_generator_version": 1,
         "generator_version_source": "flag",
@@ -552,6 +562,7 @@ def test_scoring_stability_records_both_judgements_and_flags_disagreement(monkey
         "dropped_values_head": ["12"],
         "judged_under_bound": "generator_v1 replay",
         "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+        "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
     }
     assert cases[2].scoring_record()["dropped_values_head"] == ["13"]
     assert cases[0].scoring_record() == {**_scoring_record(1, "12")}
@@ -641,7 +652,8 @@ def test_dry_selection_recomputes_eligibility_for_evaluations_shaped_like_the_sa
     }
     assert provenance["eligibility"]["failing"] == {
         "eligibility_source": "recomputed",
-        "integrity": {"evaluation": 0, "recomputed": 1},
+        "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
+        "integrity": {"evaluation": 0, "recomputed": 1, "head_alone": 0},
         "difficulty": {"evaluation": 0, "recomputed": 1},
         "recomputed_generator_version": patch.GENERATOR_VERSION,
         "generator_version_source": "flag",
@@ -694,6 +706,7 @@ def test_real_saved_evaluations_select_exactly_the_spec_universe() -> None:
     assert provenance["eligibility"]["failing"]["integrity"] == {
         "evaluation": 0,
         "recomputed": 5,
+        "head_alone": 0,
     }
     assert provenance["eligibility"]["failing"]["recomputed_generator_version"] == 1
     assert provenance["eligibility"]["failing"]["generator_version_source"] == "flag"
@@ -1135,7 +1148,7 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         "passing": {"eligibility_source": "evaluation"},
         "failing": {
             "eligibility_source": "recomputed",
-            "integrity": {"evaluation": 0, "recomputed": 1},
+            "integrity": {"evaluation": 0, "recomputed": 1, "head_alone": 0},
             "difficulty": {"evaluation": 0, "recomputed": 1},
             "recomputed_generator_version": patch.GENERATOR_VERSION,
         },
@@ -1494,18 +1507,23 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
         "flip": 2,
         "corrupted": 0,
         "unchanged": 0,
+        "empty": 0,
         "parse_error": 0,
     }
     assert payload["cells"]["1:system_prompt"]["controls"]["unrelated_task"]["outcomes"] == {
         "flip": 0,
         "corrupted": 2,
         "unchanged": 0,
+        "empty": 0,
         "parse_error": 0,
     }
     # R27(5): applicable only where the cell reads a dropped-value row.
     assert payload["cells"]["1:system_prompt"]["controls"]["content_swap"] == {
         "applicable": False,
         "reason": patch._CONTENT_SWAP_NOT_APPLICABLE,
+        # R30(6): the n a control was NOT taken over is stated, not left blank.
+        "applicable_cases": 0,
+        "cases": 2,
     }
     assert payload["cells"]["1:final_token"]["controls"]["content_swap"]["applicable"] is False
     swap = payload["cells"]["1:dropped_value_slot"]["controls"]["content_swap"]
@@ -1571,6 +1589,10 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
         "dropped_values_scored": ["42"],
         "canonical_values": [],
         "expected_values": ["42"],
+        # R30(3)/(4): the fake task carries no canonical note, so there is no list field to
+        # scope by; the required set is D alone, which is inside E, so the flip is reachable.
+        "expected_field_scope": [],
+        "flip_satisfiable": True,
         "failing_values_outside_canonical": [],
     }
     assert payload["cases"] == [
@@ -1773,9 +1795,10 @@ def _probe_fixture(monkeypatch, cases):
     return Tokenizer(), captures
 
 
-def _probe_case(index, *, judgements, observation=None):
+def _probe_case(index, *, judgements, observation=None, failing_note="drop"):
     """A probe case; ``observation`` puts a retained observation before the decision step,
-    which is what R27(3)'s visibility measurement reads."""
+    which is what R27(3)'s visibility measurement reads, and ``failing_note`` sets the note
+    at that step, which is what R30(3)/(4) scope and satisfiability read."""
     from local_llm_lab.probes import patch
 
     first = {"thought": "a"}
@@ -1784,7 +1807,7 @@ def _probe_case(index, *, judgements, observation=None):
     return patch.PatchCase(
         _Task(f"test-ledger_reconcile-{index}-clean", "ledger_reconcile"),
         1,
-        (first, {"thought": "drop"}),
+        (first, {"thought": failing_note}),
         None,
         *judgements,
     )
@@ -1838,6 +1861,7 @@ def test_patch_probe_excludes_unstable_cases_from_the_headline_and_lists_them(mo
             "dropped_values_head": ["42"],
             "judged_under_bound": "generator_v1 replay",
             "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+            "eligibility_basis": patch.BOUND_VS_HEAD_BASIS,
             "dropped_value_visible_in_retained_observations": False,
             "visible_dropped_values": [],
             "retained_observations": 0,
@@ -3030,7 +3054,9 @@ def test_strict_scoring_refuses_a_turn_that_does_not_parse_or_carries_no_value(
     """R27(1): both parse failures are ``parse_error``, and the raw head is kept."""
     from local_llm_lab.probes import patch
 
-    scoring = patch.CaseScoring(failing=("1",), dropped=("2",), canonical=("1", "2"))
+    scoring = patch.CaseScoring(
+        failing=("1",), dropped=("2",), canonical=("1", "2"), fields=("approved",)
+    )
     monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
     monkeypatch.setattr(
         patch, "parse_turn", lambda raw: (_ for _ in ()).throw(ValueError("bad"))
@@ -3043,8 +3069,11 @@ def test_strict_scoring_refuses_a_turn_that_does_not_parse_or_carries_no_value(
     monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
     valueless = patch.score_generation("Reading the next invoice; pending: none.", scoring)
 
-    assert valueless.outcome == "parse_error"
-    assert valueless.raw_head == "Reading the next invoice; pending: none."
+    # R30(5) split this out of ``parse_error``: the turn parsed, so nothing is unaccounted
+    # for and no raw head is kept.  ``test_a_parseable_note_with_no_values_scores_empty``
+    # carries the rest of the clause.
+    assert valueless.outcome == "empty"
+    assert valueless.raw_head == ""
     # A note that DOES parse to numbers is not a parse error, even when it is wrong.
     assert patch.score_generation("approved: 1, 2", scoring).outcome == "flip"
     assert patch.score_generation("approved: 1, 2, 3", scoring).outcome == "corrupted"
@@ -3254,7 +3283,10 @@ def test_content_swap_is_not_applicable_where_no_dropped_value_row_is_read(monke
         "final_token": False,
     }
     inert = payload["cells"]["1:system_prompt"]["controls"]["content_swap"]
-    assert set(inert) == {"applicable", "reason"} and "nothing to swap" in inert["reason"]
+    assert set(inert) == {"applicable", "reason", "applicable_cases", "cases"}
+    assert "nothing to swap" in inert["reason"]
+    # R30(6): even an inapplicable control states the n it was NOT taken over.
+    assert (inert["applicable_cases"], inert["cases"]) == (0, 2)
     assert set(payload["cells"]["1:system_prompt"]["controls"]) == set(patch.CONTROLS)
 
 
@@ -3275,6 +3307,7 @@ def test_aggregate_counts_outcomes_over_generations_and_rates_over_cases() -> No
         "flip": 1,
         "corrupted": 1,
         "unchanged": 2,
+        "empty": 0,
         "parse_error": 1,
     }
     assert summary["generations"] == 5
@@ -3446,7 +3479,7 @@ def test_render_markdown_carries_the_outcome_counts_and_the_content_control() ->
     """R27(7): the counts, the content control's applicability, and the secondary section."""
     from local_llm_lab.probes import patch
 
-    counts = {"flip": 3, "corrupted": 1, "unchanged": 0, "parse_error": 1}
+    counts = {"flip": 3, "corrupted": 1, "unchanged": 0, "empty": 0, "parse_error": 1}
     payload = {
         "groups": ["system_prompt"],
         "layers": [1],
@@ -3455,11 +3488,34 @@ def test_render_markdown_carries_the_outcome_counts_and_the_content_control() ->
         "condition": patch.PRIMARY_CONDITION,
         "cells": {
             "1:system_prompt": {
-                "treatment": {"rate": 0.6, "wilson_95": [0.2, 0.9], "outcomes": counts},
+                "treatment": {
+                    "rate": 0.6,
+                    "wilson_95": [0.2, 0.9],
+                    "outcomes": counts,
+                    "applicable_cases": 5,
+                    "cases": 5,
+                },
                 "controls": {
-                    "unrelated_task": {"rate": 0.2, "wilson_95": [0.0, 0.6], "outcomes": counts},
-                    "random_positions": {"rate": 0.0, "wilson_95": [0.0, 0.4], "outcomes": counts},
-                    "content_swap": {"applicable": False, "reason": "nothing to swap"},
+                    "unrelated_task": {
+                        "rate": 0.2,
+                        "wilson_95": [0.0, 0.6],
+                        "outcomes": counts,
+                        "applicable_cases": 5,
+                        "cases": 5,
+                    },
+                    "random_positions": {
+                        "rate": 0.0,
+                        "wilson_95": [0.0, 0.4],
+                        "outcomes": counts,
+                        "applicable_cases": 5,
+                        "cases": 5,
+                    },
+                    "content_swap": {
+                        "applicable": False,
+                        "reason": "nothing to swap",
+                        "applicable_cases": 0,
+                        "cases": 5,
+                    },
                 },
             }
         },
@@ -3475,10 +3531,12 @@ def test_render_markdown_carries_the_outcome_counts_and_the_content_control() ->
 
     assert "Condition: `primary`." in lines
     assert "## Outcome counts per cell (R27)" in lines
-    assert "| 1:system_prompt | treatment | 3 | 1 | 0 | 1 |" in lines
-    assert "| 1:system_prompt | content_swap | n/a | n/a | n/a | n/a |" in lines
+    # R30(5)/(6): the ``empty`` column, and the n each row was taken over.
+    assert "| 1:system_prompt | treatment | n=5/5 | 3 | 1 | 0 | 0 | 1 |" in lines
+    assert "| 1:system_prompt | content_swap | n=0/5 | n/a | n/a | n/a | n/a | n/a |" in lines
     assert "## Control: content_swap" in lines
-    assert "| 1:system_prompt | not_applicable | nothing to swap |" in lines
+    assert "| 1:system_prompt | n=0/5 | not_applicable | nothing to swap |" in lines
+    assert "| 1:system_prompt | n=5/5 | 0.200 | [0.000, 0.600] |" in lines
     secondary = lines.index("# Secondary condition (R27, issue #26)")
     assert any("designed_correct" in line for line in lines[secondary:])
     assert any("Not scored: no eligible patch cases" in line for line in lines[secondary:])
@@ -3583,3 +3641,393 @@ def test_real_saved_evaluations_measure_every_dropped_value_as_hidden() -> None:
     assert not {case.task.task_id for case in secondary} & {
         case.task.task_id for case in cases
     }
+
+    # R30(2), measured on the real files: judged under HEAD alone, no v1 replay is performed,
+    # and the whole 15-case population is eligible instead of the 2 that survived R24's
+    # bound-vs-HEAD comparison (the aggregate_report note template moved between v1 and v4).
+    assert len(secondary) == 15
+    assert secondary_provenance["eligibility"]["failing"]["integrity"] == {
+        "evaluation": 0,
+        "recomputed": 0,
+        "head_alone": 15,
+    }
+    assert (
+        secondary_provenance["eligibility"]["failing"]["eligibility_basis"]
+        == patch.HEAD_ALONE_BASIS
+    )
+    assert all(case.scoring_version_stable for case in secondary)
+    assert all(
+        not patch.dropped_value_visibility(case, keep_last=2)[
+            "dropped_value_visible_in_retained_observations"
+        ]
+        for case in secondary
+    )
+    # R30(4), measured: five failing notes carry only a computed subtotal that the canonical
+    # value list does not contain, so no generation could ever score a flip for them.
+    secondary_scoring = {case.task.task_id: patch.case_scoring(case) for case in secondary}
+    assert {
+        task_id: sorted(record.required - record.expected)
+        for task_id, record in secondary_scoring.items()
+        if not record.flip_satisfiable
+    } == {
+        "test-aggregate_report-0011-clean": ["32"],
+        "test-aggregate_report-0107-clean": ["139"],
+        "test-aggregate_report-0131-clean": ["115"],
+        "test-aggregate_report-0155-clean": ["113"],
+        "test-aggregate_report-0179-clean": ["67"],
+    }
+    assert sum(record.flip_satisfiable for record in secondary_scoring.values()) == 10
+    # R30(1), measured: the two cases whose note uses run C's ``first half complete:`` style
+    # now parse to a value set; before R30 the colon had to follow ``half`` directly and F
+    # was empty for both.  Their scope is empty because the HEAD canonical note carries a
+    # ``values so far`` field instead, so E falls back to the canonical note's own list
+    # fields — still field-scoped, and both cases stay satisfiable.
+    half_style = {
+        case.task.task_id: case
+        for case in secondary
+        if "half complete" in (case.failing_steps[case.decision_step].get("thought") or "")
+    }
+    assert set(half_style) == {
+        "test-aggregate_report-0035-clean",
+        "test-aggregate_report-0143-clean",
+    }
+    for task_id, case in half_style.items():
+        note = case.failing_steps[case.decision_step]["thought"]
+        assert tuple(patch._note_value_fields(note)) == (
+            "first half complete",
+            "second half complete",
+        ), task_id
+        assert secondary_scoring[task_id].failing, task_id
+        assert secondary_scoring[task_id].flip_satisfiable, task_id
+    assert secondary_scoring["test-aggregate_report-0035-clean"].failing == (
+        "67",
+        "16",
+        "71",
+        "26",
+    )
+    # R30(3), measured on the primary: scoping to the failing note's own list field leaves the
+    # five ledger cases exactly as they were, so the rerun is comparable.
+    assert {
+        case.task.task_id: patch.case_scoring(case).fields for case in cases
+    } == dict.fromkeys((case.task.task_id for case in cases), ("approved",))
+    assert all(patch.case_scoring(case).flip_satisfiable for case in cases)
+
+
+# --- R30 (map:658-664): secondary condition and scorer refinements -------------------------
+#
+# Six clauses, each with its own test below:
+#   (1) ``_note_values`` accepts words between ``half`` and the colon;
+#   (2) the ``aggregate_report`` secondary condition's eligibility is judged under HEAD alone
+#       with the basis recorded (no v1-bound side);
+#   (3) the expected set is field-scoped to the failing note's list field;
+#   (4) ``flip_unsatisfiable`` cases are marked and excluded from the headline;
+#   (5) a parseable note with no values scores ``empty``;
+#   (6) control rates are over applicable cases with n printed.
+
+
+def test_note_values_accepts_words_between_half_and_the_colon() -> None:
+    """R30(1): run C's ``first half complete:`` style, not only ``first half:``.
+
+    Measured on the saved run: the ``aggregate_report`` note at the calculate step reads
+    ``first half complete: 67 + 16; second half complete: 71 + 26.`` — the pre-R30 regex
+    required the colon immediately after ``half``, so it extracted nothing and F was empty.
+    """
+    from local_llm_lab.probes import patch
+
+    run_c = "first half complete: 67 + 16; second half complete: 71 + 26. Computing the first half."
+
+    assert patch._note_values(run_c) == ["67", "16", "71", "26"]
+    # The plain form still parses, and the order is document order (R25 pairs values by
+    # string identity but ``_value_alignment`` reads ``list(source_values)`` in this order).
+    assert patch._note_values("first half: 73, 44 (full); second half: 87, 89.") == [
+        "73",
+        "44",
+        "87",
+        "89",
+    ]
+    # The allowance stops at the clause: it cannot reach across ``;`` or ``.`` to a later colon.
+    assert patch._note_values("first half; nothing here. approved: 5") == ["5"]
+    # A label with words is reported under its own name, so the field scoping in R30(3) can
+    # tell one list field from another.
+    assert patch._note_value_fields(run_c) == {
+        "first half complete": ("67", "16"),
+        "second half complete": ("71", "26"),
+    }
+    # Subtotal and ``highest so far`` expressions are values but are NOT list fields.
+    assert patch._note_value_fields("First subtotal = 32. Computing the rest.") == {}
+    assert patch._note_values("First subtotal = 32. Computing the rest.") == ["32"]
+
+
+def _aggregate_case(*, failing_note, canonical_note, dropped, step=1):
+    """A case whose task carries a real canonical note at the decision step."""
+    from local_llm_lab.probes import patch
+
+    task = _Task(
+        "test-aggregate_report-0023-clean",
+        "aggregate_report",
+        steps=(SimpleNamespace(thought="plan"), SimpleNamespace(thought=canonical_note)),
+    )
+    judgement = patch.DropJudgement(step, tuple(dropped), "head")
+    return patch.PatchCase(
+        task,
+        step,
+        ({"thought": "plan"}, {"thought": failing_note}),
+        None,
+        judgement,
+        judgement,
+    )
+
+
+def test_expected_set_is_scoped_to_the_failing_notes_list_field() -> None:
+    """R30(3): E comes from the canonical note's SAME list field, not every field.
+
+    The reviewer's case-0023 shape: the canonical note carries both a value list and a
+    computed subtotal (``values so far: 73, 44, 87, 89, 11, 89; … First subtotal = 204``).
+    Flattening E across fields would admit 204 as a legitimate value, so a regenerated list
+    ``values so far: 73, 44, 204`` would escape the corruption test. Field scoping refuses it.
+    """
+    from local_llm_lab.probes import patch
+
+    canonical = (
+        "values so far: 73, 44, 87, 89, 11, 89; split after 3 of 6. "
+        "First subtotal = 204; computing 89 + 11 + 89."
+    )
+    case = _aggregate_case(
+        failing_note="values so far: 73, 44, 87, 89, 89; split after 3 of 6.",
+        canonical_note=canonical,
+        dropped=("11",),
+    )
+
+    scoring = patch.case_scoring(case)
+
+    assert scoring.fields == ("values so far",)
+    # 204 is in the canonical note but not in the list field, so it is not expected.
+    assert scoring.expected == frozenset({"73", "44", "87", "89", "11"})
+    assert "204" in patch._note_values(canonical), "the flattened set would have held 204"
+    assert patch.classify_generation(["73", "44", "87", "89", "11", "89"], scoring) == "flip"
+    assert patch.classify_generation(["73", "44", "204"], scoring) == "corrupted"
+    assert scoring.record()["expected_field_scope"] == ["values so far"]
+    # A failing note with no list field at all falls back to the canonical note's own list
+    # fields — still field-scoped, so the subtotal is still excluded.
+    bare = _aggregate_case(
+        failing_note="First subtotal = 204. Computing the second subtotal.",
+        canonical_note=canonical,
+        dropped=("11",),
+    )
+    bare_scoring = patch.case_scoring(bare)
+    assert bare_scoring.fields == ()
+    assert "204" not in bare_scoring.expected
+    assert bare_scoring.record()["expected_field_scope"] == []
+
+
+def test_flip_unsatisfiable_cases_are_marked_and_excluded(monkeypatch) -> None:
+    """R30(4): required ⊄ expected means no generation could ever score ``flip``.
+
+    Measured shape from the run: the failing note carries a computed subtotal that is not in
+    the canonical value list, so F ⊄ E and the case can only ever be ``corrupted``. Scoring
+    it would report a false 0.0, so it is excluded and the reason recorded.
+    """
+    from local_llm_lab.probes import patch
+
+    canonical = (
+        "values so far: 18, 14, 75, 72, 18, 79; split after 3 of 6. "
+        "First subtotal = 107; computing 72 + 18 + 79."
+    )
+    unsatisfiable = _aggregate_case(
+        failing_note="First subtotal = 32. Computing the second subtotal 75 + 72.",
+        canonical_note=canonical,
+        dropped=("14", "18"),
+    )
+    satisfiable = _aggregate_case(
+        failing_note="values so far: 18, 75, 72, 79; split after 3 of 6.",
+        canonical_note=canonical,
+        dropped=("14",),
+    )
+
+    assert patch.case_scoring(unsatisfiable).flip_satisfiable is False
+    assert patch.case_scoring(satisfiable).flip_satisfiable is True
+    assert patch.case_scoring(unsatisfiable).record()["flip_satisfiable"] is False
+
+    cases = [
+        _probe_case(0, judgements=_judgements(1)),
+        _probe_case(1, judgements=_judgements(1), failing_note="approved: 999"),
+        _probe_case(2, judgements=_judgements(1)),
+    ]
+    tokenizer, captures = _probe_fixture(monkeypatch, cases)
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1], policy="base",
+        keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    assert len(captures) == 4, "the unsatisfiable case is never prepared or captured"
+    assert payload["headline_cases"] == 2
+    assert payload["flip_unsatisfiable_cases"] == 1
+    assert payload["headline_task_ids"] == [cases[0].task.task_id, cases[2].task.task_id]
+    excluded = payload["excluded_cases"][0]
+    assert excluded["task_id"] == cases[1].task.task_id
+    assert excluded["excluded_reason"] == "flip_unsatisfiable"
+    assert excluded["value_sets"]["flip_satisfiable"] is False
+    for cell in payload["cells"].values():
+        assert cell["treatment"]["denominator"] == 2
+
+
+def test_a_parseable_note_with_no_values_scores_empty(monkeypatch) -> None:
+    """R30(5): ``empty`` is its own outcome, and it still records the legacy diagnostic.
+
+    A note that parses but carries no value list is not a parse failure — the model wrote a
+    turn, it just did not restate the list — and folding it into ``parse_error`` hid that.
+    """
+    from local_llm_lab.probes import patch
+
+    assert patch.OUTCOMES == ("flip", "corrupted", "unchanged", "empty", "parse_error")
+    scoring = patch.CaseScoring(
+        failing=("1",), dropped=("2",), canonical=("1", "2"), fields=("approved",)
+    )
+    monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
+    monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
+
+    scored = patch.score_generation("Reading the next invoice; pending: none.", scoring)
+
+    assert scored.outcome == "empty"
+    assert scored.values == ()
+    assert scored.note == "Reading the next invoice; pending: none."
+    # It parsed, so the raw head is not kept: nothing is unaccounted for.
+    assert scored.raw_head == ""
+
+    class Hook:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    case = patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ({"thought": "bad"},)
+    )
+    monkeypatch.setattr(patch, "InjectionHook", Hook)
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "no values here.")
+    monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: True)
+
+    through = patch._score_patch(
+        object(), object(), case, scoring=scoring, layer=1, source_rows=object(),
+        target_positions=(0,), failing_ids=[1], keep_last=2, max_tokens=1,
+    )
+
+    assert through.outcome == "empty"
+    # R30(5): unlike ``parse_error``, an ``empty`` generation still records the pre-R27 rule.
+    assert through.value_drop_cleared is True
+
+    counts = patch.aggregate_task_outcomes({"task-a": ["empty"], "task-b": ["flip"]})
+    assert counts["outcomes"]["empty"] == 1
+    assert counts["rate"] == 0.5
+
+
+def test_control_rates_are_over_applicable_cases_with_n_recorded(monkeypatch) -> None:
+    """R30(6): a control's rate covers only the cases it could be run on, and n is printed."""
+    from local_llm_lab.probes import patch
+
+    payload, _injected = _alignment_probe(monkeypatch, ["41", "57"], ["41", "57", "62"])
+
+    for key, cell in payload["cells"].items():
+        for name, control in cell["controls"].items():
+            if not control.get("applicable", True):
+                assert control["applicable_cases"] == 0, key
+                assert control["cases"] == 2, key
+                continue
+            assert control["applicable_cases"] == control["denominator"], (key, name)
+            assert control["cases"] == 2, (key, name)
+        assert cell["treatment"]["applicable_cases"] == cell["treatment"]["denominator"]
+
+    swap = payload["cells"]["1:previous_notes"]["controls"]["content_swap"]
+    assert swap["applicable_cases"] == 2 and swap["cases"] == 2
+    text = patch.render_markdown(payload)
+    assert "n=2/2" in text
+    assert "n=0/2" in text, "an inapplicable control prints its n, it does not hide"
+
+
+def test_secondary_eligibility_is_judged_under_head_alone_with_the_basis_recorded(
+    monkeypatch,
+) -> None:
+    """R30(2): no v1-bound side for the secondary condition, and the basis is in the artifact.
+
+    Its counterfactual is already a HEAD generator note, so a version-bound judgement has
+    nothing to bind to; judging it under R24's bound-vs-HEAD comparison excluded cases for a
+    disagreement that cannot matter here.
+    """
+    from local_llm_lab.probes import patch
+
+    tasks = {
+        "test-aggregate_report-0-clean": _Task(
+            "test-aggregate_report-0-clean", "aggregate_report"
+        ),
+        "test-ledger_reconcile-1-clean": _Task(
+            "test-ledger_reconcile-1-clean", "ledger_reconcile"
+        ),
+    }
+    monkeypatch.setattr(patch, "task_from_id", lambda task_id, seed, difficulty: tasks[task_id])
+    replays = []
+
+    def replay(task_id, seed, version, level):
+        replays.append((task_id, version))
+        return tasks[task_id]
+
+    monkeypatch.setattr(patch, "replay_task_from_id", replay)
+    # The bound replay and HEAD disagree on both the step and the values, which is what
+    # excluded 13 of the 15 real cases before R30.
+    monkeypatch.setattr(
+        patch,
+        "check_trajectory",
+        lambda task, steps, *, keep_last: _drop_report(1, "7")
+        if task is tasks["test-ledger_reconcile-1-clean"]
+        else _drop_report(1, "7"),
+    )
+    passing = _payload(
+        [
+            {
+                "task_id": "test-ledger_reconcile-1-clean",
+                "verdict": {"success": True},
+                "steps": [{"thought": "saved note"}],
+            }
+        ]
+    )
+    failing = _payload(
+        [
+            {
+                "task_id": key,
+                "difficulty": 2,
+                "verdict": {"success": False},
+                "steps": [{"thought": "before"}, {"thought": "drop"}],
+            }
+            for key in tasks
+        ],
+        generator_version=1,
+    )
+
+    secondary, provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, secondary_condition="aggregate_report"
+    )
+
+    (case,) = secondary
+    assert case.task.task_id == "test-aggregate_report-0-clean"
+    # No v1 replay was performed for this universe at all: HEAD alone.
+    assert replays == []
+    assert case.bound_judgement is case.head_judgement
+    assert case.scoring_version_stable is True
+    assert case.eligibility_basis == patch.HEAD_ALONE_BASIS
+    record = case.scoring_record()
+    assert record["eligibility_basis"] == patch.HEAD_ALONE_BASIS
+    assert record["judged_under_bound"] == record["judged_under_head"]
+    assert provenance["eligibility"]["failing"]["eligibility_basis"] == patch.HEAD_ALONE_BASIS
+    # The primary universe keeps the R24 bound-vs-HEAD comparison and does replay.
+    primary, primary_provenance = patch.select_patch_cases(passing, failing, keep_last=2)
+    assert replays == [("test-ledger_reconcile-1-clean", 1)]
+    assert primary[0].eligibility_basis == patch.BOUND_VS_HEAD_BASIS
+    assert (
+        primary_provenance["eligibility"]["failing"]["eligibility_basis"]
+        == patch.BOUND_VS_HEAD_BASIS
+    )
