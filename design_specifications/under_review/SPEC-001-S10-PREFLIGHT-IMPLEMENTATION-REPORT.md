@@ -74,9 +74,55 @@ Immediately before the full run, `git rev-parse HEAD` returned
 nodes. The exact required `uv run pytest -q` then exited 0 with 523 passing tests. No real
 preflight/model command was executed.
 
-## Controller-only execution evidence (reserved)
+## Independent review and controller verification
 
-Do not fill this section during fake-only implementation. After independent approval, the
-controller may record the one authorized `qwen35-4b` preflight execution here: wall time, memory
-estimate and observed MLX peak if available, JVP method, cache kinds/strategy, local cache
-footprint, and zero external API cost.
+The principal review found one Important issue: the first implementation did not validate the
+top-level `schema_version`. Fix commit `84992f2` now rejects missing or unsupported schema
+versions, and the scoped re-review approved the fix. The final whole-change review approved both
+spec compliance and engineering quality with no Critical or Important findings. It retained three
+non-blocking follow-ups: normalize invalid-UTF-8 artifact errors, add raised/non-finite JVP fallback
+tests, and extend true skip-flag coverage to select/eval/all.
+
+Immediately before serialized model execution, the controller recorded HEAD
+`001a35da2e85ad6d90a716381865f60b5b7d2173`, 526 collected nodes, 37 focused preflight/CLI tests,
+scoped Ruff success, and exit 0 from exact `uv run pytest -q` with 526 passing tests.
+
+## Controller-only `qwen35-4b` execution evidence
+
+The controller re-listed the active board, acquired exclusive action `model-execution` at claim
+revision 3, and immediately ran exactly:
+
+```text
+uv run agent-pipeline preflight --model qwen35-4b
+```
+
+The command downloaded 10 files into the project-local Hugging Face cache and exited 0. The
+download progress reported 4 minutes 9 seconds; end-to-end command/release handling was under
+5 minutes. The exclusive action was removed promptly at claim revision 4. No training,
+evaluation, probe, push, second model command, or skip override was run.
+
+The sole artifact is `outputs/preflight/qwen35-4b.json` (2.8 KiB), SHA-256
+`499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`. It matches cached
+revision `32f3e8ecf65426fc3306969496342d504bfa13f3` and records:
+
+- architecture: 32 layers (24 `linear_attention`, 8 `attention`), hidden size 2560,
+  vocabulary 248320, tied embeddings;
+- residual equivalence: 64 tokens, maximum absolute error `2.5591506958007812`, **failed**;
+- JVP: layer 16, forward mode did not yield usable finite evidence, finite-difference fallback
+  finite;
+- cache: 24 `ArraysCache` and 8 `KVCache` entries; strategy `none` because equivalence remains
+  unverified;
+- LoRA: 12 resolved target suffixes and 32,464,896 trainable parameters;
+- memory estimate: 2,367,118,848 parameter bytes plus 1,761,607,680 activation bytes,
+  4,128,726,528 bytes total (3.8451762199401855 GiB), within the 22 GiB budget;
+- prompt token counts: unsupported 24, off 26, inference 24, trained 24; and
+- overall `passed: false` because residual equivalence failed.
+
+The cache footprint increased from 1.6 GiB to 4.5 GiB. Actual MLX peak memory was not emitted by
+this deterministic-report command and is therefore unavailable after process exit; the report
+does not infer it from the estimate. External API cost was zero: execution and inference were
+local, with only an unauthenticated Hugging Face model download.
+
+Finally, a no-model guard invocation rejected the artifact with `preflight did not pass for
+qwen35-4b`, confirming train/select/eval remain fail-closed. The failed result must not be bypassed
+without a new explicit decision; the residual mismatch requires a separately scoped diagnosis.
