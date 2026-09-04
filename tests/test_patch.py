@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -344,6 +345,8 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
     failing.write_text("{}", encoding="utf-8")
     selected = SimpleNamespace(
         hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.25, 0.5),
         resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1, 2)),
     )
     case = patch.PatchCase(_Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ())
@@ -355,13 +358,19 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         lambda name: seen.append(("spec", name)) or selected,
     )
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: seen.append(("guard", None)))
-    monkeypatch.setattr(patch, "resolve_policy", lambda name: seen.append(("policy", name)) or None)
+    monkeypatch.setattr(
+        patch,
+        "resolve_policy",
+        lambda name, spec: seen.append(("policy", name, spec)) or None,
+    )
     monkeypatch.setattr(
         patch,
         "load_policy",
         lambda name, adapter: seen.append(("load", name, adapter)) or (object(), object()),
     )
-    monkeypatch.setattr(patch.ArchitectureView, "from_model", lambda _model: SimpleNamespace())
+    monkeypatch.setattr(
+        patch.ArchitectureView, "from_model", lambda _model: SimpleNamespace(num_layers=4)
+    )
     monkeypatch.setattr(
         patch,
         "run_patch_probe",
@@ -391,9 +400,17 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
     patch.main()
 
     assert seen[0] == ("spec", "qwen35-4b")
-    assert ("policy", "base") in seen and ("load", "fake/hf", None) in seen
+    assert ("policy", "base", selected) in seen and ("load", "fake/hf", None) in seen
     assert seen[-1] == ("probe", selected, argv)
     assert (tmp_path / "patch.json").is_file() and (tmp_path / "patch.md").read_text() == "# fake\n"
+    payload = json.loads((tmp_path / "patch.json").read_text(encoding="utf-8"))
+    assert payload["layer_selection"] == {
+        "source": "cli",
+        "requested": ["1", "0.5"],
+        "fractions": [0.25, 0.5],
+        "indices": [1, 2],
+        "num_layers": 4,
+    }
 
 
 def test_patch_cli_rejects_malformed_layers_before_model_loading(monkeypatch, tmp_path) -> None:

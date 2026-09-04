@@ -2087,6 +2087,8 @@ def test_artifact_identity_accepts_a_partial_cached_huggingface_snapshot(monkeyp
 
 
 def test_state_probe_cli_bounds_and_releases_mlx_before_fitting(monkeypatch, tmp_path) -> None:
+    from types import SimpleNamespace
+
     from local_llm_lab.pipeline import evaluate
     from local_llm_lab.probes import guard, policies
 
@@ -2097,13 +2099,18 @@ def test_state_probe_cli_bounds_and_releases_mlx_before_fitting(monkeypatch, tmp
             events.append("model released")
 
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: events.append("idle checked"))
-    monkeypatch.setattr(policies, "resolve_policy", lambda _policy: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda _policy, _spec: None)
     monkeypatch.setattr(
         evaluate,
         "load_policy",
         lambda _model, _adapter: (events.append("model loaded") or TrackedModel(), object()),
     )
     monkeypatch.setattr(state_probe, "artifact_identity", lambda value: f"identity:{value}")
+    monkeypatch.setattr(
+        state_probe.ArchitectureView,
+        "from_model",
+        lambda _model: SimpleNamespace(num_layers=1),
+    )
     monkeypatch.setattr(
         state_probe,
         "build_probe_dataset",
@@ -2136,7 +2143,7 @@ def test_state_probe_cli_bounds_and_releases_mlx_before_fitting(monkeypatch, tmp
             "--limit",
             "1",
             "--layers",
-            "0",
+            "1",
             "--targets",
             "pending_count",
             "--mlx-cache-limit-mib",
@@ -2528,18 +2535,6 @@ def test_require_idle_gpu_aborts_when_busy_and_passes_when_overridden(monkeypatc
     guard.require_idle_gpu(parser, argparse.Namespace(allow_busy_gpu=True), "loading a model")
     monkeypatch.setattr(guard, "gpu_users", lambda *a, **k: [])
     guard.require_idle_gpu(parser, argparse.Namespace(allow_busy_gpu=False), "loading a model")
-
-
-def test_resolve_policy_maps_names_and_rejects_unknown(tmp_path) -> None:
-    from local_llm_lab.probes.policies import POLICY_NAMES, resolve_policy
-
-    assert POLICY_NAMES == ("base", "A", "B", "C")
-    assert resolve_policy("base") is None
-    assert resolve_policy("B").name == "best-adapter"
-    assert resolve_policy("B").parent.name == "agent-v2b"
-    assert resolve_policy(str(tmp_path)) == tmp_path.resolve()
-    with pytest.raises(ValueError):
-        resolve_policy("nope")
 
 
 def test_run_label_distinguishes_identically_named_adapter_directories() -> None:

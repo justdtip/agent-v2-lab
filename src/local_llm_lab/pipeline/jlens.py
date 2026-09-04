@@ -461,11 +461,16 @@ def _print_table(records: list[dict[str, Any]], candidates: dict[str, str]) -> N
                 )
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901 - pre-existing probe CLI orchestration
     from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.evaluate import load_policy
     from local_llm_lab.pipeline.tasks import make_tasks
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
-    from local_llm_lab.project import configure_local_cache
+    from local_llm_lab.probes.policies import (
+        resolve_layers,
+        resolve_policy,
+        validate_layer_syntax,
+    )
 
     parser = argparse.ArgumentParser(
         description=(
@@ -475,7 +480,12 @@ def main() -> None:
     )
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument(
-        "--adapter", type=Path, help="Adapter directory; omit for the untouched base."
+        "--policy", help="a policy named by the selected model; defaults to the base"
+    )
+    parser.add_argument(
+        "--adapter",
+        type=Path,
+        help="Deprecated explicit adapter-directory alias; omit for the untouched base.",
     )
     parser.add_argument("--split", default="test")
     parser.add_argument("--task-index", type=int, default=0)
@@ -493,7 +503,9 @@ def main() -> None:
             "candidate, rather than the start of its note."
         ),
     )
-    parser.add_argument("--layers", default="6,12,18,24,30")
+    parser.add_argument(
+        "--layers", help="comma-separated layer indices or fractions; defaults to the registry"
+    )
     parser.add_argument("--corpus-size", type=int, default=16)
     parser.add_argument("--top-k", type=int, default=20)
     parser.add_argument(
@@ -506,13 +518,17 @@ def main() -> None:
     add_gpu_arguments(parser)
     args = parser.parse_args()
     spec = load_model_spec(args.model)
-
+    if args.policy is not None and args.adapter is not None:
+        parser.error("--policy and --adapter cannot be used together")
     try:
-        layers = [int(part) for part in args.layers.split(",") if part.strip()]
-    except ValueError:
-        parser.error("--layers must be a comma-separated list of integers")
-    if not layers:
-        parser.error("--layers must list at least one layer index")
+        validate_layer_syntax(args.layers)
+        policy_name = args.policy or "base"
+        adapter = resolve_policy(
+            str(args.adapter) if args.adapter is not None else policy_name,
+            spec,
+        )
+    except ValueError as error:
+        parser.error(str(error))
     if args.corpus_size < 1:
         parser.error("--corpus-size must be positive")
     if args.top_k < 1:
@@ -545,12 +561,13 @@ def main() -> None:
     candidates = {"target": target_path, "already_read": already_read, "unseen": unseen_path}
 
     require_idle_gpu(parser, args, "loading the J-lens model")
-    configure_local_cache()
-    from mlx_lm import load
-
-    model, tokenizer = load(
-        args.model, adapter_path=None if args.adapter is None else str(args.adapter.resolve())
-    )
+    model, tokenizer = load_policy(spec.hf_id, adapter)
+    view = ArchitectureView.from_model(model)
+    try:
+        selection = resolve_layers(args.layers, spec, view.num_layers)
+    except ValueError as error:
+        parser.error(str(error))
+    layers = list(selection.indices)
 
     prompt = render_probe_prompt(tokenizer, messages, spec=spec)
     if args.force_prefix:
@@ -562,7 +579,6 @@ def main() -> None:
     except TypeError:
         token_ids = tokenizer.encode(prompt)
 
-    view = ArchitectureView.from_model(model)
     corpus = DEFAULT_CORPUS[: args.corpus_size]
     corpus_ids = [encode(tokenizer, text) for text in corpus]
 
@@ -585,11 +601,13 @@ def main() -> None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "model": args.model,
-            "adapter": None if args.adapter is None else str(args.adapter.resolve()),
+            "policy": policy_name if args.adapter is None else None,
+            "adapter": None if adapter is None else str(adapter),
             "split": args.split,
             "task_id": task.task_id,
             "step": args.step,
             "layers": layers,
+            "layer_selection": selection.as_dict(),
             "corpus_size": len(corpus_ids),
             "jvp_method": args.jvp_method,
             "candidates": candidates,

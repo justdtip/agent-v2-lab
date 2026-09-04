@@ -45,6 +45,7 @@ from typing import Any
 
 import numpy as np
 
+from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.pipeline.data import build_rows
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt, parse_turn
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
@@ -377,7 +378,7 @@ def build_label_dataset(
     )
 
 
-def build_probe_dataset(
+def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
     model: Any,
     tokenizer: Any,
     tasks: list[Task],
@@ -392,6 +393,7 @@ def build_probe_dataset(
     checkpoint_dir: Path | None = None,
     checkpoint_context: dict[str, Any] | None = None,
     spec: Any = None,
+    layer_selection: dict[str, object] | None = None,
 ) -> ProbeDataset:
     """Capture the last prompt token's residual stream for every supervised row.
 
@@ -412,6 +414,7 @@ def build_probe_dataset(
     if checkpoint_context.get("generator_version", GENERATOR_VERSION) != GENERATOR_VERSION:
         raise ValueError("checkpoint context generator_version must match the current generator")
     checkpoint_context["generator_version"] = GENERATOR_VERSION
+    selection_metadata = None if layer_selection is None else dict(layer_selection)
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -499,6 +502,11 @@ def build_probe_dataset(
                         ),
                         "max_prompt_tokens": int(np.max(task_lengths)) if task_lengths else 0,
                         "checkpoint": signature,
+                        **(
+                            {"layer_selection": selection_metadata}
+                            if selection_metadata is not None
+                            else {}
+                        ),
                     },
                 )
                 if checkpoint_path is not None:
@@ -560,6 +568,11 @@ def build_probe_dataset(
             },
             "mean_prompt_tokens": float(prompt_token_sum / len(task_ids)) if task_ids else 0.0,
             "max_prompt_tokens": max_prompt_tokens,
+            **(
+                {"layer_selection": selection_metadata}
+                if selection_metadata is not None
+                else {}
+            ),
         },
     )
 
@@ -1874,7 +1887,7 @@ def _holm_adjust(p_values: list[float]) -> list[float]:
     return adjusted
 
 
-def _analyse_cohort(
+def _analyse_cohort(  # noqa: C901 - pre-existing statistical orchestration
     dataset: ProbeDataset,
     labels: dict[str, np.ndarray],
     surface: np.ndarray,
@@ -2762,7 +2775,63 @@ def resolve_within_position(mix_difficulty: bool, requested: bool | None) -> boo
     return bool(mix_difficulty) if requested is None else bool(requested)
 
 
-def main() -> None:
+def _saved_selection_indices(recorded: dict[str, Any], dataset: ProbeDataset) -> list[int]:
+    indices = recorded.get("indices")
+    if not isinstance(indices, list) or not all(
+        isinstance(index, int) and not isinstance(index, bool) for index in indices
+    ):
+        raise ValueError("saved layer_selection metadata has invalid indices")
+    if any(index not in dataset.layers for index in indices):
+        raise ValueError("saved layer_selection names layers absent from the artifact")
+    return indices
+
+
+def _reuse_layer_selection(
+    dataset: ProbeDataset, raw: str | None, spec: Any
+) -> tuple[list[int], dict[str, object]]:
+    """Select only saved layers while preserving or honestly reconstructing provenance."""
+    recorded = dataset.meta.get("layer_selection")
+    if recorded is not None and not isinstance(recorded, dict):
+        raise ValueError("saved layer_selection metadata must be a mapping")
+    if raw is None:
+        if recorded is None:
+            return list(dataset.layers), {
+                "source": "legacy-artifact",
+                "requested": None,
+                "fractions": None,
+                "indices": list(dataset.layers),
+                "num_layers": None,
+            }
+        indices = _saved_selection_indices(recorded, dataset)
+        return list(indices), dict(recorded)
+
+    if recorded is not None:
+        depth = recorded.get("num_layers")
+        if isinstance(depth, bool) or not isinstance(depth, int) or depth <= 0:
+            raise ValueError("saved layer_selection metadata has no valid num_layers")
+        from local_llm_lab.probes.policies import resolve_layers
+
+        selection = resolve_layers(raw, spec, depth)
+        if any(index not in dataset.layers for index in selection.indices):
+            raise ValueError("requested layers are absent from the reused artifact")
+        return list(selection.indices), selection.as_dict()
+
+    tokens = [token.strip() for token in raw.split(",")]
+    if any(re.fullmatch(r"[+-]?\d+", token) is None for token in tokens):
+        raise ValueError("fractional --layers need recorded layer depth in a reused artifact")
+    indices = list(dict.fromkeys(int(token) for token in tokens))
+    if any(index not in dataset.layers for index in indices):
+        raise ValueError("requested layers are absent from the reused artifact")
+    return indices, {
+        "source": "cli",
+        "requested": [str(index) for index in indices],
+        "fractions": None,
+        "indices": indices,
+        "num_layers": None,
+    }
+
+
+def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestration
     if len(sys.argv) > 1 and sys.argv[1] == "reanalyse":
         _main_reanalyse(sys.argv[2:])
         return
@@ -2771,13 +2840,19 @@ def main() -> None:
     from local_llm_lab.pipeline.evaluate import load_policy
     from local_llm_lab.pipeline.tasks import make_tasks
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
-    from local_llm_lab.probes.policies import POLICY_NAMES, resolve_policy
+    from local_llm_lab.probes.policies import (
+        resolve_layers,
+        resolve_policy,
+        validate_layer_syntax,
+    )
 
     parser = argparse.ArgumentParser(
         description="P2: linear state probes over the residual stream."
     )
     parser.add_argument(
-        "--policy", default="base", help=f"one of {POLICY_NAMES} or an adapter directory"
+        "--policy",
+        default="base",
+        help="a policy named by the selected model or an explicit adapter directory",
     )
     parser.add_argument("--model", default="mlx-community/Qwen2.5-Coder-3B-Instruct-4bit")
     parser.add_argument("--splits", default="train", help="Comma-separated split names.")
@@ -2789,7 +2864,9 @@ def main() -> None:
         "(difficulty 2), so the same (family, step) occurs with different true states.",
     )
     parser.add_argument("--limit", type=int, default=120, help="Tasks per split.")
-    parser.add_argument("--layers", default="6,12,18,24,30,35")
+    parser.add_argument(
+        "--layers", help="comma-separated layer indices or fractions; defaults to the registry"
+    )
     parser.add_argument("--strip", action="store_true", help="Remove state fields from every note.")
     parser.add_argument(
         "--within-position",
@@ -2813,6 +2890,10 @@ def main() -> None:
     add_gpu_arguments(parser)
     args = parser.parse_args()
     spec = load_model_spec(args.model)
+    try:
+        validate_layer_syntax(args.layers)
+    except ValueError as error:
+        parser.error(str(error))
 
     if args.split is not None:
         if args.splits != "train":
@@ -2821,7 +2902,6 @@ def main() -> None:
     splits = [part.strip() for part in args.splits.split(",") if part.strip()]
     if not splits:
         parser.error("--splits needs at least one split name")
-    layers = [int(part) for part in args.layers.split(",") if part.strip()]
     targets = [part for part in args.targets.split(",") if part.strip()]
     unknown = [target for target in targets if target not in TARGETS]
     if unknown:
@@ -2843,6 +2923,11 @@ def main() -> None:
 
     if args.reuse and npz_path.is_file():
         dataset = load_dataset(npz_path)
+        try:
+            layers, layer_selection = _reuse_layer_selection(dataset, args.layers, spec)
+        except ValueError as error:
+            parser.error(str(error))
+        dataset.meta["layer_selection"] = layer_selection
         if args.mix_difficulty:
             preflight = validate_mixed_design(dataset, targets, args.seed)
             if preflight["status"] != "PASS":
@@ -2876,8 +2961,11 @@ def main() -> None:
                 ),
                 flush=True,
             )
+        try:
+            adapter = resolve_policy(args.policy, spec)
+        except ValueError as error:
+            parser.error(str(error))
         require_idle_gpu(parser, args, "capturing activations")
-        adapter = resolve_policy(args.policy)
         import mlx.core as mx
 
         previous_cache_limit = set_mlx_cache_limit(mx, args.mlx_cache_limit_mib)
@@ -2885,7 +2973,14 @@ def main() -> None:
         checkpoint_dir = args.output / f"{stem}.checkpoints"
         latest_memory: dict[str, Any] = {}
         try:
-            model, tokenizer = load_policy(args.model, adapter)
+            model, tokenizer = load_policy(spec.hf_id, adapter)
+            view = ArchitectureView.from_model(model)
+            try:
+                selection = resolve_layers(args.layers, spec, view.num_layers)
+            except ValueError as error:
+                parser.error(str(error))
+            layers = list(selection.indices)
+            layer_selection = selection.as_dict()
             model_artifact = artifact_identity(args.model)
             adapter_artifact = artifact_identity(adapter)
             print(f"{len(tasks)} tasks from {[name for name, _ in plan]}", flush=True)
@@ -2933,8 +3028,10 @@ def main() -> None:
                     "mix_difficulty": bool(args.mix_difficulty),
                     "data_seed": args.data_seed,
                     "generator_version": GENERATOR_VERSION,
+                    "layer_selection": layer_selection,
                 },
                 spec=spec,
+                layer_selection=layer_selection,
             )
         finally:
             model = None
@@ -2943,6 +3040,7 @@ def main() -> None:
         dataset.meta["splits"] = [name for name, _ in plan]
         dataset.meta["mix_difficulty"] = bool(args.mix_difficulty)
         dataset.meta["mlx_cache_limit_mib"] = args.mlx_cache_limit_mib
+        dataset.meta["layer_selection"] = layer_selection
         if preflight is not None:
             dataset.meta["deconfounding_preflight"] = preflight
         save_dataset(dataset, npz_path)

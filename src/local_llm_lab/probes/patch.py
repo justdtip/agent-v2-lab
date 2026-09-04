@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import random
 import re
 import sys
@@ -28,7 +27,7 @@ from local_llm_lab.pipeline.protocol import (
 )
 from local_llm_lab.pipeline.tasks import Task, render_expert_note, task_from_id
 from local_llm_lab.probes.capture import InjectionHook, capture_residuals
-from local_llm_lab.probes.policies import resolve_policy
+from local_llm_lab.probes.policies import resolve_layers, resolve_policy, validate_layer_syntax
 
 POSITION_GROUPS = (
     "system_prompt",
@@ -570,40 +569,6 @@ def _load_payload(path: Path) -> dict[str, Any]:
     return value
 
 
-def _parse_layers(raw: str | None, resolved: ResolvedSpec) -> tuple[int, ...]:
-    if raw is None:
-        return resolved.probe_layers
-    values: list[int] = []
-    for part in raw.split(","):
-        try:
-            number = float(part.strip())
-        except ValueError as error:
-            raise ValueError("--layers must be comma-separated indices or fractions") from error
-        layer = round(number * resolved.num_layers) if 0 < number <= 1 and number != int(number) else int(number)
-        if not 1 <= layer <= resolved.num_layers:
-            raise ValueError(f"layer {part!r} is outside [1, {resolved.num_layers}]")
-        values.append(layer)
-    if not values:
-        raise ValueError("--layers must not be empty")
-    return tuple(dict.fromkeys(values))
-
-
-def _validate_layer_syntax(raw: str | None) -> None:
-    """Reject malformed layer text before any GPU or model-loading action."""
-    if raw is None:
-        return
-    parts = raw.split(",")
-    if not parts or any(not part.strip() for part in parts):
-        raise ValueError("--layers must be comma-separated indices or fractions")
-    for part in parts:
-        try:
-            number = float(part.strip())
-        except ValueError as error:
-            raise ValueError("--layers must be comma-separated indices or fractions") from error
-        if not math.isfinite(number) or number <= 0 or (number > 1 and not number.is_integer()):
-            raise ValueError("--layers must be positive indices or fractions in (0, 1]")
-
-
 def main() -> None:
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
 
@@ -623,8 +588,9 @@ def main() -> None:
         parser.error("--passing-eval and --failing-eval must name existing files")
     if args.keep_last < 0 or args.max_tokens <= 0:
         parser.error("--keep-last must be non-negative and --max-tokens must be positive")
+    spec = load_model_spec(args.model)
     try:
-        _validate_layer_syntax(args.layers)
+        validate_layer_syntax(args.layers)
     except ValueError as error:
         parser.error(str(error))
     try:
@@ -635,23 +601,32 @@ def main() -> None:
         parser.error(str(error))
     if not cases:
         parser.error("no eligible patch cases")
-    spec = load_model_spec(args.model)
+    try:
+        adapter = resolve_policy(args.policy, spec)
+    except ValueError as error:
+        parser.error(str(error))
     require_idle_gpu(parser, args, "running P6 causal patching")
-    adapter = resolve_policy(args.policy)
     model, tokenizer = load_policy(spec.hf_id, adapter)
     view = ArchitectureView.from_model(model)
     resolved = spec.resolve(model, tokenizer)
     try:
-        layers = _parse_layers(args.layers, resolved)
+        selection = resolve_layers(args.layers, spec, view.num_layers)
     except ValueError as error:
         parser.error(str(error))
     del view
     payload = run_patch_probe(
-        model, tokenizer, cases, spec=spec, resolved=resolved, layers=layers, policy=args.policy,
+        model,
+        tokenizer,
+        cases,
+        spec=spec,
+        resolved=resolved,
+        layers=selection.indices,
+        policy=args.policy,
         keep_last=args.keep_last, max_tokens=args.max_tokens, seed=args.seed, command=sys.argv,
     )
     if not isinstance(payload, dict) or "cells" not in payload:
         parser.error("run_patch_probe returned an invalid payload")
+    payload["layer_selection"] = selection.as_dict()
     markdown = render_markdown(payload)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "patch.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

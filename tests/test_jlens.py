@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import mlx.core as mx
@@ -146,8 +147,8 @@ def test_probe_layers_threads_selected_method_and_emits_it(monkeypatch) -> None:
 
 
 def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> None:
-    from local_llm_lab.pipeline import tasks
-    from local_llm_lab.probes import guard
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard, policies
 
     task = SimpleNamespace(
         steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
@@ -162,26 +163,73 @@ def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> N
     from local_llm_lab import project
 
     monkeypatch.setattr(project, "configure_local_cache", lambda: calls.append("cache"))
+
     def fake_load(*_args, **_kwargs):
         calls.append("load")
         raise SystemExit(7)
 
-    fake_mlx_lm = SimpleNamespace(load=fake_load)
+    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(evaluate, "load_policy", fake_load)
+    fake_mlx_lm = SimpleNamespace(
+        load=lambda *_args, **_kwargs: pytest.fail("used the legacy direct MLX loader")
+    )
     monkeypatch.setitem(__import__("sys").modules, "mlx_lm", fake_mlx_lm)
     monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--jvp-method", "finite_difference"])
 
     with pytest.raises(SystemExit, match="7"):
         jlens.main()
 
-    assert calls == ["guard", "cache", "load"]
+    assert calls == ["guard", "load"]
 
 
-def test_jlens_main_loads_and_dispatches_the_selected_spec(monkeypatch) -> None:
-    from local_llm_lab import models, project
-    from local_llm_lab.pipeline import tasks
-    from local_llm_lab.probes import guard
+@pytest.mark.parametrize(
+    ("layer_arguments", "expected"),
+    [
+        (
+            [],
+            {
+                "source": "registry-default",
+                "requested": ["0.167", "0.333", "0.5", "0.667", "0.833", "1.0"],
+                "fractions": [0.167, 0.333, 0.5, 0.667, 0.833, 1.0],
+                "indices": [5, 11, 16, 21, 27, 32],
+                "num_layers": 32,
+            },
+        ),
+        (
+            ["--layers", "1,0.5,1.0"],
+            {
+                "source": "cli",
+                "requested": ["1", "0.5", "1.0"],
+                "fractions": [0.03125, 0.5, 1.0],
+                "indices": [1, 16, 32],
+                "num_layers": 32,
+            },
+        ),
+    ],
+)
+def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
+    monkeypatch, tmp_path, layer_arguments, expected
+) -> None:
+    """Catches hard-coded layers, direct MLX loading, or missing JSON provenance."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard, policies
 
-    selected = object()
+    selected = SimpleNamespace(
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
+    )
+    model = object()
+
+    class Tokenizer:
+        bos_token = None
+
+        def encode(self, _text, add_special_tokens=False):
+            del add_special_tokens
+            return [1]
+
+    tokenizer = Tokenizer()
     seen = []
     task = SimpleNamespace(
         steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
@@ -192,26 +240,151 @@ def test_jlens_main_loads_and_dispatches_the_selected_spec(monkeypatch) -> None:
     monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
     monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
-    monkeypatch.setattr(project, "configure_local_cache", lambda: None)
     monkeypatch.setattr(
         models,
         "load_model_spec",
         lambda model: seen.append(("load", model)) or selected,
     )
+    monkeypatch.setattr(
+        policies,
+        "resolve_policy",
+        lambda name, spec: seen.append(("policy", name, spec)) or None,
+    )
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda name, adapter: seen.append(("model", name, adapter)) or (model, tokenizer),
+    )
     monkeypatch.setitem(
         __import__("sys").modules,
         "mlx_lm",
-        SimpleNamespace(load=lambda *_args, **_kwargs: (None, None)),
+        SimpleNamespace(
+            load=lambda *_args, **_kwargs: pytest.fail("used the legacy direct MLX loader")
+        ),
+    )
+    monkeypatch.setattr(
+        jlens.ArchitectureView,
+        "from_model",
+        lambda loaded: SimpleNamespace(num_layers=32) if loaded is model else None,
+    )
+    monkeypatch.setattr(
+        jlens,
+        "render_probe_prompt",
+        lambda _tokenizer, _messages, *, spec: seen.append(("render", spec)) or "prompt",
+    )
+    monkeypatch.setattr(
+        jlens,
+        "probe_layers",
+        lambda _view, _tokenizer, _token_ids, layers, *_args, **_kwargs: (
+            seen.append(("probe", layers)) or []
+        ),
+    )
+    monkeypatch.setattr(jlens, "_print_table", lambda *_args: None)
+    output = tmp_path / "jlens.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-jlens",
+            "--model",
+            "qwen35-4b",
+            "--corpus-size",
+            "1",
+            "--top-k",
+            "1",
+            "--output",
+            str(output),
+            *layer_arguments,
+        ],
     )
 
-    def intercept(*_args, **kwargs):
-        seen.append(("dispatch", kwargs["spec"]))
-        raise RuntimeError("stop after dispatch")
+    jlens.main()
 
-    monkeypatch.setattr(jlens, "render_probe_prompt", intercept)
-    monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--model", "qwen35-4b"])
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["layers"] == expected["indices"]
+    assert payload["layer_selection"] == expected
+    assert ("policy", "base", selected) in seen
+    assert ("model", "fake/hf", None) in seen
+    assert ("render", selected) in seen
+    assert ("probe", expected["indices"]) in seen
 
-    with pytest.raises(RuntimeError, match="stop after dispatch"):
+
+def test_jlens_rejects_malformed_layers_before_gpu_or_loader(monkeypatch) -> None:
+    """Catches empty layer cells being discarded before model loading."""
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard
+
+    task = SimpleNamespace(
+        steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
+        files={"x": ""},
+        task_id="fake",
+    )
+    monkeypatch.setattr(tasks, "make_tasks", lambda *_args, **_kwargs: [task])
+    monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
+    monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+    monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--layers", "1,,2"])
+
+    with pytest.raises(SystemExit) as raised:
         jlens.main()
 
-    assert seen == [("load", "qwen35-4b"), ("dispatch", selected)]
+    assert raised.value.code == 2
+
+
+def test_jlens_rejects_depth_overflow_before_probe_execution(monkeypatch) -> None:
+    """Catches an out-of-range layer being passed into the J-lens computation."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard, policies
+
+    selected = SimpleNamespace(hf_id="fake/hf", policies={}, probe_layer_fractions=(1.0,))
+    model = object()
+    task = SimpleNamespace(
+        steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
+        files={"x": ""},
+        task_id="fake",
+    )
+    tokenizer = SimpleNamespace(bos_token=None, encode=lambda *_args, **_kwargs: [1])
+    monkeypatch.setattr(models, "load_model_spec", lambda _model: selected)
+    monkeypatch.setattr(tasks, "make_tasks", lambda *_args, **_kwargs: [task])
+    monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
+    monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
+    monkeypatch.setattr(jlens, "render_probe_prompt", lambda *_args, **_kwargs: "prompt")
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (model, tokenizer))
+    monkeypatch.setattr(
+        jlens.ArchitectureView, "from_model", lambda _model: SimpleNamespace(num_layers=32)
+    )
+    monkeypatch.setattr(
+        jlens, "probe_layers", lambda *_args, **_kwargs: pytest.fail("reached probe execution")
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "mlx_lm",
+        SimpleNamespace(load=lambda *_args, **_kwargs: (model, tokenizer)),
+    )
+    monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--layers", "33"])
+
+    with pytest.raises(SystemExit) as raised:
+        jlens.main()
+
+    assert raised.value.code == 2
+
+
+def test_jlens_rejects_policy_and_adapter_alias_together(monkeypatch, tmp_path, capsys) -> None:
+    """Catches ambiguous registry policy and deprecated directory alias selection."""
+    monkeypatch.setattr(
+        "sys.argv",
+        ["agent-v2-jlens", "--policy", "base", "--adapter", str(tmp_path)],
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        jlens.main()
+
+    assert raised.value.code == 2
+    assert "cannot be used together" in capsys.readouterr().err

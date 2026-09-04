@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import numpy as np
@@ -99,12 +100,22 @@ def test_build_probe_dataset_forwards_the_selected_spec_to_prompt_rendering(
     assert shard.meta["generator_version"] == GENERATOR_VERSION
 
 
-def test_main_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path) -> None:
+def test_state_probe_default_layers_use_actual_depth_and_persist_selection(
+    monkeypatch, tmp_path
+) -> None:
+    """Catches qwen25 defaults, spec-free policy lookup, or missing capture metadata."""
+    import sys
+
     from local_llm_lab import models
     from local_llm_lab.pipeline import evaluate, tasks
     from local_llm_lab.probes import guard, policies
 
-    selected = object()
+    selected = SimpleNamespace(
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
+    )
+    model = object()
     seen = []
     monkeypatch.setattr(
         models,
@@ -118,25 +129,174 @@ def test_main_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path) -> N
     )
     monkeypatch.setattr(state_probe, "task_difficulties", lambda *_args: {"t": 0})
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
-    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
-    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None))
+    monkeypatch.setattr(
+        policies,
+        "resolve_policy",
+        lambda name, spec: seen.append(("policy", name, spec)) or None,
+    )
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (model, object()))
     monkeypatch.setattr(state_probe, "artifact_identity", lambda *_args: {})
     monkeypatch.setattr(state_probe, "set_mlx_cache_limit", lambda *_args: 0)
+    monkeypatch.setattr(
+        state_probe.ArchitectureView,
+        "from_model",
+        lambda loaded: SimpleNamespace(num_layers=32) if loaded is model else None,
+    )
+    fake_mlx = SimpleNamespace(clear_cache=lambda: None, set_cache_limit=lambda _value: None)
+    monkeypatch.setitem(sys.modules, "mlx.core", fake_mlx)
 
-    def intercept(*_args, **kwargs):
+    expected = {
+        "source": "registry-default",
+        "requested": ["0.167", "0.333", "0.5", "0.667", "0.833", "1.0"],
+        "fractions": [0.167, 0.333, 0.5, 0.667, 0.833, 1.0],
+        "indices": [5, 11, 16, 21, 27, 32],
+        "num_layers": 32,
+    }
+
+    def capture(_model, _tokenizer, _tasks, layers, *_args, **kwargs):
+        assert layers == [5, 11, 16, 21, 27, 32]
+        assert kwargs["layer_selection"] == expected
+        assert kwargs["checkpoint_context"]["layer_selection"] == expected
         seen.append(("dispatch", kwargs["spec"]))
-        raise RuntimeError("stop after dispatch")
+        return state_probe.ProbeDataset(
+            layers=layers,
+            features={layer: np.empty((0, 1), dtype=np.float32) for layer in layers},
+            labels={},
+            task_ids=np.array([], dtype=str),
+            meta={"layers": layers, "layer_selection": expected},
+        )
 
-    monkeypatch.setattr(state_probe, "build_probe_dataset", intercept)
+    monkeypatch.setattr(state_probe, "build_probe_dataset", capture)
+    monkeypatch.setattr(state_probe, "save_dataset", lambda _dataset, path: path)
+
+    def fit(dataset, _targets, layers, *_args, **_kwargs):
+        assert dataset.meta["layer_selection"] == expected
+        assert layers == expected["indices"]
+        return {"meta": dataset.meta, "targets": {}}
+
+    monkeypatch.setattr(state_probe, "fit_probes", fit)
+    monkeypatch.setattr(state_probe, "render_markdown", lambda *_args: "# fake")
     monkeypatch.setattr(
         "sys.argv",
         ["state-probe", "--model", "qwen35-4b", "--output", str(tmp_path), "--limit", "1"],
     )
 
-    with pytest.raises(RuntimeError, match="stop after dispatch"):
+    state_probe.main()
+
+    assert seen == [
+        ("load", "qwen35-4b"),
+        ("policy", "base", selected),
+        ("dispatch", selected),
+    ]
+    payload = json.loads((tmp_path / "state-base.json").read_text(encoding="utf-8"))
+    assert payload["meta"]["layer_selection"] == expected
+
+
+def test_state_probe_rejects_malformed_layers_before_gpu_or_loader(monkeypatch, tmp_path) -> None:
+    """Catches empty layer cells being discarded before the model-loading boundary."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard
+
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: object())
+    monkeypatch.setattr(tasks, "make_tasks", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["state-probe", "--output", str(tmp_path), "--layers", "1,,2"],
+    )
+
+    with pytest.raises(SystemExit) as raised:
         state_probe.main()
 
-    assert seen == [("load", "qwen35-4b"), ("dispatch", selected)]
+    assert raised.value.code == 2
+
+
+@pytest.mark.parametrize("has_selection", [False, True])
+def test_state_probe_reuse_discloses_legacy_or_preserves_recorded_selection(
+    monkeypatch, tmp_path, has_selection
+) -> None:
+    """Catches reused captures guessing depth/fractions or replacing recorded provenance."""
+    expected = (
+        {
+            "source": "registry-default",
+            "requested": ["0.5", "1.0"],
+            "fractions": [0.5, 1.0],
+            "indices": [1, 2],
+            "num_layers": 2,
+        }
+        if has_selection
+        else {
+            "source": "legacy-artifact",
+            "requested": None,
+            "fractions": None,
+            "indices": [1, 2],
+            "num_layers": None,
+        }
+    )
+    metadata = {"layers": [1, 2]}
+    if has_selection:
+        metadata["layer_selection"] = expected
+    state_probe.save_dataset(
+        state_probe.ProbeDataset(
+            layers=[1, 2],
+            features={
+                1: np.zeros((1, 1), dtype=np.float32),
+                2: np.zeros((1, 1), dtype=np.float32),
+            },
+            labels={},
+            task_ids=np.array(["test-read-0000-clean"]),
+            meta=metadata,
+        ),
+        tmp_path / "state-base.npz",
+    )
+    monkeypatch.setattr(
+        state_probe,
+        "fit_probes",
+        lambda dataset, _targets, layers, *_args, **_kwargs: (
+            {"meta": dataset.meta, "layers_seen": layers, "targets": {}}
+        ),
+    )
+    monkeypatch.setattr(state_probe, "render_markdown", lambda *_args: "# fake")
+    monkeypatch.setattr(
+        "sys.argv", ["state-probe", "--output", str(tmp_path), "--reuse"]
+    )
+
+    state_probe.main()
+
+    payload = json.loads((tmp_path / "state-base.json").read_text(encoding="utf-8"))
+    assert payload["layers_seen"] == [1, 2]
+    assert payload["meta"]["layer_selection"] == expected
+
+
+def test_state_probe_legacy_reuse_rejects_fractional_layers_without_guessing_depth(
+    monkeypatch, tmp_path
+) -> None:
+    """Catches a fraction being resolved against an invented legacy model depth."""
+    state_probe.save_dataset(
+        state_probe.ProbeDataset(
+            layers=[1],
+            features={1: np.zeros((1, 1), dtype=np.float32)},
+            labels={},
+            task_ids=np.array(["test-read-0000-clean"]),
+            meta={"layers": [1]},
+        ),
+        tmp_path / "state-base.npz",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["state-probe", "--output", str(tmp_path), "--reuse", "--layers", "0.5"],
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        state_probe.main()
+
+    assert raised.value.code == 2
 
 
 def test_label_dataset_records_the_current_generator_version() -> None:

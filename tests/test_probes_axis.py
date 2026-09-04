@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -76,7 +77,7 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
     from local_llm_lab.pipeline import evaluate
     from local_llm_lab.probes import guard, policies
 
-    selected = object()
+    selected = SimpleNamespace(hf_id="fake/hf", policies={})
     seen = []
     args = argparse.Namespace(
         axis=tmp_path / "axis.npz",
@@ -94,7 +95,11 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
         lambda *_args: ({18: np.array([1.0])}, {"layers": {"18": {}}}),
     )
     monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
-    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(
+        policies,
+        "resolve_policy",
+        lambda name, spec: seen.append(("policy", name, spec)) or None,
+    )
     monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None))
     monkeypatch.setattr(
         models,
@@ -111,7 +116,111 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
     with pytest.raises(RuntimeError, match="stop after dispatch"):
         assistant_axis._project(args, parser)
 
-    assert seen == [("load", "qwen35-4b"), ("dispatch", selected)]
+    assert seen == [
+        ("load", "qwen35-4b"),
+        ("policy", "base", selected),
+        ("dispatch", selected),
+    ]
+
+
+def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Catches hard-coded build layers, global policy lookup, or missing diagnostics."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.probes import guard, policies
+
+    selected = SimpleNamespace(
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
+    )
+    model = object()
+    seen = []
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: selected)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(
+        policies,
+        "resolve_policy",
+        lambda name, spec: seen.append(("policy", name, spec)) or None,
+    )
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (model, object()))
+    monkeypatch.setattr(
+        assistant_axis.ArchitectureView,
+        "from_model",
+        lambda loaded: SimpleNamespace(num_layers=32) if loaded is model else None,
+    )
+    monkeypatch.setattr(assistant_axis, "load_chat_prompts", lambda _count: ["prompt"])
+
+    def build(_model, _tokenizer, _prompts, layers, *_args, **_kwargs):
+        assert layers == [5, 11, 16, 21, 27, 32]
+        return {layer: np.ones(1, dtype=np.float32) for layer in layers}, {"layers": {}}
+
+    monkeypatch.setattr(assistant_axis, "build_axis_run", build)
+    monkeypatch.setattr(assistant_axis, "save_axis", lambda path, *_args: path)
+    monkeypatch.setattr(assistant_axis, "render_build_markdown", lambda *_args: "# fake")
+    args = argparse.Namespace(
+        model="qwen35-4b",
+        policy="base",
+        output=tmp_path,
+        allow_busy_gpu=False,
+        prompts=1,
+        role_prompts=1,
+        max_tokens=1,
+        layers=None,
+        min_expression=0.34,
+        exemplar=True,
+        judge=False,
+    )
+
+    assistant_axis._build(args, argparse.ArgumentParser())
+
+    expected = {
+        "source": "registry-default",
+        "requested": ["0.167", "0.333", "0.5", "0.667", "0.833", "1.0"],
+        "fractions": [0.167, 0.333, 0.5, 0.667, 0.833, 1.0],
+        "indices": [5, 11, 16, 21, 27, 32],
+        "num_layers": 32,
+    }
+    payload = json.loads((tmp_path / "axis-base.json").read_text(encoding="utf-8"))
+    assert payload["layer_selection"] == expected
+    assert seen == [("policy", "base", selected)]
+
+
+def test_axis_build_rejects_malformed_layers_before_gpu_or_loader(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Catches layer validation occurring after role-rollout model loading."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.probes import guard
+
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: object())
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("reached the GPU guard")
+    )
+    monkeypatch.setattr(
+        evaluate, "load_policy", lambda *_args: pytest.fail("reached the model loader")
+    )
+    args = argparse.Namespace(
+        model="qwen35-4b",
+        policy="base",
+        output=tmp_path,
+        allow_busy_gpu=False,
+        prompts=1,
+        role_prompts=1,
+        max_tokens=1,
+        layers="1,,2",
+        min_expression=0.34,
+        exemplar=True,
+        judge=False,
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        assistant_axis._build(args, argparse.ArgumentParser())
+
+    assert raised.value.code == 2
 
 
 def test_role_prompts_are_strong_and_have_markers_and_exemplars() -> None:

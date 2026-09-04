@@ -31,6 +31,7 @@ from typing import Any
 
 import numpy as np
 
+from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.compare_chat import CHAT_SYSTEM_PROMPT
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import response_mean_activations
@@ -1198,13 +1199,29 @@ def render_projection_markdown(
 
 
 def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.evaluate import load_policy
     from local_llm_lab.probes.guard import require_idle_gpu
-    from local_llm_lab.probes.policies import resolve_policy
+    from local_llm_lab.probes.policies import (
+        resolve_layers,
+        resolve_policy,
+        validate_layer_syntax,
+    )
 
+    spec = load_model_spec(args.model)
+    try:
+        validate_layer_syntax(args.layers)
+        adapter = resolve_policy(args.policy, spec)
+    except ValueError as error:
+        parser.error(str(error))
     require_idle_gpu(parser, args, "generating role rollouts")
-    layers = [int(part) for part in args.layers.split(",") if part.strip()]
-    model, tokenizer = load_policy(args.model, resolve_policy(args.policy))
+    model, tokenizer = load_policy(spec.hf_id, adapter)
+    view = ArchitectureView.from_model(model)
+    try:
+        selection = resolve_layers(args.layers, spec, view.num_layers)
+    except ValueError as error:
+        parser.error(str(error))
+    layers = list(selection.indices)
     prompts = load_chat_prompts(args.prompts)
     print(f"default assistant: {len(prompts)} prompts", flush=True)
     try:
@@ -1232,6 +1249,7 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
             "model": args.model,
             "prompts": len(prompts),
             "role_prompts": args.role_prompts,
+            "layer_selection": selection.as_dict(),
         }
     )
     args.output.mkdir(parents=True, exist_ok=True)
@@ -1252,12 +1270,16 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     from local_llm_lab.probes.guard import require_idle_gpu
     from local_llm_lab.probes.policies import resolve_policy
 
+    spec = load_model_spec(args.model)
+    try:
+        adapter = resolve_policy(args.policy, spec)
+    except ValueError as error:
+        parser.error(str(error))
     require_idle_gpu(parser, args, "projecting trajectories")
     axis, diagnostics = load_axis(args.axis)
     if args.layer not in axis:
         parser.error(f"axis file has layers {sorted(axis)}, not {args.layer}")
-    model, tokenizer = load_policy(args.model, resolve_policy(args.policy))
-    spec = load_model_spec(args.model)
+    model, tokenizer = load_policy(spec.hf_id, adapter)
     records = trajectory_projections(
         model,
         tokenizer,
@@ -1293,12 +1315,13 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
 
 def main() -> None:
     from local_llm_lab.probes.guard import add_gpu_arguments
-    from local_llm_lab.probes.policies import POLICY_NAMES
 
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--model", default="mlx-community/Qwen2.5-Coder-3B-Instruct-4bit")
     common.add_argument(
-        "--policy", default="base", help=f"one of {POLICY_NAMES} or an adapter directory"
+        "--policy",
+        default="base",
+        help="a policy named by the selected model or an explicit adapter directory",
     )
     common.add_argument("--output", type=Path, required=True)
     add_gpu_arguments(common)
@@ -1312,7 +1335,9 @@ def main() -> None:
     build.add_argument("--prompts", type=int, default=96)
     build.add_argument("--role-prompts", type=int, default=8)
     build.add_argument("--max-tokens", type=int, default=192)
-    build.add_argument("--layers", default="6,12,18,24,30,35")
+    build.add_argument(
+        "--layers", help="comma-separated layer indices or fractions; defaults to the registry"
+    )
     build.add_argument("--min-expression", type=float, default=0.34)
     build.add_argument(
         "--exemplar",

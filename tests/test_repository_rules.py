@@ -83,6 +83,38 @@ def _banned_model_assumptions(paths: set[Path], forbidden: tuple[str, ...]) -> l
     return findings
 
 
+def _hard_coded_probe_layer_defaults(paths: set[Path]) -> list[str]:
+    """Report literal numeric defaults for probe and J-lens layer-list arguments."""
+    findings: list[str] = []
+    layer_flags = {"--layers", "--readout-layers"}
+    for path in sorted(paths):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            flag = _constant_string(node.args[0])
+            if flag not in layer_flags:
+                continue
+            default = next(
+                (
+                    _constant_string(keyword.value)
+                    for keyword in node.keywords
+                    if keyword.arg == "default"
+                ),
+                None,
+            )
+            if default is None or "," not in default:
+                continue
+            cells = [cell.strip() for cell in default.split(",")]
+            try:
+                numeric = bool(cells) and all(cell and float(cell) == float(cell) for cell in cells)
+            except ValueError:
+                numeric = False
+            if numeric:
+                findings.append(f"{path.name}:{node.lineno}:{flag}={default}")
+    return findings
+
+
 def test_banned_model_constants_are_limited_to_approved_or_legacy_modules() -> None:
     root = Path(__file__).resolve().parents[1]
     forbidden = ("36", "2048", "35", "<|im_end|>", "model.model.layers")
@@ -121,4 +153,34 @@ def test_banned_model_scanner_reports_ast_assumptions_and_ignores_lookalikes(tmp
         "example.py:3:model.model.layers",
         "example.py:4:projection-list",
         "example.py:5:projection-list",
+    ]
+
+
+def test_probe_layer_defaults_come_from_runtime_registry_metadata() -> None:
+    """Catches model-specific numeric layer lists returning to probe or J-lens parsers."""
+    root = Path(__file__).resolve().parents[1]
+
+    assert _hard_coded_probe_layer_defaults(_discover_modern_python_sources(root)) == []
+
+
+def test_probe_layer_default_scanner_ignores_nonliteral_and_unrelated_defaults(tmp_path) -> None:
+    """Catches the AST rule widening beyond literal layer-list parser defaults."""
+    source = tmp_path / "example.py"
+    source.write_text(
+        "\n".join(
+            (
+                'parser.add_argument("--layers", default="2,4,6")',
+                'parser.add_argument("--readout-layers", default="0.5,1.0")',
+                'parser.add_argument("--layers", default=None)',
+                'parser.add_argument("--other", default="2,4,6")',
+                'computed = "2,4,6"',
+                'parser.add_argument("--layers", default=computed)',
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert _hard_coded_probe_layer_defaults({source}) == [
+        "example.py:1:--layers=2,4,6",
+        "example.py:2:--readout-layers=0.5,1.0",
     ]
