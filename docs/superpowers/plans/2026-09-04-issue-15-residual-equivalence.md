@@ -15,7 +15,7 @@
 - Keep `ArchitectureView.embed(ids)` and `ArchitectureView.run_block(...)` float32. Activations and tangents remain float32 and weights remain quantised; do not remove or weaken those casts.
 - Treat BF16-versus-FP32 as the leading hypothesis, not a conclusion. The Qwen3.5 native-dtype manual-loop control must try to falsify it before the equivalence pass criterion changes.
 - The regression fake is genuinely BF16 and hybrid: three linear-attention blocks and one attention block, with distinct native masks and no cache.
-- Record both maximum absolute error and scale-normalized maximum relative error. Proposed tolerance is derived before controls from the reference/native dtype: `relative_tolerance = 2 * finfo(reference.dtype).eps` and `absolute_tolerance = relative_tolerance * max(reference_scale, finfo(reference.dtype).tiny)`, where `reference_scale = max(abs(reference))`. Do not tune either threshold after observing a model result.
+- Record both maximum absolute error and scale-normalized maximum relative error. Proposed tolerance is derived before controls from the reference/native dtype: `relative_tolerance = 2 * finfo(reference.dtype).eps` and `absolute_tolerance = relative_tolerance * max(reference_scale, finfo(reference.dtype).smallest_normal)`, where `reference_scale = max(abs(reference))`. Do not tune either threshold after observing a model result.
 - The pre-fix instrumentation may report `within_tolerance`, but `_residual_equivalence(...)["passed"]` remains exact equality until both controls support the hypothesis and the fix is independently reviewed.
 - `outputs/preflight/qwen35-4b.json` is immutable incident evidence. Its bytes retain SHA-256 `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679` throughout.
 - `require_preflight` defaults to the view/probe predicate and remains fail-closed. The training predicate requires schema, identity, revision, memory, prompt-rendering, and LoRA evidence but deliberately does not depend on residual/JVP. No CLI call-site changes belong to this task.
@@ -23,7 +23,7 @@
 - Offline work does not load checkpoints, tokenizers, weights, or execute real-model inference. Tests use only local fakes.
 - Do not run training, evaluation, rollout, probe capture, cache attestation, push, publish, or destructive commands. Do not reclaim `pipeline/cli.py` or `tests/test_cli.py`.
 - Model processes are serialized and never resident concurrently. Before each control/retry: independently approve the exact command, re-list the board, acquire exclusive `model-execution`, run exactly once, end the process, release promptly, and re-hash the canonical artifact.
-- Authorized real-model executions are exactly two pre-fix controls (Qwen3.5 native-dtype manual loop; Qwen2.5 BF16 preflight) and one post-fix Qwen3.5 preflight retry. No second attempt of any command is allowed.
+- Authorized successful-result real-model executions are exactly two pre-fix controls (Qwen3.5 native-dtype manual loop; Qwen2.5 BF16 preflight) and one post-fix Qwen3.5 preflight retry. A process that fails before writing any control artifact because reviewed instrumentation is incompatible with the installed runtime may be repeated once only after an offline regression fix, scoped re-review, and renewed exact-command approval; otherwise no command is repeated.
 - Control outputs live only under `outputs/preflight/issue-15-controls/`; retry output lives only under `outputs/preflight/issue-15-retry/`. All targets must be absent before their one write.
 - Use one principal implementer for all code/report phases and one independent principal reviewer for every gate.
 
@@ -84,13 +84,13 @@
   info = array_api.finfo(reference.dtype)
   scale = _scalar(array_api.max(array_api.abs(reference)))
   relative_tolerance = 2.0 * float(info.eps)
-  absolute_tolerance = relative_tolerance * max(scale, float(info.tiny))
+  absolute_tolerance = relative_tolerance * max(scale, float(info.smallest_normal))
   max_abs_error = _scalar(array_api.max(array_api.abs(actual - reference)))
-  max_relative_error = max_abs_error / max(scale, float(info.tiny))
+  max_relative_error = max_abs_error / max(scale, float(info.smallest_normal))
   within_tolerance = max_abs_error <= absolute_tolerance
   ```
 
-  Tests prove the values change with reference dtype and scale and reject a post-hoc hard-coded `1e-5`. Extend `_residual_equivalence` to serialize these fields for FP32-manual versus native-reference, but at this phase keep `passed` equal to exact equality and serialize `criterion: "exact_pre_control"`.
+  Tests prove the values change with reference dtype and scale, reject a post-hoc hard-coded `1e-5`, and use an `finfo` fake that exposes MLX's real `.smallest_normal` property but no NumPy-only `.tiny` property. Extend `_residual_equivalence` to serialize these fields for FP32-manual versus native-reference, but at this phase keep `passed` equal to exact equality and serialize `criterion: "exact_pre_control"`.
 
 - [ ] **Step 5: Add and fake-test the one-model residual control writer**
 
