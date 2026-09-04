@@ -93,6 +93,7 @@ def test_run_rollout_loads_and_forwards_one_registry_spec(monkeypatch, tmp_path:
     tasks: list[object] = []
     rows: list[dict[str, object]] = []
     seen: list[tuple[object, ...]] = []
+    resolved_sink: list[object] = []
 
     _install_fake_mlx(monkeypatch, seen)
 
@@ -146,6 +147,7 @@ def test_run_rollout_loads_and_forwards_one_registry_spec(monkeypatch, tmp_path:
         output=tmp_path,
         transcript_dir=None,
         quiet=True,
+        on_resolved=resolved_sink.append,
     )
 
     assert seen[:2] == [("registry", "qwen35-4b"), ("loader", spec, None)]
@@ -153,6 +155,10 @@ def test_run_rollout_loads_and_forwards_one_registry_spec(monkeypatch, tmp_path:
     assert seen.count(("clear_cache",)) == 1
     assert summary["model"] == resolved.as_dict()
     assert json.loads((tmp_path / "summary.json").read_text())["model"] == resolved.as_dict()
+    # C7: the return value is a summary dict the CLI's rollout stage depends on (cli.py:992),
+    # so the resolved identity leaves this function through the sink instead. Without it the
+    # entry point has no ResolvedSpec to hand write_provenance.
+    assert resolved_sink == [resolved]
 
 
 # --------------------------------------------------------------- module main (R21, R26(a))
@@ -294,9 +300,11 @@ def test_rollout_main_writes_run_log_events_manifest_and_provenance(
     target = tmp_path / "rollouts"
     captured: dict[str, object] = {}
     summary = {"pass_at_k": 0.0, "kept_rows": 0, "seed": 11}
+    resolved = SimpleNamespace(as_dict=lambda: {"spec": {"name": "resolved-by-the-run"}})
 
     def fake_run(**kwargs):
         captured.update(kwargs)
+        kwargs["on_resolved"](resolved)
         return dict(summary)
 
     monkeypatch.setattr(rollout, "run_rollout", fake_run)
@@ -323,6 +331,10 @@ def test_rollout_main_writes_run_log_events_manifest_and_provenance(
     provenance = json.loads((target / "provenance.json").read_text(encoding="utf-8"))
     assert provenance["extra"]["stage"] == "rollout"
     assert provenance["extra"]["summary"] == summary
+    # C7: the top-level ``model`` block carries the resolved identity the run built against the
+    # loaded model -- the shape every stage that holds a ResolvedSpec records there
+    # (cli.py:665, probes/patch.py:2408) -- not the static registry spec.
+    assert provenance["model"] == resolved.as_dict()
     end = [event for event in events if event["message"] == "rollout complete"][-1]
     assert end["fields"]["provenance"] == str(target / "provenance.json")
 

@@ -248,11 +248,18 @@ def run_branch_mining(
     quiet: bool = False,
     seed: int = 20260902,
     progress: Callable[..., None] | None = None,
+    on_resolved: Callable[[ResolvedSpec], None] | None = None,
 ) -> dict[str, Any]:
     import mlx.core as mx
 
     spec = load_model_spec(model_name)
     model, tokenizer, view, resolved = load_policy(spec, adapter)
+    if on_resolved is not None:
+        # The caller's provenance needs the resolved declaration, not the static registry spec
+        # (evaluate.py:87: "every stage then records the same resolved declaration"). This
+        # function returns a summary dict the CLI's branch command consumes as one value
+        # (cli.py:1209), so the resolved spec leaves through this sink rather than the return.
+        on_resolved(resolved)
     tasks = make_tasks(split, limit, seed)
     started = time.monotonic()
     all_pairs: list[dict[str, Any]] = []
@@ -364,6 +371,7 @@ def main() -> None:
             "git_commit": git_commit(),
         },
     ) as log:
+        resolved_specs: list[ResolvedSpec] = []
         summary = run_branch_mining(
             model_name=args.model,
             adapter=args.adapter,
@@ -378,6 +386,7 @@ def main() -> None:
             keep_last=args.keep_last,
             quiet=args.quiet,
             progress=log.progress,
+            on_resolved=resolved_specs.append,
         )
         _write_stage_manifest(
             output,
@@ -393,7 +402,11 @@ def main() -> None:
         )
         provenance = write_provenance(
             output,
-            resolved=None,
+            # The identity the run resolved against the loaded model, so this file's top-level
+            # ``model`` block has the shape every stage holding a ResolvedSpec records there
+            # (cli.py:665, probes/patch.py:2408) instead of the static registry spec. ``spec``
+            # stays the registry declaration, as those callers pass it.
+            resolved=resolved_specs[0] if resolved_specs else None,
             spec=spec,
             extra={"stage": "branch", "summary": summary},
         )

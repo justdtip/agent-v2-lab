@@ -325,6 +325,58 @@ def test_branch_completions_end_with_the_active_spec_terminator(monkeypatch) -> 
     assert pairs[0]["rejected"].endswith(terminator)
 
 
+def test_run_branch_mining_hands_the_resolved_identity_to_its_caller(monkeypatch, tmp_path) -> None:
+    """C7: the resolved identity has to leave this function without changing its return shape.
+
+    ``run_branch_mining`` resolves the spec against the loaded model but returns a summary dict
+    the CLI's branch command depends on (cli.py:1209), so the entry point that writes provenance
+    receives the ResolvedSpec through the sink instead.
+    """
+    import sys
+    from types import ModuleType
+
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline import branch
+
+    spec = load_model_spec("qwen35-4b")
+    resolved = types.SimpleNamespace(as_dict=lambda: {"spec": {"name": spec.name}})
+    cleared: list[str] = []
+    resolved_sink: list[object] = []
+
+    core = ModuleType("mlx.core")
+    core.random = types.SimpleNamespace(seed=lambda _value: None)
+    core.clear_cache = lambda: cleared.append("clear_cache")
+    package = ModuleType("mlx")
+    package.core = core
+    monkeypatch.setitem(sys.modules, "mlx", package)
+    monkeypatch.setitem(sys.modules, "mlx.core", core)
+
+    monkeypatch.setattr(branch, "load_model_spec", lambda _name: spec, raising=False)
+    monkeypatch.setattr(
+        branch, "load_policy", lambda _spec, _adapter: (object(), object(), object(), resolved)
+    )
+    monkeypatch.setattr(branch, "make_tasks", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(branch, "write_jsonl", lambda _path, _rows: "digest")
+    monkeypatch.setattr(branch, "mine_pairs", lambda *_a, **_k: pytest.fail("no task to mine"))
+
+    summary = branch.run_branch_mining(
+        model_name="qwen35-4b",
+        adapter=None,
+        split="pref-resolved-identity",
+        limit=1,
+        branches=1,
+        temperature=0.9,
+        output=tmp_path,
+        transcript_dir=None,
+        quiet=True,
+        on_resolved=resolved_sink.append,
+    )
+
+    assert summary["model"] == resolved.as_dict()
+    assert resolved_sink == [resolved]
+    assert cleared == ["clear_cache"]
+
+
 # -------------------------------------------- module main (R21, R26(a), provenance)
 
 
@@ -392,9 +444,11 @@ def test_branch_main_writes_run_log_events_manifest_and_provenance(monkeypatch, 
 
     target = tmp_path / "preferences"
     captured: dict[str, object] = {}
+    resolved = types.SimpleNamespace(as_dict=lambda: {"spec": {"name": "resolved-by-the-run"}})
 
     def fake_run(**kwargs):
         captured.update(kwargs)
+        kwargs["on_resolved"](resolved)
         return {"pairs": 0, "branch_points": 0, "seed": 13}
 
     monkeypatch.setattr(branch, "run_branch_mining", fake_run)
@@ -420,6 +474,10 @@ def test_branch_main_writes_run_log_events_manifest_and_provenance(monkeypatch, 
     assert manifest["seed"] == 13
     provenance = json.loads((target / "provenance.json").read_text(encoding="utf-8"))
     assert provenance["extra"]["stage"] == "branch"
+    # C7: the top-level ``model`` block carries the resolved identity the run built against the
+    # loaded model -- the shape every stage that holds a ResolvedSpec records there
+    # (cli.py:665, probes/patch.py:2408) -- not the static registry spec.
+    assert provenance["model"] == resolved.as_dict()
 
 
 def _interrupt_the_manifest_writer(monkeypatch, limit: int) -> None:
