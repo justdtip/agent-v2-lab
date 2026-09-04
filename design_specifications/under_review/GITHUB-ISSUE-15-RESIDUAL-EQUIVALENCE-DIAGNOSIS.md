@@ -237,3 +237,38 @@ exit 0: All checks passed!
 ```
 
 No model, preflight, control, or retry command was run in Step 11.
+
+## Final R13 verification and protected retry
+
+Controller R13, reviewed at `9c4eb5c3be1b9dfb0d0f6e51e5a6521f512e663c`,
+collected 596 tests with `pytest --collect-only -q`, passed all 596 with
+`pytest -q`, and passed `ruff check src tests`. The reviewer approved one
+exact protected retry. The controller acquired the model-execution claim at
+revision 9, executed exactly once:
+
+```console
+.venv/bin/python -c 'from pathlib import Path; from local_llm_lab.pipeline.preflight import run_preflight; run_preflight("qwen35-4b", output_root=Path("outputs/preflight/issue-15-retry"))'
+```
+
+That command exited 0 and the controller released the claim at revision 10.
+The separate retry artifact,
+`outputs/preflight/issue-15-retry/qwen35-4b.json`, has SHA-256
+`42f6fbcce61a896b841b2666e152498ebe9104852cc49566f47913ff368ef03d` and
+records `passed: true`.
+
+Its residual evidence uses `reference_dtype_rms_roundoff`: absolute error
+`2.5591506958007812 <= 2.944613669788728`, relative error
+`0.054741191354027406 <= 0.06298638865858242`, reference dtype
+`mlx.core.bfloat16`, epsilon `0.0078125`, scale `46.75`, and
+`rounding_steps: 65`. The JVP is finite at layer 16, and memory is
+`3.8451762199401855 GiB <= 22 GiB`.
+
+The canonical artifact is unchanged at SHA-256
+`499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`; it
+remains the original failing, fail-closed default/view-gate evidence and was
+not overwritten. The two immutable controls are also unchanged:
+`qwen35-native-loop.json` is
+`9a5bc0faa30c0c9bd256fa60fc0076afc38bcf651d69a052c039aecb666bfe73`, and
+`qwen25-coder-3b.json` is
+`c02011a36a02158e8f35d70e19cc52516c9766d99f751abf2a27a6cfbd65db17`. No
+additional model execution was attempted.
