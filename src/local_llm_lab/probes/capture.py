@@ -192,23 +192,21 @@ class InjectionHook:
         depth = architecture.num_layers
         if not 0 <= int(layer) < depth:
             raise ValueError(f"layer must lie in [0, {depth - 1}]; got {layer}")
-        if replace:
-            raise NotImplementedError("replace=True is owned by SPEC-004")
-        if positions is not None and (from_position is not None or at_positions is not None):
-            raise ValueError("positions cannot be combined with from_position or at_positions")
-        if positions is not None:
-            self.mode, self.index = self._parse_positions(positions)
-            self.at_positions: frozenset[int] | None = None
-        elif at_positions is not None:
-            self.mode, self.index = "at", 0
-            self.at_positions = frozenset(int(position) for position in at_positions)
-        elif from_position is not None:
-            self.mode, self.index, self.at_positions = "from", int(from_position), None
-        else:
-            self.mode, self.index, self.at_positions = "all", 0, None
+        if replace and alpha != 1.0:
+            raise ValueError("replace=True requires the default alpha=1.0")
+        self.mode, self.index, self.at_positions = self._selection(
+            positions, from_position, at_positions
+        )
         self.view = architecture
         self.layer = int(layer)
-        self.vector = mx.array(vector).astype(mx.float32).reshape(-1)
+        source = mx.array(vector).astype(mx.float32)
+        self.vector = self._replacement_vector(source, replace)
+        self.replace = bool(replace)
+        self._position_rows = (
+            {position: row for row, position in enumerate(self.at_positions)}
+            if self.at_positions is not None
+            else {}
+        )
         self.alpha = float(alpha)
         self.calls = 0
         self.injected = 0
@@ -226,6 +224,38 @@ class InjectionHook:
         raise ValueError(
             f"positions must be 'all', ('from', index), ('at', index), or an int; got {positions!r}"
         )
+
+    def _selection(
+        self,
+        positions: str | int | tuple[str, int] | None,
+        from_position: int | None,
+        at_positions: Sequence[int] | None,
+    ) -> tuple[str, int, tuple[int, ...] | None]:
+        if positions is not None and (from_position is not None or at_positions is not None):
+            raise ValueError("positions cannot be combined with from_position or at_positions")
+        if positions is not None:
+            mode, index = self._parse_positions(positions)
+            return mode, index, None
+        if at_positions is not None:
+            selected = tuple(dict.fromkeys(int(position) for position in at_positions))
+            if not selected:
+                raise ValueError("at_positions must not be empty")
+            return "at", 0, selected
+        if from_position is not None:
+            return "from", int(from_position), None
+        return "all", 0, None
+
+    def _replacement_vector(self, source: Any, replace: bool) -> Any:
+        if not replace:
+            return source.reshape(-1)
+        if source.ndim not in (1, 2):
+            raise ValueError("replacement vector must have rank one or two")
+        if source.ndim == 2:
+            if self.at_positions is None:
+                raise ValueError("two-dimensional replacement requires at_positions")
+            if source.shape[0] != len(self.at_positions):
+                raise ValueError("replacement row count must match ordered at_positions")
+        return source
 
     def _cache_offset(self, cache: Any) -> int:
         """Absolute position before a block advances either native cache representation."""
@@ -256,32 +286,52 @@ class InjectionHook:
 
         self.calls += 1
         length = out.shape[1]
-        weights = mx.zeros((1, length, 1), dtype=mx.float32)
-        if self.mode == "all":
-            weights = weights + 1.0
-        elif self.mode == "from":
-            local = max(0, self.index - offset)
-            if local < length:
-                weights[0, local:, 0] = 1.0
-        elif self.at_positions is None:
-            local = self.index - offset
-            if 0 <= local < length:
-                weights[0, local, 0] = 1.0
-        else:
-            for absolute in self.at_positions:
-                local = absolute - offset
-                if 0 <= local < length:
-                    weights[0, local, 0] = 1.0
-        if not bool(mx.any(weights).item()):
+        selected = self._selected_positions(length, offset)
+        if not selected:
             if cache is not None and not hasattr(cache, "offset"):
                 self._array_offsets[id(cache)] = offset + length
             return out
         self.injected += 1
+        if self.replace:
+            if self.vector.shape[-1] != out.shape[-1]:
+                raise ValueError(
+                    "replacement hidden width must match block output "
+                    f"({self.vector.shape[-1]} != {out.shape[-1]})"
+                )
+            result = out.astype(mx.float32)
+            for local, absolute in selected:
+                source = (
+                    self.vector
+                    if self.vector.ndim == 1
+                    else self.vector[self._position_rows[absolute]]
+                )
+                result[0, local] = source
+            result = result.astype(out.dtype)
+            if cache is not None and not hasattr(cache, "offset"):
+                self._array_offsets[id(cache)] = offset + length
+            return result
+        weights = mx.zeros((1, length, 1), dtype=mx.float32)
+        for local, _absolute in selected:
+            weights[0, local, 0] = 1.0
         delta = weights * (self.alpha * self.vector).astype(mx.float32)
         result = (out.astype(mx.float32) + delta).astype(out.dtype)
         if cache is not None and not hasattr(cache, "offset"):
             self._array_offsets[id(cache)] = offset + length
         return result
+
+    def _selected_positions(self, length: int, offset: int) -> list[tuple[int, int]]:
+        if self.mode == "all":
+            return [(local, offset + local) for local in range(length)]
+        if self.mode == "from":
+            return [(local, offset + local) for local in range(max(0, self.index - offset), length)]
+        if self.at_positions is None:
+            local = self.index - offset
+            return [(local, self.index)] if 0 <= local < length else []
+        return [
+            (absolute - offset, absolute)
+            for absolute in self.at_positions
+            if 0 <= absolute - offset < length
+        ]
 
     def __enter__(self) -> InjectionHook:
         self._original_run_block = self.view.run_block

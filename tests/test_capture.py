@@ -157,6 +157,75 @@ def test_injection_restores_shared_view_run_block_after_an_error() -> None:
     np.testing.assert_allclose(np.asarray(after_error), [[[1.0]]])
 
 
+def test_replacement_overwrites_selected_rows_without_addition() -> None:
+    view = _View()
+
+    with capture.InjectionHook(
+        view,
+        0,
+        mx.array([7.0]),
+        at_positions=[1],
+        replace=True,
+    ) as hook:
+        result = view.run_block(0, mx.zeros((1, 3, 1)), {}, None)
+
+    np.testing.assert_allclose(np.asarray(result), [[[1.0], [7.0], [1.0]]])
+    assert result.dtype == mx.float32
+    assert hook.calls == 1 and hook.injected == 1
+
+
+def test_replacement_maps_ordered_rows_across_cached_calls() -> None:
+    class Cache:
+        offset = 0
+
+    class UpdatingView(_View):
+        def run_block(self, index, value, masks, cache_i=None):
+            result = super().run_block(index, value, masks, cache_i)
+            cache_i.offset += value.shape[1]
+            return result
+
+    view = UpdatingView()
+    cache = Cache()
+    with capture.InjectionHook(
+        view,
+        0,
+        mx.array([[7.0], [9.0]]),
+        at_positions=[1, 3],
+        replace=True,
+    ) as hook:
+        first = view.run_block(0, mx.zeros((1, 2, 1)), {}, cache)
+        second = view.run_block(0, mx.zeros((1, 2, 1)), {}, cache)
+
+    np.testing.assert_allclose(np.asarray(first), [[[1.0], [7.0]]])
+    np.testing.assert_allclose(np.asarray(second), [[[1.0], [9.0]]])
+    assert hook.calls == 2 and hook.injected == 2
+
+
+@pytest.mark.parametrize(
+    ("vector", "at_positions", "message"),
+    [
+        (mx.array([1.0, 2.0]), [0], "hidden width"),
+        (mx.array([[1.0], [2.0]]), [0], "row count"),
+    ],
+)
+def test_replacement_validates_its_shape(vector, at_positions, message) -> None:
+    view = _View()
+    if message == "row count":
+        with pytest.raises(ValueError, match=message):
+            capture.InjectionHook(view, 0, vector, at_positions=at_positions, replace=True)
+    else:
+        with (
+            capture.InjectionHook(view, 0, vector, at_positions=at_positions, replace=True),
+            pytest.raises(ValueError, match=message),
+        ):
+            view.run_block(0, mx.zeros((1, 1, 1)), {}, None)
+
+
+def test_replacement_rejects_nondefault_alpha() -> None:
+    with pytest.raises(ValueError, match="alpha"):
+        capture.InjectionHook(_View(), 0, mx.array([1.0]), replace=True, alpha=0.5)
+
+
 def test_lora_block_mask_uses_view_owned_blocks_and_restores_after_error() -> None:
     class Adapter:
         def __init__(self) -> None:
