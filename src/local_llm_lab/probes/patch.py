@@ -8,14 +8,21 @@ import random
 import re
 import sys
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.evaluate import load_policy, wilson
-from local_llm_lab.pipeline.integrity import check_trajectory
+from local_llm_lab.pipeline.integrity import (
+    _canonical_note,
+    _extract_facts,
+    _fact_is_visible,
+    _normalise,
+    _policy_index,
+    check_trajectory,
+)
 from local_llm_lab.pipeline.protocol import (
     SYSTEM_PROMPT,
     assistant_message,
@@ -64,10 +71,30 @@ target note dropped should have appeared).  Both are pairwise quantities, so the
 after ``align_groups`` has seen both prompts.
 """
 
-CONTROLS = ("unrelated_task", "random_positions")
-ARTIFACT_SCHEMA = "p6-patch-r25"
+CONTROLS = ("unrelated_task", "random_positions", "content_swap")
+"""R27(5) adds ``content_swap``: the treatment rows with the dropped value's own rows
+replaced by an unrelated case's, which separates "this position gates the decision" from
+"this value's representation is what the injection carries"."""
+
+OUTCOMES = ("flip", "corrupted", "unchanged", "parse_error")
+"""R27(1): the strict per-generation outcome. A wrong number is never a flip."""
+
+ARTIFACT_SCHEMA = "p6-patch-r27"
 """Names the artifact shape; the payload carried no schema/version field before R25."""
 _FAMILIES = frozenset({"aggregate_report", "ledger_reconcile"})
+
+PRIMARY_CONDITION = "primary"
+SECONDARY_CONDITIONS = ("aggregate_report",)
+"""R27(5): the bound secondary condition (issue #26) — ``aggregate_report`` failures scored
+against the designed-correct generator note, kept in their own section of the artifact."""
+
+_CONDITION_LABELS = {
+    PRIMARY_CONDITION: "empirically_passing_preferred",
+    "aggregate_report_secondary": "designed_correct",
+}
+
+_RAW_HEAD_CHARS = 200
+"""How much of an unparseable generation the artifact keeps, so a parse error is auditable."""
 
 
 @dataclass(frozen=True)
@@ -105,6 +132,17 @@ class PatchCase:
     passing_steps: tuple[dict[str, Any], ...] | None = None
     bound_judgement: DropJudgement | None = None
     head_judgement: DropJudgement | None = None
+    condition: str = PRIMARY_CONDITION
+
+    @property
+    def counterfactual_label(self) -> str:
+        """What kind of note the counterfactual is (R27(5)).
+
+        The primary condition prefers the passing run's own note (R22b); the secondary
+        condition has no passing run to draw on, so its note is the generator's
+        designed-correct one and must never be read as an empirically passing note.
+        """
+        return _CONDITION_LABELS[self.condition]
 
     @property
     def scoring_version_stable(self) -> bool:
@@ -291,9 +329,17 @@ def select_patch_cases(
     keep_last: int,
     data_seed: int | None = None,
     generator_version: int | None = None,
+    secondary_condition: str | None = None,
 ) -> tuple[list[PatchCase], dict[str, Any]]:
     """Select the SPEC-004 §5 universe — task ids that pass under B and fail under C —
     restricted to value-drop decisions, and reconstruct C's task declaration.
+
+    ``secondary_condition`` selects the bound secondary universe instead (R27(5), issue
+    #26): the named family's failures under C, WITHOUT the passing-run intersection,
+    because that family fails under B and C alike and supplies no empirically passing
+    note. Those cases carry no ``passing_steps``, so ``counterfactual_note`` falls back to
+    ``render_expert_note`` at HEAD and the case is labelled ``designed_correct``. The two
+    universes are disjoint populations and are never merged into one headline.
 
     Returns the cases plus provenance: per-input data-seed sources (R22a) under
     ``data_seeds`` and per-input eligibility sources under ``eligibility``. A failing
@@ -311,6 +357,15 @@ def select_patch_cases(
     """
     if keep_last < 0:
         raise ValueError("keep_last must be non-negative")
+    if secondary_condition is not None and secondary_condition not in SECONDARY_CONDITIONS:
+        raise ValueError(
+            f"unknown secondary condition {secondary_condition!r}; "
+            f"expected one of {', '.join(SECONDARY_CONDITIONS)}"
+        )
+    families = _FAMILIES if secondary_condition is None else frozenset({secondary_condition})
+    condition = (
+        PRIMARY_CONDITION if secondary_condition is None else f"{secondary_condition}_secondary"
+    )
     passing, passing_seed, passing_source = _records(passing_payload, "passing", data_seed=data_seed)
     failing, failing_seed, failing_source = _records(failing_payload, "failing", data_seed=data_seed)
     replay_version, version_source = _generator_version_binding(
@@ -336,7 +391,9 @@ def select_patch_cases(
         verdict = record.get("verdict")
         if (
             not isinstance(task_id, str)
-            or task_id not in successful
+            # The secondary universe deliberately drops the passing-run intersection
+            # (R27(5)): its family has no pass/fail pair to intersect with.
+            or (secondary_condition is None and task_id not in successful)
             or not isinstance(steps, list)
             # SPEC-004 §5 universe: the task must FAIL under C, not merely drop a value.
             or not isinstance(verdict, dict)
@@ -352,7 +409,7 @@ def select_patch_cases(
             level = _derived_difficulty(task_id)
             difficulty_source = "recomputed"
         task = task_from_id(task_id, failing_seed, level)
-        if task.family not in _FAMILIES:
+        if task.family not in families:
             continue
         if not all(isinstance(step, dict) for step in steps):
             raise ValueError(f"{task_id}: malformed failing steps")
@@ -385,15 +442,23 @@ def select_patch_cases(
         head = _recomputed_judgement(
             task, steps, keep_last=keep_last, judged_under=f"generator_v{GENERATOR_VERSION} HEAD"
         )
-        saved = successful[task_id].get("steps")
+        saved = successful[task_id].get("steps") if task_id in successful else None
         passing_steps = (
             tuple(dict(step) for step in saved)
-            if isinstance(saved, list) and all(isinstance(step, dict) for step in saved)
+            if secondary_condition is None
+            and isinstance(saved, list)
+            and all(isinstance(step, dict) for step in saved)
             else None
         )
         selected.append(
             PatchCase(
-                task, dropped, tuple(dict(step) for step in steps), passing_steps, bound, head
+                task,
+                dropped,
+                tuple(dict(step) for step in steps),
+                passing_steps,
+                bound,
+                head,
+                condition,
             )
         )
     recomputed_total = integrity_counts["recomputed"] + difficulty_counts["recomputed"]
@@ -423,6 +488,8 @@ def select_patch_cases(
             "passing": {"eligibility_source": "evaluation"},
             "failing": failing_eligibility,
         },
+        "condition": condition,
+        "counterfactual_label": _CONDITION_LABELS[condition],
     }
     return selected, provenance
 
@@ -652,6 +719,30 @@ def aggregate_task_flips(task_flips: dict[str, Sequence[bool]]) -> dict[str, Any
     }
 
 
+def aggregate_task_outcomes(task_outcomes: dict[str, Sequence[str]]) -> dict[str, Any]:
+    """R27(2): the flip rate over cases, beside the per-outcome generation counts.
+
+    ``numerator``/``denominator``/``rate``/``wilson_95`` are unchanged — one case counts
+    once and flips when ANY of its generations is a ``flip`` — so the headline is directly
+    comparable with the pre-R27 artifact. ``outcomes`` counts GENERATIONS, not cases, so a
+    reader can see how much of a cell's non-flip mass is corruption rather than an
+    unchanged note; that distinction is the whole point of the ruling.
+    """
+    counts = dict.fromkeys(OUTCOMES, 0)
+    for outcomes in task_outcomes.values():
+        for outcome in outcomes:
+            if outcome not in counts:
+                raise ValueError(f"unknown R27 outcome {outcome!r}")
+            counts[outcome] += 1
+    summary = aggregate_task_flips(
+        {
+            task_id: [outcome == "flip" for outcome in outcomes]
+            for task_id, outcomes in task_outcomes.items()
+        }
+    )
+    return {**summary, "outcomes": counts, "generations": sum(counts.values())}
+
+
 def _action(record: dict[str, Any]) -> Any:
     raw = record.get("action")
     if isinstance(raw, dict) and isinstance(raw.get("name"), str):
@@ -739,6 +830,17 @@ def replay_counterfactual(
 
 
 def _is_flip(task: Task, steps: list[dict[str, Any]], decision_step: int, *, keep_last: int) -> bool:
+    """The PRE-R27 rule: no ``value_drop`` remains at the decision step.
+
+    Retained as a recorded diagnostic only (``ScoredGeneration.value_drop_cleared``), never
+    as an outcome.  It is not a flip test: a regenerated note carrying a WRONG number makes
+    ``integrity._contradictory_fields`` mark the field contradictory, and
+    ``_fact_covered_by_stale_field`` then treats every canonical value — the dropped one
+    included — as covered, so the drop disappears and a corruption scores as a flip
+    (``integrity.py:374-395``).  R27 replaces it with ``classify_generation``; keeping it
+    beside the strict outcome lets the rerun be compared with the 2026-09-04 artifact
+    without spending a second run.
+    """
     report = check_trajectory(task, steps, keep_last=keep_last)
     return not any(
         violation.kind == "value_drop" and violation.step == decision_step
@@ -809,6 +911,187 @@ def _note_values(note: str) -> list[str]:
         )
     )
     return values
+
+
+def _unique(values: Iterable[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
+
+
+@dataclass(frozen=True)
+class CaseScoring:
+    """The value sets R27(1) scores one case's generations against.
+
+    ``failing`` (F) is the failing note's own value set, ``dropped`` (D) the values the
+    checker says that note is missing at the decision step, and ``canonical`` the value set
+    of the ground-truth note at the same step.  All three are read with ``_note_values``,
+    the same field-scoped, digit-bounded extraction R25's value alignment uses, so the
+    scorer and the injection agree on what a "value" is.
+
+    The expected set E is ``canonical | dropped``: D is a ``required_carry`` fact and is
+    expected at that step by construction, so a case whose canonical note happens to carry
+    the value outside a value field still admits a flip instead of failing closed.
+    """
+
+    failing: tuple[str, ...]
+    dropped: tuple[str, ...]
+    canonical: tuple[str, ...]
+
+    @property
+    def expected(self) -> frozenset[str]:
+        """E: every number the regenerated note may carry."""
+        return frozenset(self.canonical) | frozenset(self.dropped)
+
+    @property
+    def required(self) -> frozenset[str]:
+        """F ∪ D: every number the regenerated note must carry to count as a flip."""
+        return frozenset(self.failing) | frozenset(self.dropped)
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "failing_values": list(self.failing),
+            "dropped_values_scored": list(self.dropped),
+            "canonical_values": list(self.canonical),
+            "expected_values": sorted(self.expected),
+            # A selected case's failing note is a subset of the canonical field by
+            # construction — a foreign number there is scored ``stale_fact``, not
+            # ``value_drop``, so the case would not have been selected.  A non-empty list
+            # therefore marks an anomaly a reader must weigh, never a silent adjustment.
+            "failing_values_outside_canonical": sorted(
+                frozenset(self.failing) - self.expected
+            ),
+        }
+
+
+def case_scoring(case: PatchCase) -> CaseScoring:
+    """Measure F, D and the canonical value set once per case (R27(1)).
+
+    The canonical note is located exactly as ``check_trajectory`` locates it — the saved
+    ``index`` when it is in range, else the position, then the task's own step note,
+    normalised — so the scorer judges against the same ground truth the checker does.
+    """
+    judgement = case.head_judgement
+    if judgement is None or judgement.dropped_values is None:
+        raise ValueError(
+            f"{case.task.task_id}: strict R27 scoring needs the HEAD value-drop judgement"
+        )
+    record = case.failing_steps[case.decision_step]
+    note = record.get("thought")
+    step = _policy_index(record, case.decision_step, len(case.task.steps))
+    canonical = _canonical_note([_normalise(item.thought) for item in case.task.steps], step)
+    return CaseScoring(
+        failing=_unique(_note_values(note) if isinstance(note, str) else ()),
+        dropped=_unique(judgement.dropped_values),
+        canonical=_unique(_note_values(canonical)),
+    )
+
+
+def classify_generation(values: Sequence[str], scoring: CaseScoring) -> str:
+    """R27(1)'s strict outcome for one parsed value set S.
+
+    ``corrupted`` when S carries any number outside E — a wrong number is never a flip,
+    which is the defect this ruling closes: a corrupted ``approved:`` list is marked
+    contradictory by ``integrity._contradictory_fields`` and its canonical values, the
+    dropped one included, are then treated as covered, so the pre-R27 rule scored it as a
+    flip.  ``flip`` when S carries every value the failing note already had plus every
+    dropped value.  ``unchanged`` when S parses and stays inside E but does not restore D.
+    """
+    parsed = frozenset(values)
+    if not parsed:
+        return "parse_error"
+    if not parsed <= scoring.expected:
+        return "corrupted"
+    if scoring.required <= parsed:
+        return "flip"
+    return "unchanged"
+
+
+@dataclass(frozen=True)
+class ScoredGeneration:
+    """One generation's R27 outcome beside the evidence it was scored from.
+
+    ``value_drop_cleared`` is the PRE-R27 rule (``_is_flip``: no ``value_drop`` remains at
+    the decision step), recorded as a diagnostic only so the rerun can be compared with the
+    2026-09-04 artifact without a second run.  It never decides ``outcome``.
+    """
+
+    outcome: str
+    note: str
+    values: tuple[str, ...]
+    raw_head: str = ""
+    value_drop_cleared: bool | None = None
+
+    @property
+    def is_flip(self) -> bool:
+        return self.outcome == "flip"
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "outcome": self.outcome,
+            "note": self.note,
+            "values": list(self.values),
+            "raw_head": self.raw_head,
+            "value_drop_cleared": self.value_drop_cleared,
+        }
+
+
+def score_generation(raw: str, scoring: CaseScoring) -> ScoredGeneration:
+    """Parse one generated turn and classify it (R27(1)).
+
+    A turn that does not parse, and a note whose value field yields no number at all, are
+    both ``parse_error``; the first 200 characters of the raw text are kept so the failure
+    is auditable offline instead of vanishing into a rate.
+    """
+    head = raw[:_RAW_HEAD_CHARS]
+    try:
+        _thinking, cleaned = strip_thinking(raw)
+        note = parse_turn(cleaned).thought
+    except Exception:
+        return ScoredGeneration("parse_error", "", (), head)
+    if not isinstance(note, str):
+        return ScoredGeneration("parse_error", "", (), head)
+    values = _unique(_note_values(note))
+    outcome = classify_generation(values, scoring)
+    return ScoredGeneration(
+        outcome, note, values, head if outcome == "parse_error" else ""
+    )
+
+
+def dropped_value_visibility(case: PatchCase, *, keep_last: int) -> dict[str, Any]:
+    """R27(3): is the dropped value visible in the retained observations?
+
+    Measured with the integrity module's own extraction, never a substring grep (the
+    correction on issue #26): the failing trajectory's observations before the decision
+    step are collected exactly as ``check_trajectory`` collects them — skipping
+    ``FINISHED`` — the last ``keep_last`` are the visible window, and a dropped value
+    counts as visible only when ``_fact_is_visible`` finds a fact of the same kind and
+    value there.  A value that appears in no earlier observation cannot appear in the
+    retained ones either, so it is correctly not visible.
+
+    True excludes the case from the headline: the checker never scores a visible fact as a
+    drop, so such a case would be measuring something other than restoration.
+    """
+    if keep_last < 0:
+        raise ValueError("keep_last must be non-negative")
+    judgement = case.head_judgement
+    dropped = frozenset(judgement.dropped_values or ()) if judgement is not None else frozenset()
+    observations = [
+        record["observation"]
+        for record in case.failing_steps[: case.decision_step]
+        if isinstance(record.get("observation"), str) and record["observation"] != "FINISHED"
+    ]
+    retained = observations[-keep_last:] if keep_last else []
+    facts = {
+        fact
+        for observed_at, observation in enumerate(observations)
+        for fact in _extract_facts(observation, observed_at)
+        if fact.value in dropped
+    }
+    visible = sorted({fact.value for fact in facts if _fact_is_visible(fact, retained)})
+    return {
+        "dropped_value_visible_in_retained_observations": bool(visible),
+        "visible_dropped_values": visible,
+        "retained_observations": len(retained),
+    }
 
 
 def _groups_for(
@@ -1136,6 +1419,61 @@ def _match_rows(rows: Any, count: int) -> Any:
     return mx.take(rows, mx.array([index % rows.shape[0] for index in range(count)], dtype=mx.int32), axis=0)
 
 
+def dropped_value_source_positions(alignment: dict[str, GroupAlignment]) -> tuple[int, ...]:
+    """The counterfactual-prompt positions holding the dropped value's own tokens.
+
+    R25(b) already located them: ``dropped_value_slot`` records each dropped value's source
+    rows in ``pooled_sources`` (``pooled_source_positions`` in the artifact).  The content
+    control (R27(5)) is defined against exactly those positions, so it reads them from the
+    alignment rather than re-deriving a second, possibly disagreeing, notion of "the value".
+    """
+    return tuple(
+        dict.fromkeys(
+            int(position)
+            for rows in alignment["dropped_value_slot"].pooled_sources
+            for position in rows
+        )
+    )
+
+
+def content_swap_indices(
+    alignment: GroupAlignment, dropped_positions: Sequence[int]
+) -> tuple[int, ...]:
+    """Which of a cell's rows, in target order, come from a dropped-value position.
+
+    Empty means the cell's treatment reads none of those positions, so R27(5)'s content
+    control is ``not_applicable`` there and is recorded as such rather than faked.
+    """
+    dropped = {int(position) for position in dropped_positions}
+    if alignment.pooled_sources:
+        return tuple(
+            index
+            for index, rows in enumerate(alignment.pooled_sources)
+            if any(int(position) in dropped for position in rows)
+        )
+    return tuple(
+        index
+        for index, position in enumerate(alignment.source_positions)
+        if int(position) in dropped
+    )
+
+
+def _swap_rows(rows: Any, indices: Sequence[int], replacement: Any) -> Any:
+    """Return ``rows`` with the named target-order rows replaced, order preserved."""
+    import mlx.core as mx
+
+    if replacement.shape[0] != len(indices):
+        raise ValueError("content control replacement must match the swapped row count")
+    order = {int(index): position for position, index in enumerate(indices)}
+    return mx.concatenate(
+        [
+            (replacement[order[row]] if row in order else rows[row])[None, :]
+            for row in range(rows.shape[0])
+        ],
+        axis=0,
+    )
+
+
 def _random_control_pair(
     *,
     source_length: int,
@@ -1165,13 +1503,15 @@ def _score_patch(
     tokenizer: Any,
     case: PatchCase,
     *,
+    scoring: CaseScoring,
     layer: int,
     source_rows: Any,
     target_positions: Sequence[int],
     failing_ids: Sequence[int],
     keep_last: int,
     max_tokens: int,
-) -> bool:
+) -> ScoredGeneration:
+    """Generate the decision turn under one injection and score it strictly (R27(1))."""
     with InjectionHook(
         view,
         layer - 1,
@@ -1180,14 +1520,47 @@ def _score_patch(
         replace=True,
     ):
         raw = greedy_generate(view, tokenizer, failing_ids, max_tokens=max_tokens)
-    try:
-        _thinking, cleaned = strip_thinking(raw)
-        turn = parse_turn(cleaned)
-    except Exception:
-        return False
-    scored = [dict(step) for step in case.failing_steps]
-    scored[case.decision_step]["thought"] = turn.thought
-    return _is_flip(case.task, scored, case.decision_step, keep_last=keep_last)
+    scored = score_generation(raw, scoring)
+    if scored.outcome == "parse_error":
+        return scored
+    steps = [dict(step) for step in case.failing_steps]
+    steps[case.decision_step]["thought"] = scored.note
+    return replace(
+        scored,
+        value_drop_cleared=_is_flip(case.task, steps, case.decision_step, keep_last=keep_last),
+    )
+
+
+_CONTENT_SWAP_NOT_APPLICABLE = (
+    "the cell's treatment source rows include none of the dropped value's token positions, "
+    "so there is nothing to swap (R27)"
+)
+
+
+def _control_record(
+    control: str, task_outcomes: dict[str, Sequence[str]], swapped: dict[str, int]
+) -> dict[str, Any]:
+    """One control's cell entry; ``content_swap`` may be ``not_applicable`` (R27(5))."""
+    if control != "content_swap":
+        return aggregate_task_outcomes(task_outcomes)
+    if not task_outcomes:
+        return {"applicable": False, "reason": _CONTENT_SWAP_NOT_APPLICABLE}
+    return {
+        **aggregate_task_outcomes(task_outcomes),
+        "applicable": True,
+        "swapped_rows": dict(sorted(swapped.items())),
+    }
+
+
+def condition_of(cases: Sequence[PatchCase]) -> str:
+    """The one condition a run's cases belong to; mixing them is refused (R27(5))."""
+    conditions = {case.condition for case in cases}
+    if len(conditions) != 1:
+        raise ValueError(
+            "a P6 run scores one condition at a time; "
+            f"got {', '.join(sorted(conditions)) or 'none'}"
+        )
+    return conditions.pop()
 
 
 def run_patch_probe(
@@ -1205,12 +1578,17 @@ def run_patch_probe(
     command: Sequence[str],
     progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any]:
-    """Run the P6 cells and return aggregate-only, JSON-safe records.
+    """Run the P6 cells and return per-generation, JSON-safe records.
 
-    The headline cells run over scoring-version-stable cases only (R24); unstable cases
-    are listed under ``excluded_cases`` with both judgements and never merged into a cell.
-    This seam is deliberately composed from fakes in tests; the CLI is the only real-model
-    entry point and remains gated by its GPU guard.
+    The headline cells run over scoring-version-stable cases (R24) whose dropped value is
+    NOT visible in the retained observations (R27(3)); every other case is listed under
+    ``excluded_cases`` with its reason and both judgements, and never merged into a cell.
+    Aggregate-only artifacts are not permitted for P6 (R27(2)), so every generation's note
+    text, parsed value set and outcome is recorded in the top-level ``generations`` list —
+    one flat row per (case, layer, cell, condition), which keeps ``cells`` comparable with
+    the pre-R27 artifact and lets a re-scoring run offline.  This seam is deliberately
+    composed from fakes in tests; the CLI is the only real-model entry point and remains
+    gated by its GPU guard.
 
     ``progress`` is an optional ``(step, total, label)`` callback reporting completed work:
     one call per prepared case and one per (layer, group) cell once its cases are scored
@@ -1224,30 +1602,51 @@ def run_patch_probe(
         raise ValueError("layers must be residual indices in [1, num_layers]")
     stable = [case for case in cases if case.scoring_version_stable]
     unstable = [case for case in cases if not case.scoring_version_stable]
-    if len(stable) < 2:
+    visibility = {
+        case.task.task_id: dropped_value_visibility(case, keep_last=keep_last)
+        for case in stable
+    }
+    def _visible(case: PatchCase) -> bool:
+        return bool(
+            visibility[case.task.task_id]["dropped_value_visible_in_retained_observations"]
+        )
+
+    hidden = [case for case in stable if not _visible(case)]
+    exposed = [case for case in stable if _visible(case)]
+    if len(hidden) < 2:
         raise ValueError(
             "P6 unrelated-task control requires at least two scoring-version-stable patch "
-            f"cases (R24); {len(stable)} stable, {len(unstable)} unstable"
+            f"cases (R24); {len(stable)} stable, {len(unstable)} unstable, {len(exposed)} "
+            "excluded for a dropped value visible in the retained observations (R27)"
         )
 
     def case_record(case: PatchCase, provenance: dict[str, Any]) -> dict[str, Any]:
         return {
             "task_id": case.task.task_id,
             "decision_step": case.decision_step,
+            "condition": case.condition,
+            "counterfactual_label": case.counterfactual_label,
             **provenance,
             **case.scoring_record(),
+            # Measured once for every stable case above; an unstable case is measured here
+            # so its record carries the same fields, never a blank the reader must guess at.
+            **(
+                visibility[case.task.task_id]
+                if case.task.task_id in visibility
+                else dropped_value_visibility(case, keep_last=keep_last)
+            ),
         }
 
     excluded: list[dict[str, Any]] = []
-    for case in unstable:
+    for case, reason in [(case, "scoring_version_unstable") for case in unstable] + [
+        (case, "dropped_value_visible_in_retained_observations") for case in exposed
+    ]:
         _failing, _counterfactual, provenance = replay_counterfactual(case)
-        excluded.append(
-            {**case_record(case, provenance), "excluded_reason": "scoring_version_unstable"}
-        )
+        excluded.append({**case_record(case, provenance), "excluded_reason": reason})
     prepared: list[dict[str, Any]] = []
     case_provenance: list[dict[str, Any]] = []
     source_counts: dict[str, int] = {}
-    for case_number, case in enumerate(stable, start=1):
+    for case_number, case in enumerate(hidden, start=1):
         failing, counterfactual, provenance = replay_counterfactual(case)
         source = provenance.get("counterfactual_source") or "none"
         source_counts[source] = source_counts.get(source, 0) + 1
@@ -1271,9 +1670,11 @@ def run_patch_probe(
             target_ids=failing_ids,
         )
         alignment_record = {group: cell.record() for group, cell in alignment.items()}
+        scoring = case_scoring(case)
         case_provenance.append(
             {
                 **case_record(case, provenance),
+                "value_sets": scoring.record(),
                 "boundary_repairs": {"failing": failing_repairs, "counterfactual": counter_repairs},
                 "alignment": alignment_record,
             }
@@ -1281,6 +1682,8 @@ def run_patch_probe(
         prepared.append(
             {
                 "case": case,
+                "scoring": scoring,
+                "dropped_source_positions": dropped_value_source_positions(alignment),
                 "failing_ids": failing_ids,
                 "counter_ids": counter_ids,
                 "failing_groups": failing_groups,
@@ -1292,13 +1695,53 @@ def run_patch_probe(
             }
         )
         if progress is not None:
-            progress(case_number, len(stable), f"capture {case.task.task_id}")
+            progress(case_number, len(hidden), f"capture {case.task.task_id}")
     cells: dict[str, dict[str, Any]] = {}
+    generations: list[dict[str, Any]] = []
     cell_total = len(layers) * len(POSITION_GROUPS)
     cell_number = 0
+
+    def score(
+        item: dict[str, Any],
+        *,
+        condition: str,
+        layer: int,
+        group: str,
+        rows: Any,
+        positions: Sequence[int],
+        sink: dict[str, dict[str, list[str]]],
+    ) -> None:
+        """Score one generation and record it under both the cell and ``generations``."""
+        case = item["case"]
+        scored = _score_patch(
+            view,
+            tokenizer,
+            case,
+            scoring=item["scoring"],
+            layer=layer,
+            source_rows=rows,
+            target_positions=positions,
+            failing_ids=item["failing_ids"],
+            keep_last=keep_last,
+            max_tokens=max_tokens,
+        )
+        sink[condition][case.task.task_id] = [scored.outcome]
+        generations.append(
+            {
+                "task_id": case.task.task_id,
+                "layer": layer,
+                "group": group,
+                "condition": condition,
+                **scored.record(),
+            }
+        )
+
     for layer in layers:
         for group in POSITION_GROUPS:
-            outcomes = {name: {} for name in ("treatment", *CONTROLS)}
+            outcomes: dict[str, dict[str, list[str]]] = {
+                name: {} for name in ("treatment", *CONTROLS)
+            }
+            swapped: dict[str, int] = {}
             for index, item in enumerate(prepared):
                 case = item["case"]
                 alignment = item["alignment"][group]
@@ -1306,21 +1749,19 @@ def run_patch_probe(
                 treatment_rows = _alignment_rows(item["counter_residuals"][layer], alignment)
                 if treatment_rows.shape[0] != len(target):
                     raise ValueError("treatment source and target group cardinality must match")
-                outcomes["treatment"][case.task.task_id] = [_score_patch(
-                    view, tokenizer, case, layer=layer, source_rows=treatment_rows,
-                    target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
-                    max_tokens=max_tokens,
-                )]
+                score(
+                    item, condition="treatment", layer=layer, group=group,
+                    rows=treatment_rows, positions=target, sink=outcomes,
+                )
                 unrelated = prepared[(index + 1) % len(prepared)]
                 unrelated_rows = _match_rows(
                     _alignment_rows(unrelated["counter_residuals"][layer], unrelated["alignment"][group]),
                     len(target),
                 )
-                outcomes["unrelated_task"][case.task.task_id] = [_score_patch(
-                    view, tokenizer, case, layer=layer, source_rows=unrelated_rows,
-                    target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
-                    max_tokens=max_tokens,
-                )]
+                score(
+                    item, condition="unrelated_task", layer=layer, group=group,
+                    rows=unrelated_rows, positions=target, sink=outcomes,
+                )
                 random_source, random_target = _random_control_pair(
                     source_length=len(item["counter_ids"]),
                     target_length=len(item["failing_ids"]),
@@ -1333,11 +1774,36 @@ def run_patch_probe(
                     group=group,
                 )
                 random_rows = _take_rows(item["counter_residuals"][layer], random_source)
-                outcomes["random_positions"][case.task.task_id] = [_score_patch(
-                    view, tokenizer, case, layer=layer, source_rows=random_rows,
-                    target_positions=random_target, failing_ids=item["failing_ids"], keep_last=keep_last,
-                    max_tokens=max_tokens,
-                )]
+                score(
+                    item, condition="random_positions", layer=layer, group=group,
+                    rows=random_rows, positions=random_target, sink=outcomes,
+                )
+                # R27(5) content control: the treatment rows with the dropped value's own
+                # rows replaced by an unrelated case's dropped-value rows.  A cell whose
+                # source rows never touch those positions has nothing to swap, so it is
+                # recorded ``not_applicable`` rather than given a fabricated number.
+                indices = content_swap_indices(alignment, item["dropped_source_positions"])
+                if not indices:
+                    continue
+                # The foreign value's rows are pooled exactly as R25(b) pools the treatment's
+                # own: ``_alignment_rows`` over the unrelated case's slot cell yields one
+                # float32 mean row per dropped value.  Taking that value's first token row
+                # unpooled would make the control a different manipulation from the
+                # treatment it exists to isolate, and the comparison would not be a
+                # content swap at all.
+                foreign_cell = unrelated["alignment"]["dropped_value_slot"]
+                if not foreign_cell.pooled_sources:
+                    continue
+                replacement = _match_rows(
+                    _alignment_rows(unrelated["counter_residuals"][layer], foreign_cell),
+                    len(indices),
+                )
+                swapped[case.task.task_id] = len(indices)
+                score(
+                    item, condition="content_swap", layer=layer, group=group,
+                    rows=_swap_rows(treatment_rows, indices, replacement),
+                    positions=target, sink=outcomes,
+                )
             cells[f"{layer}:{group}"] = {
                 "layer": layer,
                 "group": group,
@@ -1347,9 +1813,10 @@ def run_patch_probe(
                     item["case"].task.task_id: item["alignment_record"][group]
                     for item in prepared
                 },
-                "treatment": aggregate_task_flips(outcomes["treatment"]),
+                "treatment": aggregate_task_outcomes(outcomes["treatment"]),
                 "controls": {
-                    control: aggregate_task_flips(outcomes[control]) for control in CONTROLS
+                    control: _control_record(control, outcomes[control], swapped)
+                    for control in CONTROLS
                 },
             }
             cell_number += 1
@@ -1362,33 +1829,77 @@ def run_patch_probe(
         "layers": list(layers),
         "seed": seed,
         "command": list(command),
+        "condition": condition_of(cases),
         "groups": list(POSITION_GROUPS),
         "controls": list(CONTROLS),
+        "outcomes": list(OUTCOMES),
         "selected_task_ids": [case.task.task_id for case in cases],
         "scoring_generator_version": GENERATOR_VERSION,
         "stable_cases": len(stable),
         "unstable_cases": len(unstable),
-        "headline_task_ids": [case.task.task_id for case in stable],
+        "headline_cases": len(hidden),
+        "visibility_excluded_cases": len(exposed),
+        "headline_task_ids": [case.task.task_id for case in hidden],
         "cases": case_provenance,
+        "generations": generations,
         "excluded_cases": excluded,
         "counterfactual_sources": source_counts,
         "cells": cells,
     }
 
 
+def _outcome_counts_table(payload: dict[str, Any]) -> list[str]:
+    """R27(2)/(7): every cell's per-outcome generation counts, treatment and controls.
+
+    A rate alone cannot be read after R27 — 0.0 from four corruptions and 0.0 from four
+    unchanged notes mean opposite things — so the counts sit beside the heat map.
+    """
+    names = payload.get("outcomes") or list(OUTCOMES)
+    lines = [
+        "| layer/group | condition | " + " | ".join(names) + " |",
+        "|---|---|" + "|".join("---:" for _ in names) + "|",
+    ]
+    for key, cell in payload["cells"].items():
+        for condition in ("treatment", *payload["controls"]):
+            summary = cell["treatment"] if condition == "treatment" else cell["controls"][condition]
+            if not summary.get("applicable", True):
+                lines.append(f"| {key} | {condition} | " + " | ".join("n/a" for _ in names) + " |")
+                continue
+            counts = summary.get("outcomes", {})
+            lines.append(
+                f"| {key} | {condition} | "
+                + " | ".join(str(counts.get(name, 0)) for name in names)
+                + " |"
+            )
+    return lines
+
+
 def render_markdown(payload: dict[str, Any]) -> str:
     """Render a compact layer×group treatment table and named-control tables.
 
-    The heat map covers scoring-version-stable cases only; unstable cases get their own
-    table so they are never read as part of the headline (R24).
+    The heat map covers headline cases only — scoring-version-stable (R24) and with the
+    dropped value hidden from the retained observations (R27(3)); every excluded case gets
+    its own table so it is never read as part of the headline.  The strict outcome counts
+    (R27(1)) and the content control (R27(5)) each get their own section, and the secondary
+    condition, when a run carries one, is rendered separately and never merged.
     """
     groups = payload["groups"]
-    lines = ["# P6 causal patching", "", "## Treatment flip rate", ""]
+    lines = ["# P6 causal patching", ""]
+    if payload.get("condition"):
+        lines.extend([f"Condition: `{payload['condition']}`.", ""])
+    lines.extend(["## Treatment flip rate", ""])
     if "stable_cases" in payload:
         lines.extend(
             [
-                f"Headline over {payload['stable_cases']} scoring-version-stable case(s); "
-                f"{payload['unstable_cases']} unstable case(s) excluded (R24).",
+                f"Headline over {payload.get('headline_cases', payload['stable_cases'])} "
+                f"case(s) of {payload['stable_cases']} scoring-version-stable; "
+                f"{payload['unstable_cases']} unstable case(s) excluded (R24) and "
+                f"{payload.get('visibility_excluded_cases', 0)} excluded because the dropped "
+                "value is visible in the retained observations (R27).",
+                "",
+                "A flip is strict (R27): the note parses, carries every value the failing "
+                "note had and every dropped value, and no number outside the canonical set. "
+                "Read the rates with the outcome counts below.",
                 "",
             ]
         )
@@ -1404,8 +1915,14 @@ def render_markdown(payload: dict[str, Any]) -> str:
         lines.extend(["", f"## Control: {control}", "", "| layer/group | rate | 95% Wilson |", "|---|---:|---|"])
         for key, cell in payload["cells"].items():
             summary = cell["controls"][control]
+            if not summary.get("applicable", True):
+                lines.append(f"| {key} | not_applicable | {summary.get('reason', '')} |")
+                continue
             low, high = summary["wilson_95"]
             lines.append(f"| {key} | {summary['rate']:.3f} | [{low:.3f}, {high:.3f}] |")
+    if payload.get("cells"):
+        lines.extend(["", "## Outcome counts per cell (R27)", ""])
+        lines.extend(_outcome_counts_table(payload))
     sources = payload.get("counterfactual_sources")
     if sources:
         lines.extend(["", "## Counterfactual note sources", ""])
@@ -1415,14 +1932,40 @@ def render_markdown(payload: dict[str, Any]) -> str:
         lines.extend(["", "## Alignment (R25)", ""])
         lines.extend(alignment_lines)
     if "stable_cases" in payload:
-        lines.extend(["", "## Scoring version stability (R24)", ""])
+        lines.extend(["", "## Scoring version stability and value visibility (R24, R27)", ""])
         lines.extend(_stability_table(payload.get("cases", []), "headline"))
-        lines.extend(["", "### Unstable cases (excluded from the headline)", ""])
+        lines.extend(["", "### Excluded cases (never in the headline)", ""])
         if payload.get("excluded_cases"):
             lines.extend(_stability_table(payload["excluded_cases"], "excluded"))
         else:
             lines.append("None.")
+    secondary = payload.get("secondary")
+    if secondary:
+        lines.extend(["", "# Secondary condition (R27, issue #26)", ""])
+        lines.extend(_secondary_section(secondary))
     return "\n".join(lines)
+
+
+def _secondary_section(secondary: dict[str, Any]) -> list[str]:
+    """Render the secondary condition on its own, never merged into the ledger headline."""
+    lines = [
+        f"Condition `{secondary.get('condition', 'unknown')}`, counterfactual note labelled "
+        f"`{secondary.get('counterfactual_label', 'designed_correct')}`. This population is "
+        "disjoint from the headline above and its rates are never pooled with it.",
+        "",
+    ]
+    if secondary.get("error"):
+        lines.extend(
+            [
+                f"Not scored: {secondary['error']}",
+                "",
+                "Selected task ids: "
+                + (", ".join(secondary.get("selected_task_ids", [])) or "none"),
+            ]
+        )
+        return lines
+    lines.append(render_markdown(secondary))
+    return lines
 
 
 def _alignment_table(records: Sequence[dict[str, Any]]) -> list[str]:
@@ -1463,14 +2006,18 @@ def _stability_table(records: Sequence[dict[str, Any]], population: str) -> list
         return ", ".join(listed) if isinstance(listed, list) else "unknown"
 
     lines = [
-        f"| task ({population}) | stable | decision step bound / HEAD | dropped values bound / HEAD |",
-        "|---|---|---|---|",
+        f"| task ({population}) | stable | decision step bound / HEAD | "
+        "dropped values bound / HEAD | value visible in retained obs (R27) | excluded because |",
+        "|---|---|---|---|---|---|",
     ]
     for record in records:
+        visible = record.get("dropped_value_visible_in_retained_observations")
         lines.append(
             f"| {record['task_id']} | {'yes' if record['scoring_version_stable'] else 'no'} | "
             f"{record['decision_step_bound']} / {record['decision_step_head']} | "
-            f"{values(record['dropped_values_bound'])} / {values(record['dropped_values_head'])} |"
+            f"{values(record['dropped_values_bound'])} / {values(record['dropped_values_head'])} | "
+            f"{'unknown' if visible is None else ('yes' if visible else 'no')} | "
+            f"{record.get('excluded_reason', '-')} |"
         )
     return lines
 
@@ -1514,6 +2061,17 @@ def main() -> None:
             "the failing evaluation records no generator_version (R12/R22)"
         ),
     )
+    parser.add_argument(
+        "--secondary-condition",
+        choices=SECONDARY_CONDITIONS,
+        default=None,
+        help=(
+            "also score the bound secondary condition (R27(5), issue #26): the named "
+            "family's failures under C, with the designed-correct generator note as the "
+            "counterfactual. Written to a separate section of the artifact; never merged "
+            "into the headline"
+        ),
+    )
     add_gpu_arguments(parser)
     args = parser.parse_args()
     if not args.passing_eval.is_file() or not args.failing_eval.is_file():
@@ -1525,14 +2083,27 @@ def main() -> None:
         validate_layer_syntax(args.layers)
     except ValueError as error:
         parser.error(str(error))
+    passing_payload = _load_payload(args.passing_eval)
+    failing_payload = _load_payload(args.failing_eval)
+    secondary_cases: list[PatchCase] = []
+    secondary_provenance: dict[str, Any] = {}
     try:
         cases, selection_provenance = select_patch_cases(
-            _load_payload(args.passing_eval),
-            _load_payload(args.failing_eval),
+            passing_payload,
+            failing_payload,
             keep_last=args.keep_last,
             data_seed=args.data_seed,
             generator_version=args.generator_version,
         )
+        if args.secondary_condition is not None:
+            secondary_cases, secondary_provenance = select_patch_cases(
+                passing_payload,
+                failing_payload,
+                keep_last=args.keep_last,
+                data_seed=args.data_seed,
+                generator_version=args.generator_version,
+                secondary_condition=args.secondary_condition,
+            )
     except ValueError as error:
         parser.error(str(error))
     if not cases:
@@ -1594,6 +2165,45 @@ def main() -> None:
         payload["layer_selection"] = selection.as_dict()
         payload["data_seeds"] = selection_provenance["data_seeds"]
         payload["eligibility"] = selection_provenance["eligibility"]
+        if args.secondary_condition is not None:
+            # R27(5): a separate population with its own headline. It runs after the
+            # primary so a refusal here (too few eligible cases, say) costs the primary
+            # nothing; the reason is recorded in place of the section's cells.
+            log.info(
+                "secondary condition",
+                condition=args.secondary_condition,
+                cases=len(secondary_cases),
+            )
+            section: dict[str, Any] = {
+                "condition": secondary_provenance.get("condition", args.secondary_condition),
+                "counterfactual_label": secondary_provenance.get(
+                    "counterfactual_label", "designed_correct"
+                ),
+                "selected_task_ids": [case.task.task_id for case in secondary_cases],
+                "eligibility": secondary_provenance.get("eligibility", {}),
+            }
+            try:
+                section = {
+                    **section,
+                    **run_patch_probe(
+                        model,
+                        tokenizer,
+                        secondary_cases,
+                        spec=spec,
+                        resolved=resolved,
+                        layers=selection.indices,
+                        policy=args.policy,
+                        keep_last=args.keep_last,
+                        max_tokens=args.max_tokens,
+                        seed=args.seed,
+                        command=sys.argv,
+                        progress=log.progress,
+                    ),
+                }
+            except ValueError as error:
+                section["error"] = str(error)
+                log.info("secondary condition not scored", reason=str(error))
+            payload["secondary"] = section
         markdown = render_markdown(payload)
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / "patch.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

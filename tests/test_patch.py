@@ -19,7 +19,12 @@ class _Task:
     steps: tuple[object, ...] = ()
 
 
-def _payload(trajectories, *, data_seed=17):
+_FIXTURE_SEED = 17
+"""The data seed the fixtures build tasks under. Fixture data, not a tool constant: the
+generator is seeded by it and any value yields a well-formed task."""
+
+
+def _payload(trajectories, *, data_seed=_FIXTURE_SEED):
     return {"data_seed": data_seed, "trajectories": trajectories}
 
 
@@ -904,6 +909,7 @@ def test_flip_scoring_requires_the_decision_step_value_drop_to_disappear(monkeyp
 
 
 def test_patch_score_treats_an_unparseable_generation_as_non_flip(monkeypatch) -> None:
+    """R27(1): an unparseable turn is ``parse_error``, never a flip, and its raw head is kept."""
     from local_llm_lab.probes import patch
 
     class Hook:
@@ -921,15 +927,22 @@ def test_patch_score_treats_an_unparseable_generation_as_non_flip(monkeypatch) -
         0,
         ({"thought": "bad"},),
     )
+    scoring = patch.CaseScoring(failing=(), dropped=("42",), canonical=("42",))
     monkeypatch.setattr(patch, "InjectionHook", Hook)
     monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "not a turn")
     monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
     monkeypatch.setattr(patch, "parse_turn", lambda _raw: (_ for _ in ()).throw(ValueError("bad")))
 
-    assert not patch._score_patch(
-        object(), object(), case, layer=1, source_rows=object(), target_positions=(0,),
-        failing_ids=[1], keep_last=2, max_tokens=1,
+    scored = patch._score_patch(
+        object(), object(), case, scoring=scoring, layer=1, source_rows=object(),
+        target_positions=(0,), failing_ids=[1], keep_last=2, max_tokens=1,
     )
+
+    assert not scored.is_flip
+    assert scored.outcome == "parse_error"
+    assert scored.raw_head == "not a turn"
+    # The pre-R27 boolean is not even measured for a turn that never parsed.
+    assert scored.value_drop_cleared is None
 
 
 def test_replay_replaces_only_the_immediately_previous_note(monkeypatch) -> None:
@@ -1406,6 +1419,9 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
         # dropped_value_slot pools its source rows into one; here that is a single row.
         return (sum(rows) / len(rows),) if name == "dropped_value_slot" else rows
 
+    # The generated NOTE is what R27 scores, so the fake returns a parseable value field:
+    # the treatment restores the dropped value (a strict flip), everything else writes a
+    # number outside the canonical set (a corruption, never a flip).
     def generation(*args, **_kwargs):
         vector, target = injected[-1]
         own_base = 201 if args[2][0] == 10 else 401
@@ -1414,19 +1430,13 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
             for name in patch.POSITION_GROUPS
         }
         if (vector, target) in own_treatments:
-            return "treatment"
-        if target in set(aligned_target.values()):
-            return "unrelated"
-        return "random"
+            return "approved: 42"
+        return "approved: 77"
 
     monkeypatch.setattr(patch, "greedy_generate", generation)
     monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
     monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
-    monkeypatch.setattr(
-        patch,
-        "_is_flip",
-        lambda _task, steps, *_args, **_kwargs: steps[0]["thought"] == "treatment",
-    )
+    monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: False)
     resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
 
     payload = patch.run_patch_probe(
@@ -1435,7 +1445,12 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
     )
 
     assert len(captures) == 4
-    assert len(injected) == len(cases) * len(patch.POSITION_GROUPS) * 3
+    # R27(5): the content control only runs where the cell's source rows actually cover the
+    # dropped value's positions — here position 7 of the counterfactual prompt.
+    content_swap_groups = ("dropped_value_slot", "last_two_observations")
+    assert len(injected) == len(cases) * (
+        len(patch.POSITION_GROUPS) * 3 + len(content_swap_groups)
+    )
     expected = []
     for name in patch.POSITION_GROUPS:
         for task_id, own_base, other_base in (
@@ -1456,6 +1471,13 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
             expected.append(
                 (tuple(float(own_base + position) for position in random_source), random_target)
             )
+            if name in content_swap_groups:
+                # The treatment rows with the row sourced from position 7 — the dropped
+                # value's own row — replaced by the OTHER case's POOLED dropped-value row.
+                # Its slot pools the single position 7, so the mean is that row itself.
+                rows = list(treatment_vector(name, own_base))
+                rows[0] = float(other_base + 7)
+                expected.append((tuple(rows), target))
     assert injected == expected
     final_group = injected[-6:]
     assert [positions for _vector, positions in final_group[::3]] == [(8,), (8,)]
@@ -1467,6 +1489,28 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
     assert payload["cells"]["1:final_token"]["treatment"]["denominator"] == 2
     assert set(payload["cells"]["1:final_token"]["controls"]) == set(patch.CONTROLS)
     assert payload["artifact_schema"] == patch.ARTIFACT_SCHEMA
+    # R27(1)/(2): the strict outcome, not a boolean, and the counts beside the rate.
+    assert payload["cells"]["1:system_prompt"]["treatment"]["outcomes"] == {
+        "flip": 2,
+        "corrupted": 0,
+        "unchanged": 0,
+        "parse_error": 0,
+    }
+    assert payload["cells"]["1:system_prompt"]["controls"]["unrelated_task"]["outcomes"] == {
+        "flip": 0,
+        "corrupted": 2,
+        "unchanged": 0,
+        "parse_error": 0,
+    }
+    # R27(5): applicable only where the cell reads a dropped-value row.
+    assert payload["cells"]["1:system_prompt"]["controls"]["content_swap"] == {
+        "applicable": False,
+        "reason": patch._CONTENT_SWAP_NOT_APPLICABLE,
+    }
+    assert payload["cells"]["1:final_token"]["controls"]["content_swap"]["applicable"] is False
+    swap = payload["cells"]["1:dropped_value_slot"]["controls"]["content_swap"]
+    assert swap["applicable"] is True and swap["denominator"] == 2
+    assert swap["swapped_rows"] == {case.task.task_id: 1 for case in cases}
     # _groups_for is faked here, so no boundary repair is recorded for either prompt.
     no_repairs = {name: 0 for name in patch.PROMPT_GROUPS}
     alignment = {
@@ -1515,22 +1559,44 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
         ).record()
         for name in patch.POSITION_GROUPS
     }
+    # R27(3): the decision step is 0, so there is no prior observation to retain and the
+    # dropped value cannot be visible in one.  R27(1): the value sets are recorded per case.
+    hidden = {
+        "dropped_value_visible_in_retained_observations": False,
+        "visible_dropped_values": [],
+        "retained_observations": 0,
+    }
+    value_sets = {
+        "failing_values": [],
+        "dropped_values_scored": ["42"],
+        "canonical_values": [],
+        "expected_values": ["42"],
+        "failing_values_outside_canonical": [],
+    }
     assert payload["cases"] == [
         {
             "task_id": "test-aggregate_report-0-clean",
             "decision_step": 0,
+            "condition": patch.PRIMARY_CONDITION,
+            "counterfactual_label": "empirically_passing_preferred",
             "counterfactual_source": "passing_transcript",
             "counterfactual_basis": "fixture",
             **_scoring_record(0),
+            **hidden,
+            "value_sets": value_sets,
             "boundary_repairs": {"failing": no_repairs, "counterfactual": no_repairs},
             "alignment": alignment,
         },
         {
             "task_id": "test-ledger_reconcile-1-clean",
             "decision_step": 0,
+            "condition": patch.PRIMARY_CONDITION,
+            "counterfactual_label": "empirically_passing_preferred",
             "counterfactual_source": f"generator_v{patch.GENERATOR_VERSION}",
             "counterfactual_basis": "fixture",
             **_scoring_record(0),
+            **hidden,
+            "value_sets": value_sets,
             "boundary_repairs": {"failing": no_repairs, "counterfactual": no_repairs},
             "alignment": alignment,
         },
@@ -1543,9 +1609,27 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
         f"generator_v{patch.GENERATOR_VERSION}": 1,
     }
     assert (payload["stable_cases"], payload["unstable_cases"]) == (2, 0)
+    assert (payload["headline_cases"], payload["visibility_excluded_cases"]) == (2, 0)
     assert payload["excluded_cases"] == []
     assert payload["headline_task_ids"] == payload["selected_task_ids"]
     assert payload["scoring_generator_version"] == patch.GENERATOR_VERSION
+    assert payload["condition"] == patch.PRIMARY_CONDITION
+    assert payload["outcomes"] == list(patch.OUTCOMES)
+    # R27(2): aggregate-only is not permitted — one row per (case, layer, cell, condition).
+    assert len(payload["generations"]) == len(injected)
+    assert {row["condition"] for row in payload["generations"]} == {
+        "treatment",
+        *patch.CONTROLS,
+    }
+    treatment_rows = [
+        row
+        for row in payload["generations"]
+        if row["condition"] == "treatment" and row["group"] == "system_prompt"
+    ]
+    assert [row["outcome"] for row in treatment_rows] == ["flip", "flip"]
+    assert [row["note"] for row in treatment_rows] == ["approved: 42", "approved: 42"]
+    assert [row["values"] for row in treatment_rows] == [["42"], ["42"]]
+    assert json.loads(json.dumps(payload["generations"])) == payload["generations"]
 
 
 def test_patch_probe_refuses_a_source_group_shorter_than_the_target(monkeypatch) -> None:
@@ -1680,20 +1764,27 @@ def _probe_fixture(monkeypatch, cases):
 
     monkeypatch.setattr(patch, "capture_residuals", capture)
     monkeypatch.setattr(patch, "InjectionHook", Hook)
-    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "x")
+    # R27 scores the generated NOTE, so the fake writes a parseable value field carrying
+    # the case's dropped value: every generation is a strict flip.
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "approved: 42")
     monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
     monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
     monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: True)
     return Tokenizer(), captures
 
 
-def _probe_case(index, *, judgements):
+def _probe_case(index, *, judgements, observation=None):
+    """A probe case; ``observation`` puts a retained observation before the decision step,
+    which is what R27(3)'s visibility measurement reads."""
     from local_llm_lab.probes import patch
 
+    first = {"thought": "a"}
+    if observation is not None:
+        first["observation"] = observation
     return patch.PatchCase(
         _Task(f"test-ledger_reconcile-{index}-clean", "ledger_reconcile"),
         1,
-        ({"thought": "a"}, {"thought": "drop"}),
+        (first, {"thought": "drop"}),
         None,
         *judgements,
     )
@@ -1724,12 +1815,20 @@ def test_patch_probe_excludes_unstable_cases_from_the_headline_and_lists_them(mo
     assert all(record["scoring_version_stable"] for record in payload["cases"])
     for cell in payload["cells"].values():
         assert cell["treatment"]["denominator"] == 2
-        assert all(control["denominator"] == 2 for control in cell["controls"].values())
+        assert all(
+            control["denominator"] == 2
+            for control in cell["controls"].values()
+            # R27(5): a cell whose source rows cover no dropped-value position records
+            # ``not_applicable`` rather than a fabricated denominator.
+            if control.get("applicable", True)
+        )
     assert payload["counterfactual_sources"] == {"passing_transcript": 2}
     assert payload["excluded_cases"] == [
         {
             "task_id": "test-ledger_reconcile-1-clean",
             "decision_step": 1,
+            "condition": patch.PRIMARY_CONDITION,
+            "counterfactual_label": "empirically_passing_preferred",
             "counterfactual_source": "passing_transcript",
             "counterfactual_basis": "fixture",
             "scoring_version_stable": False,
@@ -1739,6 +1838,9 @@ def test_patch_probe_excludes_unstable_cases_from_the_headline_and_lists_them(mo
             "dropped_values_head": ["42"],
             "judged_under_bound": "generator_v1 replay",
             "judged_under_head": f"generator_v{patch.GENERATOR_VERSION} HEAD",
+            "dropped_value_visible_in_retained_observations": False,
+            "visible_dropped_values": [],
+            "retained_observations": 0,
             "excluded_reason": "scoring_version_unstable",
         }
     ]
@@ -1820,7 +1922,8 @@ def test_render_markdown_splits_stable_and_unstable_cases() -> None:
         "scoring_version_stable": False,
         "decision_step_head": 2,
         "dropped_values_head": None,
-        "excluded_reason": "scoring_version_unstable",
+        "dropped_value_visible_in_retained_observations": True,
+        "excluded_reason": "dropped_value_visible_in_retained_observations",
     }
     payload = {
         "groups": ["system_prompt"],
@@ -1829,20 +1932,31 @@ def test_render_markdown_splits_stable_and_unstable_cases() -> None:
         "cells": {"1:system_prompt": {"treatment": {"rate": 1.0, "wilson_95": [0.5, 1.0]}}},
         "stable_cases": 1,
         "unstable_cases": 1,
-        "cases": [stable],
+        "headline_cases": 1,
+        "visibility_excluded_cases": 0,
+        "cases": [{**stable, "dropped_value_visible_in_retained_observations": False}],
         "excluded_cases": [unstable],
     }
 
     text = patch.render_markdown(payload)
     lines = text.splitlines()
 
-    assert "Headline over 1 scoring-version-stable case(s); 1 unstable case(s) excluded (R24)." in lines
+    assert (
+        "Headline over 1 case(s) of 1 scoring-version-stable; 1 unstable case(s) excluded "
+        "(R24) and 0 excluded because the dropped value is visible in the retained "
+        "observations (R27)."
+    ) in lines
     assert lines.index("## Treatment flip rate") < lines.index("| 1 | 1.000 [0.500, 1.000] |")
-    assert "## Scoring version stability (R24)" in lines
-    assert "| test-ledger_reconcile-0-clean | yes | 1 / 1 | 12 / 12 |" in lines
-    unstable_header = lines.index("### Unstable cases (excluded from the headline)")
-    assert lines.index("| test-ledger_reconcile-1-clean | no | 1 / 2 | 12 / unknown |") > unstable_header
-    assert lines.index("| test-ledger_reconcile-0-clean | yes | 1 / 1 | 12 / 12 |") < unstable_header
+    assert "## Scoring version stability and value visibility (R24, R27)" in lines
+    headline_row = "| test-ledger_reconcile-0-clean | yes | 1 / 1 | 12 / 12 | no | - |"
+    assert headline_row in lines
+    unstable_header = lines.index("### Excluded cases (never in the headline)")
+    excluded_row = (
+        "| test-ledger_reconcile-1-clean | no | 1 / 2 | 12 / unknown | yes | "
+        "dropped_value_visible_in_retained_observations |"
+    )
+    assert lines.index(excluded_row) > unstable_header
+    assert lines.index(headline_row) < unstable_header
 
     without = patch.render_markdown({**payload, "excluded_cases": [], "unstable_cases": 0})
     assert "None." in without.splitlines()
@@ -2624,11 +2738,20 @@ def test_random_control_pool_arithmetic_is_pinned_for_every_cell() -> None:
         )
 
 
-def _alignment_probe(monkeypatch, target_values, source_values, *, layers=(1,)):
-    """Run ``run_patch_probe`` over the fakes and return ``(payload, injections)``."""
+def _alignment_probe(monkeypatch, target_values, source_values, *, layers=(1,), other=None):
+    """Run ``run_patch_probe`` over the fakes and return ``(payload, injections)``.
+
+    ``other`` gives the SECOND case a different value pair, which is what the R27 content
+    control needs: the unrelated case's dropped-value rows then sit at different positions
+    from the treated case's, so a swapped row is distinguishable from an unswapped one.
+    """
     from local_llm_lab.probes import patch
 
     injected = []
+    pairs = {
+        "test-ledger_reconcile-0-clean": (target_values, source_values),
+        "test-ledger_reconcile-1-clean": other or (target_values, source_values),
+    }
 
     class View:
         num_layers = 1
@@ -2649,8 +2772,8 @@ def _alignment_probe(monkeypatch, target_values, source_values, *, layers=(1,)):
         patch,
         "replay_counterfactual",
         lambda case: (
-            _value_messages(target_values),
-            _value_messages(source_values),
+            _value_messages(pairs[case.task.task_id][0]),
+            _value_messages(pairs[case.task.task_id][1]),
             {"counterfactual_source": "passing_transcript", "counterfactual_basis": "fixture"},
         ),
     )
@@ -2664,7 +2787,7 @@ def _alignment_probe(monkeypatch, target_values, source_values, *, layers=(1,)):
         },
     )
     monkeypatch.setattr(patch, "InjectionHook", Hook)
-    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "x")
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "approved: 42")
     monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
     monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
     monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: True)
@@ -2740,12 +2863,23 @@ def test_controls_resample_to_the_post_alignment_cardinality(monkeypatch) -> Non
     record = payload["cases"][0]["alignment"]
     slots = tuple(entry["slot_position"] for entry in record["dropped_value_slot"]["slots"])
     assert len(slots) == 2
-    # Three injections per (case, group): treatment, unrelated_task, random_positions.
-    assert len(injected) == len(patch.POSITION_GROUPS) * len(payload["cases"]) * 3
+    # Three injections per (case, group): treatment, unrelated_task, random_positions —
+    # plus one content_swap (R27) on each cell whose source rows cover a dropped value.
+    swap_cells = [
+        key.split(":", 1)[1]
+        for key, cell in payload["cells"].items()
+        if cell["controls"]["content_swap"].get("applicable")
+    ]
+    assert set(swap_cells) == {"previous_notes", "dropped_value_slot"}
+    assert len(injected) == len(patch.POSITION_GROUPS) * len(payload["cases"]) * 3 + len(
+        swap_cells
+    ) * len(payload["cases"])
     slot_injections = [
         (rows, positions) for rows, positions in injected if positions == slots
     ]
-    assert len(slot_injections) == 2 * 2, "treatment and unrelated_task, for both cases"
+    assert len(slot_injections) == 3 * 2, (
+        "treatment, unrelated_task and content_swap, for both cases"
+    )
     assert all(rows.shape[0] == len(slots) for rows, _positions in slot_injections)
     random_slot = [
         (rows, positions)
@@ -2757,3 +2891,695 @@ def test_controls_resample_to_the_post_alignment_cardinality(monkeypatch) -> Non
     notes_target = tuple(record["previous_notes"]["target_positions"])
     notes_rows = [rows for rows, positions in injected if positions == notes_target]
     assert notes_rows and all(rows.shape[0] == len(notes_target) for rows in notes_rows)
+
+
+# --- R27: strict, auditable flip scoring ---------------------------------------------------
+#
+# The defect the ruling closes, in one sentence from the code: ``_is_flip`` asks only whether a
+# ``value_drop`` violation remains at the decision step, and ``integrity._contradictory_fields``
+# (``integrity.py:374-386``) marks a note's ``approved:`` field contradictory as soon as its
+# numbers are not a SUBSET of the canonical field's, after which
+# ``_fact_covered_by_stale_field`` (``:389-395``) treats every canonical value — the dropped one
+# included — as covered.  A regenerated note carrying a WRONG number therefore loses its value
+# drop and scored as a flip.  The fixture below is a real HEAD ledger task, so the demonstration
+# runs through the real checker with no model and no tokenizer.
+
+_R27_TASK_ID = "test-ledger_reconcile-0007-clean"
+_R27_DECISION = 7
+_R27_CANONICAL_VALUES = "34, 117, 145, 131"
+_R27_FAILING_VALUES = "34, 117, 131"
+_R27_DROPPED = "145"
+
+
+def _real_ledger_case():
+    """A real HEAD ledger task replayed through its simulator, with one value dropped.
+
+    Structurally identical to the five P6 cases: an ``approved:`` list at the summing step
+    that omits one amount whose observation has already left the window.
+    """
+    from local_llm_lab.pipeline.env import Simulator
+    from local_llm_lab.pipeline.tasks import difficulty, task_from_id
+    from local_llm_lab.probes import patch
+
+    index = int(_R27_TASK_ID.rsplit("-", 2)[1])
+    task = task_from_id(_R27_TASK_ID, _FIXTURE_SEED, difficulty("test", index))
+    simulator = Simulator.for_task(task)
+    steps = []
+    for step in task.steps:
+        observation = simulator.execute(step.action)
+        steps.append(
+            {
+                "thought": step.thought,
+                "action": {"name": step.action.name, "arguments": step.action.arguments},
+                "observation": observation,
+            }
+        )
+    canonical = task.steps[_R27_DECISION].thought
+    assert _R27_CANONICAL_VALUES in canonical, "fixture drifted from the generator"
+    steps[_R27_DECISION] = {
+        **steps[_R27_DECISION],
+        "thought": canonical.replace(_R27_CANONICAL_VALUES, _R27_FAILING_VALUES),
+    }
+    judgement = patch.DropJudgement(
+        _R27_DECISION, (_R27_DROPPED,), f"generator_v{patch.GENERATOR_VERSION} HEAD"
+    )
+    case = patch.PatchCase(
+        task, _R27_DECISION, tuple(steps), None, judgement, judgement
+    )
+    return case, task, steps, canonical
+
+
+def _note_with(values: str) -> str:
+    _case, task, _steps, _canonical = _real_ledger_case()
+    return task.steps[_R27_DECISION].thought.replace(_R27_CANONICAL_VALUES, values)
+
+
+def test_the_selected_case_really_carries_one_value_drop_at_the_decision_step() -> None:
+    """The fixture is only evidence if the real checker agrees it is a value drop."""
+    from local_llm_lab.pipeline.integrity import check_trajectory
+
+    case, task, steps, _canonical = _real_ledger_case()
+
+    report = check_trajectory(task, steps, keep_last=2)
+    decision = [
+        (violation.kind, violation.detail)
+        for violation in report.violations
+        if violation.step == _R27_DECISION
+    ]
+
+    assert decision == [("value_drop", f"missing required values: {_R27_DROPPED}")]
+    assert case.scoring_version_stable is True
+
+
+@pytest.mark.parametrize(
+    ("label", "values", "pre_r27_flip", "outcome"),
+    [
+        # HEAD's wrong results, measured: a note carrying a number that is not in the
+        # canonical list clears the value drop and scored as a flip.
+        ("foreign_number", "34, 117, 131, 200", True, "corrupted"),
+        # The same defect with a HELD amount moved into the approved list.
+        ("held_number", "34, 117, 131, 99", True, "corrupted"),
+        # The two cases HEAD already got right, pinned so the fix cannot regress them.
+        ("restored", _R27_CANONICAL_VALUES, True, "flip"),
+        ("unchanged", _R27_FAILING_VALUES, False, "unchanged"),
+    ],
+)
+def test_pre_r27_scored_a_corrupted_note_as_a_flip_and_the_strict_rule_does_not(
+    label, values, pre_r27_flip, outcome
+) -> None:
+    """R27(1), red-first: a wrong number is a corruption, never a flip.
+
+    ``pre_r27_flip`` records what ``_is_flip`` says on this exact input at HEAD; two of the
+    four rows are the defect (``True`` beside ``corrupted``).  Both are asserted, so the
+    legacy diagnostic stays honest and the strict rule is pinned against it.
+    """
+    from local_llm_lab.probes import patch
+
+    case, task, steps, _canonical = _real_ledger_case()
+    note = _note_with(values)
+    scored_steps = [dict(step) for step in steps]
+    scored_steps[_R27_DECISION]["thought"] = note
+
+    assert patch._is_flip(task, scored_steps, _R27_DECISION, keep_last=2) is pre_r27_flip
+    scoring = patch.case_scoring(case)
+    assert patch.classify_generation(patch._note_values(note), scoring) == outcome
+    assert (outcome == "flip") is not (label in ("foreign_number", "held_number", "unchanged"))
+
+
+def test_case_scoring_reads_the_value_sets_from_the_checkers_own_ground_truth() -> None:
+    """R27(1): F, D and E, measured on the real fixture with ``_note_values``."""
+    from local_llm_lab.probes import patch
+
+    case, _task, _steps, _canonical = _real_ledger_case()
+
+    scoring = patch.case_scoring(case)
+
+    assert scoring.failing == ("34", "117", "131")
+    assert scoring.dropped == (_R27_DROPPED,)
+    assert scoring.canonical == ("34", "117", "145", "131")
+    assert scoring.expected == frozenset({"34", "117", "145", "131"})
+    assert scoring.required == frozenset({"34", "117", "131", "145"})
+    # The failing note is a subset of the canonical field by construction; a non-empty list
+    # here would mark an anomaly, never a silent adjustment.
+    assert scoring.record()["failing_values_outside_canonical"] == []
+
+
+def test_strict_scoring_refuses_a_turn_that_does_not_parse_or_carries_no_value(
+    monkeypatch,
+) -> None:
+    """R27(1): both parse failures are ``parse_error``, and the raw head is kept."""
+    from local_llm_lab.probes import patch
+
+    scoring = patch.CaseScoring(failing=("1",), dropped=("2",), canonical=("1", "2"))
+    monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
+    monkeypatch.setattr(
+        patch, "parse_turn", lambda raw: (_ for _ in ()).throw(ValueError("bad"))
+    )
+    unparsed = patch.score_generation("x" * 400, scoring)
+
+    assert unparsed.outcome == "parse_error"
+    assert len(unparsed.raw_head) == 200 and unparsed.values == ()
+
+    monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
+    valueless = patch.score_generation("Reading the next invoice; pending: none.", scoring)
+
+    assert valueless.outcome == "parse_error"
+    assert valueless.raw_head == "Reading the next invoice; pending: none."
+    # A note that DOES parse to numbers is not a parse error, even when it is wrong.
+    assert patch.score_generation("approved: 1, 2", scoring).outcome == "flip"
+    assert patch.score_generation("approved: 1, 2, 3", scoring).outcome == "corrupted"
+    assert patch.score_generation("approved: 1", scoring).outcome == "unchanged"
+
+
+def test_dropped_value_visibility_uses_the_checkers_extraction_not_a_substring() -> None:
+    """R27(3): ``_fact_is_visible`` over the retained window, never a digit-substring grep.
+
+    The correction on issue #26: a substring test matched other numbers and reported three
+    of the five P6 values as visible, which cannot be so — a visible fact is never scored as
+    a drop.  The distractor line below contains ``145`` inside ``1450`` and inside prose, and
+    must not count.
+    """
+    from local_llm_lab.probes import patch
+
+    task = _Task("test-ledger_reconcile-0-clean", "ledger_reconcile")
+    judgement = patch.DropJudgement(2, ("145",), "head")
+    hidden = patch.PatchCase(
+        task,
+        2,
+        (
+            {"thought": "a", "observation": "path=inv/0 status=approved amount=145"},
+            {"thought": "b", "observation": "context-9=historical 1450 for component 145x"},
+            {"thought": "drop"},
+        ),
+        None,
+        judgement,
+        judgement,
+    )
+    visible = patch.PatchCase(
+        task,
+        2,
+        (
+            {"thought": "a", "observation": "noise"},
+            {"thought": "b", "observation": "path=inv/1 status=approved amount=145"},
+            {"thought": "drop"},
+        ),
+        None,
+        judgement,
+        judgement,
+    )
+
+    # keep_last=1 retains only the distractor, whose digits are not an ``amount`` fact.
+    assert patch.dropped_value_visibility(hidden, keep_last=1) == {
+        "dropped_value_visible_in_retained_observations": False,
+        "visible_dropped_values": [],
+        "retained_observations": 1,
+    }
+    # keep_last=2 retains the observation the amount actually came from.
+    assert patch.dropped_value_visibility(hidden, keep_last=2)[
+        "dropped_value_visible_in_retained_observations"
+    ]
+    assert patch.dropped_value_visibility(visible, keep_last=1) == {
+        "dropped_value_visible_in_retained_observations": True,
+        "visible_dropped_values": ["145"],
+        "retained_observations": 1,
+    }
+
+
+def test_a_visible_dropped_value_excludes_the_case_from_the_headline(monkeypatch) -> None:
+    """R27(3): True excludes, exactly as ``scoring_version_stable=False`` does, with a reason."""
+    from local_llm_lab.probes import patch
+
+    cases = [
+        _probe_case(0, judgements=_judgements(1)),
+        _probe_case(1, judgements=_judgements(1), observation="status=approved amount=42"),
+        _probe_case(2, judgements=_judgements(1)),
+    ]
+    tokenizer, captures = _probe_fixture(monkeypatch, cases)
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1], policy="base",
+        keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    assert len(captures) == 4, "the excluded case is never prepared or captured"
+    assert (payload["stable_cases"], payload["unstable_cases"]) == (3, 0)
+    assert (payload["headline_cases"], payload["visibility_excluded_cases"]) == (2, 1)
+    assert payload["headline_task_ids"] == [cases[0].task.task_id, cases[2].task.task_id]
+    assert [record["task_id"] for record in payload["excluded_cases"]] == [
+        cases[1].task.task_id
+    ]
+    excluded = payload["excluded_cases"][0]
+    assert excluded["excluded_reason"] == "dropped_value_visible_in_retained_observations"
+    assert excluded["dropped_value_visible_in_retained_observations"] is True
+    assert excluded["visible_dropped_values"] == ["42"]
+    assert all(
+        record["dropped_value_visible_in_retained_observations"] is False
+        for record in payload["cases"]
+    )
+    for cell in payload["cells"].values():
+        assert cell["treatment"]["denominator"] == 2
+
+
+def test_content_swap_replaces_only_the_dropped_values_rows(monkeypatch) -> None:
+    """R27(5): B's rows with the dropped value's positions carrying an unrelated value's.
+
+    The residual fake gives position ``p`` the row ``[p]``, so the injected vector names the
+    positions it was built from and the swap is checkable row by row.
+
+    The replacement row is the float32 MEAN of the foreign value's rows, pooled exactly as
+    R25(b) pools the treatment's own (``_alignment_rows``).  Review finding 10: taking that
+    value's first token row unpooled made the control a different manipulation from the
+    treatment, so the pooling is asserted here, not merely the positions.
+    """
+    payload, injected = _alignment_probe(
+        monkeypatch,
+        ["41", "57"],
+        ["41", "57", "62"],
+        other=(["41", "57"], ["41", "62", "57", "78"]),
+    )
+
+    first, second = payload["cases"]
+    notes = first["alignment"]["previous_notes"]
+    own_dropped = [
+        position
+        for slot in first["alignment"]["dropped_value_slot"]["slots"]
+        for position in slot["pooled_source_positions"]
+    ]
+    # One pooled row per foreign dropped value: the mean of that value's own token rows.
+    foreign_pooled = [
+        sum(slot["pooled_source_positions"]) / len(slot["pooled_source_positions"])
+        for slot in second["alignment"]["dropped_value_slot"]["slots"]
+    ]
+    assert len(second["alignment"]["dropped_value_slot"]["slots"]) == 2, (
+        "the unrelated case must carry its own, different dropped-value rows"
+    )
+    assert all(
+        len(slot["pooled_source_positions"]) > 1
+        for slot in second["alignment"]["dropped_value_slot"]["slots"]
+    ), "the pooling is only checkable when a foreign value spans several rows"
+    source = notes["source_positions"]
+    target = tuple(notes["target_positions"])
+    indices = [index for index, position in enumerate(source) if position in own_dropped]
+    assert indices, "the note cell must cover the dropped value's positions to be applicable"
+
+    treatment = tuple(float(position) for position in source)
+    swapped = list(treatment)
+    for order, index in enumerate(indices):
+        swapped[index] = foreign_pooled[order % len(foreign_pooled)]
+    # A pooled mean is not any single foreign row, so this cannot pass by accident.
+    assert not set(swapped[index] for index in indices) & {
+        float(position)
+        for slot in second["alignment"]["dropped_value_slot"]["slots"]
+        for position in slot["pooled_source_positions"]
+    }
+    matches = [
+        (np.asarray(rows), tuple(np.asarray(rows).reshape(-1)))
+        for rows, positions in injected
+        if positions == target
+    ]
+    vectors = [vector for _rows, vector in matches]
+
+    assert treatment in vectors, "the treatment rows are unchanged"
+    assert tuple(swapped) in vectors, "the content control writes the foreign value's rows"
+    assert tuple(swapped) != treatment
+    # Briefing rule 1.5: the pooled row is taken in float32, as R25(b) does for the treatment.
+    swapped_rows = next(rows for rows, vector in matches if vector == tuple(swapped))
+    assert swapped_rows.dtype == np.float32
+    # Every non-dropped row is carried through untouched: only the value's rows move.
+    assert [
+        value for index, value in enumerate(swapped) if index not in indices
+    ] == [value for index, value in enumerate(treatment) if index not in indices]
+    control = payload["cells"]["1:previous_notes"]["controls"]["content_swap"]
+    assert control["applicable"] is True
+    assert control["swapped_rows"][first["task_id"]] == len(indices)
+
+    # At ``dropped_value_slot`` every row IS a dropped-value row, so once the replacement is
+    # pooled the content control and ``unrelated_task`` write the identical rows there. That
+    # is the cell's own statement, and it only holds because both sides pool the same way.
+    slot_target = tuple(first["alignment"]["dropped_value_slot"]["target_positions"])
+    slot_vectors = {
+        tuple(np.asarray(rows).reshape(-1))
+        for rows, positions in injected
+        if positions == slot_target
+    }
+    assert len(slot_vectors) == 2, (
+        "the slot cell writes exactly two distinct row sets: the case's own pooled row "
+        "(treatment) and the foreign pooled row (unrelated_task and content_swap)"
+    )
+    assert (foreign_pooled[0],) in slot_vectors
+
+
+def test_content_swap_is_not_applicable_where_no_dropped_value_row_is_read(monkeypatch) -> None:
+    """R27(5): cells that read none of those positions record ``not_applicable``, not a rate."""
+    from local_llm_lab.probes import patch
+
+    payload, _injected = _alignment_probe(monkeypatch, ["41", "57"], ["41", "57", "62"])
+
+    applicable = {
+        key.split(":", 1)[1]: cell["controls"]["content_swap"].get("applicable", False)
+        for key, cell in payload["cells"].items()
+    }
+
+    # The dropped value's tokens sit inside the note, so the note cell and the slot cell
+    # read them; the system prompt, task prompt, shared values, observations and the final
+    # token do not.
+    assert applicable == {
+        "system_prompt": False,
+        "task_prompt": False,
+        "previous_notes": True,
+        "shared_value_tokens": False,
+        "dropped_value_slot": True,
+        "last_two_observations": False,
+        "final_token": False,
+    }
+    inert = payload["cells"]["1:system_prompt"]["controls"]["content_swap"]
+    assert set(inert) == {"applicable", "reason"} and "nothing to swap" in inert["reason"]
+    assert set(payload["cells"]["1:system_prompt"]["controls"]) == set(patch.CONTROLS)
+
+
+def test_aggregate_counts_outcomes_over_generations_and_rates_over_cases() -> None:
+    """R27(2): the case-level flip rate is unchanged; the counts are per generation."""
+    from local_llm_lab.probes import patch
+
+    summary = patch.aggregate_task_outcomes(
+        {
+            "task-a": ["corrupted", "flip"],
+            "task-b": ["unchanged", "unchanged"],
+            "task-c": ["parse_error"],
+        }
+    )
+
+    assert (summary["numerator"], summary["denominator"], summary["rate"]) == (1, 3, 1 / 3)
+    assert summary["outcomes"] == {
+        "flip": 1,
+        "corrupted": 1,
+        "unchanged": 2,
+        "parse_error": 1,
+    }
+    assert summary["generations"] == 5
+    assert summary["wilson_95"] == list(patch.wilson(1, 3))
+    # The same rate the pre-R27 aggregate would report for the same cases.
+    assert summary["rate"] == patch.aggregate_task_flips(
+        {"task-a": [False, True], "task-b": [False, False], "task-c": [False]}
+    )["rate"]
+    with pytest.raises(ValueError, match="unknown R27 outcome"):
+        patch.aggregate_task_outcomes({"task-a": ["flipped"]})
+
+
+def test_secondary_condition_selects_the_family_without_the_passing_intersection(
+    monkeypatch,
+) -> None:
+    """R27(5), issue #26: ``aggregate_report`` failures with the designed-correct note.
+
+    The family fails under B and C alike, so the primary universe (pass under B, fail under
+    C) is empty for it; the secondary universe drops that intersection and takes the
+    generator note as the counterfactual instead.
+    """
+    from local_llm_lab.probes import patch
+
+    tasks = {
+        "test-aggregate_report-0-clean": _Task(
+            "test-aggregate_report-0-clean", "aggregate_report"
+        ),
+        "test-ledger_reconcile-1-clean": _Task(
+            "test-ledger_reconcile-1-clean", "ledger_reconcile"
+        ),
+    }
+    monkeypatch.setattr(patch, "task_from_id", lambda task_id, seed, difficulty: tasks[task_id])
+    monkeypatch.setattr(
+        patch, "check_trajectory", lambda task, steps, *, keep_last: _drop_report(1, "7")
+    )
+    passing = _payload(
+        [
+            {
+                "task_id": "test-ledger_reconcile-1-clean",
+                "verdict": {"success": True},
+                "steps": [{"thought": "saved note"}],
+            }
+        ]
+    )
+    failing = _payload(
+        [
+            {
+                "task_id": key,
+                "difficulty": 2,
+                "verdict": {"success": False},
+                "steps": [{"thought": "before"}, {"thought": "drop"}],
+                "integrity": {"violations": [{"kind": "value_drop", "step": 1, "detail": "d: 7"}]},
+            }
+            for key in tasks
+        ]
+    )
+
+    primary, primary_provenance = patch.select_patch_cases(passing, failing, keep_last=2)
+    secondary, secondary_provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, secondary_condition="aggregate_report"
+    )
+
+    # Only the ledger task has a pass/fail pair, which is why the primary run is ledger-only.
+    assert [case.task.task_id for case in primary] == ["test-ledger_reconcile-1-clean"]
+    assert primary[0].condition == patch.PRIMARY_CONDITION
+    assert primary_provenance["condition"] == patch.PRIMARY_CONDITION
+    assert [case.task.task_id for case in secondary] == ["test-aggregate_report-0-clean"]
+    assert secondary[0].condition == "aggregate_report_secondary"
+    assert secondary[0].counterfactual_label == "designed_correct"
+    assert secondary_provenance["counterfactual_label"] == "designed_correct"
+    # No passing steps, so ``counterfactual_note`` falls back to the HEAD generator note.
+    assert secondary[0].passing_steps is None
+    monkeypatch.setattr(patch, "render_expert_note", lambda _task, index: f"expert {index}")
+    note, note_provenance = patch.counterfactual_note(secondary[0])
+    assert note == "expert 0"
+    assert note_provenance["counterfactual_source"] == f"generator_v{patch.GENERATOR_VERSION}"
+    with pytest.raises(ValueError, match="unknown secondary condition"):
+        patch.select_patch_cases(
+            passing, failing, keep_last=2, secondary_condition="ledger_reconcile"
+        )
+    with pytest.raises(ValueError, match="one condition at a time"):
+        patch.condition_of([*primary, *secondary])
+
+
+def test_patch_cli_accepts_the_secondary_condition_flag(monkeypatch, tmp_path) -> None:
+    """R27(5): the CLI shape, and the secondary section never merging into the headline."""
+    from local_llm_lab.probes import guard, patch
+
+    passing = tmp_path / "passing.json"
+    failing = tmp_path / "failing.json"
+    passing.write_text("{}", encoding="utf-8")
+    failing.write_text("{}", encoding="utf-8")
+    spec = SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.25,),
+        resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1,)),
+    )
+    case = patch.PatchCase(
+        _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"), 0, (), None, *_judgements(0)
+    )
+    secondary_case = patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"),
+        0,
+        (),
+        None,
+        *_judgements(0),
+        "aggregate_report_secondary",
+    )
+    selections = []
+
+    def select(*_args, **kwargs):
+        condition = kwargs.get("secondary_condition")
+        selections.append(condition)
+        provenance = {
+            "data_seeds": {},
+            "eligibility": {},
+            "condition": "aggregate_report_secondary" if condition else patch.PRIMARY_CONDITION,
+            "counterfactual_label": "designed_correct" if condition else "empirically_passing",
+        }
+        return ([secondary_case] if condition else [case]), provenance
+
+    runs = []
+
+    def run(_model, _tokenizer, cases, **_kwargs):
+        runs.append([item.task.task_id for item in cases])
+        return {"cells": {}, "groups": [], "layers": [], "controls": [], "condition": "x"}
+
+    monkeypatch.setattr(patch, "select_patch_cases", select)
+    monkeypatch.setattr(patch, "load_model_spec", lambda _name: spec)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(patch, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        patch,
+        "load_policy",
+        lambda _spec, _adapter: (object(), object(), SimpleNamespace(num_layers=4), object()),
+    )
+    monkeypatch.setattr(patch, "run_patch_probe", run)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-probe-patch",
+            "--passing-eval", str(passing),
+            "--failing-eval", str(failing),
+            "--output", str(tmp_path),
+            "--secondary-condition", "aggregate_report",
+        ],
+    )
+
+    patch.main()
+
+    assert selections == [None, "aggregate_report"]
+    assert runs == [
+        ["test-ledger_reconcile-1-clean"],
+        ["test-aggregate_report-0-clean"],
+    ]
+    payload = json.loads((tmp_path / "patch.json").read_text(encoding="utf-8"))
+    assert payload["secondary"]["counterfactual_label"] == "designed_correct"
+    assert payload["secondary"]["selected_task_ids"] == ["test-aggregate_report-0-clean"]
+    # The secondary population is a section, never merged into the headline's own keys.
+    assert "test-aggregate_report-0-clean" not in json.dumps(
+        {key: value for key, value in payload.items() if key != "secondary"}
+    )
+    assert "# Secondary condition (R27, issue #26)" in (tmp_path / "patch.md").read_text()
+
+
+def test_render_markdown_carries_the_outcome_counts_and_the_content_control() -> None:
+    """R27(7): the counts, the content control's applicability, and the secondary section."""
+    from local_llm_lab.probes import patch
+
+    counts = {"flip": 3, "corrupted": 1, "unchanged": 0, "parse_error": 1}
+    payload = {
+        "groups": ["system_prompt"],
+        "layers": [1],
+        "controls": list(patch.CONTROLS),
+        "outcomes": list(patch.OUTCOMES),
+        "condition": patch.PRIMARY_CONDITION,
+        "cells": {
+            "1:system_prompt": {
+                "treatment": {"rate": 0.6, "wilson_95": [0.2, 0.9], "outcomes": counts},
+                "controls": {
+                    "unrelated_task": {"rate": 0.2, "wilson_95": [0.0, 0.6], "outcomes": counts},
+                    "random_positions": {"rate": 0.0, "wilson_95": [0.0, 0.4], "outcomes": counts},
+                    "content_swap": {"applicable": False, "reason": "nothing to swap"},
+                },
+            }
+        },
+        "secondary": {
+            "condition": "aggregate_report_secondary",
+            "counterfactual_label": "designed_correct",
+            "selected_task_ids": ["test-aggregate_report-0-clean"],
+            "error": "no eligible patch cases",
+        },
+    }
+
+    lines = patch.render_markdown(payload).splitlines()
+
+    assert "Condition: `primary`." in lines
+    assert "## Outcome counts per cell (R27)" in lines
+    assert "| 1:system_prompt | treatment | 3 | 1 | 0 | 1 |" in lines
+    assert "| 1:system_prompt | content_swap | n/a | n/a | n/a | n/a |" in lines
+    assert "## Control: content_swap" in lines
+    assert "| 1:system_prompt | not_applicable | nothing to swap |" in lines
+    secondary = lines.index("# Secondary condition (R27, issue #26)")
+    assert any("designed_correct" in line for line in lines[secondary:])
+    assert any("Not scored: no eligible patch cases" in line for line in lines[secondary:])
+
+
+@pytest.mark.skipif(
+    not all(path.is_file() for path in _SAVED_EVALS),
+    reason="protected saved evaluations not present on this checkout",
+)
+def test_real_saved_evaluations_measure_every_dropped_value_as_hidden() -> None:
+    """R27(3) on the real evidence, re-measured with the checker's own extraction.
+
+    Reads the protected evidence read-only, with no model and no tokenizer.  Pins the
+    Chief's correction on issue #26: none of the five dropped values is visible in the
+    retained observations (a visible fact is never scored as a drop), and four of the five
+    are referenced in an EARLIER note of the failing prompt, which is why a flip does not
+    require the injected content in those four.  The seed and version literals are fixture
+    data: the runs' recorded configuration, not constants used by the tool.
+    """
+    import json
+
+    from local_llm_lab.pipeline.integrity import _fact_is_referenced, required_carry
+    from local_llm_lab.probes import patch
+
+    passing = json.loads(_SAVED_EVALS[0].read_text(encoding="utf-8"))
+    failing = json.loads(_SAVED_EVALS[1].read_text(encoding="utf-8"))
+    cases, _provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=20260902, generator_version=1
+    )
+
+    assert len(cases) == 5
+    visibility = {
+        case.task.task_id: patch.dropped_value_visibility(case, keep_last=2) for case in cases
+    }
+    assert {
+        task_id: record["dropped_value_visible_in_retained_observations"]
+        for task_id, record in visibility.items()
+    } == {
+        "test-ledger_reconcile-0031-clean": False,
+        "test-ledger_reconcile-0127-clean": False,
+        "test-ledger_reconcile-0139-clean": False,
+        "test-ledger_reconcile-0163-clean": False,
+        "test-ledger_reconcile-0175-clean": False,
+    }
+    assert all(record["retained_observations"] == 2 for record in visibility.values())
+
+    # The earlier-note references, measured with ``_fact_is_referenced``: the note index of
+    # the first earlier note carrying the dropped value, or None when no note carries it.
+    references = {}
+    scoring = {}
+    for case in cases:
+        facts = {
+            fact
+            for fact in required_carry(case.task, keep_last=2)[case.decision_step]
+            if fact.value in set(case.head_judgement.dropped_values or ())
+        }
+        references[case.task.task_id] = next(
+            (
+                index
+                for index, record in enumerate(case.failing_steps[: case.decision_step])
+                if any(_fact_is_referenced(fact, record.get("thought") or "") for fact in facts)
+            ),
+            None,
+        )
+        scoring[case.task.task_id] = patch.case_scoring(case)
+    assert references == {
+        "test-ledger_reconcile-0031-clean": 5,
+        "test-ledger_reconcile-0127-clean": 5,
+        "test-ledger_reconcile-0139-clean": 5,
+        # 0163's value 32 has no text source anywhere in the failing prompt, so a flip there
+        # would be genuine retrieval from the injected rows.
+        "test-ledger_reconcile-0163-clean": None,
+        "test-ledger_reconcile-0175-clean": 4,
+    }
+    # Every case admits a strict flip: D is inside E and F is a subset of E.
+    for task_id, record in scoring.items():
+        assert set(record.dropped) <= record.expected, task_id
+        assert set(record.failing) <= record.expected, task_id
+        assert record.record()["failing_values_outside_canonical"] == [], task_id
+    assert {task_id: record.dropped for task_id, record in scoring.items()} == {
+        "test-ledger_reconcile-0031-clean": ("85",),
+        "test-ledger_reconcile-0127-clean": ("89",),
+        "test-ledger_reconcile-0139-clean": ("100",),
+        "test-ledger_reconcile-0163-clean": ("32",),
+        "test-ledger_reconcile-0175-clean": ("54",),
+    }
+
+    # R27(5): the bound secondary universe, measured on the same files.
+    secondary, secondary_provenance = patch.select_patch_cases(
+        passing,
+        failing,
+        keep_last=2,
+        data_seed=20260902,
+        generator_version=1,
+        secondary_condition="aggregate_report",
+    )
+    assert secondary, "the secondary condition must select at least one aggregate_report case"
+    assert {case.task.family for case in secondary} == {"aggregate_report"}
+    assert all(case.passing_steps is None for case in secondary)
+    assert all(case.counterfactual_label == "designed_correct" for case in secondary)
+    assert secondary_provenance["condition"] == "aggregate_report_secondary"
+    assert not {case.task.task_id for case in secondary} & {
+        case.task.task_id for case in cases
+    }
