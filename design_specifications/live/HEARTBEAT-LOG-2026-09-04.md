@@ -694,3 +694,14 @@ recording the execution rule. No execution lane designated yet.
 - Options on #18: (a) config `max_seq_length: 3200` (training-invariant by measurement;
   Director's word needed); (b) train stage loads train/valid only — slice dispatched with the
   R26 error-path amendment proposed on #35. Lane free.
+
+## 2026-09-05 — Director "Go": ceiling 3200, B4 training restarted; R27 review in
+
+- Config `max_seq_length` 2688 → 3200 on the Director's word (training-invariant by
+  measurement); committed with the rationale; attempt 2 started as a background process.
+- R19 review of the R27 scorer: strict rule verified on a real-case edge battery; two
+  blocking findings — (10) content-control replacement at the slot cell unpooled vs the pooled
+  treatment row (sent back, one-line fix + test); (9) the secondary condition's extractor does
+  not match run C's aggregate_report note style (F empty; parse_error) — with the Chief on
+  #41 alongside the n = 2 gap; recommendation: extend the extractor, HEAD-alone eligibility,
+  run the ledger primary first. Findings posted verbatim on #41.
