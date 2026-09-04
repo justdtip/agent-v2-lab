@@ -9,12 +9,13 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from local_llm_lab.models import load_model_spec
+from local_llm_lab.models import LoraSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.branch import run_branch_mining
 from local_llm_lab.pipeline.data import SplitSpec, write_dataset
 from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
@@ -107,19 +108,47 @@ def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
     print(f"Wrote {config['data']}")
 
 
-LORA_KEYS = [
-    "self_attn.q_proj",
-    "self_attn.k_proj",
-    "self_attn.v_proj",
-    "self_attn.o_proj",
-    "mlp.gate_proj",
-    "mlp.up_proj",
-    "mlp.down_proj",
-]
+def _load_training_base(hf_id: str) -> tuple[Any, Any]:
+    """Lazily load the registry's base model only while resolving training targets."""
+    configure_local_cache()
+    from mlx_lm import load
+
+    return load(hf_id)
+
+
+def _clear_model_cache() -> None:
+    """Release the temporary base-model allocation after architecture resolution."""
+    import mlx.core as mx
+
+    mx.clear_cache()
+
+
+def _resolve_training_spec(config: dict[str, Any]) -> ResolvedSpec:
+    """Resolve LoRA targets from the declared base architecture and training overrides."""
+    spec = load_model_spec(config["model"])
+    train = config["train"]
+    keys = "auto" if "lora_keys" not in train else tuple(train["lora_keys"])
+    effective = replace(
+        spec,
+        lora=LoraSpec(
+            keys=keys,
+            rank=train["rank"],
+            scale=train["scale"],
+            dropout=train.get("dropout", 0.0),
+        ),
+    )
+    model, tokenizer = _load_training_base(effective.hf_id)
+    try:
+        return effective.resolve(model, tokenizer)
+    finally:
+        _clear_model_cache()
 
 
 def lora_config(
-    config: dict[str, Any], iters: int | None = None, resume_from: Path | None = None
+    config: dict[str, Any],
+    resolved: ResolvedSpec,
+    iters: int | None = None,
+    resume_from: Path | None = None,
 ) -> dict[str, Any]:
     """Build the mlx-lm ``lora`` YAML payload from the pipeline config (pure; no side effects).
 
@@ -131,13 +160,13 @@ def lora_config(
         train["iters"] = iters
     output: Path = config["output"]
     lora: dict[str, Any] = {
-        "model": config["model"],
+        "model": resolved.spec.hf_id,
         "train": True,
         "fine_tune_type": "lora",
         "optimizer": "adamw",
         "data": str(config["data"]),
         "seed": config["seed"],
-        "num_layers": train["num_layers"],
+        "num_layers": resolved.num_layers,
         "batch_size": train["batch_size"],
         "grad_accumulation_steps": train["grad_accumulation_steps"],
         "iters": train["iters"],
@@ -152,7 +181,7 @@ def lora_config(
         "adapter_path": str(output / "adapters"),
         "test": False,
         "lora_parameters": {
-            "keys": list(LORA_KEYS),
+            "keys": list(resolved.lora_keys),
             "rank": train["rank"],
             "scale": train["scale"],
             "dropout": train.get("dropout", 0.0),
@@ -170,9 +199,11 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
     if checkpoints.exists():
         shutil.rmtree(checkpoints)
     adapters.mkdir(parents=True, exist_ok=True)
-    lora = lora_config(config, iters=iters, resume_from=resume_from)
+    resolved = _resolve_training_spec(config)
+    lora = lora_config(config, resolved, iters=iters, resume_from=resume_from)
     config_path = output / "lora.yaml"
     config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
+    print(f"Resolved {len(resolved.lora_keys)} LoRA targets: {list(resolved.lora_keys)}")
     configure_local_cache()
     command = [sys.executable, "-m", "mlx_lm", "lora", "--config", str(config_path)]
     if shutil.which("mlx_lm.lora"):
@@ -199,6 +230,15 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
         code = process.wait()
     if code != 0:
         raise SystemExit(f"training failed with exit code {code}; see {log_path}")
+    write_provenance(
+        output,
+        resolved=resolved,
+        spec=resolved.spec,
+        extra={
+            "stage": "train",
+            "training_config": yaml.safe_load(config_path.read_text(encoding="utf-8")),
+        },
+    )
     print(
         f"Training finished in {(time.monotonic() - started) / 60:.1f} min; checkpoints in {adapters}"
     )

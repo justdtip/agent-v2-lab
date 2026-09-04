@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import yaml
 
+from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec
 from local_llm_lab.pipeline import cli
 from local_llm_lab.pipeline.cli import load_config, stage_data
 from local_llm_lab.pipeline.data import SplitSpec
@@ -169,34 +172,94 @@ def test_stage_select_writes_provenance_after_selection_json(monkeypatch, tmp_pa
     assert model_lookups == [config["model"]]
 
 
-def test_lora_config_reflects_grad_checkpoint_and_resume(tmp_path) -> None:
-    from pathlib import Path
+def _training_model_spec() -> ModelSpec:
+    return ModelSpec(
+        name="registry-name",
+        hf_id="registry/hf-id",
+        family="fake",
+        chat=ChatSpec("unsupported", {}, "<eot>", ()),
+        lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+        train={},
+        cache_strategy="none",
+        probe_layer_fractions=(1.0,),
+        memory_budget_gib=1.0,
+        policies={},
+    )
 
-    from local_llm_lab.pipeline.cli import DEFAULT_CONFIG, load_config, lora_config
 
-    config = load_config(DEFAULT_CONFIG)
-    assert isinstance(config["train"]["grad_checkpoint"], bool), "project config sets it explicitly"
-    lora = lora_config(config)
-    assert lora["grad_checkpoint"] is config["train"]["grad_checkpoint"]
-    assert "resume_adapter_file" not in lora
-    assert lora["iters"] == config["train"]["iters"]
-    assert lora["adapter_path"] == str(Path(config["output"]) / "adapters")
+def _training_config(tmp_path: Path) -> dict[str, object]:
+    config = cli.load_config(cli.DEFAULT_CONFIG)
+    config.update({"model": "registry-name", "output": tmp_path / "run", "data": tmp_path / "data"})
+    return config
 
-    config["train"]["grad_checkpoint"] = True
-    assert lora_config(config, iters=7)["grad_checkpoint"] is True
-    assert lora_config(config, iters=7)["iters"] == 7
-    del config["train"]["grad_checkpoint"]
-    assert lora_config(config)["grad_checkpoint"] is True, "defaults to on when unset"
 
+def test_resolve_training_spec_uses_registry_hf_id_and_configured_key_policy(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Target resolution uses the declared base identifier and effective frozen LoRA policy."""
+    spec = _training_model_spec()
+    model, tokenizer = object(), object()
+    resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("hybrid.q",))
+    loaded = []
+    effective = []
+    cleared = []
+
+    def fake_resolve(self, received_model, received_tokenizer):
+        effective.append((self, received_model, received_tokenizer))
+        return resolved
+
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(
+        cli,
+        "_load_training_base",
+        lambda hf_id: (loaded.append(hf_id) or (model, tokenizer)),
+    )
+    monkeypatch.setattr(cli, "_clear_model_cache", lambda: cleared.append(True), raising=False)
+    monkeypatch.setattr(ModelSpec, "resolve", fake_resolve)
+    auto = _training_config(tmp_path)
+    auto["train"].pop("lora_keys", None)
+
+    assert cli._resolve_training_spec(auto) is resolved
+    explicit = _training_config(tmp_path)
+    explicit["train"]["lora_keys"] = ["hybrid.v", "hybrid.q"]
+    explicit["train"].update({"rank": 3, "scale": 4.0, "dropout": 0.2})
+    assert cli._resolve_training_spec(explicit) is resolved
+
+    assert loaded == [spec.hf_id, spec.hf_id]
+    assert cleared == [True, True]
+    assert effective[0][0].lora == LoraSpec("auto", 16, 32.0, 0.0)
+    assert effective[1][0].lora == LoraSpec(("hybrid.v", "hybrid.q"), 3, 4.0, 0.2)
+    assert all(
+        (received_model, received_tokenizer) == (model, tokenizer)
+        for _, received_model, received_tokenizer in effective
+    )
+
+
+def test_lora_config_uses_resolved_architecture_and_fresh_keys(tmp_path: Path) -> None:
+    """mlx-lm config follows architecture-resolved targets rather than static config fields."""
+    config = _training_config(tmp_path)
+    resolved = SimpleNamespace(
+        spec=SimpleNamespace(hf_id="registry/hybrid"),
+        num_layers=7,
+        lora_keys=("layers.0.hybrid.q_proj", "layers.6.hybrid.v_proj"),
+    )
     weights = tmp_path / "0000100_adapters.safetensors"
     weights.write_bytes(b"")
-    resumed = lora_config(config, resume_from=Path("relative") / ".." / weights)
-    assert resumed["resume_adapter_file"] == str(weights.resolve())
-    assert Path(resumed["resume_adapter_file"]).is_absolute()
-    assert (
-        lora_config(config)["lora_parameters"]["keys"]
-        is not lora_config(config)["lora_parameters"]["keys"]
-    ), "each call returns a fresh key list"
+
+    lora = cli.lora_config(config, resolved, iters=7, resume_from=Path("relative") / ".." / weights)
+    another = cli.lora_config(config, resolved)
+
+    assert lora["model"] == resolved.spec.hf_id
+    assert lora["num_layers"] == resolved.num_layers
+    assert lora["lora_parameters"]["keys"] == list(resolved.lora_keys)
+    assert lora["lora_parameters"]["keys"] is not another["lora_parameters"]["keys"]
+    assert lora["iters"] == 7
+    assert lora["grad_checkpoint"] is config["train"]["grad_checkpoint"]
+    assert lora["resume_adapter_file"] == str(weights.resolve())
+    assert "resume_adapter_file" not in another
+    assert another["iters"] == config["train"]["iters"]
+    del config["train"]["grad_checkpoint"]
+    assert cli.lora_config(config, resolved)["grad_checkpoint"] is True
 
 
 def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch) -> None:
@@ -213,21 +276,52 @@ def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch)
     keep.parent.mkdir(parents=True)
     keep.write_text("preserve", encoding="utf-8")
 
+    resolved = SimpleNamespace(
+        spec=SimpleNamespace(hf_id="registry/hybrid"),
+        num_layers=7,
+        lora_keys=("layers.0.hybrid.q_proj",),
+    )
+    calls = []
+
     class FakeProcess:
         stdout: list[str] = []
 
+        def __init__(self, code: int) -> None:
+            self.code = code
+
         def wait(self) -> int:
-            return 0
+            return self.code
 
     def fake_popen(*args, **kwargs):
         assert not (output / "checkpoints").exists()
-        return FakeProcess()
+        return FakeProcess(0)
+
+    def capture_provenance(run_dir, *, resolved, spec, extra):
+        calls.append((run_dir, resolved, spec, extra))
 
     monkeypatch.setattr(cli, "configure_local_cache", lambda: None)
     monkeypatch.setattr(cli.shutil, "which", lambda name: None)
     monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(cli, "_resolve_training_spec", lambda config: resolved, raising=False)
+    monkeypatch.setattr(cli, "write_provenance", capture_provenance)
 
     cli.stage_train(config, iters=1)
 
     assert not (output / "checkpoints").exists()
     assert keep.read_text(encoding="utf-8") == "preserve"
+    training_config = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
+    assert training_config["num_layers"] == resolved.num_layers
+    assert training_config["lora_parameters"]["keys"] == list(resolved.lora_keys)
+    assert calls == [
+        (
+            output,
+            resolved,
+            resolved.spec,
+            {"stage": "train", "training_config": training_config},
+        )
+    ]
+
+    monkeypatch.setattr(cli.subprocess, "Popen", lambda *args, **kwargs: FakeProcess(1))
+    with pytest.raises(SystemExit, match="training failed"):
+        cli.stage_train(config, iters=1)
+    assert len(calls) == 1
