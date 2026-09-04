@@ -677,6 +677,15 @@ forget. Each has an integration check in §6.
   chunk) joins R15 condition 1 with 10% headroom. Validation runs on the kernel path via
   `model.eval()` around the trainer's evaluate. Review:
   `under_review/GATED-DELTA-TRAINING-MEMORY-REVIEW-round1-2026-09-05.md`.
+- **R32 addendum (2026-09-05 12:40):** the preflight training footprint is a calibrated
+  upper-envelope model `peak = a × retained_state_bytes + b` fitted from the lane probe's
+  measured peaks (points, coefficients and date recorded; re-fit when points are added);
+  lane 2 does not gate until the fit exists. B4 attempt 4 gate: longest row steps under the
+  working set with 10% headroom and 400 iterations project at ≤ 3 hours; otherwise stage 2
+  first. mlx-lm already runs validation in eval mode; the wrapper is for restore-on-exception.
+- **R33 (2026-09-05 12:40) no stashing on the shared tree.** Implementers never run
+  `git stash` on the shared tree (two incidents); `git show HEAD:path` and worktrees instead. A
+  stash is reported as an incident and the Deputy re-verifies every other lane's edits.
 
 ## 8. Implementer amendments (append-only, dated)
 

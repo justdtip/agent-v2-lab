@@ -851,3 +851,19 @@ recording the execution rule. No execution lane designated yet.
 - Director on the overlap: "call it a stress test". Recorded as such: the 3B P6 rerun kept
   its per-cell cadence with the 4B loaded and stepping beside it for ~10 min (ETA drifted
   1:07 → 1:13); no shared state, no writes near its artifact. The one-lane rule stands.
+git add design_specifications/live/HEARTBEAT-LOG-2026-09-04.md && git commit -q -m "Log: lane 1 committed; R33
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin codex/agent-v2-specs && git log --oneline -1; echo "=== tree after ==="; git status --short src tests configs | head; echo "=== P6 ==="; tail -1 outputs/probes/patch-C-r27-2026-09-05/run.log
+
+## 2026-09-05 — #51 ratified; lane 1 committed `bea311c` (message amended); R33
+
+- Chief read the recurrence directly; ratified lane 1 now, lane 2 after a calibrated
+  upper-envelope estimator fitted from the probe (points and coefficients recorded), schema
+  bump with it, preflight regenerated immediately after. Attempt-4 gates made explicit:
+  longest row (2,257) under the working set with 10% headroom; clean step time projecting
+  400 iterations ≤ 3 h; above that, stage 2 first. R33: stashing on the shared tree is banned;
+  worktrees and `git show`; any stash is an incident with re-verification of every lane.
+- Lane 1's cli.py hunks split from lane 2's by hunk; committed and verified alone in a
+  throwaway worktree; pushed. A heredoc-order slip put the log text into the commit message
+  and vice versa; the commit message was amended in place (force-with-lease, message only)
+  and this entry restored. Lane 2 remains in the tree.
