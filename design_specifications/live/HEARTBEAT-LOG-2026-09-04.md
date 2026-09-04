@@ -908,3 +908,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   (chunkwise-parallel gated delta; tolerance-tested against the library's step function;
   `train.gated_delta_mode`). Remaining calibration points running one process each. The
   earlier in-loop failures were the loop, not the script.
+- Calibration points (one process each): no-recurrence 997 → 5.36 GB/7.9 s, 1,591 → 6.61/11.4,
+  2,085 → 7.88/15.1 (≈ 3.1 GB + 2.3 MB/token; longest row fits); stage 1 at 997: chunk 32
+  11.85, 64 11.85, 128 12.66 GB — chunk size barely matters, so the cost is inside the chunk
+  recompute, not boundary states. Time gate is tight even at the floor (~2.5 h projected for
+  400 iterations of 4 rows). Lane free; secondary P6 offered to the Director.
