@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -707,14 +709,13 @@ def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch)
     training_config = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
     assert training_config["num_layers"] == resolved.num_layers
     assert training_config["lora_parameters"]["keys"] == list(resolved.lora_keys)
-    assert calls == [
-        (
-            output,
-            resolved,
-            resolved.spec,
-            {"stage": "train", "training_config": training_config},
-        )
-    ]
+    ((run_dir, received_resolved, received_spec, extra),) = calls
+    assert (run_dir, received_resolved, received_spec) == (output, resolved, resolved.spec)
+    assert extra["stage"] == "train" and extra["training_config"] == training_config
+    # R26(f), issue #35: the final health record travels with provenance. This fake trainer
+    # reports nothing and saves nothing, which is exactly what an incomplete run looks like.
+    assert extra["health"]["verdict"] == "incomplete"
+    assert extra["health_thresholds"] == extra["health"]["thresholds"]
 
 
 
@@ -831,7 +832,10 @@ def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
     rendered = yaml.safe_load((output / "lora.yaml").read_text(encoding="utf-8"))
     assert trainer_calls == [(rendered, model, train_set, valid_set)]
     assert not stale.exists() and (output / "evals" / "keep").is_file()
-    assert provenance == [{"stage": "train", "training_config": rendered}]
+    (extra,) = provenance
+    assert extra["stage"] == "train" and extra["training_config"] == rendered
+    # R26(f), issue #35: health.json's record is copied into provenance, thresholds included.
+    assert extra["health_thresholds"] == extra["health"]["thresholds"]
     metrics = json.loads((output / "metrics.jsonl").read_text().splitlines()[0])
     assert {key: value for key, value in metrics.items() if key != "elapsed"} == {
         "step": 1,
@@ -840,6 +844,288 @@ def test_stage_train_uses_rendered_splits_and_five_argument_trainer(
         "tokens": None,
     }
     assert isinstance(metrics["elapsed"], float) and metrics["elapsed"] >= 0
+
+
+# --------------------------------------------------------- run logging and health (issue #35, R26)
+
+_TRAINER_LINE = "Iter 1: Train loss 1.000, Tokens/sec 100.000, Peak mem 0.500 GB"
+_ELAPSED = re.compile(r'"elapsed": [0-9.e+-]+')
+
+
+def _report(iteration: int, loss: float) -> dict[str, object]:
+    """One mlx-lm 0.31.3 train report, with the exact field names TrainingCallback delivers."""
+    return {
+        "iteration": iteration,
+        "train_loss": loss,
+        "learning_rate": 3.0e-5,
+        "tokens_per_second": 100.0,
+        "trained_tokens": 64 * iteration,
+        "peak_memory": 0.5,
+    }
+
+
+def _patch_stage_train(monkeypatch, trainer) -> SimpleNamespace:
+    """Wire stage_train to fakes only: no trainer entry point, no model, no dataset on disk."""
+    spec = _training_model_spec()
+    model, tokenizer = object(), object()
+    resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("hybrid.q",))
+    record = SimpleNamespace(provenance=[], loads=[], resolved=resolved, spec=spec)
+
+    def fake_load_base(hf_id):
+        record.loads.append(hf_id)
+        return model, tokenizer
+
+    def fake_provenance(run_dir, *, resolved, spec, extra):
+        record.provenance.append(extra)
+        (run_dir / "provenance.json").write_text(
+            json.dumps(extra, indent=2, default=str), encoding="utf-8"
+        )
+
+    monkeypatch.setattr(cli, "_load_training_entry", lambda: (trainer, {}))
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(cli, "_load_training_base", fake_load_base)
+    monkeypatch.setattr(ModelSpec, "resolve", lambda self, model, tokenizer: resolved)
+    monkeypatch.setattr(
+        cli,
+        "load_rendered_splits",
+        lambda path, received_tokenizer, *, max_seq_length: (["a", "b", "c"], ["d", "e"], ["f"]),
+        raising=False,
+    )
+    monkeypatch.setattr(cli, "_clear_model_cache", lambda: None)
+    monkeypatch.setattr(cli, "write_provenance", fake_provenance)
+    return record
+
+
+def _healthy_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+    """A complete run: every planned iteration reported and a final checkpoint written."""
+    print(_TRAINER_LINE)
+    training_callback.on_train_loss_report(_report(1, 1.0))
+    training_callback.on_val_loss_report({"iteration": 1, "val_loss": 1.25})
+    training_callback.on_train_loss_report(_report(2, 0.9))
+    Path(args.adapter_path, "adapters.safetensors").write_bytes(b"")
+
+
+def _short_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+    """A run that stops one iteration short of the plan but still saves a checkpoint."""
+    training_callback.on_train_loss_report(_report(1, 1.0))
+    Path(args.adapter_path, "adapters.safetensors").write_bytes(b"")
+
+
+def _no_checkpoint_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+    """A run that reports every iteration and leaves no final adapter file behind."""
+    training_callback.on_train_loss_report(_report(1, 1.0))
+    training_callback.on_train_loss_report(_report(2, 0.9))
+
+
+def _nan_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+    """mlx-lm does not catch callback exceptions, so the abort must end the loop here."""
+    training_callback.on_train_loss_report(_report(1, float("nan")))
+    raise AssertionError("the training loop must not continue past a non-finite loss")
+
+
+def _spiking_trainer(args, model, train_set, valid_set, training_callback=None) -> None:
+    """Five flat reports fill the trailing window; the sixth is well past the spike factor."""
+    for iteration in range(1, 6):
+        training_callback.on_train_loss_report(_report(iteration, 1.0))
+    training_callback.on_train_loss_report(_report(6, 10.0))
+    Path(args.adapter_path, "adapters.safetensors").write_bytes(b"")
+
+
+def test_stage_train_writes_run_log_events_and_health_beside_the_existing_artifacts(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(a): a training run must leave a readable stream and a machine record of itself."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    for name in ("train.log", "metrics.jsonl", "run.log", "events.jsonl", "health.json"):
+        assert (output / name).is_file(), name
+
+
+def test_stage_train_keeps_the_metrics_stream_byte_identical(monkeypatch, tmp_path: Path) -> None:
+    """_validation_losses reads metrics.jsonl, so its keys, order and step convention are frozen."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    text = (output / "metrics.jsonl").read_text(encoding="utf-8")
+    assert text.endswith("\n")
+    assert [_ELAPSED.sub('"elapsed": T', line) for line in text.splitlines()] == [
+        '{"step": 1, "train_loss": 1.0, "val_loss": null, "tokens": 64, "elapsed": T}',
+        '{"step": 2, "train_loss": null, "val_loss": 1.25, "tokens": null, "elapsed": T}',
+        '{"step": 2, "train_loss": 0.9, "val_loss": null, "tokens": 128, "elapsed": T}',
+    ]
+    assert cli._validation_losses(output) == {2: 1.25}
+
+
+def test_stage_train_keeps_train_log_verbatim_and_mirrors_it_into_run_log(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """train.log stays exactly the trainer's own stdout while run.log adds the pipeline stream."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    assert (output / "train.log").read_text(encoding="utf-8") == _TRAINER_LINE + "\n"
+    lines = (output / "run.log").read_text(encoding="utf-8").splitlines()
+    assert [line for line in lines if _TRAINER_LINE in line]
+    assert [line for line in lines if "train 1/2" in line], "no progress line for the train report"
+    assert [line for line in lines if "val_loss" in line and "1.25" in line]
+    assert [line for line in lines if "hybrid.q" in line], "resolved targets must be logged"
+
+
+def test_stage_train_events_are_ordered_and_carry_the_run_name(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(e): events.jsonl is the machine record a lift request cites."""
+    config = _training_config(tmp_path)
+    config["config_path"] = str(tmp_path / "arm.yaml")
+    manifest = tmp_path / "data" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('{"rows": 1}', encoding="utf-8")
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    events = [
+        json.loads(line)
+        for line in (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    kinds = [event["kind"] for event in events]
+    assert {event["run"] for event in events} == {"train"}
+    assert kinds[0] == "start" and kinds[-1] == "end"
+    assert kinds.index("info") < kinds.index("progress") < kinds.index("metric")
+    progress = next(event for event in events if event["kind"] == "progress")
+    assert progress["fraction"] == 0.5 and progress["eta_seconds"] is not None
+    identity = events[0]["fields"]
+    assert identity["model"] == "registry-name" and identity["hf_id"] == "registry/hf-id"
+    assert identity["config"] == str(tmp_path / "arm.yaml")
+    assert identity["data_manifest_sha256"] == hashlib.sha256(manifest.read_bytes()).hexdigest()
+    assert re.fullmatch(r"[0-9a-f]{40}|unknown", identity["git_commit"])
+    assert events[-1]["fields"]["verdict"] == "healthy"
+
+
+def test_stage_train_records_a_healthy_verdict_and_copies_it_into_provenance(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(f): the provenance copy of the health record must be the final one."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    record = _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["verdict"] == "healthy" and health["status"] == "ok"
+    assert health["flags"] == []
+    (extra,) = record.provenance
+    assert extra["stage"] == "train"
+    assert extra["health"]["verdict"] == health["verdict"]
+    assert extra["health"]["thresholds"] == health["thresholds"]
+    assert extra["health_thresholds"] == health["thresholds"]
+
+
+def test_stage_train_flags_a_run_that_stops_short_or_saves_no_checkpoint(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """R26(c): a run that ends early is not a healthy run even though nothing raised."""
+    short = _training_config(tmp_path / "short")
+    _patch_stage_train(monkeypatch, _short_trainer)
+    cli.stage_train(short, iters=2)
+    stopped = json.loads((short["output"] / "health.json").read_text(encoding="utf-8"))
+
+    unsaved_config = _training_config(tmp_path / "unsaved")
+    _patch_stage_train(monkeypatch, _no_checkpoint_trainer)
+    cli.stage_train(unsaved_config, iters=2)
+    unsaved = json.loads((unsaved_config["output"] / "health.json").read_text(encoding="utf-8"))
+
+    assert stopped["verdict"] == "incomplete" and stopped["status"] == "ok"
+    assert unsaved["verdict"] == "incomplete" and unsaved["status"] == "ok"
+    assert "incomplete_run" in {flag["flag"] for flag in stopped["flags"]}
+    assert "incomplete_run" in {flag["flag"] for flag in unsaved["flags"]}
+
+
+def test_stage_train_aborts_on_a_non_finite_loss_without_writing_provenance(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """R26(c): an aborted run's adapters are never eligible, so no provenance is written."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    record = _patch_stage_train(monkeypatch, _nan_trainer)
+
+    with pytest.raises(SystemExit) as error:
+        cli.stage_train(config, iters=2)
+
+    captured = capsys.readouterr()
+    assert [
+        line
+        for line in captured.err.splitlines()
+        if "training aborted" in line and "non_finite_loss" in line
+    ], "the fatal flag is raised, not returned, so the stage must report it itself"
+    assert "non_finite_loss" in str(error.value)
+    assert str(output / "health.json") in str(error.value)
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["verdict"] == "aborted" and health["status"] == "aborted"
+    assert record.provenance == []
+    assert not (output / "provenance.json").exists()
+
+
+def test_stage_train_warns_on_a_loss_spike_and_records_it(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """A warning is worth nothing unless the operator sees it while the run is going."""
+    config = _training_config(tmp_path)
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _spiking_trainer)
+
+    cli.stage_train(config, iters=6)
+
+    captured = capsys.readouterr()
+    warnings = [line for line in captured.err.splitlines() if "health flag" in line]
+    assert [line for line in warnings if "loss_spike" in line]
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["verdict"] == "warnings"
+    spikes = [flag for flag in health["flags"] if flag["flag"] == "loss_spike"]
+    assert len(spikes) == 1 and spikes[0]["iteration"] == 6
+
+
+def test_stage_train_health_thresholds_come_from_the_arm_config(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Changing a threshold is a config change, visible in health.json and in provenance."""
+    config = _training_config(tmp_path)
+    config["train"]["health"] = {"loss_spike_factor": 3.0}
+    output = config["output"]
+    record = _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    health = json.loads((output / "health.json").read_text(encoding="utf-8"))
+    assert health["thresholds"]["loss_spike_factor"] == 3.0
+    assert health["thresholds"]["memory_budget_gib"] == _training_model_spec().memory_budget_gib
+    assert record.provenance[0]["health_thresholds"]["loss_spike_factor"] == 3.0
+
+
+def test_stage_train_rejects_an_unknown_health_key_before_loading_the_model(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A typo in train.health must cost nothing: no weights, no output directory churn."""
+    config = _training_config(tmp_path)
+    config["train"]["health"] = {"loss_spike_factor": 3.0, "loss_spike_facter": 3.0}
+    record = _patch_stage_train(monkeypatch, _healthy_trainer)
+
+    with pytest.raises(ValueError, match="loss_spike_facter"):
+        cli.stage_train(config, iters=2)
+
+    assert record.loads == [], "the base model must not load for a rejected config"
 
 
 def test_stage_eval_writes_one_ordered_provenance_record(monkeypatch, tmp_path: Path) -> None:
@@ -1075,3 +1361,25 @@ def test_main_all_wires_one_best_adapter_evaluation(
             },
         ),
     ]
+
+
+def test_stage_train_ignores_a_stale_checkpoint_from_an_earlier_run(monkeypatch, tmp_path: Path) -> None:
+    """Chief's condition on #37: a checkpoint older than this run's start is not this run's."""
+    import os
+    import time
+
+    config = _training_config(tmp_path / "stale")
+    adapters = config["output"] / "adapters"
+    adapters.mkdir(parents=True)
+    stale = adapters / "adapters.safetensors"
+    stale.write_bytes(b"left by an earlier run")
+    old = time.time() - 3600
+    os.utime(stale, (old, old))
+    _patch_stage_train(monkeypatch, _no_checkpoint_trainer)
+
+    cli.stage_train(config, iters=2)
+
+    health = json.loads((config["output"] / "health.json").read_text(encoding="utf-8"))
+    assert health["verdict"] == "incomplete"
+    assert health["final_checkpoint"] is False
+    assert "incomplete_run" in {flag["flag"] for flag in health["flags"]}

@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
 import shutil
 import sys
 import time
@@ -33,6 +34,15 @@ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 from local_llm_lab.provenance import write_provenance
+from local_llm_lab.runlog import (
+    HealthThresholds,
+    RunLog,
+    Tee,
+    TrainingAborted,
+    TrainingHealth,
+    git_commit,
+    sha256_of,
+)
 from local_llm_lab.tuner_data import load_rendered_splits
 
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "agent_v2.yaml"
@@ -253,10 +263,48 @@ def _effective_lora_args(lora: dict[str, Any], defaults: dict[str, Any]) -> Simp
     return SimpleNamespace(**{**defaults, **lora})
 
 
+def _flag_detail(flag: dict[str, Any]) -> dict[str, Any]:
+    """A flag's detail as log fields, minus the two names the log line already carries."""
+    detail = flag.get("detail") or {}
+    return {key: value for key, value in detail.items() if key not in {"flag", "iteration"}}
+
+
+def _health_flags(log: RunLog, health: TrainingHealth, names: list[str], iteration: int) -> None:
+    """Put every newly raised health flag on stderr with the detail that raised it (R26)."""
+    if not names:
+        return
+    latest = {flag["flag"]: flag for flag in health.flags}
+    for name in names:
+        log.warn("health flag", flag=name, iteration=iteration, **_flag_detail(latest.get(name, {})))
+
+
 class _TrainingMetrics:
-    def __init__(self, target: TextIO, started: float) -> None:
+    """Write ``metrics.jsonl`` and mirror every trainer report to the run log and health rules.
+
+    ``_validation_losses`` reads this file back for checkpoint selection, so its keys, their
+    order, and the ``iteration + 1`` step convention for validation records are frozen; the
+    run log and the health state machine are additive and never change what is written here.
+    """
+
+    def __init__(
+        self,
+        target: TextIO,
+        started: float,
+        *,
+        log: RunLog,
+        health: TrainingHealth,
+        iters: int,
+        budget_gib: float | None,
+    ) -> None:
         self.target = target
         self.started = started
+        self.log = log
+        self.health = health
+        self.iters = iters
+        self.budget_gib = budget_gib
+        self.last_iteration = 0
+        self.best: float | None = None
+        self.best_iteration: int | None = None
 
     def _write(self, *, step: int, train_loss: Any, val_loss: Any, tokens: Any) -> None:
         self.target.write(
@@ -275,9 +323,54 @@ class _TrainingMetrics:
 
     def on_val_loss_report(self, metrics: dict[str, Any]) -> None:
         self._write(step=int(metrics["iteration"]) + 1, train_loss=None, val_loss=metrics["val_loss"], tokens=None)
+        iteration = int(metrics["iteration"])
+        val_loss = metrics["val_loss"]
+        _health_flags(
+            self.log,
+            self.health,
+            self.health.on_val_report(iteration=iteration, val_loss=val_loss),
+            iteration,
+        )
+        if self.best is None or val_loss < self.best:
+            self.best, self.best_iteration = val_loss, iteration
+        self.log.metric(
+            "val",
+            iteration=iteration,
+            val_loss=val_loss,
+            best=self.best,
+            best_iteration=self.best_iteration,
+        )
 
     def on_train_loss_report(self, metrics: dict[str, Any]) -> None:
         self._write(step=int(metrics["iteration"]), train_loss=metrics["train_loss"], val_loss=None, tokens=metrics["trained_tokens"])
+        iteration = int(metrics["iteration"])
+        self.last_iteration = iteration
+        # mlx-lm 0.31.3 always sends the five metric fields; the defaults keep a partial
+        # report (a fake, or a future trainer) from turning logging into the failure.
+        _health_flags(
+            self.log,
+            self.health,
+            self.health.on_train_report(
+                iteration=iteration,
+                train_loss=metrics["train_loss"],
+                learning_rate=metrics.get("learning_rate", 0.0),
+                tokens_per_second=metrics.get("tokens_per_second", 0.0),
+                trained_tokens=metrics.get("trained_tokens", 0),
+                peak_memory_gb=metrics.get("peak_memory", 0.0),
+            ),
+            iteration,
+        )
+        self.log.progress(
+            iteration,
+            self.iters,
+            "train",
+            loss=metrics["train_loss"],
+            lr=metrics.get("learning_rate"),
+            tok_s=metrics.get("tokens_per_second"),
+            tokens=metrics["trained_tokens"],
+            peak_gb=metrics.get("peak_memory"),
+            budget_gib=self.budget_gib,
+        )
 
 
 def _resolve_training_spec(config: dict[str, Any]) -> ResolvedSpec:
@@ -341,64 +434,189 @@ def lora_config(
     return lora
 
 
+def _fresh_checkpoint(path: Path, *, since: float) -> bool:
+    """True when ``path`` exists and was written by THIS run.
+
+    A stale ``adapters.safetensors`` left in the same output directory by an earlier run must
+    not count as this run's final checkpoint (Chief's condition on issue #37; the same class of
+    defect SPEC-002 closed in checkpoint selection). ``since`` is wall-clock seconds at stage
+    start, floored to the second so a coarse-resolution filesystem cannot truncate a fresh
+    file's mtime to just before it.
+    """
+    if not path.is_file():
+        return False
+    return path.stat().st_mtime >= math.floor(since)
+
+
+def _split_size(split: Any) -> int | None:
+    """Row count when the loaded split exposes one; ``None`` for anything unmeasurable."""
+    try:
+        return len(split)
+    except TypeError:
+        return None
+
+
+def _training_identity(config: dict[str, Any], spec: ModelSpec) -> dict[str, Any]:
+    """R26(e): what the start event names so a lift request is checkable from the file alone."""
+    manifest = Path(config["data"]) / "manifest.json"
+    return {
+        "model": spec.name,
+        "hf_id": spec.hf_id,
+        "config": config.get("config_path"),
+        "data_manifest_sha256": sha256_of(manifest) if manifest.is_file() else None,
+        "git_commit": git_commit(),
+    }
+
+
 def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | None = None) -> None:
     output: Path = config["output"]
     adapters = output / "adapters"
     checkpoints = output / "checkpoints"
     trainer, defaults = _load_training_entry()
+    effective = _effective_training_spec(config)
+    # Both are resolved before anything loads, so a typo under train.health costs no weights.
+    # The planned iteration count is lora["iters"] by the same override lora_config applies.
+    thresholds = HealthThresholds.from_config(
+        config["train"].get("health"), memory_budget_gib=effective.memory_budget_gib
+    )
+    health = TrainingHealth(
+        thresholds, iters=config["train"]["iters"] if iters is None else iters
+    )
     model: Any | None = None
     tokenizer: Any | None = None
     train_set: Any | None = None
     valid_set: Any | None = None
     test_set: Any | None = None
     callback: _TrainingMetrics | None = None
+    aborted: TrainingAborted | None = None
+    summary: dict[str, Any] | None = None
+    status = "ok"
     started = time.monotonic()
-    try:
-        effective = _effective_training_spec(config)
-        model, tokenizer = _load_training_base(effective.hf_id)
-        resolved = effective.resolve(model, tokenizer)
-        lora = {**defaults, **lora_config(config, resolved, iters=iters, resume_from=resume_from)}
-        args = _effective_lora_args(lora, {})
-        adapters.mkdir(parents=True, exist_ok=True)
-        config_path = output / "lora.yaml"
-        config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
-        train_set, valid_set, test_set = load_rendered_splits(
-            config["data"], tokenizer, max_seq_length=args.max_seq_length
-        )
-        if checkpoints.exists():
-            shutil.rmtree(checkpoints)
-        print(f"Resolved {len(resolved.lora_keys)} LoRA targets: {list(resolved.lora_keys)}")
-        _log("train: mlx_lm.lora.train_model")
-        with (output / "train.log").open("w", encoding="utf-8") as log, (
-            output / "metrics.jsonl"
-        ).open("w", encoding="utf-8") as metrics:
-            callback = _TrainingMetrics(metrics, started)
-            with contextlib.redirect_stdout(_Tee(sys.stdout, log)):
-                trainer(args, model, train_set, valid_set, callback)
-        write_provenance(
-            output,
-            resolved=resolved,
-            spec=resolved.spec,
-            extra={"stage": "train", "training_config": lora},
-        )
-        print(f"Training finished in {(time.monotonic() - started) / 60:.1f} min; checkpoints in {adapters}")
-    finally:
-        del callback, train_set, valid_set, test_set, model, tokenizer
-        _clear_model_cache()
+    started_wall = time.time()
+    with RunLog.open(
+        output,
+        name="train",
+        command=list(sys.argv),
+        identity=_training_identity(config, effective),
+    ) as runlog:
+        try:
+            runlog.info("loading base", model=effective.hf_id)
+            model, tokenizer = _load_training_base(effective.hf_id)
+            resolved = effective.resolve(model, tokenizer)
+            runlog.info(
+                "resolved lora targets",
+                count=len(resolved.lora_keys),
+                keys=list(resolved.lora_keys),
+            )
+            lora = {
+                **defaults,
+                **lora_config(config, resolved, iters=iters, resume_from=resume_from),
+            }
+            args = _effective_lora_args(lora, {})
+            adapters.mkdir(parents=True, exist_ok=True)
+            config_path = output / "lora.yaml"
+            config_path.write_text(yaml.safe_dump(lora, sort_keys=False), encoding="utf-8")
+            train_set, valid_set, test_set = load_rendered_splits(
+                config["data"], tokenizer, max_seq_length=args.max_seq_length
+            )
+            runlog.info(
+                "splits",
+                train=_split_size(train_set),
+                valid=_split_size(valid_set),
+                test=_split_size(test_set),
+            )
+            if checkpoints.exists():
+                shutil.rmtree(checkpoints)
+            runlog.info(
+                "trainer",
+                entry="mlx_lm.lora.train_model",
+                iters=lora["iters"],
+                batch_size=lora["batch_size"],
+                max_seq_length=lora["max_seq_length"],
+                steps_per_report=lora["steps_per_report"],
+                steps_per_eval=lora["steps_per_eval"],
+                save_every=lora["save_every"],
+            )
+            _log("train: mlx_lm.lora.train_model")
+            with (output / "train.log").open("w", encoding="utf-8") as log, (
+                output / "metrics.jsonl"
+            ).open("w", encoding="utf-8") as metrics:
+                callback = _TrainingMetrics(
+                    metrics,
+                    started,
+                    log=runlog,
+                    health=health,
+                    iters=lora["iters"],
+                    budget_gib=thresholds.memory_budget_gib,
+                )
+                with contextlib.redirect_stdout(_Tee(runlog.tee(sys.stdout), log)):
+                    trainer(args, model, train_set, valid_set, callback)
+            # R26(c): a trainer that returned early or saved nothing produced an adapter that
+            # nothing downstream may select from; on_finish records that and never raises.
+            _health_flags(
+                runlog,
+                health,
+                health.on_finish(
+                    iterations_done=callback.last_iteration,
+                    final_checkpoint=_fresh_checkpoint(
+                        adapters / "adapters.safetensors", since=started_wall
+                    ),
+                ),
+                callback.last_iteration,
+            )
+            summary = health.summary(elapsed=time.monotonic() - started, status="ok")
+            # R26(f): provenance carries the same health record health.json does, written
+            # after on_finish so the verdict recorded there is the final one.
+            write_provenance(
+                output,
+                resolved=resolved,
+                spec=resolved.spec,
+                extra={
+                    "stage": "train",
+                    "training_config": lora,
+                    "health_thresholds": thresholds.as_dict(),
+                    "health": summary,
+                },
+            )
+            runlog.info(
+                "training finished",
+                minutes=round((time.monotonic() - started) / 60, 1),
+                checkpoints=str(adapters),
+                verdict=health.verdict,
+            )
+        except TrainingAborted as error:
+            # R26(c): an aborted run's adapters are not eligible for selection, so the stage
+            # records the health verdict and stops without writing provenance. A fatal flag
+            # is raised rather than returned, so it is the one flag _health_flags never sees.
+            status, aborted = "aborted", error
+            runlog.error(
+                "training aborted",
+                flag=error.flag["flag"],
+                iteration=error.flag["iteration"],
+                **_flag_detail(error.flag),
+            )
+        except BaseException:
+            status = "error"
+            raise
+        finally:
+            if summary is None or status != "ok":
+                summary = health.summary(elapsed=time.monotonic() - started, status=status)
+            (output / "health.json").write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            runlog.close(status=status, verdict=health.verdict, flags=len(health.flags))
+            del callback, train_set, valid_set, test_set, model, tokenizer
+            _clear_model_cache()
+        if aborted is not None:
+            raise SystemExit(
+                f"training aborted: {aborted.flag['flag']} at iteration "
+                f"{aborted.flag['iteration']}; see {output / 'health.json'}"
+            )
 
 
-class _Tee:
-    def __init__(self, console: TextIO, log: TextIO) -> None:
-        self.console, self.log = console, log
-
-    def write(self, value: str) -> int:
-        self.console.write(value)
-        self.log.write(value)
-        return len(value)
-
-    def flush(self) -> None:
-        self.console.flush()
-        self.log.flush()
+# RunLog.tee already mirrors the console side into run.log, so the training stage nests one
+# Tee inside another; the private alias keeps the old name for anything that imports it.
+_Tee = Tee
 
 
 def checkpoint_dirs(config: dict[str, Any]) -> list[tuple[int, Path]]:
@@ -833,7 +1051,11 @@ def main() -> None:
             overwrite=args.force_overwrite,
         )
         return
-    config = load_config(args.config.resolve())
+    run_config_path = args.config.resolve()
+    config = load_config(run_config_path)
+    # R26(e): the run log's start event names the recipe file this run came from. Recorded
+    # here rather than in load_config so reading a config for comparison stays value-only.
+    config["config_path"] = str(run_config_path)
     if args.stage == "render":
         source = args.source.resolve() if args.source else config.get("source_rows")
         if source is None:
