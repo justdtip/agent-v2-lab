@@ -713,3 +713,6 @@ recording the execution rule. No execution lane designated yet.
   Added to the in-flight fix slice as the top item (implement `process` → `(tokens, offset)`;
   verify against the real `CacheDataset`/`iterate_batches` with a fake tokenizer; red-first).
   health.json again "healthy" at 0 iterations — same slice. Posted on #18. Lane free.
+- B1c rebased onto B5 (eight source hunks, one test hunk, both features intact; counts
+  reconcile 749 → 774 → 786); patch applies to the main tree; work order filed. Chief's point:
+  Holm across the comparison cells (recommend a follow-up line).
