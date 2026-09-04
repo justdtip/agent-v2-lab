@@ -51,11 +51,11 @@ exit 0
 
 ## R13 full fake-only suite
 
-- Tested code commit: `a0b88a976639caf243b9f38bded53929d67f6eb7`
+- Tested code commit: `d75415dd566fbb7ea41312a346bc744f36bbdbf0`
 - Required command: `uv run pytest -q`
 - Exit code: 0
 - Summary-enabled equivalent: `uv run pytest -q -o addopts='' --tb=no` (exit 0)
-- Counts: 498 passed, 0 failed, 0 xfailed
+- Counts: 505 passed, 0 failed, 0 xfailed
 - Failing nodes: none
 
 ## No-model and protected-path evidence
@@ -78,6 +78,7 @@ were written by this lane; all test files use `tmp_path`.
 
 - `dd036a48ce22dd47ed4623d02bfc676f5887d81e` — `feat: add fake-tested P6 causal patching`
 - `a0b88a976639caf243b9f38bded53929d67f6eb7` — `fix: correct P6 causal patch controls`
+- `d75415dd566fbb7ea41312a346bc744f36bbdbf0` — `fix: enforce P6 control cardinality`
 - This report is committed separately after its final evidence update.
 
 ## Fix Round 1
@@ -120,4 +121,38 @@ uv run pytest -q
 exit 0
 uv run pytest -q -o addopts='' --tb=no
 498 passed in 7.40s
+```
+
+## Fix Round 2
+
+Random source and target samples now come from one RNG seeded exactly
+`f"{seed}:{task_id}:{layer}:{group}"`; each contains the treatment target cardinality and excludes
+its respective treatment group. The implementation fails closed when either candidate pool is too
+small. Treatment now requires equal source/target cardinality rather than truncating or cycling;
+only the unrelated-task rotation retains deterministic row cycling/truncation.
+
+RED/GREEN evidence on the new mutation-sensitive fake vertical:
+
+```text
+uv run pytest -q tests/test_patch.py -k 'exact_trace or unequal_treatment'
+RED: 2 failed
+- random injections used the old suffixed seeds and did not match the exact ordered trace
+- unequal treatment groups reached InjectionHook instead of failing closed
+
+uv run pytest -q tests/test_patch.py -k 'exact_trace or unequal_treatment'
+GREEN: 2 passed
+uv run pytest -q tests/test_capture.py tests/test_patch.py
+29 passed
+uv run ruff check src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py tests/test_capture.py tests/test_patch.py
+All checks passed!
+uv run ruff check --select C901 src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py
+All checks passed!
+python3 -m py_compile src/local_llm_lab/probes/capture.py src/local_llm_lab/probes/patch.py tests/test_capture.py tests/test_patch.py
+exit 0
+git diff --check d75415d^ d75415d -- src/local_llm_lab/probes/patch.py tests/test_patch.py
+exit 0
+uv run pytest -q
+exit 0
+uv run pytest -q -o addopts='' --tb=no
+505 passed in 7.26s
 ```
