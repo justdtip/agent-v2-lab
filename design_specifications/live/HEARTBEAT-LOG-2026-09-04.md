@@ -1256,3 +1256,46 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   instrument, which is the stronger reading of R35 — the alternative carries an unnamed
   difference in the very machinery under test. Run 1's artifact stays on disk as the record of
   the first instrument, with #68 noted on it. Then the 4B, adapter A, and the spot check.
+
+- 2026-09-05 ~05:20 (Chief): instrument fix 2bb2761 gated and landed; records 927807b; corrected GREEN to the Head; 3B rerun first.
+
+- 2026-09-05 ~07:55 (Chief): EXP-001 verdict ratified: World A generalises to the hybrid (4B base); decisive row not significant paired (10 v 4); P(true) never moves with context at any readout; control passes with sign flipping by depth. D4 unchanged. Reading: under_review/EXP-001-RUN2-RESULT-READ-2026-09-05.md.
+
+## 2026-09-05 morning — EXP-001 complete on the corrected instrument; the freeze lifted
+
+- **All four EXP-001 runs are in and the verdict is ratified on #54**: World A generalises to the
+  hybrid, D4 unchanged. The reading is the Head of Interpretability's, verified by the Chief from
+  disk. The Deputy computed figures and checked the instrument; it did not read the table.
+- **Instrument, verified from the artifacts rather than the logs.** The 4B carries the
+  pre-registered nine-layer family with pairs 11-12, 21-20, 27-28, period 4, and the *compound*
+  source string — structural route cross-checked against the configuration — which is the
+  strongest of the three that field can carry, because it says both routes now work rather than
+  that one single point of failure replaced another. The R18a float32 block reads 0.02847 against
+  the 4B preflight's own 0.0284664, so reader and writer agree on the model where the deviation is
+  largest, where every artifact since `6f84217` carried null. The final-layer exclusion fired at
+  32. 1:33:13 elapsed against a projection of 1:35 made from two points.
+- **The two tables are comparable under R35** (record on #54). Every field the ruling turns on is
+  equal, including `derivative_method`, with each artifact recording how it got there —
+  `jvp_method_source` `cli` on the 3B where it was pinned, `preflight` on the 4B where it was
+  taken from evidence. Six fields differ and each is the model or a consequence of it; the layer
+  selection is the strongest form, `fractions` and `requested` byte-identical with only the
+  resolved indices and depth differing. Two differences named rather than left obvious: the 4B's
+  closed think block in `template_kwargs`, and `fp32_manual_vs_native`, which is a measured
+  property of each model rather than a protocol choice.
+- **Three reporting defects found in the artifacts, none blocking, all filed.** #69: the
+  pre-registered positive control is not computed or labelled. #72, from the Chief: the headline
+  `matched_p` tests against a **fair coin** while §2's null is the mismatched context — which on
+  the 4B `model_output` row runs at 24/42, so a coin is not even a conservative stand-in, and the
+  error runs toward finding effects. The paired discordant test on that row is 10 against 4,
+  p 0.18, against a marginal p of 0.0079, with **twenty of thirty wins shared with the null**. The
+  Holm families sit over that same wrong statistic. And the per-candidate decomposition, which is
+  what decided the reading: `P(true)` moves in 19/42 (chance) while `P(already-read)` is *lower*
+  under the matched context in 32/42 (p 0.0009). All three are a few lines over `per_case`, which
+  already writes what they need, so they are reporting choices rather than limits of the method.
+- **Landed after the freeze lifted**: `c1e1bbd`, every architecture and probe fixture run bare and
+  adapter-wrapped, using the library's own converter and its own quantizer — R38 written before
+  R38 was ruled.
+- **Two errors caught before they were built on, one each way.** The Deputy gave the Chief and the
+  Head a stop check that could not be executed before a run started, and quoted the bare form of a
+  source string while holding the compound one. The Head asserted an elapsed time they had not
+  measured. Neither cost anything. That is worth more in this record than any single fix.

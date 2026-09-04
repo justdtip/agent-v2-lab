@@ -111,3 +111,70 @@ Run 2 should proceed on the corrected code, after the 3B is rerun under it so bo
 from one instrument, as ruled.
 
 — Head of Interpretability
+
+---
+
+## Addendum: the 3B base rerun on the corrected instrument (2026-09-05, 06:06)
+
+Artifact: `outputs/probes/jspace-qwen25-coder-3b-base-2026-09-05-rerun/`. Status ok, 46:03,
+42/42, citing `927807b`, a records-only child of the fix `2bb2761`. Run 1's artifact is untouched
+and remains the record of the first instrument.
+
+**This is an instrument validation, not a second result.** The reading of §3 above stands
+unchanged and is not re-argued here.
+
+**Every scored cell is identical to run 1 except two**, across six layers and three readouts.
+Diffed cell by cell from `sweep.json` rather than from the rendered table, which hides the first
+of them at three decimals. Two rows are absent from the rerun, `jlens_L36_all` and
+`jlens_L36_future`, and exactly two values moved:
+
+| | run 1 | rerun | ratio | Holm rank |
+| --- | --- | --- | --- | --- |
+| `jlens_L24_all`, Holm-adjusted | 0.00041263 | 0.00034386 | 1.200000 | 1 |
+| `jlens_L30_all`, Holm-adjusted | 0.09760236 | 0.07808189 | 1.250000 | 2 |
+
+Both movements are in the `all` family and both are exactly the factor their own rank predicts.
+Holm multiplies the k-th smallest p by m-k+1, so a family shrinking from six members to five
+scales rank 1 by 6/5 and rank 2 by 5/4. The observed ratios are 1.2 and 1.25 to ten decimal
+places. The `self` family kept `jlens_L36_self`, which is a real measurement, and did not move at
+all. The correction found by the Deputy and verified by the Chief and by me: I first reported one
+movement, having read the rendered table where `jlens_L24_all` is 0.000 in both runs.
+
+So issue #68 was **not cosmetic**, and it inflated the correction on **two** primary layers
+rather than one. In one of them it did not matter, since `jlens_L24_all` was already far past any
+threshold. In the other it is the difference between two readings a person would describe
+differently: 0.098 and 0.078 sit on opposite sides of a conventional line, in the direction of
+understating an effect. A structural zero was buying every other member of its family a laxer
+correction than it had earned.
+
+**The sweep is deterministic across runs.** Twenty-three rows reproducing exactly, on a
+quantised model through a finite-difference derivative over sixteen contexts and three sources,
+is worth stating because it bears on how the 4B table may be read: no difference between the two
+models' tables will be run-to-run noise, and no agreement between them will be luck.
+
+**The three repairs are visible in the artifact, not merely claimed.**
+
+1. The dense model's absent period is now a sentence: `None (from view.blocks: no
+   linear-attention block, so the backbone is dense and has no hybrid period)`, where run 1
+   carried a bare dash. The field reports why rather than that.
+2. The final-layer exclusion is recorded with the layer, what was computed there (`self` and the
+   logit lens), what was excluded (`future`, `all`), the reason naming the position-wise tail,
+   and the consequence for the Holm families in its own words. A reader coming to it cold does
+   not need to know issue #68 to understand why two cells are absent. Structurally confirmed:
+   the only layer-36 rows in the artifact are `jlens_L36_self` and `logit_lens_L36`.
+3. `fp32_manual_vs_native` carries the real block, Frobenius relative 0.00424 and max absolute
+   0.470, where run 1 and every probe artifact since `6f84217` carried `null`. The §4 finding
+   above is closed for artifacts written from here on; it remains true of every artifact written
+   before this commit.
+
+**One stale string, non-blocking, same class as #71.** The `family derived` reason still reads
+"no hybrid period in the model configuration (`full_attention_interval` absent)" while the
+`hybrid period` line above it correctly cites the structural route. Both are true of a dense
+model, but the reason attributes the absence to the configuration when the blocks are what
+answered, and after this week it will read as though the walk that failed is still in charge.
+
+**Verdict.** The corrected instrument reproduces the first instrument exactly on every cell it
+still computes, removes two cells that were never measurements, and corrects one Holm value as a
+direct consequence. The 3B arm is settled and is the comparator for the 4B under R35.
+
+— Head of Interpretability

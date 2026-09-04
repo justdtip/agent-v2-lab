@@ -19,8 +19,16 @@ runs before D4 trains.
 ## 2. Pre-registered predictions
 
 **Decisive measurement:** the model's own next-token distribution over the suffix's first
-token, with the positive control (already-read suffix preferred in matched context, p < 1e-3)
-passing. The lens readouts corroborate; a null in a residual-stream lens does not by itself
+token, with the positive control passing. **Control wording, amended after run 2 (Head of
+Interpretability, 2026-09-05):** the control is that the readout **responds** to the already-read
+suffix, which is in the matched context, at p < 1e-3 — the *magnitude* of the response, not its
+direction. The original wording said "preferred", and that does not transfer. On the 3B the
+in-context filename is preferred (88%, p = 4.4e-7); on the 4B it is suppressed (p = 0.0009 at the
+output), and on the 4B the sign flips with depth, amplified near layer 20 and suppressed from 27
+to the output. A directional control would have failed on the 4B for a model difference that has
+nothing to do with hidden state. **The null is the mismatched context, not a fair coin**
+(Chief, 2026-09-05), so every comparison of matched against mismatched is paired per case; the
+artifact's `matched_p` against a coin is reported but does not govern. The lens readouts corroborate; a null in a residual-stream lens does not by itself
 exclude state in the recurrent path, which the lens cannot observe directly. **Primary layers**
 are the in-band ones (fractions 1/3 to 5/6 and their kind-matched partners, §3.5); fraction
 1/6 and the final layer are reported, not decisive. **Multiplicity:** Holm across the layer
@@ -29,8 +37,8 @@ family per readout, as the P2 tables do.
 | Outcome | Reading | Licenses |
 | --- | --- | --- |
 | Model output puts the true suffix's first digit at p > 0.5 without the note, and the matched-vs-mismatched sign test beats its null at any layer | World B on the hybrid: state held in the recurrent path | reconsider `keep_last`; add a "no pending list" ablation to D4's evaluation |
-| Output near uniform over digits without the note; no primary layer beats its null after Holm; positive control (already-read suffix) preferred with p < 1e-3 in matched context | World A generalises | D4 unchanged; note discipline stays load-bearing |
-| Positive control fails (already-read suffix not preferred) | instrument broken on the hybrid; no conclusion | fix before any reading |
+| Output near uniform over digits without the note; no primary layer beats its null after Holm on the paired test; positive control responds at p < 1e-3 in matched context | World A generalises | D4 unchanged; note discipline stays load-bearing |
+| Positive control fails (the already-read suffix's probability does not respond to its own context, in either direction) | instrument broken on the hybrid; no conclusion | fix before any reading |
 | Partial (late layers only, or weak preference) | degraded trace; report as such | no design change; extend with word-token discriminators (batch_update modes) |
 
 ## 3. Method (the 3B design, unchanged where it can be)
@@ -102,7 +110,23 @@ family per readout, as the P2 tables do.
    stands; the record says so rather than leaving it to be discovered from the artifact.
    Corpus size 16 contexts (the paper's floor
    is ten); (c) logit lens at the same layers as the no-Jacobian baseline.
-3. **Statistic.** Per point, is the true suffix's first token more probable than a wrong,
+3. **Statistic.** **Required decomposition (Head of Interpretability, ratified by the Chief,
+   2026-09-05).** An ordering statistic compares two probabilities and cannot say which one
+   moved. For each readout: P(true suffix) matched against mismatched, and P(already-read
+   suffix) matched against mismatched, each as a paired test over the same cases. **The artifact
+   computes it for every readout, unconditionally** (Chief, 2026-09-05, #72): emitting it only
+   where the ordering test reaches significance would make the block's presence a selection, and
+   a decomposition at a non-significant readout is evidence too. Run 2 is its own proof — the
+   model's own output does **not** reach paired significance on the ordering (p = 0.180), and its
+   decomposition is the centrepiece of the reading. A conditional rule would have suppressed the
+   single most important block in this experiment. The reading then reports the decompositions
+   that bear on the verdict, and the markdown renderer may show only those; the JSON carries all.
+   This is what distinguishes a trace of the hidden filename from a response to the visible one,
+   and on run 2 it was the whole result: at five readouts spanning both block kinds and the
+   workspace band, P(true) never moved (p = 0.644 to 0.878) while P(already-read) always did
+   (p = 0.0001 to 0.0029). Without it, `logit_lens_L27` at paired p = 0.0005 reads as a
+   late-layer partial trace, which is row four of §2, and it is not one.
+   Per point, is the true suffix's first token more probable than a wrong,
    previously-seen one? Matched context vs the same pair scored against another task's
    context (the null). Exact two-sided sign test; report both columns per readout, as the 3B
    table does. Positive control: the already-read suffix in matched vs mismatched context.

@@ -385,3 +385,24 @@ Worktree `wt-hybrid-period` off `c349739`; eight files; disjoint from stage 2. R
   fake is kept under a name saying what it covers.
 - My run: 128 passed across the four suites in the worktree, ruff clean; the Deputy's full
   suite 1177 passed (pre-stage-2 base). Citation for the reruns: the fix commit.
+
+## Gate: adapter-wrapped standard fixtures (#52), 2026-09-05 ~05:30
+
+Main tree, two files (`tests/test_arch.py`, `tests/test_probes.py`), read in full.
+**Approved to commit after the last EXP-001 artifact.**
+- `wrap_with_adapter` runs `mlx_lm.tuner.utils.linear_to_lora_layers` over the fake's text
+  module with production's argument shape (keys, rank, scale, dropout), so the fixture holds
+  the library's own `LoRALinear` wrappers, and it raises naming the keys if nothing was
+  wrapped. `make_fake(factory, variant)` gives every standard fake a bare and a wrapped form;
+  eleven structural tests are parametrised over both.
+- `make_quantized_dense_fake` is quantized by `nn.quantize` (group 64, 4 bits) into real
+  `QuantizedLinear` modules; it is wider than the other fakes because `mx.quantize` accepts
+  only group sizes 32/64/128, stated in its docstring. Wrapped, it is the shape an adapter load
+  produces over the real 4-bit base, exercised through the view's block walk, dimension reader
+  and residual capture.
+- The #27 blindness is pinned: the view's discovery unwraps `.linear` at `arch.py:318-320`,
+  and the wrapped-variant tests go red without it. Path-keyed consumers see the same paths;
+  dimension readers get the module that owns the weights.
+- Noted, not a defect: `lora_b` initialises to zero, so wrapped and bare are numerically
+  identical and the exact residual equality holds; the variants test structure, not
+  arithmetic. R38 in shape before R38 was written. Deputy's run: 126 passed on the CPU device.
