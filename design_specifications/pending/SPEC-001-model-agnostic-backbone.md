@@ -53,7 +53,8 @@ train:
   learning_rate: 3.0e-5
   grad_checkpoint: true
 cache:
-  strategy: auto               # auto | trim | snapshot | none   (§5)
+  strategy: auto               # auto | trim | snapshot | none   (§5; ruling R1 in the wiring map)
+  equivalence_verified: null   # {date, sha256} written only after research/cache_equivalence.py passes for this model
 probes:
   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]   # §8
 memory:
@@ -165,7 +166,7 @@ error exactly as today.
 ## 5. Cross-turn cache strategy
 
 `runner.TurnCache` becomes an interface with two implementations chosen by
-`spec.cache.strategy` (`auto` picks by `view.cache_trimmable`):
+`spec.cache.strategy` (`auto`: `trim` if trimmable, else `snapshot` only when `equivalence_verified` is set, else `none`; wiring map ruling R1):
 
 - `TrimCache`: the existing longest-common-prefix trim (dense KV only).
 - `SnapshotCache`: after the first turn's prefill, snapshot the cache state at the token boundary
@@ -191,7 +192,7 @@ embeddings included). Policies:
 | Policy | Modules |
 | --- | --- |
 | `attention+mlp` | `q_proj k_proj v_proj o_proj gate_proj up_proj down_proj` where present (reproduces the 3B recipe) |
-| `all-linear` | the above plus, in linear-attention blocks, `in_proj_qkvz in_proj_ba out_proj` |
+| `all-linear` | the above plus, in linear-attention blocks, every `nn.Linear` the block owns: installed mlx-lm 0.31.3 `qwen3_5.py` uses `in_proj_qkv in_proj_z in_proj_b in_proj_a out_proj`; the `qwen3_next.py` layout uses `in_proj_qkvz in_proj_ba out_proj`; discover by type, accept both name sets (correction 2026-09-03 evening, confirmed against the installed source) |
 | `auto` | `attention+mlp` for dense models, `all-linear` for hybrids |
 | explicit | validated against the module tree; unknown names abort |
 
@@ -252,10 +253,11 @@ probe on a model not yet in `outputs/preflight/`.
 - `uv run pytest` passes with the fake dense and fake hybrid models parametrised through the
   capture, J-lens, injection, block-mask, cache-snapshot, rendering, thinking-parse, LoRA-key,
   adapter-delta-parsing, and provenance tests.
-- `agent-pipeline data` regenerates `data/agent_v2c` byte-for-byte for `qwen25-coder-3b` with
-  `thinking: unsupported` (the rendered `prompt` rows must tokenise identically to the old
-  `messages` rows; a migration test proves it).
+- `agent-pipeline data` for `qwen25-coder-3b` with `thinking: unsupported` reproduces the pinned
+  hashes of the current `GENERATOR_VERSION` (ruling R5), and the rendered `prompt`/`completion`
+  rows tokenise identically to the `messages` rendering of the same rows (migration test).
 - `preflight` output exists for `qwen25-coder-3b` and `qwen35-4b` once runs are permitted.
+- Provenance records the git commit hash and a dirty-tree patch: the workspace is now a git checkout (branch `codex/agent-v2-specs`, baseline `bda5ff5`), so `write_provenance` must include `git.commit`, `git.branch`, and `git.dirty_patch_sha256` alongside the per-file hashes.
 
 ## 12. Review checklist for the implementer
 
