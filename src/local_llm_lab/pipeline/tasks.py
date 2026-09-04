@@ -42,6 +42,22 @@ P2_SPLITS: tuple[tuple[str, int, bool], ...] = (
     ("p2-d2", 2, False),
 )
 P2_SPLIT_NAMES: tuple[str, ...] = tuple(name for name, _level, _perturb in P2_SPLITS)
+
+# EXP-001 §3.1 (issue #54): the J-space sweep split, in the same (name, difficulty, perturb)
+# shape and for the same reason. ``_difficulty_level`` alternates 0/1 on a split name it does
+# not know and ``make_tasks`` perturbs any split that is not valid/test, so a sweep that leaned
+# on those defaults could not be replayed from its artifact.
+#
+# Purely declarative: ``make_tasks`` and ``_difficulty_level`` are untouched, and
+# :func:`make_jspace_tasks` is what applies the two fields for the caller, exactly as
+# ``make_p2_tasks`` does. Difficulty 1 is not a new choice either -- it is the value the
+# alternation already produces for every ``ledger_reconcile`` task of this split, because that
+# family sits at index 7 of the twelve ``FAMILIES`` and 7, 19, 31, ... are all odd -- so naming
+# it changes no task the recorded sweep drew from.
+JSPACE_SPLITS: tuple[tuple[str, int, bool], ...] = (("jsweep", 1, False),)
+JSPACE_SPLIT_NAMES: tuple[str, ...] = tuple(name for name, _level, _perturb in JSPACE_SPLITS)
+# EXP-001 §3.1: "720 tasks".
+JSPACE_SPLIT_LIMIT = 720
 # SPEC-004 §2: "120 tasks each".
 P2_SPLIT_LIMIT = 120
 # The placeholder the split name is rewritten to before a task is fingerprinted (R28).
@@ -208,6 +224,26 @@ def make_p2_tasks(name: str, limit: int, seed: int) -> list[Task]:
     """
     _name, level, perturb = p2_split(name)
     return make_tasks(_name, limit, seed, perturb=perturb, difficulty=level)
+
+
+def jspace_split(name: str) -> tuple[str, int, bool]:
+    """Return the ``JSPACE_SPLITS`` entry for ``name``, or raise if it is not a sweep split."""
+    for entry in JSPACE_SPLITS:
+        if entry[0] == name:
+            return entry
+    known = ", ".join(JSPACE_SPLIT_NAMES)
+    raise ValueError(f"{name!r} is not a J-space sweep split (known: {known})")
+
+
+def make_jspace_tasks(name: str, count: int, seed: int) -> list[Task]:
+    """Generate the EXP-001 §3.1 sweep split with its declared difficulty and perturbation.
+
+    The counterpart of :func:`make_p2_tasks`: the helper, not the caller, carries the two
+    fields the split table fixes, so an artifact that records the split name and the seed
+    records everything needed to regenerate the probe points (R12/R23 replay).
+    """
+    _name, level, perturb = jspace_split(name)
+    return make_tasks(_name, count, seed, perturb=perturb, difficulty=level)
 
 
 def split_of_task_id(task_id: str) -> str:

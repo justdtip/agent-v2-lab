@@ -117,10 +117,15 @@ def test_probe_layers_threads_selected_method_and_emits_it(monkeypatch) -> None:
     view = _View()
     selected: list[str] = []
 
-    def fake_map(_view, _layer, probe, _corpus, *, position, method):
-        del position
+    def fake_map(
+        _view, _layer, probe, _corpus, *, source_positions, readouts, method, capture_dtype
+    ):
+        del source_positions, capture_dtype
         selected.append(method)
-        return probe, {"used": 1, "skipped": 0, "method": method}
+        return (
+            {name: probe for name in readouts},
+            {"used": 1, "skipped": 0, "method": method, "window": {}, "source_positions": []},
+        )
 
     class Tokenizer:
         def encode(self, text, add_special_tokens=False):
@@ -130,7 +135,7 @@ def test_probe_layers_threads_selected_method_and_emits_it(monkeypatch) -> None:
         def decode(self, _ids):
             return "x"
 
-    monkeypatch.setattr(jlens, "jlens_map", fake_map)
+    monkeypatch.setattr(jlens, "jlens_readouts", fake_map)
     records = jlens.probe_layers(
         view,
         Tokenizer(),
@@ -146,7 +151,7 @@ def test_probe_layers_threads_selected_method_and_emits_it(monkeypatch) -> None:
     assert records[0]["jvp_method"] == "finite_difference"
 
 
-def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> None:
+def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch, tmp_path) -> None:
     from local_llm_lab.pipeline import evaluate, tasks
     from local_llm_lab.probes import guard, policies
 
@@ -174,12 +179,24 @@ def test_jlens_cli_checks_gpu_before_cache_setup_or_model_load(monkeypatch) -> N
         load=lambda *_args, **_kwargs: pytest.fail("used the legacy direct MLX loader")
     )
     monkeypatch.setitem(__import__("sys").modules, "mlx_lm", fake_mlx_lm)
-    monkeypatch.setattr("sys.argv", ["agent-v2-jlens", "--jvp-method", "finite_difference"])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-jlens",
+            "--jvp-method",
+            "finite_difference",
+            "--skip-preflight-check",
+            "--log-dir",
+            str(tmp_path / "run"),
+        ],
+    )
 
     with pytest.raises(SystemExit, match="7"):
         jlens.main()
 
     assert calls == ["guard", "load"]
+    # R26(a): the log covers the whole run, so it exists even on the failing path.
+    assert (tmp_path / "run" / "run.log").is_file()
 
 
 @pytest.mark.parametrize(
@@ -216,9 +233,11 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
     from local_llm_lab.probes import guard, policies
 
     selected = SimpleNamespace(
+        name="fake-model",
         hf_id="fake/hf",
         policies={},
         probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
+        chat=SimpleNamespace(template_kwargs={}),
     )
     model = object()
 
@@ -254,7 +273,12 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
         evaluate,
         "load_policy",
         lambda given, adapter: seen.append(("model", given.hf_id, adapter))
-        or (model, tokenizer, SimpleNamespace(num_layers=32), object()),
+        or (
+            model,
+            tokenizer,
+            SimpleNamespace(num_layers=32),
+            SimpleNamespace(as_dict=lambda: {"resolved": "fake"}),
+        ),
     )
     monkeypatch.setitem(
         __import__("sys").modules,
@@ -287,6 +311,9 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
             "1",
             "--top-k",
             "1",
+            "--jvp-method",
+            "finite_difference",
+            "--skip-preflight-check",
             "--output",
             str(output),
             *layer_arguments,
@@ -385,3 +412,492 @@ def test_jlens_rejects_policy_and_adapter_alias_together(monkeypatch, tmp_path, 
 
     assert raised.value.code == 2
     assert "cannot be used together" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------- EXP-001 (issue #54) additions
+
+
+class _BroadcastView(_View):
+    """A tail that carries a source position forward, the way a recurrent state does.
+
+    ``cumsum`` over the position axis makes the output at every position after the source
+    depend on the source, so ``self``, ``future`` and ``all`` are genuinely different
+    readouts rather than three names for one number.
+    """
+
+    def tail(self, layer):
+        del layer
+        return lambda value: mx.cumsum(value.astype(mx.float32), axis=1)
+
+
+def test_jvp_method_defaults_to_the_method_the_preflight_recorded(tmp_path) -> None:
+    """R18a/EXP-001 §3.2: the established method, not the literal ``forward``."""
+    spec = SimpleNamespace(name="fake-model")
+    (tmp_path / "fake-model.json").write_text(
+        json.dumps({"jvp": {"finite": True, "layer": 4, "method": "finite_difference"}}),
+        encoding="utf-8",
+    )
+
+    assert jlens.resolve_jvp_method(None, spec, output_root=tmp_path) == (
+        "finite_difference",
+        "preflight",
+    )
+    assert jlens.resolve_jvp_method("forward", spec, output_root=tmp_path) == ("forward", "cli")
+
+
+def test_jvp_method_without_a_flag_or_a_preflight_record_fails_closed(tmp_path) -> None:
+    """Neither source establishes a method: a named error, never a silent default."""
+    spec = SimpleNamespace(name="fake-model")
+
+    with pytest.raises(jlens.JvpMethodUnresolved) as raised:
+        jlens.resolve_jvp_method(None, spec, output_root=tmp_path)
+
+    assert "fake-model" in str(raised.value)
+
+
+def test_future_readout_raises_rather_than_reading_a_structural_zero() -> None:
+    """The Head of Interpretability's A1: an empty window raises, naming context and position."""
+    probe = mx.array([3.0], dtype=mx.float32)
+
+    with pytest.raises(jlens.EmptyFutureWindowError) as raised:
+        jlens.jlens_readouts(
+            _BroadcastView(),
+            1,
+            probe,
+            [[1, 2, 3]],
+            source_positions=jlens.resolve_source_positions("-1"),
+        )
+
+    message = str(raised.value)
+    assert "context 0" in message and "position 2" in message
+
+
+def test_self_future_and_all_are_three_distinct_readouts_of_one_jvp() -> None:
+    """B3: one JVP per context yields self, future and all; ``all`` is their sum."""
+    probe = mx.array([3.0], dtype=mx.float32)
+
+    mapped, stats = jlens.jlens_readouts(
+        _BroadcastView(),
+        1,
+        probe,
+        [[1, 2, 3, 4]],
+        source_positions=jlens.resolve_source_positions("0.25"),
+    )
+
+    # source at position 1 of a 4-token context: the cumulative tail carries the tangent to
+    # positions 1, 2 and 3, so self = probe, future = 2 * probe, all = 3 * probe.
+    np.testing.assert_allclose(np.asarray(mapped["self"]), [3.0], atol=1e-3)
+    np.testing.assert_allclose(np.asarray(mapped["future"]), [6.0], atol=1e-3)
+    np.testing.assert_allclose(np.asarray(mapped["all"]), [9.0], atol=1e-3)
+    assert stats["window"]["median_future_window"] == 2
+
+
+class _CharTokenizer:
+    """One id per character: long enough corpus contexts without a real tokenizer."""
+
+    bos_token = None
+
+    def encode(self, text, add_special_tokens=False):
+        del add_special_tokens
+        return [ord(character) % 64 for character in text]
+
+    def decode(self, ids):
+        return "".join(chr(64 + int(i) % 26) for i in ids)
+
+    def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=False, **kwargs):
+        del add_generation_prompt, tokenize, kwargs
+        return "\n".join(str(message["content"]) for message in messages)
+
+
+class _CliView(_BroadcastView):
+    num_layers = 4
+    vocabulary = 64
+
+    def layer_kind(self, index):
+        return "linear_attention" if (index + 1) % 4 else "attention"
+
+    def unembed(self, value):
+        return (value.astype(mx.float32) * mx.ones((self.vocabulary,), dtype=mx.float32))
+
+
+def _fake_preflight(tmp_path, spec):
+    root = tmp_path / "preflight"
+    root.mkdir(exist_ok=True)
+    (root / f"{spec.name}.json").write_text(
+        json.dumps(
+            {
+                "jvp": {"finite": True, "layer": 2, "method": "finite_difference"},
+                "fp32_manual_vs_native": {"frobenius_relative": 0.004, "max_abs": 0.02},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_jlens_main_logs_one_event_per_layer_and_records_r34_and_r35(
+    monkeypatch, tmp_path
+) -> None:
+    """R26(a)(g), R34, R35, R18a and the preflight-recorded JVP default, end to end."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, preflight, tasks
+    from local_llm_lab.probes import guard, policies
+
+    spec = models.load_model_spec("qwen35-4b")
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", _fake_preflight(tmp_path, spec))
+    monkeypatch.setattr(preflight, "require_preflight", lambda *_args, **_kwargs: None)
+    task = SimpleNamespace(
+        steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
+        files={"x": ""},
+        task_id="fake",
+    )
+    monkeypatch.setattr(tasks, "make_tasks", lambda *_args, **_kwargs: [task])
+    monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
+    monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_args, **_kwargs: (object(), _CharTokenizer(), _CliView(), None),
+    )
+    monkeypatch.setattr(jlens, "render_probe_prompt", lambda *_args, **_kwargs: "note prefix")
+    monkeypatch.setattr(jlens, "_print_table", lambda *_args: None)
+    output = tmp_path / "run" / "jlens.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-jlens",
+            "--model",
+            "qwen35-4b",
+            "--layers",
+            "2,3",
+            "--corpus-size",
+            "2",
+            "--corpus-length",
+            "24",
+            "--top-k",
+            "1",
+            "--skip-preflight-check",
+            "--output",
+            str(output),
+        ],
+    )
+
+    jlens.main()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["jvp_method"] == "finite_difference"
+    assert payload["jvp_method_source"] == "preflight"
+
+    conformance = payload["conformance"]
+    for key in (
+        "layer_index_convention",
+        "layers",
+        "layer_kinds",
+        "source_positions",
+        "output_positions_read",
+        "readouts",
+        "primary_readout",
+        "self_only_limiting_case",
+        "corpus_size",
+        "corpus_length",
+        "window",
+        "jvp_method",
+        "jvp_method_source",
+        "capture_dtype",
+    ):
+        assert key in conformance, key
+    assert "after block L-1" in conformance["layer_index_convention"]
+    assert conformance["window"]["median_future_window"] >= 1
+    assert set(conformance["readouts"]) == set(jlens.READOUTS)
+
+    comparability = payload["comparability"]
+    for key in (
+        "policy",
+        "adapter",
+        "derivative_method",
+        "prompt_rendering",
+        "estimator_variant",
+        "layer_selection",
+        "generator_version",
+        "fp32_manual_vs_native",
+    ):
+        assert key in comparability, key
+    assert comparability["prompt_rendering"]["template_kwargs"] == dict(
+        spec.chat.template_kwargs
+    )
+    assert comparability["fp32_manual_vs_native"] == {
+        "frobenius_relative": 0.004,
+        "max_abs": 0.02,
+    }
+
+    run_log = output.parent / "run.log"
+    events = output.parent / "events.jsonl"
+    assert run_log.is_file() and events.is_file()
+    records = [json.loads(line) for line in events.read_text(encoding="utf-8").splitlines()]
+    layer_events = [
+        record for record in records if record.get("label") == "layer"
+    ]
+    assert [record["step"] for record in layer_events] == [1, 2]
+    assert records[0]["kind"] == "start"
+    assert records[-1]["kind"] == "end"
+
+
+# --------------------------------------- EXP-001 §3.5 (issue #54): the kind-matched family
+
+
+def _hybrid_args(**overrides):
+    """A real ``TextModelArgs`` at toy width.
+
+    R31: the seam this slice leans on is the library's hybrid period, so the configuration
+    dataclass and ``DecoderLayer`` are the real ones; only the widths are shrunk, and no
+    weights are loaded. Left alone, ``num_hidden_layers`` and ``full_attention_interval``
+    carry the 4B's own values, which is what EXP-001 §3.5 pre-registers its layer list from.
+    """
+    from mlx_lm.models import qwen3_5
+
+    tiny = {
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "vocab_size": 64,
+        "linear_num_value_heads": 4,
+        "linear_num_key_heads": 2,
+        "linear_key_head_dim": 8,
+        "linear_value_head_dim": 8,
+    }
+    return qwen3_5.TextModelArgs(**{**tiny, **overrides})
+
+
+def _library_layer_kinds(args) -> dict[int, str]:
+    """Probe-layer kinds from the library's own ``DecoderLayer.is_linear`` (R31).
+
+    Probe layer ``L`` is the residual after block ``L - 1`` (R34), so block ``index`` writes
+    probe layer ``index + 1``.
+    """
+    from mlx_lm.models import qwen3_5
+
+    return {
+        index + 1: (
+            "linear_attention"
+            if qwen3_5.DecoderLayer(args=args, layer_idx=index).is_linear
+            else "attention"
+        )
+        for index in range(args.num_hidden_layers)
+    }
+
+
+def test_in_band_layers_drop_the_shallow_fraction_and_the_final_layer() -> None:
+    """EXP-001 §2: fractions 1/3 to 5/6 decide; fraction 1/6 and the final layer are reported."""
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.probes.policies import resolve_layers
+
+    depth = _hybrid_args().num_hidden_layers
+    selection = resolve_layers(None, load_model_spec("qwen35-4b"), depth)
+
+    band = jlens.in_band_layers(selection.indices, depth)
+
+    assert band == tuple(
+        index
+        for index in selection.indices
+        if round(depth / 3) <= index <= round(depth * 5 / 6) and index != depth
+    )
+    assert selection.indices[0] not in band
+    assert depth not in band
+
+
+def test_kind_matched_family_reproduces_the_4b_sweep_from_its_own_configuration() -> None:
+    """EXP-001 §3.5 and issue #54: registry fractions plus ``full_attention_interval`` partners.
+
+    The expectation is computed from the library's own layer kinds and the registry's own
+    fractions; no layer list is written down here, so a change to either source shows up as a
+    failure rather than as a quietly different sweep.
+    """
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.probes.policies import resolve_layers
+
+    args = _hybrid_args()
+    kinds = _library_layer_kinds(args)
+    depth = args.num_hidden_layers
+    selection = resolve_layers(None, load_model_spec("qwen35-4b"), depth)
+
+    family = jlens.kind_matched_layer_family(
+        selection.indices,
+        num_layers=depth,
+        period=args.full_attention_interval,
+        kind_of=kinds.get,
+    )
+
+    attention = tuple(layer for layer, kind in kinds.items() if kind == "attention")
+    expected_partners = tuple(
+        sorted(
+            {
+                min(attention, key=lambda candidate: (abs(candidate - layer), candidate))
+                for layer in jlens.in_band_layers(selection.indices, depth)
+                if kinds[layer] != "attention"
+            }
+        )
+    )
+    assert family.partners == expected_partners
+    assert family.layers == tuple(sorted(set(selection.indices) | set(expected_partners)))
+    assert len(family.layers) == len(selection.indices) + len(expected_partners)
+    assert all(1 <= layer <= depth for layer in family.layers)
+    assert family.kinds == {layer: kinds[layer] for layer in family.layers}
+    assert family.period == args.full_attention_interval
+
+    # §3.5 structurally: an in-band layer written by a recurrent block is paired with an
+    # attention-written layer nearer than one hybrid period; an in-band layer that is itself
+    # an attention output takes no partner.
+    for layer in family.in_band:
+        assert family.roles[layer] == "primary"
+        if kinds[layer] == "attention":
+            assert layer not in family.pairs
+        else:
+            partner = family.pairs[layer]
+            assert kinds[partner] == "attention"
+            assert 0 < abs(partner - layer) < family.period
+            assert family.roles[partner] in ("partner", "primary")
+    for layer in family.partners:
+        assert family.roles[layer] == "partner"
+    assert set(family.primary_layers) == set(family.in_band) | set(family.partners)
+
+
+@pytest.mark.parametrize(("layer", "expected"), [(5, 4), (6, 4), (7, 8)])
+def test_partner_is_the_nearest_opposite_kind_layer_and_the_lower_index_on_a_tie(
+    layer: int, expected: int
+) -> None:
+    """Smaller depth difference wins; an exact tie takes the lower index."""
+    family = jlens.kind_matched_layer_family((layer,), num_layers=8, period=4)
+
+    assert family.pairs == {layer: expected}
+    assert family.partners == (expected,)
+    assert family.layers == tuple(sorted((layer, expected)))
+    assert family.kinds[expected] == "attention"
+    assert family.kinds[layer] == "linear_attention"
+
+
+@pytest.mark.parametrize(
+    ("period", "fragment"),
+    [(None, "full_attention_interval"), (1, "every layer"), (9, "exceeds")],
+)
+def test_a_configuration_with_one_block_kind_keeps_the_selection_and_records_why(
+    period: int | None, fragment: str
+) -> None:
+    """No opposite kind exists, so the sweep is the selection itself with the reason recorded.
+
+    It returns rather than raises because EXP-001 §5 runs this same code on the dense 3B as
+    the R35 comparator, where every layer is an attention output.
+    """
+    selected = (3, 5, 8)
+
+    family = jlens.kind_matched_layer_family(selected, num_layers=8, period=period)
+
+    assert family.layers == selected
+    assert family.partners == ()
+    assert family.pairs == {}
+    assert family.derived is True
+    assert fragment in family.reason
+
+
+def test_explicit_layers_are_honoured_verbatim_and_take_no_partners() -> None:
+    """An operator's own list is the list; the derivation is bypassed and marked as bypassed."""
+    family = jlens.kind_matched_layer_family((7, 5), num_layers=8, period=4, derive=False)
+
+    assert family.layers == (7, 5)
+    assert family.partners == ()
+    assert set(family.roles.values()) == {"explicit"}
+    assert family.derived is False
+    assert "verbatim" in family.reason
+
+
+def test_hybrid_period_is_read_from_the_loaded_models_own_configuration() -> None:
+    """The period is configuration, never a literal: it is read off a real ``TextModelArgs``."""
+    args = _hybrid_args(num_hidden_layers=10, full_attention_interval=3)
+    view = SimpleNamespace(model=SimpleNamespace(language_model=SimpleNamespace(args=args)))
+
+    period, source = jlens.hybrid_period(view)
+
+    assert period == args.full_attention_interval
+    assert source.endswith("full_attention_interval")
+    assert jlens.hybrid_period(SimpleNamespace()) == (None, "unavailable")
+
+
+class _HybridCliView(_CliView):
+    """A deeper hybrid for the single-decision CLI, its period from a real ``TextModelArgs``."""
+
+    num_layers = 10
+
+    def __init__(self) -> None:
+        self.args = _hybrid_args(num_hidden_layers=self.num_layers, full_attention_interval=3)
+        self.model = SimpleNamespace(language_model=SimpleNamespace(args=self.args))
+        self._kinds = _library_layer_kinds(self.args)
+
+    def layer_kind(self, index):
+        return self._kinds[index + 1]
+
+
+def test_jlens_default_layers_take_the_kind_matched_family(monkeypatch, tmp_path) -> None:
+    """EXP-001 §3.4 omits ``--layers``, so the spot check must sweep the derived family too."""
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, preflight, tasks
+    from local_llm_lab.probes import guard, policies
+
+    spec = models.load_model_spec("qwen35-4b")
+    view = _HybridCliView()
+    monkeypatch.setattr(preflight, "_OUTPUT_DIRECTORY", _fake_preflight(tmp_path, spec))
+    monkeypatch.setattr(preflight, "require_preflight", lambda *_args, **_kwargs: None)
+    task = SimpleNamespace(
+        steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
+        files={"x": ""},
+        task_id="fake",
+    )
+    monkeypatch.setattr(tasks, "make_tasks", lambda *_args, **_kwargs: [task])
+    monkeypatch.setattr(jlens, "_replay_to_step", lambda *_args: ([], []))
+    monkeypatch.setattr(jlens, "_unseen_path", lambda *_args: "other")
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda *_args: None)
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_args, **_kwargs: (object(), _CharTokenizer(), view, None),
+    )
+    monkeypatch.setattr(jlens, "render_probe_prompt", lambda *_args, **_kwargs: "note prefix")
+    monkeypatch.setattr(jlens, "_print_table", lambda *_args: None)
+    output = tmp_path / "run" / "jlens.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-jlens",
+            "--model",
+            "qwen35-4b",
+            "--corpus-size",
+            "2",
+            "--corpus-length",
+            "24",
+            "--top-k",
+            "1",
+            "--skip-preflight-check",
+            "--output",
+            str(output),
+        ],
+    )
+
+    jlens.main()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    family = payload["layer_family"]
+    assert payload["layer_selection"]["source"] == "registry-default"
+    assert family["derived"] is True
+    assert family["hybrid_period"] == view.args.full_attention_interval
+    assert family["partners"]
+    assert payload["layers"] == family["layers"]
+    assert set(family["layers"]) > set(payload["layer_selection"]["indices"])
+    assert payload["conformance"]["layer_family"] == family
+    assert payload["comparability"]["layer_family"] == family
+    for layer in family["partners"]:
+        assert payload["layer_roles"][str(layer)] == "partner"
+        assert payload["layer_kinds"][str(layer)] == "attention"
+    assert [record["layer"] for record in payload["records"]] == family["layers"]
