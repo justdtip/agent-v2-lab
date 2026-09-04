@@ -134,8 +134,8 @@ class _MetricArray:
 
 class _MetricApi:
     _info = {
-        "bfloat16": SimpleNamespace(eps=2**-7, tiny=2**-126),
-        "float32": SimpleNamespace(eps=2**-23, tiny=2**-126),
+        "bfloat16": SimpleNamespace(eps=2**-7, smallest_normal=2**-126),
+        "float32": SimpleNamespace(eps=2**-23, smallest_normal=2**-126),
     }
 
     @staticmethod

@@ -143,3 +143,43 @@ exit 0: All checks passed!
 
 No model, checkpoint, tokenizer, preflight, or control command was run. Canonical artifact SHA-256
 remains `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`.
+
+## Runtime fix round 2: MLX finfo floor
+
+The controller verified the Qwen3.5 native-loop target was absent, acquired `model-execution` at
+claim revision 3, and ran exactly once:
+
+```text
+.venv/bin/python -c 'from pathlib import Path; from local_llm_lab.pipeline.preflight import run_residual_control; run_residual_control("qwen35-4b", output_path=Path("outputs/preflight/issue-15-controls/qwen35-native-loop.json"))'
+```
+
+It exited 1 before artifact write in `_residual_metrics` with
+`AttributeError: 'finfo' object has no attribute 'tiny'`; the target remains absent. The controller
+released `model-execution` at claim revision 4. The canonical artifact remained SHA-256
+`499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`.
+
+The installed MLX finfo contract uses `.smallest_normal`, not NumPy's `.tiny`. RED changed the
+metric fake to expose only `.smallest_normal` and ran:
+
+```text
+.venv/bin/python -m pytest -q tests/test_preflight.py::test_residual_metrics_follow_the_reference_dtype_and_scale
+exit 1: AttributeError: 'types.SimpleNamespace' object has no attribute 'tiny'
+```
+
+The minimal fix substitutes `info.smallest_normal` for the scale floor in both the absolute and
+relative formula through their shared `floor`; `2 * epsilon`, exact pre-control equality, gates,
+and execution boundaries are unchanged. GREEN at shared HEAD
+`d17feb316b8b3c9aace0b8597ad342f0aa8a56ca`:
+
+```text
+.venv/bin/python -m pytest -q tests/test_preflight.py
+exit 0: 26 passed
+
+.venv/bin/python -m pytest -q tests/test_arch.py tests/test_preflight.py
+exit 0: 27 passed
+
+.venv/bin/ruff check src/local_llm_lab/arch.py src/local_llm_lab/pipeline/preflight.py tests/test_arch.py tests/test_preflight.py
+exit 0: All checks passed!
+```
+
+No model, checkpoint, tokenizer, preflight, control, or retry was run during this remediation.

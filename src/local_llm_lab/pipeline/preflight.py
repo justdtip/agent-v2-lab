@@ -301,7 +301,7 @@ def _residual_metrics(actual: Any, reference: Any, *, array_api: Any) -> dict[st
     """Describe an error against the precision and scale of its native reference."""
     info = array_api.finfo(reference.dtype)
     scale = _scalar(array_api.max(array_api.abs(reference)))
-    floor = max(scale, float(info.tiny))
+    floor = max(scale, float(info.smallest_normal))
     relative_tolerance = 2.0 * float(info.eps)
     absolute_tolerance = relative_tolerance * floor
     max_abs_error = _scalar(array_api.max(array_api.abs(actual - reference)))
