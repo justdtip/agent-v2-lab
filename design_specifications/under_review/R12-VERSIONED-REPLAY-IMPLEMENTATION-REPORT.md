@@ -45,8 +45,8 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 
 ## R13 full fake-only suite
 
-- HEAD: pending final gate
+- HEAD: `d94a9f07f88c0312dbfa809dd0abcbd5a041865d`
 - Command: `uv run pytest -q`
-- Exit code: pending final gate
-- Result: pending final gate
-- Failing node names: pending final gate
+- Exit code: `0`
+- Result: `478 passed, 0 failed, 0 xfailed`
+- Failing node names: none
