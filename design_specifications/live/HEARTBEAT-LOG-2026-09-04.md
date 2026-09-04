@@ -705,3 +705,11 @@ recording the execution rule. No execution lane designated yet.
   not match run C's aggregate_report note style (F empty; parse_error) — with the Chief on
   #41 alongside the n = 2 gap; recommendation: extend the extractor, HEAD-alone eligibility,
   run the ledger primary first. Findings posted verbatim on #41.
+
+## 2026-09-05 — B4 attempt 2 failed at the first step: dataset protocol mismatch (mlx_lm 0.31.3)
+
+- Loader passed; 12 LoRA targets, 32.465M trainable (0.772%); then `CacheDataset.__getitem__`
+  called `RenderedRowsDataset.process` — absent (our adapter implements the pre-0.31 protocol).
+  Added to the in-flight fix slice as the top item (implement `process` → `(tokens, offset)`;
+  verify against the real `CacheDataset`/`iterate_batches` with a fake tokenizer; red-first).
+  health.json again "healthy" at 0 iterations — same slice. Posted on #18. Lane free.
