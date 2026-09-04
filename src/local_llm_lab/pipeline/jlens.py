@@ -79,13 +79,16 @@ variant it names is the following.
   fractions of the context (``--source-positions``, default
   ``0.25,0.5,0.75``) or as explicit indices. The mapping function's historical default
   was the last token, where the future window is empty.
-- **Output positions read.** ``self`` reads the output tangent at the source position (the
-  paper's self-only limiting case, the variant every J-lens number in this repository was
-  drawn under before this module changed); ``future`` sums the output tangent over every
-  position strictly after the source (the paper's broadcast component); ``all`` is their
-  sum (the paper's default estimator up to a scale the sign test ignores) and is primary.
-  All three come from one JVP per (context, source) sample. A readout whose future window
-  is empty raises :class:`EmptyFutureWindowError`; it never reads as a zero.
+- **Output positions read, and both reduction axes.** ``self`` reads the output tangent at
+  the source position (the paper's self-only limiting case, the variant every J-lens number
+  in this repository was drawn under before this module changed); ``future`` sums the output
+  tangent over every position strictly after the source (the paper's broadcast component);
+  ``all`` is their sum (the paper's default estimator up to a scale the sign test ignores)
+  and is primary. Those sums are **within** one sample; **across** samples the per-sample
+  vectors are **averaged**. Naming only one axis leaves "sum" ambiguous between the two, so
+  R34 requires both (Head of Interpretability, issue #61). All three readouts come from one
+  JVP per (context, source) sample. A readout whose future window is empty raises
+  :class:`EmptyFutureWindowError`; it never reads as a zero.
 - **Corpus size and context length.** The number of contexts averaged over and their token
   lengths; the median future window per context and per readout is recorded beside them.
 - **JVP method.** ``forward`` or ``finite_difference``, with the source it was established
@@ -771,6 +774,13 @@ def jlens_readouts(
     * ``all`` -- ``self + future``, the paper's default estimator up to a scale factor that a
       sign test ignores. Primary.
 
+    The two reduction axes are different reductions and R34 names both (Head of
+    Interpretability, issue #61): **within** a sample the output tangent is *summed* over the
+    readout's window of output positions, and **across** samples the resulting vectors are
+    *averaged* -- ``totals[name] / used`` below, so a skipped sample lowers the divisor rather
+    than entering as a zero. The paper does the same: it differentiates a sum over target
+    positions and then takes the mean over source positions and over prompts.
+
     A sample whose future window is empty raises :class:`EmptyFutureWindowError` whenever
     ``future`` or ``all`` is requested: with the source at the last token the sum is
     identically zero, and a structural zero is indistinguishable from a genuine null in
@@ -1048,6 +1058,13 @@ def conformance_block(
     derivation: the hybrid period it came from, the kind-matched pairs, and each layer's
     ``primary``/``partner`` role, so a reader can see which pairs the per-kind contrast rests
     on.
+
+    ``reduction`` names **both** reduction axes rather than only the one inside a sample. The
+    estimator sums over output positions within a sample and averages over samples, and the
+    bare word "sum" is ambiguous between the two -- which is exactly how the question the Head
+    of Interpretability answered on issue #61 arose. Only the within-sample axis was ever a
+    choice: the across-sample division is a positive global scale that ``distribution``'s final
+    RMS norm removes before the unembedding, so it cannot move a number either way.
     """
     return {
         "ruling": "R34",
@@ -1064,8 +1081,26 @@ def conformance_block(
         "source_positions": [source.as_dict() for source in source_positions],
         "output_positions_read": {
             "self": "the source position only",
-            "future": "every position strictly after the source, summed",
-            "all": "the source position and every position after it, summed",
+            "future": "every position strictly after the source, summed within a sample",
+            "all": (
+                "the source position and every position after it, summed within a sample"
+            ),
+        },
+        # Both reduction axes, named separately: the bare word "sum" does not say which of
+        # the two it governs, and that ambiguity is what raised the C2 question (Head of
+        # Interpretability, issue #61). The paper differentiates a sum over target positions
+        # and then averages over sources and prompts; this is the same pair of reductions.
+        "reduction": {
+            "within_a_sample": (
+                "the output tangent is summed over the readout's window of output positions, "
+                "one (context, source) sample at a time"
+            ),
+            "across_samples": (
+                "the per-sample vectors are averaged: the running totals are divided by the "
+                "number of samples used, so a skipped sample lowers the divisor rather than "
+                "entering as a zero"
+            ),
+            "sample": "one (corpus context, source position) pair, contributing one JVP",
         },
         "readouts": list(readouts),
         "primary_readout": PRIMARY_READOUT,
@@ -1096,6 +1131,8 @@ def comparability_block(
     jvp_method: str,
     template_kwargs: dict[str, Any],
     keep_last: int | None,
+    row_keep_last: int | None = None,
+    rewindowed: bool = True,
     estimator_variant: str,
     layer_selection: dict[str, Any] | None,
     layer_kinds: dict[int, str],
@@ -1112,6 +1149,16 @@ def comparability_block(
     difference, not a comparison, so ``policy`` and ``adapter`` sit here rather than only in
     the identity block. ``layer_family`` carries the derived list and the hybrid period behind
     it, since two sweeps whose partners differ are not the same layer selection.
+
+    Prompt rendering carries three windowing coordinates, not one (C3, issue #62). ``keep_last``
+    alone is the number handed to ``build_prompt``, which does not say what window the context
+    actually carries: a caller whose rows were already windowed by ``pipeline.data.build_rows``
+    passes the row's own tool count so that render-time windowing is a no-op, and recording only
+    that number hides both the real window and the reason it is a no-op. ``row_keep_last`` is
+    the window already built into the rows (``None`` where the caller assembled its own
+    messages), and ``rewindowed`` says whether ``build_prompt`` narrowed them further. It
+    defaults to ``True`` because ``build_prompt`` windows by default; a caller that pre-windowed
+    its rows must say so.
     """
     return {
         "ruling": "R35",
@@ -1125,6 +1172,17 @@ def comparability_block(
             "renderer": "local_llm_lab.pipeline.protocol.build_prompt",
             "template_kwargs": dict(template_kwargs),
             "keep_last": keep_last,
+            "row_keep_last": row_keep_last,
+            "rewindowed": rewindowed,
+            "windowing_rule": (
+                "row_keep_last is the observation window pipeline.data.build_rows had already "
+                "applied when the row was built (null where the caller assembled its own "
+                "messages); keep_last is the window build_prompt was asked for on top of it; "
+                "rewindowed is false where keep_last was set to the row's own tool count so "
+                "that render-time windowing is a no-op and the row's window is the one the "
+                "context carries -- re-windowing an already-stubbed observation would rewrite "
+                "its line count and corrupt the context"
+            ),
         },
         "estimator_variant": estimator_variant,
         "layer_selection": layer_selection,

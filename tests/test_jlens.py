@@ -713,8 +713,10 @@ def test_kind_matched_family_reproduces_the_4b_sweep_from_its_own_configuration(
     """EXP-001 §3.5 and issue #54: registry fractions plus ``full_attention_interval`` partners.
 
     The expectation is computed from the library's own layer kinds and the registry's own
-    fractions; no layer list is written down here, so a change to either source shows up as a
-    failure rather than as a quietly different sweep.
+    fractions, so this pins the *derivation*: the code must build the family the way §3.5 says,
+    from whatever those two sources hold. It is by construction blind to a change in the sources
+    themselves -- move the fractions and the expectation moves with them -- which is why the
+    literal nine-layer list is pinned separately below (C4, issue #62).
     """
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.probes.policies import resolve_layers
@@ -763,6 +765,36 @@ def test_kind_matched_family_reproduces_the_4b_sweep_from_its_own_configuration(
     for layer in family.partners:
         assert family.roles[layer] == "partner"
     assert set(family.primary_layers) == set(family.in_band) | set(family.partners)
+
+
+def test_the_4b_default_family_is_the_pre_registered_nine_layer_list() -> None:
+    """C4 (issue #62): pin EXP-001 §3.5's list as a literal, beside the derivation above.
+
+    The derivation test computes its expectation from the two sources the code itself reads --
+    the library's layer-kind rule and the registry's fractions -- which is the stronger test of
+    the derivation but is blind to a change in those sources: move the fractions and the
+    expectation moves with them. This one is blind to nothing, because the nine layers are
+    written down. Together they fail on a change in either source and on a change in both that
+    happens to agree, which is what §3.5 pre-registers.
+    """
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.probes.policies import resolve_layers
+
+    args = _hybrid_args()
+    depth = args.num_hidden_layers
+    selection = resolve_layers(None, load_model_spec("qwen35-4b"), depth)
+
+    family = jlens.kind_matched_layer_family(
+        selection.indices,
+        num_layers=depth,
+        period=args.full_attention_interval,
+        kind_of=_library_layer_kinds(args).get,
+    )
+
+    assert family.layers == (5, 11, 12, 16, 20, 21, 27, 28, 32)
+    assert family.partners == (12, 20, 28)
+    assert family.pairs == {11: 12, 21: 20, 27: 28}
+    assert family.in_band == (11, 16, 21, 27)
 
 
 @pytest.mark.parametrize(("layer", "expected"), [(5, 4), (6, 4), (7, 8)])

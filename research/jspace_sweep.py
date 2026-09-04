@@ -7,8 +7,16 @@ console entry point and no way to take flags from an operator. Use the installed
 
     uv run agent-v2-jspace-sweep --model <name> --output outputs/probes/jspace-<model>-<date>
 
-This wrapper exists only so the historical path keeps working. It loads model weights, so it
-runs only under a Director lift, in the single designated execution lane.
+This wrapper keeps the historical *path* working; it does not reproduce the historical
+*numbers*, and nothing here should be read as claiming it does (C5, issue #62). It now runs a
+different variant of the estimator: three readouts rather than one, interior source positions
+rather than the last token, a 128-token corpus, a derived kind-matched layer family rather than
+a literal layer list, and rendering through the registry's template kwargs. The World A table
+recorded in ``research/jspace_probe.md`` reproduces only from this script as it stood at commit
+``1953493``, the parent of ``d0adfc6`` (the commit that moved the body into the package).
+
+It loads model weights, so it runs only under a Director lift, in the single designated
+execution lane.
 """
 
 from __future__ import annotations

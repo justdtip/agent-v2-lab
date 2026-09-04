@@ -455,6 +455,111 @@ def test_empty_future_window_is_reported_rather_than_read_as_zero(monkeypatch, t
     assert jspace_sweep is not None
 
 
+def test_the_comparability_block_records_the_row_window_and_the_no_rewindow_rule(
+    monkeypatch, tmp_path
+) -> None:
+    """C3 (issue #62): ``keep_last`` alone does not let a reader reconstruct the context.
+
+    The rows reach ``select_cases`` already windowed by ``build_rows``; ``build_prompt`` is
+    then handed the row's own tool count precisely so that it re-windows nothing. Recording
+    only the number passed to ``build_prompt`` hides the window the context actually carries,
+    which is the coordinate R35 asks for.
+    """
+    from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
+
+    payload, _output, _tokenizer, _spec = _run_sweep_cli(monkeypatch, tmp_path)
+
+    rendering = payload["comparability"]["prompt_rendering"]
+    assert rendering["row_keep_last"] == DEFAULT_KEEP_LAST
+    assert rendering["rewindowed"] is False
+    assert "build_rows" in rendering["windowing_rule"]
+
+
+# ------------------------------------- C1 (issue #61): one J-lens map per distinct prompt
+
+
+class _ScoringSweepView(_SweepView):
+    """``_SweepView`` with a token-dependent unembedding.
+
+    The base fake gives every token the same logit, so its softmax is uniform and a cache that
+    served the *wrong* prompt's maps would still produce identical numbers. Here each token has
+    its own scale, so the identity assertion below can actually fail.
+    """
+
+    def unembed(self, value):
+        return value.astype(mx.float32) * mx.arange(1, self.vocabulary + 1, dtype=mx.float32)
+
+
+def _cache_probe_cases(count: int = 4) -> list[dict]:
+    """Probe points in the shape ``select_cases`` returns: distinct prompts, distinct pairs."""
+    return [
+        {
+            "task_id": f"ledger-{index}",
+            "difficulty": index % 2,
+            "prompt": f"note {'ab' * (index + 1)} Reading invoice-{index}-",
+            "prefix": f"Reading invoice-{index}-",
+            "true": f"t{index}",
+            "false": f"f{index}",
+            "true_token": index + 1,
+            "false_token": index + count + 1,
+        }
+        for index in range(count)
+    ]
+
+
+def _sweep_counting_map_computations(monkeypatch, *, cache: bool):
+    """Run ``run_sweep`` over the fakes with a spy on the J-lens map entry point."""
+    from local_llm_lab.pipeline.jlens import (
+        DEFAULT_SOURCE_POSITIONS,
+        build_corpus,
+        jlens_readouts,
+        resolve_source_positions,
+    )
+    from local_llm_lab.probes import jspace_sweep
+
+    computations: list[tuple[int, int]] = []
+
+    def counted(view, layer, probe, corpus_ids, **kwargs):
+        computations.append((layer, len(corpus_ids)))
+        return jlens_readouts(view, layer, probe, corpus_ids, **kwargs)
+
+    monkeypatch.setattr(jspace_sweep, "jlens_readouts", counted)
+    tokenizer = _SweepTokenizer()
+    payload = jspace_sweep.run_sweep(
+        _ScoringSweepView(),
+        tokenizer,
+        _cache_probe_cases(),
+        layers=[2, 3],
+        corpus_ids=build_corpus(tokenizer, size=2, length=24),
+        source_positions=resolve_source_positions(DEFAULT_SOURCE_POSITIONS),
+        method="finite_difference",
+        capture_dtype="float32",
+        cache=cache,
+    )
+    return payload, len(computations)
+
+
+def test_the_prompt_cache_halves_the_map_computations_and_changes_no_number(
+    monkeypatch,
+) -> None:
+    """C1 (issue #61): the null for case *i* is the matched computation for case *i+1*.
+
+    The rotation makes every prompt appear twice -- once as its own case's treatment, once as
+    its predecessor's null -- so without a cache every J-lens map in the run is computed
+    twice. Keyed on the prompt itself, not the case index: an index key would miss every hit
+    (the same prompt sits at two indices) and a positional key would read another prompt's
+    maps. Because the key is the prompt, the saving is exact and no number moves.
+    """
+    cases = _cache_probe_cases()
+    uncached, uncached_maps = _sweep_counting_map_computations(monkeypatch, cache=False)
+    cached, cached_maps = _sweep_counting_map_computations(monkeypatch, cache=True)
+
+    assert cached == uncached
+    assert uncached_maps == 2 * len(cases) * len(uncached["layers"])
+    assert cached_maps == len(cases) * len(cached["layers"])
+    assert uncached_maps == 2 * cached_maps
+
+
 # ------------------------------ EXP-001 §3.5 (issue #54): the derived kind-matched family
 
 

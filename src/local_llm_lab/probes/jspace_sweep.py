@@ -53,8 +53,11 @@ model's own ``full_attention_interval`` and recorded with the period, the pairs 
 layer's role. Sources are placed at the fractions given
 by ``--source-positions`` of each corpus context; ``self`` reads the output tangent at the
 source, ``future`` sums it over every strictly later position, ``all`` is their sum and is
-primary; the ``self`` readout alone is the source paper's self-only limiting case, the variant
-every J-lens number recorded here before EXP-001 was drawn under. Corpus size and minimum
+primary. Those sums are taken **within** one (context, source) sample; **across** samples the
+per-sample vectors are **averaged**. Both axes are named because the bare word "sum" does not
+say which of the two it governs (Head of Interpretability, issue #61). The ``self`` readout
+alone is the source paper's self-only limiting case, the variant every J-lens number recorded
+here before EXP-001 was drawn under. Corpus size and minimum
 context length are ``--corpus-size`` and ``--corpus-length``; the median future window per
 context and per readout is recorded in the artifact. The JVP method is the flag when given and
 otherwise the one this model's preflight established, and a run with neither fails closed.
@@ -66,6 +69,10 @@ Comparability (R35). Two J-lens tables are comparable only where policy, derivat
 layer selection (as fractions and kinds), generator version, prompt rendering and estimator
 variant agree, or every difference is named in both artifacts. Base-versus-adapter is a named
 difference, not a comparison. The artifact's ``comparability`` block carries all of them.
+Prompt rendering includes the **window**: the rows reach ``select_cases`` already windowed by
+``build_rows``, and ``build_prompt`` is handed the row's own tool count so that it re-windows
+nothing, so the block records the row window and the no-rewindow rule and not only the number
+passed to the renderer.
 
 No model runs from this docstring: the CLI loads weights, and it runs only under a Director
 lift.
@@ -261,21 +268,28 @@ def _probabilities(
     view: Any,
     tokenizer: Any,
     prompt: str,
-    candidates: dict[str, int],
+    token_ids: Sequence[int],
     *,
     layers: Sequence[int],
     corpus_ids: Sequence[Any],
     source_positions: Sequence[SourcePosition],
     method: str,
     capture_dtype: str,
-) -> tuple[dict[str, dict[str, float]], dict[int, dict[str, Any]]]:
-    """Per-layer, per-readout probability of each candidate, plus the model's own output.
+) -> tuple[dict[str, dict[int, float]], dict[int, dict[str, Any]]]:
+    """Per-layer, per-readout probability of each requested token, plus the model's own output.
 
     The model's own next-token distribution is the decisive measurement (EXP-001 §2); the lens
     readouts corroborate it. Both are returned from the same context so the pair is exact.
+
+    Keyed by **token id** rather than by candidate label, because one prompt is scored against
+    two candidate pairs -- its own case's, and its predecessor's through the rotation -- while
+    the J-lens maps behind those probabilities are one and the same computation. Separating the
+    maps from the labels is what lets :func:`run_sweep` compute each of them once (C1, issue
+    #61); ``_by_label`` puts the artifact's own shape back.
     """
     ids = encode(tokenizer, prompt)
-    result: dict[str, dict[str, float]] = {}
+    wanted = sorted(set(token_ids))
+    result: dict[str, dict[int, float]] = {}
     stats_by_layer: dict[int, dict[str, Any]] = {}
     for layer in layers:
         residual = residual_at(view, ids, layer, capture_dtype=capture_dtype)
@@ -293,19 +307,23 @@ def _probabilities(
         stats_by_layer[layer] = stats
         for name in READOUTS:
             probs = distribution(view, mapped[name]).tolist()
-            result[f"jlens_L{layer}_{name}"] = {
-                label: float(probs[token]) for label, token in candidates.items()
-            }
+            result[f"jlens_L{layer}_{name}"] = {token: float(probs[token]) for token in wanted}
         logit = distribution(view, probe).tolist()
-        result[f"logit_lens_L{layer}"] = {
-            label: float(logit[token]) for label, token in candidates.items()
-        }
+        result[f"logit_lens_L{layer}"] = {token: float(logit[token]) for token in wanted}
     final = residual_at(view, ids, view.num_layers, capture_dtype=capture_dtype)[0, -1]
     output = distribution(view, final).tolist()
-    result["model_output"] = {
-        label: float(output[token]) for label, token in candidates.items()
-    }
+    result["model_output"] = {token: float(output[token]) for token in wanted}
     return result, stats_by_layer
+
+
+def _by_label(
+    scored: dict[str, dict[int, float]], candidates: dict[str, int]
+) -> dict[str, dict[str, float]]:
+    """Re-key one prompt's token probabilities by candidate label: the artifact's own shape."""
+    return {
+        key: {label: probs[token] for label, token in candidates.items()}
+        for key, probs in scored.items()
+    }
 
 
 def run_sweep(
@@ -319,14 +337,53 @@ def run_sweep(
     method: str,
     capture_dtype: str,
     progress: Any | None = None,
+    cache: bool = True,
 ) -> dict[str, Any]:
     """Score every probe point in matched and mismatched contexts and aggregate the sign tests.
 
     ``progress`` is called once per probe point -- the outer unit of work here, since layers
     share the expensive prefill inside it -- so the run is never silent for longer than one
     point (R26 g).
+
+    ``cache`` keeps each prompt's J-lens maps so that the run computes them once (C1, issue
+    #61). The mismatched null for case *i* scores case *i*'s candidate pair against case
+    *i+1*'s prompt, which needs exactly the maps the matched computation for case *i+1* needs;
+    with the cache off, every JVP in the run is done twice. The key is **the prompt itself,
+    never the case index**: the rotation puts one prompt at two different indices, so an index
+    key would miss every hit and a positional key would read another prompt's maps (Head of
+    Interpretability, issue #61). Keyed on the prompt the saving is exact and no reported
+    number moves -- the flag exists only so a test can demonstrate that.
     """
     import mlx.core as mx
+
+    # Every token id each prompt must be scored against, gathered before the loop: a prompt is
+    # scored against its own case's pair and, one step earlier in the rotation, against its
+    # predecessor's, and both must come out of a single set of maps.
+    wanted: dict[str, set[int]] = {}
+    for index, case in enumerate(cases):
+        tokens = {case["true_token"], case["false_token"]}
+        for prompt in (case["prompt"], cases[(index + 1) % len(cases)]["prompt"]):
+            wanted.setdefault(prompt, set()).update(tokens)
+
+    computed: dict[str, tuple[dict[str, dict[int, float]], dict[int, dict[str, Any]]]] = {}
+
+    def score(prompt: str) -> tuple[dict[str, dict[int, float]], dict[int, dict[str, Any]]]:
+        if prompt in computed:
+            return computed[prompt]
+        scored = _probabilities(
+            view,
+            tokenizer,
+            prompt,
+            sorted(wanted[prompt]),
+            layers=layers,
+            corpus_ids=corpus_ids,
+            source_positions=source_positions,
+            method=method,
+            capture_dtype=capture_dtype,
+        )
+        if cache:
+            computed[prompt] = scored
+        return scored
 
     matched: dict[str, list[bool]] = {}
     mismatched: dict[str, list[bool]] = {}
@@ -334,30 +391,14 @@ def run_sweep(
     stats_by_layer: dict[int, dict[str, Any]] = {}
     for index, case in enumerate(cases):
         candidates = {"true": case["true_token"], "false": case["false_token"]}
-        own, stats = _probabilities(
-            view,
-            tokenizer,
-            case["prompt"],
-            candidates,
-            layers=layers,
-            corpus_ids=corpus_ids,
-            source_positions=source_positions,
-            method=method,
-            capture_dtype=capture_dtype,
-        )
+        own_scores, stats = score(case["prompt"])
+        own = _by_label(own_scores, candidates)
+        # The matched computation's statistics are the ones recorded, as before: the null's
+        # would only overwrite them with the same layer's numbers from a different prompt.
         stats_by_layer.update(stats)
         other = cases[(index + 1) % len(cases)]
-        alien, _ = _probabilities(
-            view,
-            tokenizer,
-            other["prompt"],
-            candidates,
-            layers=layers,
-            corpus_ids=corpus_ids,
-            source_positions=source_positions,
-            method=method,
-            capture_dtype=capture_dtype,
-        )
+        alien_scores, _ = score(other["prompt"])
+        alien = _by_label(alien_scores, candidates)
         for key, values in own.items():
             matched.setdefault(key, []).append(values["true"] > values["false"])
         for key, values in alien.items():
@@ -433,6 +474,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         f"- family derived: {family.get('derived')} -- {family.get('reason')}",
         f"- source positions: {conformance.get('source_positions')}",
         f"- output positions read: {conformance.get('output_positions_read')}",
+        f"- reduction: {conformance.get('reduction')}",
         f"- corpus: {conformance.get('corpus_size')} contexts, {conformance.get('corpus_length')}",
         f"- window: {conformance.get('window')}",
         f"- JVP: {conformance.get('jvp_method')} (from {conformance.get('jvp_method_source')})",
@@ -441,7 +483,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         "## How often is the TRUE suffix more probable than a wrong, previously-seen one?",
         "",
-        "| readout | matched | mismatched (null) | matched p | Holm |",
+        "| readout | matched | mismatched (null) | matched p | matched p, Holm-adjusted |",
         "| --- | --- | --- | --- | --- |",
     ]
     for key, value in payload.get("results", {}).items():
@@ -453,6 +495,10 @@ def render_markdown(payload: dict[str, Any]) -> str:
             f"{value['matched_p']:.3f} | {'-' if holm is None else f'{holm:.3f}'} |"
         )
     lines += [
+        "",
+        "A dash in the Holm-adjusted column means the row is not in a Holm family: the family",
+        "is every swept layer under one J-lens readout (EXP-001 §2), so the logit-lens rows and",
+        "the model's own output are outside every family and are reported uncorrected.",
         "",
         "If a readout tracks the task, its matched rate is well above both 50% and its own",
         "mismatched rate. If it only tracks digit frequency, the two columns agree.",
@@ -466,6 +512,7 @@ def main() -> None:  # noqa: C901 - probe CLI orchestration
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline import preflight as preflight_module
     from local_llm_lab.pipeline.evaluate import load_policy
+    from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
     from local_llm_lab.pipeline.tasks import (
         GENERATOR_VERSION,
         JSPACE_SPLIT_LIMIT,
@@ -689,7 +736,14 @@ def main() -> None:  # noqa: C901 - probe CLI orchestration
             adapter=None if adapter is None else str(adapter),
             jvp_method=jvp_method,
             template_kwargs=dict(spec.chat.template_kwargs),
+            # C3 (issue #62): the window the context carries is the one ``build_rows`` applied
+            # when the row was built, and ``select_cases`` deliberately re-windows nothing.
+            # ``keep_last`` stays null because there is no single render-time value -- each
+            # case passes its own row's tool count -- so the two coordinates beside it are
+            # what let a reader reconstruct the window from the artifact alone.
             keep_last=None,
+            row_keep_last=DEFAULT_KEEP_LAST,
+            rewindowed=False,
             estimator_variant=PRIMARY_READOUT,
             layer_selection=selection.as_dict(),
             layer_kinds=layer_kinds,

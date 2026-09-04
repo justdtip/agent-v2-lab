@@ -156,6 +156,14 @@ present, so no decoding-side fix could have worked.
 
 ### The mid-layer signal, resolved (`research/jspace_sweep.py`)
 
+> **How to reproduce the table below (C5, issue #62).** `research/jspace_sweep.py` is now a
+> thin wrapper over the installed `agent-v2-jspace-sweep`, which runs a *different* variant:
+> three readouts rather than one, interior source positions rather than the last token, a
+> 128-token corpus, a derived kind-matched layer family, and registry rendering. The numbers
+> recorded here reproduce only from the script as it stood at commit `1953493`, the parent of
+> `d0adfc6`. The current CLI answers the same question under the EXP-001 estimator and is not
+> comparable to this table without naming every difference (R35).
+
 The single-task probe left an ordering unexplained: at layers 18 and 30 the J-lens put the correct
 suffix above a previously-seen one above an unrelated one, even where the model demonstrably did
 not know the answer. Either a weak internal trace, or a digit-frequency artifact.
