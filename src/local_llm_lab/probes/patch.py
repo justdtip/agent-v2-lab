@@ -24,6 +24,7 @@ from local_llm_lab.pipeline.protocol import (
     strip_thinking,
     tool_message,
     turn_is_complete,
+    window_messages,
 )
 from local_llm_lab.pipeline.tasks import (
     GENERATOR_VERSION,
@@ -405,68 +406,146 @@ def select_patch_cases(
     return selected, provenance
 
 
-def _find_once(ids: Sequence[int], needle: Sequence[int], *, start: int, label: str) -> tuple[int, ...]:
+def _encode(tokenizer: Any, text: str) -> list[int]:
+    try:
+        return [int(value) for value in tokenizer.encode(text, add_special_tokens=False)]
+    except TypeError:
+        return [int(value) for value in tokenizer.encode(text)]
+
+
+def _char_span_once(text: str, needle: str, *, start: int, label: str) -> tuple[int, int]:
+    """Return the unique ``[start, end)`` character span of ``needle`` at or after ``start``."""
     if not needle:
-        return ()
-    matches = [
-        index
-        for index in range(start, len(ids) - len(needle) + 1)
-        if list(ids[index : index + len(needle)]) == list(needle)
-    ]
-    if not matches:
         raise ValueError(f"missing token span for {label}")
-    if len(matches) != 1:
+    first = text.find(needle, start)
+    if first < 0:
+        raise ValueError(f"missing token span for {label}")
+    if text.find(needle, first + 1) >= 0:
         raise ValueError(f"ambiguous token span for {label}")
-    return tuple(range(matches[0], matches[0] + len(needle)))
+    return first, first + len(needle)
+
+
+def _common_prefix_length(left: Sequence[int], right: Sequence[int]) -> int:
+    count = 0
+    for a, b in zip(left, right):
+        if a != b:
+            break
+        count += 1
+    return count
+
+
+def _token_span(
+    tokenizer: Any,
+    prompt_text: str,
+    ids: Sequence[int],
+    span: tuple[int, int],
+    *,
+    label: str,
+) -> tuple[tuple[int, ...], int]:
+    """Map a character span of the rendered prompt to the token positions covering it.
+
+    The prompt prefix up to each character boundary is tokenised and its length taken as the
+    boundary's token index.  Tokenisation is context dependent: the prefix's last token can
+    differ from the full prompt's token at that index when the boundary falls inside a merge
+    (trap 6; ``capture.response_mean_activations`` repairs the same class).  The boundary is
+    then widened to the merged token by comparing against the full prompt's ids, and the
+    repair is counted so the artifact records how many spans needed it.
+    """
+    char_start, char_end = span
+    repairs = 0
+    head = _encode(tokenizer, prompt_text[:char_start])
+    start = len(head)
+    if list(ids[:start]) != head:
+        start = _common_prefix_length(ids, head)
+        repairs += 1
+    body = _encode(tokenizer, prompt_text[:char_end])
+    end = len(body)
+    if list(ids[:end]) != body:
+        end = min(_common_prefix_length(ids, body) + 1, len(ids))
+        repairs += 1
+    # A merge moves a boundary by at most one token on a prefix-stable tokenizer.  A larger
+    # move means the tokenizer is not prefix-stable or the span is mislocated; refuse loudly
+    # rather than widen silently backwards (Chief's condition on issue #29).
+    if abs(start - len(head)) > 1 or abs(end - len(body)) > 1:
+        raise ValueError(
+            f"token span for {label} moved more than one token at a boundary "
+            f"(start {len(head)}->{start}, end {len(body)}->{end})"
+        )
+    if end <= start or start < 0 or end > len(ids):
+        raise ValueError(f"missing token span for {label}")
+    return tuple(range(start, end)), repairs
 
 
 def position_groups(
     tokenizer: Any,
     prompt_ids: Sequence[int],
     *,
+    prompt_text: str,
     system_text: str,
     task_text: str,
     previous_notes: Sequence[str],
     note_values: Sequence[str],
     observations: Sequence[str],
+    stats: dict[str, int] | None = None,
 ) -> dict[str, tuple[int, ...]]:
-    """Locate the six P6 token groups, refusing missing or ambiguous content spans."""
+    """Locate the six P6 token groups, refusing missing or ambiguous content spans.
+
+    Every text is located by its unique character span in the rendered ``prompt_text`` and
+    mapped to tokens through ``_token_span``; ``observations`` must be the observations that
+    are present verbatim in that prompt (the windowed view), and the last two of them form
+    ``last_two_observations``.  ``stats`` receives the per-group ``boundary_repairs`` counts.
+    """
     ids = [int(value) for value in prompt_ids]
-
-    def encoded(text: str) -> list[int]:
-        try:
-            return list(tokenizer.encode(text, add_special_tokens=False))
-        except TypeError:
-            return list(tokenizer.encode(text))
-
-    system = _find_once(ids, encoded(system_text), start=0, label="system_prompt")
-    task = _find_once(ids, encoded(task_text), start=system[-1] + 1 if system else 0, label="task_prompt")
-    note_spans = [
-        _find_once(ids, encoded(note), start=task[-1] + 1 if task else 0, label="previous_note")
-        for note in previous_notes
-    ]
-    previous = tuple(position for span in note_spans for position in span)
-    note_region = note_spans[-1] if note_spans else ()
-    values: list[int] = []
-    for value in note_values:
-        needle = encoded(value)
-        starts = range(note_region[0], note_region[-1] - len(needle) + 2) if note_region else ()
-        matches = [start for start in starts if ids[start : start + len(needle)] == needle]
-        if len(matches) != 1:
-            raise ValueError("note_value token span is missing or ambiguous in the substituted note")
-        span = tuple(range(matches[0], matches[0] + len(needle)))
-        values.extend(span)
-    observation_spans = [
-        _find_once(ids, encoded(observation), start=task[-1] + 1 if task else 0, label="observation")
-        for observation in observations
-    ]
-    last_observations = tuple(position for span in observation_spans[-2:] for position in span)
     if not ids:
         raise ValueError("prompt token ids must not be empty")
+    if not isinstance(prompt_text, str) or not prompt_text:
+        raise ValueError("prompt text must not be empty")
+    repairs = {name: 0 for name in POSITION_GROUPS}
+
+    def locate(text: str, *, start: int, label: str, group: str) -> tuple[tuple[int, ...], int]:
+        span = _char_span_once(prompt_text, text, start=start, label=label)
+        tokens, repaired = _token_span(tokenizer, prompt_text, ids, span, label=label)
+        repairs[group] += repaired
+        return tokens, span[1]
+
+    system, cursor = locate(system_text, start=0, label="system_prompt", group="system_prompt")
+    task, cursor = locate(task_text, start=cursor, label="task_prompt", group="task_prompt")
+    after_task = cursor
+    previous: list[int] = []
+    note_span: tuple[int, int] | None = None
+    for note in previous_notes:
+        note_span = _char_span_once(prompt_text, note, start=cursor, label="previous_note")
+        tokens, repaired = _token_span(tokenizer, prompt_text, ids, note_span, label="previous_note")
+        repairs["previous_notes"] += repaired
+        previous.extend(tokens)
+        cursor = note_span[1]
+    values: list[int] = []
+    for value in note_values:
+        if note_span is None:
+            raise ValueError("note_value token span is missing or ambiguous in the substituted note")
+        region = prompt_text[note_span[0] : note_span[1]]
+        first = region.find(value)
+        if first < 0 or region.find(value, first + 1) >= 0:
+            raise ValueError("note_value token span is missing or ambiguous in the substituted note")
+        offset = note_span[0] + first
+        tokens, repaired = _token_span(
+            tokenizer, prompt_text, ids, (offset, offset + len(value)), label="note_value_tokens"
+        )
+        repairs["note_value_tokens"] += repaired
+        values.extend(tokens)
+    observation_spans: list[tuple[int, ...]] = []
+    cursor = after_task
+    for observation in observations:
+        tokens, cursor = locate(observation, start=cursor, label="observation", group="last_two_observations")
+        observation_spans.append(tokens)
+    last_observations = tuple(position for span in observation_spans[-2:] for position in span)
+    if stats is not None:
+        stats.clear()
+        stats.update(repairs)
     return {
         "system_prompt": system,
         "task_prompt": task,
-        "previous_notes": previous,
+        "previous_notes": tuple(previous),
         "note_value_tokens": tuple(values),
         "last_two_observations": last_observations,
         "final_token": (len(ids) - 1,),
@@ -627,8 +706,16 @@ def _is_flip(task: Task, steps: list[dict[str, Any]], decision_step: int, *, kee
     )
 
 
-def _message_contents(messages: Sequence[dict[str, Any]]) -> tuple[str, str, list[str], list[str]]:
-    """Extract canonical group inputs without altering the rendered prompt."""
+def _message_contents(
+    messages: Sequence[dict[str, Any]], *, keep_last: int
+) -> tuple[str, str, list[str], list[str]]:
+    """Extract canonical group inputs from the same windowed view ``build_prompt`` renders.
+
+    ``window_messages`` replaces all but the last ``keep_last`` tool observations with hidden
+    stubs, so only the observations still present verbatim are returned; stubs are not
+    observations.
+    """
+    windowed = window_messages([dict(message) for message in messages], keep_last)
     system = next(
         (message["content"] for message in messages if message.get("role") == "system"),
         "",
@@ -644,8 +731,10 @@ def _message_contents(messages: Sequence[dict[str, Any]]) -> tuple[str, str, lis
     ]
     observations = [
         message["content"]
-        for message in messages
-        if message.get("role") == "tool" and isinstance(message.get("content"), str)
+        for message, original in zip(windowed, messages)
+        if message.get("role") == "tool"
+        and isinstance(message.get("content"), str)
+        and message["content"] == original.get("content")
     ]
     if not isinstance(system, str) or not isinstance(task, str):
         raise ValueError("replayed messages must contain system and task text")
@@ -682,21 +771,32 @@ def _note_values(note: str) -> list[str]:
     return values
 
 
-def _groups_for(tokenizer: Any, token_ids: Sequence[int], messages: Sequence[dict[str, Any]]) -> dict[str, tuple[int, ...]]:
-    system, task, notes, observations = _message_contents(messages)
+def _groups_for(
+    tokenizer: Any,
+    token_ids: Sequence[int],
+    messages: Sequence[dict[str, Any]],
+    *,
+    prompt_text: str,
+    keep_last: int,
+) -> tuple[dict[str, tuple[int, ...]], dict[str, int]]:
+    """Resolve the six groups on the rendered prompt; return them with boundary repairs."""
+    system, task, notes, observations = _message_contents(messages, keep_last=keep_last)
     values = _note_values(notes[-1]) if notes else []
+    repairs: dict[str, int] = {}
     groups = position_groups(
         tokenizer,
         token_ids,
+        prompt_text=prompt_text,
         system_text=system,
         task_text=task,
         previous_notes=notes,
         note_values=values,
         observations=observations,
+        stats=repairs,
     )
     if tuple(groups) != POSITION_GROUPS or any(not groups[name] for name in POSITION_GROUPS):
         raise ValueError("each P6 position group must resolve to at least one token")
-    return groups
+    return groups, {name: int(repairs.get(name, 0)) for name in POSITION_GROUPS}
 
 
 def _take_rows(rows: Any, positions: Sequence[int]) -> Any:
@@ -823,20 +923,31 @@ def run_patch_probe(
     source_counts: dict[str, int] = {}
     for case in stable:
         failing, counterfactual, provenance = replay_counterfactual(case)
-        case_provenance.append(case_record(case, provenance))
         source = provenance.get("counterfactual_source") or "none"
         source_counts[source] = source_counts.get(source, 0) + 1
-        failing_prompt = build_prompt(tokenizer, failing, spec=spec)
-        counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec)
+        failing_prompt = build_prompt(tokenizer, failing, spec=spec, keep_last=keep_last)
+        counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec, keep_last=keep_last)
         failing_ids = list(tokenizer.encode(failing_prompt, add_special_tokens=False))
         counter_ids = list(tokenizer.encode(counter_prompt, add_special_tokens=False))
+        failing_groups, failing_repairs = _groups_for(
+            tokenizer, failing_ids, failing, prompt_text=failing_prompt, keep_last=keep_last
+        )
+        counter_groups, counter_repairs = _groups_for(
+            tokenizer, counter_ids, counterfactual, prompt_text=counter_prompt, keep_last=keep_last
+        )
+        case_provenance.append(
+            {
+                **case_record(case, provenance),
+                "boundary_repairs": {"failing": failing_repairs, "counterfactual": counter_repairs},
+            }
+        )
         prepared.append(
             {
                 "case": case,
                 "failing_ids": failing_ids,
                 "counter_ids": counter_ids,
-                "failing_groups": _groups_for(tokenizer, failing_ids, failing),
-                "counter_groups": _groups_for(tokenizer, counter_ids, counterfactual),
+                "failing_groups": failing_groups,
+                "counter_groups": counter_groups,
                 "failing_residuals": capture_residuals(view, failing_ids, layers, positions="all"),
                 "counter_residuals": capture_residuals(view, counter_ids, layers, positions="all"),
             }

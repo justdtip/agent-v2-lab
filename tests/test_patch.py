@@ -732,6 +732,7 @@ def test_position_groups_are_exact_and_fail_closed() -> None:
     groups = patch.position_groups(
         tokenizer,
         tokenizer.encode(text),
+        prompt_text=text,
         system_text="SYS",
         task_text="TASK",
         previous_notes=["OLD", "NOTE|42"],
@@ -748,6 +749,7 @@ def test_position_groups_are_exact_and_fail_closed() -> None:
         patch.position_groups(
             tokenizer,
             tokenizer.encode("SYS|TASK"),
+            prompt_text="SYS|TASK",
             system_text="SYS",
             task_text="TASK",
             previous_notes=["MISSING"],
@@ -797,7 +799,10 @@ def test_groups_for_extracts_canonical_family_value_tokens(
     prompt = "|".join(message["content"] for message in messages)
 
     prompt_ids = tokenizer.encode(prompt)
-    groups = patch._groups_for(tokenizer, prompt_ids, messages)
+    groups, repairs = patch._groups_for(
+        tokenizer, prompt_ids, messages, prompt_text=prompt, keep_last=2
+    )
+    assert repairs == {name: 0 for name in patch.POSITION_GROUPS}
 
     assert all(groups[name] for name in patch.POSITION_GROUPS)
     value_text = "".join(chr(prompt_ids[position]) for position in groups["note_value_tokens"])
@@ -1379,6 +1384,8 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
     assert payload["cells"]["1:system_prompt"]["controls"]["random_positions"]["rate"] == 0.0
     assert payload["cells"]["1:final_token"]["treatment"]["denominator"] == 2
     assert set(payload["cells"]["1:final_token"]["controls"]) == set(patch.CONTROLS)
+    # position_groups is faked here, so no boundary repair is recorded for either prompt.
+    no_repairs = {name: 0 for name in patch.POSITION_GROUPS}
     assert payload["cases"] == [
         {
             "task_id": "test-aggregate_report-0-clean",
@@ -1386,6 +1393,7 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
             "counterfactual_source": "passing_transcript",
             "counterfactual_basis": "fixture",
             **_scoring_record(0),
+            "boundary_repairs": {"failing": no_repairs, "counterfactual": no_repairs},
         },
         {
             "task_id": "test-ledger_reconcile-1-clean",
@@ -1393,6 +1401,7 @@ def test_patch_probe_routes_every_group_and_control_with_exact_trace(monkeypatch
             "counterfactual_source": f"generator_v{patch.GENERATOR_VERSION}",
             "counterfactual_basis": "fixture",
             **_scoring_record(0),
+            "boundary_repairs": {"failing": no_repairs, "counterfactual": no_repairs},
         },
     ]
     assert payload["counterfactual_sources"] == {
@@ -1663,3 +1672,352 @@ def test_render_markdown_summarises_counterfactual_note_sources() -> None:
     assert "## Counterfactual note sources" in text
     assert "- passing_transcript: 2" in text
     assert "- generator_v4: 1" in text
+
+
+# --- Position groups on the windowed prompt with a context-dependent tokenizer -----------
+#
+# The Director's P6 run crashed at ``_groups_for`` on real data: the replayed message list
+# carries every observation, but ``build_prompt`` renders ``window_messages`` (stubs for all
+# but the last ``keep_last``), and the template wraps each message in newlines so a
+# standalone ``encode(text)`` is never a token-substring of the prompt (briefing trap 6).
+# The fake below reproduces both: a newline merges into the following character, so
+# ``encode("\n" + x) != encode("\n") + encode(x)``.
+
+_FAKE_SPEC = SimpleNamespace(chat=SimpleNamespace(template_kwargs={}, thinking="on"))
+
+
+class _MergingTokenizer:
+    """Context-dependent fake: a newline merges with the character that follows it."""
+
+    _TOKEN = __import__("re").compile(r"\n[^\n]|\n|[^\n]")
+
+    def __init__(self) -> None:
+        self.vocab: dict[str, int] = {}
+
+    def offsets(self, text):
+        return [(match.start(), match.end()) for match in self._TOKEN.finditer(text)]
+
+    def encode(self, text, add_special_tokens=False):
+        assert add_special_tokens is False
+        return [
+            self.vocab.setdefault(token, len(self.vocab) + 1) for token in self._TOKEN.findall(text)
+        ]
+
+    def decode(self, ids):
+        inverse = {index: token for token, index in self.vocab.items()}
+        return "".join(inverse[index] for index in ids)
+
+    def apply_chat_template(self, messages, add_generation_prompt, tokenize, **_kwargs):
+        from local_llm_lab.pipeline.protocol import generation_suffix
+
+        assert tokenize is False
+        parts = []
+        for message in messages:
+            if message["role"] == "tool":
+                parts.append(f"[user]\n<tool_response>\n{message['content']}\n</tool_response>\n[/user]\n")
+            else:
+                parts.append(f"[{message['role']}]\n{message['content']}\n[/{message['role']}]\n")
+        prompt = "".join(parts)
+        return prompt + generation_suffix(_FAKE_SPEC) if add_generation_prompt else prompt
+
+
+def _windowed_messages(*, observations=("OBS zero", "OBS one", "OBS two"), last_value="25"):
+    """A replayed ledger case with three observations: more than ``keep_last`` = 2."""
+    from local_llm_lab.agent_protocol import Action
+    from local_llm_lab.pipeline.protocol import assistant_message, tool_message
+
+    notes = [
+        "Invoices read: 1 of 3. approved: 14; held (skip): 9. Reading the next invoice.",
+        "Invoices read: 2 of 3. approved: 14, 18; held (skip): 9. Reading the next invoice.",
+        f"Invoices read: 3 of 3. approved: 14, 18, {last_value}; held (skip): 9. Summing approved amounts.",
+    ]
+    # The system text is long enough that every group's random-position control can draw a
+    # disjoint pool of equal cardinality from the rest of the prompt.
+    system = "SYS rules for the agent. " + " ".join(f"Rule {index} applies." for index in range(24))
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "TASK reconcile the ledger"},
+    ]
+    for index, (note, observation) in enumerate(zip(notes, observations)):
+        messages.append(assistant_message(note, Action("read_file", {"path": f"inv/{index}"})))
+        messages.append(tool_message("read_file", observation))
+    return messages
+
+
+def _covering_positions(tokenizer, prompt, text, *, start=0):
+    first = prompt.index(text, start)
+    last = first + len(text)
+    return tuple(
+        index
+        for index, (begin, end) in enumerate(tokenizer.offsets(prompt))
+        if begin < last and end > first
+    ), last
+
+
+def test_groups_for_uses_the_windowed_view_and_char_offsets_with_a_merging_tokenizer() -> None:
+    """Causes A and B together: hidden observations are not searched; merges are repaired."""
+    from local_llm_lab.pipeline.protocol import build_prompt, window_messages
+    from local_llm_lab.probes import patch
+
+    tokenizer = _MergingTokenizer()
+    messages = _windowed_messages()
+    prompt = build_prompt(tokenizer, messages, spec=_FAKE_SPEC, keep_last=2)
+    ids = tokenizer.encode(prompt)
+
+    # The windowed prompt carries a stub for the first observation and the last two verbatim.
+    windowed = window_messages(messages, 2)
+    assert "OBS zero" not in prompt and windowed[3]["content"] in prompt
+    assert all(message["content"] in prompt for message in windowed[4:])
+    # Cause B, as measured on the fake: the text is present, its standalone ids are not.
+    wrapped = tokenizer.encode("OBS one")
+    assert not any(ids[index : index + len(wrapped)] == wrapped for index in range(len(ids)))
+
+    groups, repairs = patch._groups_for(tokenizer, ids, messages, prompt_text=prompt, keep_last=2)
+
+    assert tuple(groups) == patch.POSITION_GROUPS
+    assert all(groups[name] for name in patch.POSITION_GROUPS)
+    assert repairs == {
+        "system_prompt": 1,
+        "task_prompt": 1,
+        "previous_notes": 3,
+        "note_value_tokens": 0,
+        "last_two_observations": 2,
+        "final_token": 0,
+    }
+    # (c) Each group is exactly the tokens covering its text in the rendered prompt.
+    system, cursor = _covering_positions(tokenizer, prompt, messages[0]["content"])
+    task, cursor = _covering_positions(tokenizer, prompt, messages[1]["content"], start=cursor)
+    assert groups["system_prompt"] == system
+    assert groups["task_prompt"] == task
+    notes = ()
+    for message in messages[2::2]:
+        span, cursor = _covering_positions(tokenizer, prompt, message["content"], start=cursor)
+        notes += span
+    assert groups["previous_notes"] == notes
+    last_note = messages[-2]["content"]
+    note_start = prompt.index(last_note)
+    values = ()
+    for value in ("14", "18", "25"):
+        span, _ = _covering_positions(tokenizer, prompt, value, start=note_start)
+        values += span
+    assert groups["note_value_tokens"] == values
+    assert set(groups["note_value_tokens"]) <= set(groups["previous_notes"])
+    assert tokenizer.decode([ids[index] for index in groups["note_value_tokens"]]) == "141825"
+    observations = ()
+    cursor = prompt.index(messages[1]["content"])
+    for text in ("OBS one", "OBS two"):
+        span, cursor = _covering_positions(tokenizer, prompt, text, start=cursor)
+        observations += span
+    assert groups["last_two_observations"] == observations
+    assert tokenizer.decode([ids[index] for index in groups["last_two_observations"]]) == (
+        "\nOBS one\nOBS two"
+    )
+    assert groups["final_token"] == (len(ids) - 1,)
+
+
+def test_position_groups_refuses_ambiguous_and_missing_text_on_the_rendered_prompt() -> None:
+    from local_llm_lab.pipeline.protocol import build_prompt
+    from local_llm_lab.probes import patch
+
+    tokenizer = _MergingTokenizer()
+    duplicated = _windowed_messages(observations=("OBS zero", "OBS same", "OBS same"))
+    prompt = build_prompt(tokenizer, duplicated, spec=_FAKE_SPEC, keep_last=2)
+    with pytest.raises(ValueError, match="ambiguous token span for observation"):
+        patch._groups_for(tokenizer, tokenizer.encode(prompt), duplicated, prompt_text=prompt, keep_last=2)
+
+    messages = _windowed_messages()
+    prompt = build_prompt(tokenizer, messages, spec=_FAKE_SPEC, keep_last=2)
+    ids = tokenizer.encode(prompt)
+    with pytest.raises(ValueError, match="missing token span for previous_note"):
+        patch.position_groups(
+            tokenizer,
+            ids,
+            prompt_text=prompt,
+            system_text=messages[0]["content"],
+            task_text=messages[1]["content"],
+            previous_notes=["MISSING"],
+            note_values=[],
+            observations=["OBS one", "OBS two"],
+        )
+    with pytest.raises(ValueError, match="note_value token span is missing or ambiguous"):
+        patch.position_groups(
+            tokenizer,
+            ids,
+            prompt_text=prompt,
+            system_text=messages[0]["content"],
+            task_text=messages[1]["content"],
+            previous_notes=[messages[-2]["content"]],
+            note_values=["9999"],
+            observations=["OBS one", "OBS two"],
+        )
+    # Cause A, stated directly: searching for a hidden observation is refused as missing.
+    with pytest.raises(ValueError, match="missing token span for observation"):
+        patch.position_groups(
+            tokenizer,
+            ids,
+            prompt_text=prompt,
+            system_text=messages[0]["content"],
+            task_text=messages[1]["content"],
+            previous_notes=[messages[-2]["content"]],
+            note_values=[],
+            observations=["OBS zero", "OBS one", "OBS two"],
+        )
+
+
+def test_groups_for_windows_with_the_threaded_keep_last() -> None:
+    from local_llm_lab.pipeline.protocol import build_prompt
+    from local_llm_lab.probes import patch
+
+    tokenizer = _MergingTokenizer()
+    messages = _windowed_messages()
+    prompt = build_prompt(tokenizer, messages, spec=_FAKE_SPEC, keep_last=1)
+    ids = tokenizer.encode(prompt)
+
+    groups, _repairs = patch._groups_for(tokenizer, ids, messages, prompt_text=prompt, keep_last=1)
+
+    assert tokenizer.decode([ids[index] for index in groups["last_two_observations"]]) == "\nOBS two"
+    with pytest.raises(ValueError, match="at least one token"):
+        patch._groups_for(tokenizer, ids, messages, prompt_text=prompt, keep_last=0)
+
+
+class _CharacterTokenizer(_MergingTokenizer):
+    """Context-free fake sharing the template: only windowing (cause A) can bite."""
+
+    _TOKEN = __import__("re").compile(r"[^\n]|\n")
+
+
+@pytest.mark.parametrize(
+    ("tokenizer_type", "expected_repairs"),
+    [
+        (_CharacterTokenizer, 0),
+        (_MergingTokenizer, 1),
+    ],
+)
+def test_run_patch_probe_resolves_groups_over_the_windowed_prompt(
+    monkeypatch, tokenizer_type, expected_repairs
+) -> None:
+    """(a) The live crash path: real ``build_prompt``/``window_messages``/``position_groups``."""
+    from local_llm_lab.probes import patch
+
+    tokenizer = tokenizer_type()
+
+    class View:
+        num_layers = 1
+
+    class Hook:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(patch.ArchitectureView, "from_model", lambda _model: View())
+    monkeypatch.setattr(
+        patch,
+        "replay_counterfactual",
+        lambda case: (
+            _windowed_messages(),
+            _windowed_messages(last_value="26"),
+            {"counterfactual_source": "passing_transcript", "counterfactual_basis": "fixture"},
+        ),
+    )
+    monkeypatch.setattr(
+        patch,
+        "capture_residuals",
+        lambda _view, ids, layers, **_kwargs: {layer: mx.zeros((len(ids), 1)) for layer in layers},
+    )
+    monkeypatch.setattr(patch, "InjectionHook", Hook)
+    monkeypatch.setattr(patch, "greedy_generate", lambda *_args, **_kwargs: "x")
+    monkeypatch.setattr(patch, "strip_thinking", lambda raw: (None, raw))
+    monkeypatch.setattr(patch, "parse_turn", lambda raw: SimpleNamespace(thought=raw))
+    monkeypatch.setattr(patch, "_is_flip", lambda *_args, **_kwargs: True)
+    cases = [_probe_case(0, judgements=_judgements(1)), _probe_case(1, judgements=_judgements(1))]
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), tokenizer, cases, spec=_FAKE_SPEC, resolved=resolved, layers=[1],
+        policy="base", keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    repairs = {
+        "system_prompt": expected_repairs,
+        "task_prompt": expected_repairs,
+        "previous_notes": 3 * expected_repairs,
+        "note_value_tokens": 0,
+        "last_two_observations": 2 * expected_repairs,
+        "final_token": 0,
+    }
+    assert [record["boundary_repairs"] for record in payload["cases"]] == [
+        {"failing": repairs, "counterfactual": repairs}
+    ] * 2
+    assert len(payload["cells"]) == len(patch.POSITION_GROUPS)
+
+
+def test_real_tokenizer_resolves_the_six_groups_on_the_first_selected_case() -> None:
+    """Smoke test on the cached 3B tokenizer (a tokenizer load is not model execution)."""
+    import json
+    import os
+
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.protocol import build_prompt
+    from local_llm_lab.probes import patch
+    from local_llm_lab.project import configure_local_cache
+
+    if not all(path.is_file() for path in _SAVED_EVALS):
+        pytest.skip("protected saved evaluations not present on this checkout")
+    spec = load_model_spec("qwen25-coder-3b")
+    snapshot = configure_local_cache() / "hub" / f"models--{spec.hf_id.replace('/', '--')}"
+    if not snapshot.is_dir():
+        pytest.skip("cached tokenizer snapshot not present on this machine")
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    from local_llm_lab.pipeline import cli
+
+    tokenizer = cli._load_data_tokenizer(spec.hf_id)
+    passing = json.loads(_SAVED_EVALS[0].read_text(encoding="utf-8"))
+    failing = json.loads(_SAVED_EVALS[1].read_text(encoding="utf-8"))
+    cases, _provenance = patch.select_patch_cases(
+        passing, failing, keep_last=2, data_seed=20260902, generator_version=1
+    )
+    case = cases[0]
+    replayed, _counterfactual, _note = patch.replay_counterfactual(case)
+    prompt = build_prompt(tokenizer, replayed, spec=spec, keep_last=2)
+    ids = list(tokenizer.encode(prompt, add_special_tokens=False))
+
+    groups, repairs = patch._groups_for(tokenizer, ids, replayed, prompt_text=prompt, keep_last=2)
+
+    assert tuple(groups) == patch.POSITION_GROUPS
+    assert all(groups[name] for name in patch.POSITION_GROUPS)
+    _system, _task, _notes, observations = patch._message_contents(replayed, keep_last=2)
+    assert len(observations) == 2
+    covered = tokenizer.decode([ids[index] for index in groups["last_two_observations"]])
+    assert all(observation in covered for observation in observations)
+    assert repairs["last_two_observations"] > 0
+    assert groups["final_token"] == (len(ids) - 1,)
+
+
+class _ParityTokenizer(_CharacterTokenizer):
+    """Not prefix-stable: ids depend on the length parity of the encoded text.
+
+    A prefix whose parity differs from the full prompt disagrees from its first token, so the
+    common prefix collapses to zero and an unbounded widening would silently move a boundary
+    many tokens backwards.
+    """
+
+    def encode(self, text, add_special_tokens=False):
+        offset = 1000 if len(text) % 2 else 0
+        return [value + offset for value in super().encode(text, add_special_tokens=add_special_tokens)]
+
+
+def test_token_span_refuses_a_boundary_that_moves_more_than_one_token():
+    from local_llm_lab.probes import patch
+
+    tokenizer = _ParityTokenizer()
+    prompt = "abcdefgh"
+    ids = tokenizer.encode(prompt)
+    # "cde" starts at an even offset (prefix "ab" agrees) and ends at an odd one (prefix
+    # "abcde" disagrees from token 0): the end boundary would collapse to 1.
+    with pytest.raises(ValueError, match="moved more than one token"):
+        patch._token_span(tokenizer, prompt, ids, (2, 5), label="task_prompt")
