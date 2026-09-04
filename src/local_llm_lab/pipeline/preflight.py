@@ -7,7 +7,7 @@ import os
 from collections.abc import Callable, Mapping
 from math import ceil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
@@ -16,6 +16,7 @@ __all__ = [
     "artifact_path",
     "cached_revision",
     "require_preflight",
+    "run_residual_control",
     "run_preflight",
     "write_report",
 ]
@@ -149,12 +150,70 @@ def run_preflight(
     report["passed"] = bool(
         residual["passed"] and jvp_result["finite"] and report["memory"]["within_budget"]
     )
-    return write_report(report, artifact_path(spec, output_root))
+    path = write_report(report, artifact_path(spec, output_root))
+    if report["passed"]:
+        return path
+    raise SystemExit(f"preflight failed for {spec.name}; evidence written to {path}")
+
+
+def run_residual_control(
+    model_name: str,
+    *,
+    output_path: Path,
+    loader: Callable[..., tuple[Any, Any]] | None = None,
+    spec_loader: Callable[[str], ModelSpec] | None = None,
+    view_factory: Callable[[Any], Any] | None = None,
+    revision_reader: Callable[[ModelSpec], str | None] | None = None,
+    array_api: Any | None = None,
+) -> Path:
+    """Write one narrow, no-cache residual control without broader preflight work."""
+    if spec_loader is None:
+        spec_loader = load_model_spec
+    spec = spec_loader(model_name)
+    if loader is None:
+        loader = _default_loader
+    if view_factory is None:
+        from local_llm_lab.arch import ArchitectureView
+
+        view_factory = ArchitectureView.from_model
+    if revision_reader is None:
+        revision_reader = cached_revision
+    if array_api is None:
+        import mlx.core as mx
+
+        array_api = mx
+    model, tokenizer = loader(spec.hf_id, lazy=True)
+    view = view_factory(model)
+    revision = revision_reader(spec)
+    if not revision:
+        raise SystemExit(f"no cached revision for {spec.name}; cannot write residual control")
+    ids = _fixed_token_ids(tokenizer, array_api)
+    fp32_manual = _manual_final_residual(view, ids)
+    native_manual = view.diagnostic_native_final_residual(ids)
+    native_reference = _native_final_residual(view, ids)
+    report = {
+        "fp32_manual_vs_native": _residual_metrics(
+            fp32_manual, native_reference, array_api=array_api
+        ),
+        "hf_id": spec.hf_id,
+        "model_name": spec.name,
+        "native_manual_vs_native": _residual_metrics(
+            native_manual, native_reference, array_api=array_api
+        ),
+        "schema_version": _SCHEMA_VERSION,
+        "snapshot_revision": revision,
+        "token_identity": {
+            "ids": [int(token) for token in ids[0].tolist()],
+            "token_count": int(ids.shape[1]),
+        },
+    }
+    return write_report(report, output_path)
 
 
 def require_preflight(
     spec: ModelSpec,
     *,
+    consumer: Literal["view", "training"] = "view",
     skip: bool = False,
     output_root: Path | None = None,
     revision_reader: Callable[[ModelSpec], str | None] | None = None,
@@ -165,6 +224,8 @@ def require_preflight(
     ``action`` is deliberately called only after validation and exists solely as a narrow test
     seam proving the guard's order.  Production callers leave it unset.
     """
+    if consumer not in {"view", "training"}:
+        _reject(spec, f"unknown preflight consumer {consumer!r}")
     if skip:
         return None
     if revision_reader is None:
@@ -189,11 +250,10 @@ def require_preflight(
         _reject(spec, "cached snapshot revision is absent")
     if record.get("snapshot_revision") != revision:
         _reject(spec, "preflight artifact snapshot revision is stale")
-    if record.get("passed") is not True:
-        _reject(spec, "preflight did not pass")
-    memory = record.get("memory")
-    if not isinstance(memory, dict) or memory.get("within_budget") is not True:
-        _reject(spec, "preflight memory budget did not pass")
+    if not _training_evidence_passed(record):
+        _reject(spec, "preflight training evidence did not pass")
+    if consumer == "view" and not _view_evidence_passed(record):
+        _reject(spec, "preflight view evidence did not pass")
     if action is not None:
         action()
     return record
@@ -218,14 +278,43 @@ def _fixed_token_ids(tokenizer: Any, array_api: Any) -> Any:
 
 
 def _residual_equivalence(view: Any, ids: Any, array_api: Any) -> dict[str, Any]:
+    manual = _manual_final_residual(view, ids)
+    native = _native_final_residual(view, ids)
+    metrics = _residual_metrics(manual, native, array_api=array_api)
+    return {
+        **metrics,
+        "criterion": "exact_pre_control",
+        "passed": metrics["max_abs_error"] == 0.0,
+        "token_count": 64,
+    }
+
+
+def _manual_final_residual(view: Any, ids: Any) -> Any:
     manual = view.embed(ids)
     masks = view.masks(manual, None)
     for index in range(view.num_layers):
         manual = view.run_block(index, manual, masks, None)
-    manual = view.final_norm(manual)
-    native = _native_final_residual(view, ids)
-    error = _scalar(array_api.max(array_api.abs(manual - native)))
-    return {"max_abs_error": error, "passed": error == 0.0, "token_count": 64}
+    return view.final_norm(manual)
+
+
+def _residual_metrics(actual: Any, reference: Any, *, array_api: Any) -> dict[str, Any]:
+    """Describe an error against the precision and scale of its native reference."""
+    info = array_api.finfo(reference.dtype)
+    scale = _scalar(array_api.max(array_api.abs(reference)))
+    floor = max(scale, float(info.tiny))
+    relative_tolerance = 2.0 * float(info.eps)
+    absolute_tolerance = relative_tolerance * floor
+    max_abs_error = _scalar(array_api.max(array_api.abs(actual - reference)))
+    return {
+        "absolute_tolerance": absolute_tolerance,
+        "max_abs_error": max_abs_error,
+        "max_relative_error": max_abs_error / floor,
+        "reference_dtype": str(reference.dtype),
+        "reference_epsilon": float(info.eps),
+        "reference_scale": scale,
+        "relative_tolerance": relative_tolerance,
+        "within_tolerance": max_abs_error <= absolute_tolerance,
+    }
 
 
 def _native_final_residual(view: Any, ids: Any) -> Any:
@@ -324,6 +413,50 @@ def _is_finite(value: Any, array_api: Any) -> bool:
 def _scalar(value: Any) -> float:
     item = getattr(value, "item", None)
     return float(item() if callable(item) else value)
+
+
+def _training_evidence_passed(record: Mapping[str, Any]) -> bool:
+    memory = record.get("memory")
+    if not isinstance(memory, Mapping) or memory.get("within_budget") is not True:
+        return False
+    prompts = record.get("thinking_prompts")
+    if not isinstance(prompts, list):
+        return False
+    modes = [entry.get("mode") if isinstance(entry, Mapping) else None for entry in prompts]
+    if modes != list(_THINKING_MODES):
+        return False
+    if not all(
+        isinstance(entry, Mapping)
+        and isinstance(entry.get("prompt"), str)
+        and bool(entry["prompt"])
+        and isinstance(entry.get("token_count"), int)
+        and not isinstance(entry["token_count"], bool)
+        and entry["token_count"] > 0
+        for entry in prompts
+    ):
+        return False
+    lora = record.get("lora")
+    return bool(
+        isinstance(lora, Mapping)
+        and isinstance(lora.get("keys"), list)
+        and lora["keys"]
+        and all(isinstance(key, str) and key for key in lora["keys"])
+        and isinstance(lora.get("trainable_parameters"), int)
+        and not isinstance(lora["trainable_parameters"], bool)
+        and lora["trainable_parameters"] > 0
+    )
+
+
+def _view_evidence_passed(record: Mapping[str, Any]) -> bool:
+    residual = record.get("residual_equivalence")
+    jvp = record.get("jvp")
+    return bool(
+        record.get("passed") is True
+        and isinstance(residual, Mapping)
+        and residual.get("passed") is True
+        and isinstance(jvp, Mapping)
+        and jvp.get("finite") is True
+    )
 
 
 def _reject(spec: ModelSpec, reason: str) -> None:

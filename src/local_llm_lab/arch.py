@@ -143,6 +143,21 @@ class ArchitectureView:
 
         return self.text_module.norm(h).astype(mx.float32)
 
+    def diagnostic_native_final_residual(self, ids: Any) -> Any:
+        """Replay the native no-cache residual loop without diagnostic dtype promotion."""
+        import mlx.core as mx
+
+        token_ids = mx.array(ids).astype(mx.int32)
+        if token_ids.ndim == 1:
+            token_ids = token_ids[None, :]
+        if token_ids.ndim != 2:
+            raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
+        hidden = self.text_module.embed_tokens(token_ids)
+        masks = self.masks(hidden, None)
+        for index, block in enumerate(self.blocks):
+            hidden = block(hidden, mask=masks[self.layer_kind(index)], cache=None)
+        return self.text_module.norm(hidden)
+
     def unembed(self, h: Any) -> Any:
         """Project hidden states to vocabulary logits through the tied or untied readout."""
         import mlx.core as mx
