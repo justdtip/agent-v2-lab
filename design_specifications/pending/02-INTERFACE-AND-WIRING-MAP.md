@@ -97,6 +97,8 @@ class ArchitectureView:
     @property
     def cache_trimmable(self) -> bool: ...
     def lora_targets(self, policy: str | tuple[str, ...]) -> tuple[str, ...]: ...
+    vocab_size: int; tie_word_embeddings: bool                        # accepted amendment, R3
+    def lora_parameter_count(self, keys: Sequence[str], rank: int) -> int: ...   # accepted amendment, R3
     def residuals(self, ids: mx.array, layers: Sequence[int]) -> dict[int, mx.array]: ...  # one pass, deepest layer only
     def tail(self, layer: int) -> Callable[[mx.array], mx.array]: ...  # blocks[layer:] + final_norm with per-kind masks; used by J-lens
 ```
@@ -370,7 +372,7 @@ forget. Each has an integration check in §6.
    `state_probe` capture position (last prompt token is after the generation suffix in every
    mode; assert `generation_suffix(spec)`).
 7. `lora_keys` resolution → `cli.stage_train` YAML, `provenance`, `adapter_delta` parsing (must
-   accept `in_proj_qkvz`, `in_proj_ba`, `out_proj`), `capture.lora_block_mask` (must find LoRA
+   accept the installed split names `in_proj_qkv`, `in_proj_z`, `in_proj_b`, `in_proj_a`, `out_proj` and the combined `in_proj_qkvz`, `in_proj_ba`; classify by final path segment, never by a fixed list), `capture.lora_block_mask` (must find LoRA
    modules by type, not by the seven names).
 8. `ResolvedSpec.probe_layers` → `state_probe`, `assistant_axis`, `adapter_delta`
    `--readout-layers`, `jlens --layers`; all outputs record fractions and indices.
@@ -393,6 +395,10 @@ forget. Each has an integration check in §6.
 15. `preflight` writes `outputs/preflight/<name>.json` → `cli.stage_train/eval` and probe CLIs
     refuse to proceed without it unless `--skip-preflight-check`; the check compares the
     recorded `hf_id` and snapshot revision.
+16. Name collisions: `branch.render_completion(thought, action)` is replaced by
+    `protocol.render_completion(thought, action, *, spec)` when SPEC-001 §3 lands (update
+    `branch.py:33` and its callers); `state_probe._preflight_section` is a report section
+    unrelated to the preflight stage and is renamed `_gate_section`.
 
 ## 5. Config and artifact schema changes (summary)
 
@@ -401,7 +407,7 @@ forget. Each has an integration check in §6.
 | `data/<run>/manifest.json` | `model` (resolved spec), `splits[*].difficulty`, `splits[*].role`, `rendering: {thinking, template_kwargs, generation_suffix}` |
 | `outputs/<run>/lora.yaml` | `lora_parameters.keys` (resolved list), `num_layers` from the view |
 | `outputs/<run>/provenance.json` | new file, SPEC-001 §9 |
-| `outputs/<run>/evals/*.json` | per trajectory: `difficulty`, `think_tokens`, `integrity`, `steps[*].thinking`; summary: `wilson_95`, `integrity`, `by_difficulty`, `think_tokens_per_task`, `model`, `data_seed` |
+| `outputs/<run>/evals/*.json` | `verdict.answer`/`verdict.expected_answer` are normalised, `verdict.raw_answer` original, `verdict.unexpected_files`; `transcripts.jsonl` starts with a `run_id` header record (R6); per trajectory: `difficulty`, `think_tokens`, `integrity`, `steps[*].thinking`; summary: `wilson_95`, `integrity`, `by_difficulty`, `think_tokens_per_task`, `model`, `data_seed` |
 | `outputs/<run>/selection.json` | `components` per checkpoint, `wilson_95`, `val_loss`, `disagreement` |
 | `outputs/probes/**/*.json` | `model` (resolved), `layers: {fractions, indices}`, `command`, `controls` |
 | `outputs/preflight/<name>.json` | new file, SPEC-001 §10 |
@@ -429,3 +435,125 @@ forget. Each has an integration check in §6.
 9. T: `summarize` and `report.render` handle records with and without the new fields.
 10. Manual: `uv run pytest -q` green; the implementation report lists every caller touched for
     each row of §4.
+
+## 7. Rulings log (Research Scientist; newest last; these override earlier text)
+
+- **R1 (2026-09-03 20:30) `cache_strategy: auto` semantics.** `auto` resolves to `trim` when
+  `view.cache_trimmable`; otherwise to `snapshot` **only if** the registry file carries
+  `cache.equivalence_verified: {date, sha256 of research/cache_equivalence.py output}`; otherwise
+  to `none`, and `ResolvedSpec.cache_strategy_reason` records which branch fired. The runner
+  prints one warning line when `none` is chosen on a hybrid. This reconciles the plan ruling
+  (`none` for unverified snapshot) with SPEC-001 §5 (snapshot must be proven per model). An
+  implementation that resolves `auto` straight to `snapshot` is not acceptable.
+- **R2 (2026-09-03 20:30) allowed literal.** `"<|im_end|>"` may appear in
+  `models.py::_default_spec` as the fallback `ChatSpec.end_of_turn` for unregistered HF ids, in
+  addition to `configs/models/` and `arch.py`. Nowhere else.
+- **R3 (2026-09-03 20:30) documents in `pending/` are not edited by implementers.** Record
+  discrepancies and amendments in the task report and, if a shared decision is needed, append a
+  dated bullet under "Implementer amendments" at the end of this file; the Research Scientist
+  folds accepted amendments into the specs. The DeltaNet projection-name correction and the
+  additive `ArchitectureView` fields (`vocab_size`, `tie_word_embeddings`,
+  `lora_parameter_count(keys, rank)`) are accepted and now part of §2.2.
+- **R4 (2026-09-03 20:30) registry schema addition.** `configs/models/<name>.yaml` gains
+  `cache: {strategy: auto, equivalence_verified: null}`; `ModelSpec` gains
+  `cache_equivalence_verified: dict[str, str] | None`.
+- **R5 (2026-09-03 21:20) generator versioning replaces the C byte-for-byte rule.** SPEC-002
+  §3/§5 legitimately change generated rows (failing-step notes, two prompts). Add
+  `GENERATOR_VERSION: int` to `tasks.py` (1 = the generator at commit 97d197c that reproduces
+  `data/agent_v2c`; 2 = HEAD after SPEC-002 §3/§5; bump on every row-changing change). Record it
+  in every manifest and in `provenance.json`. Replace the acceptance "regenerates `data/agent_v2c`
+  byte-for-byte" (SPEC-001 §11, briefing §1.8) with: a test pins the train/valid/test hashes of the
+  current generator version for the reference config, and the SPEC-001 rendering migration test
+  compares old `messages` rendering against new `prompt`/`completion` rendering on the *same*
+  generator version. The last commit that reproduces run C's data is 97d197c.
+- **R6 (2026-09-03 21:20) `transcripts.jsonl` header record.** The first record is
+  `{"run_id": ...}`; every reader skips records without `task_id` via
+  `transcript.iter_task_records(path)`.
+- **R7 (2026-09-03 22:10) P2 cohorts.** Only `train-` rows are SFT-identical (737, not 1,050);
+  `sft_disjoint` is for paired adapter comparisons and is compared within difficulty only;
+  `all_rows` is the reportable cohort for a base run. See
+  `under_review/SPEC-004-s1-REVIEW-round1-2026-09-03.md`.
+- **R8 (2026-09-03 22:10) within-position reporting.** Every within-position cell reports
+  `n_test` and `n_cells`; below 24 test rows or 5 eligible cells print `n/a (n=…)`; the pooled
+  `overall` row appears in markdown; bootstrap intervals are computed over task ids restricted
+  to eligible cells.
+- **R9 (2026-09-03 22:40) no accidental snapshot.** Until Task 5 applies R1, hybrid registry
+  files set `cache.strategy: none` explicitly; the temporary `auto → snapshot` branch is
+  commented `TEMPORARY until R1` and its test is `xfail(strict=True)`.
+- **R10 (2026-09-03 22:40) per-module test files.** New tests go in `tests/test_<module>.py`;
+  existing tests move only when their owning lane next touches them. Purpose: stop file-level
+  claims on the two monolithic test files from serialising independent lanes.
+- **R11 (2026-09-03 22:40) atomic-write threshold.** Metadata-sized writers may write directly;
+  anything over 1 MiB or containing arrays uses temp file, fsync, `os.replace`.
+- **R12 (2026-09-04 09:00) versioned replay.** When `GENERATOR_VERSION` at HEAD exceeds the
+  version in a saved artifact's manifest, retroactive tools (`agent-v2-integrity` over saved
+  evaluations, `agent-v2-probe-state reanalyse`) replay the note-template functions of the
+  artifact's recorded version, kept in-repo behind a version switch used for replay only;
+  generation for training always uses HEAD templates; standing contract tests pin their
+  artifact's version explicitly. (Deputy's §8 proposal of 06:15, promoted.)
+- **R13 (2026-09-04 09:00) green gate at hand-off.** A lane may not report complete, request
+  review, or release its claimed paths with a red full suite; a landing that turns the suite
+  red is an incident requiring an issue within the cycle. Three red landings occurred on
+  2026-09-03 night; each was caught, but the gate moves to hand-off.
+- **R2 amended (2026-09-04 09:00):** the end-of-turn literal is additionally permitted in
+  tests that assert registry or template round-trips; never in fixture logic that would mask a
+  layout bug. (Deputy's proposal, promoted.)
+- **Ratified 2026-09-04 09:00:** the four PROPOSED bullets of 00:20–05:50 in §8 are promoted:
+  §2.13/§2.14 carry the Task 3 tuple returns, `lora_block_mask -> Iterator[int]`, and the
+  declared `positions=` kwarg; §2.3 records the phased `build_prompt` contract with its two
+  conditions (spec threading now; Task 6 removes the default and `tools=`); §2.5/§5 wording
+  becomes "registry `ModelSpec` (data stage) / resolved spec (model stages)";
+  §2.4 gains `family_balanced_tasks(split, *, difficulty, per_family, seed) -> list[Task]`;
+  the §2.11 screen example gains its `difficulty:` key; `stage_select`'s missing
+  `write_provenance` call remains owed.
+
+## 8. Implementer amendments (append-only, dated)
+
+- PROPOSED (Deputy, 2026-09-04 00:20): §2.13/§2.14 amendments to match the disclosed Task 3
+  deviations (issue #6 N2), for promotion or deletion: `response_mean_activations` and
+  `jlens_map` return a `(result, stats)` tuple for view callers and keep the legacy bare-dict/
+  bare-array return for raw-model callers until `assistant_axis.py` and `test_pipeline.py`
+  migrate (Task 8); `lora_block_mask` returns `Iterator[int]` yielding the masked-module count;
+  `InjectionHook`'s extra `positions=` convenience kwarg is either declared in §2.13 or removed.
+- PROPOSED (Deputy, 2026-09-04 00:20): reconcile R2 with §6 check 2. R2 permits the end-of-turn
+  literal in `models.py::_default_spec`, `configs/models/` and `arch.py` "nowhere else"; §6
+  check 2 additionally allows "tests, and legacy modules". Commit `b39d6ea` added a test
+  asserting the registry round-trip (`tests/test_probes.py:1912`), a literal R2 hit that §6
+  permits. Proposed text: R2 gains "and in tests that assert registry or template round-trips;
+  never in fixture logic that would mask a layout bug."
+
+- PROPOSED (Deputy, 2026-09-04 05:40): record Task 4's phased `build_prompt` contract in §2.3.
+  Until SPEC-001 Task 6: `spec` defaults to `None` and resolves to the qwen25-coder-3b
+  compatibility spec; `tools=` remains accepted and discarded. Two conditions attach: (a) the
+  three probe CLIs and the runner thread their loaded spec into every `build_prompt` call now
+  (issue #10 T1), re-enabling the generation-suffix assertion for non-3B models — the
+  assertion being skipped in compatibility mode is the hazard; (b) Task 6 removes the default
+  and the `tools=` parameter and this bullet. Bundled: the dataset manifest records
+  `asdict(ModelSpec)`, not the resolved spec, because the data stage loads no model — either
+  amend §2.5/§5's "resolved" wording to "registry `ModelSpec` (data stage) / resolved spec
+  (model stages)" per the Codex provenance ruling on issue #3 C3, or require a follow-up.
+
+- PROPOSED (Deputy, 2026-09-04 05:50): §2.4 addition — `family_balanced_tasks(split, *,
+  difficulty, per_family, seed=20260902) -> list[Task]` (tasks.py:135), the screen-cell
+  sampler `stage_select` uses; validates quota keys and non-negative ints. Also: the §2.11
+  `select.screen` example omits the `difficulty:` key that `stage_select` (cli.py:298) and
+  `family_balanced_tasks` require — add it to the example. Also: `stage_select` still lacks
+  its `write_provenance` call (asked of the lane on issue #7); the map's "every stage" sentence
+  stays normative.
+
+- PROPOSED (Deputy, 2026-09-04 06:15): versioned replay ruling (issue #11). When
+  `GENERATOR_VERSION` at HEAD exceeds the version recorded in a saved artifact's manifest,
+  retroactive tools (`agent-v2-integrity` over saved evals, `agent-v2-probe-state reanalyse`)
+  replay the note-template functions of the artifact's recorded version, kept in-repo behind a
+  version switch used for replay only; generation for training always uses HEAD templates.
+  Standing contract tests pin their artifact's version explicitly. Alternative if versioned
+  replay is refused: retroactive tools refuse with a named error and their tests skip with the
+  version mismatch stated.
+
+- PROPOSED (Deputy, 2026-09-04 09:05): record the Director's model-execution rule as a numbered
+  ruling (issue #12). The prohibition on model runs is lifted; execution is confined to a single
+  designated lane under a single task, project-wide, whose UUID the coordinator records. Every
+  other lane and every test remains fake-only: no checkpoint or tokenizer loads, no `mlx_lm.load`,
+  no `load_policy` against real weights, and briefing §7 rule 4 ("never run a model to just
+  check") still binds them. Briefing §1.1 needs the corresponding edit; its own wording
+  anticipates the lift.
