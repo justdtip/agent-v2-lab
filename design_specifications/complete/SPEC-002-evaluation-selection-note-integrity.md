@@ -2,7 +2,7 @@
 
 > Read first: `01-IMPLEMENTER-BRIEFING.md` (standing rules, traps, hand-off) and `02-INTERFACE-AND-WIRING-MAP.md` (exact shared signatures, file ownership, implementation order, integration checks). Signatures in the wiring map override any looser wording here.
 
-Status: pending. Author: Claude. Date: 2026-09-03.
+Status: COMPLETE (ratified 2026-09-05, review round 2; sanctioned deviations listed there). Author: Claude. Date: 2026-09-03.
 Depends on: SPEC-001 for the `ModelSpec` plumbing only; §2 and §5 can be implemented first
 against the current tree and run today over saved outputs. GPU: none for implementation and for
 the retroactive analysis in §2.4; the new screen runs only inside `select`, which is gated.

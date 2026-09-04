@@ -5,12 +5,12 @@ conventions: updated by the Deputy after every commit, an item ticks only on a c
 file:line, or a checksummed artifact — re-measured, not re-read (Chief's standard, #21). Covers when probes may run and what the probe programme
 (SPEC-004) still needs. Training's arm 1 has its own list; the one shared item is marked.
 
-As of: `ac9c27a` (position-groups fix committed with the Chief's one-token guard, #29), suite
-**654 passed, exit 0** bare. Two independent auditors each saw one
+As of: `036e62c` (R25 alignment slice committed, #30; position-groups fix `ac9c27a`, #29), suite
+**667 passed, exit 0** bare. Two independent auditors each saw one
 transient red run in `tests/test_patch.py` (`random control candidate pool cannot satisfy
 treatment cardinality`) during the implementer's edit window; not reproduced since — carried
 to the R19 reviewer as a question, not folded into the count.
-Updated: 2026-09-04 ~20:20 by the Deputy (after commit `ac9c27a`).
+Updated: 2026-09-05 by the Deputy (after commit `036e62c`).
 
 ## The one distinction that matters
 
@@ -61,8 +61,8 @@ counterfactual note is longer than the failing note by construction (663 vs 659 
 7 vs 5 value tokens — the extras are the dropped values) and the patcher requires equal
 source/target cardinality. Ruled as R25 on issue #28** (tail alignment with residue
 recorded; `note_value_tokens` → `shared_value_tokens` + `dropped_value_slot`; controls resample
-post-alignment; seven cells). B3 therefore waits on: the R25 slice (implemented, Deputy-reviewed READY, applied uncommitted on `ac9c27a`, work order #30 at the Chief's gate — Director-expedited chain, no R19 round),
-then the Director's third attempt with the unchanged command.
+post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief-ratified).** B3 now waits only on the
+Director's third attempt with the unchanged command.
 
 ## Part B — SPEC-004 sections, in the spec's own priority
 
@@ -80,7 +80,7 @@ then the Director's third attempt with the unchanged command.
   stable, decision steps 7/7/7/7/6, dropped values 85/89/100/32/54. Lift request sent
   (`P6-LIFT-REQUEST-2026-09-04.md`, approved by the Director). **Two live attempts failed on
   code, not on inputs** — see the standing note: wrapper visibility (fixed, `89dfb56`),
-  position groups (fixed, `ac9c27a`), and the R25 alignment slice (#28) still ahead.
+  position groups (fixed, `ac9c27a`), and the R25 alignment slice (fixed, `036e62c`). Nothing known stands between the code and the run.
   Bound secondary condition from #26's ratification: `aggregate_report` failures with the
   generator-v4 note as counterfactual, labelled designed-correct — after the primary run.
   Ticks when the run's artifact exists under `outputs/probes/patch-C-2026-09-04/`.

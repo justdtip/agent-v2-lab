@@ -474,3 +474,12 @@ recording the execution rule. No execution lane designated yet.
 - Concurrent document reorganisation observed in the tree (`DOCUMENT-MOVES-2026-09-05.md`): log
   and checklists now under `live/`, finished reports under `complete/`. Records updated at the
   new paths; nothing lost.
+
+## 2026-09-05 — R25 slice ratified (#30) and committed `036e62c`; P6 unblocked
+
+- Chief read the alignment code directly, approved with all four open points kept as
+  recommended; #28 and #30 closed. Final gate: suite 667 / exit 0 bare. Committed, pushed.
+  Implementer worktree removed. Records at their `live/` paths updated; the Chief's review file
+  `under_review/R25-ALIGNMENT-REVIEW-round1-2026-09-05.md` carried in the docs commit.
+- Director told: third P6 attempt can run with the unchanged command; B4 training request
+  follows on the single lane.

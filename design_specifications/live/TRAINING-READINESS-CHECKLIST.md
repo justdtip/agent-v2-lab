@@ -6,10 +6,10 @@ gets its line re-derived, never assumed — re-measured, not re-read (Chief's st
 commit, a file:line, or an artifact with a checksum. Structure follows ruling R15; nothing here
 adds to or relaxes it.
 
-As of: `ac9c27a`, suite **654 passed, exit 0** bare (nine consecutive green runs including
+As of: `036e62c`, suite **667 passed, exit 0** bare (green on every bare run since; earlier note: nine consecutive green runs including
 `tests/test_patch.py` alone and reversed file order; two auditors each saw one transient red in
 that file during an implementer's edit window, not reproduced since).
-Updated: 2026-09-04 ~20:20 by the Deputy (after commit `ac9c27a`; nothing on this list moved).
+Updated: 2026-09-05 by the Deputy (after commit `036e62c`; nothing on this list moved — P6 runs first on the single lane).
 
 ## Part 0 — gate mechanics (before anything else can tick)
 

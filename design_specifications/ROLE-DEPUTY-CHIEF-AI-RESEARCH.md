@@ -109,10 +109,11 @@ Chief promotes it to §7 or deletes it. Never write into §7 yourself.
 - When the Director asks for a document, write it to disk once and give the path; do not
   paste long content into chat.
 
-## 9. Current state of play (as of 2026-09-04 ~20:20; update as things land)
+## 9. Current state of play (as of 2026-09-05; update as things land)
 
-HEAD `ac9c27a`, pushed (branch in sync with origin). Suite **654 passed, exit 0** bare. Source
-tree clean.
+HEAD `036e62c`, pushed (branch in sync with origin). Suite **667 passed, exit 0** bare. Source
+tree clean. Documents reorganised per `DOCUMENT-MOVES-2026-09-05.md` (`3842e9d`): live
+instruments under `live/`, ratified reports under `complete/`, closed notes under `records/`.
 
 - **Both preflights passed under the R18a gate** (Director-run, 15:18 and 15:20): native-dtype
   max_abs 0.0 and Frobenius 0.0 on both the 3B and Qwen3.5-4B; fp32 gap measured, never gated
@@ -131,10 +132,9 @@ tree clean.
   merge; **fixed `ac9c27a`**, #29 ratified with a one-token boundary guard, closed). Behind it, verified on real data: the counterfactual note is longer than the failing
   note by construction, so the patcher's equal-cardinality rule fails; **ruled R25 on #28**
   (tail alignment with residue; `shared_value_tokens` + `dropped_value_slot` with mean-pooled
-  source rows on the separator slot; controls resample post-alignment; seven cells). The R25
-  slice is being implemented in an isolated worktree on top of the fix; own R19 round; lands
-  as the next work order. The Director's command is unchanged; the third attempt follows both
-  commits. Both readiness checklists re-audited line by line and corrected (~19:40).
+  source rows on the separator slot; controls resample post-alignment; seven cells). **The R25
+  slice is committed `036e62c`** (#30; Director-expedited chain: implementer → Deputy's direct
+  review → Chief). The Director's command is unchanged; **the third attempt is unblocked.** Both readiness checklists re-audited line by line and corrected (~19:40).
 - Rulings R1 to R25. Governance: Deputy dispatches implementers, R19 reviewer between
   implementer and Deputy verdict, Chief gates commits (rulings and reviews rest on the
   governing code read directly), Deputy commits and pushes; momentum standing order; execution
