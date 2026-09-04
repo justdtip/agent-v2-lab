@@ -1,122 +1,123 @@
-# Issue 15 Residual Equivalence Diagnosis Implementation Plan
+# Issue 15 Residual Equivalence and Gate Scope Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Diagnose and correct the `qwen35-4b` preflight residual-equivalence failure without changing the float32 `ArchitectureView` contract or overwriting the failed incident artifact.
+**Goal:** Falsify or confirm the BF16-versus-FP32 explanation for the `qwen35-4b` residual failure, correct the evidence criterion only if controls support it, and expose a consumer-specific preflight gate without overwriting the incident artifact.
 
-**Architecture:** Treat the existing failed artifact as immutable incident evidence. Reproduce the suspected BF16-versus-FP32 control-path split with a small hybrid fake, then make the preflight compare the manual float32 traversal with the model-native traversal seeded by the same float32 embedding. Use the specification's `1e-5` absolute tolerance, write failed evidence before returning a nonzero status, independently review all offline work, and permit at most one serialized real-model retry to a separate output root after the reviewer approves the exact command.
+**Architecture:** Preserve the briefing-mandated FP32 `ArchitectureView` path and add an explicitly diagnostic native-dtype traversal plus dtype-aware error instrumentation. Independently review that instrumentation and the consumer gate, run two serialized controls, then let the same implementer apply the measured conclusion and the same reviewer gate it before one protected Qwen3.5 retry. Failed artifacts remain evidence and return nonzero; canonical incident bytes never change.
 
 **Tech Stack:** Python 3.13, MLX/MLX-LM, pytest, Ruff, deterministic JSON, Markdown incident reporting
 
-**Spec:** `design_specifications/pending/SPEC-001-model-agnostic-backbone.md` §§2, 10-12 and GitHub issue #15 assignment from the goal Coordinator
+**Spec:** `design_specifications/pending/SPEC-001-model-agnostic-backbone.md` §§2, 10-12; the user-ratified Deputy/Coordinator comments on GitHub issues #15 and #16
 
 ## Global Constraints
 
-- `ArchitectureView.embed(ids)` and `ArchitectureView.run_block(...)` continue returning float32; activations and tangents remain float32 and weights remain quantised.
-- The residual contract compares the view's pre-unembedding final residual with the text module's own block/mask/final-norm path to absolute tolerance `1e-5` on exactly 64 tokens.
-- `outputs/preflight/qwen35-4b.json` is immutable incident evidence. Its bytes must retain SHA-256 `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679` throughout this task.
-- `require_preflight` remains fail-closed for missing, malformed, stale, unsupported-schema, or `passed: false` artifacts. No skip/bypass path is added or exercised.
-- A failed `agent-pipeline preflight` writes its deterministic evidence artifact and exits nonzero.
-- Offline implementation and review must not load a checkpoint, tokenizer, weights, or execute model inference. Tests use only local fakes.
-- Do not run training, evaluation, rollout, probe, cache attestation, push, publish, or any destructive command.
-- At most one real `qwen35-4b` retry is allowed. Before it, the reviewer must approve the exact command, the Coordinator board must be re-listed, and this task must acquire exclusive `model-execution`.
-- The retry must write to a distinct issue-15 evidence directory, never the canonical `outputs/preflight/qwen35-4b.json` path.
-- One principal implementer owns the code/report work and one independent principal reviewer gates it.
+- Keep `ArchitectureView.embed(ids)` and `ArchitectureView.run_block(...)` float32. Activations and tangents remain float32 and weights remain quantised; do not remove or weaken those casts.
+- Treat BF16-versus-FP32 as the leading hypothesis, not a conclusion. The Qwen3.5 native-dtype manual-loop control must try to falsify it before the equivalence pass criterion changes.
+- The regression fake is genuinely BF16 and hybrid: three linear-attention blocks and one attention block, with distinct native masks and no cache.
+- Record both maximum absolute error and scale-normalized maximum relative error. Proposed tolerance is derived before controls from the reference/native dtype: `relative_tolerance = 2 * finfo(reference.dtype).eps` and `absolute_tolerance = relative_tolerance * max(reference_scale, finfo(reference.dtype).tiny)`, where `reference_scale = max(abs(reference))`. Do not tune either threshold after observing a model result.
+- The pre-fix instrumentation may report `within_tolerance`, but `_residual_equivalence(...)["passed"]` remains exact equality until both controls support the hypothesis and the fix is independently reviewed.
+- `outputs/preflight/qwen35-4b.json` is immutable incident evidence. Its bytes retain SHA-256 `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679` throughout.
+- `require_preflight` defaults to the view/probe predicate and remains fail-closed. The training predicate requires schema, identity, revision, memory, prompt-rendering, and LoRA evidence but deliberately does not depend on residual/JVP. No CLI call-site changes belong to this task.
+- A failed preflight writes deterministic evidence and then exits nonzero.
+- Offline work does not load checkpoints, tokenizers, weights, or execute real-model inference. Tests use only local fakes.
+- Do not run training, evaluation, rollout, probe capture, cache attestation, push, publish, or destructive commands. Do not reclaim `pipeline/cli.py` or `tests/test_cli.py`.
+- Model processes are serialized and never resident concurrently. Before each control/retry: independently approve the exact command, re-list the board, acquire exclusive `model-execution`, run exactly once, end the process, release promptly, and re-hash the canonical artifact.
+- Authorized real-model executions are exactly two pre-fix controls (Qwen3.5 native-dtype manual loop; Qwen2.5 BF16 preflight) and one post-fix Qwen3.5 preflight retry. No second attempt of any command is allowed.
+- Control outputs live only under `outputs/preflight/issue-15-controls/`; retry output lives only under `outputs/preflight/issue-15-retry/`. All targets must be absent before their one write.
+- Use one principal implementer for all code/report phases and one independent principal reviewer for every gate.
 
 ---
 
-### Task 1: Reproduce, fix, review, and document the precision-path mismatch
+### Task 1: Instrument, control, fix, and document residual equivalence and consumer gates
 
 **Files:**
-- Inspect, modify only if the regression proves it necessary: `src/local_llm_lab/arch.py`
+- Modify: `src/local_llm_lab/arch.py`
 - Modify: `src/local_llm_lab/pipeline/preflight.py`
 - Create: `tests/test_arch.py`
 - Modify: `tests/test_preflight.py`
-- Create and later append reviewed retry evidence: `design_specifications/under_review/GITHUB-ISSUE-15-RESIDUAL-EQUIVALENCE-DIAGNOSIS.md`
+- Create and append measured evidence: `design_specifications/under_review/GITHUB-ISSUE-15-RESIDUAL-EQUIVALENCE-DIAGNOSIS.md`
 
 **Interfaces:**
-- Consumes: `ArchitectureView.embed(ids)`, `masks(h, cache)`, `run_block(i, h, masks, cache_i)`, `final_norm(h)`, and a Qwen-style `text_module(ids, cache=None, input_embeddings=None)`.
-- Produces: `_residual_equivalence(view, ids, array_api) -> dict[str, Any]` with `max_abs_error`, `absolute_tolerance`, `passed`, and `token_count`; `run_preflight(...) -> Path` on success and `SystemExit` after writing evidence on failure.
+- Produces `ArchitectureView.diagnostic_native_final_residual(ids) -> array`: the raw embedding, native masks, direct blocks, and final norm with no FP32 promotion and no cache. It is diagnostic-only; all existing view methods retain their contracts.
+- Produces `run_residual_control(model_name, *, output_path, ...) -> Path`: fake-testable, one-model diagnostic JSON comparing FP32 manual, native-dtype manual, and native reference residuals.
+- Produces `_residual_metrics(actual, reference, *, array_api) -> dict[str, Any]`: `max_abs_error`, `max_relative_error`, `reference_dtype`, `reference_epsilon`, `reference_scale`, `relative_tolerance`, `absolute_tolerance`, and `within_tolerance`.
+- Produces `require_preflight(spec, *, consumer: Literal["view", "training"] = "view", ...)`: common identity/revision/schema validation followed by consumer-specific evidence validation.
+- Preserves `run_preflight(...) -> Path` on success and changes failure to `SystemExit` only after the artifact is written.
 
-- [ ] **Step 1: Freeze the incident and write the offline trace before editing product code**
+- [ ] **Step 1: Freeze evidence and trace both paths before product edits**
 
-  Record the current HEAD, `git status --short`, and SHA-256 of `outputs/preflight/qwen35-4b.json`. In the diagnosis report, trace the installed Qwen3.5 path against `ArchitectureView` in a table with these exact rows: embedding dtype, attention/SSM mask construction, cache/no-cache behavior, per-kind block selection, residual index convention, per-block dtype handling, and final norm. Cite the local installed source and cached `config.json`/safetensors metadata. The first hypothesis must be exactly: the Qwen checkpoint's BF16 native embedding path and the view's FP32-promoted path are different numerical programs, so the current oracle can accumulate a large difference even when masks, block order, residual indices, and final norm are structurally correct. Do not propose or implement a second hypothesis unless the RED test falsifies this one.
+  Record HEAD, `git status --short`, the canonical artifact hash, the installed MLX-LM Qwen3.5/Qwen2 source, cached Qwen3.5 config, and safetensors metadata. Begin the diagnosis report with a table whose exact rows are: embedding dtype, attention/SSM masks, cache/no-cache, per-kind blocks, residual indices, per-block dtype boundary, final norm. Record the leading hypothesis exactly as a hypothesis and bank the canonical successful evidence: finite-difference JVP finite at layer 16, 12 LoRA target suffixes / 32,464,896 trainable parameters, 32 layers (24 linear-attention / 8 attention), 3.8451762199401855 GiB within 22 GiB, and cache strategy `none` via unverified equivalence.
 
-- [ ] **Step 2: Add the mutation-sensitive hybrid fake regression**
+- [ ] **Step 2: Add the BF16 hybrid RED regression for native-dtype diagnostics**
 
-  Create `tests/test_arch.py` with a four-block fake whose `is_linear` sequence is `(True, True, True, False)`, whose attention and SSM helpers return distinct sentinels, whose embedding output is low precision, and whose nonlinear block arithmetic makes FP32 seeding observably differ from the default low-precision native path. The fake text module must accept `input_embeddings=None` exactly like installed Qwen2/Qwen3/Qwen3.5.
+  In `tests/test_arch.py`, use a real `mx.bfloat16` embedding and four dtype-sensitive fake blocks with `is_linear == (True, True, True, False)`. The fake text module has Qwen's `__call__(ids, cache=None, input_embeddings=None)` shape, builds one attention and one SSM mask per traversal, uses no cache, and records input/output dtype, block kind/order, residual index 4, and one final norm.
 
-  The regression must establish all three facts, not merely one:
+  Add `test_hybrid_native_diagnostic_preserves_bfloat16_and_matches_reference`. It computes the normal FP32 view residual, the fake's default BF16 reference, and `view.diagnostic_native_final_residual(ids)`, then asserts:
 
   ```python
-  view = ArchitectureView.from_model(model)
-  embedded = view.embed(ids)
-  result = _residual_equivalence(view, ids, mx)
-
-  assert embedded.dtype == mx.float32
-  assert default_native_error > 1e-5  # the fixture is mutation-sensitive
-  assert result == {
-      "absolute_tolerance": 1e-5,
-      "max_abs_error": 0.0,
-      "passed": True,
-      "token_count": 64,
-  }
+  assert view.embed(ids).dtype == mx.float32
+  assert fp32_residual.dtype == mx.float32
+  assert native_reference.dtype == mx.bfloat16
+  assert native_manual.dtype == mx.bfloat16
+  assert float(mx.max(mx.abs(fp32_residual - native_reference)).item()) > 0.0
+  assert float(mx.max(mx.abs(native_manual - native_reference)).item()) == 0.0
   ```
 
-  The fake must record and assert that both native and manual traversals use no cache, one attention mask, one SSM mask, three linear-attention blocks, one attention block, residual index 4 before the final norm, and the same final norm. If removing the `input_embeddings=` seed from the eventual production fix would not fail this test, strengthen the fixture before proceeding.
+  Mutation sensitivity: deleting the diagnostic method, routing it through `embed`/`run_block`/`final_norm`, using the wrong kind mask, introducing a cache, changing block order, or skipping/doubling norm must fail the test.
 
-- [ ] **Step 3: Run the single regression and capture RED**
+- [ ] **Step 3: Capture RED and implement only the diagnostic traversal**
 
   Run:
 
   ```bash
-  .venv/bin/python -m pytest -q tests/test_arch.py::test_hybrid_float32_equivalence_uses_the_same_embedding_seed
+  .venv/bin/python -m pytest -q tests/test_arch.py::test_hybrid_native_diagnostic_preserves_bfloat16_and_matches_reference
   ```
 
-  Expected: FAIL because the current `_native_final_residual` calls `text_module(ids)` without the view's float32 embedding. Record command, exit status, and the concise assertion failure in the diagnosis report. If the test does not fail for that reason, stop product edits and return `BLOCKED` with the falsifying evidence.
+  Expect a missing-method failure. Record command, HEAD, exit, and concise failure. Implement `diagnostic_native_final_residual` in `arch.py` using the same token-id normalization as `embed`, raw `text_module.embed_tokens`, `masks(h, None)`, direct block invocation with `masks[layer_kind(index)]` and `cache=None`, then raw `text_module.norm`. Do not call the existing FP32-promoting `embed`, `run_block`, or `final_norm` methods.
 
-- [ ] **Step 4: Make the minimal apples-to-apples residual comparison**
+- [ ] **Step 4: Add dtype-derived relative/absolute metric instrumentation**
 
-  In `src/local_llm_lab/pipeline/preflight.py`, add:
+  Add fake-only tests for `_residual_metrics` using BF16 and FP32 references. Compute:
 
   ```python
-  _RESIDUAL_ABSOLUTE_TOLERANCE = 1e-5
+  info = array_api.finfo(reference.dtype)
+  scale = _scalar(array_api.max(array_api.abs(reference)))
+  relative_tolerance = 2.0 * float(info.eps)
+  absolute_tolerance = relative_tolerance * max(scale, float(info.tiny))
+  max_abs_error = _scalar(array_api.max(array_api.abs(actual - reference)))
+  max_relative_error = max_abs_error / max(scale, float(info.tiny))
+  within_tolerance = max_abs_error <= absolute_tolerance
   ```
 
-  Preserve the first float32 embedding before the manual loop and pass that exact array to the native text-module path:
+  Tests prove the values change with reference dtype and scale and reject a post-hoc hard-coded `1e-5`. Extend `_residual_equivalence` to serialize these fields for FP32-manual versus native-reference, but at this phase keep `passed` equal to exact equality and serialize `criterion: "exact_pre_control"`.
+
+- [ ] **Step 5: Add and fake-test the one-model residual control writer**
+
+  Add `run_residual_control` with injected loader/spec-loader/view-factory/revision-reader/array-api seams. It loads lazily, builds the exact 64-token prompt, computes three residuals—normal FP32 view loop, `diagnostic_native_final_residual`, and `text_module(ids)` native reference—and writes deterministic JSON to an explicit `output_path`. The JSON contains schema/model/HF/revision/token identity, FP32-manual-versus-native metrics, and native-manual-versus-native metrics. It never calls JVP, LoRA discovery, cache creation, memory estimation, prompt-mode rendering, or another model load.
+
+- [ ] **Step 6: Add the consumer-specific gate API from issue #16**
+
+  Add a `consumer` keyword to `require_preflight`, defaulting to `"view"`. Common checks remain schema version, registered model name, HF id, and current cached revision.
+
+  The training predicate requires all of:
 
   ```python
-  embedded = view.embed(ids)
-  manual = embedded
-  masks = view.masks(manual, None)
-  for index in range(view.num_layers):
-      manual = view.run_block(index, manual, masks, None)
-  manual = view.final_norm(manual)
-  native = _native_final_residual(view, ids, embedded)
-  error = _scalar(array_api.max(array_api.abs(manual - native)))
-  return {
-      "absolute_tolerance": _RESIDUAL_ABSOLUTE_TOLERANCE,
-      "max_abs_error": error,
-      "passed": error <= _RESIDUAL_ABSOLUTE_TOLERANCE,
-      "token_count": 64,
-  }
+  memory["within_budget"] is True
+  [entry["mode"] for entry in thinking_prompts] == ["unsupported", "off", "inference", "trained"]
+  all(isinstance(entry["prompt"], str) and entry["prompt"] for entry in thinking_prompts)
+  all(isinstance(entry["token_count"], int) and entry["token_count"] > 0 for entry in thinking_prompts)
+  isinstance(lora["keys"], list) and lora["keys"] and all(nonempty strings)
+  isinstance(lora["trainable_parameters"], int) and lora["trainable_parameters"] > 0
   ```
 
-  Change `_native_final_residual` to accept `input_embeddings` and call:
+  The view predicate requires every training predicate plus `residual_equivalence["passed"] is True`, `jvp["finite"] is True`, and top-level `passed is True`. Unknown consumers fail before any action. Add tests that the preserved shape of a `passed: false` artifact can satisfy `consumer="training"` while default/`consumer="view"` rejects it, and parameterize malformed memory/rendering/LoRA/residual/JVP cases. Preserve skip semantics and action-after-validation ordering. Do not touch CLI call sites.
 
-  ```python
-  native = view.text_module(ids, input_embeddings=input_embeddings)
-  ```
+- [ ] **Step 7: Make failed preflights write evidence then exit nonzero**
 
-  Keep its existing `last_hidden_state`/tuple/direct-array normalization. Do not relax `ArchitectureView`'s float32 contract and do not change block, mask, cache, residual-index, or norm behavior unless the RED fixture independently proves such a change is required.
+  Add `test_failed_preflight_writes_evidence_then_exits_nonzero`. Use an injected mismatching fake, expect `SystemExit` containing `preflight failed`, then parse its `tmp_path` artifact and assert its failed metrics were written. In `run_preflight`, store `path = write_report(...)`, return it only when `report["passed"] is True`, otherwise raise `SystemExit` naming model and path.
 
-- [ ] **Step 5: Prove failed preflights preserve evidence and exit nonzero**
-
-  In `tests/test_preflight.py`, update the successful report expectation to include `"absolute_tolerance": 1e-5`. Add a mismatching fake view and a test named `test_failed_preflight_writes_evidence_then_exits_nonzero` which invokes `run_preflight(..., output_root=tmp_path)` under `pytest.raises(SystemExit, match="preflight failed")`, then reads `tmp_path / "fake-model.json"` and asserts `passed is False`, residual `passed is False`, and the mismatch/tolerance fields are present.
-
-  In `run_preflight`, always call `write_report` first. Return the resulting path only when `report["passed"] is True`; otherwise raise `SystemExit` whose message names the failed model and the evidence path. Do not modify `pipeline/cli.py`: its existing direct call will naturally exit nonzero.
-
-- [ ] **Step 6: Run GREEN, focused compatibility checks, and lint**
+- [ ] **Step 8: Run offline GREEN/lint, complete the pre-control report, and commit**
 
   Run and record exact exits/counts:
 
@@ -126,29 +127,28 @@
   .venv/bin/ruff check src/local_llm_lab/arch.py src/local_llm_lab/pipeline/preflight.py tests/test_arch.py tests/test_preflight.py
   ```
 
-  Re-run the incident SHA-256 check and assert it still equals `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679`.
+  Re-hash the incident artifact. The report records the trace, single hypothesis, BF16 RED/GREEN, metrics/formula, gate API, failed-exit decision, exact commands/HEADs/exits/counts, changed files, and that no model/weights ran. Commit only claimed source/tests/report.
 
-- [ ] **Step 7: Complete the offline diagnosis report and commit**
+- [ ] **Step 9: Independent pre-control review and exact two-command authorization**
 
-  The report must contain: scope and exclusions; immutable incident path/hash and original `2.5591506958007812` error; installed/cached-source evidence; the seven-row path trace; the single hypothesis; RED/GREEN/lint commands with HEADs, exits, and test counts; the exact `1e-5` tolerance rationale from SPEC-001 §2; the failed-command exit decision; changed files; and an explicit statement that no weights/model inference occurred. Commit only the claimed source, tests, and report.
-
-- [ ] **Step 8: Independent offline review and exact retry authorization**
-
-  The reviewer must issue both a spec-compliance verdict and a code-quality verdict. In addition, it must approve or reject this exact proposed retry shape: first verify that `outputs/preflight/issue-15-retry/qwen35-4b.json` does not exist, acquire `model-execution`, run exactly the following command once, and release the action immediately:
+  The reviewer issues spec-compliance and code-quality verdicts, actively tries to falsify the hypothesis/test fixture, checks the tolerance is dtype/scale-derived but not yet used as the pass criterion, and approves or rejects these exact absent-target commands separately:
 
   ```bash
-  .venv/bin/python -c 'from pathlib import Path; from local_llm_lab.pipeline.preflight import run_preflight; run_preflight("qwen35-4b", output_root=Path("outputs/preflight/issue-15-retry"))'
+  .venv/bin/python -c 'from pathlib import Path; from local_llm_lab.pipeline.preflight import run_residual_control; run_residual_control("qwen35-4b", output_path=Path("outputs/preflight/issue-15-controls/qwen35-native-loop.json"))'
+  .venv/bin/python -c 'from pathlib import Path; from local_llm_lab.pipeline.preflight import run_preflight; run_preflight("qwen25-coder-3b", output_root=Path("outputs/preflight/issue-15-controls"))'
   ```
 
-  Approval must confirm the command cannot resolve to or overwrite `outputs/preflight/qwen35-4b.json`; a failed retry is expected to exit nonzero only after writing its separate evidence file.
+- [ ] **Step 10: Controller-only serialized controls**
 
-- [ ] **Step 9: Controller-only serialized retry, if approved**
+  For each approved command: verify target absence; re-list the board; record HEAD/status/canonical hash; acquire `model-execution`; run that command exactly once; ensure the process ends; release promptly; record exit/output/artifact hash; and reconfirm the canonical hash. Release between commands when practical. Never keep Qwen3.5 and Qwen2.5 resident concurrently. If Qwen3.5 native-manual-versus-native does not collapse within its dtype-derived tolerance, the hypothesis is falsified: do not apply the tolerance fix or run the Qwen3.5 retry; return to one-hypothesis-at-a-time offline diagnosis.
 
-  The controller re-lists the board, records HEAD/status/canonical hash, acquires exclusive `model-execution`, runs the approved command exactly once, records command/exit/output evidence, releases the action immediately, hashes both canonical and retry artifacts, and confirms the canonical hash is unchanged. No second real-model command is allowed regardless of result.
+- [ ] **Step 11: Apply the measured criterion only if both controls support it**
 
-- [ ] **Step 10: Append retry evidence, re-review, and run R13 verification**
+  Give the same principal implementer the two immutable control artifacts. If Qwen3.5 native-manual-versus-native is within tolerance and Qwen2.5 shows the same class of FP32-versus-BF16 divergence, change `_residual_equivalence` to set `passed = metrics["within_tolerance"]` and `criterion = "reference_dtype_scaled"`. Do not change the formula. Update fake expectations, append both controls and the conclusion to the diagnosis report, and commit. The same independent reviewer performs a scoped re-review.
 
-  The same principal implementer appends the controller-provided lock revisions, exact command, HEAD, exit, residual error/tolerance/pass status, artifact paths/hashes, and canonical immutability result to the diagnosis report, then commits the report-only update. The same independent reviewer performs a scoped re-review of that append. After approval, the controller records final HEAD and runs:
+- [ ] **Step 12: R13 before the one Qwen3.5 retry**
+
+  After review approval, record HEAD and run:
 
   ```bash
   .venv/bin/python -m pytest --collect-only -q
@@ -156,4 +156,18 @@
   .venv/bin/ruff check src tests
   ```
 
-  Record exit codes and exact collected/passed counts in the final execution record. Reconfirm `require_preflight` rejects the preserved canonical `passed: false` artifact without loading a model, and reconfirm its SHA-256.
+  Record exact exits and collected/passed counts; confirm the canonical hash and all three execution targets (two controls present, retry absent).
+
+- [ ] **Step 13: Independently authorize and run one protected Qwen3.5 retry**
+
+  The reviewer approves or rejects this exact command and confirms it cannot overwrite the canonical artifact:
+
+  ```bash
+  .venv/bin/python -c 'from pathlib import Path; from local_llm_lab.pipeline.preflight import run_preflight; run_preflight("qwen35-4b", output_root=Path("outputs/preflight/issue-15-retry"))'
+  ```
+
+  If approved, the controller verifies target absence, re-lists/acquires `model-execution`, runs once, ends the process, releases immediately, and records command/HEAD/exit/counts/tolerance/evidence/hash. No second retry is allowed.
+
+- [ ] **Step 14: Final report append, scoped review, and fail-closed checks**
+
+  The same implementer appends the retry result, every lock transition, all artifact hashes, the gate API contract for issue #14 P1, and the explicit no-bypass/no-extra-execution statement; then commits only the report. The same reviewer re-reviews that append. The controller confirms the preserved canonical artifact still fails default/view `require_preflight` without loading a model and records whether its training predicate passes. Reconfirm canonical SHA-256 and notify issue #14 P1 of the released `require_preflight(..., consumer="training")` contract without editing its CLI files.
