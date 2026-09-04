@@ -55,10 +55,10 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 
 ## R13 full fake-only suite
 
-- HEAD: `f0c8d8bba30334165aa27da4d6445e9d96bafcdd`
+- HEAD: `53a49eddfd17fb101bdf44c88f031e37ffa7e4ce`
 - Command: `uv run pytest -q`
 - Exit code: `0`
-- Result: `506 passed, 0 failed, 0 xfailed`
+- Result: `525 passed, 0 failed, 0 xfailed`
 - Failing node names: none
 
 ## Review fix round 2
@@ -68,3 +68,5 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 - Historical recovery reanalysis now exercises real offline rows and `reanalyse_dataset` under
   hard-failing model/prompt seams, asserts a version-distinguishing lexical surface cell, and
   pins returned generator-version metadata plus non-default saved difficulty.
+- Positive fake-capture coverage now pins v4 generator-version metadata on the consolidated
+  dataset, checkpoint shard, and checkpoint-signature context.
