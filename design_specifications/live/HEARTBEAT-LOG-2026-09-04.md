@@ -829,3 +829,12 @@ recording the execution rule. No execution lane designated yet.
   Implementer's correction of the review: mlx-lm 0.31.3 already evals in `evaluate`; the
   wrapper is kept for restore-on-exception. Config: batch 1 × accumulation 4, chunk 64;
   pairwise test compares effective batch. Suite 1016 / exit 0. Verdict pending the probe.
+
+## 2026-09-05 — P6 rerun started by the Director; my probe killed (two processes on the lane)
+
+- The Director started the P6 ledger rerun (`outputs/probes/patch-C-r27-2026-09-05`, own
+  Sonnet monitor) while my stage-1 probe was on the lane, launched by me with the lift
+  pending — my error: nothing goes on the lane while a lift is with the Director. Probe killed
+  at its first point; P6 continues (6/42 cells at 11 min, ETA ~1 h 10).
+- First stage-1 measurement stands: chunk 64, batch 1, 997 tokens → OK, peak 11.86 GB,
+  72.6 s step + one-row val (vs OOM at 19.17 GB unrolled). Remaining points after P6.
