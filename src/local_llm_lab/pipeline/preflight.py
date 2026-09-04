@@ -178,6 +178,8 @@ def require_preflight(
         _reject(spec, "preflight artifact is malformed or unreadable")
     if not isinstance(record, dict):
         _reject(spec, "preflight artifact is not a JSON object")
+    if record.get("schema_version") != _SCHEMA_VERSION:
+        _reject(spec, "preflight artifact schema version is missing or unsupported")
     if record.get("model_name") != spec.name:
         _reject(spec, "preflight artifact model name does not match the registered model")
     if record.get("hf_id") != spec.hf_id:

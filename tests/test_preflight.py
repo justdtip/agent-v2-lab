@@ -239,11 +239,25 @@ def test_run_preflight_uses_finite_difference_only_after_bad_forward_jvp(tmp_pat
     [
         (None, "preflight artifact is missing"),
         ("not json", "preflight artifact is malformed"),
-        ({"model_name": "wrong"}, "model name"),
-        ({"model_name": "fake-model", "hf_id": "wrong"}, "hf_id"),
-        ({"model_name": "fake-model", "hf_id": "org/fake-model"}, "snapshot revision"),
+        ({"schema_version": 1, "model_name": "wrong"}, "model name"),
+        ({"schema_version": 1, "model_name": "fake-model", "hf_id": "wrong"}, "hf_id"),
+        (
+            {"schema_version": 1, "model_name": "fake-model", "hf_id": "org/fake-model"},
+            "snapshot revision",
+        ),
         (
             {
+                "model_name": "fake-model",
+                "hf_id": "org/fake-model",
+                "snapshot_revision": "current",
+                "passed": True,
+                "memory": {"within_budget": True},
+            },
+            "schema version",
+        ),
+        (
+            {
+                "schema_version": 1,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "old",
@@ -254,6 +268,7 @@ def test_run_preflight_uses_finite_difference_only_after_bad_forward_jvp(tmp_pat
         ),
         (
             {
+                "schema_version": 1,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "current",
@@ -264,6 +279,7 @@ def test_run_preflight_uses_finite_difference_only_after_bad_forward_jvp(tmp_pat
         ),
         (
             {
+                "schema_version": 1,
                 "model_name": "fake-model",
                 "hf_id": "org/fake-model",
                 "snapshot_revision": "current",
@@ -298,6 +314,7 @@ def test_require_preflight_rejects_invalid_artifacts_before_actions(
 def test_require_preflight_accepts_current_evidence_and_skip_avoids_reads(tmp_path: Path) -> None:
     """A valid artifact permits the caller, while skip bypasses artifact and cache inspection."""
     artifact = {
+        "schema_version": 1,
         "model_name": "fake-model",
         "hf_id": "org/fake-model",
         "snapshot_revision": "current",
