@@ -6,10 +6,10 @@ gets its line re-derived, never assumed — re-measured, not re-read (Chief's st
 commit, a file:line, or an artifact with a checksum. Structure follows ruling R15; nothing here
 adds to or relaxes it.
 
-As of: `036e62c`, suite **667 passed, exit 0** bare (green on every bare run since; earlier note: nine consecutive green runs including
+As of: `2405598`, suite **754 passed, exit 0** bare (green on every bare run since; earlier note: nine consecutive green runs including
 `tests/test_patch.py` alone and reversed file order; two auditors each saw one transient red in
 that file during an implementer's edit window, not reproduced since).
-Updated: 2026-09-05 by the Deputy (after commit `036e62c`; nothing on this list moved — P6 runs first on the single lane).
+Updated: 2026-09-05 by the Deputy (after the four R26 commits `c1f7d51`…`2405598`; A8 met).
 
 ## Part 0 — gate mechanics (before anything else can tick)
 
@@ -82,6 +82,23 @@ Evidence: `cli.py:36,365` consumes `load_rendered_splits`; byte-identical migrat
 **Bound follow-up (not a condition):** wave 1 broke every adapter-loaded path (the view could
 not see `LoRALinear` wrappers); fixed `89dfb56` (issue #27). #27 binds an adapter-wrapped
 variant in the standard arch fixtures **before the B4 evaluation lift** — not yet dispatched.
+
+**A8. Run logging in place (R26, Director's amendment 2026-09-05 03:40).** Training does not
+start until lane A (`src/local_llm_lab/runlog.py`) and lane B (training integration:
+`run.log`, `events.jsonl`, `health.json` on every exit path, `non_finite_loss` and
+`incomplete_run` aborts, `train.health:` config) are committed through the R19 chain with
+fake-only tests green. Evidence when ticked: the two commit hashes and the test names.
+- [x] A8.1 **MET — lane A committed `c1f7d51`** (#36): `src/local_llm_lab/runlog.py`, 70 fake-only
+  tests in `tests/test_runlog.py` (`test_events_stay_strict_json_when_a_logged_field_is_not_finite`
+  among them), scanner green.
+- [x] A8.2 **MET — lane B committed `88ecac0`** (#37): `stage_train` opens the `RunLog` before the
+  base model loads (`cli.py`, `with RunLog.open(output, name="train", …)`), so the record
+  starts before iteration one; `health.json` on every exit path; `non_finite_loss` aborts with
+  no provenance; `incomplete_run` on a short run or a missing final checkpoint, with the
+  Chief's condition that the checkpoint be newer than the run's start
+  (`test_stage_train_ignores_a_stale_checkpoint_from_an_earlier_run`); eleven tests in
+  `tests/test_cli.py` (`test_stage_train_keeps_the_metrics_stream_byte_identical`,
+  `test_stage_train_aborts_on_a_non_finite_loss_without_writing_provenance`, …).
 
 **The lift itself:** when A1–A6 tick, the Deputy posts the request on issue #18 with artifact
 paths, SHA-256s, the recompute command, and one evidence line per condition; the Director lifts

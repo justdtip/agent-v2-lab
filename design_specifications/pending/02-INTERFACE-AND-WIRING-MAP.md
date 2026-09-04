@@ -597,6 +597,27 @@ forget. Each has an integration check in §6.
   `random_positions` for `dropped_value_slot` draws one non-treatment position.
   (d) `POSITION_GROUPS` becomes seven cells; the heat map, R24 stability record, and the
   five-case caveat are unchanged. Every cell records the alignment rule and cardinalities.
+- **R26 (2026-09-05 03:20) run health as a training gate.** Adopts the Deputy's proposal
+  (`under_review/RUN-LOGGING-DESIGN-AND-GATE-PROPOSAL-2026-09-05.md` §4) as an addition to
+  R15's evidence format, amended: (a) every training and probe run writes `<output>/run.log`
+  and `<output>/events.jsonl`; every training run also writes `<output>/health.json` on every
+  exit path; (b) `non_finite_loss` aborts the run and its adapters are ineligible for
+  selection; (c) a new fatal flag `incomplete_run` (iterations done < planned, or no checkpoint
+  at the final iteration) makes the run ineligible unless the Director lifts it explicitly
+  with the shortfall stated; (d) **Director's amendment 2026-09-05 03:40: training does not start until logging is in
+  place.** R15 gains condition 8: lanes A (`runlog.py`) and B (training integration,
+  `health.json`, abort path) are committed and their fake-only tests green before any
+  training lift; the run's health record starts at iteration one. An arm's **evaluation
+  lift** additionally requires `health.json` with verdict `healthy` or `warnings`, every warning listed in the lift request with the Deputy's
+  reading, and `run.log`/`events.jsonl`/`health.json` cited by path and SHA-256; (e) the
+  `start` event records the resolved `ModelSpec` name and hf_id, the config path, the data
+  manifest hash, and the git commit, so `run.log` alone identifies the run; (f) `health.json`
+  and the thresholds are copied into `provenance.json`; (g) probe runs emit at least one
+  progress line per outer unit of work (case, layer, task, or checkpoint), so no run is silent
+  for more than the length of one unit; (h) thresholds are engineering defaults recorded per
+  run and changed only through the arm config's `train.health:` block; (i) `metrics.jsonl`
+  and `train.log` stay byte-compatible (selection reads them). Contract in the proposal §5 is
+  normative for the four lanes; lane A lands first.
 
 ## 8. Implementer amendments (append-only, dated)
 

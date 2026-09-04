@@ -37,7 +37,7 @@ architecture until then.
   activations are FP32 by rule 1.5 while the model deploys BF16 — pre-existing, applies to the
   3B equally, surfaced on issue #15. The C7 refit (round FP32 activations in the saved npz to
   BF16, refit through the reanalysis pipeline, compare Holm flags) is offline, needs no model,
-  and would bound the effect with evidence. *Ruled — item 4 of R18 (the C7 refit clause; no separate "R18(c)" heading exists in the wiring map) on issue #15 — assigned to the Director, unimplemented.*
+  and would bound the effect with evidence. *Ruled — item 4 of R18 (the C7 refit clause; no separate "R18(c)" heading exists in the wiring map) on issue #15 — ruled; an offline implementer slice (no model), unassigned — corrected by the Chief 2026-09-05.*
 
 ## Standing note, 2026-09-04 ~19:30 — two blockers found by live P6 attempts; one fixed and committed, one fixed in the tree, one ruling requested
 

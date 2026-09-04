@@ -483,3 +483,57 @@ recording the execution rule. No execution lane designated yet.
   `under_review/R25-ALIGNMENT-REVIEW-round1-2026-09-05.md` carried in the docs commit.
 - Director told: third P6 attempt can run with the unchanged command; B4 training request
   follows on the single lane.
+
+## 2026-09-05 — run logging: design written, R26 requested (#34), four lanes dispatched
+
+- Director's ask: terminal progress + run-health metrics for training and probes, to file AND
+  stdout/stderr; the training health record as a gate. Survey: `stage_train` already tees
+  mlx_lm stdout to `train.log` and writes `metrics.jsonl` (selection reads it — byte-identical
+  invariant); P6 prints nothing during a run; mlx_lm 0.31.3 callbacks carry loss/lr/tokens-per-
+  second/trained tokens/peak memory. Design + proposed R26 in
+  `under_review/RUN-LOGGING-DESIGN-AND-GATE-PROPOSAL-2026-09-05.md`; ruling requested on #34.
+- Lanes (disjoint files, one fixed contract): A `runlog.py` core + `TrainingHealth`; B
+  `pipeline/cli.py` training integration + `health.json`; C `probes/patch.py` +
+  `adapter_delta.py`; D `state_probe.py` + `assistant_axis.py`. Invariants: no execution (P6
+  on the lane), no writes under outputs/, fakes-only, artifacts byte-identical, red-first.
+  Chain: Deputy's review → Chief's review → commit. B4 has not started, so it can carry the
+  health record from its first iteration if the chain closes before P6 finishes.
+
+## 2026-09-05 — R26 ruled (#35, five amendments) and dispatched; lane A reviewed
+
+- Amendments relayed to all four lanes in the ruling's words with two contract extensions
+  (`TrainingHealth.on_finish` + `incomplete_run`; `RunLog.open(identity=)`; shared `sha256_of`
+  / `git_commit`). Chain per the Director: implementer → Deputy's direct review → Chief.
+- Lane A delivered `runlog.py` (793 lines) + 69 tests. Read directly: rules use prior-window
+  medians with strict boundaries; memory flag once; rising streak re-arms after a decrease;
+  `on_finish` makes a short or checkpoint-less run `incomplete`; precedence aborted >
+  incomplete > warnings > healthy. Two defects fixed under review: non-finite floats in any
+  logged field became bare `NaN`/`Infinity` tokens (invalid strict JSON) — now serialised as
+  strings via a recursive sanitiser with `allow_nan=False`, one new test; the start line's
+  double space (my brief's typo) — now single, five expectations updated. 70 passed; scanner
+  green. Lanes B–D informed.
+
+## 2026-09-05 — lane B reviewed READY; work orders for lanes A and B filed
+
+- Lane B (`cli.py` +250/−46, tests +295/−9) read in full: metrics.jsonl written before the
+  rules run (byte-identity pinned), nested tee keeps train.log verbatim and mirrors into
+  run.log, thresholds validated before any load, on_finish only on the normal path, abort path
+  logs the flag / writes health.json / skips provenance / exits non-zero, health copied into
+  provenance after on_finish, identity from registry + config path + manifest hash + git.
+  Non-blocking: ValueError traceback for a bad health key; thresholds duplicated in
+  provenance. Implementer's stash/pop hazard verified harmless. Suite 754 / exit 0.
+- Work orders filed for A and B so the Chief can rule while C and D finish; commit order
+  A → B → C → D.
+
+## 2026-09-05 — lanes C and D reviewed READY; all four R26 work orders filed
+
+- Read all four probe diffs directly. C: progress per case and per cell in `run_patch_probe`
+  (payload byte-identical with and without), per condition in `run_block_ablation`, per
+  adapter in the delta CLI; logs open after cheap resolution, before guard and load; identity
+  carries input digests via `runlog.sha256_of`. Reverted under review: progress threaded
+  through `render_markdown`'s rendering loop (my brief's pointer error) — noise, no unit of
+  work. D: `resolve_policy` hoisted with its error deferred to the original site; capture
+  progress carries the memory fields; reanalyse and both axis paths logged; `print(markdown)`
+  retained. Pre-existing seed literal in the ablation CLI moved with indentation (scanner
+  accepts). Suite 754 / exit 0 after edits; scanner green; diff-check clean.
+- Work orders: A #36, B #37, C and D filed now. Commit order A → B → C → D on ratification.
