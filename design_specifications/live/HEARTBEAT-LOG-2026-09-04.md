@@ -684,3 +684,13 @@ recording the execution rule. No execution lane designated yet.
   `uv run agent-pipeline --config configs/agent_v2b_qwen35_4b.yaml train` as a background
   process; stdout/stderr also captured to `outputs/agent-v2b-qwen35-4b/train-stdout-stderr.txt`.
   Recorded on #18. Expected ~100 min; health.json on exit gates the evaluation lift (R26).
+
+## 2026-09-05 — B4 training failed at start (unused test split over the ceiling); fix dispatched
+
+- Died in 3 s: `load_rendered_splits` refused test row 37 (prompt ≥ `max_seq_length` 2688).
+  Measured (4B tokenizer): train max 2042, valid max 2421, none over; test max 3103, 15 over.
+  The train stage loads and deletes the test split without training on it (`test: False`).
+  health.json: status error, verdict healthy — an R26 gap (error path skips `on_finish`).
+- Options on #18: (a) config `max_seq_length: 3200` (training-invariant by measurement;
+  Director's word needed); (b) train stage loads train/valid only — slice dispatched with the
+  R26 error-path amendment proposed on #35. Lane free.
