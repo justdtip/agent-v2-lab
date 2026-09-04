@@ -109,26 +109,50 @@ Chief promotes it to §7 or deletes it. Never write into §7 yourself.
 - When the Director asks for a document, write it to disk once and give the path; do not
   paste long content into chat.
 
-## 9. Current state of play (as of 2026-09-04, 09:05; update as things land)
+## 9. Current state of play (as of 2026-09-04 ~20:20; update as things land)
 
-HEAD `bdd972a`. Suite 413 passed, 1 failed (the retroactive memo contract, resolved by R12 once
-Lane A implements it). Night's work ratified at standup; overnight log and summary in
-`under_review/`.
+HEAD `ac9c27a`, pushed (branch in sync with origin). Suite **654 passed, exit 0** bare. Source
+tree clean.
 
-- **Model execution is no longer banned.** Director, 2026-09-04: execution happens in ONE lane
-  under ONE task, project-wide; every other lane and all tests stay fake-only. Issue #12 records
-  it; a `PROPOSED (Deputy)` bullet in wiring map §8 asks the Chief to number it as a ruling and
-  to update briefing §1.1, which still reads "No model runs".
-- Rulings R1 to R13. R12: retroactive tools replay the note templates of the artifact's recorded
-  generator version behind a replay-only switch; training always generates at HEAD. R13: the
-  green full fake-only suite is a hand-off gate, not a review finding.
-- Six lanes dispatched, disjoint claims: A R12 replay + `row_labels` (`01a068af`), B adapter-delta
-  ablation (`01a066e6`), C P6 patching CLI plus `capture.py` since `InjectionHook` lacks
-  `replace=` (`01a06844`), D provenance + auto LoRA targets (`01a06858`), E SPEC-002 §4
-  (`01a06728`), F R13 enforcement (coordinator). SPEC-004 §2 waits on A and C; SPEC-001 §10
-  waits on D.
-- Readiness for the new base: capture-based probes ready; J-lens not, until preflight settles
-  `mx.jvp` through `gated_delta_update`; training not safe until Lane D replaces the hardcoded
-  `LORA_KEYS` at `cli.py:110` with the registry's `lora.keys: auto`.
-- Deputy is running a 15-minute parity heartbeat from 10:15, logging to
-  `under_review/HEARTBEAT-LOG-2026-09-04.md`.
+- **Both preflights passed under the R18a gate** (Director-run, 15:18 and 15:20): native-dtype
+  max_abs 0.0 and Frobenius 0.0 on both the 3B and Qwen3.5-4B; fp32 gap measured, never gated
+  (3B 4.2e-3, 4B 2.8e-2). **The Qwen3.5 probe hold is lifted.**
+- **Training arm B4:** render on disk (`data/agent_v2b-qwen35-4b`, 1915/284/494, parity with
+  run B); R15 conditions 1, 2, 3, 5, 7 met with evidence, 4 met per R15's text (R20 debt slice
+  bound), 6 is the Director's cost acceptance. Lift request drafted
+  (`live/B4-TRAINING-LIFT-REQUEST-2026-09-04.md`, command verified against `--help`),
+  held until P6 completes because the two runs share the single execution lane.
+- **Committed and pushed today:** R17 scanner (`afc0905`, #21), wave 1 (`a2f003c`, #19), R18a
+  gate (`ed88c96`, #23), R21 guard + render (`94c920e`, #24), adapter-wrapper fix (`89dfb56`,
+  #27), `criteria:` blocks (`7dd251d`, #18), P6 evidence binding with R22/R23/R24 (`07c6657`,
+  #26; five stable cases, steps 7/7/7/7/6).
+- **P6, the critical path.** Lift approved by the Director; two live attempts failed on code:
+  wrapper visibility (fixed `89dfb56`) and position groups (windowing + trailing boundary
+  merge; **fixed `ac9c27a`**, #29 ratified with a one-token boundary guard, closed). Behind it, verified on real data: the counterfactual note is longer than the failing
+  note by construction, so the patcher's equal-cardinality rule fails; **ruled R25 on #28**
+  (tail alignment with residue; `shared_value_tokens` + `dropped_value_slot` with mean-pooled
+  source rows on the separator slot; controls resample post-alignment; seven cells). The R25
+  slice is being implemented in an isolated worktree on top of the fix; own R19 round; lands
+  as the next work order. The Director's command is unchanged; the third attempt follows both
+  commits. Both readiness checklists re-audited line by line and corrected (~19:40).
+- Rulings R1 to R25. Governance: Deputy dispatches implementers, R19 reviewer between
+  implementer and Deputy verdict, Chief gates commits (rulings and reviews rest on the
+  governing code read directly), Deputy commits and pushes; momentum standing order; execution
+  = loading a model and running inference, one lane, one task; tokeniser loads are not
+  execution. Event-driven watch, no cron.
+- Backup: `~/Desktop/agent-v2-lab-BACKUP-2026-09-04`, 3.6 GB, 1,249 files, hashes verified.
+  git-lfs for `data/` remains the Director's open decision.
+- Bound follow-ups: adapter-wrapped variant in the standard arch fixtures (due before the B4
+  evaluation lift, #27); condition-4 completion slice (training-path loader via `load_policy`,
+  expires `DEBT(R20)`); stale `train.num_layers: 36` in cross-model configs (never read);
+  manifest writes through the atomic path; legacy unguarded writers; secondary P6 condition on
+  `aggregate_report` with the generator-v4 note; two drifted briefing §3 anchors; the C7 BF16
+  refit (item 4 of R18, #15, Director-assigned).
+
+## 11. Directory layout (2026-09-05)
+
+`pending/` specs; `under_review/` implementations awaiting Chief ratification; `complete/`
+ratified report + review pairs; `live/` instruments re-derived every commit (checklists,
+heartbeat log, lift requests); `records/` closed logs, superseded drafts, one-time notes.
+Move plan and rationale: `DOCUMENT-MOVES-2026-09-05.md`. The wiring map §7 is the rulings
+register; rulings are never re-homed.

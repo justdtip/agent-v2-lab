@@ -204,7 +204,7 @@ in the YAML is always `view.num_layers`.
 ## 7. Training entry
 
 `pipeline/cli.py::stage_train` moves from `subprocess(mlx_lm.lora --config)` to an in-process
-call of `mlx_lm.lora.train_model(args, model, tokenizer, train_set, valid_set)` with
+call of `mlx_lm.lora.train_model(args, model, train_set, valid_set, training_callback)` (installed 0.31.3 signature; ruling R14) with
 `RenderedRowsDataset` objects (tokenised `prompt`/`completion`, prompt masked by offset, sorted by
 length for batching as mlx-lm does). The effective mlx-lm args namespace is still dumped to
 `lora.yaml` for the record. If `train_model`'s signature differs from the pinned version, abort

@@ -26,7 +26,7 @@ Keep each cycle cheap (role doc §8). In order:
 1. **Progress survey.** `git log --oneline <last-seen>..HEAD`, `git status --short`,
    `.codex/coordination/CURRENT.md`, `gh issue list`. Map each new commit to its lane and spec
    section. Update your role doc §9 and append one dated entry (3 to 6 lines) to
-   `under_review/OVERNIGHT-LOG-2026-09-04.md`: commits landed, lanes moved, anything raised.
+   `records/OVERNIGHT-LOG-2026-09-04.md`: commits landed, lanes moved, anything raised.
 2. **Code review, first pass, per landed commit.** Draft review file per role doc §5 if the
    commit completes a lane; otherwise fold findings into the log. Checks, in order:
    signatures against wiring map §2; the lane stayed inside its claimed paths; banned-constant

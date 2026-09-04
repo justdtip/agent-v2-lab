@@ -506,6 +506,97 @@ forget. Each has an integration check in §6.
   §2.4 gains `family_balanced_tasks(split, *, difficulty, per_family, seed) -> list[Task]`;
   the §2.11 screen example gains its `difficulty:` key; `stage_select`'s missing
   `write_provenance` call remains owed.
+- **R14 (2026-09-04 09:40) training entry API.** SPEC-001 §7's `train_model(args, model,
+  tokenizer, train_set, valid_set)` was the Chief's error. Adopt the installed mlx-lm 0.31.3
+  signature `train_model(args, model, train_set, valid_set, training_callback=None)`
+  (`mlx_lm/lora.py:216`); the tokenizer is consumed only by `RenderedRowsDataset`. Keep the
+  version pin check at import (`mlx_lm.__version__ == "0.31.3"`, else abort with a message).
+  Pass a `training_callback` that writes `outputs/<run>/metrics.jsonl` (one record per report
+  and per validation: step, train_loss, val_loss, tokens, elapsed) so `stage_select`'s val-loss
+  component reads structured metrics instead of parsing `train.log`. No dependency change.
+- **R15 (2026-09-04 13:30) training-run readiness gate.** Seven conditions in
+  `records/COMPLETENESS-ASSESSMENT-round1-2026-09-04.md`; first arm B4. Lifting the ban is
+  the Director's act per run.
+- **R16 (2026-09-04 13:30) report accuracy.** Every claimed deliverable cites file:line; the
+  reviewer spot-checks three; an uncited claim counts as not done.
+- **R17 (2026-09-04 13:30) scanner and layer fractions.** Substring pass added to the
+  banned-constant check; probe `--layers` accepts fractions and defaults to
+  `spec.probes.layer_fractions`.
+- **R18 (2026-09-04 13:30) precision.** Residual-equivalence tolerance is Frobenius relative
+  ≤ 1e-2 with elementwise maxima reported; `ModelSpec.probes.capture_dtype: native|float32`
+  (default native; float32 block path only for J-lens tail/JVP with deviation recorded);
+  SPEC-004 §1 correction C7 (bfloat16-rounding refit of the saved P2 npz); memo caveat.
+  Briefing rule 1.5 amended.
+- **R18a (2026-09-04 14:05) preflight gate refined.** The residual-equivalence gate compares
+  the view's manual loop run in the model's **native dtype** against the native forward
+  (expected exact; tolerance Frobenius relative ≤ 1e-4). The float32-path deviation is measured
+  and reported as the `fp32_manual_vs_native` block (Frobenius relative plus elementwise maxima; name amended 2026-09-04 19:30), never gated;
+  it informs `capture_dtype` and is recorded in every probe artifact. Supersedes R18(a).
+- **R19 (2026-09-04 14:05) independent reviewer.** Under the Deputy-run workflow every
+  implementation is reviewed by a separate reviewing agent (not the implementer, not the
+  dispatcher's own pass) before the Deputy's readiness verdict and the review-request issue;
+  the reviewer's findings are attached to the issue verbatim.
+- **R20 (2026-09-04 15:10) `mine_pairs` view/resolved debt.** Optional `view`/`resolved` in
+  `branch.mine_pairs` is accepted debt, marked `# DEBT(R20)`, and expires with the
+  condition-4 completion slice (`resolve_policy` on `ModelSpec.policies`, `branch.build_prompt`
+  threading, `_load_training_base` via `load_policy(adapter=None, lazy=False)`), which makes
+  them required and updates the two optional-path tests. Wave 1 ratified in
+  `complete/WAVE1-LOAD-POLICY-REVIEW-round1-2026-09-04.md`.
+- **R21 (2026-09-04 15:40) dataset write guard and the render stage.** (a) `write_dataset`
+  and every stage that writes under `data/` refuse to write into a directory that already
+  contains `manifest.json` unless `--force-overwrite` is passed explicitly (flag name amended 2026-09-04 20:40); targets inside a protected directory refuse too (K1, review round 1); `data/agent_v2`,
+  `data/agent_v2b`, `data/agent_v2c`, and `data/chat_replay` are additionally listed in
+  `PROTECTED_DATASETS` and refuse even with `--force-overwrite`. (b) New stage
+  `agent-pipeline render --source <dir> --output <dir> --model <name>`: reads existing
+  `messages` rows from `<source>/{train,valid,test}.jsonl`, applies `render_rows` for the
+  named model's spec (thinking mode from the registry), writes the three files plus a
+  manifest recording the source directory, its per-split SHA-256, the source manifest's
+  `GENERATOR_VERSION` if present, and the rendering metadata, and `provenance.json`. It never
+  calls `make_tasks`. (c) Arm B4 is defined as `render --source data/agent_v2b --output
+  data/agent_v2b-qwen35-4b --model qwen35-4b`; `configs/agent_v2b_qwen35_4b.yaml` sets
+  `data: data/agent_v2b-qwen35-4b` and `source_rows: data/agent_v2b`, and `stage_data` for a
+  config with `source_rows` delegates to `render`. Regenerating with `stage_data` would produce
+  generator-v4 rows, which are not run B's data.
+- **R22 (2026-09-04 18:05) P6 inputs.** (a) `agent-v2-probe-patch` accepts `--data-seed`;
+  evaluation JSON `data_seed` is used when present, the flag when absent, and the tool errors
+  only when neither exists; the artifact records the seed and its source. (b) The
+  counterfactual note is, by preference, the **passing run's saved note** at the same task id
+  and step, used when the passing trajectory's actions up to the decision step equal the
+  failing run's; otherwise `render_expert_note` at HEAD, and each case records
+  `counterfactual_source: passing_transcript | generator_v<N>`. Rationale: run B's generator
+  revision is unrecoverable and the in-repo v1 templates are run C's rewrite, so a regenerated
+  note is not B's; the saved note is the one that empirically led to a pass.
+- **R23 (2026-09-04 21:30, Director-ratified on issue #25; folded by the Chief).**
+  Pre-versioning artifacts (runs A, B, C, their datasets and saved evaluations) bind to
+  generator version 1 for every retroactive replay, on the recorded rational basis (R5 defines
+  v1 as the C-reproducing generator; no version field could exist before versioning). Tools
+  replaying them record both the version used and this basis. Post-versioning artifacts get no
+  such latitude: an absent `GENERATOR_VERSION` there is a defect. A needed-but-missing binding
+  fails closed with a named R12 error, never defaulting to HEAD.
+- **R24 (2026-09-04 21:30) P6 scoring version.** Flip scoring may judge value reappearance at
+  HEAD only when, for that case, the dropped value and the decision step are identical under
+  the bound replay version and HEAD; the artifact records `scoring_version_stable` per case
+  and the headline includes only stable cases, with unstable cases listed separately. The
+  eligibility recomputation and the verdict filter (failing run must fail; SPEC-004 §5's
+  universe) are ratified as the R22 extension.
+- **R25 (2026-09-04 23:20) P6 treatment alignment (issue #28).** Grounded in `patch.py`:
+  `InjectionHook(replace=True)` maps source row *i* to `at_positions[i]` and requires equal
+  counts, and the failing prompt has no position for the dropped value. Therefore:
+  (a) **Unequal groups align on the tail** (`previous_notes`, and any group whose cardinality
+  differs): the last |target| source positions patch the target; the leading source residue
+  is recorded per case as `unpatched_source_tokens`. The decision-adjacent context is the
+  note's end, and tail alignment keeps absolute-position offsets to a few tokens.
+  (b) **`note_value_tokens` splits into two cells.** `shared_value_tokens`: values present in
+  both notes, aligned by string identity through `_note_values`, equal cardinality by
+  construction. `dropped_value_slot`: for each dropped value, the source residual rows of its
+  tokens are mean-pooled to one row and replace the target residual at the **single
+  separator position immediately after the preceding shared value** (the slot where the value
+  should have appeared); the artifact records the slot position, the token it overwrote, the
+  source tokens pooled, and the dropped value. This is the write-side test the memo asks for.
+  (c) Controls keep their existing resampling to the post-alignment treatment cardinality;
+  `random_positions` for `dropped_value_slot` draws one non-treatment position.
+  (d) `POSITION_GROUPS` becomes seven cells; the heat map, R24 stability record, and the
+  five-case caveat are unchanged. Every cell records the alignment rule and cardinalities.
 
 ## 8. Implementer amendments (append-only, dated)
 
@@ -566,3 +657,11 @@ forget. Each has an integration check in §6.
   execution claim still gates `mlx_lm.load`, `load_policy` against real weights, safetensors
   weight loads, and any forward or backward pass: preflight, training, evaluation, rollouts,
   probe capture, and cache-equivalence attestation.
+
+- PROPOSED (Deputy, 2026-09-04 16:20): fold the Director's ratification (issue #25) beside R12
+  and R22: pre-versioning artifacts (runs A, B, C, their datasets and saved evaluations) bind to
+  generator version 1 for retroactive replay on the recorded rational basis — R5 defines v1 as
+  the C-reproducing generator, the v1/v2 and v3/v4 template structure brackets the residual
+  uncertainty, and no version field could have existed before versioning did. Retroactive tools
+  record the version used and the basis. Post-versioning artifacts get no such latitude: an
+  absent field is a defect.

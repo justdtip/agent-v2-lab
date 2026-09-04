@@ -23,8 +23,10 @@ The interface and wiring map (`02-INTERFACE-AND-WIRING-MAP.md`) is the companion
    Do not edit them; propose text in your implementation report instead.
 4. **Every result carries its control.** A probe number without its shuffled, position, or
    surface baseline is not reported. A rate without a Wilson interval is not reported.
-5. **Float32 for activations, tangents, and probe features.** Weights stay 4-bit. Float16
-   overflowed the J-lens tangent on the real checkpoint.
+5. **Float32 for stored activations, tangents, and probe features; native dtype for block
+   execution during capture (R18).** Weights stay 4-bit. Float16 overflowed the J-lens tangent
+   on the real checkpoint; bfloat16 has float32 range, and running blocks in float32 on a
+   bfloat16 model diverges from deployment by up to 5% on the hybrid.
 6. **The model's own causal mask, always.** Any code that runs decoder blocks by hand must build
    masks the way the model does (`create_attention_mask` for attention blocks,
    `create_ssm_mask` for linear-attention blocks). Passing `None` gives bidirectional attention
@@ -188,3 +190,11 @@ Assume 1.4× for the 4B model and 2.5× for the 9B model until `preflight` measu
 - **Integrity violation**: a note that copies its predecessor verbatim, drops a required-carry
   value, asserts completion early, miscounts, or states a stale fact (SPEC-002 §2).
 - **View**: `ArchitectureView`, the only sanctioned way to run blocks by hand (SPEC-001 §2).
+
+## 9. Addendum 2026-09-04: implementers spawned by the Deputy
+
+If you are an Opus implementation agent spawned by the Deputy Chief, every rule above applies
+to you unchanged. In addition: you commit nothing; you hand your change and an implementation
+report (R16: every claim cites file:line) to the Deputy; the Chief's ratification on a GitHub
+issue gates the commit. Read the wiring map §7 rulings R1 to R18 before starting; they
+override spec text. Work only inside the paths your task names.

@@ -75,6 +75,12 @@ What this run cannot say, and why the remaining seven cells should not be run as
    makes (is the value just read the new maximum), and `prev_error` should be asked about an
    error that has scrolled out of the window.
 
+
+**Precision caveat (added 2026-09-04, R18):** every P2 and J-space number above was captured
+through a float32 block path on a bfloat16 model; on the 3B the divergence from the native
+forward is 0.3% max relative, on Qwen3.5-4B 5.5%. The offline bfloat16-rounding refit (SPEC-004
+§1 C7) bounds the effect; until it reports, the numbers carry this caveat.
+
 ### 2.3 P5 adapter delta (items 1-4 complete; block ablation absent)
 
 All three adapters use 12-13 of 16 singular values to hold 90% of the energy, spread evenly over

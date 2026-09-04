@@ -75,7 +75,7 @@ data stage is deterministic and must regenerate byte-for-byte under a test.
 | --- | --- | --- | --- | --- | --- |
 | B (exists) | `qwen25-coder-3b` | B | attention+mlp | unsupported | reference |
 | D3 | `qwen25-coder-3b` | D | attention+mlp | unsupported | H1 |
-| B4 | `qwen35-4b` | B | all-linear (auto) | off | H2, paired with B |
+| B4 | `qwen35-4b` | B, **rendered from `data/agent_v2b` rows by `agent-pipeline render` (R21), never regenerated** | all-linear (auto) | off | H2, paired with B |
 | D4 | `qwen35-4b` | D | all-linear | off | H3, paired with D3 |
 | D4-think | D4's adapter | none | none | inference (512-token budget) | evaluation-only arm: does intra-turn reasoning fix list handling without retraining |
 | D9 (stretch) | `qwen35-9b` | D | all-linear | off | only if `preflight` memory estimate fits at batch 1 |

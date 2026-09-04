@@ -15,6 +15,7 @@
 - No checkpoint, tokenizer, MLX model, probe, J-lens, inference, training, evaluation, preflight, or agent CLI execution. Tests use pure or existing fakes only.
 - Do not modify `outputs/`, `data/`, `reports/`, `research/*.md`, pending design documents, `src/local_llm_lab/arch.py`, or `src/local_llm_lab/pipeline/preflight.py`.
 - Do not create `src/local_llm_lab/pipeline/policies.py`; the existing `src/local_llm_lab/probes/policies.py` owns this wiring.
+- Do not modify `src/local_llm_lab/pipeline/evaluate.py`; its owner must publish an exact committed `load_policy`/`run_evaluation` contract before this task changes claimed callers.
 - Do not add policy paths to either Qwen3.5 registry file while its `policies` mapping is empty.
 - Preserve the `base` policy as `None`, named qwen25 policy paths relative to the project root, and explicit existing adapter directories as resolved absolute paths.
 - `--layers` accepts comma-separated integer indices or decimal fractions in `(0, 1]`; lexical `1` is index 1 and lexical `1.0` is the full-depth fraction. Defaults come only from `ModelSpec.probe_layer_fractions`.
@@ -36,11 +37,13 @@
 - Modify: `src/local_llm_lab/probes/state_probe.py`
 - Modify: `src/local_llm_lab/probes/assistant_axis.py`
 - Modify: `src/local_llm_lab/probes/patch.py`
+- Modify: `src/local_llm_lab/probes/adapter_delta.py`
 - Modify: `src/local_llm_lab/pipeline/jlens.py`
 - Create: `tests/test_policies.py`
 - Modify: `tests/test_state_probe.py`
 - Modify: `tests/test_probes_axis.py`
 - Modify: `tests/test_patch.py`
+- Modify: `tests/test_adapter_delta.py`
 - Modify: `tests/test_jlens.py`
 - Modify: `tests/test_probes.py`
 - Modify: `tests/test_repository_rules.py`
@@ -53,6 +56,27 @@
 - Produces: `policy_names(spec) -> tuple[str, ...]`, `resolve_policy(name, spec) -> Path | None`, `validate_layer_syntax(raw) -> None`, `resolve_layers(raw, spec, num_layers) -> LayerSelection`, and `LayerSelection.as_dict() -> dict[str, object]`.
 - `LayerSelection.as_dict()` returns exactly the JSON-safe keys `source`, `requested`, `fractions`, `indices`, and `num_layers`. `source` is `"registry-default"` when `raw is None` and `"cli"` otherwise.
 - Existing downstream APIs continue receiving `list[int]` or `tuple[int, ...]` layer indices; metadata is additive.
+- Evaluator integration consumes only the exact committed contract returned by the owner of `pipeline/evaluate.py`; no caller signature is guessed locally.
+
+#### Issue #10 dependency addendum
+
+The goal Coordinator expanded this vertical after the initial implementation commits. This addendum supersedes the earlier omission of `adapter_delta.py` and requires all five claimed evaluator consumers (`state_probe.py`, `assistant_axis.py`, `patch.py`, `adapter_delta.py`, and `pipeline/jlens.py`) to use the evaluator owner's model-aware `load_policy` contract. If that owner changes `run_evaluation`, migrate only the claimed `adapter_delta.py` call sites to the returned exact signature. Add fake-only TDD coverage in each corresponding owned test module; do not edit evaluator production or tests.
+
+- [ ] **Addendum Step A: Wait for and record the committed evaluator contract**
+
+Publish the already committed `resolve_policy(name, spec) -> Path | None` contract to the evaluator owner. Record its returned commit and exact `load_policy`/`run_evaluation` signatures before writing callers.
+
+- [ ] **Addendum Step B: Add failing caller-contract tests**
+
+Update the five claimed caller test modules, including `tests/test_adapter_delta.py`, with fake-only assertions that fail against the obsolete evaluator call shape and prove each caller passes the selected model spec/policy inputs required by the returned contract. Cover every `run_evaluation` call in `adapter_delta.py` if its signature changed.
+
+- [ ] **Addendum Step C: Migrate only claimed callers and verify**
+
+Change only the five claimed consumer modules, preserving their existing layer-selection behavior and compatibility aliases. Run the focused caller tests, the adjacent probe tests, Ruff, C901/diff checks, and exact full `uv run pytest -q` at a named committed HEAD. Amend this plan/report and commit exact claimed paths only.
+
+- [ ] **Addendum Step D: Independent review**
+
+Generate exact commit packages that include the initial implementation, evidence, plan, and dependency-addendum commits. The same single independent principal reviewer performs the whole-change review because the first review was interrupted before verdict when scope expanded.
 
 - [ ] **Step 1: Add failing pure policy and 32-layer selection tests**
 
