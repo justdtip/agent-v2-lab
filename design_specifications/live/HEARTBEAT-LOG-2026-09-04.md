@@ -779,3 +779,8 @@ recording the execution rule. No execution lane designated yet.
   997 tokens → OOM at 19.17 GB peak (working set 17.8 GiB). Median train row 824 tokens.
   Batch size is not the remedy. Probing: checkpoint coverage of both hybrid layer types;
   peak vs adapted-layer depth (8/16) at 997/1592/2000 tokens.
+- Depth probe: NL 8 → OOM at 997 tokens (19.69 GB); NL 16 → OOM (21.70 GB). Checkpointing
+  covers all 32 layers (one DecoderLayer class). Forward fits (attempt 3's validation over
+  ~2,400-token rows); the spike is the gated-delta BACKWARD, independent of batch and depth.
+  B4 cannot step the median training row on this machine with mlx-lm 0.31.3. Reading the
+  kernel's VJP path and checking newer mlx-lm.
