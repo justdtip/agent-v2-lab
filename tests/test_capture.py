@@ -261,3 +261,128 @@ def test_capture_residuals_declares_binding_positions_annotation() -> None:
 
     assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
     assert "Literal['last', 'all'] | Sequence[int]" in str(parameter.annotation)
+
+
+# ------------------------------------------------------- R18b capture dtype and the note span
+
+
+class _NativeView(_View):
+    """A view whose blocks emit bfloat16, so the R18b dtype switch is observable."""
+
+    def residuals(self, ids, layers):
+        self.calls += 1
+        values = mx.array(ids).astype(mx.float32)[None, :, None] / 3.0
+        return {layer: (values + float(layer)).astype(mx.bfloat16) for layer in layers}
+
+
+def test_capture_residuals_native_dtype_returns_the_blocks_own_precision() -> None:
+    """R18b: ``native`` hands back the block output untouched; ``float32`` casts as before."""
+    view = _NativeView()
+
+    native = capture.capture_residuals(view, [2, 4, 8], [1], positions="all", dtype="native")[1]
+    upcast = capture.capture_residuals(view, [2, 4, 8], [1], positions="all")[1]
+
+    assert native.dtype == mx.bfloat16
+    assert upcast.dtype == mx.float32
+    # Widening bfloat16 to float32 is exact, so the stored last-token view is identical either
+    # way; the two paths separate only once something is pooled, as the note mean pools.
+    assert bool(mx.all(native.astype(mx.float32) == upcast).item())
+    assert mx.mean(native, axis=0).dtype == mx.bfloat16
+    assert float(mx.mean(native, axis=0).item()) != float(mx.mean(upcast, axis=0).item())
+
+
+def test_capture_residuals_rejects_an_unknown_dtype() -> None:
+    with pytest.raises(ValueError, match="dtype"):
+        capture.capture_residuals(_View(), [1, 2], [1], dtype="float16")
+
+
+def test_capture_residuals_dtype_is_keyword_only_and_defaults_to_float32() -> None:
+    parameter = inspect.signature(capture.capture_residuals).parameters["dtype"]
+
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default == "float32"
+
+
+def test_response_token_span_counts_the_prompt_prefix() -> None:
+    tokenizer = _Tokenizer()
+
+    joint, start, repaired = capture.response_token_span(tokenizer, "abc", "de")
+
+    assert joint == tokenizer.encode("abcde")
+    assert start == 3
+    assert repaired is False
+
+
+class _MergingTokenizer(_Tokenizer):
+    """Characters merge pairwise, so an odd-length prompt is not a token prefix of the join."""
+
+    def encode(self, text, add_special_tokens=False):
+        del add_special_tokens
+        pairs = [text[index : index + 2] for index in range(0, len(text), 2)]
+        return [sum(map(ord, pair)) for pair in pairs]
+
+
+def test_response_token_span_repairs_a_merged_boundary_by_rebuilding() -> None:
+    """P1's historical behaviour, kept byte for byte: the joint sequence is rebuilt."""
+    tokenizer = _MergingTokenizer()
+
+    joint, start, repaired = capture.response_token_span(tokenizer, "odd", "note")
+
+    assert repaired is True
+    assert start == len(tokenizer.encode("odd"))
+    assert joint == [*tokenizer.encode("odd"), *tokenizer.encode("note")]
+
+
+def test_response_token_span_rejects_an_empty_response() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        capture.response_token_span(_Tokenizer(), "prompt", "")
+
+
+# ------------------------------------------------------------------------- note_token_span
+
+
+def test_note_token_span_counts_the_prompt_prefix_on_a_clean_boundary() -> None:
+    tokenizer = _Tokenizer()
+
+    joint, start, repairs = capture.note_token_span(tokenizer, "abc", "de")
+
+    assert joint == tokenizer.encode("abcde")
+    assert start == 3
+    assert repairs == 0
+
+
+def test_note_token_span_widens_over_a_merged_boundary_token() -> None:
+    """The natural joint tokenisation is kept; the span widens back over the merged token."""
+    tokenizer = _MergingTokenizer()
+    prompt, note = "odd", "note"
+
+    joint, start, repairs = capture.note_token_span(tokenizer, prompt, note)
+
+    natural = tokenizer.encode(prompt + note)
+    assert joint == natural, "the sequence the model sees must not be rebuilt"
+    assert joint != [*tokenizer.encode(prompt), *tokenizer.encode(note)]
+    counted = len(tokenizer.encode(prompt))
+    assert repairs == 1
+    assert start == counted - 1, "widened by exactly one token, never more"
+    # That boundary token really is the merged one: it carries the prompt's last character.
+    assert joint[start] == ord(prompt[-1]) + ord(note[0])
+    assert joint[:start] == tokenizer.encode(prompt)[:start]
+
+
+class _UnstableTokenizer(_Tokenizer):
+    """Not prefix-stable at all: appending anything re-tokenises from character zero."""
+
+    def encode(self, text, add_special_tokens=False):
+        del add_special_tokens
+        offset = 1 if len(text) > 4 else 0
+        return [ord(character) + offset for character in text]
+
+
+def test_note_token_span_refuses_a_boundary_that_would_move_more_than_one_token() -> None:
+    with pytest.raises(ValueError, match="more than one token"):
+        capture.note_token_span(_UnstableTokenizer(), "abcd", "ef")
+
+
+def test_note_token_span_rejects_an_empty_note() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        capture.note_token_span(_Tokenizer(), "prompt", "")

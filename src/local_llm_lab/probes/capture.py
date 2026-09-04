@@ -24,12 +24,21 @@ from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.pipeline.jlens import encode
 
 __all__ = [
+    "CAPTURE_DTYPES",
     "InjectionHook",
     "capture_residuals",
     "lora_block_mask",
+    "note_token_span",
     "response_mean_activations",
+    "response_token_span",
     "strip_state_fields",
 ]
+
+# R18/R18b: ``native`` hands back whatever precision the blocks ran in, so the float32 cast
+# happens once, at storage; ``float32`` is the historical behaviour and stays the default of
+# this function so no existing caller changes. The registry's default is ``native``
+# (``ModelSpec.probes.capture_dtype``), which is what the probe CLIs pass.
+CAPTURE_DTYPES = ("float32", "native")
 
 
 # --------------------------------------------------------------------------- capture
@@ -64,6 +73,7 @@ def capture_residuals(
     layers: Sequence[int],
     *,
     positions: Literal["last", "all"] | Sequence[int] = "last",
+    dtype: Literal["float32", "native"] = "float32",
 ) -> dict[int, Any]:
     """Post-block residual streams at several layers from **one** forward pass.
 
@@ -74,8 +84,17 @@ def capture_residuals(
 
     ``positions`` is ``"last"`` (one ``(d,)`` vector per layer), ``"all"`` (``(T, d)``), or an
     explicit sequence of token indices (``(len(positions), d)``, negatives counted from the
-    end). Returns ``{layer: mx.array}`` in float32.
+    end).
+
+    ``dtype`` (ruling R18b) chooses the returned precision. ``"float32"`` casts every capture,
+    which is what this function has always done and remains the default so no existing caller
+    moves. ``"native"`` returns the block output untouched, leaving the single float32 cast to
+    the caller's storage step (``state_probe._materialize_residuals``); widening bfloat16 to
+    float32 is exact, so the two agree on any position that is merely sliced and differ only
+    once something is pooled, which is where the extra precision would otherwise be invented.
     """
+    if dtype not in CAPTURE_DTYPES:
+        raise ValueError(f"dtype must be one of {list(CAPTURE_DTYPES)}; got {dtype!r}")
     if isinstance(positions, str):
         if positions not in ("last", "all"):
             raise ValueError(f"positions must be 'last', 'all', or a sequence: {positions!r}")
@@ -92,10 +111,98 @@ def capture_residuals(
 
     import mlx.core as mx
 
+    captured = architecture.residuals(token_ids, wanted)
+    if dtype == "native":
+        return {layer: _take(activation, positions) for layer, activation in captured.items()}
     return {
         layer: _take(activation.astype(mx.float32), positions)
-        for layer, activation in architecture.residuals(token_ids, wanted).items()
+        for layer, activation in captured.items()
     }
+
+
+def response_token_span(
+    tokenizer: Any, prompt_text: str, response_text: str
+) -> tuple[list[int], int, bool]:
+    """Locate the response inside ``prompt + response`` by prefix count, repairing a merge.
+
+    Returns ``(joint_ids, start, repaired)``: the ids of the joint text, the index of the first
+    response token, and whether the prompt's own ids failed to be a prefix of the joint
+    tokenisation (installed-library trap 6). On failure the joint sequence is rebuilt as
+    ``encode(prompt) + encode(response)`` so the span is exact by construction, at the cost of a
+    tokenisation the model would not itself produce -- which is why the repair is reported
+    rather than hidden.
+
+    This is the boundary logic :func:`response_mean_activations` has always used, lifted out
+    verbatim so P1's numbers are unchanged. **New callers should prefer**
+    :func:`note_token_span`, which keeps the natural joint tokenisation and widens the span over
+    a merged boundary token instead of rebuilding the sequence; rebuilding puts a token pair
+    through the model that the model would never itself produce at that boundary, which is
+    tolerable for a mean over a long response and not for a residual read at the boundary.
+    """
+    if not response_text:
+        raise ValueError("response_token_span: response_text is empty")
+    prompt_ids = encode(tokenizer, prompt_text)
+    joint_ids = encode(tokenizer, prompt_text + response_text)
+    start = len(prompt_ids)
+    repaired = joint_ids[:start] != prompt_ids or len(joint_ids) <= start
+    if repaired:
+        joint_ids = [*prompt_ids, *encode(tokenizer, response_text)]
+    if len(joint_ids) <= start:
+        raise ValueError("response_token_span: response tokenised to nothing")
+    return joint_ids, start, repaired
+
+
+def _common_prefix_length(left: Sequence[int], right: Sequence[int]) -> int:
+    """How many leading ids the two sequences share; the sequences differ in length by design."""
+    count = 0
+    for first, second in zip(left, right, strict=False):
+        if first != second:
+            break
+        count += 1
+    return count
+
+
+def note_token_span(
+    tokenizer: Any, prompt_text: str, response_text: str
+) -> tuple[list[int], int, int]:
+    """Locate the response inside the **natural** tokenisation of ``prompt + response``.
+
+    Returns ``(joint_ids, start, repairs)``. ``joint_ids`` is always
+    ``encode(prompt + response)`` -- the sequence the model would actually see -- and ``start``
+    is the first token position of the span covering the response's characters.
+
+    The boundary is found by prefix count: ``start = len(encode(prompt))``. Tokenisation is
+    context dependent, so the prompt's own last token can differ from the joint sequence's token
+    at that index when the boundary falls inside a merge (installed-library trap 6). When it
+    does, the boundary is **widened** back to the merged token, by taking the length of the
+    common prefix of the two id sequences, and the repair is counted. Widening keeps every
+    residual on the natural sequence at the cost of including one token that also carries the
+    prompt's final characters; rebuilding the sequence, which is what
+    :func:`response_token_span` does for P1, would instead change the input the model sees.
+
+    A merge moves the boundary by at most one token on a prefix-stable tokenizer. A larger move
+    means the tokenizer is not prefix-stable or the span is mislocated, and this refuses loudly
+    rather than widen silently backwards over prompt content -- the same guard, for the same
+    reason, as the Chief's condition on the P6 patching spans (issue #29).
+    """
+    if not response_text:
+        raise ValueError("note_token_span: response_text is empty")
+    prompt_ids = encode(tokenizer, prompt_text)
+    joint_ids = encode(tokenizer, prompt_text + response_text)
+    counted = len(prompt_ids)
+    start = counted
+    repairs = 0
+    if list(joint_ids[:start]) != list(prompt_ids):
+        start = _common_prefix_length(joint_ids, prompt_ids)
+        repairs += 1
+    if abs(start - counted) > 1:
+        raise ValueError(
+            "note_token_span: the note boundary moved more than one token "
+            f"({counted} -> {start}); the tokenizer is not prefix-stable here"
+        )
+    if not 0 <= start < len(joint_ids):
+        raise ValueError("note_token_span: the note tokenised to nothing")
+    return joint_ids, start, repairs
 
 
 def response_mean_activations(
@@ -124,15 +231,10 @@ def response_mean_activations(
         raise ValueError("response_mean_activations: response_text is empty")
     view_call = callable(getattr(view, "residuals", None)) and hasattr(view, "blocks")
     details: dict[str, Any] = dict(stats or {})
-    prompt_ids = encode(tokenizer, prompt_text)
-    joint_ids = encode(tokenizer, prompt_text + response_text)
-    start = len(prompt_ids)
-    if joint_ids[:start] != prompt_ids or len(joint_ids) <= start:
-        joint_ids = [*prompt_ids, *encode(tokenizer, response_text)]
+    joint_ids, start, repaired = response_token_span(tokenizer, prompt_text, response_text)
+    if repaired:
         details["prefix_mismatch"] = int(details.get("prefix_mismatch", 0)) + 1
     details["sequences"] = int(details.get("sequences", 0)) + 1
-    if len(joint_ids) <= start:
-        raise ValueError("response_mean_activations: response tokenised to nothing")
 
     captured = capture_residuals(view, joint_ids, layers, positions="all")
     means = {

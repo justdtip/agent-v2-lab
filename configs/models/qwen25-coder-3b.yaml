@@ -22,6 +22,8 @@ cache:
   equivalence_verified: null
 probes:
   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
+  # R18: native block execution during capture; float32 only on the J-lens tail.
+  capture_dtype: native
 memory:
   budget_gib: 22
 policies:

@@ -1620,6 +1620,7 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         "cache_strategy",
         "cache_equivalence_verified",
         "probe_layer_fractions",
+        "probe_capture_dtype",
         "memory_budget_gib",
         "policies",
     }

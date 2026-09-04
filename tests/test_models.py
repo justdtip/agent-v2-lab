@@ -225,6 +225,57 @@ def test_auto_cache_resolution_records_safe_branch(
     assert resolved.as_dict()["cache_strategy_reason"] == reason
 
 
+@pytest.mark.parametrize("name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"])
+def test_registered_probe_capture_dtype_is_native(name: str) -> None:
+    """R18b: native block execution is the registry default for every registered model."""
+    spec = load_model_spec(name)
+
+    assert spec.probe_capture_dtype == "native"
+    assert spec.probes.capture_dtype == "native"
+
+
+@pytest.mark.parametrize("declared", ["native", "float32"])
+def test_probe_capture_dtype_round_trips_through_the_registry(declared: str) -> None:
+    raw = _registry_mapping(None)
+    raw["probes"]["capture_dtype"] = declared
+
+    spec = models._model_spec_from_mapping(raw, source="test")
+
+    assert spec.probe_capture_dtype == declared
+    assert spec.probes.capture_dtype == declared
+
+
+def test_probe_capture_dtype_defaults_to_native_when_the_registry_omits_it() -> None:
+    raw = _registry_mapping(None)
+    assert "capture_dtype" not in raw["probes"]
+
+    assert models._model_spec_from_mapping(raw, source="test").probe_capture_dtype == "native"
+
+
+@pytest.mark.parametrize("declared", ["float16", "bfloat16", "", 32, None])
+def test_probe_capture_dtype_rejects_anything_but_native_or_float32(declared) -> None:
+    raw = _registry_mapping(None)
+    raw["probes"]["capture_dtype"] = declared
+
+    with pytest.raises(ValueError, match=r"probes\.capture_dtype"):
+        models._model_spec_from_mapping(raw, source="test")
+
+
+def test_probes_view_exposes_the_specs_own_field_names() -> None:
+    """SPEC-004 §2 and R17 name ``spec.probes.layer_fractions``; the stored field is unchanged."""
+    spec = load_model_spec("qwen35-4b")
+
+    assert spec.probes.layer_fractions == spec.probe_layer_fractions
+    assert spec.probes.capture_dtype == spec.probe_capture_dtype
+
+
+def test_default_spec_for_an_unregistered_model_captures_natively() -> None:
+    spec = load_model_spec("example/not-registered")
+
+    assert spec.probe_capture_dtype == "native"
+    assert spec.probes.layer_fractions == spec.probe_layer_fractions
+
+
 @pytest.mark.parametrize("strategy", ["trim", "snapshot", "none"])
 def test_explicit_cache_resolution_records_declared_strategy(monkeypatch, strategy: str) -> None:
     _install_view(monkeypatch, False, ("linear_attention",) * 4)

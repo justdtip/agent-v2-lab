@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -1237,3 +1238,746 @@ def test_compare_cli_writes_the_pair_of_reports_and_a_run_log(
     assert start["left_predictions_sha256"] and start["right_predictions_sha256"]
     assert "# P2 paired comparison" in out
     assert (output / "compare.md").is_file()
+
+
+# ------------------------- B1b: P2 conditions, dual capture positions, capture dtype (R18b)
+
+
+# The generator's own default data seed, read rather than restated (briefing rule 1.8).
+_GENERATOR_DATA_SEED = int(inspect.signature(make_tasks).parameters["seed"].default)
+_NOTE_TEXT = "Pending 2 of 6: alpha, beta."
+_TARGET_TURN = _NOTE_TEXT + '\n```json\n{"name": "read_file", "arguments": {"path": "a.txt"}}\n```'
+
+
+class _SpanTokenizer:
+    """Character-level ids, so every prompt is a strict token prefix of prompt + note."""
+
+    def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        del add_special_tokens
+        return [ord(character) for character in text]
+
+
+class _MergingSpanTokenizer(_SpanTokenizer):
+    """Characters merge pairwise: an odd-length prompt breaks the prefix property."""
+
+    def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        del add_special_tokens
+        pairs = [text[index : index + 2] for index in range(0, len(text), 2)]
+        return [sum(map(ord, pair)) for pair in pairs]
+
+
+class _Runtime(SimpleNamespace):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def eval(self, *values: Any) -> None:
+        del values
+
+    def clear_cache(self) -> None:
+        return None
+
+    def reset_peak_memory(self) -> None:
+        return None
+
+    def get_active_memory(self) -> int:
+        return 0
+
+    def get_cache_memory(self) -> int:
+        return 0
+
+    def get_peak_memory(self) -> int:
+        return 0
+
+
+def _token_capture(_model, token_ids, layers, *, positions="last", dtype="float32"):
+    """One feature per token, equal to the token id, so a pooled mean is checkable by hand."""
+    del dtype
+    values = np.array([[float(token)] for token in token_ids], dtype=np.float32)
+    picked = values[-1] if positions == "last" else values
+    return {layer: picked + float(layer) for layer in layers}
+
+
+def _one_row(prompt: str = "PROMPT", turn: str = _TARGET_TURN):
+    return [
+        {
+            "messages": [
+                {"role": "user", "content": "u"},
+                {"role": "tool", "name": "read_file", "content": "observed"},
+                {"role": "assistant", "content": turn},
+            ],
+            "metadata": {"step": 0},
+        }
+    ]
+
+
+def _single_task() -> list[Any]:
+    """One real generated task; the replay itself is stubbed by ``_install_single_row``."""
+    return make_tasks("test", 1)[:1]
+
+
+def _install_single_row(monkeypatch, *, prompt: str = "PROMPT", turn: str = _TARGET_TURN) -> None:
+    monkeypatch.setattr(state_probe, "build_rows", lambda *_a, **_k: _one_row(turn=turn))
+    monkeypatch.setattr(state_probe, "build_prompt", lambda *_a, **_k: prompt)
+    monkeypatch.setattr(
+        state_probe, "row_labels", lambda *_a: {name: 0.0 for name in state_probe.TARGETS}
+    )
+    monkeypatch.setattr(state_probe, "mlx_memory_snapshot", lambda *_a: {})
+
+
+# --------------------------------------------------------------- conditions and difficulties
+
+
+def test_capture_condition_names_the_four_spec_conditions() -> None:
+    """SPEC-004 §2: the (--strip, --stub-observations) pair names one of four conditions."""
+    assert state_probe.capture_condition(False, False) == "intact"
+    assert state_probe.capture_condition(True, False) == "notes-stripped"
+    assert state_probe.capture_condition(False, True) == "observations-stubbed"
+    assert state_probe.capture_condition(True, True) == "both"
+    assert set(state_probe.CONDITIONS.values()) == {
+        "intact",
+        "notes-stripped",
+        "observations-stubbed",
+        "both",
+    }
+
+
+@pytest.mark.parametrize("split", ["train", "valid", "test", "p2mix"])
+def test_task_difficulties_is_unchanged_for_the_legacy_split_names(split: str) -> None:
+    """The fix must not move a single legacy label: same ids, same levels, same order."""
+    from local_llm_lab.pipeline.tasks import difficulty
+
+    tasks = make_tasks(split, 8)
+    legacy = {task.task_id: int(difficulty(split, index)) for index, task in enumerate(tasks)}
+
+    assert state_probe.task_difficulties(split, tasks) == legacy
+
+
+@pytest.mark.parametrize(("split", "level"), [("p2-d0", 0), ("p2-d1", 1), ("p2-d2", 2)])
+def test_task_difficulties_reads_the_p2_splits_own_difficulty(split: str, level: int) -> None:
+    """Known defect: ``difficulty(split, index)`` returns ``index % 2`` on an unknown split."""
+    from local_llm_lab.pipeline.tasks import difficulty, make_p2_tasks
+
+    tasks = make_p2_tasks(split, 6, _GENERATOR_DATA_SEED)
+    levels = state_probe.task_difficulties(split, tasks)
+
+    assert set(levels.values()) == {level}
+    assert all(task.difficulty == level for task in tasks)
+    if level != 2:  # the defect's signature: the positional formula disagrees on p2-d0/p2-d1
+        assert [difficulty(split, index) for index in range(len(tasks))] != [level] * len(tasks)
+
+
+def test_task_difficulties_falls_back_to_the_positional_rule_for_unlabelled_tasks() -> None:
+    tasks = [SimpleNamespace(task_id=f"t{index}", difficulty=-1) for index in range(4)]
+
+    assert state_probe.task_difficulties("p2mix", tasks) == {"t0": 0, "t1": 1, "t2": 0, "t3": 1}
+
+
+def test_build_probe_dataset_stub_observations_hides_every_observation(monkeypatch) -> None:
+    """``--stub-observations`` is ``keep_last = 0`` (Chief, 2026-09-05 05:40 decision 4)."""
+    from local_llm_lab.pipeline.tasks import make_tasks as real_make_tasks
+
+    seen: list[int] = []
+    monkeypatch.setattr(
+        state_probe,
+        "build_rows",
+        lambda _task, *, keep_last: seen.append(keep_last) or _one_row(),
+    )
+    monkeypatch.setattr(state_probe, "build_prompt", lambda *_a, **_k: "PROMPT")
+    monkeypatch.setattr(
+        state_probe, "row_labels", lambda *_a: {name: 0.0 for name in state_probe.TARGETS}
+    )
+    monkeypatch.setattr(state_probe, "mlx_memory_snapshot", lambda *_a: {})
+    monkeypatch.setattr(state_probe, "capture_residuals", _token_capture)
+    task = real_make_tasks("test", 1)[0]
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        _SpanTokenizer(),
+        [task],
+        [1],
+        stub_observations=True,
+        mlx_runtime=_Runtime(),
+    )
+
+    assert seen == [0]
+    assert dataset.meta["keep_last"] == 0
+    assert dataset.meta["stub_observations"] is True
+    assert dataset.meta["condition"] == "observations-stubbed"
+
+
+def test_build_probe_dataset_records_the_both_condition(monkeypatch) -> None:
+    from local_llm_lab.pipeline.tasks import make_tasks as real_make_tasks
+
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _token_capture)
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        _SpanTokenizer(),
+        real_make_tasks("test", 1)[:1],
+        [1],
+        True,
+        stub_observations=True,
+        mlx_runtime=_Runtime(),
+    )
+
+    assert dataset.meta["condition"] == "both"
+    assert dataset.meta["strip"] is True
+
+
+# ------------------------------------------------------------------- dual capture positions
+
+
+def test_note_mean_averages_exactly_the_expert_note_tokens(monkeypatch) -> None:
+    """SPEC-004 §2: the second position is the mean over the teacher-forced note tokens."""
+    from local_llm_lab.probes.capture import note_token_span
+
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _token_capture)
+    tokenizer = _SpanTokenizer()
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        tokenizer,
+        _single_task(),
+        [1, 3],
+        capture_positions=("last", "note_mean"),
+        mlx_runtime=_Runtime(),
+    )
+
+    joint, start, repairs = note_token_span(tokenizer, "PROMPT", _NOTE_TEXT)
+    assert repairs == 0
+    assert joint == tokenizer.encode("PROMPT" + _NOTE_TEXT)
+    expected = float(np.mean([float(token) for token in joint[start:]]))
+    assert dataset.note_features is not None
+    for layer in (1, 3):
+        assert dataset.note_features[layer].shape == (1, 1)
+        assert dataset.note_features[layer][0, 0] == pytest.approx(expected + layer)
+        # the last-token capture still sees the prompt alone, and is a different number
+        assert dataset.features[layer][0, 0] == pytest.approx(
+            float(tokenizer.encode("PROMPT")[-1]) + layer
+        )
+        assert dataset.features[layer][0, 0] != dataset.note_features[layer][0, 0]
+    assert dataset.meta["capture_positions"] == ["last", "note_mean"]
+    assert dataset.meta["note_token_counts"] == [len(joint) - start]
+    assert dataset.meta["note_boundary_repairs"] == 0
+
+
+def test_note_mean_widens_over_a_merged_tokenizer_boundary(monkeypatch) -> None:
+    """Trap 6 (briefing §4): the boundary token merges, so the span widens onto the NATURAL
+    joint sequence by exactly one token, and the repair is counted."""
+    from local_llm_lab.probes.capture import note_token_span
+
+    prompt = "odd"
+    _install_single_row(monkeypatch, prompt=prompt)
+    captured_ids: list[list[int]] = []
+
+    def recording_capture(model, token_ids, layers, *, positions="last", dtype="float32"):
+        captured_ids.append(list(token_ids))
+        return _token_capture(model, token_ids, layers, positions=positions, dtype=dtype)
+
+    monkeypatch.setattr(state_probe, "capture_residuals", recording_capture)
+    tokenizer = _MergingSpanTokenizer()
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        tokenizer,
+        _single_task(),
+        [1],
+        capture_positions=("last", "note_mean"),
+        mlx_runtime=_Runtime(),
+    )
+
+    natural = tokenizer.encode(prompt + _NOTE_TEXT)
+    joint, start, repairs = note_token_span(tokenizer, prompt, _NOTE_TEXT)
+    assert (joint, repairs) == (natural, 1)
+    # The sequence the model was actually run on is the natural one, not a rebuilt pair.
+    assert captured_ids[-1] == natural
+    assert natural != [*tokenizer.encode(prompt), *tokenizer.encode(_NOTE_TEXT)]
+    # Widened by exactly one token, and that token is the merged boundary.
+    assert start == len(tokenizer.encode(prompt)) - 1
+    assert natural[start] == ord(prompt[-1]) + ord(_NOTE_TEXT[0])
+
+    assert dataset.meta["note_boundary_repairs"] == 1
+    assert dataset.meta["note_token_counts"] == [len(natural) - start]
+    assert dataset.note_features is not None
+    # The pooled mean covers exactly the widened span, merged boundary token included.
+    assert dataset.note_features[1][0, 0] == pytest.approx(
+        float(np.mean([float(token) for token in natural[start:]])) + 1.0
+    )
+
+
+def test_note_mean_refuses_a_tokenizer_that_is_not_prefix_stable(monkeypatch) -> None:
+    """A boundary that would move more than one token raises rather than widen silently."""
+
+    class _Unstable(_SpanTokenizer):
+        def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+            del add_special_tokens
+            offset = 1 if len(text) > len("PROMPT") else 0
+            return [ord(character) + offset for character in text]
+
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _token_capture)
+
+    with pytest.raises(ValueError, match="more than one token"):
+        state_probe.build_probe_dataset(
+            object(),
+            _Unstable(),
+            _single_task(),
+            [1],
+            capture_positions=("last", "note_mean"),
+            mlx_runtime=_Runtime(),
+        )
+
+
+def test_note_mean_pools_the_unstripped_target_note(monkeypatch) -> None:
+    """--strip rewrites the context's notes, never the target whose residual is under test."""
+    from local_llm_lab.probes.capture import note_token_span
+
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _token_capture)
+    tokenizer = _SpanTokenizer()
+
+    stripped = state_probe.build_probe_dataset(
+        object(),
+        tokenizer,
+        _single_task(),
+        [1],
+        True,
+        capture_positions=("last", "note_mean"),
+        mlx_runtime=_Runtime(),
+    )
+
+    joint, start, _repairs = note_token_span(tokenizer, "PROMPT", _NOTE_TEXT)
+    assert stripped.meta["condition"] == "notes-stripped"
+    assert stripped.meta["note_token_counts"] == [len(joint) - start]
+    assert stripped.note_features is not None
+    assert stripped.note_features[1][0, 0] == pytest.approx(
+        float(np.mean([float(token) for token in joint[start:]])) + 1.0
+    )
+
+
+def test_reanalyse_cli_names_the_position_and_keeps_the_legacy_stem(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """``--position`` defaults to ``last``, whose artifact name is exactly the ratified one."""
+    import sys
+
+    dataset = _refit_capture()
+    dataset.note_features = {layer: values + 1.0 for layer, values in dataset.features.items()}
+    capture_path = tmp_path / "cap.npz"
+    state_probe.save_dataset(dataset, capture_path)
+    output = tmp_path / "result"
+
+    for position, stem in (("last", "cap.reanalysis"), ("note_mean", "cap.reanalysis.note_mean")):
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "state-probe",
+                "reanalyse",
+                "--input",
+                str(capture_path),
+                "--output",
+                str(output),
+                "--split-seeds",
+                ",".join(map(str, _REFIT_SPLIT_SEEDS)),
+                "--bootstrap-resamples",
+                str(_REFIT_RESAMPLES),
+                "--position",
+                position,
+            ],
+        )
+        state_probe._main_reanalyse(sys.argv[2:])
+        capsys.readouterr()
+        payload = json.loads((output / f"{stem}.json").read_text(encoding="utf-8"))
+        assert payload["metadata"]["position"] == position
+
+
+def test_expert_note_is_the_text_before_the_tool_call() -> None:
+    assert state_probe.expert_note(_TARGET_TURN) == _NOTE_TEXT
+    # An unparseable target keeps its whole content rather than losing the row.
+    assert state_probe.expert_note("no call here") == "no call here"
+
+
+def test_capture_positions_default_to_the_last_token_alone(monkeypatch) -> None:
+    """Default ``("last",)``: every existing artifact and caller is unchanged."""
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _token_capture)
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        _SpanTokenizer(),
+        _single_task(),
+        [1],
+        mlx_runtime=_Runtime(),
+    )
+
+    assert dataset.note_features is None
+    assert dataset.meta["capture_positions"] == ["last"]
+
+
+def test_dataset_round_trip_carries_the_note_mean_features(tmp_path) -> None:
+    dataset = state_probe.ProbeDataset(
+        layers=[1, 2],
+        features={
+            1: np.array([[1.0], [2.0]], dtype=np.float32),
+            2: np.array([[3.0], [4.0]], dtype=np.float32),
+        },
+        note_features={
+            1: np.array([[5.0], [6.0]], dtype=np.float32),
+            2: np.array([[7.0], [8.0]], dtype=np.float32),
+        },
+        labels={},
+        task_ids=np.array(["test-read-0000-clean", "test-read-0001-clean"]),
+        meta={"layers": [1, 2], "capture_positions": ["last", "note_mean"]},
+    )
+
+    reloaded = state_probe.load_dataset(state_probe.save_dataset(dataset, tmp_path / "dual.npz"))
+
+    assert reloaded.note_features is not None
+    for layer in (1, 2):
+        np.testing.assert_array_equal(reloaded.features[layer], dataset.features[layer])
+        np.testing.assert_array_equal(reloaded.note_features[layer], dataset.note_features[layer])
+
+
+def test_legacy_single_position_artifacts_still_load(tmp_path) -> None:
+    dataset = state_probe.ProbeDataset(
+        layers=[1],
+        features={1: np.array([[1.0]], dtype=np.float32)},
+        labels={},
+        task_ids=np.array(["test-read-0000-clean"]),
+        meta={"layers": [1]},
+    )
+
+    reloaded = state_probe.load_dataset(state_probe.save_dataset(dataset, tmp_path / "old.npz"))
+
+    assert reloaded.note_features is None
+    with pytest.raises(ValueError, match="note_mean"):
+        reloaded.at_position("note_mean")
+
+
+def test_at_position_selects_the_requested_feature_set() -> None:
+    dataset = state_probe.ProbeDataset(
+        layers=[1],
+        features={1: np.array([[1.0]], dtype=np.float32)},
+        note_features={1: np.array([[9.0]], dtype=np.float32)},
+        labels={},
+        task_ids=np.array(["test-read-0000-clean"]),
+        meta={"layers": [1]},
+    )
+
+    assert dataset.at_position("last") is dataset
+    assert dataset.at_position().features[1][0, 0] == 1.0
+    assert dataset.at_position("note_mean").features[1][0, 0] == 9.0
+    with pytest.raises(ValueError, match="position"):
+        dataset.at_position("first")
+
+
+def test_fit_probes_and_reanalyse_read_the_selected_position() -> None:
+    """Default ``last`` leaves every existing artifact unchanged; ``note_mean`` uses the pool."""
+    dataset = _refit_capture()
+    dataset.note_features = {layer: values + 1.0 for layer, values in dataset.features.items()}
+
+    last = state_probe.reanalyse_dataset(
+        dataset, split_seeds=_REFIT_SPLIT_SEEDS, bootstrap_resamples=_REFIT_RESAMPLES
+    )
+    note = state_probe.reanalyse_dataset(
+        dataset,
+        split_seeds=_REFIT_SPLIT_SEEDS,
+        bootstrap_resamples=_REFIT_RESAMPLES,
+        position="note_mean",
+    )
+
+    assert last["metadata"]["position"] == "last"
+    assert note["metadata"]["position"] == "note_mean"
+    shifted = state_probe.ProbeDataset(
+        layers=list(dataset.layers),
+        features=dict(dataset.note_features),
+        labels=dict(dataset.labels),
+        task_ids=dataset.task_ids,
+        family=dataset.family,
+        step_index=dataset.step_index,
+        difficulty=dataset.difficulty,
+        meta=dict(dataset.meta),
+    )
+    control = state_probe.reanalyse_dataset(
+        shifted, split_seeds=_REFIT_SPLIT_SEEDS, bootstrap_resamples=_REFIT_RESAMPLES
+    )
+    assert _canonical(note["analyses"]) == _canonical(control["analyses"])
+
+    fitted = state_probe.fit_probes(dataset, ["pending_count"], [_REFIT_LAYERS[0]], 3)
+    fitted_note = state_probe.fit_probes(
+        dataset, ["pending_count"], [_REFIT_LAYERS[0]], 3, position="note_mean"
+    )
+    assert fitted["position"] == "last"
+    assert fitted_note["position"] == "note_mean"
+
+
+# ----------------------------------------------------------------------- capture dtype (R18b)
+
+
+def _bfloat16_capture(_model, token_ids, layers, *, positions="last", dtype="float32"):
+    """Blocks that emit bfloat16; ``float32`` upcasts before anything is pooled."""
+    import mlx.core as mx
+
+    values = mx.array(
+        np.array([[float(token) / 3.0] for token in token_ids], dtype=np.float32)
+    ).astype(mx.bfloat16)
+    if dtype == "float32":
+        values = values.astype(mx.float32)
+    picked = values[-1] if positions == "last" else values
+    return {layer: picked for layer in layers}
+
+
+@pytest.mark.parametrize("capture_dtype", ["native", "float32"])
+def test_capture_dtype_stores_float32_and_records_itself(monkeypatch, capture_dtype: str) -> None:
+    """Rule 1.5 as amended by R18: native blocks, float32 only at storage."""
+    import mlx.core as mx
+
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _bfloat16_capture)
+    tokenizer = _SpanTokenizer()
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        tokenizer,
+        _single_task(),
+        [1],
+        capture_positions=("last", "note_mean"),
+        capture_dtype=capture_dtype,
+        mlx_runtime=mx,
+    )
+
+    assert dataset.meta["capture_dtype"] == capture_dtype
+    assert dataset.features[1].dtype == np.float32
+    assert dataset.note_features is not None
+    stored_last = dataset.features[1]
+    # The last-token value is bfloat16-representable under both paths: widening is exact.
+    np.testing.assert_array_equal(state_probe._round_to_bfloat16(stored_last), stored_last)
+
+    note = dataset.note_features[1]
+    if capture_dtype == "native":
+        # Pooled in the block's own precision, so the mean is a bfloat16 number.
+        np.testing.assert_array_equal(state_probe._round_to_bfloat16(note), note)
+    else:
+        assert not np.array_equal(state_probe._round_to_bfloat16(note), note)
+
+
+def test_capture_dtype_native_adds_no_rounding_beyond_the_blocks_own(monkeypatch) -> None:
+    """The native path must store the block's bfloat16 values, not re-round them."""
+    import mlx.core as mx
+
+    _install_single_row(monkeypatch)
+    monkeypatch.setattr(state_probe, "capture_residuals", _bfloat16_capture)
+    tokenizer = _SpanTokenizer()
+    ids = tokenizer.encode("PROMPT")
+
+    dataset = state_probe.build_probe_dataset(
+        object(),
+        tokenizer,
+        _single_task(),
+        [1],
+        capture_dtype="native",
+        mlx_runtime=mx,
+    )
+
+    expected = np.array(
+        mx.array(np.array([float(ids[-1]) / 3.0], dtype=np.float32))
+        .astype(mx.bfloat16)
+        .astype(mx.float32),
+        dtype=np.float32,
+    )
+    np.testing.assert_array_equal(dataset.features[1][0], expected)
+
+
+def test_build_probe_dataset_rejects_an_unknown_capture_dtype_or_position() -> None:
+    with pytest.raises(ValueError, match="capture_dtype"):
+        state_probe.build_probe_dataset(
+            object(), _SpanTokenizer(), [], [1], capture_dtype="float16"
+        )
+    with pytest.raises(ValueError, match="capture position"):
+        state_probe.build_probe_dataset(
+            object(), _SpanTokenizer(), [], [1], capture_positions=("first",)
+        )
+
+
+def test_spec_capture_dtype_reads_the_specs_own_name() -> None:
+    from dataclasses import replace
+
+    spec = load_model_spec("qwen35-4b")
+
+    assert state_probe.spec_capture_dtype(spec) == "native"
+    assert state_probe.spec_capture_dtype(replace(spec, probe_capture_dtype="float32")) == "float32"
+    # Registry stand-ins in tests and older callers have no probes block at all.
+    assert state_probe.spec_capture_dtype(object()) == "native"
+
+
+def test_preflight_precision_block_is_read_only_and_absent_is_none(tmp_path) -> None:
+    """R18a: the fp32-vs-native deviation is recorded in every probe artifact, or ``None``."""
+    spec = load_model_spec("qwen35-4b")
+
+    assert state_probe.preflight_precision_block(spec, output_root=tmp_path) is None
+
+    block = {"frobenius_relative_error": 0.004, "max_abs_error": 0.5}
+    (tmp_path / f"{spec.name}.json").write_text(
+        json.dumps({"fp32_manual_vs_native": block}), encoding="utf-8"
+    )
+
+    assert state_probe.preflight_precision_block(spec, output_root=tmp_path) == block
+
+
+# ------------------------------------------------------------------------- the capture CLI
+
+
+def _install_capture_cli(monkeypatch, tmp_path, recorded: dict[str, Any]):
+    """Stub every model-touching seam of the capture CLI; nothing is loaded or run."""
+    import sys
+
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.probes import guard, policies
+
+    spec = load_model_spec("qwen35-4b")
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: spec)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_a: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_a: (object(), object(), SimpleNamespace(num_layers=4), object()),
+    )
+    monkeypatch.setattr(state_probe, "artifact_identity", lambda *_a: {})
+    monkeypatch.setattr(state_probe, "set_mlx_cache_limit", lambda *_a: 0)
+    monkeypatch.setitem(
+        sys.modules,
+        "mlx.core",
+        SimpleNamespace(clear_cache=lambda: None, set_cache_limit=lambda _value: None),
+    )
+
+    def capture(_model, _tokenizer, tasks, layers, strip=False, **kwargs):
+        recorded["tasks"] = list(tasks)
+        recorded["strip"] = strip
+        recorded["kwargs"] = kwargs
+        return state_probe.ProbeDataset(
+            layers=list(layers),
+            features={layer: np.empty((0, 1), dtype=np.float32) for layer in layers},
+            labels={},
+            task_ids=np.array([], dtype=str),
+            meta={"layers": list(layers), "condition": kwargs.get("condition", "intact")},
+        )
+
+    monkeypatch.setattr(state_probe, "build_probe_dataset", capture)
+    monkeypatch.setattr(state_probe, "save_dataset", lambda _dataset, path: path)
+
+    def fit(dataset, _targets, _layers, *_a, position="last", **_k):
+        recorded["position"] = position
+        return {"meta": dataset.meta, "targets": {}, "position": position}
+
+    monkeypatch.setattr(state_probe, "fit_probes", fit)
+    monkeypatch.setattr(state_probe, "render_markdown", lambda *_a: "# fake")
+    return spec
+
+
+@pytest.mark.parametrize("selector", [["--p2"], ["--splits", "p2-d0,p2-d1,p2-d2"]])
+def test_capture_cli_p2_builds_the_three_probe_splits(monkeypatch, tmp_path, selector) -> None:
+    """SPEC-004 §2 / R28: ``--p2`` draws through ``make_p2_tasks`` with explicit difficulty."""
+    from local_llm_lab.pipeline.tasks import P2_SPLIT_NAMES, split_of_task_id
+
+    recorded: dict[str, Any] = {}
+    _install_capture_cli(monkeypatch, tmp_path, recorded)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "state-probe",
+            "--model",
+            "qwen35-4b",
+            "--output",
+            str(tmp_path),
+            "--limit",
+            "3",
+            *selector,
+        ],
+    )
+
+    state_probe.main()
+
+    tasks = recorded["tasks"]
+    assert len(tasks) == 3 * 3
+    assert {split_of_task_id(task.task_id) for task in tasks} == set(P2_SPLIT_NAMES)
+    levels = {split_of_task_id(task.task_id): task.difficulty for task in tasks}
+    assert levels == {"p2-d0": 0, "p2-d1": 1, "p2-d2": 2}
+    assert recorded["kwargs"]["difficulties"] == {task.task_id: task.difficulty for task in tasks}
+    assert (tmp_path / "state-base-p2.npz").name  # the stem carries the plan
+    events = _events(tmp_path)
+    start = _flat(events[0])
+    assert start["splits"] == list(P2_SPLIT_NAMES)
+    assert start["condition"] == "intact"
+    assert start["positions"] == ["last", "note_mean"]
+    assert start["capture_dtype"] == "native"
+
+
+def test_capture_cli_stub_observations_names_the_condition_in_the_stem(
+    monkeypatch, tmp_path
+) -> None:
+    recorded: dict[str, Any] = {}
+    _install_capture_cli(monkeypatch, tmp_path, recorded)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "state-probe",
+            "--model",
+            "qwen35-4b",
+            "--output",
+            str(tmp_path),
+            "--limit",
+            "1",
+            "--strip",
+            "--stub-observations",
+            "--capture-positions",
+            "last,note_mean",
+            "--position",
+            "note_mean",
+        ],
+    )
+
+    state_probe.main()
+
+    assert recorded["strip"] is True
+    assert recorded["kwargs"]["stub_observations"] is True
+    assert recorded["position"] == "note_mean"
+    assert (tmp_path / "state-base-stripped-stubbed.json").is_file()
+    start = _flat(_events(tmp_path)[0])
+    assert start["condition"] == "both"
+    assert start["positions"] == ["last", "note_mean"]
+
+
+def test_capture_cli_keeps_the_legacy_stem_for_the_two_old_conditions(
+    monkeypatch, tmp_path
+) -> None:
+    """Existing artifact names must not move: intact stays bare, --strip stays -stripped."""
+    recorded: dict[str, Any] = {}
+    _install_capture_cli(monkeypatch, tmp_path, recorded)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["state-probe", "--model", "qwen35-4b", "--output", str(tmp_path), "--limit", "1"],
+    )
+    state_probe.main()
+    assert (tmp_path / "state-base.json").is_file()
+    # No --p2: the default stays the single last-token capture, so cost and shards are unmoved.
+    assert _flat(_events(tmp_path)[0])["positions"] == ["last"]
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "state-probe",
+            "--model",
+            "qwen35-4b",
+            "--output",
+            str(tmp_path),
+            "--limit",
+            "1",
+            "--strip",
+        ],
+    )
+    state_probe.main()
+    assert (tmp_path / "state-base-stripped.json").is_file()

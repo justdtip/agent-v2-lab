@@ -13,6 +13,7 @@ __all__ = [
     "ChatSpec",
     "LoraSpec",
     "ModelSpec",
+    "ProbesSpec",
     "ResolvedSpec",
     "load_model_spec",
     "registered_models",
@@ -20,6 +21,7 @@ __all__ = [
 
 _THINKING_MODES = frozenset({"unsupported", "off", "inference", "trained"})
 _CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "none"})
+_CAPTURE_DTYPES = frozenset({"native", "float32"})
 _DEFAULT_PROBE_FRACTIONS = (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
 _REGISTRY_DIR = Path(__file__).resolve().parents[2] / "configs" / "models"
 
@@ -42,6 +44,20 @@ class LoraSpec:
 
 
 @dataclass(frozen=True)
+class ProbesSpec:
+    """The registry's ``probes:`` block, under the names the specs use for it.
+
+    SPEC-004 §2 and ruling R17 both write ``spec.probes.layer_fractions``, and the R18b
+    assignment writes ``spec.probes.capture_dtype``. Those names live here rather than on
+    ``ModelSpec`` so the stored fields (``probe_layer_fractions``, ``probe_capture_dtype``) and
+    every caller reading them stay exactly as they are.
+    """
+
+    layer_fractions: tuple[float, ...]
+    capture_dtype: Literal["native", "float32"]
+
+
+@dataclass(frozen=True)
 class ModelSpec:
     name: str
     hf_id: str
@@ -54,6 +70,17 @@ class ModelSpec:
     memory_budget_gib: float
     policies: dict[str, str]
     cache_equivalence_verified: dict[str, str] | None = None
+    # R18: native block execution during capture is the default; the float32 block path is for
+    # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
+    probe_capture_dtype: Literal["native", "float32"] = "native"
+
+    @property
+    def probes(self) -> ProbesSpec:
+        """The ``probes:`` block under the specs' own names; a view, not stored state."""
+        return ProbesSpec(
+            layer_fractions=self.probe_layer_fractions,
+            capture_dtype=self.probe_capture_dtype,
+        )
 
     def resolve(self, model: Any, tokenizer: Any) -> ResolvedSpec:
         """Combine this declaration with facts exposed by ``ArchitectureView``.
@@ -215,6 +242,9 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     fractions = tuple(float(fraction) for fraction in fractions_raw)
     if any(not 0 < fraction <= 1 for fraction in fractions):
         raise ValueError(f"{source}: probes.layer_fractions must be within (0, 1]")
+    capture_dtype = probes.get("capture_dtype", "native")
+    if capture_dtype not in _CAPTURE_DTYPES:
+        raise ValueError(f"{source}: probes.capture_dtype must be one of {sorted(_CAPTURE_DTYPES)}")
     template_kwargs = chat.get("template_kwargs")
     if not isinstance(template_kwargs, dict):
         raise ValueError(f"{source}: chat.template_kwargs must be a mapping")
@@ -249,6 +279,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
         if cache_equivalence_verified is None
         else dict(cache_equivalence_verified),
         probe_layer_fractions=fractions,
+        probe_capture_dtype=capture_dtype,
         memory_budget_gib=float(memory.get("budget_gib")),
         policies=dict(policies),
     )
@@ -266,6 +297,7 @@ def _default_spec(hf_id: str) -> ModelSpec:
         cache_strategy="none",
         cache_equivalence_verified=None,
         probe_layer_fractions=_DEFAULT_PROBE_FRACTIONS,
+        probe_capture_dtype="native",
         memory_budget_gib=22.0,
         policies={},
     )

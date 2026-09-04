@@ -39,7 +39,7 @@ import tempfile
 import time
 import warnings
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -50,10 +50,17 @@ from local_llm_lab.pipeline.data import build_rows
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt, parse_turn
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
 from local_llm_lab.probes import stats
-from local_llm_lab.probes.capture import capture_residuals, strip_state_fields
+from local_llm_lab.probes.capture import (
+    CAPTURE_DTYPES,
+    capture_residuals,
+    note_token_span,
+    strip_state_fields,
+)
 from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
 __all__ = [
+    "CAPTURE_POSITIONS",
+    "CONDITIONS",
     "TARGETS",
     "CompareRefusal",
     "ProbeDataset",
@@ -61,15 +68,20 @@ __all__ = [
     "baseline_reanalysis_parameters",
     "build_label_dataset",
     "build_probe_dataset",
+    "capture_condition",
     "compare_predictions",
     "compare_refit",
     "compare_resample_seeds",
+    "condition_stem_token",
     "derive_position_keys",
+    "expert_note",
     "fit_probes",
     "load_dataset",
     "load_prediction_sidecar",
     "main",
     "position_baseline",
+    "preflight_precision_block",
+    "spec_capture_dtype",
     "position_determinism",
     "prediction_sidecar_path",
     "reanalyse_dataset",
@@ -116,6 +128,28 @@ _LOAD_RE = re.compile(r"^load=(\d+)$", re.MULTILINE)
 # rollout-style name so tasks.difficulty alternates 0/1, and test is difficulty 2. train and
 # p2mix perturb by default, so they carry the recovery variants; test is generated clean.
 MIX_PLAN: tuple[tuple[str, bool | None], ...] = (("train", None), ("p2mix", None), ("test", False))
+# SPEC-004 §2: the four conditions, keyed by the (--strip, --stub-observations) pair the CLI
+# exposes. Observation stubbing is ``keep_last = 0`` (Chief's decision 4, 2026-09-05 05:40):
+# ``protocol.window_messages`` then replaces every tool observation with its hidden stub.
+CONDITIONS: dict[tuple[bool, bool], str] = {
+    (False, False): "intact",
+    (True, False): "notes-stripped",
+    (False, True): "observations-stubbed",
+    (True, True): "both",
+}
+# The artifact-stem token per condition. ``intact`` and ``notes-stripped`` keep the names every
+# existing artifact already carries, so no saved capture is renamed by this slice.
+_CONDITION_STEMS: dict[str, str] = {
+    "intact": "",
+    "notes-stripped": "-stripped",
+    "observations-stubbed": "-stubbed",
+    "both": "-stripped-stubbed",
+}
+# SPEC-004 §2 capture positions: the last prompt token (the position the note is generated
+# from, stored as ``layer_{L}``) and the mean over the teacher-forced note tokens of the expert
+# target (the write-side view, stored as ``layer_{L}_note_mean``; Chief's decision 4).
+CAPTURE_POSITIONS: tuple[str, ...] = ("last", "note_mean")
+_NOTE_FEATURE_SUFFIX = "_note_mean"
 MIN_WITHIN_CELLS = 5
 MIN_WITHIN_TRAIN_ROWS = 48
 MIN_WITHIN_TEST_ROWS = 24
@@ -293,6 +327,11 @@ class ProbeDataset:
     baseline can be fitted: they are the confound's coordinates. When they are not supplied
     (an old ``.npz``, or a synthetic dataset in a test) they are derived from ``task_ids`` and
     the difficulty is recorded as ``-1``, "unknown".
+
+    ``note_features`` is SPEC-004 §2's second capture position -- the mean residual over the
+    teacher-forced note tokens of each row's expert target -- and is ``None`` for every capture
+    taken before the dual-position work and for any single-position run. Choose between the two
+    with :meth:`at_position`; ``features`` alone is what every existing caller reads.
     """
 
     layers: list[int]
@@ -303,6 +342,35 @@ class ProbeDataset:
     family: np.ndarray | None = None
     step_index: np.ndarray | None = None
     difficulty: np.ndarray | None = None
+    note_features: dict[int, np.ndarray] | None = None
+
+    def at_position(self, position: str = "last") -> ProbeDataset:
+        """This dataset seen from one capture position (SPEC-004 §2).
+
+        ``"last"`` returns ``self`` unchanged, so the default path allocates nothing and every
+        existing artifact, caller and test behaves exactly as before; ``"note_mean"`` returns a
+        view whose ``features`` are the note-token means, refusing rather than silently falling
+        back when the capture holds only one position.
+        """
+        if position == "last":
+            return self
+        if position != "note_mean":
+            raise ValueError(f"unknown capture position {position!r}; known: {CAPTURE_POSITIONS}")
+        if self.note_features is None:
+            raise ValueError(
+                "this capture stores only the last prompt token; recapture with "
+                "--capture-positions last,note_mean to analyse note_mean"
+            )
+        return ProbeDataset(
+            layers=list(self.layers),
+            features=dict(self.note_features),
+            labels=self.labels,
+            task_ids=self.task_ids,
+            meta=self.meta,
+            family=self.family,
+            step_index=self.step_index,
+            difficulty=self.difficulty,
+        )
 
     def __post_init__(self) -> None:
         self.task_ids = np.asarray(self.task_ids, dtype=str)
@@ -341,15 +409,40 @@ def _strip_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def task_difficulties(split: str, tasks: list[Task]) -> dict[str, int]:
-    """``task_id -> difficulty level`` for tasks made by ``make_tasks(split, ...)``.
+def capture_condition(strip: bool, stub_observations: bool) -> str:
+    """The SPEC-004 §2 condition name for a (``--strip``, ``--stub-observations``) pair."""
+    return CONDITIONS[(bool(strip), bool(stub_observations))]
 
-    The level comes from :func:`tasks.difficulty` applied to the generator index, which is the
-    position in the list ``make_tasks`` returned -- not from parsing the id.
+
+def condition_stem_token(condition: str) -> str:
+    """The artifact-stem fragment that carries ``condition`` (empty for ``intact``)."""
+    try:
+        return _CONDITION_STEMS[condition]
+    except KeyError as error:
+        raise ValueError(f"unknown condition {condition!r}") from error
+
+
+def task_difficulties(split: str, tasks: list[Task]) -> dict[str, int]:
+    """``task_id -> difficulty level`` for a list of generated tasks.
+
+    The level is the one the task itself carries (``make_tasks`` stamps ``Task.difficulty`` with
+    the level it generated at, ``tasks.py:148``). Reading it here rather than recomputing
+    ``difficulty(split, index)`` is what makes the SPEC-004 §2 splits correct: ``p2-d0/1/2`` are
+    generated with an explicit difficulty, but the positional rule knows only train/valid/test
+    and would return ``index % 2`` for any other name, mislabelling every P2 row. For the
+    legacy split names the two agree exactly -- ``make_tasks`` computed the stored level with
+    that same rule -- and a test pins that equality.
+
+    Tasks that carry no level (the ``-1`` default, i.e. anything not built by ``make_tasks``)
+    fall back to the positional rule, which is what this function used to do for everything.
     """
     from local_llm_lab.pipeline.tasks import difficulty
 
-    return {task.task_id: int(difficulty(split, index)) for index, task in enumerate(tasks)}
+    levels: dict[str, int] = {}
+    for index, task in enumerate(tasks):
+        recorded = int(getattr(task, "difficulty", -1))
+        levels[task.task_id] = recorded if recorded >= 0 else int(difficulty(split, index))
+    return levels
 
 
 def build_label_dataset(
@@ -411,6 +504,9 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
     strip: bool = False,
     *,
     keep_last: int = DEFAULT_KEEP_LAST,
+    stub_observations: bool = False,
+    capture_positions: Sequence[str] = ("last",),
+    capture_dtype: str = "float32",
     difficulties: dict[str, int] | None = None,
     progress: Any = None,
     mlx_runtime: Any = None,
@@ -420,17 +516,48 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
     spec: Any = None,
     layer_selection: dict[str, object] | None = None,
 ) -> ProbeDataset:
-    """Capture the last prompt token's residual stream for every supervised row.
+    """Capture the residual stream at the requested positions for every supervised row.
 
     The rows come from :func:`build_rows`, so the context is exactly the windowed context the
     policy sees at inference. Those messages are already windowed, so ``build_prompt`` is
     called with ``keep_last`` large enough to leave them alone (windowing twice would re-stub
     an already-stubbed observation and change the text).
 
+    ``stub_observations`` (SPEC-004 §2) forces ``keep_last = 0`` for the replay, so
+    ``window_messages`` hides *every* tool observation and the note is the only memory left;
+    together with ``strip`` it names one of the four :data:`CONDITIONS`, recorded in the
+    metadata as ``condition``.
+
+    ``capture_positions`` is ``("last",)`` -- the last prompt token, which is what this function
+    has always captured and remains the default -- optionally with ``"note_mean"``, the mean
+    residual over the teacher-forced note tokens of the row's expert target. The note run is a
+    second forward pass per row over the natural tokenisation of prompt + note; its token span
+    is located by :func:`capture.note_token_span`, so a prompt/note tokenizer merge widens the
+    span by one token and is counted rather than silently shifting the window.
+
+    ``capture_dtype`` is R18b: ``"native"`` pools and slices in the blocks' own precision and
+    casts once, at storage; ``"float32"`` is the historical behaviour and the default here.
+
     ``difficulties`` maps task id to difficulty level (see :func:`task_difficulties`); rows of
     tasks it does not mention are recorded as ``-1``.
     """
     from local_llm_lab.pipeline.jlens import encode
+
+    positions = list(capture_positions)
+    unknown_positions = [name for name in positions if name not in CAPTURE_POSITIONS]
+    if unknown_positions or not positions or positions[0] != "last":
+        raise ValueError(
+            f"capture position list must start with 'last' and name only {CAPTURE_POSITIONS}; "
+            f"got {positions}"
+        )
+    if capture_dtype not in CAPTURE_DTYPES:
+        raise ValueError(
+            f"capture_dtype must be one of {list(CAPTURE_DTYPES)}; got {capture_dtype!r}"
+        )
+    note_mean = "note_mean" in positions
+    if stub_observations:
+        keep_last = 0
+    condition = capture_condition(strip, stub_observations)
 
     if mlx_runtime is None:
         import mlx.core as mlx_runtime
@@ -444,11 +571,14 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     features: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
+    note_features: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
     labels: dict[str, list[Any]] = {name: [] for name in TARGETS}
     task_ids: list[str] = []
     families: list[str] = []
     step_indices: list[int] = []
     levels: list[int] = []
+    note_token_counts: list[int] = []
+    note_boundary_repairs = 0
     prompt_token_sum = 0
     max_prompt_tokens = 0
     resumed_tasks = 0
@@ -461,6 +591,8 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
             keep_last=keep_last,
             difficulty=difficulty,
             context=checkpoint_context,
+            positions=positions,
+            capture_dtype=capture_dtype,
         )
         checkpoint_path = (
             checkpoint_dir / f"{number:04d}.npz" if checkpoint_dir is not None else None
@@ -480,12 +612,15 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
             else:
                 mlx_runtime.reset_peak_memory()
                 task_features: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
+                task_note_features: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
                 task_labels: dict[str, list[Any]] = {name: [] for name in TARGETS}
                 task_ids_part: list[str] = []
                 families_part: list[str] = []
                 step_indices_part: list[int] = []
                 levels_part: list[int] = []
                 task_lengths: list[int] = []
+                task_note_counts: list[int] = []
+                task_note_repairs = 0
                 for row in build_rows(task, keep_last=keep_last):
                     context = row["messages"][:-1]
                     if strip:
@@ -493,11 +628,28 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
                     prompt = build_prompt(tokenizer, context, keep_last=len(context), spec=spec)
                     token_ids = encode(tokenizer, prompt)
                     task_lengths.append(len(token_ids))
-                    captured = capture_residuals(model, token_ids, layers, positions="last")
+                    captured = _capture_at(
+                        model, token_ids, layers, positions="last", capture_dtype=capture_dtype
+                    )
                     materialized = _materialize_residuals(captured, layers, mlx_runtime)
                     del captured
                     for layer in layers:
                         task_features[layer].append(materialized[layer])
+                    if note_mean:
+                        pooled, count, repairs = _note_mean_residuals(
+                            model,
+                            tokenizer,
+                            prompt,
+                            row["messages"][-1],
+                            layers,
+                            capture_dtype=capture_dtype,
+                        )
+                        note_materialized = _materialize_residuals(pooled, layers, mlx_runtime)
+                        del pooled
+                        for layer in layers:
+                            task_note_features[layer].append(note_materialized[layer])
+                        task_note_counts.append(count)
+                        task_note_repairs += repairs
                     step = int(row["metadata"]["step"])
                     truth = row_labels(task, step)
                     for name in TARGETS:
@@ -509,6 +661,11 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
                 part = ProbeDataset(
                     layers=list(layers),
                     features={layer: np.stack(values) for layer, values in task_features.items()},
+                    note_features=(
+                        {layer: np.stack(values) for layer, values in task_note_features.items()}
+                        if note_mean
+                        else None
+                    ),
                     labels=_label_arrays(task_labels),
                     task_ids=np.array(task_ids_part, dtype=str),
                     family=np.array(families_part, dtype=str),
@@ -521,6 +678,12 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
                         "layers": list(layers),
                         "strip": bool(strip),
                         "keep_last": keep_last,
+                        "stub_observations": bool(stub_observations),
+                        "condition": condition,
+                        "capture_positions": list(positions),
+                        "capture_dtype": capture_dtype,
+                        "note_token_counts": list(task_note_counts),
+                        "note_boundary_repairs": task_note_repairs,
                         "prompt_token_sum": int(sum(task_lengths)),
                         "mean_prompt_tokens": (
                             float(np.mean(task_lengths)) if task_lengths else 0.0
@@ -542,6 +705,16 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
         assert part is not None
         for layer in layers:
             features[layer].extend(np.asarray(part.features[layer], dtype=np.float32))
+        if note_mean:
+            if part.note_features is None:
+                raise ValueError(
+                    f"checkpoint {checkpoint_path} holds no note-mean features; "
+                    "use a fresh output directory"
+                )
+            for layer in layers:
+                note_features[layer].extend(np.asarray(part.note_features[layer], dtype=np.float32))
+            note_token_counts.extend(int(value) for value in part.meta.get("note_token_counts", []))
+            note_boundary_repairs += int(part.meta.get("note_boundary_repairs", 0))
         for name in TARGETS:
             labels[name].extend(np.asarray(part.labels[name]).tolist())
         task_ids.extend(np.asarray(part.task_ids, dtype=str).tolist())
@@ -574,6 +747,11 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
     return ProbeDataset(
         layers=list(layers),
         features={layer: np.stack(values) for layer, values in features.items()},
+        note_features=(
+            {layer: np.stack(values) for layer, values in note_features.items()}
+            if note_mean
+            else None
+        ),
         labels=_label_arrays(labels),
         task_ids=np.array(task_ids, dtype=str),
         family=np.array(families, dtype=str),
@@ -586,6 +764,12 @@ def build_probe_dataset(  # noqa: C901 - pre-existing capture orchestration
             "layers": list(layers),
             "strip": bool(strip),
             "keep_last": keep_last,
+            "stub_observations": bool(stub_observations),
+            "condition": condition,
+            "capture_positions": list(positions),
+            "capture_dtype": capture_dtype,
+            "note_token_counts": note_token_counts,
+            "note_boundary_repairs": note_boundary_repairs,
             "checkpointed_tasks": len(tasks) if checkpoint_dir is not None else 0,
             "resumed_tasks": resumed_tasks,
             "difficulties": {
@@ -618,15 +802,123 @@ def _label_arrays(labels: dict[str, list[Any]]) -> dict[str, np.ndarray]:
     }
 
 
+def _capture_at(
+    model: Any,
+    token_ids: Any,
+    layers: list[int],
+    *,
+    positions: str,
+    capture_dtype: str,
+) -> dict[int, Any]:
+    """Call :func:`capture_residuals`, naming ``dtype`` only when it is not the default.
+
+    The float32 default is passed by omission so the historical call is byte-identical, which
+    matters because several tests replace ``capture_residuals`` with a stand-in that predates
+    R18b and takes no ``dtype``.
+    """
+    if capture_dtype == "float32":
+        return capture_residuals(model, token_ids, layers, positions=positions)
+    return capture_residuals(model, token_ids, layers, positions=positions, dtype=capture_dtype)
+
+
+def expert_note(content: str) -> str:
+    """The note of an expert assistant target: the text before its tool call.
+
+    SPEC-004 §2 pools "the teacher-forced note tokens", and the note is the state-carrying prose
+    that precedes the fenced JSON call, not the call itself -- pooling the call's tokens would
+    dilute the write-side view with syntax common to every row. A target that will not parse
+    (no fenced call at all) falls back to its whole content rather than losing the row.
+    """
+    try:
+        note = parse_turn(content).thought
+    except Exception:  # noqa: BLE001 - an unparseable target still has a note to pool
+        return content
+    return note or content
+
+
+def _note_mean_residuals(
+    model: Any,
+    tokenizer: Any,
+    prompt: str,
+    target: dict[str, Any],
+    layers: list[int],
+    *,
+    capture_dtype: str,
+) -> tuple[dict[int, Any], int, bool]:
+    """Mean residual over the expert target's note tokens (SPEC-004 §2's second position).
+
+    Returns ``(pooled, note_token_count, repairs)``. The note is rendered after the prompt and
+    the pair tokenised jointly **once**, so every residual comes from the sequence a
+    teacher-forced pass would actually see; :func:`capture.note_token_span` counts the prompt
+    prefix and, where the boundary token merges the prompt's last characters with the note's
+    first, widens the span back over that one token and counts the repair. Pooling happens
+    before materialisation, so under ``capture_dtype="native"`` the mean is taken in the blocks'
+    own precision rather than in an invented float32.
+
+    ``--strip`` does **not** reach this note. Stripping rewrites the *context's* assistant
+    messages (``_strip_messages`` is applied to ``row["messages"][:-1]``), and the target is the
+    turn being written, not memory of an earlier one; removing the value from the very tokens
+    whose residual is under test would make the stripped condition vacuous rather than a
+    control. The contrast survives regardless, because the prompt those note tokens are
+    conditioned on is the stripped one.
+    """
+    note = expert_note(str(target.get("content", "")))
+    joint_ids, start, repairs = note_token_span(tokenizer, prompt, note)
+    captured = _capture_at(model, joint_ids, layers, positions="all", capture_dtype=capture_dtype)
+    pooled = {layer: value[start:].mean(axis=0) for layer, value in captured.items()}
+    del captured
+    return pooled, len(joint_ids) - start, repairs
+
+
 def _materialize_residuals(
     captured: dict[int, Any], layers: list[int], mlx_runtime: Any
 ) -> dict[int, np.ndarray]:
     values = [captured[layer] for layer in layers]
+    # Briefing rule 1.5 as amended by R18: stored activations are float32 whatever the blocks
+    # ran in, and this is the single place that cast happens. NumPy cannot read an MLX
+    # bfloat16 buffer, so the widening goes through the runtime when it offers a dtype.
+    float32 = getattr(mlx_runtime, "float32", None)
+    if float32 is not None:
+        values = [value.astype(float32) if hasattr(value, "astype") else value for value in values]
     mlx_runtime.eval(*values)
     return {
         layer: np.array(value, dtype=np.float32, copy=True)
         for layer, value in zip(layers, values, strict=True)
     }
+
+
+def spec_capture_dtype(spec: Any) -> str:
+    """``spec.probes.capture_dtype`` (R18b), defaulting to native.
+
+    Read through the spec's own name rather than the stored field, and tolerant of the registry
+    stand-ins several probe tests pass in place of a ``ModelSpec``; an unrecognised value falls
+    back to the registry default rather than reaching the capture.
+    """
+    value = getattr(getattr(spec, "probes", None), "capture_dtype", None)
+    return value if value in CAPTURE_DTYPES else "native"
+
+
+def preflight_precision_block(spec: Any, output_root: Path | None = None) -> dict[str, Any] | None:
+    """The preflight's ``fp32_manual_vs_native`` block for ``spec``, or ``None`` if absent.
+
+    R18a requires the float32-path deviation to be "recorded in every probe artifact". This is a
+    read-only lookup of the artifact the preflight already wrote (``outputs/preflight/<model>.json``);
+    a missing, unreadable or incomplete artifact records ``None``, because a probe capture is
+    not the place to gate on preflight evidence and inventing a number would be worse than
+    saying there is none.
+    """
+    from local_llm_lab.pipeline import preflight
+
+    name = getattr(spec, "name", None)
+    if not isinstance(name, str) or not name:
+        return None
+    path = preflight.artifact_path(spec, output_root)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    block = record.get("fp32_manual_vs_native") if isinstance(record, dict) else None
+    return dict(block) if isinstance(block, dict) else None
 
 
 def mlx_memory_snapshot(mlx_runtime: Any) -> dict[str, int]:
@@ -731,7 +1023,16 @@ def _checkpoint_signature(
     keep_last: int,
     difficulty: int,
     context: dict[str, Any],
+    positions: Sequence[str] = ("last",),
+    capture_dtype: str = "float32",
 ) -> dict[str, Any]:
+    """The identity a task shard must match to be resumed.
+
+    ``positions`` and ``capture_dtype`` widen it only when they leave their historical values,
+    so a shard captured before this slice still matches a run that reproduces it, while a
+    dual-position or native-dtype run can never silently resume single-position float32 shards.
+    Observation stubbing needs no key of its own: it *is* ``keep_last = 0``, already here.
+    """
     task_payload = json.dumps(
         _canonical_value(task), sort_keys=True, separators=(",", ":"), ensure_ascii=False
     )
@@ -744,6 +1045,8 @@ def _checkpoint_signature(
         "keep_last": int(keep_last),
         "difficulty": int(difficulty),
         "context": context,
+        **({} if list(positions) == ["last"] else {"capture_positions": list(positions)}),
+        **({} if capture_dtype == "float32" else {"capture_dtype": capture_dtype}),
     }
 
 
@@ -752,6 +1055,13 @@ def save_dataset(dataset: ProbeDataset, path: Path) -> Path:
     payload: dict[str, Any] = {
         f"layer_{layer}": dataset.features[layer] for layer in dataset.layers
     }
+    if dataset.note_features is not None:
+        payload.update(
+            {
+                f"layer_{layer}{_NOTE_FEATURE_SUFFIX}": dataset.note_features[layer]
+                for layer in dataset.layers
+            }
+        )
     payload.update({f"label_{name}": values for name, values in dataset.labels.items()})
     payload["task_ids"] = dataset.task_ids
     payload["family"] = np.asarray(dataset.family, dtype=str)
@@ -781,6 +1091,8 @@ def load_dataset(path: Path) -> ProbeDataset:
         layers = list(meta["layers"])
         has_position = "family" in handle and "step_index" in handle
         has_difficulty = "difficulty" in handle
+        # SPEC-004 §2's second capture position, absent from every capture taken before it.
+        has_note = all(f"layer_{layer}{_NOTE_FEATURE_SUFFIX}" in handle for layer in layers)
         if not has_position:
             warnings.warn(
                 f"{path} has no per-row family/step_index arrays (captured before the "
@@ -791,6 +1103,11 @@ def load_dataset(path: Path) -> ProbeDataset:
         return ProbeDataset(
             layers=layers,
             features={layer: handle[f"layer_{layer}"] for layer in layers},
+            note_features=(
+                {layer: handle[f"layer_{layer}{_NOTE_FEATURE_SUFFIX}"] for layer in layers}
+                if has_note
+                else None
+            ),
             labels={name: handle[f"label_{name}"] for name in TARGETS if f"label_{name}" in handle},
             task_ids=handle["task_ids"],
             meta=meta,
@@ -1308,6 +1625,7 @@ def fit_probes(
     steps: int = 400,
     train_fraction: float = 0.7,
     within_position: bool = False,
+    position: str = "last",
 ) -> dict[str, Any]:
     """Fit one probe per (target, layer) beside two controls on the same split.
 
@@ -1326,10 +1644,15 @@ def fit_probes(
     ``conditional_update``, ``first_bucket_count`` outside ``aggregate_report``) are dropped
     for that target only. A target with a single class in the training half is skipped and says
     so, rather than reporting a meaningless perfect score.
+
+    ``position`` (SPEC-004 §2) chooses which captured position is fitted: ``"last"``, the
+    default and the only one every existing artifact holds, or ``"note_mean"``.
     """
+    dataset = dataset.at_position(position)
     results: dict[str, Any] = {
         "seed": seed,
         "meta": dataset.meta,
+        "position": position,
         "within_position": bool(within_position),
         "position_determinism": position_determinism(dataset, targets),
         "targets": {},
@@ -2281,6 +2604,7 @@ def reanalyse_dataset(
     logistic_steps: int = 120,
     progress: Callable[[str, str, int, int], None] | None = None,
     return_predictions: bool = False,
+    position: str = "last",
 ) -> dict[str, Any] | tuple[dict[str, Any], list[dict[str, Any]]]:
     """Run SPEC-004 §1 entirely from a saved activation capture and regenerated task truth.
 
@@ -2291,7 +2615,11 @@ def reanalyse_dataset(
     ``return_predictions`` additionally returns the per-row test-half predictions R29's
     sidecar records. It changes nothing about the JSON-safe result, which is returned
     unchanged (and alone) when the flag is false.
+
+    ``position`` (SPEC-004 §2) selects the capture position analysed; ``"last"`` is the default,
+    so a dual-position capture re-runs the ratified analysis unchanged.
     """
+    dataset = dataset.at_position(position)
     if len(split_seeds) != len(set(split_seeds)) or not split_seeds:
         raise ValueError("split seeds must be non-empty and unique")
     if bootstrap_resamples < 1:
@@ -2358,6 +2686,7 @@ def reanalyse_dataset(
             "surface_feature_details": surface_meta,
             "data_seed": data_seed,
             "generator_version": resolved_generator_version,
+            "position": position,
             "model": dataset.meta.get("model"),
             "source_metadata": dataset.meta,
             "fit": {
@@ -3312,11 +3641,18 @@ def _main_reanalyse(argv: list[str]) -> None:
         default=True,
         help="write the R29 per-row prediction sidecar that `compare` pairs on.",
     )
+    parser.add_argument(
+        "--position",
+        default="last",
+        choices=list(CAPTURE_POSITIONS),
+        help="Which captured position to analyse; 'note_mean' needs a dual-position capture.",
+    )
     args = parser.parse_args(argv)
     seeds = tuple(int(value) for value in args.split_seeds.split(",") if value.strip())
     identity = {
         "input": str(args.input),
         "input_sha256": sha256_of(args.input) if args.input.is_file() else None,
+        "position": args.position,
         "git_commit": git_commit(),
     }
     with RunLog.open(
@@ -3336,6 +3672,7 @@ def _main_reanalyse(argv: list[str]) -> None:
             generator_version=args.generator_version,
             logistic_steps=args.logistic_steps,
             return_predictions=args.predictions,
+            position=args.position,
         )
         results, predictions = produced if isinstance(produced, tuple) else (produced, [])
         _apply_capture_metadata(results, capture_context, dataset)
@@ -3343,6 +3680,8 @@ def _main_reanalyse(argv: list[str]) -> None:
         results["metadata"]["input"] = str(args.input)
         results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
         stem = args.input.name.removesuffix(".npz") + ".reanalysis"
+        if args.position != "last":
+            stem += f".{args.position}"
         json_path = args.output / f"{stem}.json"
         markdown_path = args.output / f"{stem}.md"
         _atomic_text(
@@ -4208,7 +4547,18 @@ def render_markdown(results: dict[str, Any], label: str) -> str:
 
 
 def _build_plan(args: argparse.Namespace, splits: list[str]) -> list[tuple[str, bool | None]]:
+    from local_llm_lab.pipeline.tasks import P2_SPLITS
+
+    if getattr(args, "p2", False):
+        return [(name, perturb) for name, _level, perturb in P2_SPLITS]
     return list(MIX_PLAN) if args.mix_difficulty else [(name, None) for name in splits]
+
+
+def _is_p2_request(mix_difficulty: bool, splits: list[str]) -> bool:
+    """True when the CLI was asked for the SPEC-004 §2 plan by ``--splits`` rather than ``--p2``."""
+    from local_llm_lab.pipeline.tasks import P2_SPLIT_NAMES
+
+    return not mix_difficulty and list(splits) == list(P2_SPLIT_NAMES)
 
 
 def resolve_within_position(mix_difficulty: bool, requested: bool | None) -> bool:
@@ -4287,7 +4637,7 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
 
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.evaluate import load_policy
-    from local_llm_lab.pipeline.tasks import make_tasks
+    from local_llm_lab.pipeline.tasks import P2_SPLIT_NAMES, make_p2_tasks, make_tasks
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
     from local_llm_lab.probes.policies import (
         resolve_layers,
@@ -4317,6 +4667,32 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
         "--layers", help="comma-separated layer indices or fractions; defaults to the registry"
     )
     parser.add_argument("--strip", action="store_true", help="Remove state fields from every note.")
+    parser.add_argument(
+        "--stub-observations",
+        action="store_true",
+        help="Hide every tool observation (keep_last = 0), so the note is the only memory. "
+        "With --strip this is SPEC-004 §2's 'both' condition.",
+    )
+    parser.add_argument(
+        "--p2",
+        action="store_true",
+        help="Build from the SPEC-004 §2 probe splits (p2-d0/p2-d1/p2-d2) at their "
+        "pre-registered difficulties; equivalent to --splits p2-d0,p2-d1,p2-d2.",
+    )
+    parser.add_argument(
+        "--capture-positions",
+        default=None,
+        help="Comma-separated capture positions, starting with 'last'; add 'note_mean' for the "
+        "mean over the expert note's tokens (one extra forward pass per row). Defaults to "
+        "'last,note_mean' under --p2, which SPEC-004 §2 requires, and to 'last' otherwise, so "
+        "no pre-existing run changes what it captures or what it costs.",
+    )
+    parser.add_argument(
+        "--position",
+        default="last",
+        choices=list(CAPTURE_POSITIONS),
+        help="Which captured position to fit.",
+    )
     parser.add_argument(
         "--within-position",
         action=argparse.BooleanOptionalAction,
@@ -4351,6 +4727,22 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
     splits = [part.strip() for part in args.splits.split(",") if part.strip()]
     if not splits:
         parser.error("--splits needs at least one split name")
+    if _is_p2_request(args.mix_difficulty, splits):
+        args.p2 = True
+    if args.p2:
+        if args.mix_difficulty:
+            parser.error("pass either --p2 or --mix-difficulty, not both")
+        splits = list(P2_SPLIT_NAMES)
+    requested_positions = args.capture_positions
+    if requested_positions is None:
+        requested_positions = ",".join(CAPTURE_POSITIONS) if args.p2 else "last"
+    capture_positions = [part.strip() for part in requested_positions.split(",") if part.strip()]
+    if not capture_positions or capture_positions[0] != "last":
+        parser.error("--capture-positions must start with 'last'")
+    if any(name not in CAPTURE_POSITIONS for name in capture_positions):
+        parser.error(f"--capture-positions accepts only {list(CAPTURE_POSITIONS)}")
+    if args.position not in capture_positions:
+        parser.error(f"--position {args.position} is not captured; add it to --capture-positions")
     targets = [part for part in args.targets.split(",") if part.strip()]
     unknown = [target for target in targets if target not in TARGETS]
     if unknown:
@@ -4363,10 +4755,15 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
         parser.error(str(error))
     args.output.mkdir(parents=True, exist_ok=True)
     plan = _build_plan(args, splits)
-    suffix = (
-        "-mix" if args.mix_difficulty else ("" if splits == ["train"] else "-" + "_".join(splits))
-    )
-    stem = f"state-{args.policy}{'-stripped' if args.strip else ''}{suffix}"
+    if args.mix_difficulty:
+        suffix = "-mix"
+    elif args.p2:
+        suffix = "-p2"
+    else:
+        suffix = "" if splits == ["train"] else "-" + "_".join(splits)
+    condition = capture_condition(args.strip, args.stub_observations)
+    capture_dtype = spec_capture_dtype(spec)
+    stem = f"state-{args.policy}{condition_stem_token(condition)}{suffix}"
     npz_path = args.output / f"{stem}.npz"
     preflight: dict[str, Any] | None = None
     reusing = bool(args.reuse and npz_path.is_file())
@@ -4385,6 +4782,9 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
         "adapter": None if adapter is None else str(adapter),
         "layers": args.layers,
         "splits": [name for name, _ in plan],
+        "condition": condition,
+        "positions": list(capture_positions),
+        "capture_dtype": capture_dtype,
         "reused_capture": str(npz_path) if reusing else None,
         "reused_capture_sha256": sha256_of(npz_path) if reusing else None,
         "git_commit": git_commit(),
@@ -4409,11 +4809,14 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
             tasks: list[Task] = []
             difficulties: dict[str, int] = {}
             for name, perturb in plan:
-                made = (
-                    make_tasks(name, args.limit, args.data_seed)
-                    if perturb is None
-                    else make_tasks(name, args.limit, args.data_seed, perturb=perturb)
-                )
+                if args.p2:
+                    # The P2 splits carry an explicit difficulty as well as an explicit
+                    # perturbation (R28); make_p2_tasks applies both from the split table.
+                    made = make_p2_tasks(name, args.limit, args.data_seed)
+                elif perturb is None:
+                    made = make_tasks(name, args.limit, args.data_seed)
+                else:
+                    made = make_tasks(name, args.limit, args.data_seed, perturb=perturb)
                 tasks.extend(made)
                 difficulties.update(task_difficulties(name, made))
             if args.mix_difficulty:
@@ -4481,6 +4884,9 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
                     layers,
                     args.strip,
                     keep_last=args.keep_last,
+                    stub_observations=args.stub_observations,
+                    capture_positions=capture_positions,
+                    capture_dtype=capture_dtype,
                     difficulties=difficulties,
                     progress=progress,
                     mlx_runtime=mx,
@@ -4493,6 +4899,9 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
                         "adapter_artifact": adapter_artifact,
                         "splits": [name for name, _ in plan],
                         "mix_difficulty": bool(args.mix_difficulty),
+                        # Only when set, so a run reproducing a pre-SPEC-004 capture still
+                        # matches its saved task shards byte for byte.
+                        **({"p2": True} if args.p2 else {}),
                         "data_seed": args.data_seed,
                         "generator_version": GENERATOR_VERSION,
                         "layer_selection": layer_selection,
@@ -4506,8 +4915,12 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
                 mx.set_cache_limit(previous_cache_limit)
             dataset.meta["splits"] = [name for name, _ in plan]
             dataset.meta["mix_difficulty"] = bool(args.mix_difficulty)
+            dataset.meta["p2"] = bool(args.p2)
             dataset.meta["mlx_cache_limit_mib"] = args.mlx_cache_limit_mib
             dataset.meta["layer_selection"] = layer_selection
+            # R18a: the float32-vs-native deviation the preflight measured, recorded in every
+            # probe artifact -- ``None`` when this model has no preflight artifact on disk.
+            dataset.meta["fp32_manual_vs_native"] = preflight_precision_block(spec)
             if preflight is not None:
                 dataset.meta["deconfounding_preflight"] = preflight
             save_dataset(dataset, npz_path)
@@ -4515,8 +4928,20 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
 
         if preflight is not None:
             dataset.meta["deconfounding_preflight"] = preflight
-        results = fit_probes(dataset, targets, layers, args.seed, within_position=within_position)
+        # R18a again for the --reuse path, whose capture predates this field.
+        dataset.meta.setdefault("fp32_manual_vs_native", preflight_precision_block(spec))
+        results = fit_probes(
+            dataset,
+            targets,
+            layers,
+            args.seed,
+            within_position=within_position,
+            position=args.position,
+        )
         results["policy"] = args.policy
+        results["condition"] = condition
+        results["capture_dtype"] = dataset.meta.get("capture_dtype", capture_dtype)
+        results["fp32_manual_vs_native"] = dataset.meta.get("fp32_manual_vs_native")
         results["splits"] = [name for name, _ in plan]
         results["split"] = ",".join(name for name, _ in plan)
         (args.output / f"{stem}.json").write_text(
