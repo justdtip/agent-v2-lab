@@ -633,13 +633,19 @@ def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(
     tmp_path: Path, monkeypatch
 ) -> None:
     task = _task("read")
+    legacy_task = _task("ledger_reconcile")
     recorded = tmp_path / "recorded.json"
     legacy = tmp_path / "legacy.json"
     _write_evaluation(
         recorded, task, _expert_trace(task), success=True, label="recorded", generator_version=2
     )
     _write_evaluation(
-        legacy, task, _expert_trace(task), success=True, label="legacy", generator_version=None
+        legacy,
+        legacy_task,
+        _expert_trace(legacy_task),
+        success=True,
+        label="legacy",
+        generator_version=None,
     )
     versions = []
     original_replay = integrity_module.replay_task_from_id
@@ -652,9 +658,14 @@ def test_integrity_artifact_consumers_bind_recorded_and_legacy_versions(
     analysed = _analyse_evaluation(recorded, 20260902)
     assert analysed["generator_version"] == 2
     assert versions == [2]
-    rendered = _render_evaluations([legacy], 20260902, generator_version=1)
-    assert "generator version" in rendered
-    assert "FAIL" in rendered  # explicit binding must reach v1 replay, not silently use HEAD
+    v1 = _analyse_evaluation(legacy, 20260902, generator_version=1)
+    v4 = _analyse_evaluation(legacy, 20260902, generator_version=4)
+    v1_integrity = next(iter(v1["records"].values()))["integrity"]
+    v4_integrity = next(iter(v4["records"].values()))["integrity"]
+    assert versions[-2:] == [1, 4]
+    assert v1_integrity.clean is False
+    assert v1_integrity.counts == {"count_mismatch": 1}
+    assert v4_integrity.clean is True
     payload = json.loads(recorded.read_text())
     payload["generator_version"] = payload["summary"].pop("generator_version")
     recorded.write_text(json.dumps(payload))
