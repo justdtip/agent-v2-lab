@@ -34,8 +34,8 @@ The interface and wiring map (`02-INTERFACE-AND-WIRING-MAP.md`) is the companion
    Grep for them before you hand off.
 8. **Determinism.** Every random choice takes a seed from the CLI or config and records it.
    `make_tasks` is seeded by the split name string; the shuffle in `write_dataset` is seeded by
-   `f"{seed}:{split}"`. Do not change these derivations; run C's data must still regenerate
-   byte-for-byte (`data/agent_v2c/manifest.json` hashes are the oracle).
+   `f"{seed}:{split}"`. Do not change these derivations; generated data is versioned by
+   `tasks.GENERATOR_VERSION` (wiring map ruling R5); bump it and re-pin the reference hashes whenever a change alters any row. Run C's data reproduces only at generator version 1 (commit 97d197c).
 9. **Atomic writes** for anything large (temp file in the same directory, fsync, `os.replace`),
    as `state_probe.save_dataset` already does.
 10. **Ask by writing, not by waiting.** If a spec is ambiguous, pick the reading that keeps
@@ -62,26 +62,33 @@ The interface and wiring map (`02-INTERFACE-AND-WIRING-MAP.md`) is the companion
 
 ## 3. Repository facts that are easy to get wrong
 
+> Anchors verified 2026-09-03 22:55 by the Deputy against the working tree at `6325d3a`. Line
+> numbers drift on every insertion: nine of these anchors went stale when SPEC-004 §1 added 874
+> lines to `state_probe.py`. Check the named symbol, not the line, and treat a mismatch as drift
+> rather than as a missing fact. Two files are being edited right now by the SPEC-004 remediation
+> lane, `probes/state_probe.py` and `tests/test_probes.py`, so their anchors carry the symbol
+> name and will move again when that work lands.
+
 | Fact | Where | Why it matters |
 | --- | --- | --- |
 | The pipeline is `src/local_llm_lab/pipeline/`; legacy modules (`agent_*.py`, `complex_*`, `depth_expansion.py`, `train_*.py`, `chat*.py`) are kept for reference and are not on the v2 path except `agent_protocol.py` (action type, parser, tool schemas) and `agent_tasks.py` (`_calculate`) | provenance report | do not refactor legacy modules |
-| `protocol.build_prompt` deliberately does not pass `tools=` to the chat template | protocol.py:214-230 | the template's tool section would instruct `<tool_call>` tags, which are untrained on the 3B checkpoint |
+| `protocol.build_prompt` deliberately does not pass `tools=` to the chat template | protocol.py:219-230 | the template's tool section would instruct `<tool_call>` tags, which are untrained on the 3B checkpoint |
 | Residual layer index `L` = after block `L-1`; `L = num_layers` = pre-final-norm | capture.py:11-13 | probe layers and J-lens depths depend on it |
-| `state_probe` rows come from **expert replay**, never from policy rollouts | state_probe.py:1778-1785, data.py:20-71 | base and adapters see identical prompts |
-| The mixed P2 dataset's difficulty-0 rows are byte-identical to SFT rows | state_probe.py:90; data.py:114-118 | SPEC-004 §2 uses new split names |
-| `--strip` rewrites assistant messages only | state_probe.py:280-286 | SPEC-004 §2 adds observation stubbing |
+| `state_probe` rows come from **expert replay**, never from policy rollouts | state_probe.py:456-469 (`build_probe_dataset`), data.py:20-71 | base and adapters see identical prompts |
+| The mixed P2 dataset's `train-` rows (737) are byte-identical to SFT rows; `p2mix` rows are different tasks (R7) | state_probe.py:102-105 (`MIX_PLAN`), data.py:114-118 | SPEC-004 §2 uses new split names |
+| `--strip` rewrites assistant messages only | state_probe.py:309-315 (`_strip_messages`) | SPEC-004 §2 adds observation stubbing |
 | `capture.InjectionHook` and `capture.lora_block_mask` exist, are tested, and are imported by nothing | capture.py:145-285 | SPEC-004 §3 and §5 wire them |
 | `adapter_delta --ablate` is a `parser.error` stub | adapter_delta.py:614-623 | SPEC-004 §3 |
 | `assistant_axis` does measurement only; steering is absent by design | assistant_axis.py:8-10 | do not add steering until an axis passes |
 | `TurnCache` rebuilds from scratch whenever the cache cannot be trimmed | runner.py:96-112 | correct but zero reuse on hybrid models; SPEC-001 §5 |
 | `Trajectory(**record)` is used to reload saved evaluations | assistant_axis.py:958 | every new `Trajectory` field needs a default or old evals stop loading |
-| `transcripts.jsonl` is opened in append mode | transcript.py:118 | reruns duplicate records; SPEC-002 §5 |
-| `checkpoint_dirs` re-copies config but not stale weights | cli.py:169-170 | SPEC-002 §5 |
-| Selection tie-break is "later step wins" | cli.py:213-216 | SPEC-002 §1 changes it |
-| Tests reference a saved artifact: `outputs/probes/state/state-base.npz` | tests/test_probes.py:1231-1246 | keep that test passing; do not move the file |
-| `tasks.applicable_variants` is cached from a level-0 probe | tasks.py:53-81 | SPEC-002 §5 |
-| Test split is all-clean; recovery variants exist only in `train` and fresh splits | tasks.py:90-91 | `prev_error` has no positives at difficulty 2 |
-| `data/chat_replay` rows are mixed into every training set (240/48/60) | data.py:119-121 | keep them in run D |
+| `transcripts.jsonl` is opened in append mode | transcript.py:153-154 | reruns duplicate records; SPEC-002 §5 |
+| `checkpoint_dirs` re-copies config and replaces missing or stale weights | cli.py:174-191 | SPEC-002 §5 hardens materialised checkpoints |
+| Selection tie-break is "later step wins" | cli.py:247-250 | SPEC-002 §1 changes it |
+| Tests reference a saved artifact: `outputs/probes/state/state-base.npz` | tests/test_probes.py:2006-2024 (`_BASE_CAPTURE`) | keep that test passing; do not move the file |
+| `tasks.applicable_variants` is cached per `(family, level)` from a same-level probe | tasks.py:54-83 | SPEC-002 §5 |
+| Test split is all-clean; recovery variants exist only in `train` and fresh splits | tasks.py:92-103 | `prev_error` has no positives at difficulty 2 |
+| `data/chat_replay` rows are mixed into every training set (240/48/60) | data.py:122-129 | keep them in run D |
 
 ## 4. Installed-library traps (mlx-lm 0.31.3, mlx 0.32.2, transformers 5.16.1, mlx-tune 0.6.0)
 
