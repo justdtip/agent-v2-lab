@@ -126,12 +126,17 @@ per run. (Chief's standard, 2026-09-04.)
 Same seven R15 conditions plus condition 8 (logging). Evidence lines are D4's own; nothing is
 inherited from B4 except the base model's preflight.
 
-- [ ] **C1. Run D data exists.** `agent-pipeline data --config configs/agent_v2d.yaml` →
+- [x] **C1. MET — run D generated and integrity-checked.** Regenerated in the main tree through
+  the sanctioned data stage 2026-09-05 and verified against the reviewed artifact: manifest
+  SHA-256 `6d8f3c7036c43934bd74dcbb4b082ff480d399802b7149a08a8ed9707b2069ac`, every split byte
+  for byte identical to the lane's. Original text: `agent-pipeline data --config configs/agent_v2d.yaml` →
   `data/agent_v2d` (splits train/train1/valid/valid2/test/test3, manifest, provenance,
   `GENERATOR_VERSION`); integrity invariants pass on the generated splits. No model.
   Decision recorded: chat replay kept as-is for D3/D4 (comparability with B); fixing it is
   a separate variable (SPEC-003 amendment pending).
-- [ ] **C2. Rendered for the 4B.** `agent-pipeline render --source data/agent_v2d --output
+- [x] **C2. MET — rendered for the 4B** (`data/agent_v2d-qwen35-4b`, 46/47 MB); every rendered
+  split byte for byte identical to the reviewed artifact, the manifest differing only in the
+  recorded source directory, which is the path it came from. Original text: `agent-pipeline render --source data/agent_v2d --output
   data/agent_v2d-qwen35-4b --model qwen35-4b` (tokenizer only); manifest hashes recorded.
   Note the longest training row now comes from `train1` (difficulty 1): expect ~2,460 tokens
   with completion, longer than B4's 2,257.
