@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from local_llm_lab.pipeline import tasks as task_module
-from local_llm_lab.pipeline.cli import load_config, stage_data
+from local_llm_lab.pipeline.cli import dataset_splits, load_config, stage_data
 from local_llm_lab.pipeline.data import write_dataset
 from local_llm_lab.pipeline.tasks import (
     FAMILIES,
@@ -693,3 +694,226 @@ def test_replay_rewrites_every_historical_recovery_step(variant: str) -> None:
         assert v2.steps[bad].thought == v2.steps[bad + 2].thought.removeprefix(
             "The file's current text confirms the exact string to replace. "
         )
+
+
+# ----------------------------------------------------------- SPEC-004 §2 / R28: P2 splits
+
+
+_CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs"
+# Every config that declares a generator split table. Pinned so a new run config cannot join
+# the repository without being swept by the disjointness test below.
+_CONFIGS_WITH_SPLIT_TABLES = (
+    "agent_v2.yaml",
+    "agent_v2b.yaml",
+    "agent_v2b_qwen35_4b.yaml",
+    "agent_v2c.yaml",
+    "agent_v2d.yaml",
+    "agent_v2d_qwen35_4b.yaml",
+)
+
+
+def _config_paths():
+    return sorted(_CONFIG_DIR.glob("*.yaml"))
+
+
+def _split_table(config: dict) -> dict:
+    """The raw ``tasks:``/``splits:`` block of a config, or ``{}`` when it declares neither."""
+    return config.get("tasks") or config.get("splits") or {}
+
+
+def _generated_splits(config: dict) -> list[tuple[str, int, int | None, bool | None]]:
+    """``(name, count, difficulty, perturb)`` for every split a config's table declares.
+
+    ``dataset_splits`` normalises both supported schemas; the legacy ``tasks:`` schema leaves
+    difficulty and perturbation to ``make_tasks``' own split-name defaults, which is exactly how
+    those datasets were generated.
+    """
+    specs = dataset_splits(config)
+    return [(name, spec.count, spec.difficulty, spec.perturb) for name, spec in specs.items()]
+
+
+def _screen_splits(config: dict) -> list[dict]:
+    """Selection-screen splits, which are generated but do not appear in the split table."""
+    screen = (config.get("select") or {}).get("screen") or []
+    return [entry for entry in screen if entry.get("split") not in _split_table(config)]
+
+
+def _source_config_for(config: dict):
+    """Resolve a ``source_rows`` config to the config that generated those rows."""
+    source = config.get("source_rows")
+    if source is None:
+        return None
+    for path in _config_paths():
+        other = load_config(path)
+        if other.get("data") == source:
+            return path, other
+    raise AssertionError(f"no config generates {source}")
+
+
+def _config_tasks(config: dict) -> list:
+    """Regenerate every task a config's splits contain, deterministically and without files."""
+    seed = config["seed"]
+    generated = []
+    for name, count, level, perturb in _generated_splits(config):
+        kwargs = {}
+        if level is not None:
+            kwargs["difficulty"] = level
+        if perturb is not None:
+            kwargs["perturb"] = perturb
+        generated.extend(make_tasks(name, count, seed, **kwargs))
+    for entry in _screen_splits(config):
+        generated.extend(
+            family_balanced_tasks(
+                entry["split"],
+                difficulty=entry["difficulty"],
+                per_family=entry["per_family"],
+                seed=seed,
+            )
+        )
+    return generated
+
+
+def _rename_split(task, new: str):
+    """A byte-copy of a task minted under ``new``: the split tokens rewritten, nothing else."""
+    old = task_module.split_of_task_id(task.task_id)
+
+    def substitute(text: str) -> str:
+        text = re.sub(
+            rf"(?<![0-9A-Za-z_])(workspace|lab)/{re.escape(old)}/", rf"\1/{new}/", text
+        )
+        return re.sub(
+            rf"(?<![0-9A-Za-z_])(KEY|REF)-{re.escape(old.upper())}-",
+            rf"\1-{new.upper()}-",
+            text,
+        )
+
+    return dataclasses.replace(
+        task,
+        task_id=new + task.task_id[len(old) :],
+        prompt=substitute(task.prompt),
+        files={substitute(path): substitute(body) for path, body in task.files.items()},
+        expected_answer=substitute(task.expected_answer),
+    )
+
+
+def _p2_tasks(seed: int, limit: int) -> list:
+    return [
+        task
+        for name in task_module.P2_SPLIT_NAMES
+        for task in task_module.make_p2_tasks(name, limit, seed)
+    ]
+
+
+def test_p2_split_plan_matches_the_spec() -> None:
+    """SPEC-004 §2: p2-d0/1/2, explicit difficulty, perturbed at 0 and 1, clean at 2."""
+    assert task_module.P2_SPLITS == (("p2-d0", 0, True), ("p2-d1", 1, True), ("p2-d2", 2, False))
+    assert task_module.P2_SPLIT_NAMES == ("p2-d0", "p2-d1", "p2-d2")
+    assert task_module.P2_SPLIT_LIMIT == 120
+    with pytest.raises(ValueError):
+        task_module.p2_split("train")
+
+
+def test_make_p2_tasks_applies_the_planned_difficulty_and_perturbation() -> None:
+    """The helper, not the caller, carries the split's difficulty and perturb flags."""
+    seed = load_config(_REFERENCE_CONFIG)["seed"]
+    for name, level, perturb in task_module.P2_SPLITS:
+        made = task_module.make_p2_tasks(name, len(FAMILIES) * 2, seed)
+        assert len(made) == len(FAMILIES) * 2
+        assert {task.difficulty for task in made} == {level}
+        assert all(task.task_id.startswith(f"{name}-") for task in made)
+        variants = {task.variant for task in made}
+        assert (variants != {"clean"}) is perturb
+        assert made == make_tasks(
+            name, len(FAMILIES) * 2, seed, perturb=perturb, difficulty=level
+        )
+
+
+def test_task_fingerprint_ignores_the_split_but_not_the_content() -> None:
+    """R28's normalisation: identity under renaming, sensitivity to everything else."""
+    seed = load_config(_REFERENCE_CONFIG)["seed"]
+    train = make_tasks("train", len(FAMILIES), seed)
+    for task in train:
+        assert task_module.task_fingerprint(task) == task_module.task_fingerprint(task)
+        for name in task_module.P2_SPLIT_NAMES:
+            renamed = _rename_split(task, name)
+            assert task_module.split_of_task_id(renamed.task_id) == name
+            assert task_module.task_fingerprint(renamed) == task_module.task_fingerprint(task), (
+                f"{task.task_id}: fingerprint changed under a pure split rename"
+            )
+    assert len({task_module.task_fingerprint(task) for task in train}) == len(train)
+
+
+def test_task_fingerprint_leaves_no_split_token_in_its_payload() -> None:
+    """The normalisation is complete: no fingerprinted field still names its split."""
+    seed = load_config(_REFERENCE_CONFIG)["seed"]
+    for name in ("train", "valid", "test", *task_module.P2_SPLIT_NAMES):
+        made = (
+            task_module.make_p2_tasks(name, len(FAMILIES), seed)
+            if name in task_module.P2_SPLIT_NAMES
+            else make_tasks(name, len(FAMILIES), seed)
+        )
+        for task in made:
+            fields = [
+                task_module._normalise_split_tokens(task.prompt, name),
+                task_module._normalise_split_tokens(task.expected_answer, name),
+                *(
+                    task_module._normalise_split_tokens(text, name)
+                    for path, body in task.files.items()
+                    for text in (path, body)
+                ),
+            ]
+            residual = [text for text in fields if name in text or name.upper() in text]
+            assert not residual, f"{task.task_id}: split token survives normalisation: {residual}"
+
+
+def test_no_config_declares_a_p2_split() -> None:
+    """R28 (a): no P2 split name appears in any config's ``tasks:``/``splits:`` block."""
+    tabled = []
+    for path in _config_paths():
+        config = load_config(path)
+        table = _split_table(config)
+        if not table:
+            continue
+        tabled.append(path.name)
+        overlap = set(table) & set(task_module.P2_SPLIT_NAMES)
+        assert not overlap, f"{path.name}: training table declares P2 split(s) {sorted(overlap)}"
+        screened = {entry["split"] for entry in _screen_splits(config)}
+        assert not screened & set(task_module.P2_SPLIT_NAMES), f"{path.name}: screen uses a P2 split"
+    assert tuple(tabled) == _CONFIGS_WITH_SPLIT_TABLES
+
+
+def test_p2_tasks_are_content_disjoint_from_every_configured_split() -> None:
+    """R28 (b): no P2 task's content fingerprint appears in any config's generated rows.
+
+    Configs whose data directory is absent are regenerated through ``make_tasks`` from their
+    split table, so the sweep never skips; configs that render from ``source_rows`` are checked
+    against the table of the config that generated those rows as well as their own.
+    """
+    seed = load_config(_REFERENCE_CONFIG)["seed"]
+    p2 = {}
+    for task in _p2_tasks(seed, task_module.P2_SPLIT_LIMIT):
+        p2.setdefault(task_module.task_fingerprint(task), []).append(task.task_id)
+    assert len(p2) == len(task_module.P2_SPLIT_NAMES) * task_module.P2_SPLIT_LIMIT
+
+    checked = []
+    for path in _config_paths():
+        config = load_config(path)
+        if not _split_table(config):
+            continue
+        resolved = _source_config_for(config)
+        if resolved is not None:
+            source_path, source_config = resolved
+            assert _split_table(config) == _split_table(source_config), (
+                f"{path.name}: renders {source_path.name}'s rows but declares a different table"
+            )
+        assert config["seed"] == seed
+        rows = _config_tasks(config)
+        assert rows
+        collisions = [
+            (task.task_id, p2[fingerprint])
+            for task in rows
+            if (fingerprint := task_module.task_fingerprint(task)) in p2
+        ]
+        assert not collisions, f"{path.name}: P2 rows duplicate training content: {collisions[:5]}"
+        checked.append(path.name)
+    assert tuple(checked) == _CONFIGS_WITH_SPLIT_TABLES

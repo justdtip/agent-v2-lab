@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import random
 import re
 from dataclasses import dataclass, field, replace
@@ -27,6 +29,23 @@ FAMILIES = (
 LONG_HORIZON_FAMILIES = FAMILIES[6:]
 VARIANTS = ("clean", "wrong_path", "transient", "unknown_tool", "stale_path", "failed_edit")
 GENERATOR_VERSION = 4
+
+# SPEC-004 §2 probe splits: name, explicit difficulty, perturb. Difficulty is explicit because
+# ``_difficulty_level`` would otherwise alternate 0/1 on an unknown split name, and perturb is
+# explicit because ``make_tasks`` would otherwise perturb every split that is not valid/test.
+# Shape: a 3-tuple per split, the ``MIX_PLAN`` (name, perturb) pair widened by the difficulty
+# the P2 design fixes; iterate it as ``for name, level, perturb in P2_SPLITS`` or, preferably,
+# call :func:`make_p2_tasks`, which applies both fields for the caller.
+P2_SPLITS: tuple[tuple[str, int, bool], ...] = (
+    ("p2-d0", 0, True),
+    ("p2-d1", 1, True),
+    ("p2-d2", 2, False),
+)
+P2_SPLIT_NAMES: tuple[str, ...] = tuple(name for name, _level, _perturb in P2_SPLITS)
+# SPEC-004 §2: "120 tasks each".
+P2_SPLIT_LIMIT = 120
+# The placeholder the split name is rewritten to before a task is fingerprinted (R28).
+FINGERPRINT_SPLIT_PLACEHOLDER = "<SPLIT>"
 
 
 @dataclass(frozen=True)
@@ -167,6 +186,87 @@ def family_balanced_tasks(
             selected.append(task)
             seen[task.family] += 1
     return selected
+
+
+def p2_split(name: str) -> tuple[str, int, bool]:
+    """Return the ``P2_SPLITS`` entry for ``name``, or raise if it is not a P2 split."""
+    for entry in P2_SPLITS:
+        if entry[0] == name:
+            return entry
+    known = ", ".join(P2_SPLIT_NAMES)
+    raise ValueError(f"{name!r} is not a P2 probe split (known: {known})")
+
+
+def make_p2_tasks(name: str, limit: int, seed: int) -> list[Task]:
+    """Generate one SPEC-004 §2 probe split with its pre-registered difficulty and perturbation.
+
+    ``limit`` is explicit rather than defaulted so a test can ask for a handful of rows; the
+    designed size is ``P2_SPLIT_LIMIT``. ``seed`` is explicit for the same reason every other
+    entry point takes one: the data seed belongs to the config or the CLI, never to source
+    (briefing §1.8). Nothing else about the derivation changes -- the rows come from the same
+    ``make_tasks`` generator, so the split name alone separates them from training rows.
+    """
+    _name, level, perturb = p2_split(name)
+    return make_tasks(_name, limit, seed, perturb=perturb, difficulty=level)
+
+
+def split_of_task_id(task_id: str) -> str:
+    """The split name a ``make_tasks`` id was minted under (``{split}-{family}-{index}-{variant}``)."""
+    try:
+        split, family, _index, variant = task_id.rsplit("-", 3)
+    except ValueError as error:
+        raise ValueError(f"{task_id}: invalid task id") from error
+    if not split or family not in FAMILIES or variant not in VARIANTS:
+        raise ValueError(f"{task_id}: invalid task id")
+    return split
+
+
+def _normalise_split_tokens(text: str, split: str) -> str:
+    """Replace the two places a split name is embedded in generated content (R28).
+
+    Workspace roots ``workspace/<split>/`` and ``lab/<split>/`` (``tasks.py`` family builders)
+    and the ``KEY-<SPLIT>-`` / ``REF-<SPLIT>-`` lookup tokens (`_search`, `_cross_reference`)
+    are the only split-derived text in a task's prompt, files, or expected answer; everything
+    else that differs between splits differs because the RNG is seeded by the split name, which
+    is the content difference the fingerprint is meant to detect.
+    """
+    placeholder = FINGERPRINT_SPLIT_PLACEHOLDER
+    text = re.sub(
+        rf"(?<![0-9A-Za-z_])(workspace|lab)/{re.escape(split)}/",
+        rf"\1/{placeholder}/",
+        text,
+    )
+    return re.sub(
+        rf"(?<![0-9A-Za-z_])(KEY|REF)-{re.escape(split.upper())}-",
+        rf"\1-{placeholder}-",
+        text,
+    )
+
+
+def task_fingerprint(task: Task) -> str:
+    """Content identity of a task with its split erased (SPEC-004 §2, ruling R28).
+
+    SHA-256 over canonical JSON of family, difficulty, variant, the prompt, the sorted files,
+    and the expected answer, with the split root and ``KEY-``/``REF-`` tokens normalised to
+    ``FINGERPRINT_SPLIT_PLACEHOLDER``. ``task_id`` is excluded (it names the split by
+    construction) and so are the expert steps (they are a rendering of the same inputs). Two
+    tasks share a fingerprint exactly when they pose the same problem over the same files, so
+    equality across two splits is a genuine content overlap, not a naming coincidence.
+    """
+    split = split_of_task_id(task.task_id)
+    payload = {
+        "family": task.family,
+        "difficulty": int(task.difficulty),
+        "variant": task.variant,
+        "prompt": _normalise_split_tokens(task.prompt, split),
+        "files": sorted(
+            [_normalise_split_tokens(path, split), _normalise_split_tokens(content, split)]
+            for path, content in task.files.items()
+        ),
+        "expected_answer": _normalise_split_tokens(task.expected_answer, split),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def task_from_id(
