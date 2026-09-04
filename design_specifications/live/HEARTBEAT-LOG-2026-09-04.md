@@ -975,3 +975,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   gate, in this order: the adapter-wrapped fixtures (#52, smallest and independent), R32 stage 2
   (#55), then the preflight budget/footprint gate (#51 lane 2), which is held for the calibrated
   estimator and must be sequenced with regenerating both preflight artifacts on the lane.
+- Run D delivered by regeneration (`95825bc`): manifest and every split byte-identical to the
+  reviewed artifact; rendered manifest differs only in the source directory it records. C1 and
+  C2 ticked; worktree released. **Finding carried from the lane and re-measured by the Deputy:**
+  the longest run-D training row is 2,874 tokens (checklist C2 expected ~2,460), and 4 train +
+  6 valid prompts for D4 (2 + 6 for D3) reach or exceed `max_seq_length: 2688`, so the loader
+  raises and BOTH D arms would stop before iteration one — the same failure as B4 attempt 1,
+  caught before the lane was spent. Ruling requested; three options, Deputy recommends raising
+  the D pair's limit with the pairwise rule amended as it was for effective batch.
