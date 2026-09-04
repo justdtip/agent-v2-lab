@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -325,3 +326,134 @@ def test_stage_train_clears_only_its_checkpoint_directory(tmp_path, monkeypatch)
     with pytest.raises(SystemExit, match="training failed"):
         cli.stage_train(config, iters=1)
     assert len(calls) == 1
+
+
+def test_stage_eval_writes_one_ordered_provenance_record(monkeypatch, tmp_path: Path) -> None:
+    """Evaluation provenance is written once after base and adapter policy summaries exist."""
+    output = tmp_path / "output"
+    adapter = output / "best-adapter"
+    adapter.mkdir(parents=True)
+    config = {
+        "output": output,
+        "model": "fake-model",
+        "seed": 17,
+        "keep_last": 2,
+        "eval": {"split": "test", "limit": 180, "max_steps": 2, "max_tokens": 3},
+    }
+    spec = object()
+    summaries = [{"label": "base"}, {"label": "best-adapter"}]
+    evaluations = []
+    calls = []
+    lookups = []
+
+    monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
+    monkeypatch.setattr(
+        cli,
+        "run_evaluation",
+        lambda **kwargs: evaluations.append(kwargs) or summaries[len(evaluations) - 1],
+    )
+    monkeypatch.setattr(cli, "load_model_spec", lambda model: lookups.append(model) or spec)
+    monkeypatch.setattr(
+        cli,
+        "write_provenance",
+        lambda run_dir, *, resolved, spec, extra: calls.append((run_dir, resolved, spec, extra)),
+    )
+
+    cli.stage_eval(
+        config,
+        adapter,
+        base=True,
+        split=None,
+        limit=None,
+        stress=False,
+        quiet=True,
+    )
+
+    assert [evaluation["adapter"] for evaluation in evaluations] == [None, adapter]
+    assert calls == [
+        (output, None, spec, {"stage": "eval", "evaluations": summaries})
+    ]
+    assert lookups == [config["model"]]
+
+
+def test_stage_rollout_writes_one_post_run_provenance_record(monkeypatch, tmp_path: Path) -> None:
+    """Rollout provenance captures the returned summary after the sampling call succeeds."""
+    output = tmp_path / "output"
+    adapter = output / "best-adapter"
+    config = {
+        "output": output,
+        "model": "fake-model",
+        "seed": 17,
+        "keep_last": 2,
+        "eval": {"max_steps": 2, "max_tokens": 3},
+        "rollout": {"limit": 4, "samples": 2, "temperature": 0.7},
+    }
+    spec = object()
+    summary = {"accepted": 3, "split": "iter1"}
+    calls = []
+    lookups = []
+
+    monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
+    monkeypatch.setattr(cli, "run_rollout", lambda **kwargs: summary)
+    monkeypatch.setattr(cli, "load_model_spec", lambda model: lookups.append(model) or spec)
+    monkeypatch.setattr(
+        cli,
+        "write_provenance",
+        lambda run_dir, *, resolved, spec, extra: calls.append((run_dir, resolved, spec, extra)),
+    )
+
+    cli.stage_rollout(config, adapter, "iter1", limit=None, samples=None, quiet=True)
+
+    assert calls == [(output, None, spec, {"stage": "rollout", "summary": summary})]
+    assert lookups == [config["model"]]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ([], {"base": False, "stress": False, "limit": 180}),
+        (["--base", "--stress"], {"base": True, "stress": True, "limit": 180}),
+        (["--limit", "17"], {"base": False, "stress": False, "limit": 17}),
+    ],
+)
+def test_main_all_wires_one_best_adapter_evaluation(
+    monkeypatch, tmp_path: Path, arguments, expected
+) -> None:
+    """The all command evaluates the selected adapter once unless --base explicitly includes it."""
+    config_path = tmp_path / "config.yaml"
+    config = {"output": tmp_path / "output"}
+    calls = []
+
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(cli, "stage_data", lambda config, extra: calls.append(("data", extra)))
+    monkeypatch.setattr(cli, "stage_train", lambda config, iters: calls.append(("train", iters)))
+    monkeypatch.setattr(
+        cli,
+        "stage_select",
+        lambda config, limit, quiet: calls.append(("select", limit, quiet)),
+    )
+    monkeypatch.setattr(
+        cli,
+        "stage_eval",
+        lambda config, adapter, **kwargs: calls.append(("eval", adapter, kwargs)),
+    )
+    monkeypatch.setattr(sys, "argv", ["pipeline", "--config", str(config_path), "all", *arguments])
+
+    cli.main()
+
+    assert calls == [
+        ("data", []),
+        ("train", None),
+        ("select", None, False),
+        (
+            "eval",
+            config["output"] / "best-adapter",
+            {
+                "base": expected["base"],
+                "split": None,
+                "limit": expected["limit"],
+                "stress": expected["stress"],
+                "quiet": False,
+            },
+        ),
+    ]

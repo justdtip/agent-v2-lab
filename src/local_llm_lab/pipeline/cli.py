@@ -454,26 +454,35 @@ def stage_eval(
         if not best.is_dir():
             raise SystemExit(f"{best} does not exist; run select or pass --adapter/--base")
         policies.append(("best-adapter", best))
+    summaries = []
     for label, path in policies:
         stem = f"{label}-{split}{'-stress' if stress else ''}"
         transcript_dir = output / "transcripts" / stem
         Transcript.start_run(transcript_dir)
         _log(f"eval: {label} on {split} ({limit} tasks{', stress' if stress else ''})")
-        run_evaluation(
-            model_name=config["model"],
-            adapter=path,
-            label=label,
-            split=split,
-            limit=limit,
-            output=output / "evals" / f"{stem}.json",
-            transcript_dir=transcript_dir,
-            stress=stress,
-            max_steps=evaluation["max_steps"],
-            max_tokens=evaluation["max_tokens"],
-            keep_last=config["keep_last"],
-            quiet=quiet,
-            seed=config["seed"],
+        summaries.append(
+            run_evaluation(
+                model_name=config["model"],
+                adapter=path,
+                label=label,
+                split=split,
+                limit=limit,
+                output=output / "evals" / f"{stem}.json",
+                transcript_dir=transcript_dir,
+                stress=stress,
+                max_steps=evaluation["max_steps"],
+                max_tokens=evaluation["max_tokens"],
+                keep_last=config["keep_last"],
+                quiet=quiet,
+                seed=config["seed"],
+            )
         )
+    write_provenance(
+        output,
+        resolved=None,
+        spec=load_model_spec(config["model"]),
+        extra={"stage": "eval", "evaluations": summaries},
+    )
 
 
 def stage_rollout(
@@ -490,7 +499,7 @@ def stage_rollout(
     transcript_dir = output / "transcripts" / f"rollout-{split}"
     Transcript.start_run(transcript_dir)
     _log(f"rollout: sampling {adapter.name} on fresh split '{split}'")
-    run_rollout(
+    summary = run_rollout(
         model_name=config["model"],
         adapter=adapter,
         label=f"rollout-{split}",
@@ -506,6 +515,12 @@ def stage_rollout(
         keep_last=config["keep_last"],
         quiet=quiet,
         seed=config["seed"],
+    )
+    write_provenance(
+        output,
+        resolved=None,
+        spec=load_model_spec(config["model"]),
+        extra={"stage": "rollout", "summary": summary},
     )
 
 
@@ -588,10 +603,12 @@ def main() -> None:
     stages.add_parser("report", help="Tabulate every evaluation summary in outputs/<run>/evals.")
 
     everything = stages.add_parser(
-        "all", help="data -> train -> select -> eval (base and best adapter)."
+        "all", help="data -> train -> select -> eval the best adapter (and optionally base)."
     )
     everything.add_argument("--iters", type=int)
-    everything.add_argument("--limit", type=int)
+    everything.add_argument("--base", action="store_true")
+    everything.add_argument("--stress", action="store_true")
+    everything.add_argument("--limit", type=int, default=180)
 
     args = parser.parse_args()
     config = load_config(args.config.resolve())
@@ -670,8 +687,11 @@ def main() -> None:
         stage_train(config, args.iters)
         stage_select(config, None, args.quiet)
         stage_eval(
-            config, None, base=True, split=None, limit=args.limit, stress=False, quiet=args.quiet
-        )
-        stage_eval(
-            config, None, base=False, split=None, limit=args.limit, stress=False, quiet=args.quiet
+            config,
+            config["output"] / "best-adapter",
+            base=args.base,
+            split=None,
+            limit=args.limit,
+            stress=args.stress,
+            quiet=args.quiet,
         )
