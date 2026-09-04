@@ -87,8 +87,13 @@ variant it names is the following.
   and is primary. Those sums are **within** one sample; **across** samples the per-sample
   vectors are **averaged**. Naming only one axis leaves "sum" ambiguous between the two, so
   R34 requires both (Head of Interpretability, issue #61). All three readouts come from one
-  JVP per (context, source) sample. A readout whose future window is empty raises
-  :class:`EmptyFutureWindowError`; it never reads as a zero.
+  JVP per (context, source) sample. Two guards keep a structural zero from being reported as
+  a measurement, and R34 names them apart because they answer different questions: a readout
+  whose future *window* is empty -- the source is the context's last token -- raises
+  :class:`EmptyFutureWindowError`, and a ``future``/``all`` readout at ``L == num_layers``,
+  where no decoder *block* remains in the tail, raises :class:`NoTailBlocksError` (issue #68).
+  Neither ever reads as a zero; a CLI excludes the final layer's two cells and records the
+  exclusion in the conformance block.
 - **Corpus size and context length.** The number of contexts averaged over and their token
   lengths; the median future window per context and per readout is recorded beside them.
 - **JVP method.** ``forward`` or ``finite_difference``, with the source it was established
@@ -126,6 +131,10 @@ __all__ = [
     "DEFAULT_MODEL",
     "DEFAULT_SOURCE_POSITIONS",
     "EmptyFutureWindowError",
+    "NoTailBlocksError",
+    "FINAL_LAYER_EXCLUDED_READOUTS",
+    "readouts_for_layer",
+    "final_layer_exclusion",
     "HYBRID_PERIOD_FIELD",
     "IN_BAND_FRACTIONS",
     "JVP_METHODS",
@@ -163,6 +172,10 @@ DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
 
 #: The three readouts EXP-001 §3.2 (B3) requires, in report order; ``all`` is primary.
 READOUTS: tuple[str, ...] = ("self", "future", "all")
+
+#: The readouts that need at least one decoder block left in the tail to be a measurement.
+#: At ``L == num_layers`` there is none, so both are structural zeros (issue #68).
+FINAL_LAYER_EXCLUDED_READOUTS: tuple[str, ...] = ("future", "all")
 PRIMARY_READOUT = "all"
 JVP_METHODS: tuple[str, ...] = ("forward", "finite_difference")
 CAPTURE_DTYPES: tuple[str, ...] = ("native", "float32")
@@ -197,6 +210,21 @@ class JvpMethodUnresolved(ValueError):
 
 class EmptyFutureWindowError(ValueError):
     """A ``future``/``all`` readout was asked for where no later position exists (A1)."""
+
+
+class NoTailBlocksError(EmptyFutureWindowError):
+    """A ``future``/``all`` readout was asked for where no decoder block remains (issue #68).
+
+    The sibling condition to :class:`EmptyFutureWindowError`, and deliberately a *distinct*
+    name: that one is about **positions in the context** -- the source sits at the last token,
+    so there is nothing after it -- while this one is about **blocks in the tail**. At layer
+    ``L == num_layers`` the tail is the final norm and the unembedding and nothing else. Both
+    are position-wise, so no perturbation at the source can reach any later position and the
+    future readout is identically zero for every context of every model.
+
+    A subclass rather than a plain sibling so a caller that already handles the empty-window
+    case keeps catching this one; the name and message are what tell the two apart.
+    """
 
 
 @dataclass(frozen=True)
@@ -438,6 +466,56 @@ def residual_at(
     return architecture.residuals(token_ids, [layer])[layer]
 
 
+def readouts_for_layer(
+    names: Sequence[str], layer: int, num_layers: int | None
+) -> tuple[str, ...]:
+    """The requested readouts that are *measurements* at ``layer`` (issue #68).
+
+    At ``layer == num_layers`` no decoder block remains, so ``future`` and ``all`` are
+    structural zeros. A CLI computes what is left there rather than propagating
+    :class:`NoTailBlocksError` and losing that layer's ``self`` and logit-lens rows along with
+    them. Every other layer keeps every readout it was asked for.
+    """
+    if not isinstance(num_layers, int) or layer < num_layers:
+        return tuple(names)
+    kept = tuple(name for name in names if name not in FINAL_LAYER_EXCLUDED_READOUTS)
+    # Asking *only* for excluded readouts there leaves nothing to compute; hand the names back
+    # unchanged so the caller meets NoTailBlocksError and its explanation rather than an empty
+    # request and a generic "unknown readout(s) []".
+    return kept or tuple(names)
+
+
+def final_layer_exclusion(
+    layers: Sequence[int], names: Sequence[str], num_layers: int | None
+) -> dict[str, Any] | None:
+    """R34's record of issue #68's exclusion, or ``None`` when it did not apply to this run.
+
+    Written into the conformance block so an artifact *says* why those cells are absent
+    instead of leaving a reader to derive it from a gap in a table.
+    """
+    if not isinstance(num_layers, int) or num_layers not in tuple(layers):
+        return None
+    excluded = [name for name in names if name in FINAL_LAYER_EXCLUDED_READOUTS]
+    if not excluded:
+        return None
+    return {
+        "layer": num_layers,
+        "excluded": excluded,
+        "computed": [*(name for name in names if name not in excluded), "logit_lens"],
+        "reason": (
+            "no decoder block remains at the final layer: the tail is the final norm and the "
+            "unembedding, both position-wise, so the output tangent is exactly zero at every "
+            "position after the source. These readouts would be structural zeros for every "
+            "context, identical across models and conditions, rather than measurements "
+            "(issue #68)"
+        ),
+        "holm": (
+            "the excluded readouts' Holm families are built from the layers actually scored "
+            "under them, so this layer is not a member and does not enter the correction"
+        ),
+    }
+
+
 def probe_layer_kind(view: Any, layer: int) -> str:
     """The kind of the block that **wrote** probe layer ``layer`` (R34's writer convention).
 
@@ -457,14 +535,91 @@ def probe_layer_kind(view: Any, layer: int) -> str:
 
 
 def hybrid_period(view: Any) -> tuple[int | None, str]:
-    """The hybrid backbone's attention period, read off the loaded model's own configuration.
+    """The hybrid backbone's attention period, derived from the decoder's own blocks.
 
-    A Qwen3.5-style hybrid names it ``full_attention_interval`` and builds every block from
-    it: ``DecoderLayer.is_linear = (layer_idx + 1) % full_attention_interval != 0``. The
-    field lives on the text configuration, which sits at a different place under every
-    wrapper, so this walks the handful of attribute names configurations are ever reached
-    through rather than assuming one path. Returns ``(None, "unavailable")`` for a dense
-    backbone, which has no such period at all.
+    A Qwen3.5-style hybrid builds every block from one number:
+    ``DecoderLayer.is_linear = (layer_idx + 1) % full_attention_interval != 0``. Inverted, the
+    attention blocks sit at indices ``p-1, 2p-1, ...``, so the period is the first attention
+    block's index plus one -- readable from exactly the place
+    :meth:`ArchitectureView.layer_kind` already reads, which is why that method stayed correct
+    through the whole of the defect this replaces.
+
+    Structural first, deliberately. ``ArchitectureView`` exists to "discover the decoder
+    structurally, without consulting a model-type string" (``arch.py``), and a walk over
+    configuration attribute names is against that grain. It went stale silently: it returned
+    ``(None, "unavailable")`` on a real ``qwen3_5`` model that plainly carried the field, the
+    sweep fell back to the six registry fractions instead of the pre-registered nine-layer
+    kind-matched family, and the artifact logged ``hybrid_period=-`` beside a perfectly
+    correct list of block kinds.
+
+    The configuration is still read, as a **cross-check** rather than as the source. When both
+    routes answer and they disagree, that is a genuine inconsistency between a model's blocks
+    and its own configuration -- impossible on a consistent model, since a real
+    ``DecoderLayer`` derives ``is_linear`` from the field -- so this raises rather than quietly
+    preferring one. A view with no blocks (the probe fakes) falls back to the walk alone.
+
+    Returns ``(period, source)``, the source naming which route produced the number. A dense
+    backbone has no linear-attention block and therefore no period at all: ``(None, ...)``
+    with a source that says so, so an artifact's dash is explained rather than bare.
+    """
+    structural, structural_source = _structural_period(view)
+    configured, configured_source = _configured_period(view)
+    if structural is not None and configured is not None and structural != configured:
+        raise ValueError(
+            f"hybrid period disagreement: the decoder's own blocks imply {structural} "
+            f"({structural_source}), but the configuration says {configured} "
+            f"({configured_source}). A real DecoderLayer derives is_linear from "
+            f"{HYBRID_PERIOD_FIELD}, so a consistent model cannot produce both; refusing to "
+            "guess which one the sweep should pre-register its layer family from."
+        )
+    if structural is not None:
+        if configured is None:
+            return structural, structural_source
+        return structural, f"{structural_source}, cross-checked against {configured_source}"
+    if configured is not None:
+        # No structural answer, but the configuration still carries what the blocks cannot:
+        # either the view exposes no blocks at all (the probe fakes), or every block is one
+        # kind -- a period of 1 makes them all attention, a period past the depth makes them
+        # all linear -- and only the field distinguishes those from a genuinely dense model.
+        return configured, configured_source
+    return None, structural_source
+
+
+def _structural_period(view: Any) -> tuple[int | None, str]:
+    """Invert ``is_linear`` over the view's own blocks; the source names which case applied."""
+    blocks = getattr(view, "blocks", None)
+    kind_of = getattr(view, "layer_kind", None)
+    if blocks is None or not callable(kind_of):
+        # A view without blocks is a probe fake, not a model. The configuration walk is all
+        # there is, and "unavailable" is the string those artifacts have always carried.
+        return None, "unavailable"
+    try:
+        kinds = [str(kind_of(index)) for index in range(len(blocks))]
+    except (ValueError, IndexError, AttributeError, TypeError):  # pragma: no cover - defensive
+        return None, "unavailable"
+    if RECURRENT_KIND not in kinds:
+        return None, (
+            "view.blocks: no linear-attention block, so the backbone is dense and has no "
+            "hybrid period"
+        )
+    if ATTENTION_KIND not in kinds:
+        return None, (
+            "view.blocks: no attention block, so any hybrid period exceeds the decoder depth"
+        )
+    first = kinds.index(ATTENTION_KIND)
+    # ``is_linear = (index + 1) % p != 0`` puts the attention blocks at p-1, 2p-1, ...; the
+    # first of them is at p-1, so the period is that index plus one.
+    return first + 1, (
+        f"view.blocks[{first}].is_linear (first attention block; period = index + 1)"
+    )
+
+
+def _configured_period(view: Any) -> tuple[int | None, str]:
+    """The configuration walk, kept as the cross-check rather than as the source of truth.
+
+    ``full_attention_interval`` lives on the text configuration, which sits at a different
+    place under every wrapper, so this walks the handful of attribute names configurations are
+    ever reached through rather than assuming one path.
     """
     roots = [
         (name, getattr(view, name, None)) for name in ("model", "text_module")
@@ -491,12 +646,35 @@ def hybrid_period(view: Any) -> tuple[int | None, str]:
 
 
 def _member(node: Any, name: str) -> Any:
-    if isinstance(node, Mapping):
-        return node.get(name)
+    """One member of ``node``, reached by attribute **and** by mapping key -- both are needed.
+
+    ``mlx.nn.Module`` is a ``dict`` subclass. A module is therefore simultaneously a Mapping
+    and an ordinary object with attributes, and the dict half holds *only* its registered
+    parameters and submodules -- never a plain Python attribute. Testing
+    ``isinstance(node, Mapping)`` first and returning ``node.get(name)`` consequently
+    **shadows attribute access on every module**: ``model.args`` is a dataclass hung off the
+    module, not a registered member, so the mapping branch answered ``None`` for it while
+    ``getattr`` answered correctly, and the period walk never reached the text configuration.
+    That is the trap; do not re-set it by reordering these two branches.
+
+    Attribute first, mapping as the fallback, so a plain ``dict`` configuration -- the other
+    shape this walk crosses -- still resolves. The order is safe for the names actually asked
+    for here (``args``, ``config``, ``text_config``, ``language_model``, ``model`` and
+    ``full_attention_interval``): none of them is a ``dict`` method, so no attribute can
+    shadow a real key going the other way.
+    """
     try:
-        return getattr(node, name, None)
+        value = getattr(node, name, None)
     except (AttributeError, KeyError, TypeError):  # pragma: no cover - defensive
-        return None
+        value = None
+    if value is not None:
+        return value
+    if isinstance(node, Mapping):
+        try:
+            return node.get(name)
+        except (AttributeError, KeyError, TypeError):  # pragma: no cover - defensive
+            return None
+    return None
 
 
 def _period_field(node: Any) -> int | None:
@@ -803,6 +981,21 @@ def jlens_readouts(
     needs_future = bool({"future", "all"} & set(names))
 
     architecture = _view(view)
+    # Issue #68: the tail at ``L == num_layers`` is the final norm and the unembedding, both
+    # position-wise, so ``future`` is a structural zero for every context and ``all`` collapses
+    # onto ``self`` exactly. The run that raised this reported 0 of 42 in both columns with the
+    # smallest rank in the Holm family, for a reason that has nothing to do with the model.
+    # Checked before any work is done, so the caller pays nothing to be told.
+    num_layers = getattr(architecture, "num_layers", None)
+    if needs_future and isinstance(num_layers, int) and layer >= num_layers:
+        blocked = ", ".join(name for name in names if name in {"future", "all"})
+        raise NoTailBlocksError(
+            f"layer {layer} of a {num_layers}-block decoder: no decoder block remains in the "
+            f"tail, which is the final norm and the unembedding alone. Both are position-wise, "
+            f"so the output tangent is exactly zero at every position after the source and the "
+            f"{blocked!r} readout(s) would be a structural zero for every context rather than a "
+            "measurement (issue #68). Probe a layer before the last, or ask only for 'self'."
+        )
     probe32 = probe.astype(mx.float32)
     totals = {name: mx.zeros_like(probe32) for name in names}
     used = 0
@@ -1047,6 +1240,7 @@ def conformance_block(
     jvp_method: str,
     jvp_method_source: str,
     capture_dtype: dict[str, Any],
+    final_layer_readout_exclusion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The R34 conformance statement, in the artifact and mirrored by the module docstring.
 
@@ -1109,10 +1303,21 @@ def conformance_block(
             "calls closest in spirit to the logit lens; every J-lens number recorded in this "
             "repository before EXP-001 was drawn under it"
         ),
+        # Two guards, named apart on purpose: the first is about positions in the context, the
+        # second about blocks in the tail, and an artifact that named only one would leave a
+        # reader unable to tell which condition a run actually hit.
         "empty_future_window_policy": (
-            "a readout whose future window is empty raises EmptyFutureWindowError; it is never "
-            "reported as zero"
+            "a readout whose future window is empty -- the source position is the last token "
+            "of the context, so no later position exists -- raises EmptyFutureWindowError; it "
+            "is never reported as zero"
         ),
+        "final_layer_readout_policy": (
+            "a 'future' or 'all' readout requested at layer L == num_layers, where no decoder "
+            "block remains in the tail (only the position-wise final norm and unembedding), "
+            "raises NoTailBlocksError; a CLI excludes those cells rather than reporting the "
+            "structural zero (issue #68)"
+        ),
+        "final_layer_readout_exclusion": final_layer_readout_exclusion,
         "corpus_size": corpus_size,
         "corpus_length": corpus_length,
         "window": window,
@@ -1240,24 +1445,31 @@ def probe_layers(
         length = residual.shape[1]
         pos = position if position >= 0 else length + position
         probe = residual[0, pos]
+        # Issue #68: at the final layer no decoder block remains, so 'future' and 'all' are
+        # structural zeros. Compute what is still a measurement there rather than propagating
+        # the raise and losing this layer's 'self' and logit-lens rows with it.
+        layer_names = readouts_for_layer(names, layer, getattr(architecture, "num_layers", None))
         mapped, stats = jlens_readouts(
             architecture,
             layer,
             probe,
             corpus_ids,
             source_positions=source_positions,
-            readouts=names,
+            readouts=layer_names,
             method=method,
             capture_dtype=capture_dtype,
         )
         logit_distribution = distribution(architecture, probe)
         per_readout: dict[str, Any] = {}
-        for name in names:
+        for name in layer_names:
             readout_distribution = distribution(architecture, mapped[name])
             per_readout[name] = {
                 "jlens_top_k": _top_k(readout_distribution, tokenizer, k),
                 "jlens_evidence": token_evidence(readout_distribution, tokenizer, candidates),
             }
+        # The mirrored historical keys follow whichever readout is primary *at this layer*:
+        # 'all' is excluded at the final layer (issue #68), so 'self' carries them there.
+        layer_primary = primary if primary in layer_names else layer_names[0]
         record = {
             "layer": layer,
             "layer_kind": probe_layer_kind(architecture, layer),
@@ -1267,9 +1479,9 @@ def probe_layers(
             "source_positions": stats.get("source_positions", []),
             "window": stats.get("window", {}),
             "readouts": per_readout,
-            "primary_readout": primary,
-            "jlens_top_k": per_readout[primary]["jlens_top_k"],
-            "jlens_evidence": per_readout[primary]["jlens_evidence"],
+            "primary_readout": layer_primary,
+            "jlens_top_k": per_readout[layer_primary]["jlens_top_k"],
+            "jlens_evidence": per_readout[layer_primary]["jlens_evidence"],
             "logit_lens_top_k": _top_k(logit_distribution, tokenizer, k),
             "logit_lens_evidence": token_evidence(logit_distribution, tokenizer, candidates),
         }
@@ -1601,6 +1813,11 @@ def main() -> None:  # noqa: C901 - pre-existing probe CLI orchestration
             jvp_method=jvp_method,
             jvp_method_source=jvp_method_source,
             capture_dtype=resolve_capture_dtype(view, capture_dtype),
+            # The registry fractions include 1.0, so this CLI sweeps the final layer too and
+            # owes a reader the same explanation the sweep does (issue #68).
+            final_layer_readout_exclusion=final_layer_exclusion(
+                layers, READOUTS, view.num_layers
+            ),
         )
         comparability = comparability_block(
             model=spec.name,

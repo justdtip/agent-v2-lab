@@ -2202,12 +2202,33 @@ def test_spec_capture_dtype_reads_the_specs_own_name() -> None:
     assert state_probe.spec_capture_dtype(object()) == "native"
 
 
-def test_preflight_precision_block_is_read_only_and_absent_is_none(tmp_path) -> None:
-    """R18a: the fp32-vs-native deviation is recorded in every probe artifact, or ``None``."""
+def test_preflight_precision_block_is_none_when_neither_key_is_present(tmp_path) -> None:
+    """R18a: no artifact, or an artifact carrying neither shape, records ``None``.
+
+    A probe capture is not the place to gate on preflight evidence, and inventing a number
+    would be worse than saying there is none.
+    """
     spec = load_model_spec("qwen35-4b")
 
     assert state_probe.preflight_precision_block(spec, output_root=tmp_path) is None
 
+    (tmp_path / f"{spec.name}.json").write_text(
+        json.dumps({"residual_equivalence": {"passed": True}}), encoding="utf-8"
+    )
+
+    assert state_probe.preflight_precision_block(spec, output_root=tmp_path) is None
+
+
+def test_preflight_precision_block_still_reads_the_older_top_level_shape(tmp_path) -> None:
+    """The fallback route only -- and this hand-made record is why it must not stand alone.
+
+    This shape is what the reader assumed and what the previous coverage supplied, so the test
+    passed while production returned ``null`` on every real artifact: ``run_preflight`` nests
+    the block under ``residual_equivalence`` and writes nothing at the top level. The
+    writer-shaped case is pinned in ``tests/test_preflight.py``, against a record that
+    ``run_preflight`` itself produced.
+    """
+    spec = load_model_spec("qwen35-4b")
     block = {"frobenius_relative_error": 0.004, "max_abs_error": 0.5}
     (tmp_path / f"{spec.name}.json").write_text(
         json.dumps({"fp32_manual_vs_native": block}), encoding="utf-8"

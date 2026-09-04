@@ -629,14 +629,27 @@ def test_default_layers_sweep_the_kind_matched_family_and_record_every_role(
 def test_holm_corrects_across_the_whole_family_including_the_partners(
     monkeypatch, tmp_path
 ) -> None:
-    """EXP-001 §2 multiplicity: the family is every layer scored under one readout."""
+    """EXP-001 §2 multiplicity: the family is every layer *scored* under one readout.
+
+    "Scored", not "swept". The registry fractions include 1.0, and issue #68 excludes ``future``
+    and ``all`` at the final layer -- no decoder block remains, so both would be structural
+    zeros -- which makes those two families one member smaller than ``self``'s. That is the
+    correction actually applied, and it must be built that way rather than adjusted afterwards.
+    """
     payload, _output, _tokenizer, _spec = _run_sweep_cli(
         monkeypatch, tmp_path, layers=(), view=_HybridSweepView()
     )
 
     family = payload["layer_family"]
     assert family["partners"]
+    final = _HybridSweepView.num_layers
+    assert final in family["layers"], "the premise: the default sweep reaches the final layer"
     for readout in ("self", "future", "all"):
+        scored = [
+            layer
+            for layer in family["layers"]
+            if readout not in ("future", "all") or layer != final
+        ]
         corrected = sorted(
             key
             for key, value in payload["results"].items()
@@ -644,9 +657,7 @@ def test_holm_corrects_across_the_whole_family_including_the_partners(
             and key.endswith(f"_{readout}")
             and "matched_p_holm" in value
         )
-        assert corrected == sorted(
-            f"jlens_L{layer}_{readout}" for layer in family["layers"]
-        )
+        assert corrected == sorted(f"jlens_L{layer}_{readout}" for layer in scored)
 
 
 def test_explicit_layers_bypass_the_derivation_and_are_marked_as_such(
@@ -680,3 +691,98 @@ def test_sweep_markdown_states_the_family_the_period_and_the_pairs(
     assert "full_attention_interval" in text
     assert "kind-matched pairs" in text
     assert "roles" in text
+
+
+# ------------------ the sweep refuses a hybrid whose period was never found (issue #54 lane)
+
+
+class _DenseSweepView(_SweepView):
+    """One block kind only: EXP-001 §5's R35 dense comparator, which legitimately has none."""
+
+    def layer_kind(self, index):
+        del index
+        return "attention"
+
+
+def test_a_hybrid_whose_period_was_not_found_refuses_to_sweep(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """Two GPU hours are too expensive to spend on a silently degraded layer family.
+
+    ``_SweepView`` is a hybrid by its own ``layer_kind`` -- both block kinds are present --
+    but exposes neither blocks nor a configuration, so no period is derivable and the derived
+    family collapses to the bare registry fractions with no kind-matched partner. That is
+    exactly the shape the 4B run took: it logged ``hybrid_period=-`` and swept on regardless.
+    """
+    with pytest.raises(SystemExit):
+        _run_sweep_cli(monkeypatch, tmp_path, layers=(), view=_SweepView())
+
+    message = capsys.readouterr().err
+    assert "kind-matched partner" in message
+    assert "--layers" in message, "the message must name the way past it"
+
+
+def test_a_dense_backbone_still_sweeps_with_no_partners(monkeypatch, tmp_path) -> None:
+    """One block kind is not a missed period: the R35 comparator must still run normally."""
+    payload, _output, _tokenizer, _spec = _run_sweep_cli(
+        monkeypatch, tmp_path, layers=(), view=_DenseSweepView()
+    )
+
+    family = payload["layer_family"]
+    assert family["partners"] == []
+    assert set(family["kinds"].values()) == {"attention"}
+    assert payload["results"], "a dense sweep produces results like any other"
+
+
+# --------------- issue #68: the final layer carries no future or all readout to report
+
+
+def test_the_sweep_computes_only_self_and_the_logit_lens_at_the_final_layer(
+    monkeypatch, tmp_path
+) -> None:
+    """The cells are absent and the artifact says why, rather than reporting structural zeros."""
+    final = _SweepView.num_layers
+    payload, _output, _tokenizer, _spec = _run_sweep_cli(
+        monkeypatch, tmp_path, layers=("--layers", f"2,{final}")
+    )
+
+    results = payload["results"]
+    assert f"jlens_L{final}_self" in results
+    assert f"logit_lens_L{final}" in results
+    assert f"jlens_L{final}_future" not in results
+    assert f"jlens_L{final}_all" not in results
+    # An interior layer keeps all three, so the exclusion is the final layer's alone.
+    assert {f"jlens_L2_{name}" for name in ("self", "future", "all")} <= set(results)
+
+    exclusion = payload["conformance"]["final_layer_readout_exclusion"]
+    assert exclusion["layer"] == final
+    assert exclusion["excluded"] == ["future", "all"]
+    assert "no decoder block remains" in exclusion["reason"]
+
+
+def test_the_holm_family_for_future_is_built_without_the_final_layer(
+    monkeypatch, tmp_path
+) -> None:
+    """The family is every layer scored under one readout, so dropping a member changes it.
+
+    The correction must be built from the layers actually scored, not adjusted afterwards: at
+    the final layer ``future`` is never scored at all, so it was never a family member.
+    """
+    final = _SweepView.num_layers
+    payload, _output, _tokenizer, _spec = _run_sweep_cli(
+        monkeypatch, tmp_path, layers=("--layers", f"2,{final}")
+    )
+
+    swept = payload["layers"]
+    corrected = {
+        name: [
+            key
+            for key, value in payload["results"].items()
+            if key.endswith(f"_{name}") and "matched_p_holm" in value
+        ]
+        for name in ("self", "future", "all")
+    }
+
+    assert len(corrected["self"]) == len(swept)
+    assert len(corrected["future"]) == len(swept) - 1
+    assert len(corrected["all"]) == len(swept) - 1

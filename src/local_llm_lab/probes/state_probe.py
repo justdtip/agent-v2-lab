@@ -944,6 +944,14 @@ def preflight_precision_block(spec: Any, output_root: Path | None = None) -> dic
     a missing, unreadable or incomplete artifact records ``None``, because a probe capture is
     not the place to gate on preflight evidence and inventing a number would be worse than
     saying there is none.
+
+    Read from ``residual_equivalence.fp32_manual_vs_native``, which is where ``run_preflight``
+    writes it. The top level is a *fallback*, not the primary: this used to read the top level
+    only, and ``run_preflight`` never wrote a key there, so every probe artifact since 6f84217
+    recorded ``null`` for a number R18a requires in all of them. (``run_residual_control`` does
+    write a top-level block, but into a different file entirely, which is how the two shapes
+    came to be confused.) The fallback stays so an artifact written in the older shape still
+    resolves.
     """
     from local_llm_lab.pipeline import preflight
 
@@ -955,7 +963,12 @@ def preflight_precision_block(spec: Any, output_root: Path | None = None) -> dic
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    block = record.get("fp32_manual_vs_native") if isinstance(record, dict) else None
+    if not isinstance(record, dict):
+        return None
+    equivalence = record.get("residual_equivalence")
+    block = equivalence.get("fp32_manual_vs_native") if isinstance(equivalence, dict) else None
+    if not isinstance(block, dict):
+        block = record.get("fp32_manual_vs_native")
     return dict(block) if isinstance(block, dict) else None
 
 

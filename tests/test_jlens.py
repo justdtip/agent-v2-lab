@@ -845,8 +845,136 @@ def test_explicit_layers_are_honoured_verbatim_and_take_no_partners() -> None:
     assert "verbatim" in family.reason
 
 
-def test_hybrid_period_is_read_from_the_loaded_models_own_configuration() -> None:
-    """The period is configuration, never a literal: it is read off a real ``TextModelArgs``."""
+def _tiny_hybrid_model(*, num_hidden_layers: int, full_attention_interval: int):
+    """A real ``qwen3_5.Model`` at toy width: the object the sweep actually holds (R31).
+
+    Built from a configuration and never from a checkpoint, so every wrapper the period read
+    has to cross -- ``Model`` -> ``TextModel`` -> ``TextModelArgs`` -- is the library's own.
+    That matters here more than usual: each of those modules is an ``mlx.nn.Module`` and
+    therefore a ``dict`` subclass, which is exactly the shape a ``SimpleNamespace`` fake does
+    not have and exactly the shape the period read got wrong.
+
+    The text configuration is passed as the plain dict the loader hands ``ModelArgs``, again
+    because that is what the real path does.
+    """
+    from mlx_lm.models import qwen3_5
+
+    text_config = {
+        "model_type": "qwen3_5",
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 1,
+        "rms_norm_eps": 1e-5,
+        "vocab_size": 32,
+        "max_position_embeddings": 64,
+        "linear_num_value_heads": 4,
+        "linear_num_key_heads": 2,
+        "linear_key_head_dim": 8,
+        "linear_value_head_dim": 8,
+        "linear_conv_kernel_dim": 4,
+        "full_attention_interval": full_attention_interval,
+    }
+    return qwen3_5.Model(qwen3_5.ModelArgs(model_type="qwen3_5", text_config=text_config))
+
+
+def _tiny_dense_model(*, num_hidden_layers: int):
+    """A real dense ``llama.Model`` at toy width: a backbone with no hybrid period at all.
+
+    Real rather than faked because "dense" is a structural fact -- every block is an attention
+    block -- and a fake could only assert it.
+    """
+    from mlx_lm.models import llama
+
+    return llama.Model(
+        llama.ModelArgs(
+            model_type="llama",
+            hidden_size=16,
+            num_hidden_layers=num_hidden_layers,
+            intermediate_size=32,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            rms_norm_eps=1e-5,
+            vocab_size=32,
+        )
+    )
+
+
+def test_hybrid_period_is_derived_from_a_real_models_own_blocks() -> None:
+    """R31 at the seam that failed: a real ``ArchitectureView`` over a real hybrid model.
+
+    The configuration walk alone returned ``(None, "unavailable")`` here while
+    ``layer_kind`` beside it stayed correct, so the 4B sweep ran the registry fractions
+    instead of the pre-registered kind-matched family. The blocks carry the period in the same
+    place ``layer_kind`` reads it: attention blocks sit at ``p-1, 2p-1, ...``.
+    """
+    from local_llm_lab.arch import ArchitectureView
+
+    model = _tiny_hybrid_model(num_hidden_layers=8, full_attention_interval=4)
+    args = model.language_model.args
+    view = ArchitectureView.from_model(model)
+
+    period, source = jlens.hybrid_period(view)
+
+    assert period == args.full_attention_interval
+    # The structural rule the derivation inverts, spelled out against the library's own blocks.
+    assert [view.layer_kind(index) for index in range(args.num_hidden_layers)] == [
+        "attention" if (index + 1) % args.full_attention_interval == 0 else "linear_attention"
+        for index in range(args.num_hidden_layers)
+    ]
+    assert "is_linear" in source, "the source must name the structural route it came from"
+    assert "full_attention_interval" in source, "and the configuration it was cross-checked on"
+
+
+def test_hybrid_period_is_absent_on_a_real_dense_backbone() -> None:
+    """EXP-001 §5's dense comparator has one block kind, so there is no period to derive."""
+    from local_llm_lab.arch import ArchitectureView
+
+    view = ArchitectureView.from_model(_tiny_dense_model(num_hidden_layers=4))
+
+    period, source = jlens.hybrid_period(view)
+
+    assert period is None
+    assert "linear-attention" in source, "a dash in an artifact must say why the period is absent"
+
+
+class _ContradictoryView:
+    """Blocks and configuration that contradict each other -- a shape only a fake can hold.
+
+    A real ``DecoderLayer`` computes ``is_linear`` *from* ``full_attention_interval``, so the
+    two routes cannot disagree on a real model; the fake is honest here precisely because the
+    inconsistency it stands for would be a loader or wrapper bug, not a model.
+    """
+
+    def __init__(self, kinds: list[str], configured: int) -> None:
+        self.blocks = list(range(len(kinds)))
+        self.num_layers = len(kinds)
+        self._kinds = kinds
+        self.model = SimpleNamespace(args=SimpleNamespace(full_attention_interval=configured))
+
+    def layer_kind(self, index: int) -> str:
+        return self._kinds[index]
+
+
+def test_hybrid_period_raises_when_the_blocks_and_the_configuration_disagree() -> None:
+    """A real inconsistency, not something to paper over: the run must stop and say so."""
+    view = _ContradictoryView(
+        ["linear_attention", "linear_attention", "linear_attention", "attention"], 3
+    )
+
+    with pytest.raises(ValueError, match="disagree"):
+        jlens.hybrid_period(view)
+
+
+def test_hybrid_period_falls_back_to_the_configuration_when_a_view_has_no_blocks() -> None:
+    """The pre-existing coverage, kept for what it actually covers: the fallback route only.
+
+    This test passed throughout the defect. Its view is a ``SimpleNamespace``, which is not a
+    ``dict`` subclass, so the attribute path inside ``_member`` worked here while the Mapping
+    branch shadowed it on every real ``nn.Module``. It is retained because a view without
+    blocks is a shape the probe fakes really do have -- but it can no longer stand alone.
+    """
     args = _hybrid_args(num_hidden_layers=10, full_attention_interval=3)
     view = SimpleNamespace(model=SimpleNamespace(language_model=SimpleNamespace(args=args)))
 
@@ -854,7 +982,26 @@ def test_hybrid_period_is_read_from_the_loaded_models_own_configuration() -> Non
 
     assert period == args.full_attention_interval
     assert source.endswith("full_attention_interval")
-    assert jlens.hybrid_period(SimpleNamespace()) == (None, "unavailable")
+    assert jlens.hybrid_period(SimpleNamespace())[0] is None
+
+
+def test_member_reads_an_attribute_that_a_modules_own_dict_does_not_hold() -> None:
+    """The trap itself, pinned directly: ``nn.Module`` is a ``dict`` subclass (R31).
+
+    A module's dict holds registered parameters and submodules, never plain attributes, so a
+    Mapping-first accessor answers ``None`` for ``args`` while ``getattr`` answers correctly.
+    """
+    from collections.abc import Mapping
+
+    model = _tiny_hybrid_model(num_hidden_layers=8, full_attention_interval=4)
+
+    assert isinstance(model, Mapping), "the premise of the defect; if this fails, re-read _member"
+    assert "args" not in dict(model), "args is an attribute, never a registered member"
+    assert jlens._member(model, "args") is model.args
+    # A submodule *is* a registered member, so both routes agree there.
+    assert jlens._member(model, "language_model") is model.language_model
+    # And a plain dict configuration -- the other thing the walk crosses -- still resolves.
+    assert jlens._member({"text_config": {"a": 1}}, "text_config") == {"a": 1}
 
 
 class _HybridCliView(_CliView):
@@ -933,3 +1080,63 @@ def test_jlens_default_layers_take_the_kind_matched_family(monkeypatch, tmp_path
         assert payload["layer_roles"][str(layer)] == "partner"
         assert payload["layer_kinds"][str(layer)] == "attention"
     assert [record["layer"] for record in payload["records"]] == family["layers"]
+
+
+# ------------------------- issue #68: the final layer has no tail blocks left to differentiate
+
+
+def test_future_and_all_raise_at_the_final_layer_where_no_block_remains() -> None:
+    """At ``L == num_layers`` the tail is the final norm and the unembedding, and nothing else.
+
+    Both are position-wise, so a perturbation at the source cannot reach any later position:
+    the future readout is identically zero for every context, whatever the model does. The run
+    that raised this scored 0 of 42 in *both* the matched and the mismatched column, a
+    sign-test p of 4.5e-13 and the smallest rank in the Holm family, for a reason that has
+    nothing to do with the model -- and ``all`` equalled ``self`` to every digit.
+
+    Distinct from :class:`EmptyFutureWindowError`, which tests *positions in the context*;
+    this one tests *blocks in the tail*. A subclass so an existing handler still catches it.
+    """
+    view = _View()
+    probe = mx.array([3.0], dtype=mx.float32)
+
+    assert issubclass(jlens.NoTailBlocksError, jlens.EmptyFutureWindowError)
+    for readout in ("future", "all"):
+        with pytest.raises(jlens.NoTailBlocksError, match="no decoder block remains"):
+            jlens.jlens_readouts(
+                view, view.num_layers, probe, [[1, 2, 3]], readouts=(readout,)
+            )
+
+
+def test_self_still_computes_at_the_final_layer() -> None:
+    """Only the two readouts that need a later position are excluded; ``self`` is untouched."""
+    view = _View()
+    probe = mx.array([3.0], dtype=mx.float32)
+
+    mapped, _stats = jlens.jlens_readouts(
+        view, view.num_layers, probe, [[1, 2, 3]], readouts=("self",)
+    )
+
+    assert mapped["self"].shape == probe.shape
+    assert bool(mx.all(mx.isfinite(mapped["self"])).item())
+
+
+def test_the_conformance_block_names_the_two_readout_guards_apart() -> None:
+    """R34: a reader must be able to tell which guard fired, so both are named separately."""
+    block = jlens.conformance_block(
+        layers=[1],
+        layer_kinds={1: "attention"},
+        layer_selection=None,
+        source_positions=(),
+        readouts=("self",),
+        corpus_size=1,
+        corpus_length={},
+        window={},
+        jvp_method="forward",
+        jvp_method_source="flag",
+        capture_dtype={},
+    )
+
+    assert "EmptyFutureWindowError" in block["empty_future_window_policy"]
+    assert "NoTailBlocksError" in block["final_layer_readout_policy"]
+    assert "no decoder block remains" in block["final_layer_readout_policy"]

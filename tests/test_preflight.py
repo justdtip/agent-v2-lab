@@ -1889,3 +1889,67 @@ def test_the_state_shape_is_read_off_the_librarys_own_decoder_layer() -> None:
         expected,
         "text module config",
     )
+
+
+def test_module_candidates_reach_a_blocks_plain_attributes_as_well_as_its_members() -> None:
+    """The dict-subclass trap again, at the second site the Chief named (R31).
+
+    ``mlx.nn.Module`` is a ``dict`` subclass whose dict holds only registered parameters and
+    submodules. ``_module_candidates`` promises "a decoder block and its direct members,
+    whichever way the block stores them", but a Mapping-first branch that ``return``s cuts the
+    attribute half off entirely: a recurrence configuration hung off the block as a plain
+    dataclass -- exactly how ``is_linear`` and ``args`` are stored on a real ``DecoderLayer``
+    -- is never offered to ``_state_shape_from``.
+
+    On today's ``qwen3_5`` block the shape happens to be found anyway, because the recurrence
+    module *is* a registered submodule. This pins the contract rather than the luck.
+    """
+    from collections.abc import Mapping
+
+    import mlx.nn as nn
+
+    from local_llm_lab.pipeline.preflight import _module_candidates
+
+    recurrence = SimpleNamespace(num_v_heads=4, head_v_dim=8, head_k_dim=8)
+
+    class _Block(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.norm = nn.RMSNorm(8)  # a registered submodule: it lives in the module's dict
+            self.recurrence = recurrence  # a plain attribute: it does not
+
+    block = _Block()
+
+    assert isinstance(block, Mapping), "the premise: an nn.Module is a dict subclass"
+    assert "recurrence" not in dict(block), "a plain attribute is not a registered member"
+    candidates = list(_module_candidates(block))
+    assert block in candidates
+    assert any(candidate is block.norm for candidate in candidates), "registered members"
+    assert recurrence in candidates, "and plain attributes, which the Mapping branch dropped"
+
+
+def test_the_probe_precision_block_reads_the_artifact_the_preflight_actually_writes(
+    tmp_path: Path,
+) -> None:
+    """R18a: reader and writer disagreed on the *level*, and the fake agreed with the reader.
+
+    ``run_preflight`` nests the float32 deviation under ``residual_equivalence``; it writes
+    nothing at the top level of this artifact. ``preflight_precision_block`` read the top
+    level, so every probe artifact since 6f84217 recorded ``null`` for a number R18a requires
+    in every one of them, and the existing coverage passed throughout because it fed a
+    hand-made dict with the key where the reader hoped it was.
+
+    The record here therefore comes out of ``run_preflight`` itself. Hand-shaping it would
+    only re-record the assumption that failed. This test lives beside the writer's own fake
+    harness for exactly that reason -- it must be the writer's shape, not a copy of it.
+    """
+    from local_llm_lab.probes.state_probe import preflight_precision_block
+
+    spec = _spec()
+    record = _preflight(spec, _View(), tmp_path)
+
+    assert "fp32_manual_vs_native" not in record, "the writer does not use the top level"
+    written = record["residual_equivalence"]["fp32_manual_vs_native"]
+    assert written, "and it does write the block one level down"
+
+    assert preflight_precision_block(spec, output_root=tmp_path) == written

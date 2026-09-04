@@ -786,6 +786,14 @@ def _parameter_tree_bytes(model: Any) -> int:
 
 
 def _tree_values(value: Any):
+    """Flatten a parameter tree to its leaves.
+
+    Mapping-first is *correct* here, unlike in ``_module_candidates`` and ``jlens._member``.
+    ``model.parameters()`` hands back a plain nested dict, and on the fallback path where a
+    module itself arrives, the module's dict half holds exactly what this counts -- its
+    registered parameters and submodules. Plain Python attributes are not parameter buffers,
+    so there is nothing here for the dict-subclass shadowing to hide.
+    """
     if isinstance(value, Mapping):
         for child in value.values():
             yield from _tree_values(child)
@@ -1128,14 +1136,27 @@ def _linear_attention_state_shape(view: Any, layers: int) -> tuple[dict[str, int
 
 
 def _module_candidates(block: Any):
-    """Yield a decoder block and its direct members, whichever way the block stores them."""
+    """Yield a decoder block and its direct members, whichever way the block stores them.
+
+    Both halves, never one or the other. ``mlx.nn.Module`` is a ``dict`` subclass, so a real
+    decoder block is simultaneously a Mapping and an ordinary object -- and the two halves hold
+    *different* things: the dict holds registered parameters and submodules (``linear_attn``,
+    the norms, the MLP), while ``__dict__`` holds the plain attributes (``is_linear``, and any
+    configuration dataclass hung off the block). A Mapping-first branch that returned early
+    therefore dropped every plain attribute silently.
+
+    Today's ``qwen3_5`` block survives that because its recurrence module is a registered
+    submodule and is found in the dict half; the same shadowing in ``jlens._member`` cost a
+    two-hour sweep the correct layer family, so the fragility is not worth keeping for the
+    sake of one lucky lookup. Order is unchanged -- registered members first -- so the first
+    match ``_state_shape_from`` accepts is the same one it accepted before.
+    """
     yield block
     if isinstance(block, Mapping):
         yield from block.values()
-        return
     try:
         members = vars(block)
-    except TypeError:
+    except TypeError:  # an object with __slots__ and no __dict__ has no attribute half
         return
     yield from members.values()
 

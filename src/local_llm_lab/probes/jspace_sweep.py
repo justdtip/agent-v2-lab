@@ -34,7 +34,10 @@ EXP-001 (issue #54) turned that research script into this installed CLI. What ch
   (B2). A bare ``apply_chat_template`` on a thinking model leaves the think block open, so the
   probe would read a distribution taken inside it.
 - **Three readouts, one JVP** (B3): ``self``, ``future`` and ``all``; ``all`` primary. An
-  empty future window raises rather than reading as a structural zero (A1).
+  empty future window raises rather than reading as a structural zero (A1), and at the final
+  layer -- where no decoder block remains in the tail, so both would be zero for every context
+  of every model -- only ``self`` and the logit lens are computed, with the exclusion, its
+  reason and its effect on the Holm families recorded in the conformance block (issue #68).
 - **One sweep over the kind-matched layer family** (B5). With ``--layers`` omitted the layer
   list is the registry fractions *plus* the kind-matched partners the config's
   ``full_attention_interval`` implies, because §2's predictions compare an attention layer
@@ -90,12 +93,14 @@ from pathlib import Path
 from typing import Any
 
 from local_llm_lab.pipeline.jlens import (
+    ATTENTION_KIND,
     DEFAULT_CORPUS,
     DEFAULT_CORPUS_LENGTH,
     DEFAULT_SOURCE_POSITIONS,
     JVP_METHODS,
     PRIMARY_READOUT,
     READOUTS,
+    RECURRENT_KIND,
     EmptyFutureWindowError,
     JvpMethodUnresolved,
     SourcePosition,
@@ -104,10 +109,12 @@ from local_llm_lab.pipeline.jlens import (
     conformance_block,
     distribution,
     encode,
+    final_layer_exclusion,
     hybrid_period,
     jlens_readouts,
     kind_matched_layer_family,
     probe_layer_kind,
+    readouts_for_layer,
     residual_at,
     resolve_jvp_method,
     resolve_source_positions,
@@ -294,18 +301,23 @@ def _probabilities(
     for layer in layers:
         residual = residual_at(view, ids, layer, capture_dtype=capture_dtype)
         probe = residual[0, -1]
+        # Issue #68: at the final layer no decoder block remains, so 'future' and 'all' are
+        # structural zeros rather than measurements. Compute only what is measurable there --
+        # which also keeps those keys out of ``result``, and therefore out of the Holm families
+        # ``run_sweep`` builds from it, without any family needing to be adjusted afterwards.
+        names = readouts_for_layer(READOUTS, layer, getattr(view, "num_layers", None))
         mapped, stats = jlens_readouts(
             view,
             layer,
             probe,
             list(corpus_ids),
             source_positions=source_positions,
-            readouts=READOUTS,
+            readouts=names,
             method=method,
             capture_dtype=capture_dtype,
         )
         stats_by_layer[layer] = stats
-        for name in READOUTS:
+        for name in names:
             probs = distribution(view, mapped[name]).tolist()
             result[f"jlens_L{layer}_{name}"] = {token: float(probs[token]) for token in wanted}
         logit = distribution(view, probe).tolist()
@@ -480,6 +492,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         f"- JVP: {conformance.get('jvp_method')} (from {conformance.get('jvp_method_source')})",
         f"- capture dtype: {conformance.get('capture_dtype')}",
         f"- self-only limiting case: {conformance.get('self_only_limiting_case')}",
+        f"- final-layer readout exclusion: {conformance.get('final_layer_readout_exclusion')}",
         "",
         "## How often is the TRUE suffix more probable than a wrong, previously-seen one?",
         "",
@@ -665,6 +678,28 @@ def main() -> None:  # noqa: C901 - probe CLI orchestration
             kind_of=lambda layer: probe_layer_kind(view, layer),
             derive=selection.source != "cli",
         )
+        # A hybrid whose period was never found is what cost the 4B sweep two GPU hours: it
+        # logged ``hybrid_period=-``, swept the six registry fractions instead of the
+        # pre-registered nine-layer kind-matched family, and nothing stopped it. Both block
+        # kinds present with no partner derived *is* that state, so refuse rather than run a
+        # silently degraded family. One kind only is a dense backbone -- EXP-001 §5's R35
+        # comparator -- which has no partner for an honest reason and must still run.
+        decoder_kinds = {
+            probe_layer_kind(view, layer) for layer in range(1, view.num_layers + 1)
+        }
+        if (
+            family.derived
+            and not family.partners
+            and {ATTENTION_KIND, RECURRENT_KIND} <= decoder_kinds
+        ):
+            parser.error(
+                "this decoder has both attention and linear-attention blocks, but no "
+                "kind-matched partner was derived, so EXP-001 §2's per-kind contrast at "
+                f"comparable depth would not be in the run (hybrid period: {family.period}, "
+                f"from {family.period_source}; {family.reason}). Refusing to spend the sweep "
+                "on a degraded layer family: fix the period read, or pass --layers to take "
+                "responsibility for the list verbatim."
+            )
         layers = list(family.layers)
         layer_kinds = dict(family.kinds)
         log.info(
@@ -728,6 +763,11 @@ def main() -> None:  # noqa: C901 - probe CLI orchestration
             jvp_method=jvp_method,
             jvp_method_source=jvp_method_source,
             capture_dtype=_capture_dtype_report(view, capture_dtype),
+            # So the artifact says why the final layer's future/all cells are absent rather
+            # than leaving a reader to derive it from a gap in the table (issue #68).
+            final_layer_readout_exclusion=final_layer_exclusion(
+                layers, READOUTS, view.num_layers
+            ),
         )
         comparability = comparability_block(
             model=spec.name,
