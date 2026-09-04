@@ -11,8 +11,53 @@ import pytest
 from local_llm_lab.agent_protocol import Action
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.protocol import parse_turn, render_turn
-from local_llm_lab.pipeline.runner import Trajectory, generate_turn, generate_turn_with_count
+from local_llm_lab.pipeline.runner import (
+    Trajectory,
+    detect_loop,
+    generate_turn,
+    generate_turn_with_count,
+)
 from local_llm_lab.pipeline.tasks import Task
+
+
+def _executed(index: int, name: str, arguments: dict, observation: str = "ok") -> dict:
+    return {
+        "index": index,
+        "thought": "",
+        "action": {"name": name, "arguments": arguments},
+        "observation": observation,
+        "raw": "",
+    }
+
+
+def test_detect_loop_flags_repetition_patterns() -> None:
+    same = [_executed(i, "calculate", {"expression": "1+1"}, "RESULT: 2") for i in range(3)]
+    assert detect_loop(same), "three identical calls"
+    assert not detect_loop(same[:2]), "a transient retry is not a loop"
+    alternating = [
+        _executed(
+            i, "read_file" if i % 2 else "search_files", {"path": "a"} if i % 2 else {"query": "q"}
+        )
+        for i in range(10)
+    ]
+    assert not detect_loop(alternating)
+    ping_pong = [_executed(i, "read_file", {"path": "a" if i % 2 else "b"}) for i in range(10)]
+    assert detect_loop(ping_pong), "eight same-shaped calls on one tool without an error"
+    assert not detect_loop(ping_pong[:7])
+    errors = [_executed(i, "read_file", {"path": f"p{i}"}, "ERROR: not found") for i in range(4)]
+    assert detect_loop(errors), "four consecutive errors on the same tool"
+    assert not detect_loop(errors[:3])
+    assert not detect_loop(errors[:3] + [_executed(3, "read_file", {"path": "p"}, "text")])
+    counting = [
+        _executed(i, "calculate", {"expression": f"{i}+1"}, f"RESULT: {i + 1}") for i in range(8)
+    ]
+    assert detect_loop(counting), "same tool and argument keys eight times without an error"
+    assert not detect_loop(counting[:7])
+    assert not detect_loop(counting[:7] + [_executed(7, "finish", {"answer": "8"}, "FINISHED")])
+    parse_error_step = {"index": 0, "raw": "", "parse_error": "x"}
+    assert not detect_loop([parse_error_step, *same[:2]]), "parse-error steps carry no action"
+    assert detect_loop([parse_error_step, *same])
+    assert not detect_loop([])
 
 
 def test_trajectory_as_dict_json_round_trips_through_constructor() -> None:

@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 # Window sizes for the three repetition rules in :func:`detect_loop`.
 LOOP_IDENTICAL_CALLS = 3
-LOOP_SAME_TOOL_ERRORS = 6
+LOOP_SAME_TOOL_ERRORS = 4
 LOOP_SAME_SHAPE_CALLS = 8
 
 
@@ -220,6 +220,46 @@ def make_turn_cache(
     raise ValueError(f"unsupported resolved cache strategy: {resolved.cache_strategy}")
 
 
+@dataclass
+class _ThinkingTracker:
+    enabled: bool
+    max_tokens: int
+    started: bool = False
+    finished: bool = False
+    start_token: int = 0
+    tokens: int = 0
+    forced_close_at: int | None = None
+
+    def update(self, ids: list[int], decoded: str, tokenizer: Any) -> None:
+        if not self.enabled or self.finished:
+            return
+        thinking_start = decoded.find("<think>")
+        if thinking_start < 0:
+            return
+        if not self.started:
+            self.started = True
+            self.start_token = next(
+                index
+                for index in range(len(ids))
+                if len(tokenizer.decode(ids[: index + 1])) > thinking_start
+            )
+        self.tokens = len(ids) - self.start_token
+        if decoded.find("</think>", thinking_start) >= 0:
+            self.finished = True
+        elif self.tokens >= self.max_tokens:
+            self.forced_close_at = len(ids)
+            self.finished = True
+
+    def decoded_text(self, ids: list[int], tokenizer: Any) -> str:
+        if self.forced_close_at is None:
+            return tokenizer.decode(ids)
+        return (
+            tokenizer.decode(ids[: self.forced_close_at])
+            + "\n</think>\n\n"
+            + tokenizer.decode(ids[self.forced_close_at :])
+        )
+
+
 def generate_turn_with_count(
     model: Any,
     tokenizer: Any,
@@ -252,53 +292,28 @@ def generate_turn_with_count(
         kwargs["prompt_cache"] = turn_cache.cache
 
     ids: list[int] = []
-    thinking_enabled = spec.chat.thinking in {"inference", "trained"}
-    thinking_started = False
-    thinking_finished = False
-    thinking_start_token = 0
-    think_tokens = 0
-    forced_close_at: int | None = None
-
-    def decoded_text() -> str:
-        if forced_close_at is None:
-            return tokenizer.decode(ids)
-        return (
-            tokenizer.decode(ids[:forced_close_at])
-            + "\n</think>\n\n"
-            + tokenizer.decode(ids[forced_close_at:])
-        )
+    thinking = _ThinkingTracker(
+        enabled=spec.chat.thinking in {"inference", "trained"},
+        max_tokens=spec.chat.max_think_tokens,
+    )
 
     for response in stream_generate(
         model, tokenizer, prompt=prompt_input, max_tokens=max_tokens, sampler=sampler, **kwargs
     ):
         ids.append(response.token)
         decoded = tokenizer.decode(ids)
-        if thinking_enabled and not thinking_finished:
-            thinking_start = decoded.find("<think>")
-            if thinking_start >= 0:
-                if not thinking_started:
-                    thinking_started = True
-                    thinking_start_token = next(
-                        index
-                        for index in range(len(ids))
-                        if len(tokenizer.decode(ids[: index + 1])) > thinking_start
-                    )
-                think_tokens = len(ids) - thinking_start_token
-                if decoded.find("</think>", thinking_start) >= 0:
-                    thinking_finished = True
-                elif think_tokens >= spec.chat.max_think_tokens:
-                    forced_close_at = len(ids)
-                    thinking_finished = True
+        thinking.update(ids, decoded, tokenizer)
         if response.token in stop_ids:
             break
         piece = response.text or ""
-        if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(decoded_text()):
+        if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
+            thinking.decoded_text(ids, tokenizer)
+        ):
             break
     if turn_cache is not None:
         turn_cache.commit(prompt_ids, ids)
-    if not thinking_started:
-        think_tokens = 0
-    return decoded_text(), len(ids), think_tokens
+    think_tokens = thinking.tokens if thinking.started else 0
+    return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
 
 
 def generate_turn(model: Any, tokenizer: Any, prompt: str, sampler: Any, max_tokens: int) -> str:
@@ -315,7 +330,7 @@ def detect_loop(steps: list[dict[str, Any]]) -> bool:
     Flags a degenerate loop when any of these holds for the most recent executed actions:
 
     1. the last 3 calls are identical (same tool and the same arguments);
-    2. the last 6 calls use the same tool and every observation is an error;
+    2. the last 4 calls use the same tool and every observation is an error;
     3. the last 8 calls use the same tool with the same argument keys, none of them errored,
        and none is ``finish`` (the "calculate with an incrementing number" pattern).
 

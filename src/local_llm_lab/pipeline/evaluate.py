@@ -167,6 +167,7 @@ def _trajectory_totals(trajectories: list[Trajectory]) -> dict[str, Any]:
         "schema_failures": 0,
         "executable": 0,
         "generated_tokens": 0,
+        "think_tokens": 0,
         "tool_errors": 0,
         "recovered_errors": 0,
         "loop_failures": 0,
@@ -182,6 +183,7 @@ def _trajectory_totals(trajectories: list[Trajectory]) -> dict[str, Any]:
         totals["schema_failures"] += trajectory.verdict.get("schema_failures", 0)
         totals["executable"] += trajectory.verdict.get("executable_calls", 0)
         totals["generated_tokens"] += trajectory.generated_tokens
+        totals["think_tokens"] += trajectory.think_tokens
         totals["tool_errors"] += trajectory.verdict.get("errors", 0)
         totals["recovered_errors"] += trajectory.verdict.get("recovered_errors", 0)
         totals["loop_failures"] += int(trajectory.loop_detected and not trajectory.success)
@@ -314,6 +316,8 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
         "loop_failures": totals["loop_failures"],
         "exhausted": totals["exhausted"],
         "generated_tokens": totals["generated_tokens"],
+        "think_tokens": totals["think_tokens"],
+        "think_tokens_per_task": _ratio(totals["think_tokens"], count, 2),
         "tokens_per_success": (
             round(totals["generated_tokens"] / successes, 1) if successes else None
         ),

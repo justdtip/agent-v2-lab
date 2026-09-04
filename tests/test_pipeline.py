@@ -24,7 +24,6 @@ from local_llm_lab.pipeline.protocol import (
 )
 from local_llm_lab.pipeline.runner import (
     Trajectory,
-    detect_loop,
     trajectory_rows,
 )
 from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
@@ -732,46 +731,6 @@ def test_simulator_validates_before_executing_and_counts_calls() -> None:
     verdict = simulator.verdict().as_dict()
     assert verdict["calls"] == 5 and verdict["schema_failures"] == 1
     assert verdict["executable_calls"] == 1 and verdict["errors"] == 4
-
-
-def _executed(index: int, name: str, arguments: dict, observation: str = "ok") -> dict:
-    return {
-        "index": index,
-        "thought": "",
-        "action": {"name": name, "arguments": arguments},
-        "observation": observation,
-        "raw": "",
-    }
-
-
-def test_detect_loop_flags_repetition_patterns() -> None:
-    same = [_executed(i, "calculate", {"expression": "1+1"}, "RESULT: 2") for i in range(3)]
-    assert detect_loop(same), "three identical calls"
-    assert not detect_loop(same[:2]), "a transient retry is not a loop"
-    alternating = [
-        _executed(
-            i, "read_file" if i % 2 else "search_files", {"path": "a"} if i % 2 else {"query": "q"}
-        )
-        for i in range(10)
-    ]
-    assert not detect_loop(alternating)
-    ping_pong = [_executed(i, "read_file", {"path": "a" if i % 2 else "b"}) for i in range(10)]
-    assert detect_loop(ping_pong), "eight same-shaped calls on one tool without an error"
-    assert not detect_loop(ping_pong[:7])
-    errors = [_executed(i, "read_file", {"path": f"p{i}"}, "ERROR: not found") for i in range(6)]
-    assert detect_loop(errors), "six consecutive errors on the same tool"
-    assert not detect_loop(errors[:5])
-    assert not detect_loop(errors[:5] + [_executed(5, "read_file", {"path": "p"}, "text")])
-    counting = [
-        _executed(i, "calculate", {"expression": f"{i}+1"}, f"RESULT: {i + 1}") for i in range(8)
-    ]
-    assert detect_loop(counting), "same tool and argument keys eight times without an error"
-    assert not detect_loop(counting[:7])
-    assert not detect_loop(counting[:7] + [_executed(7, "finish", {"answer": "8"}, "FINISHED")])
-    parse_error_step = {"index": 0, "raw": "", "parse_error": "x"}
-    assert not detect_loop([parse_error_step, *same[:2]]), "parse-error steps carry no action"
-    assert detect_loop([parse_error_step, *same])
-    assert not detect_loop([])
 
 
 def test_render_completion_matches_chat_template_layout() -> None:

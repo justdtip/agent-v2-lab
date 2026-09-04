@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from local_llm_lab.pipeline import evaluate
 from local_llm_lab.pipeline.runner import Trajectory
+from local_llm_lab.pipeline.tasks import Task
 
 
 def _trajectory(
@@ -16,6 +18,7 @@ def _trajectory(
     difficulty: int,
     family: str = "read",
     variant: str = "clean",
+    think_tokens: int = 0,
 ) -> Trajectory:
     return Trajectory(
         task_id=task_id,
@@ -37,7 +40,49 @@ def _trajectory(
         generated_tokens=4,
         difficulty=difficulty,
         integrity={"clean": clean, "counts": {} if clean else {"value_drop": 1}},
+        think_tokens=think_tokens,
     )
+
+
+@pytest.mark.parametrize(
+    ("stress", "expected_faults"),
+    [(False, None), (True, evaluate.STRESS_FAULTS)],
+)
+def test_evaluate_tasks_passes_stress_faults_to_runner(
+    monkeypatch, stress: bool, expected_faults: object
+) -> None:
+    captured: dict[str, object] = {}
+    task = Task(
+        task_id="test-read-0000-clean",
+        family="read",
+        variant="clean",
+        prompt="read a file",
+        files={"a.txt": "x"},
+        steps=(),
+        expected_answer="x",
+        required_tools=frozenset(),
+    )
+
+    monkeypatch.setattr(evaluate, "make_sampler", lambda _temperature: object())
+
+    def fake_run_task(*_args, **kwargs):
+        captured["faults"] = kwargs["faults"]
+        return _trajectory(task.task_id, success=True, clean=True, difficulty=0)
+
+    monkeypatch.setattr(evaluate, "run_task", fake_run_task)
+    monkeypatch.setattr(
+        evaluate,
+        "check_trajectory",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            as_dict=lambda: {"clean": True, "counts": {}}
+        ),
+    )
+
+    evaluate.evaluate_tasks(
+        object(), object(), [task], label="fake", stress=stress, quiet=True
+    )
+
+    assert captured["faults"] == expected_faults
 
 
 def test_wilson_and_mcnemar_use_exact_small_sample_statistics() -> None:
@@ -91,6 +136,48 @@ def test_summarize_exposes_rate_counts_and_wilson_intervals_for_all_groups() -> 
         )
     assert summary["by_difficulty"]["1"]["successes"] == 1
     assert summary["wilson_95"]["integrity_clean"] == pytest.approx(evaluate.wilson(1, 2))
+
+
+def test_summarize_aggregates_thinking_tokens_and_preserves_integrity() -> None:
+    clean = _trajectory(
+        "test-read-0000-clean",
+        success=True,
+        clean=True,
+        difficulty=0,
+        think_tokens=3,
+    )
+    affected = _trajectory(
+        "test-read-0001-clean",
+        success=False,
+        clean=False,
+        difficulty=0,
+        think_tokens=8,
+    )
+    affected.integrity = {"clean": False, "counts": {"value_drop": 2}}
+
+    summary = evaluate.summarize([clean, affected])
+
+    assert summary["integrity"] == {
+        "clean_trajectories": 1,
+        "clean_rate": 0.5,
+        "affected_trajectories": 1,
+        "violations": 2,
+        "by_kind": {"value_drop": {"violations": 2, "affected_trajectories": 1}},
+        "by_family": {
+            "read": {
+                "trajectories": 2,
+                "clean_trajectories": 1,
+                "clean_rate": 0.5,
+                "violations": 2,
+                "affected_trajectories": 1,
+            }
+        },
+        "failed_trajectories": 1,
+        "failed_with_violation": 1,
+        "failure_explained_rate": 1.0,
+    }
+    assert summary["think_tokens"] == 11
+    assert summary["think_tokens_per_task"] == 5.5
 
 
 def test_run_evaluation_records_explicit_difficulty_and_screen_metadata(
