@@ -1008,3 +1008,148 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
 - Dispatched, neither needing the machine: the preflight footprint calibration (the estimator's
   chunk dependence is falsified 2.12x predicted vs 1.07x measured, and it binds the chunked
   recurrence while the arm selects chunkwise) and C7's provenance shape. C1 held for C2.
+
+## 2026-09-05 overnight — standing lift verified; C7 landed; regeneration staged behind #51
+
+- **Standing lift recorded.** The Director gave the Deputy standing authority to run EXP-001
+  once the preflight artifacts are rebuilt, then verified it to the Chief directly. The Chief
+  recorded it at `live/EXP-001-STANDING-LIFT-2026-09-05.md` and on #59. Scope: the preflight
+  regeneration runs for both registered models, and EXP-001's runs one at a time on the lane.
+  Not covered: training, the R32 stage-2 probe, the P6 secondary condition. The Chief's gate on
+  the calibration code is not waived by the lift, and under R37 the code and the regenerated
+  artifacts land in one commit.
+- **A fallback the Deputy proposed was refused, correctly.** Running EXP-001 from a clean
+  checkout predating the preflight gate would have needed no gate, but it would have run the
+  sweep before C1 lands, and a sweep run before C1 is a sweep to be thrown away. It would also
+  have sidestepped a gate the Director had approved. Withdrawn.
+- **C7 landed: `bcfc6f9`.** `run_rollout` and `run_branch_mining` both resolved a spec and
+  recorded it under `extra.summary.model`, then passed `resolved=None` to `write_provenance`,
+  so the top-level `model` block held the registry fallback (`provenance.py:79`). Fixed with a
+  keyword-only `on_resolved` sink fired after `load_policy`; changing the return type would have
+  broken `cli.py:992` and `cli.py:1209`. Deputy review then Chief gate, both on the code. Full
+  suite 1212 passed, exit 0.
+- **#63 raised**: the same defect at three `cli.py` sites (`stage_select`, `stage_eval`,
+  `stage_rollout`). `stage_rollout` is a one-line close now that `run_rollout` takes the sink.
+- **C2 recorded in the spec** (EXP-001 §3.2), per the Head of Interpretability's ruling on #61:
+  within a sample the reduction over target positions is a **sum** (`jlens.py:825-827`); across
+  samples the totals are divided by the number used (`jlens.py:859`), so the map is a **mean**
+  over sources and prompts. That is what the paper does and what the code already does. Keep it,
+  no code change; both axes to be named in every artifact's R34 conformance block, because an
+  artifact that says only "sum" does not pin the readout.
+- **Regeneration shape settled with the Chief: narrow.** Both artifacts regenerated bare, no
+  arm inputs. Verified in the code: `require_preflight` reads only `schema_version`,
+  `model_name`, `hf_id` and the snapshot revision, so the probe unblock needs nothing more, and
+  `training_footprint` is read at one site, the training-side gate. A footprint computed from an
+  arm whose config is uncommitted would bake in a number that R32 stage 2 may still move. Two
+  conditions from the Chief: the skipped footprint block must be present with its reason rather
+  than absent, which `preflight.py:700-706` already does; and the commit message names both
+  artifacts with their snapshot revisions.
+- **Gate reproduced rather than assumed**: `require_preflight` rejects both models today with
+  "preflight artifact schema version is missing or unsupported", naming the exact regeneration
+  command. The lane is free; no model process is running.
+- In flight: the preflight footprint calibration (#51) and EXP-001's C1 plus C3-C6. Both go to
+  the Deputy's review, then the Chief's gate, then commit.
+- **EXP-001 slice landed: `461b679`** (C1 plus C3-C6). The per-prompt J-lens cache is keyed on
+  the prompt string, as the Head required, because the rotation puts one prompt at two case
+  indices. Measured by the Deputy on the implementer's fake harness rather than taken from the
+  test's name: 16 map computations become 8, with `results` and `per_case` byte-identical. The
+  fake view carries a token-dependent unembedding so a wrong-prompt cache would move a number
+  instead of hiding in a uniform softmax. Suite 1215, exit 0.
+- **C2 closed.** Both halves of the recording condition are in: EXP-001 §3.2 names the sum
+  within a sample and the mean across samples, with the Chief's addendum that the unequal
+  windows (96, 64, 32 positions at the three default sources) make it a window-weighted mean by
+  construction; and the R34 conformance block gained a `reduction` key naming both axes.
+- **Runs reassigned.** The Director's standing instruction that night granted all
+  interpretability lifts and gave the EXP-001 runs to the Head of Interpretability. The Deputy
+  keeps the lane and the board and does not run the sweep. The 3B comparator goes first as the
+  ten-minute instrument check, the Chief accepting the Head's request over the earlier order.
+  Plan at `live/EXP-001-RUN-PLAN-2026-09-05.md`.
+- **Calibration reviewed and at the Chief's gate.** Both halves of the falsification are
+  addressed. The mode is now taken from the arm's `train.gated_delta_mode` through an explicit
+  mapping and an unknown name is refused rather than estimated as something else; that ordering
+  mirrors `cli._training_backbone`, which validates the name before it looks at the chunk and
+  installs nothing when there is no chunk. The envelope no longer reads the chunk at all. The
+  Deputy re-derived the fit at all thirteen points: every prediction sits at or above its
+  measurement and the predicted verdict equals the truth verdict everywhere, zero mismatches.
+  One open question referred to the Chief: the envelope is calibrated at batch 1 with
+  checkpointing on, and departures are recorded rather than refused. It does not bind tonight,
+  because a bare regeneration passes no row count and never consults the envelope.
+- **Two issues raised, one of them a review miss.** #64: `agent-pipeline report` is dead at the
+  entry point with `TypeError: 'ArgumentParser' object is not callable`, because the `render`
+  import at `cli.py:32` is shadowed by its own subparser inside `main`. Reproduced, not
+  inferred. It came in with the R21 render slice at `94c920e`, which the Deputy reviewed and the
+  Chief gated; neither caught it, and no test drives that stage through `main`, which is the
+  more useful finding. #65: `agent-v2-jlens` records a null window where the sweep now records a
+  number.
+- **The calibration was gated with two conditions, and a third was found by two people
+  independently.** The Chief's K4: `require_preflight(consumer="training")` accepts a *skipped*
+  footprint, because a skipped block records `passed: true` and the evidence check reads only
+  `passed` — so the moment tonight's bare artifacts exist, a training run would clear a gate on
+  a footprint that was never computed. The Chief's K5: `_training_backbone` maps `chunkwise` to
+  `install_chunkwise_gated_delta`, which is not in the tree this commit produces, so an arm
+  configuring chunkwise gets an `AttributeError` at train start.
+- **K4 cannot be applied as written, and the reason is the third finding.**
+  `_training_evidence_passed` is called *unconditionally* at `preflight.py:563`, for every
+  consumer; only the view check at `:565` is consumer-gated. So making a skipped footprint fail
+  it would refuse the view consumer and every probe with it. The Head of Interpretability
+  reached the same structure from the other side while reading the uncommitted slice, and
+  between us it is wired in three places: `_training_evidence_passed` requires the footprint at
+  `:1152`; `report["passed"]` carries `footprint["passed"]` as a conjunct at `:470`, which
+  `_view_evidence_passed` inherits through `record["passed"]` at `:1186`; and `run_preflight`
+  raises at `:475` when `report["passed"]` is false. A 4B whose footprint missed its headroom
+  would therefore fail the preflight command itself, leave an artifact stamped `passed: false`,
+  and have every probe CLI refuse it. EXP-001 would be refused on a training criterion, though
+  the sweep loads no optimiser, takes no gradient through a training step, and never reaches
+  `max_seq_length`. It does not bite tonight only because a bare regeneration skips the
+  footprint, and the 4B's footprint is precisely the quantity in doubt.
+- Proposed to the Chief, awaiting the ruling before anything is dispatched: take
+  `footprint["passed"]` out of `report["passed"]`, leaving that flag to mean the model-level
+  evidence; let `run_preflight` raise only on it; require the footprint present, computed and
+  passed for `consumer="training"`; and stop the view consumer looking at it at all. That is
+  K4 and the Head's narrowing together, and it leaves R32(d) as strong for the runs it was
+  written for.
+- **The commit was checked to stand on its own** rather than assumed: a scratch worktree at
+  head carrying only the seven declared files, nothing from stage 2 or the other slices, runs
+  1122 passed, 8 skipped, exit 0.
+
+## 2026-09-05 overnight, second half — the preflight lane is clear; EXP-001 is unblocked
+
+- **K4 and K5 landed with the calibration: `f1230ac`.** Eight files, gated by the Chief on the
+  delta alone. The behaviour was verified across all four footprint states rather than read off
+  the tests' names: a bare, a failed, a refused and a passing footprint each admit the view
+  consumer and each reject the training consumer for the reason they name, except the passing
+  one which admits both.
+- **Both artifacts regenerated bare, one at a time on an idle lane.** `outputs/` is gitignored,
+  so under R37 the commit records them by digest rather than tracking them, which is how A1.2
+  recorded the morning's pair. The Chief ruled that reading rather than forcing them in.
+
+  | model | snapshot revision | SHA-256 | JVP |
+  |---|---|---|---|
+  | `qwen35-4b` | `32f3e8ec…` | `455aa069…` | `finite_difference`, layer 16 |
+  | `qwen25-coder-3b` | `3dd939c6…` | `4a4862c4…` | `forward`, layer 18 |
+
+  The 4B reading matches the Head of Interpretability's pre-registered expectation in EXP-001 §5
+  on both method and layer, so the resolution rule written there for a changed reading was not
+  needed. `require_preflight` now passes for `view` on both specs and rejects both for
+  `training` by name — the reverse of where the night started, where the schema mismatch
+  rejected every consumer and no probe could run at all.
+- **Both readiness checklists updated before the commit, not after.** Training A1.3 and A1.4:
+  the cited artifacts are superseded by digest, and a bare `agent-pipeline preflight --model
+  <name>` no longer satisfies a training gate, so B4 attempt 4 and both D arms must regenerate
+  with a row count and read `training_footprint.passed` in the artifact rather than the
+  command's exit status. Probes A2.1 and A2.2: the digest pair, and the ruling that a failed
+  training footprint does not bar a probe.
+- **Two mistakes of mine, recorded because the record is worth more than the appearance.** I
+  chained `git apply --check` with `&&`, `||` and an `echo`, and the echo printed a success line
+  while the check had failed; I caught it only when the real apply errored. That is the same
+  shape as the piped-test-output trap that cost a bad commit earlier this week: a check whose
+  success message can print without the check succeeding. Every command in this commit captured
+  its exit code on its own line instead. Separately, `configs/models` is matched by the bare
+  `models/` rule at `.gitignore:14`, so the tracked registry configs stage only under
+  `git add -f`, and `git check-ignore` reports them as *not* ignored because it skips tracked
+  paths without `--no-index`. Raised as its own issue rather than changed tonight.
+- **Runs are the Head's from here.** Order: 3B base comparator as the ten-minute instrument
+  check, then 3B adapter A, then the 4B sweep, then the single-decision check. They tell the
+  Deputy before each start and the Deputy confirms the lane.
+
+- 2026-09-05 night (Chief): f1230ac verified (eight files, declared scope; artifacts recorded by revision and digest). EXP-001 GREEN sent to the Head of Interpretability; 3B comparator first.

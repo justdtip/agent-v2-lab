@@ -33,6 +33,29 @@ architecture until then.
 - [x] A2. **MET — the Qwen3.5 probe hold is lifted.** `outputs/preflight/qwen35-4b.json`
   `passed: true` under R18a at 15:20 (native max_abs 0.0, Frobenius 0.0; SHA-256
   `8a6f4298…`), with the 3B control passing identically at 15:18. Terms of #15/#16 satisfied.
+- [ ] A2.1 **The artifacts A2 cites are `schema_version: 2` and the module now requires 3.**
+  From the moment the schema-3 preflight slice was written, `require_preflight` rejected both
+  models with "preflight artifact schema version is missing or unsupported", and the committed
+  change making every probe CLI demand preflight evidence turned that into a hard stop: no probe
+  could run from the working tree, EXP-001 included. Both artifacts were regenerated bare on the
+  night of 2026-09-05. A2's *finding* is unchanged; only its digests are. The regenerated pair,
+  both `passed: true` with `require_preflight(consumer="view")` passing for both specs where it
+  rejected both before: `qwen35-4b` revision `32f3e8ec…`, SHA-256 `455aa069…`, JVP
+  `finite_difference` at layer 16; `qwen25-coder-3b` revision `3dd939c6…`, SHA-256 `4a4862c4…`,
+  JVP `forward` at layer 18. The 4B reading matches the Head of Interpretability's pre-registered
+  expectation in EXP-001 §5 on both method and layer, so the resolution rule written there for a
+  changed reading was not needed.
+- [x] A2.2 **A failed training footprint does not bar a probe (ruled 2026-09-05).** The
+  calibration briefly wired the training footprint into the probe path three ways: through
+  `_training_evidence_passed`, which runs for every consumer; through `report["passed"]`, which
+  `_view_evidence_passed` inherits; and through `run_preflight` itself, which raised when
+  `report["passed"]` was false and so could not produce a usable artifact for such a model at
+  all. A probe loads no optimiser, takes no gradient through a training step, and never reaches
+  `max_seq_length`, so none of that is evidence about the view. Found independently by the Head
+  of Interpretability and the Chief; ruled and fixed before the artifacts landed.
+  `consumer="view"` now reads no part of the footprint, and `report["passed"]` means the
+  model-level evidence a probe depends on: residual equivalence, a finite JVP, and memory within
+  budget. Verified across all four footprint states, not inferred.
 - [x] A3. **Probe CLIs are model-aware** — layers from the registry with fraction support
   (`e53bd81`; `policies.py:96-99`, resolution recorded with `source`), per-model adapter
   resolution (`policies.py:46,53-54`), spec threading (`47751cf`), loader migration (wave 1,

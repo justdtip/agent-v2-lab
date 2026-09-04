@@ -61,16 +61,52 @@ family per readout, as the P2 tables do.
    fractions {0.25, 0.5, 0.75} of each context (`--source-positions`); `future` sums the output
    tangent over positions after the source, `self` reads the source, `all` is their sum. A
    readout whose window is empty **raises**, never returns zero; the artifact records the
-   median future window per context and per readout. Corpus size 16 contexts (the paper's floor
+   median future window per context and per readout.
+   **Reduction, condition C2 (Head of Interpretability's ruling, 2026-09-05, issue #61):**
+   both axes are named here because the bare word "sum" is ambiguous about which one it
+   describes. *Within* one sample the reduction over target positions is a **sum**: `future`
+   sums the output tangent over the positions after the source (`pipeline/jlens.py:825-827`)
+   and `all` adds the source's own tangent to it. *Across* samples the accumulated vectors are
+   divided by the number used (`pipeline/jlens.py:859`), so the map is a **mean** over sources
+   and prompts. That is what the paper does — it differentiates a sum over target positions,
+   then averages over sources and prompts — and it is what the implementation already does.
+   Ruled: keep it, no code change. Both axes are to be named in the R34 conformance block of
+   every artifact, since an artifact that says only "sum" does not pin the readout.
+   **Consequence, stated knowingly (Chief’s addendum, 2026-09-05):** summing within a sample
+   while the sources sit at different depths means the windows are unequal — at
+   `--corpus-length 128` the three default sources leave 96, 64 and 32 positions — so the
+   earliest source sums about three times as many terms as the latest, which bounds its weight
+   in the cross-sample mean of `future` and `all` from above. The realised weight depends on how
+   the output tangent's magnitude falls with distance from the source, which this run does not
+   measure (clause narrowed by the Head of Interpretability, 2026-09-05: the threefold figure is
+   a count of summed terms, not a measured ratio of influence).
+   The estimate is a window-weighted mean by construction. The choice
+   stands; the record says so rather than leaving it to be discovered from the artifact.
+   Corpus size 16 contexts (the paper's floor
    is ten); (c) logit lens at the same layers as the no-Jacobian baseline.
 3. **Statistic.** Per point, is the true suffix's first token more probable than a wrong,
    previously-seen one? Matched context vs the same pair scored against another task's
    context (the null). Exact two-sided sign test; report both columns per readout, as the 3B
    table does. Positive control: the already-read suffix in matched vs mismatched context.
 4. **Single-decision spot check.** `agent-v2-jlens --model qwen35-4b --split test --task-index 7
-   --step 3 --force-prefix "<note up to invoice-2->" --jvp-method finite_difference` (omit `--layers` to take the registry default)
+   --step 3 --force-prefix 'Invoices read: 2 of 6. approved: 178; held (skip): 38. Reading
+   invoice-2-' --jvp-method finite_difference` (omit `--layers` to take the registry default)
    on the 3B's original probe task, for a like-for-like artifact beside
    `outputs/agent-v2/jlens-forced-suffix.json`.
+   **Prefix provenance (Head of Interpretability, 2026-09-05).** The string above replaces the
+   placeholder this step carried until now, which could not be run. It was **derived from the
+   generator**, not recovered from the original artifact: `make_tasks('test', ...)` for task
+   `test-ledger_reconcile-0007-clean`, whose step 3 reads `invoice-2-537.txt`, with the expert
+   note truncated immediately before the random suffix. No model was loaded to obtain it. The
+   original artifact records model, adapter, split, task id, step, layers, corpus size,
+   candidates and records, but **no `force_prefix` field**, so the string it was actually run
+   under is not recoverable from it; the derivation above is the reconstruction, and this spec
+   is its record. The same lookup confirms `--task-index 7` is the right index for split `test`.
+   **Condition (Chief, 2026-09-05).** The spot check runs **unstripped**, like-for-like with the
+   original: it is a copying measurement that reproduces the recorded probe's condition on the
+   new base, and the memory test is the sweep, which strips the `pending:` lists. Note that
+   `agent-v2-jlens` does not record the stripping condition in its artifact, so this clause is
+   the record for that run.
 5. **Layer list, one sweep (B5).** Layer kinds are fixed by the config (`is_linear = (i+1) %
    full_attention_interval != 0`): on the 4B the residual after an attention block sits at
    layers 4, 8, …, 32, everything else follows a linear-attention block. The registry fractions
@@ -105,6 +141,23 @@ family per readout, as the P2 tables do.
 - Code: the sweep parameterisation, RunLog on both CLIs, JSON output, the `jsweep` split in
   the R28 fingerprint test, the per-kind readout; fake-only tests (R31 for the JVP seam).
 - Preflight for `qwen35-4b` passed under R18a (it has); probe hold lifted by its terms.
+- **What the preflight's `jvp` block should read, and what a change in it would mean (Head of
+  Interpretability, 2026-09-05).** The probe layer is pinned at `view.num_layers // 2`
+  (`pipeline/preflight.py`, `_jvp_result`), so it is 16 on the 4B and 18 on the 3B, matching
+  both artifacts on disk. Forward mode fails on the 4B because the tail from layer 16 spans
+  blocks 16 to 31 and contains linear-attention blocks whichever layer it starts from, so the
+  fallback to `finite_difference` is a property of the operator and not of the probe layer's own
+  kind. The preflight calibration slice touches the JVP path in one line only, adding the
+  training-footprint conjunct to `passed`. **Therefore `finite_difference` is the expected
+  reading of a regenerated 4B artifact.** If it reads `forward`, the cause lies outside that
+  slice, in the library's autodiff support or in how the tail is built, and it is a red flag to
+  investigate before any run rather than a benign side effect. Resolution if the change proves
+  benign: pin the 4B to `finite_difference` too and record in the conformance block that the
+  method was chosen for comparability under R35 rather than taken from the preflight. Finite
+  differences stay valid wherever forward works, since two evaluations of the tail is a weaker
+  requirement than autodiff, so pinning costs only the second tail pass. Matching arms is the
+  load-bearing requirement; §3.2's "the method the preflight recorded" exists to keep the run on
+  a method the model supports, not to let the method float between arms.
 - Director lifts: the 3B base re-run and the adapter-A continuity run (~10 minutes each), the
   4B sweep (about 30 minutes: ~42 points × 9 layers × corpus 16, finite-difference JVPs at two
   tail passes each, prefills shared), and the single-decision check (minutes).

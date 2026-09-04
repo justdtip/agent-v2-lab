@@ -39,6 +39,36 @@ must be regenerated under schema 3 when lane 2 lands, before any 4B stage.*
   `c536353043eb5d0eb53dcb8ecd1eb275616b398ad089bdd7c3b08cdccae36e04`, 15:18). The standing
   hypothesis resolved: fused forward and stepwise loop are bitwise-identical on both bf16
   models. fp32 gap measured, never gated: 3B Frobenius 4.2e-3, 4B 2.8e-2.
+- [ ] A1.3 **SUPERSEDES A1.2's artifacts, not its finding (2026-09-05).** The two artifacts
+  A1.2 cites are `schema_version: 2`; the calibrated preflight module requires 3, so both were
+  regenerated on the night of 2026-09-05 and A1.2's SHA-256 digests no longer match anything on
+  disk. The **finding** stands unchanged: the fused forward and the stepwise loop are
+  bitwise-identical on both models, and that is a property of the models, not of the artifact
+  format. Regenerated bare, one at a time on an idle lane, both `passed: true`:
+
+  | model | snapshot revision | SHA-256 | JVP |
+  |---|---|---|---|
+  | `qwen35-4b` | `32f3e8ecf65426fc3306969496342d504bfa13f3` | `455aa0698266c628fe3fdb4eef8d50869cacf26b842b6b1818b832b14f5b8afb` | `finite_difference`, layer 16 |
+  | `qwen25-coder-3b` | `3dd939c621c08e5753d5b89f35a2642cd83b98ca` | `4a4862c44bad17f741ca7d897ef5ec17d3a13d0b07ee7f98f2e3373a2117e965` | `forward`, layer 18 |
+
+  `outputs/` is gitignored (`.gitignore:12`), so these artifacts are identified here by digest
+  and revision rather than by a committed path, as A1.2's pair was.
+- [ ] A1.4 **A bare preflight no longer satisfies a training run (2026-09-05, R32(d) as ruled
+  with the calibration).** `require_preflight(consumer="training")` now requires the
+  `training_footprint` block to be present, computed, not refused, and passed. A block that was
+  **skipped** for want of a row count records `passed: true` inside itself and still bars a
+  training run, because passing on it would clear the gate on a number nobody has. So
+  `agent-pipeline preflight --model <name>` on its own is **no longer sufficient** for any arm's
+  training gate: the arm's preflight must pass `--data <dir>` or `--max-row-tokens <int>`, and
+  `--gated-delta-chunk` where the arm configures one.
+
+  The probe side is deliberately unaffected. `consumer="view"` does not read the footprint at
+  all, and `report["passed"]` no longer carries it, so a model whose training footprint misses
+  its headroom still produces a usable artifact and is still probeable. A failed footprint is
+  recorded rather than fatal; the preflight command exits zero and the training consumer is the
+  one that refuses. Before B4 attempt 4 or either D arm, regenerate that arm's preflight **with
+  the row count** and check `training_footprint.passed` in the artifact rather than the
+  command's exit status.
 
 **A2. In-repo rendered rows, rendering-equivalence green** — **MET** (R14).
 Evidence: `cli.py:47,614` consumes `load_rendered_splits` (import, call site); byte-identical migration tests

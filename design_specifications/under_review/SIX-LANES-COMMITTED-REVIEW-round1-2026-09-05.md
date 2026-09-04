@@ -160,3 +160,130 @@ carrying the Chief's own R29 addendum 2, R37 and R26 amendment text, and the fiv
   `extra.summary.model`. Return the resolved spec from the inner functions (or read it back
   from the summary) and pass it through, so every stage's provenance has the same shape.
 - Suites `tests/test_rollout.py`, `tests/test_branch.py`, `tests/test_protocol.py`: 38 passed.
+
+## Gate: C7 provenance shape (rollout and branch), 2026-09-05 evening
+
+Worktree `agent-a58330251f8da8762`, based on `c741b28` (one records-only commit behind the
+head). Four files dirty, the four owned. Read in full.
+
+**Approved to commit.**
+
+- `run_rollout` and `run_branch_mining` take a keyword-only `on_resolved` sink, defaulting to
+  `None`, and fire it immediately after `load_policy`, before any task is generated. The return
+  shape is unchanged, so the two keyword-only call sites in `cli.py` are untouched. `Callable`
+  and `ResolvedSpec` were already imported in both modules.
+- Both entry points collect the sink into a list and pass its first element to
+  `write_provenance`, so the provenance file's top-level `model` is now the resolved identity,
+  matching the summary one level down and the shape the probe CLIs write.
+- The accepted deviation: an unfired sink degrades to the old shape (`None`) rather than
+  raising. Ruled acceptable: in production the sink cannot be unfired, raising there would kill
+  a run whose dataset is already on disk, and the two ends are pinned by tests (the real
+  function fires the sink; the entry points' provenance carries the resolved identity).
+- Tests: 21 passed bare in the worktree; ruff clean on the four files.
+- Follow-up, agreed as a separate issue: three `cli.py` sites still pass `resolved=None`
+  (`stage_select`, `stage_eval`, `stage_rollout`). The third is a one-line pass-through now
+  that `run_rollout` takes the sink; the first two need the same sink upstream in their helper.
+
+## Gate: EXP-001 slice C1 and C3 to C6 (issues #61, #62), 2026-09-05 night
+
+Worktree `agent-a0845fe6ae2bd578d`, based on `54e0796` (one commit behind head; the commit
+between is C7, disjoint files). Six files dirty, the six owned. Read in full.
+
+**Approved to commit.**
+
+- **C1.** `run_sweep` gathers, per prompt, every token id it must be scored against (its own
+  case's pair and its predecessor's through the rotation), scores each prompt once keyed on the
+  prompt string, and re-keys by candidate label for the artifact. The matched computation's
+  statistics are the ones recorded, as before. The test spies on the map entry point with a
+  token-dependent unembedding: sixteen maps uncached, eight cached, results and per-case blocks
+  identical. Exact saving, no number moves.
+- **C2, second half.** The conformance block carries `reduction` with `within_a_sample`,
+  `across_samples` and a definition of a sample; the docstrings and the markdown name both
+  axes. The claim that the across-sample division is removed by the final RMS norm before the
+  unembedding is correct, which is why only the within-sample axis was ever a choice.
+- **C3.** The prompt-rendering coordinate now carries `row_keep_last`, `rewindowed` and a
+  windowing rule. The sweep records `row_keep_last` as the protocol default, which is
+  `build_rows`' actual default (verified: `data.py:148`), and `rewindowed=False`.
+- **C4.** The literal nine-layer list (5, 11, 12, 16, 20, 21, 27, 28, 32), the partners and the
+  pairs are pinned beside the derivation test, whose docstring now states correctly that it is
+  blind to a change in its sources.
+- **C5.** The wrapper says it keeps the path and not the numbers; `research/jspace_probe.md`
+  carries the reproduction callout naming commit `1953493`. The markdown edit is within C5's
+  named scope.
+- **C6.** The Holm column is labelled and the dash explained.
+- Two suites: 53 passed in the worktree; ruff clean on all six files.
+- **Follow-up, agreed as its own issue.** `agent-v2-jlens` records `keep_last=None` meaning
+  "the default applied", while the sweep's `None` means "each case passed its own row's tool
+  count". The new coordinates disambiguate; `jlens` should record the effective default.
+
+## Gate: preflight footprint calibration (#51), round 1, 2026-09-05 night
+
+Worktree `agent-a8745dfdde8711c26`, based on the wip commit `7991927` (whose preflight and CLI
+modules are byte-identical to the main tree's uncommitted ones). Three files dirty. Read in
+full against the branch head, so the review covers the schema-3 slice and the calibration
+together, which is what the commit will carry.
+
+**Verified.**
+- The envelope: the floor is a least-squares line over the four no-recurrence points lifted to
+  its binding point; each recurrence form is fitted on the residual over the floor in its
+  declared shape (proportional, affine, flat) and lifted again; the chunked envelope no longer
+  reads the chunk. I evaluated all thirteen points myself: every estimate sits at or above its
+  measurement, including the three OOM lower bounds, and the predicted verdict at a 17.76 GiB
+  budget with 10% headroom equals the measured verdict at every point. Zero mismatches. The
+  chunked 1591-token case is refused on its own measurement (16.93 × 1.1 > budget), which is
+  the correct reading of the headroom rule, not a weakening of it.
+- The selector: `_select_recurrence_mode` validates the configured name first, then floor for a
+  backbone with no recurrence, then unrolled when no chunk is configured, else the calibrated
+  form for the name. That is `cli._training_backbone`'s order. Both halves of the falsification
+  are addressed.
+- Single-observation caveats on `unrolled` and `chunkwise`; coefficients and points recorded in
+  the artifact; domain departures (batch size, checkpointing) named, not scaled for.
+- Suites: 119 passed in the worktree. The two ruff findings are the pre-existing `render`
+  shadow in `cli.py` (#64), not this slice's.
+
+**Two conditions on this commit (K4, K5), then it lands with the bare regenerated artifacts.**
+- **K4.** `require_preflight(consumer="training")` accepts a skipped footprint: the bare
+  artifact's block carries `passed: true`, and `_training_evidence_passed` checks only
+  `passed`. So the moment tonight's artifacts exist, the training gate would pass a footprint
+  that was never computed. `_training_evidence_passed` must return False when the block is
+  `skipped` (or `refused`), with a test that the same bare artifact is accepted for the `view`
+  consumer and rejected for `training` with a reason naming the missing row count. Tonight's
+  probes use the `view` consumer and are unaffected.
+- **K5.** `_training_backbone` maps `chunkwise` to `install_chunkwise_gated_delta`, which does
+  not exist in the tree this commit produces (R32 stage 2 is unlanded). An arm configuring
+  chunkwise would fail with an AttributeError at train start, after the gate. Resolve the
+  installer with a default and raise a clear error naming the missing function and R32 stage 2,
+  with a test using a fake `training` module that lacks it.
+
+**Condition on the next training lift (T1), recorded on #51, not on this commit.** The
+footprint lives in a per-model artifact but is a per-arm question. Before a training gate
+reads it, either the artifact is regenerated with the arm's own chunk, mode, batch size and
+longest trained row immediately before the gate under the same lift, or
+`require_preflight(consumer="training")` compares those inputs against the arm and refuses a
+mismatch and any non-empty `calibration_domain_departures`. The Deputy's recommendation to
+defer the domain question is accepted; it is folded into T1.
+
+**Commit scope.** Only: `pipeline/preflight.py`, `pipeline/cli.py`, `tests/test_preflight.py`,
+`tests/test_models.py`, and the comment-only R32(b) lines in `configs/models/*.yaml`, plus the
+two regenerated `outputs/preflight/*.json`. Not: `configs/agent_v2b_qwen35_4b.yaml`,
+`training/__init__.py`, `training/gated_delta_chunkwise.py`, `tests/test_gated_delta_chunkwise.py`
+(R32 stage 2), `tests/test_arch.py`, `tests/test_probes.py`, `tests/test_cli.py` (other slices).
+
+**K4 revised (same night).** As written, K4 would have rejected the view consumer: the footprint check runs for every consumer (`:563`), footprint `passed` is a conjunct of `report["passed"]` (`:470`) on which `run_preflight` exits (`:475`), and the view evidence inherits it (`:1186`). Revised: footprint leaves `report["passed"]`; the training consumer requires the block present, not skipped, not refused, passed; the view consumer ignores it. Scope widened by `tests/test_cli.py` (one inert stage-2 line rides along, named in the commit message).
+
+**Round 2 (same night): K4 and K5 approved; the calibration commit is cleared.** Read the
+delta alone (`fix-k4-k5-mine-only.patch`) against the gated calibration. `report["passed"]` is
+now residual, finite JVP and memory within budget; `run_preflight` raises only on that; the
+footprint check moved out of `_training_evidence_passed` into `_footprint_rejection`, consulted
+only under the training consumer, which rejects a missing block, a refused form (read before
+`skipped`, deliberately), a skipped block naming the missing row count, and a failed estimate.
+The view consumer reads none of it. `_training_backbone` resolves the installer with a default
+and raises a `ValueError` naming the function and R32 stage 2, with no fallback. Tests: the
+bare artifact passes view and stops training; failed, refused and absent blocks likewise; the
+fixture's default footprint is computed-and-passing so the malformed-evidence cases cannot
+pass vacuously; the K5 guard is tested against a fake training module. 84 passed in the two
+suites. Implementer decisions accepted: three tests encoding the abolished expectation
+rewritten; a refused form no longer fails the command. Follow-up, not this commit: one line of
+operator output when `run_preflight` writes a failed or refused footprint and exits zero.
+Commit: the seven files plus `tests/test_cli.py`, with both regenerated artifacts named by
+snapshot revision; the Chief verifies the artifacts on disk before sending the green.
