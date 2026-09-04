@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import warnings
+from dataclasses import asdict
 from pathlib import Path
 
 import mlx.core as mx
@@ -21,6 +22,7 @@ import numpy as np
 import pytest
 
 from local_llm_lab.arch import ArchitectureView
+from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline import jlens
 from local_llm_lab.probes import adapter_delta, assistant_axis, capture, state_probe, stats
 
@@ -1565,13 +1567,14 @@ def test_reanalysis_marks_zero_variance_bootstrap_r2_undefined() -> None:
     assert math.isnan(state_probe._primary_score("regression", prediction, np.arange(3)))
 
 
+@pytest.mark.parametrize("model", ["qwen25-coder-3b", "qwen35-4b"])
 def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
-    tmp_path, monkeypatch
+    model, tmp_path, monkeypatch
 ) -> None:
     from local_llm_lab.pipeline import evaluate
 
     dataset = _offline_reanalysis_dataset()
-    dataset.meta["model"] = "qwen25-coder-3b"
+    dataset.meta["model"] = model
     captured = state_probe.save_dataset(dataset, tmp_path / "state-mini.npz")
 
     def forbidden_loader(*_args, **_kwargs):
@@ -1604,7 +1607,7 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
     markdown_path = output / "state-mini.reanalysis.md"
     payload = json.loads(json_path.read_text())
     assert payload["metadata"]["command"] == " ".join(sys.argv)
-    assert payload["metadata"]["model"] == "qwen25-coder-3b"
+    assert payload["metadata"]["model"] == model
     assert payload["metadata"]["elapsed_seconds"] >= 0.0
     model_spec = payload["metadata"]["model_spec"]
     assert set(model_spec) == {
@@ -1620,15 +1623,8 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         "memory_budget_gib",
         "policies",
     }
-    assert model_spec["name"] == "qwen25-coder-3b"
-    assert model_spec["hf_id"] == "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
-    assert model_spec["chat"] == {
-        "thinking": "unsupported",
-        "template_kwargs": {},
-        "end_of_turn": "<|im_end|>",
-        "extra_stop_tokens": ["<|endoftext|>"],
-        "max_think_tokens": 512,
-    }
+    expected_model_spec = json.loads(json.dumps(asdict(load_model_spec(dataset.meta["model"]))))
+    assert model_spec == expected_model_spec
     assert "Conclusions that survived" in markdown_path.read_text()
     first_payload = payload
     first_payload["metadata"].pop("elapsed_seconds")

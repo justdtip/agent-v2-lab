@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from local_llm_lab.pipeline.env import Simulator
-from local_llm_lab.pipeline.tasks import Task, task_from_id
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
 
 __all__ = [
     "Fact",
@@ -442,12 +442,32 @@ def _has_premature_completion(
     return actual[2] and not (phase_licensed or at_or_after_horizon)
 
 
-def _analyse_evaluation(path: Path, fallback_seed: int) -> dict[str, Any]:
+def _artifact_generator_version(recorded: object, explicit: int | None, *, source: Path) -> int:
+    for label, value in (("recorded", recorded), ("explicit", explicit)):
+        if value is not None and (type(value) is not int or not 1 <= value <= GENERATOR_VERSION):
+            raise ValueError(f"{source}: invalid {label} generator_version {value!r}")
+    if recorded is None and explicit is None:
+        raise ValueError(f"{source}: artifact has no generator_version; bind one explicitly")
+    if recorded is not None and explicit is not None and recorded != explicit:
+        raise ValueError(
+            f"{source}: recorded generator_version {recorded} conflicts with explicit {explicit}"
+        )
+    return int(recorded if recorded is not None else explicit)
+
+
+def _analyse_evaluation(
+    path: Path, fallback_seed: int, *, generator_version: int | None = None
+) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     summary = payload.get("summary", {})
     records = payload.get("trajectories", [])
     if not isinstance(summary, dict) or not isinstance(records, list):
         raise ValueError(f"{path}: expected summary object and trajectories list")
+    version = _artifact_generator_version(
+        summary.get("generator_version", payload.get("generator_version")),
+        generator_version,
+        source=path,
+    )
     seed = summary.get("data_seed", fallback_seed)
     keep_last = summary.get("keep_last")
     if not isinstance(seed, int) or not isinstance(keep_last, int) or keep_last < 0:
@@ -466,7 +486,7 @@ def _analyse_evaluation(path: Path, fallback_seed: int) -> dict[str, Any]:
             type(difficulty) is not int or difficulty < 0
         ):
             raise ValueError(f"{path}: {task_id} has invalid difficulty")
-        task = task_from_id(task_id, seed, difficulty=difficulty)
+        task = replay_task_from_id(task_id, seed, version, difficulty=difficulty)
         steps = record.get("steps", [])
         integrity = check_trajectory(
             task, steps if isinstance(steps, list) else [], keep_last=keep_last
@@ -483,6 +503,7 @@ def _analyse_evaluation(path: Path, fallback_seed: int) -> dict[str, Any]:
         "label": str(summary.get("label") or path.stem),
         "seed": seed,
         "keep_last": keep_last,
+        "generator_version": version,
         "records": analysed,
     }
 
@@ -527,6 +548,7 @@ def _source_rows(evaluations: list[dict[str, Any]]) -> list[list[Any]]:
             evaluation["path"],
             evaluation["seed"],
             evaluation["keep_last"],
+            evaluation["generator_version"],
             len(evaluation["records"]),
         ]
         for evaluation in evaluations
@@ -651,14 +673,18 @@ def _acceptance_rows(evaluation: dict[str, Any]) -> list[list[Any]]:
     ]
 
 
-def _render_evaluations(paths: list[Path], seed: int) -> str:
-    evaluations = [_analyse_evaluation(path, seed) for path in paths]
+def _render_evaluations(
+    paths: list[Path], seed: int, *, generator_version: int | None = None
+) -> str:
+    evaluations = [
+        _analyse_evaluation(path, seed, generator_version=generator_version) for path in paths
+    ]
     task_ids = _validated_task_ids(evaluations)
 
     lines = ["# Offline note-integrity comparison", "", "## Sources and configuration", ""]
     lines.extend(
         _table(
-            ["run", "source", "data seed", "keep-last", "tasks"],
+            ["run", "source", "data seed", "keep-last", "generator version", "tasks"],
             _source_rows(evaluations),
         )
     )
@@ -705,8 +731,12 @@ def main() -> None:
     parser.add_argument("--eval", dest="evaluations", action="append", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--seed", default=20260902, type=int)
+    parser.add_argument("--generator-version", type=int)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        _render_evaluations(args.evaluations, args.seed), encoding="utf-8"
+        _render_evaluations(
+            args.evaluations, args.seed, generator_version=args.generator_version
+        ),
+        encoding="utf-8",
     )

@@ -15,6 +15,7 @@ from local_llm_lab.pipeline.integrity import (
     Fact,
     IntegrityReport,
     Violation,
+    _artifact_generator_version,
     _render_evaluations,
     check_trajectory,
     completion_patterns,
@@ -22,6 +23,7 @@ from local_llm_lab.pipeline.integrity import (
 )
 from local_llm_lab.pipeline.runner import Trajectory
 from local_llm_lab.pipeline.tasks import (
+    GENERATOR_VERSION,
     VARIANTS,
     difficulty,
     make_tasks,
@@ -569,6 +571,7 @@ def _write_evaluation(path: Path, task, trace: list[dict], *, success: bool, lab
                     "label": label,
                     "data_seed": 20260902,
                     "keep_last": 0,
+                    "generator_version": GENERATOR_VERSION,
                 },
                 "trajectories": [trajectory.as_dict()],
             }
@@ -592,6 +595,24 @@ def test_cli_treats_default_trajectory_difficulty_as_legacy(tmp_path: Path) -> N
     rendered = _render_evaluations([evaluation], 20260902)
 
     assert "| legacy | 1/1 | 1/1 | 0 | 0/0 |" in rendered
+
+
+def test_artifact_generator_version_requires_recorded_or_explicit_binding(tmp_path: Path) -> None:
+    source = tmp_path / "legacy.json"
+    assert _artifact_generator_version(2, None, source=source) == 2
+    assert _artifact_generator_version(None, 1, source=source) == 1
+    with pytest.raises(ValueError, match="no generator_version"):
+        _artifact_generator_version(None, None, source=source)
+    with pytest.raises(ValueError, match="conflicts"):
+        _artifact_generator_version(2, 1, source=source)
+
+
+@pytest.mark.parametrize("invalid", [True, 0, GENERATOR_VERSION + 1, "1"])
+def test_artifact_generator_version_rejects_invalid_bindings(
+    tmp_path: Path, invalid: object
+) -> None:
+    with pytest.raises(ValueError, match="invalid recorded generator_version"):
+        _artifact_generator_version(invalid, None, source=tmp_path / "source.json")
 
 
 def test_cli_helper_renders_deterministic_offline_comparison(tmp_path: Path) -> None:
@@ -647,7 +668,7 @@ def test_retroactive_saved_evaluations_match_memo_contract(tmp_path: Path) -> No
     if not run_b.exists() or not run_c.exists():
         pytest.skip("saved B/C evaluations are not available")
 
-    rendered = _render_evaluations([run_b, run_c], 20260902)
+    rendered = _render_evaluations([run_b, run_c], 20260902, generator_version=1)
     destination = tmp_path / "comparison.md"
     destination.write_text(rendered)
 

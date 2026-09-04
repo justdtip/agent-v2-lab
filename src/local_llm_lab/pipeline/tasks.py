@@ -174,6 +174,38 @@ def task_from_id(
     seed: int,
     difficulty: int | None = None,
 ) -> Task:
+    return _task_from_id(task_id, seed, difficulty)
+
+
+def replay_task_from_id(
+    task_id: str,
+    seed: int,
+    generator_version: int,
+    difficulty: int | None = None,
+) -> Task:
+    """Rebuild one historical note template while retaining HEAD task structure."""
+    version = _validate_generator_version(generator_version)
+    task = _task_from_id(task_id, seed, difficulty)
+    if version == GENERATOR_VERSION:
+        return task
+    if task.variant == "clean":
+        return _replay_clean_notes(task, version)
+    clean_id = task_id.rsplit("-", 1)[0] + "-clean"
+    clean = _replay_clean_notes(_task_from_id(clean_id, seed, difficulty), version)
+    return _replay_recovery_notes(_with_historical_base_notes(task, clean), version)
+
+
+def _validate_generator_version(generator_version: int) -> int:
+    if type(generator_version) is not int or not 1 <= generator_version <= GENERATOR_VERSION:
+        raise ValueError(f"invalid generator_version {generator_version!r}")
+    return generator_version
+
+
+def _task_from_id(
+    task_id: str,
+    seed: int,
+    difficulty: int | None = None,
+) -> Task:
     try:
         split, family, index_text, variant = task_id.rsplit("-", 3)
     except ValueError as error:
@@ -201,6 +233,330 @@ def task_from_id(
     if task.variant != variant:
         raise ValueError(f"{task_id}: variant {variant!r} realised as {task.variant!r}")
     return replace(task, task_id=task_id, difficulty=level)
+
+
+def _replay_clean_notes(task: Task, version: int) -> Task:
+    """Render v1/v2 clean notes from the current task's unchanged files and actions.
+
+    Version 1 and 2 share clean notes.  Version 3 is Run-D; version 4 only revises the
+    state-preserving terminal-read wording.
+    """
+    if version == 4:
+        return task
+    if version == 3:
+        return _replay_v3_clean_notes(task)
+    steps = list(task.steps)
+    answer = task.expected_answer
+    finish = {
+        "read": f"The file shows Owner: {answer}. Task complete.",
+        "search": f"The matching file shows Status: {answer}. Task complete.",
+        "calculate": f"Calculator result is {answer}. Task complete.",
+        "synthesis": f"Total cost is {answer}. Task complete.",
+        "update": f"Verified the file now shows {answer}. Task complete.",
+        "list": f"First line of the summary is {answer}. Task complete.",
+        "pointer_chain": f"The final node reports Result: {answer}. Task complete.",
+    }.get(task.family)
+    if finish is not None:
+        steps[-1] = replace(steps[-1], thought=finish)
+    else:
+        {
+            "ledger_reconcile": _replay_v2_ledger,
+            "cross_reference": _replay_v2_cross_reference,
+            "conditional_update": _replay_v2_conditional,
+            "batch_update": _replay_v2_batch,
+            "aggregate_report": _replay_v2_aggregate,
+        }[task.family](task, steps)
+    return replace(task, steps=tuple(steps))
+
+
+def _replay_v3_clean_notes(task: Task) -> Task:
+    """Undo only 83ca7e1's clean-row state-preserving corrections."""
+    steps = list(task.steps)
+    if task.family == "ledger_reconcile":
+        for index, step in enumerate(steps):
+            steps[index] = replace(
+                step,
+                thought=step.thought.replace(
+                    "then sum the approved amounts and update the summary.", "pending: none."
+                ),
+            )
+    elif task.family == "conditional_update":
+        steps[0] = replace(steps[0], thought=steps[0].thought.removeprefix("loads so far: none. "))
+        steps[1] = replace(steps[1], thought=steps[1].thought.removeprefix("loads so far: none. "))
+        for index, step in enumerate(steps):
+            steps[index] = replace(
+                step,
+                thought=step.thought.replace("then select the highest load.", "pending: none."),
+            )
+    elif task.family == "aggregate_report":
+        for index, step in enumerate(steps):
+            steps[index] = replace(
+                step,
+                thought=step.thought.replace(
+                    "then calculate the two subtotals.", "pending: none."
+                ),
+            )
+    return replace(task, steps=tuple(steps))
+
+
+def _replay_recovery_notes(task: Task, version: int) -> Task:
+    """Retain current recovery actions while selecting their historical note profile."""
+    steps = list(task.steps)
+    if task.variant == "wrong_path":
+        _replay_wrong_path_notes(steps, version)
+    elif task.variant == "stale_path":
+        _replay_stale_path_notes(steps, version)
+    elif task.variant == "failed_edit":
+        _replay_failed_edit_notes(steps, version)
+    return replace(task, steps=tuple(steps))
+
+
+def _with_historical_base_notes(task: Task, clean: Task) -> Task:
+    """Put historical clean thoughts back onto the current recovery action sequence."""
+    steps = list(task.steps)
+    bad = next(index for index, step in enumerate(steps) if not step.supervise)
+    skip = {bad}
+    if task.variant in {"stale_path", "failed_edit"}:
+        skip.add(bad + 1)
+    base = iter(clean.steps)
+    for index, step in enumerate(steps):
+        if index in skip:
+            continue
+        historical = next(base)
+        if step.action != historical.action:
+            raise RuntimeError(f"{task.task_id}: recovery no longer matches clean action structure")
+        steps[index] = replace(step, thought=historical.thought)
+    try:
+        next(base)
+    except StopIteration:
+        return replace(task, steps=tuple(steps))
+    raise RuntimeError(f"{task.task_id}: recovery omitted a clean action")
+
+
+def _replay_wrong_path_notes(steps: list[Step], version: int) -> None:
+    bad = next(index for index, step in enumerate(steps) if not step.supervise)
+    guess = steps[bad].action.arguments["path"]
+    recovery = steps[bad + 1]
+    if bad == 0:
+        steps[bad] = replace(steps[bad], thought=f"Trying guessed path {guess} before listing the directory.")
+        steps[bad + 1] = replace(
+            recovery,
+            thought=(
+                "That guessed path does not exist. List the directory first, then use only the exact paths it reports. "
+                + recovery.thought
+            ),
+        )
+        return
+    if version == 1:
+        # v1 used the interrupted thought; v2 introduced the explicit guessed-path sentence.
+        steps[bad] = replace(steps[bad], thought=recovery.thought.rsplit(" instead of guessing: ", 1)[-1])
+    else:
+        steps[bad] = replace(steps[bad], thought=f"Trying guessed path {guess}.")
+    steps[bad + 1] = replace(
+        recovery,
+        thought=(
+            f"That path does not exist; use the exact path from the earlier tool result instead of guessing: "
+            f"{recovery.action.arguments['path']}. {recovery.thought}"
+        ),
+    )
+
+
+def _replay_stale_path_notes(steps: list[Step], version: int) -> None:
+    bad = next(index for index, step in enumerate(steps) if not step.supervise)
+    guess = steps[bad].action.arguments["path"]
+    if version == 1:
+        recovered = steps[bad + 2].thought.removeprefix("The listing gives the exact name. ")
+        steps[bad] = replace(steps[bad], thought=recovered)
+    else:
+        steps[bad] = replace(steps[bad], thought=f"Trying stale guessed path {guess}.")
+    steps[bad + 1] = replace(
+        steps[bad + 1],
+        thought=(
+            "That path does not exist and the earlier listing is no longer visible, so list the "
+            "directory again for the exact names instead of guessing."
+        ),
+    )
+    recovered = steps[bad + 2]
+    steps[bad + 2] = replace(
+        recovered, thought="The listing gives the exact name. " + recovered.thought
+    )
+
+
+def _replay_failed_edit_notes(steps: list[Step], _version: int) -> None:
+    bad = next(index for index, step in enumerate(steps) if not step.supervise)
+    reread = steps[bad + 1]
+    steps[bad + 1] = replace(
+        reread,
+        thought=(
+            "The replacement failed because that exact text is not in the file, so re-read it to "
+            "see its current contents instead of retrying the same edit."
+        ),
+    )
+    recovered = steps[bad + 2]
+    steps[bad + 2] = replace(
+        recovered,
+        thought="The file's current text confirms the exact string to replace. " + recovered.thought,
+    )
+
+
+def _replay_v2_ledger(task: Task, steps: list[Step]) -> None:
+    invoice_paths = sorted(path for path in task.files if "/invoice-" in path)
+    approved: list[int] = []
+    held: list[int] = []
+    invoice_steps = [index for index, step in enumerate(steps) if "/invoice-" in step.action.arguments.get("path", "")]
+    for position, (step_index, path) in enumerate(zip(invoice_steps, invoice_paths, strict=True)):
+        amount = int(re.search(r"amount=(\d+)", task.files[path]).group(1))
+        status = re.search(r"status=(\w+)", task.files[path]).group(1)
+        steps[step_index] = replace(
+            steps[step_index],
+            thought=(
+                f"Invoices read: {position} of {len(invoice_paths)}. approved: {_join(approved)}; "
+                f"held (skip): {_join(held)}. Reading {_short(path)}; {_pending(invoice_paths[position + 1:])}."
+            ),
+        )
+        (approved if status == "approved" else held).append(amount)
+    summary = next(path for path in task.files if path.endswith("/summary.txt"))
+    total = str(sum(approved))
+    action_indices = {step.action.name: [] for step in steps}
+    for index, step in enumerate(steps):
+        action_indices.setdefault(step.action.name, []).append(index)
+    calculate = action_indices["calculate"][-1]
+    report_reads = [index for index in action_indices["read_file"] if steps[index].action.arguments["path"] == summary]
+    replace_index = action_indices["replace_text"][-1]
+    steps[calculate] = replace(steps[calculate], thought=(f"All {len(invoice_paths)} invoices read. approved: {_join(approved)}; held skipped: {_join(held)}. Summing approved amounts."))
+    steps[report_reads[0]] = replace(steps[report_reads[0]], thought=f"Approved total = {total}. Inspecting the summary before editing.")
+    steps[replace_index] = replace(steps[replace_index], thought=f"Summary contains approved_total=PENDING. Replacing PENDING with {total}.")
+    steps[report_reads[-1]] = replace(steps[report_reads[-1]], thought="Replacement confirmed by the tool. Re-reading the summary to verify.")
+    steps[-1] = replace(steps[-1], thought=f"Verified the summary reads approved_total={total}. Task complete.")
+
+
+def _replay_v2_cross_reference(task: Task, steps: list[Step]) -> None:
+    searches = [index for index, step in enumerate(steps) if step.action.name == "search_files"]
+    targets = [steps[index + 1].action.arguments["path"] for index in searches]
+    for hop, (search_index, target) in enumerate(zip(searches, targets, strict=True)):
+        key = steps[search_index].action.arguments["query"]
+        search_note = (
+            f"Plan: search each key, read the matching record, follow Next-Key until a Resolution appears. Searching {key}."
+            if hop == 0
+            else f"Hop {hop}: record gave Next-Key {key}, no Resolution yet. Searching for it; the file whose Lookup-Key equals it is the new one."
+        )
+        matches = _search_matches(task.files, key)
+        steps[search_index] = replace(steps[search_index], thought=search_note)
+        steps[search_index + 1] = replace(
+            steps[search_index + 1], thought=_match_note(matches, target, targets[:hop])
+        )
+    steps[-1] = replace(steps[-1], thought=f"The record shows Resolution: {task.expected_answer}. Task complete.")
+
+
+def _replay_v2_conditional(task: Task, steps: list[Step]) -> None:
+    policy = next(path for path in task.files if path.endswith("/policy.txt"))
+    threshold = int(re.search(r"threshold=(\d+)", task.files[policy]).group(1))
+    services = sorted(path for path in task.files if "/service-" in path)
+    loads = [int(re.search(r"load=(\d+)", task.files[path]).group(1)) for path in services]
+    steps[0] = replace(steps[0], thought="Plan: read the policy threshold, list services, read every service load, throttle the highest load if above threshold, re-read to verify, report. Reading policy.")
+    steps[1] = replace(steps[1], thought=f"threshold={threshold}. Listing the service files.")
+    best_index: int | None = None
+    best_load: int | None = None
+    for position, path in enumerate(services):
+        step_index = next(index for index, step in enumerate(steps) if step.action.arguments.get("path") == path)
+        label = f"service-{best_index}={best_load}" if best_index is not None else "none"
+        steps[step_index] = replace(steps[step_index], thought=(f"threshold={threshold}. highest so far: {label}. Reading service {position + 1} of {len(services)}: {_short(path)}; {_pending(services[position + 1:])}."))
+        if best_load is None or loads[position] > best_load:
+            best_index, best_load = position, loads[position]
+    target = services[best_index]
+    replace_index = next(index for index, step in enumerate(steps) if step.action.name == "replace_text")
+    verify_index = next(index for index, step in enumerate(steps[replace_index + 1:], replace_index + 1) if step.action.name == "read_file")
+    steps[replace_index] = replace(steps[replace_index], thought=(f"threshold={threshold}. highest so far: service-{best_index}={best_load} (final), above threshold, so throttle {_short(target)}."))
+    steps[verify_index] = replace(steps[verify_index], thought=f"Replacement confirmed for service-{best_index}. Re-reading to verify.")
+    steps[-1] = replace(steps[-1], thought=f"Verified service-{best_index} now has mode=throttled. Task complete.")
+
+
+def _replay_v2_batch(task: Task, steps: list[Step]) -> None:
+    manifest = next(path for path in task.files if path.endswith("/manifest.txt"))
+    targets = []
+    for line in task.files[manifest].splitlines():
+        path, modes = line.split("|", 1)
+        old, new = modes.removeprefix("mode=").split("->mode=", 1)
+        targets.append((path, old, new))
+    count = len(targets)
+    worker_paths = {path for path, _, _ in targets}
+    reads = [
+        index
+        for index, step in enumerate(steps)
+        if step.action.name == "read_file" and step.action.arguments.get("path") in worker_paths
+    ]
+    inspect, verify = reads[:count], reads[count:]
+    for number, (step_index, target) in enumerate(zip(inspect, targets, strict=True)):
+        prefix = (
+            f"Phase inspect begins; manifest read, {count} workers queued. "
+            if number == 0
+            else "Phase inspect. "
+        )
+        steps[step_index] = replace(
+            steps[step_index],
+            thought=(f"{prefix}Next: {_queue_line(target)}. Remaining after this: {_queue_tail(targets[number + 1:])}."),
+        )
+    replacements = [index for index, step in enumerate(steps) if step.action.name == "replace_text"]
+    for number, (step_index, target) in enumerate(zip(replacements, targets, strict=True)):
+        prefix = (
+            f"Phase apply begins; all {count} workers inspected. "
+            if number == 0
+            else "Phase apply. "
+        )
+        steps[step_index] = replace(
+            steps[step_index],
+            thought=(f"{prefix}Next: {_queue_line(target)}. Remaining after this: {_queue_tail(targets[number + 1:])}."),
+        )
+    for number, (step_index, target) in enumerate(zip(verify, targets, strict=True)):
+        prefix = (
+            f"Phase apply complete, all {count} replacements confirmed; phase verify begins. "
+            if number == 0
+            else "Phase verify. "
+        )
+        steps[step_index] = replace(
+            steps[step_index],
+            thought=(f"{prefix}Next: {_verify_line(target)}. Remaining after this: {_verify_tail(targets[number + 1:])}."),
+        )
+    steps[-1] = replace(
+        steps[-1], thought=f"Phase verify complete; all {count} workers verified. Task complete."
+    )
+
+
+def _replay_v2_aggregate(task: Task, steps: list[Step]) -> None:
+    metrics = sorted(path for path in task.files if "/metric-" in path)
+    values = [int(task.files[path].rsplit("value=", 1)[1]) for path in metrics]
+    split = len(values) // 2
+    first_half: list[int] = []
+    second_half: list[int] = []
+    metric_steps = [
+        index
+        for index, step in enumerate(steps)
+        if step.action.name == "read_file" and step.action.arguments.get("path") in metrics
+    ]
+    for position, (step_index, path) in enumerate(zip(metric_steps, metrics, strict=True)):
+        first_label = (
+            f"{_join(first_half)} (full)" if len(first_half) == split else _join(first_half)
+        )
+        steps[step_index] = replace(
+            steps[step_index],
+            thought=(f"first half: {first_label}; second half: {_join(second_half)}. Reading metric {position + 1} of {len(metrics)}: {_short(path)}; {_pending(metrics[position + 1:])}."),
+        )
+        (first_half if position < split else second_half).append(values[position])
+    first_expression = " + ".join(map(str, values[:split]))
+    second_expression = " + ".join(map(str, values[split:]))
+    first_total, second_total = sum(values[:split]), sum(values[split:])
+    grand_total = first_total + second_total
+    calculations = [index for index, step in enumerate(steps) if step.action.name == "calculate"]
+    steps[calculations[0]] = replace(steps[calculations[0]], thought=(f"first half complete: {first_expression}; second half complete: {second_expression}. Computing the first subtotal."))
+    steps[calculations[1]] = replace(steps[calculations[1]], thought=(f"First subtotal = {first_total}. Computing the second subtotal {second_expression}."))
+    steps[calculations[2]] = replace(steps[calculations[2]], thought=f"Subtotals {first_total} and {second_total}. Adding them for the grand total.")
+    report = next(path for path in task.files if path.endswith("/report.txt"))
+    report_reads = [index for index, step in enumerate(steps) if step.action.name == "read_file" and step.action.arguments.get("path") == report]
+    replacement = next(index for index, step in enumerate(steps) if step.action.name == "replace_text")
+    steps[report_reads[0]] = replace(steps[report_reads[0]], thought=f"Grand total = {grand_total}. Inspecting report.txt before editing.")
+    steps[replacement] = replace(steps[replacement], thought=f"Report contains grand_total=PENDING. Replacing PENDING with {grand_total}.")
+    steps[report_reads[-1]] = replace(steps[report_reads[-1]], thought="Replacement confirmed by the tool. Re-reading the report to verify.")
+    steps[-1] = replace(steps[-1], thought=f"Verified the report reads grand_total={grand_total}. Task complete.")
 
 
 def render_expert_note(task: Task, step_index: int) -> str:

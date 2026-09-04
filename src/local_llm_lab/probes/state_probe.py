@@ -47,7 +47,7 @@ import numpy as np
 
 from local_llm_lab.pipeline.data import build_rows
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt, parse_turn
-from local_llm_lab.pipeline.tasks import Task
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import capture_residuals, strip_state_fields
 
@@ -366,6 +366,7 @@ def build_label_dataset(
         step_index=np.array(step_indices, dtype=np.int64),
         difficulty=np.array(levels, dtype=np.int64),
         meta={
+            "generator_version": GENERATOR_VERSION,
             "rows": len(task_ids),
             "tasks": len(tasks),
             "layers": [0],
@@ -408,6 +409,7 @@ def build_probe_dataset(
         import mlx.core as mlx_runtime
 
     checkpoint_context = dict(checkpoint_context or {})
+    checkpoint_context.setdefault("generator_version", GENERATOR_VERSION)
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -483,6 +485,7 @@ def build_probe_dataset(
                     step_index=np.array(step_indices_part, dtype=np.int64),
                     difficulty=np.array(levels_part, dtype=np.int64),
                     meta={
+                        "generator_version": GENERATOR_VERSION,
                         "rows": len(task_ids_part),
                         "tasks": 1,
                         "layers": list(layers),
@@ -542,6 +545,7 @@ def build_probe_dataset(
         step_index=np.array(step_indices, dtype=np.int64),
         difficulty=np.array(levels, dtype=np.int64),
         meta={
+            "generator_version": GENERATOR_VERSION,
             "rows": len(task_ids),
             "tasks": len(tasks),
             "layers": list(layers),
@@ -1505,24 +1509,43 @@ def _task_coordinates(task_id: str, family: str) -> tuple[str, int]:
     return split, int(match.group(1))
 
 
-def _regenerate_tasks(dataset: ProbeDataset, data_seed: int) -> dict[str, Task]:
-    """Regenerate exactly the tasks named by a capture and reject a provenance mismatch."""
-    from local_llm_lab.pipeline.tasks import make_tasks
-
-    requested: dict[str, int] = {}
-    families: dict[str, str] = {}
-    for task_id, family in zip(dataset.task_ids.tolist(), dataset.family.tolist(), strict=True):
-        families.setdefault(task_id, family)
-        split, index = _task_coordinates(task_id, family)
-        requested[split] = max(requested.get(split, -1), index)
-    regenerated: dict[str, Task] = {}
-    for split, maximum in sorted(requested.items()):
-        tasks = (
-            make_tasks(split, maximum + 1, data_seed, perturb=False)
-            if split == "test"
-            else make_tasks(split, maximum + 1, data_seed)
+def _reanalysis_generator_version(metadata: dict[str, Any], explicit: int | None) -> int:
+    recorded = metadata.get("generator_version")
+    for label, value in (("recorded", recorded), ("explicit", explicit)):
+        if value is not None and (type(value) is not int or not 1 <= value <= GENERATOR_VERSION):
+            raise ValueError(f"invalid {label} generator_version {value!r}")
+    if recorded is None and explicit is None:
+        raise ValueError("capture has no generator_version; bind one explicitly")
+    if recorded is not None and explicit is not None and recorded != explicit:
+        raise ValueError(
+            f"recorded generator_version {recorded} conflicts with explicit {explicit}"
         )
-        regenerated.update({task.task_id: task for task in tasks})
+    return int(recorded if recorded is not None else explicit)
+
+
+def _regenerate_tasks(
+    dataset: ProbeDataset, data_seed: int, *, generator_version: int | None = None
+) -> dict[str, Task]:
+    """Regenerate exactly the tasks named by a capture and reject a provenance mismatch."""
+    families: dict[str, str] = {}
+    difficulties: dict[str, int | None] = {}
+    version = _reanalysis_generator_version(dataset.meta, generator_version)
+    for task_id, family, difficulty in zip(
+        dataset.task_ids.tolist(), dataset.family.tolist(), dataset.difficulty.tolist(), strict=True
+    ):
+        families.setdefault(task_id, family)
+        saved_difficulty = int(difficulty)
+        prior = difficulties.setdefault(task_id, None if saved_difficulty == -1 else saved_difficulty)
+        if prior != (None if saved_difficulty == -1 else saved_difficulty):
+            raise ValueError(f"saved task {task_id} has inconsistent difficulties")
+    regenerated: dict[str, Task] = {}
+    for task_id, family in families.items():
+        task = replay_task_from_id(
+            task_id, data_seed, version, difficulty=difficulties[task_id]
+        )
+        if task.family != family:
+            raise ValueError(f"saved task {task_id} does not match saved family {family}")
+        regenerated[task_id] = task
     missing = sorted(set(families) - set(regenerated))
     if missing:
         raise ValueError(
@@ -1537,10 +1560,10 @@ def _lexical_token_count(text: str) -> int:
 
 
 def _offline_rows(
-    dataset: ProbeDataset, *, data_seed: int
+    dataset: ProbeDataset, *, data_seed: int, generator_version: int | None = None
 ) -> tuple[dict[str, np.ndarray], np.ndarray, dict[str, Any]]:
     """Rebuild revised labels and tokenizer-free surface features in saved-row order."""
-    tasks = _regenerate_tasks(dataset, data_seed)
+    tasks = _regenerate_tasks(dataset, data_seed, generator_version=generator_version)
     families = sorted(set(dataset.family.tolist()))
     family_index = {family: index for index, family in enumerate(families)}
     row_lookup = {
@@ -2123,6 +2146,7 @@ def reanalyse_dataset(
     bootstrap_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
     data_seed: int = 20260902,
     captured_data_seed: int | None = None,
+    generator_version: int | None = None,
     ridge_alpha: float = 10.0,
     logistic_l2: float = 0.01,
     logistic_steps: int = 120,
@@ -2141,7 +2165,10 @@ def reanalyse_dataset(
         raise ValueError(
             f"captured data seed {int(recorded_data_seed)} does not match requested seed {data_seed}"
         )
-    labels, surface, surface_meta = _offline_rows(dataset, data_seed=data_seed)
+    resolved_generator_version = _reanalysis_generator_version(dataset.meta, generator_version)
+    labels, surface, surface_meta = _offline_rows(
+        dataset, data_seed=data_seed, generator_version=resolved_generator_version
+    )
     all_rows = np.ones(len(dataset), dtype=bool)
     train_prefix = np.array(
         [str(task_id).startswith("train-") for task_id in dataset.task_ids], dtype=bool
@@ -2195,6 +2222,7 @@ def reanalyse_dataset(
             "surface_features": list(_SURFACE_FEATURE_NAMES),
             "surface_feature_details": surface_meta,
             "data_seed": data_seed,
+            "generator_version": resolved_generator_version,
             "model": dataset.meta.get("model"),
             "source_metadata": dataset.meta,
             "fit": {
@@ -2403,11 +2431,14 @@ def _main_reanalyse(argv: list[str]) -> None:
     parser.add_argument("--split-seeds", default=",".join(map(str, DEFAULT_REANALYSIS_SPLIT_SEEDS)))
     parser.add_argument("--bootstrap-resamples", type=int, default=DEFAULT_BOOTSTRAP_RESAMPLES)
     parser.add_argument("--data-seed", type=int, default=20260902)
+    parser.add_argument("--generator-version", type=int)
     parser.add_argument("--logistic-steps", type=int, default=120)
     args = parser.parse_args(argv)
     seeds = tuple(int(value) for value in args.split_seeds.split(",") if value.strip())
     dataset = load_dataset(args.input)
     capture_context = _captured_context(args.input)
+    if "generator_version" not in dataset.meta and "generator_version" in capture_context:
+        dataset.meta["generator_version"] = capture_context["generator_version"]
     captured_data_seed = capture_context.get("data_seed", dataset.meta.get("data_seed"))
     results = reanalyse_dataset(
         dataset,
@@ -2415,6 +2446,7 @@ def _main_reanalyse(argv: list[str]) -> None:
         bootstrap_resamples=args.bootstrap_resamples,
         data_seed=args.data_seed,
         captured_data_seed=captured_data_seed,
+        generator_version=args.generator_version,
         logistic_steps=args.logistic_steps,
     )
     if capture_context:
@@ -2896,6 +2928,7 @@ def main() -> None:
                     "splits": [name for name, _ in plan],
                     "mix_difficulty": bool(args.mix_difficulty),
                     "data_seed": args.data_seed,
+                    "generator_version": GENERATOR_VERSION,
                 },
                 spec=spec,
             )

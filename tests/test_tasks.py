@@ -15,6 +15,7 @@ from local_llm_lab.pipeline.tasks import (
     LONG_HORIZON_FAMILIES,
     family_balanced_tasks,
     make_tasks,
+    replay_task_from_id,
     task_from_id,
 )
 
@@ -561,3 +562,110 @@ def test_run_d_conditional_and_recovery_notes_preserve_family_state(level: int) 
         if task.variant not in {"wrong_path", "stale_path"}:
             continue
         _assert_family_recoveries(task)
+
+
+@pytest.mark.parametrize(
+    ("generator_version", "historical_finish"),
+    [
+        (1, "The file shows Owner: owner-7158. Task complete."),
+        (2, "The file shows Owner: owner-7158. Task complete."),
+        (3, "Owner: owner-7158; pending: none."),
+        (4, "Owner: owner-7158; pending: none."),
+    ],
+)
+def test_replay_task_from_id_keeps_current_structure_and_selects_historical_notes(
+    generator_version: int, historical_finish: str
+) -> None:
+    """R12 replays the named revision's thought template without changing task structure."""
+    task_id = "test-read-0000-clean"
+    current = task_from_id(task_id, 20260902, 2)
+    replayed = replay_task_from_id(task_id, 20260902, generator_version, 2)
+
+    assert [step.action for step in replayed.steps] == [step.action for step in current.steps]
+    assert replayed.prompt == current.prompt
+    assert replayed.steps[-1].thought == historical_finish
+    assert task_from_id(task_id, 20260902, 2) == current
+
+
+@pytest.mark.parametrize("generator_version", [True, 0, 5, "3"])
+def test_replay_task_from_id_rejects_invalid_historical_generator_versions(
+    generator_version: object,
+) -> None:
+    with pytest.raises(ValueError, match="generator_version"):
+        replay_task_from_id("test-read-0000-clean", 20260902, generator_version, 2)  # type: ignore[arg-type]
+
+
+def test_normal_generation_has_no_historical_generator_switch() -> None:
+    with pytest.raises(TypeError):
+        make_tasks("test", 1, generator_version=1)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize(
+    ("family", "v2_fragment", "v3_fragment"),
+    [
+        ("ledger_reconcile", "Task complete.", "pending: none."),
+        ("cross_reference", "Task complete.", "pending: none."),
+        ("conditional_update", "Task complete.", "loads so far:"),
+        ("batch_update", "Task complete.", "Applied"),
+        ("aggregate_report", "Task complete.", "values so far:"),
+    ],
+)
+def test_replay_selects_each_historical_long_family_note_profile(
+    family: str, v2_fragment: str, v3_fragment: str
+) -> None:
+    task = next(
+        item
+        for item in make_tasks("train", 144, difficulty=1)
+        if item.family == family and item.variant == "clean"
+    )
+    v2 = replay_task_from_id(task.task_id, 20260902, 2, 1)
+    v3 = replay_task_from_id(task.task_id, 20260902, 3, 1)
+
+    assert v2.steps[-1].thought != v3.steps[-1].thought
+    assert v2_fragment in v2.steps[-1].thought
+    assert v3_fragment in v3.steps[-1].thought
+
+
+@pytest.mark.parametrize(
+    ("variant", "v1_prefix", "v2_prefix", "v4_suffix", "difference_index"),
+    [
+        ("wrong_path", "Search matched", "Trying guessed path", "Search matched", 0),
+        ("stale_path", "Invoices read:", "Trying stale guessed path", "Invoices read:", 0),
+        ("failed_edit", "File contains", "File contains", "File contains", 1),
+    ],
+)
+def test_replay_preserves_historical_recovery_injected_note_profiles(
+    variant: str, v1_prefix: str, v2_prefix: str, v4_suffix: str, difference_index: int
+) -> None:
+    task = next(
+        item
+        for item in make_tasks("train", 144, difficulty=1)
+        if item.variant == variant
+    )
+    v1 = replay_task_from_id(task.task_id, 20260902, 1, 1)
+    v2 = replay_task_from_id(task.task_id, 20260902, 2, 1)
+    v3 = replay_task_from_id(task.task_id, 20260902, 3, 1)
+    v4 = replay_task_from_id(task.task_id, 20260902, 4, 1)
+    injected = next(index for index, step in enumerate(v4.steps) if not step.supervise)
+
+    assert v1.steps[injected].thought.startswith(v1_prefix)
+    assert v2.steps[injected].thought.startswith(v2_prefix)
+    assert v2.steps[injected].thought == v3.steps[injected].thought
+    assert v4_suffix in v4.steps[injected].thought
+    assert (
+        v4.steps[injected + difference_index].thought
+        != v3.steps[injected + difference_index].thought
+    )
+    assert v1.steps[-1].thought != v4.steps[-1].thought
+    if variant == "wrong_path":
+        assert v2.steps[injected + 1].thought.startswith(
+            "That path does not exist; use the exact path"
+        )
+    elif variant == "stale_path":
+        assert v2.steps[injected + 1].thought.endswith("instead of guessing.")
+        assert v2.steps[injected + 2].thought.startswith("The listing gives the exact name. ")
+    else:
+        assert v2.steps[injected + 1].thought.endswith("instead of retrying the same edit.")
+        assert v2.steps[injected + 2].thought.startswith(
+            "The file's current text confirms the exact string to replace. "
+        )
