@@ -9,7 +9,8 @@ adds to or relaxes it.
 As of: `0b5227e`, suite **1016 passed, exit 0** bare (combined tree with lane 2 uncommitted) (green on every bare run since; earlier note: nine consecutive green runs including
 `tests/test_patch.py` alone and reversed file order; two auditors each saw one transient red in
 that file during an implementer's edit window, not reproduced since).
-Updated: 2026-09-05 by the Deputy after the four R26 commits `c1f7d51`…`2405598` (A8 met; carried
+Updated: 2026-09-05 evening by the Deputy — third currency audit applied (three anchors
+re-derived; every artifact, figure and status re-measured current). Earlier: after the four R26 commits `c1f7d51`…`2405598` (A8 met; carried
 by docs commits `a9c1535`/`e6500ba`), then re-audited line by line (second audit).
 
 ## Part 0 — gate mechanics (before anything else can tick)
@@ -27,7 +28,8 @@ with 10% headroom (lane 2, uncommitted pending calibration from the probe); the 
 must be regenerated under schema 3 when lane 2 lands, before any 4B stage.*
 - [x] A1.1 **MET — committed `ed88c96` (issue #23).** `run_preflight` gates on
   `native_manual_vs_native` (criterion `native_dtype_rms_roundoff_and_frobenius_relative`,
-  derived floor AND Frobenius ≤ 1e-4; `preflight.py:288-330`); `fp32_manual_vs_native` is
+  derived floor AND Frobenius ≤ 1e-4; `preflight.py:390-436` in the current tree — the R32
+  lane-2 edits shift this file; cite `_native_gate_passed`/`_residual_equivalence` by name); `fp32_manual_vs_native` is
   reported, never gated. The override-branch test is included.
 - [x] A1.2 **MET.** Both preflights run by the Director under the R18a gate (schema 2,
   criterion `native_dtype_rms_roundoff_and_frobenius_relative`): `outputs/preflight/qwen35-4b.json`
@@ -39,7 +41,7 @@ must be regenerated under schema 3 when lane 2 lands, before any 4B stage.*
   models. fp32 gap measured, never gated: 3B Frobenius 4.2e-3, 4B 2.8e-2.
 
 **A2. In-repo rendered rows, rendering-equivalence green** — **MET** (R14).
-Evidence: `cli.py:46,519` consumes `load_rendered_splits`; byte-identical migration tests
+Evidence: `cli.py:47,614` consumes `load_rendered_splits` (import, call site); byte-identical migration tests
 `tests/test_data.py:252,271`; committed at `a871245`.
 
 **A3. B4 dataset on disk with manifest hashes, `GENERATOR_VERSION`, `provenance.json`.**
@@ -62,7 +64,7 @@ Evidence: `cli.py:46,519` consumes `load_rendered_splits`; byte-identical migrat
   preserved). Evidence: `branch.py:55,135`.
 - [ ] A4.4 `_load_training_base` through `load_policy(adapter=None, lazy=False)` — the
   Chief-defined "condition-4 completion slice", which also expires `DEBT(R20)` and makes
-  `mine_pairs` view/resolved required. *Defined, unassigned.* Today `cli.py:186-191` still
+  `mine_pairs` view/resolved required. *Defined, unassigned.* Today `cli.py:187-191` (`_load_training_base`) still
   calls `mlx_lm.load` directly and `branch.py:75` carries the `DEBT(R20)` marker. Related, not
   gating: `train.num_layers: 36` in the B4 config is stale (the 3B count) and never read —
   `lora_config` writes `resolved.num_layers` (32); one-line cleanup across the cross-model configs.
