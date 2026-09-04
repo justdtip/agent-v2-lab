@@ -106,6 +106,17 @@ def test_build_prompt_rejects_a_wrong_suffix_and_skips_the_check_without_generat
     assert build_prompt(_WrongSuffixTokenizer(), [], spec=spec, generation=False) == "context"
 
 
+def test_build_prompt_rejects_a_tools_keyword() -> None:
+    """Task 6: the dead ``tools=`` seam is gone; it was accepted and silently discarded."""
+    spec = _spec("unsupported")
+    tokenizer = _RenderingTokenizer()
+
+    with pytest.raises(TypeError, match="tools"):
+        build_prompt(tokenizer, [{"role": "user", "content": "hello"}], tools=TOOL_SPECS, spec=spec)
+
+    assert tokenizer.calls == []
+
+
 def test_window_hides_only_older_observations() -> None:
     messages = [
         {"role": "system", "content": "s"},

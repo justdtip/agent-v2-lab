@@ -122,6 +122,8 @@ def test_mine_pairs_forwards_the_active_spec_to_seed_and_branch_paths(monkeypatc
         object(),
         task,
         spec=spec,
+        view=object(),
+        resolved=object(),
         branches=1,
         temperature=0.9,
         max_steps=2,
@@ -162,6 +164,8 @@ def test_branch_pairs_keep_the_seed_step_raw_completion(monkeypatch) -> None:
         None,
         task,
         spec=branch._LEGACY_SPEC,
+        view=object(),
+        resolved=object(),
         branches=1,
         temperature=1.0,
         max_steps=1,
@@ -208,9 +212,291 @@ def test_branch_pairs_reject_seed_steps_without_raw_completion(monkeypatch) -> N
             None,
             task,
             spec=branch._LEGACY_SPEC,
+            view=object(),
+            resolved=object(),
             branches=1,
             temperature=1.0,
             max_steps=1,
             max_tokens=20,
             keep_last=2,
         )
+
+
+# --------------------------------------------------- R20: view and resolved are required
+
+
+@pytest.mark.parametrize("omitted", ["view", "resolved"])
+def test_mine_pairs_requires_the_active_model_context(omitted: str) -> None:
+    """R20: the optionals expire; a caller that omits either one is a TypeError, not a None."""
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.tasks import Task
+
+    task = Task("pref-read-0000-clean", "read", "clean", "p", {}, (), "done", frozenset())
+    context = {"view": object(), "resolved": object()}
+    del context[omitted]
+
+    with pytest.raises(TypeError, match=omitted):
+        branch.mine_pairs(
+            None,
+            None,
+            task,
+            spec=branch._LEGACY_SPEC,
+            branches=1,
+            temperature=1.0,
+            max_steps=1,
+            max_tokens=20,
+            keep_last=2,
+            **context,
+        )
+
+
+# ------------------------------------------- R2: the turn terminator comes from the run's spec
+
+
+def _fake_spec(end_of_turn: str):
+    """A registry-shaped specification whose declared terminator is not the 3B model's."""
+    from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec
+
+    return ModelSpec(
+        name="fake-branch",
+        hf_id="fake/branch",
+        family="fake",
+        chat=ChatSpec("unsupported", {}, end_of_turn, ()),
+        lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+        train={},
+        cache_strategy="none",
+        probe_layer_fractions=(1.0,),
+        memory_budget_gib=1.0,
+        policies={},
+    )
+
+
+def test_branch_completions_end_with_the_active_spec_terminator(monkeypatch) -> None:
+    """R2: branch must read end_of_turn from the run's spec, never from the 3B module constant."""
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.tasks import Task
+
+    terminator = "<end-of-fake-turn>"
+    spec = _fake_spec(terminator)
+    task = Task("pref-read-0000-clean", "read", "clean", "p", {}, (), "done", frozenset())
+    trajectory = types.SimpleNamespace(
+        success=True,
+        steps=[
+            {
+                "thought": "seed",
+                "raw": f"seed raw{terminator}",
+                "action": {"name": "read_file", "arguments": {"path": "a"}},
+            }
+        ],
+    )
+    simulator = types.SimpleNamespace(
+        execute=lambda _action: "observation",
+        verdict=lambda: types.SimpleNamespace(success=False),
+    )
+    monkeypatch.setattr(branch, "run_task", lambda *_args, **_kwargs: trajectory)
+    monkeypatch.setattr(branch, "make_sampler", lambda _temperature: object())
+    monkeypatch.setattr(branch, "build_prompt", lambda *_args, **_kwargs: "prompt")
+    monkeypatch.setattr(branch, "generate_turn", lambda *_args: "branch raw")
+    monkeypatch.setattr(
+        branch,
+        "parse_turn",
+        lambda _raw: types.SimpleNamespace(
+            action=Action("read_file", {"path": "b"}), thought="branch"
+        ),
+    )
+    monkeypatch.setattr(branch.Simulator, "for_task", lambda _task: simulator)
+    monkeypatch.setattr(branch, "_continue", lambda *_args, **_kwargs: False)
+
+    pairs, _stats = branch.mine_pairs(
+        object(),
+        object(),
+        task,
+        spec=spec,
+        view=object(),
+        resolved=object(),
+        branches=1,
+        temperature=0.9,
+        max_steps=2,
+        max_tokens=4,
+        keep_last=2,
+    )
+
+    assert pairs and pairs[0]["rejected"] == f"branch raw{terminator}"
+    assert pairs[0]["rejected"].endswith(terminator)
+
+
+# -------------------------------------------- module main (R21, R26(a), provenance)
+
+
+def _branch_argv(output, transcripts) -> list[str]:
+    return [
+        "agent-v2-branch",
+        "--split",
+        "guard-check",
+        "--output",
+        str(output),
+        "--transcripts",
+        str(transcripts),
+        "--quiet",
+    ]
+
+
+def test_branch_main_refuses_a_protected_dataset_directory(monkeypatch, tmp_path) -> None:
+    """R21: the module main must refuse PROTECTED_DATASETS as hard as the CLI boundary does."""
+    import sys
+
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.data import ProtectedDatasetError
+    from local_llm_lab.project import PROJECT_ROOT
+
+    monkeypatch.setattr(
+        branch, "run_branch_mining", lambda **_kwargs: pytest.fail("the R21 guard did not fire")
+    )
+    monkeypatch.setattr(
+        sys, "argv", _branch_argv(PROJECT_ROOT / "data" / "agent_v2", tmp_path / "transcripts")
+    )
+
+    with pytest.raises(ProtectedDatasetError):
+        branch.main()
+
+    assert not (tmp_path / "transcripts").exists()
+
+
+def test_branch_main_refuses_an_existing_manifest_with_no_override(monkeypatch, tmp_path) -> None:
+    """R21: this stage has no override flag, so an existing dataset is simply refused."""
+    import sys
+
+    from local_llm_lab.pipeline import branch
+    from local_llm_lab.pipeline.data import DatasetWriteGuardError
+
+    target = tmp_path / "preferences"
+    target.mkdir()
+    (target / "manifest.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        branch, "run_branch_mining", lambda **_kwargs: pytest.fail("the R21 guard did not fire")
+    )
+    monkeypatch.setattr(sys, "argv", _branch_argv(target, tmp_path / "transcripts"))
+
+    with pytest.raises(DatasetWriteGuardError) as error:
+        branch.main()
+
+    assert "no overwrite path" in str(error.value)
+
+
+def test_branch_main_writes_run_log_events_manifest_and_provenance(monkeypatch, tmp_path) -> None:
+    """R26(a) plus the missing provenance stamp beside the mined artifact."""
+    import json
+    import sys
+
+    from local_llm_lab.pipeline import branch
+
+    target = tmp_path / "preferences"
+    captured: dict[str, object] = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {"pairs": 0, "branch_points": 0, "seed": 13}
+
+    monkeypatch.setattr(branch, "run_branch_mining", fake_run)
+    monkeypatch.setattr(sys, "argv", _branch_argv(target, tmp_path / "transcripts"))
+
+    branch.main()
+
+    assert (target / "run.log").is_file()
+    events = [
+        json.loads(line)
+        for line in (target / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [event["kind"] for event in events][:1] == ["start"]
+    assert len(events) >= 2
+    identity = events[0]["fields"]
+    assert identity["split"] == "guard-check"
+    assert identity["model"] and identity["hf_id"]
+    assert callable(captured["progress"])
+    manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["stage"] == "branch"
+    assert manifest["split"] == "guard-check"
+    assert manifest["seed"] == 13
+    provenance = json.loads((target / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["extra"]["stage"] == "branch"
+
+
+def _interrupt_the_manifest_writer(monkeypatch, limit: int) -> None:
+    """Truncate whichever writer the stamp uses and then fail, standing in for a full disk.
+
+    ``runlog.write_text_atomic`` writes through ``runlog``'s own ``os.fdopen`` — the shim the
+    sibling lane's ``tests/test_data.py`` interrupts — while a plain stamp writes through
+    ``Path.write_text``. Interrupting both keeps the assertion on the outcome the R21 guard
+    depends on (no partial sentinel at the destination) rather than on which writer is in use.
+    """
+    import os
+    from pathlib import Path
+
+    from local_llm_lab import runlog as runlog_module
+
+    class _Truncating:
+        def __init__(self, handle) -> None:
+            self._handle = handle
+
+        def __getattr__(self, name: str):
+            return getattr(self._handle, name)
+
+        def write(self, text: str) -> int:
+            self._handle.write(text[:limit])
+            raise OSError("no space left on device")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info) -> bool:
+            self._handle.close()
+            return False
+
+    class _InterruptingOS:
+        """An ``os`` shim patched into runlog's namespace only, so nothing else is affected."""
+
+        def __init__(self, real) -> None:
+            self._real = real
+
+        def __getattr__(self, name: str):
+            return getattr(self._real, name)
+
+        def fdopen(self, descriptor, *args, **kwargs):
+            return _Truncating(self._real.fdopen(descriptor, *args, **kwargs))
+
+    plain_write_text = Path.write_text
+
+    def truncating_write_text(self, data, *args, **kwargs):
+        plain_write_text(self, data[:limit], *args, **kwargs)
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(runlog_module, "os", _InterruptingOS(os))
+    monkeypatch.setattr(Path, "write_text", truncating_write_text)
+
+
+def test_an_interrupted_branch_manifest_write_leaves_the_previous_manifest_intact(
+    monkeypatch, tmp_path
+) -> None:
+    """manifest.json is the R21 guard's own sentinel, so a half-written one is a live hazard.
+
+    ``guard_dataset_write`` (pipeline/data.py:85) decides whether a later write is permitted by
+    whether this file is there. With the mined pairs complete and the sentinel truncated, a
+    later write would be waved straight over good data, so this stamp must be atomic: either
+    the previous manifest survives whole or the new one lands whole.
+    """
+    from local_llm_lab.pipeline import branch
+
+    target = tmp_path / "preferences"
+    target.mkdir()
+    original = '{"stage": "branch", "kept": true}\n'
+    (target / "manifest.json").write_text(original, encoding="utf-8")
+
+    _interrupt_the_manifest_writer(monkeypatch, 12)
+    with pytest.raises(OSError, match="no space left on device"):
+        branch._write_stage_manifest(target, {"stage": "branch", "split": "guard-check"})
+    monkeypatch.undo()
+
+    assert (target / "manifest.json").read_text(encoding="utf-8") == original
+    leftovers = sorted(path.name for path in target.iterdir() if path.name.startswith("."))
+    assert leftovers == [], "no partial temporary file may survive at the destination"

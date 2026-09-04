@@ -248,17 +248,18 @@ def build_prompt(
     tokenizer: Any,
     messages: list[dict[str, Any]],
     *,
-    tools: list[dict[str, Any]] = TOOL_SPECS,
     keep_last: int = DEFAULT_KEEP_LAST,
     spec: ModelSpec | None = None,
     generation: bool = True,
 ) -> str:
     """Render the windowed conversation for generation.
 
-    ``tools`` and an omitted ``spec`` are temporary Task 6 compatibility seams.  The former is
-    never passed to the template; the latter resolves only to the registered legacy 3B spec.
+    An omitted ``spec`` is the one remaining Task 6 compatibility seam: it resolves to the
+    registered legacy 3B spec and skips the generation-suffix assertion. It stays until the
+    caller that omits ``spec`` (``tests/test_probes.py``, an uncommitted slice at the Chief's
+    gate) can be updated. The dead ``tools=`` seam, never passed to the template and never
+    supplied by any caller, is gone.
     """
-    del tools
     compatibility_mode = spec is None
     resolved_spec = _compatibility_spec() if compatibility_mode else spec
     prompt = tokenizer.apply_chat_template(

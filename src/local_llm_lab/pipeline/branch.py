@@ -5,18 +5,18 @@ import copy
 import json
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from local_llm_lab.agent_protocol import ActionParseError
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
-from local_llm_lab.pipeline.data import write_jsonl
+from local_llm_lab.pipeline.data import guard_dataset_write, write_jsonl
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.evaluate import DEFAULT_MODEL, load_policy, make_sampler
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
-    END_OF_TURN,
     SYSTEM_PROMPT,
     assistant_message,
     build_prompt,
@@ -25,11 +25,29 @@ from local_llm_lab.pipeline.protocol import (
 )
 from local_llm_lab.pipeline.protocol import render_completion as protocol_render_completion
 from local_llm_lab.pipeline.runner import generate_turn, run_task
-from local_llm_lab.pipeline.tasks import Task, make_tasks
+from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
 from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.provenance import write_provenance
+from local_llm_lab.runlog import RunLog, git_commit, write_text_atomic
 
 _LEGACY_SPEC = load_model_spec(DEFAULT_MODEL)
+
+
+def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
+    """Stamp this stage's data output with manifest.json after it succeeds.
+
+    The R21 guard fires only on this file, so without the stamp the guard call in ``main``
+    would be inert on a re-run. Same shape as the pipeline CLI's stamp (cli.py:177), which
+    this entry point cannot import: the CLI imports ``run_branch_mining`` from here.
+
+    The write goes through ``runlog.write_text_atomic`` because this file is the guard's own
+    sentinel: ``guard_dataset_write`` (pipeline/data.py:85) decides whether a later write is
+    permitted by whether it is there, so a truncated one is worse than none — it can wave a
+    later write straight over mined pairs that are in fact complete.
+    """
+    target.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(target / "manifest.json", json.dumps(payload, indent=2) + "\n")
 
 
 def render_completion(thought: str, action: Any) -> str:
@@ -72,11 +90,13 @@ def mine_pairs(  # noqa: C901 - branch outcome collection remains an established
     task: Task,
     *,
     spec: ModelSpec,
-    # DEBT(R20): required once the condition-4 slice threads branch.build_prompt. That slice
-    # drops both defaults and updates the two optional-path callers that omit them today,
-    # tests/test_branch.py:164 and :210.
-    view: ArchitectureView | None = None,
-    resolved: ResolvedSpec | None = None,
+    # DEBT(R20): the mine_pairs limb is discharged -- view and resolved are required here and
+    # every caller now supplies them. One limb of the condition-4 slice remains: routing
+    # cli.py::_load_training_base through load_policy(adapter=None, lazy=False). DEFERRED --
+    # src/local_llm_lab/pipeline/cli.py is owned by an uncommitted lane sitting at the Chief's
+    # gate, so no other lane may edit it; R20 expires when that lane lands and closes it.
+    view: ArchitectureView,
+    resolved: ResolvedSpec,
     branches: int,
     temperature: float,
     max_steps: int,
@@ -126,6 +146,9 @@ def mine_pairs(  # noqa: C901 - branch outcome collection remains an established
         {"role": "user", "content": task.prompt},
     ]
     simulator = Simulator.for_task(task)
+    # R2: the turn terminator is a property of the run's model, not of the module-level
+    # compatibility constant, which is evaluated at import time from the legacy 3B spec.
+    end_of_turn = spec.chat.end_of_turn
     for point, step in enumerate(seed_trajectory.steps):
         action = step["action"]
         raw = step.get("raw")
@@ -139,7 +162,7 @@ def mine_pairs(  # noqa: C901 - branch outcome collection remains an established
         for branch in range(branches):
             mx.random.seed(seed * 100_003 + point * 101 + branch)
             raw = generate_turn(model, tokenizer, prompt, sampler, max_tokens)
-            completion = raw.replace(END_OF_TURN, "") + END_OF_TURN
+            completion = raw.replace(end_of_turn, "") + end_of_turn
             stats["branches"] += 1
             if completion in good or completion in bad:
                 continue
@@ -224,6 +247,7 @@ def run_branch_mining(
     keep_last: int = DEFAULT_KEEP_LAST,
     quiet: bool = False,
     seed: int = 20260902,
+    progress: Callable[..., None] | None = None,
 ) -> dict[str, Any]:
     import mlx.core as mx
 
@@ -257,12 +281,24 @@ def run_branch_mining(
             f"{task_stats['pairs']} pairs from {task_stats['branches']} branches",
             flush=True,
         )
+        if progress is not None:
+            # R26(g): one event per outer unit of work, so no run is silent for longer
+            # than a single task.
+            progress(
+                number,
+                len(tasks),
+                task.task_id,
+                seed_success=task_stats["seed_success"],
+                pairs=task_stats["pairs"],
+                branches=task_stats["branches"],
+            )
     output.mkdir(parents=True, exist_ok=True)
     digest = write_jsonl(output / "pairs.jsonl", all_pairs)
     summary = {
         "model": resolved.as_dict(),
         "adapter": None if adapter is None else str(adapter.resolve()),
         "split": split,
+        "seed": seed,
         "tasks": len(tasks),
         "seed_successes": sum(s["seed_success"] for s in stats),
         "branch_points": sum(s["branch_points"] for s in stats),
@@ -303,18 +339,68 @@ def main() -> None:
     args = parser.parse_args()
     if args.split in {"train", "valid", "test"}:
         parser.error("use a fresh split name so evaluation tasks are never mined")
-    run_branch_mining(
-        model_name=args.model,
-        adapter=args.adapter,
-        split=args.split,
-        limit=args.limit,
-        branches=args.branches,
-        temperature=args.temperature,
-        output=args.output or PROJECT_ROOT / "data" / "preferences" / args.split,
-        transcript_dir=args.transcripts
-        or PROJECT_ROOT / "outputs" / "agent-v2" / "transcripts" / f"branch-{args.split}",
-        max_steps=args.max_steps,
-        max_tokens=args.max_tokens,
-        keep_last=args.keep_last,
-        quiet=args.quiet,
+    output = args.output or PROJECT_ROOT / "data" / "preferences" / args.split
+    # R21: this entry point writes under data/ without going through the CLI boundary, so it
+    # carries the guard itself. The stage has no overwrite flag, hence override_flag=None.
+    guard_dataset_write(output, override_flag=None)
+    transcripts = (
+        args.transcripts
+        or PROJECT_ROOT / "outputs" / "agent-v2" / "transcripts" / f"branch-{args.split}"
     )
+    spec = load_model_spec(args.model)
+    # R26(a)/(e): the log opens before any work so run.log alone identifies the run.
+    with RunLog.open(
+        output,
+        name="agent-v2-branch",
+        command=sys.argv,
+        identity={
+            "model": spec.name,
+            "hf_id": spec.hf_id,
+            "split": args.split,
+            "adapter": None if args.adapter is None else str(args.adapter),
+            "limit": args.limit,
+            "branches": args.branches,
+            "output": str(output),
+            "git_commit": git_commit(),
+        },
+    ) as log:
+        summary = run_branch_mining(
+            model_name=args.model,
+            adapter=args.adapter,
+            split=args.split,
+            limit=args.limit,
+            branches=args.branches,
+            temperature=args.temperature,
+            output=output,
+            transcript_dir=transcripts,
+            max_steps=args.max_steps,
+            max_tokens=args.max_tokens,
+            keep_last=args.keep_last,
+            quiet=args.quiet,
+            progress=log.progress,
+        )
+        _write_stage_manifest(
+            output,
+            {
+                "stage": "branch",
+                "generator_version": GENERATOR_VERSION,
+                "model": args.model,
+                "split": args.split,
+                "seed": summary.get("seed"),
+                "adapter": None if args.adapter is None else str(args.adapter),
+                "summary": summary,
+            },
+        )
+        provenance = write_provenance(
+            output,
+            resolved=None,
+            spec=spec,
+            extra={"stage": "branch", "summary": summary},
+        )
+        log.info(
+            "branch mining complete",
+            pairs=summary.get("pairs"),
+            branch_points=summary.get("branch_points"),
+            manifest=str(output / "manifest.json"),
+            provenance=str(provenance),
+        )
