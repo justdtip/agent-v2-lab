@@ -895,3 +895,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   content swap turns it into a mechanism (foreign number written into the slot 5/5 at L6);
   memo updated. B3 ticked with hashes. Next run: the `aggregate_report` secondary (10 cases).
 - Stage-1 probe launched on the freed lane for the attempt-4 gates.
+
+## 2026-09-05 — stage-1 probe: both attempt-4 gates FAIL at chunk 64; stage 2 required
+
+- Clean lane, chunk 64, batch 1: 997 → 11.85 GB / 46 s; 1,591 → 16.93 GB / 94 s; 2,085 (longest
+  train row) → OOM 19.29 GB; batch 2 → OOM. Gate (a) fails; gate (b) fails (~24 h projected vs
+  3 h). Chunk 32/128 points invalid (same process after an OOM; all failed at 997) — rerunning
+  per process. Peak grows ~8.6 MB/token, far above the boundary states → isolation probe (no
+  recurrence backward) running to locate the remaining cost before dispatching stage 2.
