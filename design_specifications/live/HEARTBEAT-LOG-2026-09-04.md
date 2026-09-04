@@ -989,3 +989,22 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   train run D at all, and stage 2 (#55) is a prerequisite rather than an optimisation — asked
   to be gated ahead of the preflight slice. R32 gate (a) passes for stage 2; gate (b) still
   needs consecutive steps at the mean length with warm-up excluded. Posted on #55 and #60.
+
+## 2026-09-05 late — CRO's post-commit memo actioned; lane order adopted; two owned slices out
+
+- CRO read every source hunk of all seven landed lanes and ran six suites bare (195 tests); all
+  seven stand. Record `under_review/SIX-LANES-COMMITTED-REVIEW-round1-2026-09-05.md`.
+- Two record corrections, both the Deputy's, posted where the claims were made: #59 said every
+  lane was gated on the CRO's full read (true of four; the comparability correction and the
+  EXP-001 sweep were committed on the Deputy's read and gated after), and the "one shared
+  partition function" claim is false — `_cohort_holm_families` (:2280) and
+  `_compare_holm_families` (:3583) are two functions held equal by a test (:1347), as the
+  docstring at :2290 says. The first correction posted with backticked names eaten by the
+  shell; reposted from a file. Use --body-file.
+- Filed: #61 (C1 duplicate J-lens computation, Deputy; C2 sum-vs-mean readout variant, Head of
+  Interpretability — a variant choice that cannot be changed after the run), #62 (C3-C7).
+- Lane order adopted per the CRO: preflight regeneration (R37, code and artifacts together),
+  then the R32 stage-2 step-time probe, then EXP-001 once C1/C2 close, then the P6 secondary.
+- Dispatched, neither needing the machine: the preflight footprint calibration (the estimator's
+  chunk dependence is falsified 2.12x predicted vs 1.07x measured, and it binds the chunked
+  recurrence while the arm selects chunkwise) and C7's provenance shape. C1 held for C2.
