@@ -37,7 +37,7 @@ from local_llm_lab.pipeline.tasks import (
 from local_llm_lab.probes.capture import InjectionHook, capture_residuals
 from local_llm_lab.probes.policies import resolve_layers, resolve_policy, validate_layer_syntax
 
-POSITION_GROUPS = (
+PROMPT_GROUPS = (
     "system_prompt",
     "task_prompt",
     "previous_notes",
@@ -45,7 +45,28 @@ POSITION_GROUPS = (
     "last_two_observations",
     "final_token",
 )
+"""Groups a tokenizer can resolve on ONE rendered prompt (``position_groups``)."""
+
+POSITION_GROUPS = (
+    "system_prompt",
+    "task_prompt",
+    "previous_notes",
+    "shared_value_tokens",
+    "dropped_value_slot",
+    "last_two_observations",
+    "final_token",
+)
+"""The seven P6 cells (R25d).
+
+``note_value_tokens`` is not a cell: R25(b) splits it into ``shared_value_tokens`` (values the
+two notes have in common) and ``dropped_value_slot`` (the separator slot where a value the
+target note dropped should have appeared).  Both are pairwise quantities, so they exist only
+after ``align_groups`` has seen both prompts.
+"""
+
 CONTROLS = ("unrelated_task", "random_positions")
+ARTIFACT_SCHEMA = "p6-patch-r25"
+"""Names the artifact shape; the payload carried no schema/version field before R25."""
 _FAMILIES = frozenset({"aggregate_report", "ledger_reconcile"})
 
 
@@ -425,6 +446,17 @@ def _char_span_once(text: str, needle: str, *, start: int, label: str) -> tuple[
     return first, first + len(needle)
 
 
+def _value_pattern(value: str) -> str:
+    """A numeric value matched on its own boundaries, never inside a longer number.
+
+    ``32`` occurring inside ``132`` is a different value, not a second occurrence of this one
+    (issue #29): matching by plain substring aborted such a note as ambiguous.  The lookarounds
+    exclude a neighbouring digit, decimal point, or sign, so a genuine duplicate still matches
+    twice and is still refused.
+    """
+    return rf"(?<![0-9.\-]){re.escape(value)}(?![0-9.])"
+
+
 def _common_prefix_length(left: Sequence[int], right: Sequence[int]) -> int:
     count = 0
     for a, b in zip(left, right):
@@ -487,20 +519,23 @@ def position_groups(
     note_values: Sequence[str],
     observations: Sequence[str],
     stats: dict[str, int] | None = None,
+    value_spans: dict[str, tuple[int, ...]] | None = None,
 ) -> dict[str, tuple[int, ...]]:
-    """Locate the six P6 token groups, refusing missing or ambiguous content spans.
+    """Locate the six per-prompt token groups, refusing missing or ambiguous content spans.
 
     Every text is located by its unique character span in the rendered ``prompt_text`` and
     mapped to tokens through ``_token_span``; ``observations`` must be the observations that
     are present verbatim in that prompt (the windowed view), and the last two of them form
-    ``last_two_observations``.  ``stats`` receives the per-group ``boundary_repairs`` counts.
+    ``last_two_observations``.  ``stats`` receives the per-group ``boundary_repairs`` counts,
+    and ``value_spans`` receives each note value's own token positions in note order, which
+    is what R25's pairwise value alignment needs.
     """
     ids = [int(value) for value in prompt_ids]
     if not ids:
         raise ValueError("prompt token ids must not be empty")
     if not isinstance(prompt_text, str) or not prompt_text:
         raise ValueError("prompt text must not be empty")
-    repairs = {name: 0 for name in POSITION_GROUPS}
+    repairs = {name: 0 for name in PROMPT_GROUPS}
 
     def locate(text: str, *, start: int, label: str, group: str) -> tuple[tuple[int, ...], int]:
         span = _char_span_once(prompt_text, text, start=start, label=label)
@@ -520,18 +555,20 @@ def position_groups(
         previous.extend(tokens)
         cursor = note_span[1]
     values: list[int] = []
+    spans: dict[str, tuple[int, ...]] = {}
     for value in note_values:
         if note_span is None:
             raise ValueError("note_value token span is missing or ambiguous in the substituted note")
         region = prompt_text[note_span[0] : note_span[1]]
-        first = region.find(value)
-        if first < 0 or region.find(value, first + 1) >= 0:
+        found = list(re.finditer(_value_pattern(value), region))
+        if len(found) != 1:
             raise ValueError("note_value token span is missing or ambiguous in the substituted note")
-        offset = note_span[0] + first
+        offset = note_span[0] + found[0].start()
         tokens, repaired = _token_span(
             tokenizer, prompt_text, ids, (offset, offset + len(value)), label="note_value_tokens"
         )
         repairs["note_value_tokens"] += repaired
+        spans[value] = tokens
         values.extend(tokens)
     observation_spans: list[tuple[int, ...]] = []
     cursor = after_task
@@ -539,6 +576,9 @@ def position_groups(
         tokens, cursor = locate(observation, start=cursor, label="observation", group="last_two_observations")
         observation_spans.append(tokens)
     last_observations = tuple(position for span in observation_spans[-2:] for position in span)
+    if value_spans is not None:
+        value_spans.clear()
+        value_spans.update(spans)
     if stats is not None:
         stats.clear()
         stats.update(repairs)
@@ -778,11 +818,17 @@ def _groups_for(
     *,
     prompt_text: str,
     keep_last: int,
-) -> tuple[dict[str, tuple[int, ...]], dict[str, int]]:
-    """Resolve the six groups on the rendered prompt; return them with boundary repairs."""
+) -> tuple[dict[str, tuple[int, ...]], dict[str, int], dict[str, tuple[int, ...]]]:
+    """Resolve the six per-prompt groups; return them with boundary repairs and value spans.
+
+    The third element maps each of the substituted note's values to its own token positions,
+    in note order; R25's ``shared_value_tokens``/``dropped_value_slot`` alignment pairs those
+    across the two prompts by string identity.
+    """
     system, task, notes, observations = _message_contents(messages, keep_last=keep_last)
     values = _note_values(notes[-1]) if notes else []
     repairs: dict[str, int] = {}
+    spans: dict[str, tuple[int, ...]] = {}
     groups = position_groups(
         tokenizer,
         token_ids,
@@ -793,10 +839,266 @@ def _groups_for(
         note_values=values,
         observations=observations,
         stats=repairs,
+        value_spans=spans,
     )
-    if tuple(groups) != POSITION_GROUPS or any(not groups[name] for name in POSITION_GROUPS):
+    if tuple(groups) != PROMPT_GROUPS or any(not groups[name] for name in PROMPT_GROUPS):
         raise ValueError("each P6 position group must resolve to at least one token")
-    return groups, {name: int(repairs.get(name, 0)) for name in POSITION_GROUPS}
+    return groups, {name: int(repairs.get(name, 0)) for name in PROMPT_GROUPS}, spans
+
+
+@dataclass(frozen=True)
+class GroupAlignment:
+    """How one P6 cell's source rows are matched to its target positions (R25).
+
+    ``source_positions`` are taken one-for-one; ``pooled_sources`` instead names, per target
+    position, the source rows mean-pooled into the single row written there (the
+    ``dropped_value_slot`` cell).  Exactly one of the two is populated.
+    """
+
+    group: str
+    rule: str
+    source_positions: tuple[int, ...]
+    target_positions: tuple[int, ...]
+    source_cardinality: int
+    target_cardinality: int
+    unpatched_source_tokens: tuple[int, ...] = ()
+    pooled_sources: tuple[tuple[int, ...], ...] = ()
+    slots: tuple[dict[str, Any], ...] = ()
+    shared_values: tuple[str, ...] = ()
+    dropped_values: tuple[str, ...] = ()
+    residue: dict[str, Any] | None = None
+
+    @property
+    def treatment_source_positions(self) -> tuple[int, ...]:
+        """Every source position the treatment reads, pooled or not — the control's exclusion
+        set, so a random control never redraws a treated position."""
+        if self.pooled_sources:
+            return tuple(
+                dict.fromkeys(position for rows in self.pooled_sources for position in rows)
+            )
+        return self.source_positions
+
+    def record(self) -> dict[str, Any]:
+        """The JSON-safe artifact entry R25(d) requires for every cell."""
+        entry: dict[str, Any] = {
+            "group": self.group,
+            "rule": self.rule,
+            "source_cardinality": self.source_cardinality,
+            "target_cardinality": self.target_cardinality,
+            "patched_positions": len(self.target_positions),
+            "target_positions": list(self.target_positions),
+            "source_positions": list(self.source_positions),
+            "unpatched_source_tokens": self.residue
+            or {"count": 0, "positions": [], "token_ids": [], "text": ""},
+        }
+        if self.slots:
+            entry["slots"] = [dict(slot) for slot in self.slots]
+        if self.shared_values or self.dropped_values:
+            entry["shared_values"] = list(self.shared_values)
+            entry["dropped_values"] = list(self.dropped_values)
+        return entry
+
+
+def _decoded(tokenizer: Any, ids: Sequence[int]) -> str:
+    """Token text for the artifact; empty when the tokenizer cannot decode (fakes)."""
+    if not ids:
+        return ""
+    try:
+        return str(tokenizer.decode(list(ids)))
+    except Exception:  # pragma: no cover - defensive: the artifact records ids regardless
+        return ""
+
+
+def _residue_record(
+    tokenizer: Any, ids: Sequence[int], positions: Sequence[int]
+) -> dict[str, Any]:
+    token_ids = [int(ids[position]) for position in positions]
+    return {
+        "count": len(token_ids),
+        "positions": [int(position) for position in positions],
+        "token_ids": token_ids,
+        "text": _decoded(tokenizer, token_ids),
+    }
+
+
+def _tail_alignment(
+    tokenizer: Any,
+    group: str,
+    source: Sequence[int],
+    target: Sequence[int],
+    source_ids: Sequence[int],
+) -> GroupAlignment:
+    """R25(a): equal cardinalities pass through; a longer source patches from its tail."""
+    source = tuple(int(position) for position in source)
+    target = tuple(int(position) for position in target)
+    if len(source) < len(target):
+        raise ValueError(
+            f"{group}: treatment source group has {len(source)} positions, fewer than the "
+            f"target's {len(target)}; tail alignment cannot match cardinality"
+        )
+    split = len(source) - len(target)
+    residue = source[:split]
+    return GroupAlignment(
+        group=group,
+        rule="identity" if split == 0 else "tail",
+        source_positions=source[split:],
+        target_positions=target,
+        source_cardinality=len(source),
+        target_cardinality=len(target),
+        unpatched_source_tokens=residue,
+        residue=_residue_record(tokenizer, source_ids, residue),
+    )
+
+
+def _value_alignment(
+    tokenizer: Any,
+    *,
+    source_values: dict[str, tuple[int, ...]],
+    target_values: dict[str, tuple[int, ...]],
+    source_ids: Sequence[int],
+    target_ids: Sequence[int],
+    source_cardinality: int,
+    target_cardinality: int,
+) -> tuple[GroupAlignment, GroupAlignment]:
+    """R25(b): split the value cell into the shared values and the dropped-value slots.
+
+    Values are paired by string identity, not by position, so a source note that lists the
+    same values in a different order still pairs each with its twin.  ``position_groups``
+    refuses a note whose value string occurs twice, so each string names one span per note and
+    the pairing is a plain intersection.
+    """
+    shared = tuple(value for value in source_values if value in target_values)
+    dropped = tuple(value for value in source_values if value not in target_values)
+    if not shared:
+        raise ValueError(
+            "shared_value_tokens: the counterfactual and failing notes share no value, so "
+            "no dropped-value slot can be placed relative to a shared one"
+        )
+    for value in shared:
+        if len(source_values[value]) != len(target_values[value]):
+            raise ValueError(
+                f"shared_value_tokens: value {value!r} spans {len(source_values[value])} "
+                f"source tokens and {len(target_values[value])} target tokens; identical "
+                "strings must share cardinality by construction"
+            )
+    shared_cell = GroupAlignment(
+        group="shared_value_tokens",
+        rule="shared_value_identity",
+        source_positions=tuple(p for value in shared for p in source_values[value]),
+        target_positions=tuple(p for value in shared for p in target_values[value]),
+        source_cardinality=source_cardinality,
+        target_cardinality=target_cardinality,
+        residue=_residue_record(tokenizer, source_ids, ()),
+        shared_values=shared,
+        dropped_values=dropped,
+    )
+    if not dropped:
+        raise ValueError(
+            "dropped_value_slot: the failing note drops no value the counterfactual note "
+            "carries, so the cell has no slot to patch"
+        )
+    order = list(source_values)
+    slots: list[dict[str, Any]] = []
+    pooled: list[tuple[int, ...]] = []
+    positions: list[int] = []
+    for value in dropped:
+        preceding = next(
+            (
+                earlier
+                for earlier in reversed(order[: order.index(value)])
+                if earlier in target_values
+            ),
+            None,
+        )
+        if preceding is None:
+            # The value would have been first, so the slot is the separator that precedes the
+            # first shared value instead of one that follows a shared value.
+            slot = target_values[shared[0]][0] - 1
+            rule = "before_first_shared_value"
+        else:
+            slot = target_values[preceding][-1] + 1
+            rule = "after_preceding_shared_value"
+        if not 0 <= slot < len(target_ids):
+            raise ValueError(
+                f"dropped_value_slot: slot {slot} for value {value!r} is outside the "
+                f"{len(target_ids)}-token failing prompt"
+            )
+        if slot in positions:
+            raise ValueError(
+                f"dropped_value_slot: value {value!r} resolves to slot {slot}, already "
+                "claimed by an earlier dropped value; one injection cannot write two rows "
+                "to one position"
+            )
+        pooled_ids = [int(source_ids[position]) for position in source_values[value]]
+        slots.append(
+            {
+                "dropped_value": value,
+                "slot_rule": rule,
+                "preceding_shared_value": preceding,
+                "slot_position": int(slot),
+                "overwritten_token_id": int(target_ids[slot]),
+                "overwritten_token_text": _decoded(tokenizer, [target_ids[slot]]),
+                "pooled_source_positions": [int(p) for p in source_values[value]],
+                "pooled_source_token_ids": pooled_ids,
+                "pooled_source_text": _decoded(tokenizer, pooled_ids),
+            }
+        )
+        pooled.append(source_values[value])
+        positions.append(int(slot))
+    slot_cell = GroupAlignment(
+        group="dropped_value_slot",
+        rule="dropped_value_slot",
+        source_positions=(),
+        target_positions=tuple(positions),
+        source_cardinality=sum(len(rows) for rows in pooled),
+        target_cardinality=len(positions),
+        pooled_sources=tuple(pooled),
+        slots=tuple(slots),
+        residue=_residue_record(tokenizer, source_ids, ()),
+        shared_values=shared,
+        dropped_values=dropped,
+    )
+    return shared_cell, slot_cell
+
+
+def align_groups(
+    tokenizer: Any,
+    *,
+    source_groups: dict[str, tuple[int, ...]],
+    source_values: dict[str, tuple[int, ...]],
+    source_ids: Sequence[int],
+    target_groups: dict[str, tuple[int, ...]],
+    target_values: dict[str, tuple[int, ...]],
+    target_ids: Sequence[int],
+) -> dict[str, GroupAlignment]:
+    """Match the counterfactual (source) prompt's groups onto the failing (target) prompt's.
+
+    R25, grounded in ``capture.InjectionHook``: ``replace=True`` maps source row *i* to
+    ``at_positions[i]`` and refuses unequal counts, and the failing prompt has no position for
+    a dropped value.  Unequal groups therefore align on their tail, and the value cell splits
+    into an identity-aligned shared cell and a pooled-into-one-slot dropped cell.
+    """
+    aligned: dict[str, GroupAlignment] = {}
+    for group in POSITION_GROUPS:
+        if group in ("shared_value_tokens", "dropped_value_slot"):
+            continue
+        aligned[group] = _tail_alignment(
+            tokenizer, group, source_groups[group], target_groups[group], source_ids
+        )
+    shared_cell, slot_cell = _value_alignment(
+        tokenizer,
+        source_values=source_values,
+        target_values=target_values,
+        source_ids=source_ids,
+        target_ids=target_ids,
+        source_cardinality=len(source_groups["note_value_tokens"]),
+        target_cardinality=len(target_groups["note_value_tokens"]),
+    )
+    aligned["shared_value_tokens"] = shared_cell
+    aligned["dropped_value_slot"] = slot_cell
+    if any(not aligned[group].target_positions for group in POSITION_GROUPS):
+        raise ValueError("each P6 position group must resolve to at least one token")
+    return {group: aligned[group] for group in POSITION_GROUPS}
 
 
 def _take_rows(rows: Any, positions: Sequence[int]) -> Any:
@@ -805,6 +1107,24 @@ def _take_rows(rows: Any, positions: Sequence[int]) -> Any:
     if not positions:
         raise ValueError("P6 position group must not be empty")
     return mx.take(rows, mx.array(tuple(positions), dtype=mx.int32), axis=0)
+
+
+def _alignment_rows(rows: Any, alignment: GroupAlignment) -> Any:
+    """The source rows one injection writes, in target-position order.
+
+    A pooled cell (``dropped_value_slot``) contributes one row per slot: the mean of that
+    dropped value's source rows, taken in float32 (briefing rule 1.5) and shaped like a single
+    residual row, because the failing prompt has only the one separator position to write to.
+    """
+    import mlx.core as mx
+
+    if not alignment.pooled_sources:
+        return _take_rows(rows, alignment.source_positions)
+    pooled = [
+        mx.mean(_take_rows(rows, positions).astype(mx.float32), axis=0)
+        for positions in alignment.pooled_sources
+    ]
+    return mx.stack(pooled, axis=0)
 
 
 def _match_rows(rows: Any, count: int) -> Any:
@@ -929,16 +1249,27 @@ def run_patch_probe(
         counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec, keep_last=keep_last)
         failing_ids = list(tokenizer.encode(failing_prompt, add_special_tokens=False))
         counter_ids = list(tokenizer.encode(counter_prompt, add_special_tokens=False))
-        failing_groups, failing_repairs = _groups_for(
+        failing_groups, failing_repairs, failing_values = _groups_for(
             tokenizer, failing_ids, failing, prompt_text=failing_prompt, keep_last=keep_last
         )
-        counter_groups, counter_repairs = _groups_for(
+        counter_groups, counter_repairs, counter_values = _groups_for(
             tokenizer, counter_ids, counterfactual, prompt_text=counter_prompt, keep_last=keep_last
         )
+        alignment = align_groups(
+            tokenizer,
+            source_groups=counter_groups,
+            source_values=counter_values,
+            source_ids=counter_ids,
+            target_groups=failing_groups,
+            target_values=failing_values,
+            target_ids=failing_ids,
+        )
+        alignment_record = {group: cell.record() for group, cell in alignment.items()}
         case_provenance.append(
             {
                 **case_record(case, provenance),
                 "boundary_repairs": {"failing": failing_repairs, "counterfactual": counter_repairs},
+                "alignment": alignment_record,
             }
         )
         prepared.append(
@@ -948,6 +1279,8 @@ def run_patch_probe(
                 "counter_ids": counter_ids,
                 "failing_groups": failing_groups,
                 "counter_groups": counter_groups,
+                "alignment": alignment,
+                "alignment_record": alignment_record,
                 "failing_residuals": capture_residuals(view, failing_ids, layers, positions="all"),
                 "counter_residuals": capture_residuals(view, counter_ids, layers, positions="all"),
             }
@@ -958,11 +1291,11 @@ def run_patch_probe(
             outcomes = {name: {} for name in ("treatment", *CONTROLS)}
             for index, item in enumerate(prepared):
                 case = item["case"]
-                target = item["failing_groups"][group]
-                source = item["counter_groups"][group]
-                if len(source) != len(target):
+                alignment = item["alignment"][group]
+                target = alignment.target_positions
+                treatment_rows = _alignment_rows(item["counter_residuals"][layer], alignment)
+                if treatment_rows.shape[0] != len(target):
                     raise ValueError("treatment source and target group cardinality must match")
-                treatment_rows = _take_rows(item["counter_residuals"][layer], source)
                 outcomes["treatment"][case.task.task_id] = [_score_patch(
                     view, tokenizer, case, layer=layer, source_rows=treatment_rows,
                     target_positions=target, failing_ids=item["failing_ids"], keep_last=keep_last,
@@ -970,7 +1303,7 @@ def run_patch_probe(
                 )]
                 unrelated = prepared[(index + 1) % len(prepared)]
                 unrelated_rows = _match_rows(
-                    _take_rows(unrelated["counter_residuals"][layer], unrelated["counter_groups"][group]),
+                    _alignment_rows(unrelated["counter_residuals"][layer], unrelated["alignment"][group]),
                     len(target),
                 )
                 outcomes["unrelated_task"][case.task.task_id] = [_score_patch(
@@ -981,7 +1314,7 @@ def run_patch_probe(
                 random_source, random_target = _random_control_pair(
                     source_length=len(item["counter_ids"]),
                     target_length=len(item["failing_ids"]),
-                    source_treatment=source,
+                    source_treatment=alignment.treatment_source_positions,
                     target_treatment=target,
                     cardinality=len(target),
                     seed=seed,
@@ -998,12 +1331,19 @@ def run_patch_probe(
             cells[f"{layer}:{group}"] = {
                 "layer": layer,
                 "group": group,
+                # R25(d): every cell records the alignment rule, both cardinalities, and the
+                # residue or slot detail, per case, so the heat map is never read without it.
+                "alignment": {
+                    item["case"].task.task_id: item["alignment_record"][group]
+                    for item in prepared
+                },
                 "treatment": aggregate_task_flips(outcomes["treatment"]),
                 "controls": {
                     control: aggregate_task_flips(outcomes[control]) for control in CONTROLS
                 },
             }
     return {
+        "artifact_schema": ARTIFACT_SCHEMA,
         "model": resolved.as_dict(),
         "policy": policy,
         "layers": list(layers),
@@ -1057,6 +1397,10 @@ def render_markdown(payload: dict[str, Any]) -> str:
     if sources:
         lines.extend(["", "## Counterfactual note sources", ""])
         lines.extend(f"- {name}: {sources[name]}" for name in sorted(sources))
+    alignment_lines = _alignment_table(payload.get("cases", []))
+    if alignment_lines:
+        lines.extend(["", "## Alignment (R25)", ""])
+        lines.extend(alignment_lines)
     if "stable_cases" in payload:
         lines.extend(["", "## Scoring version stability (R24)", ""])
         lines.extend(_stability_table(payload.get("cases", []), "headline"))
@@ -1066,6 +1410,39 @@ def render_markdown(payload: dict[str, Any]) -> str:
         else:
             lines.append("None.")
     return "\n".join(lines)
+
+
+def _alignment_table(records: Sequence[dict[str, Any]]) -> list[str]:
+    """One row per (case, cell): the rule, both cardinalities, and the residue or slot."""
+    rows = [
+        (record["task_id"], group, entry)
+        for record in records
+        if isinstance(record.get("alignment"), dict)
+        for group, entry in record["alignment"].items()
+    ]
+    if not rows:
+        return []
+    lines = [
+        "| task | cell | rule | source | target | unpatched | detail |",
+        "|---|---|---|---:|---:|---:|---|",
+    ]
+    for task_id, group, entry in rows:
+        slots = entry.get("slots") or []
+        detail = (
+            "; ".join(
+                f"{slot['dropped_value']} -> {slot['slot_position']} "
+                f"({slot['slot_rule']}, overwrote {slot['overwritten_token_text']!r})"
+                for slot in slots
+            )
+            if slots
+            else entry["unpatched_source_tokens"]["text"] or "-"
+        )
+        lines.append(
+            f"| {task_id} | {group} | {entry['rule']} | {entry['source_cardinality']} | "
+            f"{entry['target_cardinality']} | "
+            f"{entry['unpatched_source_tokens']['count']} | {detail} |"
+        )
+    return lines
 
 
 def _stability_table(records: Sequence[dict[str, Any]], population: str) -> list[str]:
