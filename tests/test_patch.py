@@ -111,6 +111,59 @@ def test_position_groups_are_exact_and_fail_closed() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("family", "note", "expected_values"),
+    [
+        (
+            "aggregate_report",
+            "values so far: 17, 29; split after 2 of 4. First subtotal = 46; "
+            "computing 30 + 40.",
+            "172946",
+        ),
+        (
+            "ledger_reconcile",
+            "Invoices read: 3 of 3. approved: 12, 18; held (skip): 9. "
+            "Summing approved amounts.",
+            "1218",
+        ),
+    ],
+)
+def test_groups_for_extracts_canonical_family_value_tokens(
+    family, note, expected_values
+) -> None:
+    from local_llm_lab.agent_protocol import Action
+    from local_llm_lab.pipeline.protocol import assistant_message, tool_message
+    from local_llm_lab.probes import patch
+
+    class CharacterTokenizer:
+        def encode(self, text, add_special_tokens=False):
+            assert add_special_tokens is False
+            return [ord(character) for character in text]
+
+    tokenizer = CharacterTokenizer()
+    messages = [
+        {"role": "system", "content": "SYS"},
+        {"role": "user", "content": f"TASK-{family}"},
+        assistant_message("Plan: inspect the state.", Action("list_files", {"directory": "/tmp"})),
+        tool_message("list_files", "OBS0"),
+        assistant_message(note, Action("calculate", {"expression": "1 + 1"})),
+        tool_message("calculate", "OBS1"),
+    ]
+    prompt = "|".join(message["content"] for message in messages)
+
+    prompt_ids = tokenizer.encode(prompt)
+    groups = patch._groups_for(tokenizer, prompt_ids, messages)
+
+    assert all(groups[name] for name in patch.POSITION_GROUPS)
+    value_text = "".join(chr(prompt_ids[position]) for position in groups["note_value_tokens"])
+    assert value_text == expected_values
+    assert all(character.isdigit() for character in value_text)
+    unrelated = "split after 2 of 4" if family == "aggregate_report" else "held (skip): 9"
+    unrelated_start = prompt.index(unrelated, prompt.index(note))
+    unrelated_positions = set(range(unrelated_start, unrelated_start + len(unrelated)))
+    assert not unrelated_positions & set(groups["note_value_tokens"])
+
+
 def test_random_positions_are_seeded_unique_and_distinct() -> None:
     from local_llm_lab.probes import patch
 

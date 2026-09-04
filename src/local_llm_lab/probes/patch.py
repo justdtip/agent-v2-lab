@@ -315,18 +315,33 @@ def _message_contents(messages: Sequence[dict[str, Any]]) -> tuple[str, str, lis
 
 
 def _note_values(note: str) -> list[str]:
-    """Return explicit value clauses from a canonical expert note, if present."""
+    """Return numeric fact values, excluding labels, ordinals, and action expressions."""
     thought = note.split("\n```json", maxsplit=1)[0]
-    return [
-        match.group(1).strip()
+    number = r"-?\d+(?:\.\d+)?"
+    values: list[str] = []
+    for match in re.finditer(
+        r"\b(?:approved|values so far|first half|second half)\s*:\s*([^;.\n]+)",
+        thought,
+        flags=re.IGNORECASE,
+    ):
+        values.extend(re.findall(number, match.group(1)))
+    values.extend(
+        match.group(1)
         for match in re.finditer(
-            r"\b(?:approved|first half|second half|highest so far)\s*:\s*"
-            r"(.*?)(?=;|\.\s+(?:Reading|Computing)|,\s+above threshold|$)",
+            rf"\b(?:first|second|grand|approved)\s+(?:subtotal|total)\s*=\s*({number})",
             thought,
             flags=re.IGNORECASE,
         )
-        if match.group(1).strip()
-    ]
+    )
+    values.extend(
+        match.group(1)
+        for match in re.finditer(
+            rf"\bhighest so far\s*:\s*(?:[^;=]*=\s*)?({number})",
+            thought,
+            flags=re.IGNORECASE,
+        )
+    )
+    return values
 
 
 def _groups_for(tokenizer: Any, token_ids: Sequence[int], messages: Sequence[dict[str, Any]]) -> dict[str, tuple[int, ...]]:
