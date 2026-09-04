@@ -983,3 +983,9 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   raises and BOTH D arms would stop before iteration one — the same failure as B4 attempt 1,
   caught before the lane was spent. Ruling requested; three options, Deputy recommends raising
   the D pair's limit with the pairwise rule amended as it was for effective batch.
+- One-step check on run D's longest real row (2,874 tokens), one process per mode: floor 9.90 GB
+  / 20.9 s; chunkwise chunk 64 **10.12 GB / 44.1 s (0.22 GB over the floor, clears the 16.2 GB
+  gate)**; chunked chunk 64 **OOM at 19.22 GB**. So the committed stage-1 recurrence cannot
+  train run D at all, and stage 2 (#55) is a prerequisite rather than an optimisation — asked
+  to be gated ahead of the preflight slice. R32 gate (a) passes for stage 2; gate (b) still
+  needs consecutive steps at the mean length with warm-up excluded. Posted on #55 and #60.
