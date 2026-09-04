@@ -132,3 +132,124 @@ def test_hybrid_native_diagnostic_preserves_bfloat16_and_matches_reference() -> 
     assert native_manual.dtype == mx.bfloat16
     assert float(mx.max(mx.abs(fp32_residual - native_reference)).item()) > 0.0
     assert float(mx.max(mx.abs(native_manual - native_reference)).item()) == 0.0
+
+
+# --------------------------------------------------------------------------- LoRA wrappers
+
+
+def _wrap_dense_projections(model: object, *, rank: int = 2) -> int:
+    """Replace every dense LoRA-target projection with a real mlx-lm ``LoRALinear`` wrapper.
+
+    This is what ``mlx_lm.load(..., adapter_path=...)`` does to a policy: each projection
+    becomes a plain ``nn.Module`` holding the original at ``.linear``. Returns the wrap count.
+    """
+    import mlx.nn as nn
+    from mlx_lm.tuner.lora import LoRALinear
+
+    suffixes = {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"}
+    wrapped = 0
+    for block in ArchitectureView.from_model(model).blocks:
+        for path, module in list(block.named_modules()):
+            if not path or not isinstance(module, nn.Linear):
+                continue
+            if path.rsplit(".", 1)[-1] not in suffixes:
+                continue
+            parent = block
+            *parents, leaf = path.split(".")
+            for name in parents:
+                parent = getattr(parent, name)
+            setattr(parent, leaf, LoRALinear.from_base(module, r=rank))
+            wrapped += 1
+    return wrapped
+
+
+def test_lora_targets_see_through_adapter_wrappers_on_dense_and_hybrid_fakes() -> None:
+    """Loading an adapter wraps projections; the view must report the same paths regardless.
+
+    Regression for the live P6 failure: ``spec.resolve`` on an adapter-loaded policy raised
+    ``LoRA policy 'attention+mlp' matched no linear modules`` because the wrapper is not an
+    ``nn.Linear`` and its ``.linear`` child carries the wrong path suffix.
+    """
+    from mlx_lm.tuner.lora import LoRALinear
+
+    from test_probes import make_dense_fake, make_hybrid_fake
+
+    for make, policy in ((make_dense_fake, "attention+mlp"), (make_hybrid_fake, "auto")):
+        plain, _ = make()
+        expected = ArchitectureView.from_model(plain).lora_targets(policy)
+        expected_count = ArchitectureView.from_model(plain).lora_parameter_count(expected, 16)
+
+        wrapped_model, _ = make()
+        assert _wrap_dense_projections(wrapped_model) > 0
+        view = ArchitectureView.from_model(wrapped_model)
+        assert any(
+            isinstance(module, LoRALinear)
+            for block in view.blocks
+            for _, module in block.named_modules()
+        ), "the fake must actually carry LoRA wrappers for this test to mean anything"
+
+        targets = view.lora_targets(policy)
+        assert targets == expected
+        assert not any(path.endswith(".linear") for path in targets)
+        assert view.lora_parameter_count(targets, 16) == expected_count
+
+
+def test_model_spec_resolve_succeeds_on_an_adapter_wrapped_policy() -> None:
+    """The exact call chain that crashed: load_policy -> spec.resolve -> lora_targets."""
+    from local_llm_lab.models import load_model_spec
+
+    from test_probes import make_dense_fake
+
+    plain, _ = make_dense_fake()
+    wrapped, _ = make_dense_fake()
+    _wrap_dense_projections(wrapped)
+    spec = load_model_spec("qwen25-coder-3b")
+    tokenizer = type("Tokenizer", (), {"snapshot_revision": "fake-dense-revision"})()
+
+    expected = spec.resolve(plain, tokenizer)
+    resolved = spec.resolve(wrapped, tokenizer)
+
+    assert resolved.lora_keys == expected.lora_keys
+    assert resolved.trainable_parameters == expected.trainable_parameters
+
+
+def test_lora_wrapper_over_a_quantized_base_reports_dequantized_input_width() -> None:
+    """The real 3B is 4-bit: the wrapper's base is a ``QuantizedLinear`` and dims come from it."""
+    import mlx.nn as nn
+    from mlx_lm.tuner.lora import LoRALinear
+
+    from local_llm_lab.arch import _linear_dimensions
+
+    base = nn.QuantizedLinear(64, 8, bias=False, group_size=64, bits=4)
+    wrapper = LoRALinear.from_base(base, r=2)
+    assert _linear_dimensions(base) == (8, 64)
+
+    class _Attn(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.q_proj = wrapper
+
+    class _Block(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.self_attn = _Attn()
+
+    block = _Block()
+    found = dict((path, module) for path, module in block.named_modules() if path)
+    # The shape mlx-lm produces: wrapper at the projection path, base one level down.
+    assert list(found) == [
+        "self_attn",
+        "self_attn.q_proj",
+        "self_attn.q_proj.dropout",
+        "self_attn.q_proj.linear",
+    ]
+    assert isinstance(found["self_attn.q_proj"], LoRALinear)
+    assert isinstance(found["self_attn.q_proj.linear"], nn.QuantizedLinear)
+    # The wrapper owns no ``weight``: dimension readers must be handed the base, which is what
+    # the view's discovery now does. Handing them the wrapper is the pre-fix failure mode.
+    try:
+        _linear_dimensions(wrapper)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("the LoRA wrapper must not satisfy the linear-dimension reader")

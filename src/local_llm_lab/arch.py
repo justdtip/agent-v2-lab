@@ -293,6 +293,16 @@ class ArchitectureView:
         return None
 
     def _linear_modules(self) -> list[tuple[int, str, Any]]:
+        """Every linear projection per block, seen through adapter wrappers.
+
+        Loading a policy with an adapter (``mlx_lm.load(..., adapter_path=...)``) replaces
+        each projection with a ``LoRALinear``: a plain ``nn.Module`` that keeps the original at
+        ``.linear``. The wrapper is not a linear type, and its child sits at ``<path>.linear``,
+        whose suffix matches no LoRA target. So a wrapper is reported under *its own* path with
+        the *base* module, and the base is not reported a second time. Paths therefore stay
+        identical with or without an adapter, which adapter comparison and provenance rely on,
+        and dimension readers receive the module that owns ``weight`` and ``bits``.
+        """
         import mlx.nn as nn
 
         linear_types = (nn.Linear, nn.QuantizedLinear)
@@ -300,11 +310,22 @@ class ArchitectureView:
         for index, block in enumerate(self.blocks):
             if not callable(getattr(block, "named_modules", None)):
                 continue
-            found.extend(
-                (index, path, module)
-                for path, module in block.named_modules()
-                if path and isinstance(module, linear_types)
-            )
+            entries = [(path, module) for path, module in block.named_modules() if path]
+            wrapped: dict[str, Any] = {}
+            for path, module in entries:
+                if isinstance(module, linear_types):
+                    continue
+                base = getattr(module, "linear", None)
+                if isinstance(base, linear_types):
+                    wrapped[path] = base
+            for path, module in entries:
+                if path in wrapped:
+                    found.append((index, path, wrapped[path]))
+                    continue
+                if any(path.startswith(prefix + ".") for prefix in wrapped):
+                    continue
+                if isinstance(module, linear_types):
+                    found.append((index, path, module))
         return found
 
     def _validate_block_index(self, index: int) -> int:
