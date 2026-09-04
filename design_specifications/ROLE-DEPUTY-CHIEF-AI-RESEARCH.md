@@ -111,8 +111,11 @@ Chief promotes it to §7 or deletes it. Never write into §7 yourself.
 
 ## 9. Current state of play (as of 2026-09-05 evening; update as things land)
 
-HEAD `112648b`+docs, pushed. Suite at the last clean gate **807 passed, exit 0** bare; the tree
-carries two in-flight lanes' uncommitted edits (R27 scorer in `patch.py`; the training-fix
+HEAD `4df386e`, pushed (branch in sync with origin). Suite **1210 passed, exit 0** bare.
+Seven lanes landed 2026-09-05 late through the reopening workflow (`8fdffea`, `6f84217`,
+`30424d6`, `1d2da93`, `1953493`, `d0adfc6`, `382e2f8`); three reviewed slices remain
+uncommitted at the CRO's gate: R32 stage 2, the preflight budget/footprint gate, the
+adapter-wrapped fixtures.
 slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.py`.
 
 - **Training arm B4: BLOCKED at the framework level (#50, ruling requested).** Three
