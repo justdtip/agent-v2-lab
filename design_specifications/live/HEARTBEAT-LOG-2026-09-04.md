@@ -939,3 +939,31 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   adapter A, 4B sweep (~30 min), single-decision check — before D4 trains.
 - The Chief's documents from that session (Part C, R34/R35, the role manual, EXP-001 spec and
   work order) are committed here under the moves convention.
+
+## 2026-09-05 late — ultracode workflow: eight lanes surveyed, seven landed, one discarded
+
+- Director reopened every outstanding lane through a workflow (23 agents, 0 errors): six
+  read-only surveys → a partition → an implementer and a conformance reviewer per lane. The
+  partition's disjointness was moved out of the prompt into the script after the Chief's
+  warning: first lane by priority owns a path, later claimants are MERGED into the owner, the
+  nine files of the frozen slices are stripped, and a final pass halts the fan-out if any path
+  survives twice. Measured outcome: 8 lanes, 51 paths, zero collisions; `state_probe.py` and
+  `patch.py` each single-owner.
+- Three problems caught in the Deputy's own read, none by the conformance pass: EXP-001's
+  kind-matched layer family was never derived (the per-kind contrast had no guaranteed pair);
+  the comparison invented a Holm family that disagreed with the reanalysis's; the governance
+  records lane fabricated a HEAD anchor in both checklists — discarded, not repaired.
+- The CRO put a hold on the commits, read every source hunk, and returned two conditions on
+  the rollout/branch lane (the stage manifest is the write guard's own sentinel and was written
+  non-atomically; rollout wrote no provenance where branch did) plus one hazard of the Deputy's
+  making: the composed review worktree held the under-correction comparability lane beside the
+  five, so a careless commit would have landed the pre-ruling family. Proven excluded (zero
+  state_probe hunks in any of the five patches) and every commit asserted its file list.
+- Landed, each scope-asserted and suite-gated: `8fdffea` run-D recipe, `6f84217` probe-CLI
+  preflight/provenance, `30424d6` legacy writer guards + atomic manifests, `1d2da93` pipeline
+  run logging + R23 basis, `1953493` state-probe comparability (ruled family; both tools now
+  share one partition function), `d0adfc6` EXP-001 sweep prerequisites (derived family), 
+  `382e2f8` rollout/branch hardening (both conditions). Suite 1210 passed, exit 0.
+- Outstanding: three frozen slices at the CRO's gate; the run-D data (93 MB) preserved in
+  worktree `wf_5ffe49d1-99d-9` pending the Director's delivery decision; the preflight
+  sequencing hazard; the free lane. Director review raised as #59.

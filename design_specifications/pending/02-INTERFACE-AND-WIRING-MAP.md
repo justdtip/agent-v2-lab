@@ -707,6 +707,19 @@ forget. Each has an integration check in §6.
   artifact. The Deputy dispatches and keeps the board for every lane. A correction the Head
   makes directly comes to the Chief with the R19 pass and no domain review. Readings of probe
   results are the Head's and ratified by the Chief.
+- **R29 addendum 2 (2026-09-05) one Holm family definition.** `compare` uses the reanalysis's
+  family: one family per (cohort, scope) spanning every (target, layer) cell, with the two
+  controls collapsed into one cell by the larger p-value (a difference counts only if it holds
+  against both baselines), within-difficulty scopes being separate families. `holm_supported`
+  stays strictly additional to the interval flag. `COMPARE_HOLM_FAMILY` declares this, the
+  artifact names it, and a test asserts the two tools partition a synthetic result
+  identically. Raised by the Head of Interpretability on #57.
+- **R37 (2026-09-05) preflight schema bumps land with their regeneration.** A commit that
+  changes the preflight artifact schema is committed only as one operation with the
+  regeneration of every `outputs/preflight/*.json` on the lane; the Director's approval of the
+  commit is the lift for those runs, and no other stage runs between them.
+- **R26 amended (2026-09-05):** on non-training stages `incomplete_run` is an end-event field
+  meaning "exited before writing its report", carrying no verdict.
 
 ## 8. Implementer amendments (append-only, dated)
 
