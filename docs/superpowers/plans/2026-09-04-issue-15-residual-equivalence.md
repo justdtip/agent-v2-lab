@@ -15,7 +15,7 @@
 - Keep `ArchitectureView.embed(ids)` and `ArchitectureView.run_block(...)` float32. Activations and tangents remain float32 and weights remain quantised; do not remove or weaken those casts.
 - Treat BF16-versus-FP32 as the leading hypothesis, not a conclusion. The Qwen3.5 native-dtype manual-loop control must try to falsify it before the equivalence pass criterion changes.
 - The regression fake is genuinely BF16 and hybrid: three linear-attention blocks and one attention block, with distinct native masks and no cache.
-- Record both maximum absolute error and scale-normalized maximum relative error. Proposed tolerance is derived before controls from the reference/native dtype: `relative_tolerance = 2 * finfo(reference.dtype).eps` and `absolute_tolerance = relative_tolerance * max(reference_scale, finfo(reference.dtype).smallest_normal)`, where `reference_scale = max(abs(reference))`. Do not tune either threshold after observing a model result.
+- Record both maximum absolute error and scale-normalized maximum relative error. The pre-control proposal `2 * epsilon` was fixed before execution and falsified by both controls. The post-control candidate is derived from modeled rounding sites rather than fitted to either result: `rounding_steps = 2 * num_layers + 1`, `relative_tolerance = sqrt(rounding_steps) * finfo(reference.dtype).eps`, and `absolute_tolerance = relative_tolerance * max(reference_scale, finfo(reference.dtype).smallest_normal)`, where `reference_scale = max(abs(reference))`.
 - The pre-fix instrumentation may report `within_tolerance`, but `_residual_equivalence(...)["passed"]` remains exact equality until both controls support the hypothesis and the fix is independently reviewed.
 - `outputs/preflight/qwen35-4b.json` is immutable incident evidence. Its bytes retain SHA-256 `499efee17d6ba76f389ff975dbc227d7e569d5e4836963be4260fcafba9d5679` throughout.
 - `require_preflight` defaults to the view/probe predicate and remains fail-closed. The training predicate requires schema, identity, revision, memory, prompt-rendering, and LoRA evidence but deliberately does not depend on residual/JVP. No CLI call-site changes belong to this task.
@@ -41,7 +41,7 @@
 **Interfaces:**
 - Produces `ArchitectureView.diagnostic_native_final_residual(ids) -> array`: the raw embedding, native masks, direct blocks, and final norm with no FP32 promotion and no cache. It is diagnostic-only; all existing view methods retain their contracts.
 - Produces `run_residual_control(model_name, *, output_path, ...) -> Path`: fake-testable, one-model diagnostic JSON comparing FP32 manual, native-dtype manual, and native reference residuals.
-- Produces `_residual_metrics(actual, reference, *, array_api) -> dict[str, Any]`: `max_abs_error`, `max_relative_error`, `reference_dtype`, `reference_epsilon`, `reference_scale`, `relative_tolerance`, `absolute_tolerance`, and `within_tolerance`.
+- Produces `_residual_metrics(actual, reference, *, num_layers, array_api) -> dict[str, Any]`: `max_abs_error`, `max_relative_error`, `reference_dtype`, `reference_epsilon`, `reference_scale`, `rounding_steps`, `relative_tolerance`, `absolute_tolerance`, and `within_tolerance`.
 - Produces `require_preflight(spec, *, consumer: Literal["view", "training"] = "view", ...)`: common identity/revision/schema validation followed by consumer-specific evidence validation.
 - Preserves `run_preflight(...) -> Path` on success and changes failure to `SystemExit` only after the artifact is written.
 
@@ -78,7 +78,7 @@
 
 - [ ] **Step 4: Add dtype-derived relative/absolute metric instrumentation**
 
-  Add fake-only tests for `_residual_metrics` using BF16 and FP32 references. Compute:
+  Add fake-only tests for `_residual_metrics` using BF16 and FP32 references. The initial pre-control instrumentation computes a fixed `2 * epsilon` proposal so the controls can falsify it without post-hoc tuning. After Step 10, Step 11 replaces only this formula with the reviewed rounding-site model.
 
   ```python
   info = array_api.finfo(reference.dtype)
@@ -142,9 +142,11 @@
 
   For each approved command: verify target absence; re-list the board; record HEAD/status/canonical hash; acquire `model-execution`; run that command exactly once; ensure the process ends; release promptly; record exit/output/artifact hash; and reconfirm the canonical hash. Release between commands when practical. Never keep Qwen3.5 and Qwen2.5 resident concurrently. If Qwen3.5 native-manual-versus-native does not collapse within its dtype-derived tolerance, the hypothesis is falsified: do not apply the tolerance fix or run the Qwen3.5 retry; return to one-hypothesis-at-a-time offline diagnosis.
 
-- [ ] **Step 11: Apply the measured criterion only if both controls support it**
+- [ ] **Step 11: Apply a structural rounding-site criterion only if both controls support the root cause**
 
-  Give the same principal implementer the two immutable control artifacts. If Qwen3.5 native-manual-versus-native is within tolerance and Qwen2.5 shows the same class of FP32-versus-BF16 divergence, change `_residual_equivalence` to set `passed = metrics["within_tolerance"]` and `criterion = "reference_dtype_scaled"`. Do not change the formula. Update fake expectations, append both controls and the conclusion to the diagnosis report, and commit. The same independent reviewer performs a scoped re-review.
+  Give the same principal implementer the two immutable control artifacts. The measured facts are: Qwen3.5 native-manual versus native is exactly zero; Qwen3.5 FP32 versus BF16 is absolute `2.5591506958007812`, relative `0.054741191354027406`, scale `46.75`, epsilon `0.0078125`; Qwen2.5 FP32 versus runtime-FP16 is absolute `0.4695625305175781`, relative `0.0032807862394241267`, scale `143.125`, epsilon `0.0009765625`. The two-epsilon proposal failed both and must not be widened by an empirical multiplier.
+
+  Test and implement the second hypothesis: independent roundoff accumulates at the two residual additions per decoder block plus final norm, so `rounding_steps = 2 * num_layers + 1` and `relative_tolerance = sqrt(rounding_steps) * reference_epsilon`; absolute tolerance remains reference-scale multiplied. This yields predeclared structural budgets `0.06298638865858242` / `2.944613669788728` for 32-layer Qwen3.5 and `0.00834375365753665` / `1.194199742234933` for 36-layer Qwen2.5. Pass `view.num_layers` into every metric call, serialize `rounding_steps`, change `_residual_equivalence` to set `passed = metrics["within_tolerance"]` and `criterion = "reference_dtype_rms_roundoff"`, and add boundary tests just inside/outside the computed budget plus invalid-layer-count tests. Update the report and commit. The same independent reviewer performs a scoped re-review and must reject any constant chosen from the observed errors.
 
 - [ ] **Step 12: R13 before the one Qwen3.5 retry**
 
