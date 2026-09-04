@@ -816,3 +816,16 @@ recording the execution rule. No execution lane designated yet.
   tracked (an ignore pattern matched only the directory add).
 - P6 ledger rerun under R27/R30 needs only the Director's lift; lane free while B4 is
   blocked. R32 stage 1 lanes in flight; the lane probe script is ready.
+
+## 2026-09-05 — R32 stage 1 lane 1 delivered and read; lane probe running
+
+- Read `training/gated_delta_chunked.py`: same library step function, same order, chunks of
+  C tokens under `mx.checkpoint` with every tensor an explicit argument (closure tensors would
+  escape the recompute), masked variant, trailing chunk, repeat inside the differentiated
+  region, float32 state; installer rebinds `gated_delta.gated_delta_ops` (module global on the
+  `use_kernel=False` branch only) and restores on exception; `training_state_bytes` =
+  (ceil(T/C) + C) × state, erring high. Twelve tests incl. bit-exact forward/state/gradients
+  across T × C × gating × mask and the REAL GatedDeltaNet forward+backward unchanged (R31).
+  Implementer's correction of the review: mlx-lm 0.31.3 already evals in `evaluate`; the
+  wrapper is kept for restore-on-exception. Config: batch 1 × accumulation 4, chunk 64;
+  pairwise test compares effective batch. Suite 1016 / exit 0. Verdict pending the probe.
