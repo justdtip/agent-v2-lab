@@ -55,10 +55,10 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 
 ## R13 full fake-only suite
 
-- HEAD: `53a49eddfd17fb101bdf44c88f031e37ffa7e4ce`
+- HEAD: `7aed46a537e998e5b1b5be62027c7a98865fd4ca`
 - Command: `uv run pytest -q`
 - Exit code: `0`
-- Result: `525 passed, 0 failed, 0 xfailed`
+- Result: `526 passed, 0 failed, 0 xfailed`
 - Failing node names: none
 
 ## Review fix round 2
