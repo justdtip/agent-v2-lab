@@ -62,9 +62,11 @@ row of the scorecard for the read side: regimen is sufficient and cheap.
 
 What this run cannot say, and why the remaining seven cells should not be run as designed:
 
-1. The mixed dataset's difficulty-0 rows (1,050 of 2,367) are byte-identical to the adapters'
-   SFT training rows (same seed, split name, window). Any base-versus-adapter margin on them is
-   confounded with memorisation. There is no flag to exclude them.
+1. The mixed dataset's `train-` rows (737 of 2,367; corrected 2026-09-03 22:10 from an earlier
+   "1,050": the `p2mix` difficulty-0 rows are different tasks) are byte-identical to the
+   adapters' SFT training rows. Any base-versus-adapter margin on them is confounded with
+   memorisation, and excluding them shifts the difficulty mix, so adapter comparisons must be
+   made within difficulty (ruling R7).
 2. `--strip` rewrites assistant notes only; the last two verbatim observations and the user
    prompt stay, so a stripped run under-tests rather than tests.
 3. No cross-policy comparison, paired test, confidence interval, or repeated split exists. Every
