@@ -784,3 +784,12 @@ recording the execution rule. No execution lane designated yet.
   ~2,400-token rows); the spike is the gated-delta BACKWARD, independent of batch and depth.
   B4 cannot step the median training row on this machine with mlx-lm 0.31.3. Reading the
   kernel's VJP path and checking newer mlx-lm.
+
+## 2026-09-05 — B4 blocked at the framework level: unrolled gated-delta recurrence in training
+
+- Read in the library: training runs `gated_delta_ops` (per-token Python loop, state 2 MiB per
+  step retained for backward) because the Metal kernel has no gradient; forward uses the
+  kernel. Linear in T per layer; matches 11.4 GB @495 and 19.2 GB @997. mlx-lm 0.31.3 is the
+  latest release (mlx 0.32.2). Proposal: chunked checkpointed recurrence for training
+  (exact by construction; boundary states only), registry budget → 17.8; ruling requested
+  (new issue) with a slice design. Lane free. Work orders filed meanwhile: B1b #48, R30 #49.
