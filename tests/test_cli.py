@@ -122,7 +122,8 @@ def test_stage_data_normalizes_legacy_and_explicit_splits(monkeypatch, tmp_path)
 
     monkeypatch.setattr(cli, "write_dataset", capture_dataset)
     monkeypatch.setattr(cli, "write_provenance", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "load_model_spec", lambda name: object())
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: SimpleNamespace(hf_id="fake/hf"))
+    monkeypatch.setattr(cli, "_load_data_tokenizer", lambda hf_id: object())
     base = {
         "model": "fake",
         "output": tmp_path / "out",
@@ -146,6 +147,37 @@ def test_stage_data_normalizes_legacy_and_explicit_splits(monkeypatch, tmp_path)
         stage_data(base, [])
 
 
+def test_stage_data_uses_registered_tokenizer_without_loading_model_weights(
+    monkeypatch, tmp_path
+) -> None:
+    spec = SimpleNamespace(hf_id="registry/hf-id")
+    tokenizer = object()
+    datasets = []
+    provenance = []
+    config = {
+        "model": "registry-name", "output": tmp_path / "out", "data": tmp_path / "data",
+        "seed": 1, "keep_last": 2, "tasks": {"train": 1, "valid": 1, "test": 1},
+    }
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(cli, "_load_data_tokenizer", lambda hf_id: tokenizer, raising=False)
+    monkeypatch.setattr(cli, "_load_training_base", lambda *_: pytest.fail("loaded weights"))
+    monkeypatch.setattr(ModelSpec, "resolve", lambda *_: pytest.fail("resolved model"))
+    monkeypatch.setattr(
+        cli,
+        "write_dataset",
+        lambda *args, **kwargs: datasets.append((args, kwargs)) or {"splits": {}},
+    )
+    monkeypatch.setattr(
+        cli, "write_provenance", lambda run_dir, *, resolved, spec, extra: provenance.append(spec)
+    )
+
+    cli.stage_data(config, [])
+
+    assert datasets[0][1]["tokenizer"] is tokenizer
+    assert datasets[0][1]["spec"] is spec
+    assert provenance == [spec]
+
+
 def test_stage_data_passes_the_exact_six_run_d_chunks_and_recovery_multipliers(
     monkeypatch, tmp_path
 ) -> None:
@@ -158,7 +190,8 @@ def test_stage_data_passes_the_exact_six_run_d_chunks_and_recovery_multipliers(
 
     monkeypatch.setattr(cli, "write_dataset", capture_dataset)
     monkeypatch.setattr(cli, "write_provenance", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "load_model_spec", lambda name: object())
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: SimpleNamespace(hf_id="fake/hf"))
+    monkeypatch.setattr(cli, "_load_data_tokenizer", lambda hf_id: object())
     config = load_config(Path(__file__).parents[1] / "configs" / "agent_v2d.yaml")
     config["data"] = tmp_path / "data"
     config["output"] = tmp_path / "output"

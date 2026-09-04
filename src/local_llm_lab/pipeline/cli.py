@@ -89,9 +89,13 @@ def dataset_splits(config: dict[str, Any]) -> dict[str, SplitSpec]:
 
 def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
     _log("data: generating expert trajectories with state-carrying notes")
+    spec = load_model_spec(config["model"])
+    tokenizer = _load_data_tokenizer(spec.hf_id)
     manifest = write_dataset(
         config["data"],
         dataset_splits(config),
+        tokenizer=tokenizer,
+        spec=spec,
         seed=config["seed"],
         keep_last=config["keep_last"],
         chat_dir=config.get("chat_replay"),
@@ -102,7 +106,7 @@ def stage_data(config: dict[str, Any], extra: list[Path]) -> None:
     write_provenance(
         config["output"],
         resolved=None,
-        spec=load_model_spec(config["model"]),
+        spec=spec,
         extra={
             "stage": "data",
             "generator_version": GENERATOR_VERSION,
@@ -124,6 +128,24 @@ def _load_training_base(hf_id: str) -> tuple[Any, Any]:
     from mlx_lm import load
 
     return load(hf_id)
+
+
+def _import_pinned_mlx_lm() -> Any:
+    package = importlib.import_module("mlx_lm")
+    installed = getattr(package, "__version__", None)
+    if installed != _PINNED_MLX_LM_VERSION:
+        raise SystemExit(f"mlx-lm {_PINNED_MLX_LM_VERSION} required; found {installed}")
+    return package
+
+
+def _load_data_tokenizer(hf_id: str) -> Any:
+    configure_local_cache()
+    _import_pinned_mlx_lm()
+    try:
+        utils = importlib.import_module("mlx_lm.utils")
+    except ImportError as error:
+        raise SystemExit(f"cannot import pinned mlx_lm.utils: {error}") from error
+    return utils.load_tokenizer(hf_id)
 
 
 def _clear_model_cache() -> None:
@@ -150,10 +172,7 @@ def _effective_training_spec(config: dict[str, Any]) -> ModelSpec:
 
 def _load_training_entry() -> tuple[Any, dict[str, Any]]:
     try:
-        package = importlib.import_module("mlx_lm")
-        installed = getattr(package, "__version__", None)
-        if installed != _PINNED_MLX_LM_VERSION:
-            raise SystemExit(f"mlx-lm {_PINNED_MLX_LM_VERSION} required; found {installed}")
+        _import_pinned_mlx_lm()
         module = importlib.import_module("mlx_lm.lora")
     except ImportError as error:
         raise SystemExit(f"cannot import pinned mlx_lm.lora: {error}") from error
