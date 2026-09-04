@@ -746,3 +746,16 @@ recording the execution rule. No execution lane designated yet.
   a library seam drive the library's real class on that side; fakes only for weights and
   compute. Committed on a bare 827 / exit 0; pushed; #47 closed. Attempt 3 started as a
   background process; attempts 1 and 2 kept on disk as records for the #35 amendment.
+
+## 2026-09-05 — B4 attempt 3 training (val 0.7207 at iter 0); B1b delivered, sent back for rebase + span technique
+
+- Attempt 3 past loader, targets and first validation (108 s); fans audible across the room
+  per the Director. First train report due at iteration 10.
+- B1b (capture sub-slice) delivered: registry `probes.capture_dtype` (default native) with a
+  `spec.probes` view; `capture_residuals(dtype=)`; conditions and stems; `layer_{L}_note_mean`;
+  `at_position`; `task_difficulties` reads `Task.difficulty` (legacy equality pinned). Patch
+  conflicts with the committed B1c → rebase onto f29fbfd requested. Design return: the note-
+  token location rebuilt the joint tokenisation at a merge (P1's old behaviour); asked for the
+  widening technique on the natural sequence with the repair counted (as `patch.py` does).
+  Two questions for the Chief carried: strip the target note under notes-stripped? pool the
+  thought or the whole content?
