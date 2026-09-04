@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -236,6 +237,74 @@ def test_resolve_training_spec_uses_registry_hf_id_and_configured_key_policy(
     )
 
 
+def test_resolve_training_spec_releases_temporary_objects_before_clearing_cache(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The transient base model and tokenizer must not remain alive during cache clearing."""
+    config = _training_config(tmp_path)
+    spec = _training_model_spec()
+    resolved = SimpleNamespace(spec=spec, num_layers=7, lora_keys=("hybrid.q",))
+    events = []
+
+    class Temporary:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def __del__(self) -> None:
+            events.append(f"released-{self.name}")
+
+    def fake_load(hf_id: str):
+        events.append(f"load-{hf_id}")
+        return Temporary("model"), Temporary("tokenizer")
+
+    def fake_resolve(self, model, tokenizer):
+        events.append("resolved")
+        return resolved
+
+    def clear_cache() -> None:
+        assert "released-model" in events
+        assert "released-tokenizer" in events
+        events.append("cleared")
+
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    monkeypatch.setattr(cli, "_load_training_base", fake_load)
+    monkeypatch.setattr(cli, "_clear_model_cache", clear_cache)
+    monkeypatch.setattr(ModelSpec, "resolve", fake_resolve)
+
+    assert cli._resolve_training_spec(config) is resolved
+    assert events[-1] == "cleared"
+
+
+@pytest.mark.parametrize("failure", ("load", "resolve"))
+def test_resolve_training_spec_clears_cache_on_load_and_resolution_failures(
+    monkeypatch, tmp_path: Path, failure: str
+) -> None:
+    """Cache cleanup protects the entire temporary-model lifecycle, including both failures."""
+    config = _training_config(tmp_path)
+    spec = _training_model_spec()
+    clears = []
+
+    monkeypatch.setattr(cli, "load_model_spec", lambda name: spec)
+    if failure == "load":
+        monkeypatch.setattr(
+            cli,
+            "_load_training_base",
+            lambda hf_id: (_ for _ in ()).throw(RuntimeError("load failed")),
+        )
+    else:
+        monkeypatch.setattr(cli, "_load_training_base", lambda hf_id: (object(), object()))
+        monkeypatch.setattr(
+            ModelSpec,
+            "resolve",
+            lambda self, model, tokenizer: (_ for _ in ()).throw(RuntimeError("resolve failed")),
+        )
+    monkeypatch.setattr(cli, "_clear_model_cache", lambda: clears.append(True))
+
+    with pytest.raises(RuntimeError, match=f"{failure} failed"):
+        cli._resolve_training_spec(config)
+    assert clears == [True]
+
+
 def test_lora_config_uses_resolved_architecture_and_fresh_keys(tmp_path: Path) -> None:
     """mlx-lm config follows architecture-resolved targets rather than static config fields."""
     config = _training_config(tmp_path)
@@ -345,19 +414,21 @@ def test_stage_eval_writes_one_ordered_provenance_record(monkeypatch, tmp_path: 
     evaluations = []
     calls = []
     lookups = []
+    events = []
+
+    def fake_evaluation(**kwargs):
+        evaluations.append(kwargs)
+        events.append(f"evaluated-{kwargs['label']}")
+        return summaries[len(evaluations) - 1]
+
+    def capture_provenance(run_dir, *, resolved, spec, extra) -> None:
+        events.append("provenance")
+        calls.append((run_dir, resolved, spec, deepcopy(extra)))
 
     monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
-    monkeypatch.setattr(
-        cli,
-        "run_evaluation",
-        lambda **kwargs: evaluations.append(kwargs) or summaries[len(evaluations) - 1],
-    )
+    monkeypatch.setattr(cli, "run_evaluation", fake_evaluation)
     monkeypatch.setattr(cli, "load_model_spec", lambda model: lookups.append(model) or spec)
-    monkeypatch.setattr(
-        cli,
-        "write_provenance",
-        lambda run_dir, *, resolved, spec, extra: calls.append((run_dir, resolved, spec, extra)),
-    )
+    monkeypatch.setattr(cli, "write_provenance", capture_provenance)
 
     cli.stage_eval(
         config,
@@ -374,6 +445,48 @@ def test_stage_eval_writes_one_ordered_provenance_record(monkeypatch, tmp_path: 
         (output, None, spec, {"stage": "eval", "evaluations": summaries})
     ]
     assert lookups == [config["model"]]
+    assert events == ["evaluated-base", "evaluated-best-adapter", "provenance"]
+
+
+def test_stage_eval_second_policy_failure_writes_no_partial_provenance(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A later evaluation error must prevent the completed base result becoming provenance."""
+    output = tmp_path / "output"
+    adapter = output / "best-adapter"
+    adapter.mkdir(parents=True)
+    config = {
+        "output": output,
+        "model": "fake-model",
+        "seed": 17,
+        "keep_last": 2,
+        "eval": {"split": "test", "limit": 180, "max_steps": 2, "max_tokens": 3},
+    }
+    evaluations = []
+    calls = []
+
+    def fake_evaluation(**kwargs):
+        evaluations.append(kwargs["label"])
+        if kwargs["label"] == "best-adapter":
+            raise RuntimeError("second policy failed")
+        return {"label": kwargs["label"]}
+
+    monkeypatch.setattr(cli.Transcript, "start_run", lambda path: None)
+    monkeypatch.setattr(cli, "run_evaluation", fake_evaluation)
+    monkeypatch.setattr(cli, "write_provenance", lambda *args, **kwargs: calls.append(args))
+
+    with pytest.raises(RuntimeError, match="second policy failed"):
+        cli.stage_eval(
+            config,
+            adapter,
+            base=True,
+            split=None,
+            limit=None,
+            stress=False,
+            quiet=True,
+        )
+    assert evaluations == ["base", "best-adapter"]
+    assert calls == []
 
 
 def test_stage_rollout_writes_one_post_run_provenance_record(monkeypatch, tmp_path: Path) -> None:

@@ -97,3 +97,30 @@ def test_package_versions_use_none_only_for_absent_packages(monkeypatch) -> None
     monkeypatch.setattr(provenance, "version", fake_version)
 
     assert provenance._package_versions() == {"mlx": None, **versions}
+
+
+def test_git_metadata_uses_exact_commands_root_and_binary_diff_bytes(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Git provenance preserves exact binary patch bytes at its supplied root."""
+    root = tmp_path / "project"
+    raw_diff = b"diff --git a/a b/a\n\x00binary\xffpatch\n"
+    calls = []
+    responses = [b"topic\n", b"a" * 40 + b"\n", raw_diff]
+
+    def fake_check_output(command, *, cwd):
+        calls.append((command, cwd))
+        return responses.pop(0)
+
+    monkeypatch.setattr(provenance.subprocess, "check_output", fake_check_output)
+
+    assert provenance._git_metadata(root) == {
+        "branch": "topic",
+        "commit": "a" * 40,
+        "dirty_patch_sha256": hashlib.sha256(raw_diff).hexdigest(),
+    }
+    assert calls == [
+        (["git", "branch", "--show-current"], root),
+        (["git", "rev-parse", "HEAD"], root),
+        (["git", "diff", "--binary", "HEAD", "--"], root),
+    ]

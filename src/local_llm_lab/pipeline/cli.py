@@ -137,10 +137,13 @@ def _resolve_training_spec(config: dict[str, Any]) -> ResolvedSpec:
             dropout=train.get("dropout", 0.0),
         ),
     )
-    model, tokenizer = _load_training_base(effective.hf_id)
+    model: Any | None = None
+    tokenizer: Any | None = None
     try:
+        model, tokenizer = _load_training_base(effective.hf_id)
         return effective.resolve(model, tokenizer)
     finally:
+        del model, tokenizer
         _clear_model_cache()
 
 
