@@ -386,6 +386,46 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
     }
 
 
+def evaluation_metadata(
+    *,
+    label: str,
+    resolved: ResolvedSpec,
+    adapter: Path | None,
+    split: str,
+    difficulties: list[int],
+    stress: bool,
+    temperature: float,
+    keep_last: int,
+    seed: int,
+    use_cache: bool,
+    elapsed_seconds: float,
+) -> dict[str, Any]:
+    """The run-identity half of an evaluation summary, which :func:`summarize` cannot know.
+
+    ``summarize`` sees trajectories only, so every key a downstream reader uses to say *which*
+    run an artifact is — ``label``, ``split``, ``data_seed``, ``keep_last``, ``model`` — is
+    added here.  Split out of :func:`run_evaluation` (R38) so a test can build an artifact
+    carrying exactly the keys a real run records without loading a policy: a hand-written
+    summary would certify ``report.load_summaries`` and ``integrity._analyse_evaluation``
+    against their authors' belief about this block rather than against the block itself.
+    """
+    return {
+        "label": label,
+        "model": resolved.as_dict(),
+        "adapter": None if adapter is None else str(adapter.resolve()),
+        "split": split,
+        # A cohort spanning two levels has no single difficulty; ``difficulties`` keeps the set.
+        "difficulty": difficulties[0] if len(difficulties) == 1 else None,
+        "difficulties": difficulties,
+        "stress": stress,
+        "temperature": temperature,
+        "keep_last": keep_last,
+        "data_seed": seed,
+        "kv_cache": use_cache,
+        "elapsed_seconds": elapsed_seconds,
+    }
+
+
 def write_report(path: Path, summary: dict[str, Any], trajectories: list[Trajectory]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     records = []
@@ -487,22 +527,20 @@ def run_evaluation(
             log=log,
         )
         summary = summarize(trajectories)
-        difficulties = sorted({task.difficulty for task in tasks})
         summary.update(
-            {
-                "label": label,
-                "model": resolved.as_dict(),
-                "adapter": None if adapter is None else str(adapter.resolve()),
-                "split": split,
-                "difficulty": difficulties[0] if len(difficulties) == 1 else None,
-                "difficulties": difficulties,
-                "stress": stress,
-                "temperature": temperature,
-                "keep_last": keep_last,
-                "data_seed": seed,
-                "kv_cache": use_cache,
-                "elapsed_seconds": round(time.monotonic() - started, 2),
-            }
+            evaluation_metadata(
+                label=label,
+                resolved=resolved,
+                adapter=adapter,
+                split=split,
+                difficulties=sorted({task.difficulty for task in tasks}),
+                stress=stress,
+                temperature=temperature,
+                keep_last=keep_last,
+                seed=seed,
+                use_cache=use_cache,
+                elapsed_seconds=round(time.monotonic() - started, 2),
+            )
         )
         write_report(output, summary, trajectories)
         print(f"\n{label} on {split} ({'stress' if stress else 'clean'}):")

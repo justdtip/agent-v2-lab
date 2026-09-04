@@ -92,9 +92,21 @@ def adapter_base_identity(adapter_dir: str | Path) -> dict[str, str | None]:
 
     The hf id is ``adapter_config.json``'s ``model`` field, which the trainer writes for every
     run. The snapshot revision is not in that file, so it comes from the run's
-    ``provenance.json`` (SPEC-001 §9) beside the adapter or in its run directory; runs that
-    predate provenance report ``None``, which is why an unknown value never refuses a
-    comparison -- only two *known* and different values do (see :func:`compare_adapters`).
+    ``provenance.json`` (SPEC-001 §9) beside the adapter or in its run directory; a run whose
+    provenance carries no revision reports ``None``, which is why an unknown value never
+    refuses a comparison -- only two *known* and different values do (see
+    :func:`compare_adapters`).
+
+    ``write_provenance`` has two shapes for its ``model`` block and this reads both (R38).
+    A stage holding a ``ResolvedSpec`` writes ``resolved.as_dict()``: the registry
+    declaration nests under ``spec`` and ``snapshot_revision`` sits beside it. A stage that
+    resolved nothing writes ``asdict(spec)``, which is that declaration *flat* -- so ``hf_id``
+    is at the top of the block and there is no ``snapshot_revision`` key at all. The run
+    directory holding ``adapters/`` and ``best-adapter/`` is written by whichever pipeline
+    stage ran last, and ``select``, ``eval`` and ``rollout`` (``pipeline/cli.py:1042``,
+    ``:1112``, ``:1165``) all pass ``resolved=None``, so the flat shape is the one an adapter's
+    parent directory usually holds. Reading only the nested shape lost the hf id that the
+    flat block states outright.
     """
     directory = Path(adapter_dir)
     identity: dict[str, str | None] = {"hf_id": None, "snapshot_revision": None}
@@ -119,8 +131,11 @@ def adapter_base_identity(adapter_dir: str | Path) -> dict[str, str | None]:
         revision = model.get("snapshot_revision")
         if isinstance(revision, str) and revision:
             identity["snapshot_revision"] = revision
+        # ``resolved.as_dict()`` nests the declaration under ``spec``; ``asdict(spec)`` is that
+        # same declaration flat, so its ``hf_id`` is one level up. Nested first: when a stage
+        # did resolve, its record is the one that also carries the revision.
         spec = model.get("spec")
-        recorded = spec.get("hf_id") if isinstance(spec, dict) else None
+        recorded = spec.get("hf_id") if isinstance(spec, dict) else model.get("hf_id")
         if identity["hf_id"] is None and isinstance(recorded, str) and recorded:
             identity["hf_id"] = recorded
         break

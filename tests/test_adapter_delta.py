@@ -4,14 +4,18 @@ import hashlib
 import json
 import sys
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
-from local_llm_lab.pipeline import evaluate
+from local_llm_lab.models import ResolvedSpec, load_model_spec
+from local_llm_lab.pipeline import cli, evaluate
 from local_llm_lab.probes import adapter_delta, capture
+from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.provenance import write_provenance
 
 
 def test_adapter_direction_readouts_derive_negative_direction_by_jvp_linearity(monkeypatch) -> None:
@@ -317,9 +321,8 @@ def test_static_delta_cli_logs_its_identity_and_progress_without_a_base_model(
         },
         str(adapter / "adapters.safetensors"),
     )
-    (adapter / "adapter_config.json").write_text(
-        json.dumps({"lora_parameters": {"scale": 32.0, "rank": 2}}), encoding="utf-8"
-    )
+    # R38: the config the static path reads is the trainer's own, not a two-key stand-in.
+    _write_adapter_config(adapter, _resolved_spec("fake/base"))
     monkeypatch.setattr(
         guard, "require_idle_gpu", lambda *_args: pytest.fail("--no-base reached the GPU guard")
     )
@@ -684,8 +687,66 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
 # --------------------------- SPEC-001 §8/§9/§10 closure: base identity, preflight, provenance
 
 
+def _resolved_spec(hf_id: str, *, revision: str | None = None) -> ResolvedSpec:
+    """A ``ResolvedSpec`` for ``hf_id``, as ``ModelSpec.resolve`` would return one.
+
+    ``resolve`` reads an ``ArchitectureView`` over loaded weights, which this suite must never
+    touch, so the dataclass is constructed directly -- but it *is* the real class over a real
+    registry declaration, so ``as_dict`` lays the record out exactly as ``write_provenance``
+    stores it, and ``lora_config`` reads the fields it really reads.  The architecture numbers
+    are a small stand-in; nothing under test looks at them.
+    """
+    spec = replace(load_model_spec("qwen35-4b"), hf_id=hf_id)
+    return ResolvedSpec(
+        spec=spec,
+        num_layers=4,
+        hidden_size=8,
+        vocab_size=32,
+        tie_word_embeddings=True,
+        layer_types=("full_attention",) * 4,
+        lora_keys=("self_attn.q_proj", "mlp.down_proj"),
+        trainable_parameters=64,
+        probe_layers=(1, 2, 3),
+        cache_strategy="none",
+        cache_strategy_reason="explicit:none",
+        snapshot_revision=revision,
+        jvp_method="untested",
+    )
+
+
+def _write_adapter_config(directory: Path, resolved: ResolvedSpec) -> None:
+    """``adapter_config.json`` as a real training run leaves it (R38).
+
+    mlx-lm writes this file, not us: ``mlx_lm.lora.train_model`` hands ``vars(args)`` to
+    ``mlx_lm.utils.save_config`` before the first step.  So the fixture takes the route
+    ``stage_train`` takes -- a real arm config through ``lora_config``, merged over the
+    library's own ``CONFIG_DEFAULTS``, into ``_effective_lora_args`` -- and then lets mlx-lm's
+    own serialiser write it.  Pinning the shape to the library rather than to a checked-in
+    sample means a release that moves ``scale`` out of ``lora_parameters`` breaks this suite
+    instead of silently handing :func:`adapter_scale` the 20.0 default.  Every step is a dict
+    operation: no weights are loaded and no array is evaluated.
+    """
+    import importlib
+
+    from mlx_lm.utils import save_config
+
+    config = cli.load_config(PROJECT_ROOT / "configs" / "agent_v2b_qwen35_4b.yaml")
+    config["output"] = directory.parent
+    lora = {
+        **importlib.import_module("mlx_lm.lora").CONFIG_DEFAULTS,
+        **cli.lora_config(config, resolved),
+    }
+    save_config(vars(cli._effective_lora_args(lora, {})), directory / "adapter_config.json")
+
+
 def _adapter_dir(directory: Path, *, base: str | None = None, revision: str | None = None) -> Path:
-    """One adapter directory, optionally declaring the base it was trained on."""
+    """One adapter directory, optionally declaring the base it was trained on.
+
+    ``base`` is threaded through the registry declaration rather than poked into the written
+    JSON, because that is the only route by which a real run's ``adapter_config.json`` gets a
+    ``model`` field.  ``revision`` is written by the real :func:`write_provenance` into the run
+    directory above the adapter, which is where the pipeline puts it.
+    """
     from safetensors.numpy import save_file
 
     name = "model.layers.0.mlp.down_proj"
@@ -698,13 +759,20 @@ def _adapter_dir(directory: Path, *, base: str | None = None, revision: str | No
         },
         str(directory / "adapters.safetensors"),
     )
-    config: dict[str, Any] = {"lora_parameters": {"scale": 32.0, "rank": 2}}
-    if base is not None:
-        config["model"] = base
-    (directory / "adapter_config.json").write_text(json.dumps(config), encoding="utf-8")
+    resolved = _resolved_spec(base or "fake/unnamed-base", revision=revision)
+    _write_adapter_config(directory, resolved)
+    if base is None:
+        # mlx-lm always records ``model``; drop it here to reach the provenance fallback,
+        # which is the only way an adapter directory can lack one.
+        config = json.loads((directory / "adapter_config.json").read_text(encoding="utf-8"))
+        del config["model"]
+        (directory / "adapter_config.json").write_text(json.dumps(config), encoding="utf-8")
     if revision is not None:
-        (directory.parent / "provenance.json").write_text(
-            json.dumps({"model": {"snapshot_revision": revision}}), encoding="utf-8"
+        write_provenance(
+            directory.parent,
+            resolved=resolved,
+            spec=resolved.spec,
+            extra={"stage": "test-fixture"},
         )
     return directory
 
@@ -743,6 +811,86 @@ def test_compare_adapters_accepts_one_base_and_records_the_identity(tmp_path) ->
     assert comparison["base_identity"] == {
         "agent-v2b": {"hf_id": "fake/base", "snapshot_revision": "aaa"},
         "agent-v2c": {"hf_id": "fake/base", "snapshot_revision": "aaa"},
+    }
+
+
+# ------------------------------------------------ R38: each read against its real writer
+
+
+def test_adapter_scale_reads_the_scale_the_trainer_nests_under_lora_parameters(tmp_path) -> None:
+    """R38 on ``adapter_delta.py:85``, against the file mlx-lm's trainer writes.
+
+    The recipe's ``train.scale`` is 32.0 and the library's own default is 20.0, so a reader
+    looking anywhere but ``lora_parameters.scale`` reports the default and every relative-norm
+    number in P5 comes out 1.6x small.  Lifting the key one level up is the move that tells
+    the two apart: only a read at the writer's level notices.
+    """
+    adapter = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base")
+    config_path = adapter / "adapter_config.json"
+
+    assert adapter_delta.adapter_scale(adapter) == 32.0
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["scale"] = config["lora_parameters"].pop("scale")
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    assert adapter_delta.adapter_scale(adapter) == adapter_delta.DEFAULT_SCALE
+
+
+def test_base_identity_reads_the_hf_id_the_trainer_writes_as_model(tmp_path) -> None:
+    """R38 on ``adapter_delta.py:104``: the field's name is load-bearing, so rename it."""
+    adapter = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base="fake/base")
+    config_path = adapter / "adapter_config.json"
+
+    assert adapter_delta.adapter_base_identity(adapter)["hf_id"] == "fake/base"
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["base_model"] = config.pop("model")
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    assert adapter_delta.adapter_base_identity(adapter)["hf_id"] is None
+
+
+def test_base_identity_reads_the_revision_at_the_level_write_provenance_records_it(
+    tmp_path,
+) -> None:
+    """R38 on ``adapter_delta.py:113``: ``snapshot_revision`` lives inside the model block."""
+    run = tmp_path / "agent-v2b"
+    adapter = _adapter_dir(run / "best-adapter", base="fake/base", revision="aaa")
+    provenance_path = run / "provenance.json"
+
+    assert adapter_delta.adapter_base_identity(adapter)["snapshot_revision"] == "aaa"
+
+    record = json.loads(provenance_path.read_text(encoding="utf-8"))
+    record["snapshot_revision"] = record["model"].pop("snapshot_revision")
+    provenance_path.write_text(json.dumps(record), encoding="utf-8")
+
+    assert adapter_delta.adapter_base_identity(adapter)["snapshot_revision"] is None
+
+
+def test_base_identity_reads_the_flat_model_block_a_resolved_less_stage_writes(tmp_path) -> None:
+    """R38 on ``adapter_delta.py:113-118``: ``write_provenance`` has two shapes, not one.
+
+    ``select``, ``eval`` and ``rollout`` (``pipeline/cli.py:1042``, ``:1112``, ``:1165``) pass
+    ``resolved=None`` and write into ``config["output"]`` -- the very directory that holds
+    ``adapters/`` and ``best-adapter/``, and the one this reader consults as the adapter's
+    parent.  Each overwrites whatever ``train`` left there, so the flat ``asdict(spec)`` block
+    is what an adapter's parent provenance normally holds by the time P5 reads it.  That block
+    states ``hf_id`` outright at its top level and the reader was looking only one level down,
+    under ``spec``; it also has no ``snapshot_revision`` key at all, which is why an unresolved
+    stage can only ever yield an unknown revision.
+    """
+    adapter = _adapter_dir(tmp_path / "agent-v2b" / "best-adapter", base=None)
+    spec = replace(load_model_spec("qwen35-4b"), hf_id="fake/base")
+    write_provenance(
+        adapter.parent, resolved=None, spec=spec, extra={"stage": "select"}
+    )
+    record = json.loads((adapter.parent / "provenance.json").read_text(encoding="utf-8"))
+    assert "snapshot_revision" not in record["model"] and "spec" not in record["model"]
+
+    assert adapter_delta.adapter_base_identity(adapter) == {
+        "hf_id": "fake/base",
+        "snapshot_revision": None,
     }
 
 

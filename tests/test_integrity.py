@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from local_llm_lab.models import load_model_spec
+from local_llm_lab.models import ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline import evaluate, report
 from local_llm_lab.pipeline import integrity as integrity_module
 from local_llm_lab.pipeline.env import Simulator
@@ -576,6 +576,30 @@ def test_rollout_retains_only_integrity_clean_successes(monkeypatch) -> None:
     assert clean.integrity["clean"] is True
 
 
+def _resolved(spec) -> ResolvedSpec:
+    """The record ``run_evaluation`` puts under ``summary.model``, as the real dataclass.
+
+    ``ModelSpec.resolve`` needs an ``ArchitectureView`` over loaded weights, which this suite
+    never has, so the class is constructed directly; the architecture numbers are a stand-in
+    and only ``spec`` is read back (``integrity._artifact_identity``).
+    """
+    return ResolvedSpec(
+        spec=spec,
+        num_layers=4,
+        hidden_size=8,
+        vocab_size=32,
+        tie_word_embeddings=True,
+        layer_types=("full_attention",) * 4,
+        lora_keys=("self_attn.q_proj",),
+        trainable_parameters=64,
+        probe_layers=(1, 2, 3),
+        cache_strategy="none",
+        cache_strategy_reason="explicit:none",
+        snapshot_revision=None,
+        jvp_method="untested",
+    )
+
+
 def _write_evaluation(
     path: Path,
     task,
@@ -584,26 +608,50 @@ def _write_evaluation(
     success: bool,
     label: str,
     generator_version: int | None = GENERATOR_VERSION,
+    adapter: Path | None = None,
 ) -> None:
+    """One evaluation artifact, written by the writer ``_analyse_evaluation`` reads (R38).
+
+    ``write_report`` frames the payload and ``summarize`` plus ``evaluation_metadata`` fill the
+    summary, so every key this reader reaches for -- ``data_seed``, ``keep_last``, ``label``,
+    ``model``, ``split``, ``adapter``, and each trajectory's ``task_id``/``difficulty``/
+    ``steps``/``verdict`` -- lands at the level and under the name a real run records it, and a
+    key the writer stops writing takes this suite down with it.
+
+    ``generator_version`` is the exception, and it is written in afterwards: **no writer in
+    this repository records one**, at either level.  ``run_evaluation`` puts
+    ``GENERATOR_VERSION`` in the run log's identity block (``evaluate.py:_evaluation_identity``)
+    and nowhere in the artifact, and none of the eighteen saved evaluations under ``outputs/``
+    carries the field.  The reader's ``summary.get("generator_version", payload.get(...))`` is
+    therefore fed by nothing today; it is kept, and exercised here, because it is what would
+    read the field once a writer records it, and because the fail-closed path below is the one
+    that actually runs.
+    """
     trajectory = _trajectory(task, success=success)
     trajectory.steps = trace
-    path.write_text(
-        json.dumps(
-            {
-                "summary": {
-                    "label": label,
-                    "data_seed": 20260902,
-                    "keep_last": 0,
-                    **(
-                        {}
-                        if generator_version is None
-                        else {"generator_version": generator_version}
-                    ),
-                },
-                "trajectories": [trajectory.as_dict()],
-            }
+    summary = evaluate.summarize([trajectory])
+    summary.update(
+        evaluate.evaluation_metadata(
+            label=label,
+            resolved=_resolved(load_model_spec("qwen35-4b")),
+            adapter=adapter,
+            split="test",
+            difficulties=[task.difficulty],
+            stress=False,
+            temperature=0.0,
+            # 0 keeps every observation visible, so the expert trace this suite replays carries
+            # no window-driven violations of its own.
+            keep_last=0,
+            seed=20260902,
+            use_cache=True,
+            elapsed_seconds=0.0,
         )
     )
+    evaluate.write_report(path, summary, [trajectory])
+    if generator_version is not None:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["summary"]["generator_version"] = generator_version
+        path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_cli_treats_default_trajectory_difficulty_as_legacy(tmp_path: Path) -> None:
@@ -799,30 +847,22 @@ def _write_identified_evaluation(
     *,
     label: str,
     generator_version: int | None,
+    adapter: Path | None = None,
 ) -> None:
-    """A saved evaluation carrying the summary fields ``run_evaluation`` writes (R26(e))."""
-    spec = load_model_spec("qwen35-4b")
-    trajectory = _trajectory(task, success=True)
-    trajectory.steps = _expert_trace(task)
-    path.write_text(
-        json.dumps(
-            {
-                "summary": {
-                    "label": label,
-                    "data_seed": 20260902,
-                    "keep_last": 0,
-                    "split": "test",
-                    "adapter": f"/adapters/{label}",
-                    "model": {"spec": {"name": spec.name, "hf_id": spec.hf_id}},
-                    **(
-                        {}
-                        if generator_version is None
-                        else {"generator_version": generator_version}
-                    ),
-                },
-                "trajectories": [trajectory.as_dict()],
-            }
-        )
+    """A saved evaluation carrying the summary fields ``run_evaluation`` writes (R26(e)).
+
+    Delegates to :func:`_write_evaluation` so the identity block is the real one: hand-writing
+    ``{"model": {"spec": {...}}}`` here restated the reader's own guess about where
+    ``_artifact_identity`` finds the registry name, which is precisely what R38 forbids.
+    """
+    _write_evaluation(
+        path,
+        task,
+        _expert_trace(task),
+        success=True,
+        label=label,
+        generator_version=generator_version,
+        adapter=adapter,
     )
 
 
@@ -833,7 +873,10 @@ def test_analysis_record_carries_the_r23_basis_beside_the_generator_version(
     task = _task("read")
     recorded = tmp_path / "recorded.json"
     legacy = tmp_path / "legacy.json"
-    _write_identified_evaluation(recorded, task, label="recorded", generator_version=2)
+    adapter = tmp_path / "adapters" / "recorded"
+    _write_identified_evaluation(
+        recorded, task, label="recorded", generator_version=2, adapter=adapter
+    )
     _write_identified_evaluation(legacy, task, label="legacy", generator_version=None)
 
     analysed = _analyse_evaluation(recorded, 20260902)
@@ -849,8 +892,45 @@ def test_analysis_record_carries_the_r23_basis_beside_the_generator_version(
     spec = load_model_spec("qwen35-4b")
     assert identity["model"] == spec.name and identity["hf_id"] == spec.hf_id
     assert identity["policy"] == "recorded"
-    assert identity["adapter"] == "/adapters/recorded"
+    assert identity["adapter"] == str(adapter.resolve())
     assert identity["split"] == "test"
+
+
+def test_analysis_depends_on_each_summary_key_at_the_level_the_writer_records_it(
+    tmp_path: Path,
+) -> None:
+    """R38 on ``integrity.py:536-545``: move each key off its level and the analysis must break.
+
+    ``keep_last`` is required outright, so moving it raises.  ``data_seed`` is the dangerous
+    one: it is read with ``summary.get("data_seed", fallback_seed)``, so an artifact that lost
+    it does not fail -- it is silently replayed under the caller's ``--seed`` and every
+    integrity verdict below is then computed against a different task.  ``model.spec`` is where
+    ``_artifact_identity`` finds the registry name; flattened, the artifact still analyses and
+    only the identity block goes blank.  Each case is a real artifact edited afterwards, since
+    no writer produces any of them.
+    """
+    task = _task("read")
+    path = tmp_path / "recorded.json"
+    _write_identified_evaluation(path, task, label="recorded", generator_version=2)
+    original = json.loads(path.read_text(encoding="utf-8"))
+
+    def rewrite(mutate) -> None:
+        payload = json.loads(json.dumps(original))
+        mutate(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    # The recorded seed wins over the caller's fallback, so the replay is of the right task.
+    assert _analyse_evaluation(path, 19999999)["seed"] == 20260902
+
+    rewrite(lambda payload: payload.update(data_seed=payload["summary"].pop("data_seed")))
+    assert _analyse_evaluation(path, 19999999)["seed"] == 19999999
+
+    rewrite(lambda payload: payload.update(keep_last=payload["summary"].pop("keep_last")))
+    with pytest.raises(ValueError, match="keep_last"):
+        _analyse_evaluation(path, 20260902)
+
+    rewrite(lambda payload: payload["summary"].update(model=payload["summary"]["model"]["spec"]))
+    assert _analyse_evaluation(path, 20260902)["identity"]["model"] is None
 
 
 def test_missing_binding_still_fails_closed_without_a_basis(tmp_path: Path) -> None:
