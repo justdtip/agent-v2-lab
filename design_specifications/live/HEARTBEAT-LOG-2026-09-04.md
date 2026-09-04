@@ -772,3 +772,6 @@ recording the execution rule. No execution lane designated yet.
   is batch 2 × accumulation 2 (effective 4); the memory remedy keeping the effective batch is
   batch 1 × accumulation 4. Diagnostic (batch 1 × 2, 3 iters, report every step) running to
   read the per-step peak.
+- Diagnostic result: batch 1 step 1 OK (206 tokens, peak 6.8 GB, loss 0.848), step 2 OOM →
+  a per-sequence spike, not batch size. Length probe running (one LoRA step at ~500/1000/
+  1500/2000/max real train rows, peak per step; scratchpad script, outputs/scratch-b4-memprobe).
