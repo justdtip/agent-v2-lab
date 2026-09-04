@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -1100,12 +1101,19 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
     passing.write_text("{}", encoding="utf-8")
     failing.write_text("{}", encoding="utf-8")
     selected = SimpleNamespace(
+        name="qwen35-4b",
         hf_id="fake/hf",
         policies={},
         probe_layer_fractions=(0.25, 0.5),
         resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1, 2)),
     )
-    case = patch.PatchCase(_Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ())
+    case = patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"),
+        0,
+        (),
+        None,
+        *_judgements(0),
+    )
     seeds = {
         "passing": {"data_seed": 41, "data_seed_source": "flag"},
         "failing": {"data_seed": 41, "data_seed_source": "evaluation"},
@@ -1192,6 +1200,42 @@ def test_patch_cli_forwards_registry_spec_and_writes_results(monkeypatch, tmp_pa
         "indices": [1, 2],
         "num_layers": 4,
     }
+
+    # R26(e)/(g), issue #35: the run writes its own log pair, and the start event alone
+    # identifies what ran.
+    assert (tmp_path / "run.log").is_file()
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    start = events[0]
+    assert start["kind"] == "start" and start["run"] == "p6-patch"
+    assert start["command"] == argv
+    identity = dict(start["fields"])
+    assert identity.pop("git_commit")  # a commit or "unknown"; never absent
+    assert identity == {
+        "model": "qwen35-4b",
+        "hf_id": "fake/hf",
+        "policy": "base",
+        "adapter": None,
+        "passing_eval_sha256": hashlib.sha256(passing.read_bytes()).hexdigest(),
+        "failing_eval_sha256": hashlib.sha256(failing.read_bytes()).hexdigest(),
+        "layers": "1,0.5",
+        "keep_last": 2,
+        "data_seed": 41,
+        "generator_version": 1,
+    }
+    selection = next(event for event in events if event["message"] == "selected cases")
+    assert selection["fields"] == {
+        "cases": 1,
+        "stable": 1,
+        "unstable": 0,
+        "decision_steps": [0],
+    }
+    assert [event["fields"]["selected"] for event in events if event["message"] == "layers"] == [
+        [1, 2]
+    ]
+    assert events[-1]["kind"] == "end" and events[-1]["status"] == "ok"
 
 
 def test_patch_cli_rejects_malformed_layers_before_model_loading(monkeypatch, tmp_path) -> None:
@@ -1715,6 +1759,55 @@ def test_patch_probe_requires_two_stable_cases_for_the_unrelated_task_control(mo
             object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1],
             policy="base", keep_last=2, max_tokens=1, seed=7, command=["patch"],
         )
+
+
+def test_patch_probe_reports_progress_per_capture_and_cell_without_touching_the_payload(
+    monkeypatch,
+) -> None:
+    """R26(g): one line per prepared case, then one per (layer, group) cell after it is scored.
+
+    The payload must be byte-identical with and without the callback: progress is reporting,
+    never computation.
+    """
+    from local_llm_lab.probes import patch
+
+    cases = [_probe_case(index, judgements=_judgements(1)) for index in range(3)]
+    tokenizer, _captures = _probe_fixture(monkeypatch, cases)
+    # The shared fixture's view has one layer; the cell grid needs more than one.
+    monkeypatch.setattr(
+        patch.ArchitectureView, "from_model", lambda _model: SimpleNamespace(num_layers=3)
+    )
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+    layers = [1, 3]
+
+    def run(progress):
+        return patch.run_patch_probe(
+            object(), tokenizer, cases, spec=object(), resolved=resolved, layers=layers,
+            policy="base", keep_last=2, max_tokens=1, seed=7, command=["patch"],
+            progress=progress,
+        )
+
+    seen: list[tuple[int, int, str]] = []
+    with_progress = run(lambda step, total, label: seen.append((step, total, label)))
+    without_progress = run(None)
+
+    cells = len(layers) * len(patch.POSITION_GROUPS)
+    assert cells == len(layers) * 7
+    assert seen == [
+        (1, 3, "capture test-ledger_reconcile-0-clean"),
+        (2, 3, "capture test-ledger_reconcile-1-clean"),
+        (3, 3, "capture test-ledger_reconcile-2-clean"),
+        *(
+            (step, cells, f"layer {layer} {group}")
+            for step, (layer, group) in enumerate(
+                ((layer, group) for layer in layers for group in patch.POSITION_GROUPS),
+                start=1,
+            )
+        ),
+    ]
+    assert json.dumps(with_progress, sort_keys=True) == json.dumps(
+        without_progress, sort_keys=True
+    )
 
 
 def test_render_markdown_splits_stable_and_unstable_cases() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from contextlib import contextmanager
@@ -292,6 +293,168 @@ def test_block_ablation_exits_the_mask_when_a_screen_evaluation_raises(monkeypat
     assert restored == [(0, 1, 2, 3, 4, 5, 6)]
 
 
+def test_static_delta_cli_logs_its_identity_and_progress_without_a_base_model(
+    monkeypatch, tmp_path
+) -> None:
+    """R26(e)/(g): --no-base needs no model, so the whole static path runs on written files.
+
+    Catches a static CLI that writes its artifacts without the log pair, and a per-adapter
+    unit that reports no progress.
+    """
+    from safetensors.numpy import save_file
+
+    from local_llm_lab.probes import guard
+
+    adapter = tmp_path / "agent-v2b" / "best-adapter"
+    adapter.mkdir(parents=True)
+    rng = np.random.default_rng(5)
+    save_file(
+        {
+            "model.layers.0.self_attn.q_proj.lora_a": rng.normal(size=(8, 2)).astype(np.float32),
+            "model.layers.0.self_attn.q_proj.lora_b": rng.normal(size=(2, 6)).astype(np.float32),
+            "model.layers.1.mlp.down_proj.lora_a": rng.normal(size=(9, 2)).astype(np.float32),
+            "model.layers.1.mlp.down_proj.lora_b": rng.normal(size=(2, 4)).astype(np.float32),
+        },
+        str(adapter / "adapters.safetensors"),
+    )
+    (adapter / "adapter_config.json").write_text(
+        json.dumps({"lora_parameters": {"scale": 32.0, "rank": 2}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        guard, "require_idle_gpu", lambda *_args: pytest.fail("--no-base reached the GPU guard")
+    )
+    output = tmp_path / "delta"
+    argv = [
+        "agent-v2-probe-delta",
+        "--adapters",
+        str(adapter),
+        "--no-base",
+        "--model",
+        "fake-model",
+        "--output",
+        str(output),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    adapter_delta.main()
+
+    assert (output / "delta.json").is_file() and (output / "delta.md").is_file()
+    assert (output / "run.log").is_file()
+    events = [
+        json.loads(line)
+        for line in (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    start = events[0]
+    assert start["kind"] == "start" and start["run"] == "adapter-delta"
+    assert start["command"] == argv
+    identity = dict(start["fields"])
+    assert identity.pop("git_commit")  # a commit or "unknown"; never absent
+    assert identity == {
+        "model": "fake-model",
+        "adapters": [str(adapter.resolve())],
+        "readout_layers": [],
+        "top": 16,
+        "no_base": True,
+    }
+    assert [
+        (event["step"], event["total"], event["label"])
+        for event in events
+        if event["kind"] == "progress"
+    ] == [(1, 1, "adapter agent-v2b")]
+    wrote = next(event for event in events if event["message"] == "wrote")
+    assert wrote["fields"] == {
+        "json": str(output / "delta.json"),
+        "md": str(output / "delta.md"),
+    }
+    assert events[-1]["kind"] == "end" and events[-1]["status"] == "ok"
+
+
+def test_block_ablation_reports_progress_per_condition_without_touching_the_record(
+    monkeypatch,
+) -> None:
+    """R26(g): one line per evaluated condition — the two controls, then each removed block."""
+
+    view = type("View", (), {"num_layers": 7})()
+
+    @contextmanager
+    def fake_mask(_view, keep_layers):
+        yield 7 - len(tuple(keep_layers))
+
+    monkeypatch.setattr(capture, "lora_block_mask", fake_mask)
+    screen = [{"split": "valid", "difficulty": 1, "per_family": {"default": 1}}]
+
+    def fake_evaluate(_name, _cell_index, _cell):
+        return {
+            "successes": 1,
+            "tasks": 2,
+            "by_family": {"ledger_reconcile": {"successes": 1, "tasks": 2}},
+        }
+
+    seen: list[tuple[int, int, str]] = []
+    with_progress = adapter_delta.run_block_ablation(
+        view,
+        blocks=3,
+        screen=screen,
+        evaluate_condition=fake_evaluate,
+        progress=lambda step, total, label: seen.append((step, total, label)),
+    )
+    without_progress = adapter_delta.run_block_ablation(
+        view,
+        blocks=3,
+        screen=screen,
+        evaluate_condition=fake_evaluate,
+        progress=None,
+    )
+
+    assert seen == [
+        (1, 5, "condition full_adapter"),
+        (2, 5, "condition empty_adapter"),
+        (3, 5, "condition remove_block_0"),
+        (4, 5, "condition remove_block_1"),
+        (5, 5, "condition remove_block_2"),
+    ]
+    assert json.dumps(with_progress, sort_keys=True) == json.dumps(
+        without_progress, sort_keys=True
+    )
+
+
+def _delta_payload() -> dict[str, Any]:
+    def module(layer: int, name: str) -> dict[str, Any]:
+        return {
+            "module": f"model.layers.{layer}.{name}",
+            "layer": layer,
+            "type": name,
+            "shape": [4, 4],
+            "rank": 8,
+            "scale": 32.0,
+            "delta_norm": 1.0 + layer,
+            "singular_values": [1.0, 0.5],
+            "effective_rank_90": 2,
+            "relative_norm": None,
+        }
+
+    return {
+        "model": "fake-model",
+        "has_base": False,
+        "runs": [
+            {
+                "label": "run-a",
+                "adapter": "/tmp/a",
+                "scale": 32.0,
+                "modules": [module(0, "q_proj"), module(1, "down_proj")],
+                "effective_rank_histogram": {"2": 2},
+            },
+            {
+                "label": "run-b",
+                "adapter": "/tmp/b",
+                "scale": 32.0,
+                "modules": [module(0, "q_proj")],
+                "effective_rank_histogram": {"2": 1},
+            },
+        ],
+        "comparison": None,
+        "readouts": None,
+    }
 def test_reused_policy_loader_is_restored_after_an_exception(monkeypatch) -> None:
     """Catches process-global loader leakage after one ablation condition fails."""
     def original(*_args, **_kwargs):
@@ -486,4 +649,31 @@ def test_ablation_cli_uses_one_loaded_policy_and_writes_resolved_metadata(
     markdown = (output / "ablation.md").read_text(encoding="utf-8")
     assert "Full adapter" in markdown
     assert "Empty adapter" in markdown
+
+    # R26(e)/(g), issue #35: the run writes its own log pair; the start event identifies it
+    # and one progress line lands per condition.
+    assert (output / "run.log").is_file()
+    events = [
+        json.loads(line)
+        for line in (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    start = events[0]
+    assert start["kind"] == "start" and start["run"] == "block-ablation"
+    assert start["command"] == argv
+    identity = dict(start["fields"])
+    assert identity.pop("git_commit")  # a commit or "unknown"; never absent
+    assert identity == {
+        "model": "fake-model",
+        "hf_id": "fake/hf",
+        "adapter": str(adapter.resolve()),
+        "screen": str(screen_path.resolve()),
+        "screen_sha256": hashlib.sha256(screen_path.read_bytes()).hexdigest(),
+        "blocks": 6,
+    }
+    assert [event["label"] for event in events if event["kind"] == "progress"] == [
+        "condition full_adapter",
+        "condition empty_adapter",
+        *(f"condition remove_block_{index}" for index in range(6)),
+    ]
+    assert events[-1]["kind"] == "end" and events[-1]["status"] == "ok"
     assert "ledger_reconcile" in markdown

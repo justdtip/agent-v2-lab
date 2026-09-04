@@ -7,7 +7,7 @@ import json
 import random
 import re
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -1203,6 +1203,7 @@ def run_patch_probe(
     max_tokens: int,
     seed: int,
     command: Sequence[str],
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any]:
     """Run the P6 cells and return aggregate-only, JSON-safe records.
 
@@ -1210,6 +1211,11 @@ def run_patch_probe(
     are listed under ``excluded_cases`` with both judgements and never merged into a cell.
     This seam is deliberately composed from fakes in tests; the CLI is the only real-model
     entry point and remains gated by its GPU guard.
+
+    ``progress`` is an optional ``(step, total, label)`` callback reporting completed work:
+    one call per prepared case and one per (layer, group) cell once its cases are scored
+    (R26(g)). It is reporting only — the payload is identical with and without it — so the
+    function stays free of I/O and composes from fakes.
     """
     view = ArchitectureView.from_model(model)
     if not cases:
@@ -1241,7 +1247,7 @@ def run_patch_probe(
     prepared: list[dict[str, Any]] = []
     case_provenance: list[dict[str, Any]] = []
     source_counts: dict[str, int] = {}
-    for case in stable:
+    for case_number, case in enumerate(stable, start=1):
         failing, counterfactual, provenance = replay_counterfactual(case)
         source = provenance.get("counterfactual_source") or "none"
         source_counts[source] = source_counts.get(source, 0) + 1
@@ -1285,7 +1291,11 @@ def run_patch_probe(
                 "counter_residuals": capture_residuals(view, counter_ids, layers, positions="all"),
             }
         )
+        if progress is not None:
+            progress(case_number, len(stable), f"capture {case.task.task_id}")
     cells: dict[str, dict[str, Any]] = {}
+    cell_total = len(layers) * len(POSITION_GROUPS)
+    cell_number = 0
     for layer in layers:
         for group in POSITION_GROUPS:
             outcomes = {name: {} for name in ("treatment", *CONTROLS)}
@@ -1342,6 +1352,9 @@ def run_patch_probe(
                     control: aggregate_task_flips(outcomes[control]) for control in CONTROLS
                 },
             }
+            cell_number += 1
+            if progress is not None:
+                progress(cell_number, cell_total, f"layer {layer} {group}")
     return {
         "artifact_schema": ARTIFACT_SCHEMA,
         "model": resolved.as_dict(),
@@ -1474,6 +1487,7 @@ def _load_payload(path: Path) -> dict[str, Any]:
 
 def main() -> None:
     from local_llm_lab.probes.guard import add_gpu_arguments, require_idle_gpu
+    from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
     parser = argparse.ArgumentParser(description="P6 causal residual patching at value drops.")
     parser.add_argument("--passing-eval", type=Path, required=True)
@@ -1527,29 +1541,65 @@ def main() -> None:
         adapter = resolve_policy(args.policy, spec)
     except ValueError as error:
         parser.error(str(error))
-    require_idle_gpu(parser, args, "running P6 causal patching")
-    model, tokenizer, view, resolved = load_policy(spec, adapter)
-    try:
-        selection = resolve_layers(args.layers, spec, view.num_layers)
-    except ValueError as error:
-        parser.error(str(error))
-    del view
-    payload = run_patch_probe(
-        model,
-        tokenizer,
-        cases,
-        spec=spec,
-        resolved=resolved,
-        layers=selection.indices,
-        policy=args.policy,
-        keep_last=args.keep_last, max_tokens=args.max_tokens, seed=args.seed, command=sys.argv,
-    )
-    if not isinstance(payload, dict) or "cells" not in payload:
-        parser.error("run_patch_probe returned an invalid payload")
-    payload["layer_selection"] = selection.as_dict()
-    payload["data_seeds"] = selection_provenance["data_seeds"]
-    payload["eligibility"] = selection_provenance["eligibility"]
-    markdown = render_markdown(payload)
-    args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / "patch.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (args.output / "patch.md").write_text(markdown + "\n", encoding="utf-8")
+    # R26(e), issue #35: the log opens once the adapter is known but before the GPU guard
+    # and the model load, so run.log alone says what ran and covers the whole run.
+    with RunLog.open(
+        args.output,
+        name="p6-patch",
+        command=sys.argv,
+        identity={
+            "model": spec.name,
+            "hf_id": spec.hf_id,
+            "policy": args.policy,
+            "adapter": str(adapter) if adapter else None,
+            "passing_eval_sha256": sha256_of(args.passing_eval),
+            "failing_eval_sha256": sha256_of(args.failing_eval),
+            "layers": args.layers,
+            "keep_last": args.keep_last,
+            "data_seed": args.data_seed,
+            "generator_version": args.generator_version,
+            "git_commit": git_commit(),
+        },
+    ) as log:
+        stable = sum(1 for case in cases if case.scoring_version_stable)
+        log.info(
+            "selected cases",
+            cases=len(cases),
+            stable=stable,
+            unstable=len(cases) - stable,
+            decision_steps=[case.decision_step for case in cases],
+        )
+        require_idle_gpu(parser, args, "running P6 causal patching")
+        log.info("loading policy", model=args.model, policy=args.policy)
+        model, tokenizer, view, resolved = load_policy(spec, adapter)
+        try:
+            selection = resolve_layers(args.layers, spec, view.num_layers)
+        except ValueError as error:
+            parser.error(str(error))
+        log.info("layers", selected=list(selection.indices))
+        del view
+        payload = run_patch_probe(
+            model,
+            tokenizer,
+            cases,
+            spec=spec,
+            resolved=resolved,
+            layers=selection.indices,
+            policy=args.policy,
+            keep_last=args.keep_last, max_tokens=args.max_tokens, seed=args.seed, command=sys.argv,
+            progress=log.progress,
+        )
+        if not isinstance(payload, dict) or "cells" not in payload:
+            parser.error("run_patch_probe returned an invalid payload")
+        payload["layer_selection"] = selection.as_dict()
+        payload["data_seeds"] = selection_provenance["data_seeds"]
+        payload["eligibility"] = selection_provenance["eligibility"]
+        markdown = render_markdown(payload)
+        args.output.mkdir(parents=True, exist_ok=True)
+        (args.output / "patch.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (args.output / "patch.md").write_text(markdown + "\n", encoding="utf-8")
+        log.info(
+            "wrote",
+            json=str(args.output / "patch.json"),
+            md=str(args.output / "patch.md"),
+        )

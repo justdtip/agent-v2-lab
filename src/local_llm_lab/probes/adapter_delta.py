@@ -498,12 +498,27 @@ def run_block_ablation(
     blocks: int,
     screen: list[dict[str, Any]],
     evaluate_condition: Callable[[str, int, dict[str, Any]], dict[str, Any]],
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate full, empty, and leave-one-block-out adapter conditions on one screen."""
+    """Evaluate full, empty, and leave-one-block-out adapter conditions on one screen.
+
+    ``progress`` is an optional ``(step, total, label)`` callback fired once per condition
+    once that condition's screen has been evaluated (R26(g)); the record it returns is
+    identical with and without it.
+    """
     if not screen:
         raise ValueError("screen must contain at least one evaluation cell")
     partitions = _layer_blocks(int(view.num_layers), blocks)
     all_layers = tuple(range(int(view.num_layers)))
+    condition_total = len(partitions) + 2
+    condition_number = 0
+
+    def note(name: str) -> None:
+        nonlocal condition_number
+        condition_number += 1
+        if progress is not None:
+            progress(condition_number, condition_total, f"condition {name}")
+
     full = _evaluate_ablation_condition(
         view,
         name="full_adapter",
@@ -513,6 +528,7 @@ def run_block_ablation(
         screen=screen,
         evaluate_condition=evaluate_condition,
     )
+    note("full_adapter")
     empty = _evaluate_ablation_condition(
         view,
         name="empty_adapter",
@@ -522,6 +538,7 @@ def run_block_ablation(
         screen=screen,
         evaluate_condition=evaluate_condition,
     )
+    note("empty_adapter")
     conditions = []
     for block_index, removed in enumerate(partitions):
         removed_set = set(removed)
@@ -537,6 +554,7 @@ def run_block_ablation(
                 evaluate_condition=evaluate_condition,
             )
         )
+        note(f"remove_block_{block_index}")
     full_rate = float(full["overall"]["success_rate"])
     most_costly = max(
         conditions,
@@ -919,71 +937,100 @@ def _run_ablation_cli(
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline import evaluate
     from local_llm_lab.pipeline.cli import load_config
+    from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
-    require_idle_gpu(parser, args, "loading the adapter policy for block ablation")
-    config = load_config(args.screen)
-    try:
-        screen = _screen_from_config(config)
-    except ValueError as error:
-        parser.error(str(error))
     spec = load_model_spec(args.model)
-    model, tokenizer, view, resolved_spec = evaluate.load_policy(spec, args.adapter)
-    try:
-        _layer_blocks(int(view.num_layers), args.blocks)
-    except ValueError as error:
-        parser.error(str(error))
-    resolved = resolved_spec.as_dict()
-    eval_config = config.get("eval") if isinstance(config.get("eval"), dict) else {}
-    args.output.mkdir(parents=True, exist_ok=True)
-
-    def evaluate_condition(
-        condition: str, cell_index: int, cell: dict[str, Any]
-    ) -> dict[str, Any]:
-        evaluation_dir = args.output / "evaluations" / condition
-        filename = f"{cell_index:02d}-{cell['split']}-d{cell['difficulty']}.json"
-        return evaluate.run_evaluation(
-            spec=spec,
-            adapter=args.adapter,
-            label=f"{args.adapter.name}-{condition}-{cell_index:02d}",
-            split=cell["split"],
-            limit=None,
-            output=evaluation_dir / filename,
-            transcript_dir=None,
-            stress=False,
-            temperature=0.0,
-            max_steps=int(eval_config.get("max_steps", 24)),
-            max_tokens=int(eval_config.get("max_tokens", 200)),
-            keep_last=int(config.get("keep_last", 2)),
-            quiet=True,
-            use_cache=True,
-            seed=int(config.get("seed", 20260902)),
-            difficulty=int(cell["difficulty"]),
-            family_quotas=dict(cell["per_family"]),
-        )
-
-    with _reuse_loaded_policy(model, tokenizer, view, resolved_spec):
-        result = run_block_ablation(
-            view,
+    # R26(e), issue #35: the log opens before the GPU guard and the model load, so the whole
+    # run — including a guard refusal — is in run.log, and the start line says what ran.
+    with RunLog.open(
+        args.output,
+        name="block-ablation",
+        command=sys.argv,
+        identity={
+            "model": args.model,
+            "hf_id": spec.hf_id,
+            "adapter": str(args.adapter.resolve()),
+            "screen": str(args.screen.resolve()),
+            "screen_sha256": sha256_of(args.screen),
+            "blocks": args.blocks,
+            "git_commit": git_commit(),
+        },
+    ) as log:
+        config = load_config(args.screen)
+        try:
+            screen = _screen_from_config(config)
+        except ValueError as error:
+            parser.error(str(error))
+        log.info(
+            "conditions",
+            conditions=args.blocks + 2,
             blocks=args.blocks,
-            screen=screen,
-            evaluate_condition=evaluate_condition,
+            screen_cells=len(screen),
         )
-    payload = {
-        "command": shlex.join(sys.argv),
-        "model": resolved,
-        "adapter": str(args.adapter.resolve()),
-        "screen": {"path": str(args.screen.resolve()), "cells": screen},
-        "block_count": args.blocks,
-        "control": "full_adapter success rate",
-        **result,
-    }
-    (args.output / "ablation.json").write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    (args.output / "ablation.md").write_text(
-        _render_ablation_markdown(payload) + "\n", encoding="utf-8"
-    )
-    print(f"Wrote {args.output / 'ablation.json'} and {args.output / 'ablation.md'}")
+        require_idle_gpu(parser, args, "loading the adapter policy for block ablation")
+        log.info("loading policy", model=args.model, policy=str(args.adapter))
+        model, tokenizer, view, resolved_spec = evaluate.load_policy(spec, args.adapter)
+        try:
+            _layer_blocks(int(view.num_layers), args.blocks)
+        except ValueError as error:
+            parser.error(str(error))
+        resolved = resolved_spec.as_dict()
+        eval_config = config.get("eval") if isinstance(config.get("eval"), dict) else {}
+        args.output.mkdir(parents=True, exist_ok=True)
+
+        def evaluate_condition(
+            condition: str, cell_index: int, cell: dict[str, Any]
+        ) -> dict[str, Any]:
+            evaluation_dir = args.output / "evaluations" / condition
+            filename = f"{cell_index:02d}-{cell['split']}-d{cell['difficulty']}.json"
+            return evaluate.run_evaluation(
+                spec=spec,
+                adapter=args.adapter,
+                label=f"{args.adapter.name}-{condition}-{cell_index:02d}",
+                split=cell["split"],
+                limit=None,
+                output=evaluation_dir / filename,
+                transcript_dir=None,
+                stress=False,
+                temperature=0.0,
+                max_steps=int(eval_config.get("max_steps", 24)),
+                max_tokens=int(eval_config.get("max_tokens", 200)),
+                keep_last=int(config.get("keep_last", 2)),
+                quiet=True,
+                use_cache=True,
+                seed=int(config.get("seed", 20260902)),
+                difficulty=int(cell["difficulty"]),
+                family_quotas=dict(cell["per_family"]),
+            )
+
+        with _reuse_loaded_policy(model, tokenizer, view, resolved_spec):
+            result = run_block_ablation(
+                view,
+                blocks=args.blocks,
+                screen=screen,
+                evaluate_condition=evaluate_condition,
+                progress=log.progress,
+            )
+        payload = {
+            "command": shlex.join(sys.argv),
+            "model": resolved,
+            "adapter": str(args.adapter.resolve()),
+            "screen": {"path": str(args.screen.resolve()), "cells": screen},
+            "block_count": args.blocks,
+            "control": "full_adapter success rate",
+            **result,
+        }
+        (args.output / "ablation.json").write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        (args.output / "ablation.md").write_text(
+            _render_ablation_markdown(payload) + "\n", encoding="utf-8"
+        )
+        log.info(
+            "wrote",
+            json=str(args.output / "ablation.json"),
+            md=str(args.output / "ablation.md"),
+        )
 
 
 # --------------------------------------------------------------------------- CLI
@@ -1047,42 +1094,77 @@ def main() -> None:
     args.readout_layers = "" if args.readout_layers is None else args.readout_layers
     readout_layers = [int(part) for part in args.readout_layers.split(",") if part.strip()]
 
-    model = tokenizer = None
-    if not args.no_base:
-        require_idle_gpu(parser, args, "loading the base model for relative norms")
-        from local_llm_lab.models import load_model_spec
-        from local_llm_lab.pipeline.evaluate import load_policy
+    from local_llm_lab.runlog import RunLog, git_commit
 
-        model, tokenizer, _view, _resolved = load_policy(load_model_spec(args.model), None)
-
-    runs = []
-    norm_cache: dict[str, float] = {}
-    for adapter, label in zip(args.adapters, _unique_labels(list(args.adapters)), strict=True):
-        report = analyse_adapter(adapter, model, top=args.top, norm_cache=norm_cache)
-        report["label"] = label
-        runs.append(report)
-        print(
-            f"{report['label']}: {len(report['modules'])} modules, "
-            f"effective rank histogram {report['effective_rank_histogram']}"
+    adapters = [str(Path(adapter).resolve()) for adapter in args.adapters]
+    # R26(e), issue #35: opened before the GPU guard and the base-model load; `--no-base`
+    # never resolves a ModelSpec, so the model string is recorded as the CLI gave it.
+    with RunLog.open(
+        args.output,
+        name="adapter-delta",
+        command=sys.argv,
+        identity={
+            "model": args.model,
+            "adapters": adapters,
+            "readout_layers": readout_layers,
+            "top": args.top,
+            "no_base": args.no_base,
+            "git_commit": git_commit(),
+        },
+    ) as log:
+        log.info(
+            "selection",
+            adapters=len(adapters),
+            layers=readout_layers,
+            top=args.top,
+            no_base=args.no_base,
         )
+        model = tokenizer = None
+        if not args.no_base:
+            require_idle_gpu(parser, args, "loading the base model for relative norms")
+            from local_llm_lab.models import load_model_spec
+            from local_llm_lab.pipeline.evaluate import load_policy
 
-    payload: dict[str, Any] = {
-        "model": args.model,
-        "has_base": model is not None,
-        "runs": runs,
-        "comparison": compare_adapters(args.adapters, top=args.top)
-        if len(args.adapters) > 1
-        else None,
-        "readouts": None,
-    }
-    if model is not None and readout_layers:
-        payload["readouts"] = readout_update_directions(
-            ArchitectureView.from_model(model), tokenizer, args.adapters[0], readout_layers
+            spec = load_model_spec(args.model)
+            log.info("loading policy", model=args.model, policy="base", hf_id=spec.hf_id)
+            model, tokenizer, _view, _resolved = load_policy(spec, None)
+
+        runs = []
+        norm_cache: dict[str, float] = {}
+        labels = _unique_labels(list(args.adapters))
+        for index, (adapter, label) in enumerate(zip(args.adapters, labels, strict=True), start=1):
+            report = analyse_adapter(adapter, model, top=args.top, norm_cache=norm_cache)
+            report["label"] = label
+            runs.append(report)
+            log.info(
+                f"{report['label']}: {len(report['modules'])} modules, "
+                f"effective rank histogram {report['effective_rank_histogram']}"
+            )
+            log.progress(index, len(labels), f"adapter {label}")
+
+        payload: dict[str, Any] = {
+            "model": args.model,
+            "has_base": model is not None,
+            "runs": runs,
+            "comparison": compare_adapters(args.adapters, top=args.top)
+            if len(args.adapters) > 1
+            else None,
+            "readouts": None,
+        }
+        if model is not None and readout_layers:
+            payload["readouts"] = readout_update_directions(
+                ArchitectureView.from_model(model), tokenizer, args.adapters[0], readout_layers
+            )
+
+        args.output.mkdir(parents=True, exist_ok=True)
+        (args.output / "delta.json").write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
-
-    args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / "delta.json").write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    (args.output / "delta.md").write_text(render_markdown(payload) + "\n", encoding="utf-8")
-    print(f"Wrote {args.output / 'delta.json'} and {args.output / 'delta.md'}")
+        (args.output / "delta.md").write_text(
+            render_markdown(payload) + "\n", encoding="utf-8"
+        )
+        log.info(
+            "wrote",
+            json=str(args.output / "delta.json"),
+            md=str(args.output / "delta.md"),
+        )
