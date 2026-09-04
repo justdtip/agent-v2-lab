@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -350,7 +352,7 @@ def test_axis_build_rejects_malformed_layers_before_gpu_or_loader(
     assert raised.value.code == 2
 
 
-def test_role_prompts_are_strong_and_have_markers_and_exemplars() -> None:
+def test_role_prompts_are_strong_and_have_markers() -> None:
     names = [name for name, _system in assistant_axis.ROLES]
     low_and_neutral = {
         "ghost",
@@ -373,15 +375,12 @@ def test_role_prompts_are_strong_and_have_markers_and_exemplars() -> None:
         "astronaut",
     }
     assert len(names) == 24
+    assert low_and_neutral <= set(names)
     for name, system in assistant_axis.ROLES:
         sentences = [part for part in re.split(r"(?<=[.!?])\s+", system) if part]
         assert 2 <= len(sentences) <= 4, name
         assert "never mention being an AI or a language model" in system, name
         assert len(assistant_axis.ROLE_MARKERS[name]) >= 4, name
-    assert len(set(assistant_axis.ROLE_EXEMPLARS) & low_and_neutral) >= 8
-    for name, (_question, answer) in assistant_axis.ROLE_EXEMPLARS.items():
-        sentences = [part for part in re.split(r"(?<=[.!?])\s+", answer) if part]
-        assert 1 <= len(sentences) <= 2, name
 
 
 def test_pirate_heuristic_separates_role_expression_from_textbook_voice() -> None:
@@ -529,7 +528,69 @@ def test_rollout_jsonl_is_complete_before_axis_vectors_are_computed(
     assert Path(diagnostics["rollouts_path"]) == tmp_path / "rollouts-base.jsonl"
 
 
-def test_rollout_role_prepends_the_available_exemplar(monkeypatch, tmp_path: Path) -> None:
+def test_default_assistant_receives_the_same_prompt_list_as_every_role(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """SPEC-004 §4 matched design: the default persona gets the roles' eight prompts.
+
+    Before the fix the default assistant was rolled out against the whole ``--prompts``
+    pool (96) while each role saw ``prompts[:role_prompts]`` (8), so the two sides of the
+    axis differed in prompt set as well as in persona.
+    """
+    calls: list[tuple[str | None, list[str]]] = []
+
+    def recording_rollout_role(
+        _model: Any,
+        _tokenizer: Any,
+        _system: str,
+        prompts: list[str],
+        _max_tokens: int = 192,
+        *,
+        role: str | None = None,
+        exemplar: bool = True,
+        rollout_path: Path | None = None,
+    ) -> list[tuple[str, str]]:
+        del exemplar, rollout_path
+        calls.append((role, list(prompts)))
+        return [(f"rendered:{prompt}", f"response:{prompt}") for prompt in prompts]
+
+    monkeypatch.setattr(assistant_axis, "rollout_role", recording_rollout_role)
+    pool = [f"prompt-{index}" for index in range(12)]
+
+    default, role_responses, _path = assistant_axis.collect_rollouts(
+        None, None, pool, tmp_path, "base", role_prompts=4
+    )
+
+    shared = pool[:4]
+    assert [name for name, _prompts in calls] == ["default-assistant"] + [
+        name for name, _system in assistant_axis.ROLES
+    ]
+    assert [seen for _name, seen in calls] == [shared] * (1 + len(assistant_axis.ROLES))
+    assert len(default) == len(shared)
+    assert all(len(pairs) == len(shared) for pairs in role_responses.values())
+
+
+def test_no_role_in_any_group_carries_an_exemplar() -> None:
+    """Chief's ruling 2026-09-05: exemplars are dropped from all 24 roles.
+
+    The axis derives from the system prompts alone, so exemplar presence -- previously
+    0/6 high, 8/8 low and 6/10 neutral -- is equal at zero across the three groups.
+    """
+    assert assistant_axis.ROLE_EXEMPLARS == {}
+    presence = {"high": 0, "low": 0, "neutral": 0}
+    totals = {"high": 0, "low": 0, "neutral": 0}
+    for name, role in assistant_axis.ROLE_TABLE.items():
+        group = assistant_axis.ROLE_GROUPS[name]
+        totals[group] += 1
+        presence[group] += int(getattr(role, "exemplar", None) is not None)
+    assert totals == {"high": 6, "low": 8, "neutral": 10}
+    assert presence == {"high": 0, "low": 0, "neutral": 0}
+
+
+def test_rollout_role_sends_only_the_system_prompt_and_the_question(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The dropped one-shot must not survive anywhere in the rendered prompt."""
     prompts_seen: list[str] = []
 
     def fake_stream_generate(*args: Any, prompt: str, **kwargs: Any):
@@ -539,6 +600,7 @@ def test_rollout_role_prepends_the_available_exemplar(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr("mlx_lm.stream_generate", fake_stream_generate)
     path = tmp_path / "rollouts.jsonl"
+
     pairs = assistant_axis.rollout_role(
         None,
         _Tokenizer(),
@@ -550,9 +612,201 @@ def test_rollout_role_prepends_the_available_exemplar(monkeypatch, tmp_path: Pat
     )
 
     assert len(pairs) == 1
-    assert assistant_axis.ROLE_EXEMPLARS["pirate"][1] in prompts_seen[0]
+    messages = json.loads(prompts_seen[0].removesuffix("<assistant>"))
+    assert [message["role"] for message in messages] == ["system", "user"]
+    # The pirate's former one-shot question and answer, verbatim.
+    assert "How do plants make food?" not in prompts_seen[0]
+    assert "a wee green sail" not in prompts_seen[0]
     record = json.loads(path.read_text(encoding="utf-8"))
-    assert record["exemplar"] is True and record["role"] == "pirate"
+    assert record["exemplar"] is False and record["role"] == "pirate"
+
+
+def test_judge_defaults_off_in_the_build_cli_and_is_still_opt_in(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """SPEC-004 §4: heuristic only unless ``--judge`` is passed explicitly."""
+    seen: list[bool] = []
+    monkeypatch.setattr(assistant_axis, "_build", lambda args, _parser: seen.append(args.judge))
+    base = ["agent-v2-probe-axis", "build", "--output", str(tmp_path)]
+
+    monkeypatch.setattr(sys, "argv", list(base))
+    assistant_axis.main()
+    monkeypatch.setattr(sys, "argv", [*base, "--judge"])
+    assistant_axis.main()
+    monkeypatch.setattr(sys, "argv", [*base, "--no-judge"])
+    assistant_axis.main()
+
+    assert seen == [False, True, False]
+
+
+def test_build_axis_run_scores_with_the_heuristic_alone_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """``build_axis_run`` matches ``build_axis``: the same-policy judge is opt-in."""
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(
+        assistant_axis,
+        "collect_rollouts",
+        lambda *_args, **_kwargs: (
+            [("p", "r")],
+            {"pirate": [("p", "r")]},
+            tmp_path / "rollouts-base.jsonl",
+        ),
+    )
+
+    def fake_build_axis(
+        _model: Any,
+        _tokenizer: Any,
+        _default: Any,
+        _roles: Any,
+        layers: list[int],
+        *,
+        min_expression: float = 0.34,
+        use_model_judge: bool = False,
+    ):
+        del min_expression
+        seen["use_model_judge"] = use_model_judge
+        return {layer: np.ones(2, dtype=np.float32) for layer in layers}, {"layers": {}}
+
+    monkeypatch.setattr(assistant_axis, "build_axis", fake_build_axis)
+
+    _axis, diagnostics = assistant_axis.build_axis_run(None, None, ["one"], [18], tmp_path, "base")
+
+    assert seen["use_model_judge"] is False
+    assert diagnostics["model_judge"] is False
+
+
+# --------------------------------------------------------------------------- P1 closure
+
+
+def _closure_rollouts(path: Path) -> None:
+    """A six-row stand-in for the 288 saved rollouts: two personas, one expressive reply.
+
+    The pirate reply carries three of its eight markers (0.375): above the ratified 0.34 and
+    below the 0.60 the threshold test passes, so one fixture serves both.
+    """
+    pirate = "Arr, ye scallywags: the ship is away."
+    rows = [
+        {"role": "default-assistant", "prompt": "q", "response": TEXTBOOK_PHOTOSYNTHESIS},
+        {"role": "default-assistant", "prompt": "q", "response": TEXTBOOK_PHOTOSYNTHESIS},
+        {"role": "pirate", "prompt": "q", "response": pirate},
+        {"role": "pirate", "prompt": "q", "response": TEXTBOOK_PHOTOSYNTHESIS},
+        {"role": "ghost", "prompt": "q", "response": TEXTBOOK_PHOTOSYNTHESIS},
+        {"role": "ghost", "prompt": "q", "response": TEXTBOOK_PHOTOSYNTHESIS},
+    ]
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
+    )
+
+
+def test_close_writes_the_measured_closure_record(monkeypatch, tmp_path: Path, capsys) -> None:
+    """SPEC-004 §4: the record is measured from the saved rollouts, not copied."""
+    rollouts = tmp_path / "rollouts-base.jsonl"
+    _closure_rollouts(rollouts)
+    output = tmp_path / "record"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-axis",
+            "close",
+            "--rollouts",
+            str(rollouts),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assistant_axis.main()
+
+    payload = json.loads((output / "closed.json").read_text(encoding="utf-8"))
+    assert payload["min_expression"] == pytest.approx(0.34)
+    assert payload["records"] == 6
+    assert payload["rollouts"]["sha256"] == hashlib.sha256(rollouts.read_bytes()).hexdigest()
+    assert payload["rollouts"]["path"] == str(rollouts.resolve())
+    assert payload["heuristic"].startswith("src/local_llm_lab/probes/assistant_axis.py:")
+    assert payload["decision"] == assistant_axis.CLOSURE_DECISION
+    assert isinstance(payload["git_commit"], str) and payload["git_commit"]
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload["date"])
+
+    counts = {entry["role"]: (entry["at_or_above"], entry["total"]) for entry in payload["roles"]}
+    assert counts == {"pirate": (1, 2), "ghost": (0, 2)}
+    assert payload["best_role"]["role"] == "pirate"
+    assert payload["roles_at_zero"] == 1
+    assert payload["n_roles"] == 2
+    assert payload["default_assistant"]["at_or_above"] == 2
+    assert payload["default_assistant"]["marker_backed"] is False
+
+    markdown = (output / "CLOSED.md").read_text(encoding="utf-8")
+    assert assistant_axis.CLOSURE_DECISION in markdown
+    assert payload["rollouts"]["sha256"] in markdown
+    assert payload["heuristic"] in markdown
+    assert "| pirate | " in markdown
+    assert "1 of 2" in markdown
+    assert markdown in capsys.readouterr().out
+
+    events = _events(output)
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "assistant-axis-close"
+    start = _flat(events[0])
+    assert start["rollouts_sha256"] == payload["rollouts"]["sha256"]
+    assert start["min_expression"] == pytest.approx(0.34)
+    progress = [_flat(event) for event in events if event["kind"] == "progress"]
+    assert [(item["step"], item["total"], item["label"]) for item in progress] == [
+        (1, 3, "role default-assistant"),
+        (2, 3, "role pirate"),
+        (3, 3, "role ghost"),
+    ]
+    assert (output / "run.log").is_file()
+    assert _flat(events[-1])["status"] == "ok"
+
+
+def test_close_honours_the_threshold_and_refuses_a_missing_file(
+    monkeypatch, tmp_path: Path
+) -> None:
+    rollouts = tmp_path / "rollouts-base.jsonl"
+    _closure_rollouts(rollouts)
+    output = tmp_path / "record"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-axis",
+            "close",
+            "--rollouts",
+            str(rollouts),
+            "--output",
+            str(output),
+            "--min-expression",
+            "0.60",
+        ],
+    )
+
+    assistant_axis.main()
+
+    payload = json.loads((output / "closed.json").read_text(encoding="utf-8"))
+    assert payload["min_expression"] == pytest.approx(0.60)
+    assert {entry["role"]: entry["at_or_above"] for entry in payload["roles"]} == {
+        "pirate": 0,
+        "ghost": 0,
+    }
+    assert payload["roles_at_zero"] == 2
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "agent-v2-probe-axis",
+            "close",
+            "--rollouts",
+            str(tmp_path / "absent.jsonl"),
+            "--output",
+            str(tmp_path / "other"),
+        ],
+    )
+    with pytest.raises(SystemExit) as raised:
+        assistant_axis.main()
+    assert raised.value.code == 2
 
 
 def test_axis_verdict_passes_and_fails_on_the_registered_thresholds() -> None:

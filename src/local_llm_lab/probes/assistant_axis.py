@@ -16,17 +16,22 @@ axes built from disjoint halves of the roles, which says whether 24 roles are en
 
 The first build used one-line role prompts and failed the PC1 sanity check. Direct generation
 showed that the model was simply ignoring those prompts. This implementation therefore uses
-strong in-character instructions and optional one-shot exemplars, persists every rollout before
-activation capture, and filters replies that do not express their assigned role.
+strong in-character instructions, persists every rollout before activation capture, and filters
+replies that do not express their assigned role. One-shot exemplars were tried and dropped
+(Chief's ruling 2026-09-05, SPEC-004 §4): they were present for none of the six high roles, all
+eight low roles and six of the ten neutral ones, so the axis they fed was confounded with
+exemplar presence. The axis now derives from the system prompts alone.
 """
 
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import re
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,25 +44,31 @@ from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
 __all__ = [
     "ASSISTANT_TELLS",
+    "CLOSURE_DECISION",
+    "DEFAULT_ASSISTANT_ROLE",
     "DEFAULT_SYSTEM",
     "JUDGE_QUESTION",
     "ROLES",
     "ROLE_EXEMPLARS",
+    "ROLE_GROUPS",
     "ROLE_MARKERS",
     "ROLE_TABLE",
     "Role",
     "axis_verdict",
     "build_axis",
     "build_axis_run",
+    "closure_summary",
     "collect_rollouts",
     "heuristic_expression_score",
     "load_axis",
     "load_chat_prompts",
+    "load_rollouts",
     "main",
     "mann_whitney_u",
     "parse_judge_score",
     "project",
     "render_build_markdown",
+    "render_closure_markdown",
     "render_projection_markdown",
     "role_expression_score",
     "rollout_role",
@@ -66,24 +77,36 @@ __all__ = [
 ]
 
 DEFAULT_SYSTEM = CHAT_SYSTEM_PROMPT
+#: The ``role`` field the default persona's rollouts carry in the saved JSONL.
+DEFAULT_ASSISTANT_ROLE = "default-assistant"
+#: SPEC-004 §4's pre-registered conclusion, written verbatim into the closure record.
+CLOSURE_DECISION = (
+    "the coder base has no usable persona space; no further P1 work on qwen25-coder-3b"
+)
+#: The counts SPEC-004 §4 wrote down before the record existed. ``close`` re-measures them and
+#: reports the difference rather than reconciling to them.
+SPEC_004_EXPECTED = {
+    "best_role_at_or_above": 3,
+    "best_role_total": 8,
+    "roles_at_zero": 19,
+    "n_roles": 24,
+}
 mann_whitney_u = stats.mann_whitney_u
 
 
 @dataclass(frozen=True)
 class Role:
-    """A role prompt, its lexical expression markers, and an optional one-shot example."""
+    """A role prompt and its lexical expression markers."""
 
     name: str
     system: str
     markers: tuple[str, ...]
-    exemplar: tuple[str, str] | None = None
 
 
 IN_CHARACTER = (
     "Stay fully in character at all times, speak in the first person as this character, and "
     "never mention being an AI or a language model."
 )
-EXEMPLAR_QUESTION = "How do plants make food?"
 
 
 def _role(
@@ -92,14 +115,12 @@ def _role(
     voice: str,
     task: str,
     markers: tuple[str, ...],
-    exemplar: str | None = None,
 ) -> Role:
     """Assemble the required four-part prompt without hiding role-specific wording."""
     return Role(
         name=name,
         system=f"{who} {voice} {IN_CHARACTER} {task}",
         markers=markers,
-        exemplar=None if exemplar is None else (EXEMPLAR_QUESTION, exemplar),
     )
 
 
@@ -168,9 +189,6 @@ _LOW = (
         "you.",
         "Answer the question the intruder has asked, but answer it as the dead answer.",
         ("cold", "the house", "year", "the living", "dust", "wall", "linger", "dark"),
-        "The green things in the garden drank the light, once, when I could still kneel among "
-        "them; the sun goes into the leaf and the leaf makes its own bread of it. A hundred "
-        "springs I have watched do this through the cold glass, and not one has noticed me.",
     ),
     _role(
         "hermit",
@@ -180,8 +198,6 @@ _LOW = (
         "you measure everything against the valley you left.",
         "Answer your visitor's question in your own plain way, as the hermit.",
         ("mountain", "snow", "the valley", "stone", "alone", "year", "winter", "quiet"),
-        "The leaf eats light; that is all. Up here the pines do it in the cold with almost "
-        "nothing, and they have outlasted every man who came to tell me otherwise.",
     ),
     _role(
         "leviathan",
@@ -191,9 +207,6 @@ _LOW = (
         "surface world and its ships are small things far above you.",
         "Answer the small voice that has called down to you, in your own manner.",
         ("deep", "the sea", "league", "cold", "dark", "ancient", "current", "ship"),
-        "In the warm skin of the water, far above me, the small green things take the light and "
-        "make of it their flesh. I have felt their season turn the currents for ten thousand "
-        "years, and the whole bright business of it is thinner than my eyelid.",
     ),
     _role(
         "oracle",
@@ -204,9 +217,6 @@ _LOW = (
         "The question brought to you must still be answered, in your own way, before the smoke "
         "clears.",
         ("smoke", "thread", "ash", "beware", "shall", "omen", "three", "the gods"),
-        "Three things the green blade takes: the light, the water, the breath of those who ask; "
-        "three it gives back, and one of them is your bread. Beware the season that takes the "
-        "first and withholds the third.",
     ),
     _role(
         "trickster",
@@ -216,9 +226,6 @@ _LOW = (
         "and you always tell the truth in the end but never by the shortest road.",
         "Answer the question you have been asked, honestly, in your own crooked way.",
         ("trick", "riddle", "clever", "coin", "laugh", "hidden", "friend", "wink"),
-        "Here is a riddle, friend: what eats without a mouth and drinks the sun for its supper? "
-        "A leaf, and it has been picking your pocket for air all your life; clever thing—I "
-        "taught it everything it knows.",
     ),
     _role(
         "pirate",
@@ -228,9 +235,6 @@ _LOW = (
         "explanation you give runs on ships, tides, plunder and the sea.",
         "Answer whatever question is put to ye by the crew, but answer it as the captain.",
         ("arr", "ye", "me hearties", "ship", "sea", "treasure", "aye", "matey"),
-        "Arr, gather close, ye lubbers. A leaf be naught but a wee green sail, and the sunlight "
-        "be the wind that fills it; it hauls water up from the bilges o' the roots, takes air "
-        "over the rail, and cooks itself a ration o' sugar, same as we render salt pork below.",
     ),
     _role(
         "prophet",
@@ -240,9 +244,6 @@ _LOW = (
         "is coming, and you call the crowd to look at what is already in front of them.",
         "Answer the question shouted at you from the crowd, in the voice you were given.",
         ("hear", "the day", "woe", "wilderness", "the city", "shall", "dust", "warn"),
-        "Hear me: the grass of the field is fed by the light, and you are fed by the grass, and "
-        "you have never once thanked the morning for it. Woe to the city that forgets what it "
-        "eats.",
     ),
     _role(
         "wanderer",
@@ -252,9 +253,6 @@ _LOW = (
         "never claim to be from anywhere.",
         "Answer what your host has asked, in the voice of the road.",
         ("road", "dust", "walk", "town", "stranger", "wind", "far", "year"),
-        "I have walked past ten thousand fields and they were all doing the same quiet work: "
-        "taking the light and turning it into something a body can eat. It is the one thing I "
-        "have found the same in every town.",
     ),
 )
 _NEUTRAL = (
@@ -266,9 +264,6 @@ _NEUTRAL = (
         "whatever it is to something at school or to your cat.",
         "Answer the grown-up's question the way you would, all of it, as Nell.",
         ("really", "cool", "my cat", "school", "and then", "grown-up", "wow", "like"),
-        "OK so plants are like SOLAR PANELS but squishy, my teacher said that and it is actually "
-        "really cool. They drink sunshine and water and make their own snacks, which my cat "
-        "cannot do, she just yells at me until I do it for her.",
     ),
     _role(
         "poet",
@@ -278,9 +273,6 @@ _NEUTRAL = (
         "closes -- and you would rather show a thing than define it.",
         "Answer what you have been asked, but answer it in your own language.",
         ("light", "hands", "breath", "silence", "shadow", "like a", "the dark", "small"),
-        "A leaf is a green mouth held open to the light, and the light goes down into it like a "
-        "coin into water. What comes back up is sugar, is stem, is the small hard apple in "
-        "October.",
     ),
     _role(
         "drill sergeant",
@@ -290,9 +282,6 @@ _NEUTRAL = (
         "you recruit, and you end on a question that demands an answer.",
         "Answer the recruit's question at volume, in your own manner.",
         ("recruit", "listen up", "move", "understood", "on your feet", "drop", "again"),
-        "LISTEN UP, RECRUIT: the leaf takes sunlight, water and air, and it manufactures its own "
-        "rations, which is more initiative than you showed on that obstacle course this morning. "
-        "Is that understood?",
     ),
     _role(
         "historian",
@@ -311,8 +300,6 @@ _NEUTRAL = (
         "chef -- and every explanation comes out as something you do with your hands.",
         "Answer the question from your commis without stopping service, in your own voice.",
         ("service", "the pass", "heat", "knife", "salt", "plate", "kitchen", "chef"),
-        "Behind you: look, the plant is doing what I do—light in, water in, air in, sugar out—"
-        "and it never once stops to complain about the heat. Two minutes on that basil, go.",
     ),
     _role(
         "detective",
@@ -322,9 +309,6 @@ _NEUTRAL = (
         "nobody has explained yet -- and you keep interrogating your own conclusion.",
         "Answer the question you have just been asked in that same working-it-out voice.",
         ("the case", "timeline", "witness", "motive", "alibi", "the scene", "does not fit"),
-        "Start with what we know: the light arrives, the water arrives, and by evening there is "
-        "sugar that nobody delivered. That is a manufacturing operation running in plain sight, "
-        "and the only thing that does not fit is how long it took us to notice.",
     ),
     _role(
         "monk",
@@ -343,9 +327,6 @@ _NEUTRAL = (
         "tell a story about a hand you played whenever it makes the point faster.",
         "Answer whatever the man beside you asked, in the language of the table.",
         ("odds", "bet", "the table", "chip", "the house", "hand", "fold", "long shot"),
-        "Kid, a plant is the only player at this table with a guaranteed edge: it puts up "
-        "nothing but time and the house pays it in sunlight every single morning. I once bet a "
-        "man in Reno that grass turns a better margin than he does, and I took his watch.",
     ),
     _role(
         "nurse",
@@ -384,9 +365,17 @@ def _interleave(*groups: tuple[Role, ...]) -> tuple[Role, ...]:
 _ROLE_DEFINITIONS = _interleave(_HIGH, _LOW, _NEUTRAL)
 ROLE_TABLE = {role.name: role for role in _ROLE_DEFINITIONS}
 ROLE_MARKERS = {role.name: role.markers for role in _ROLE_DEFINITIONS}
-ROLE_EXEMPLARS = {
-    role.name: role.exemplar for role in _ROLE_DEFINITIONS if role.exemplar is not None
+#: Which end of the axis each role sits at; the closure record and the balance test read it.
+ROLE_GROUPS: dict[str, str] = {
+    role.name: group
+    for group, definitions in (("high", _HIGH), ("low", _LOW), ("neutral", _NEUTRAL))
+    for role in definitions
 }
+#: Empty by the Chief's ruling of 2026-09-05: no role carries a one-shot exemplar any more, so
+#: exemplar presence is balanced at zero across the high, low and neutral groups and the axis
+#: derives from the system prompts alone. Kept as a name because ``rollout_role`` and the saved
+#: rollout records still carry the ``exemplar`` field of the artifact schema.
+ROLE_EXEMPLARS: dict[str, tuple[str, str]] = {}
 # Keep the original tuple-of-pairs API: downstream code and the pre-existing tests unpack it.
 ROLES: tuple[tuple[str, str], ...] = tuple((role.name, role.system) for role in _ROLE_DEFINITIONS)
 assert len(ROLES) == 24, "the design specifies 24 roles"
@@ -560,7 +549,7 @@ def rollout_role(
         if rollout_path is not None:
             rollout_path.parent.mkdir(parents=True, exist_ok=True)
             record = {
-                "role": resolved_role or "default-assistant",
+                "role": resolved_role or DEFAULT_ASSISTANT_ROLE,
                 "prompt": prompt,
                 "response": response,
                 "rendered_prompt": rendered,
@@ -589,7 +578,13 @@ def collect_rollouts(
     exemplar: bool = True,
     progress: Any = None,
 ) -> tuple[list[tuple[str, str]], dict[str, list[tuple[str, str]]], Path]:
-    """Generate and persist the full default/role text corpus for one axis build."""
+    """Generate and persist the full default/role text corpus for one axis build.
+
+    Matched design (SPEC-004 §4): the default assistant is rolled out against exactly the
+    ``prompts[:role_prompts]`` list each role sees, so the two sides of the axis differ in
+    persona and in nothing else. ``prompts`` may be longer -- it is the pool the shared list
+    is taken from -- but the extra prompts are not generated against.
+    """
     if len(prompts) < role_prompts:
         raise ValueError(f"only {len(prompts)} chat prompts available; need {role_prompts}")
     output = Path(output)
@@ -597,13 +592,14 @@ def collect_rollouts(
     rollout_path = output / f"rollouts-{_policy_stem(policy)}.jsonl"
     rollout_path.write_text("", encoding="utf-8")
 
+    shared_prompts = prompts[:role_prompts]
     default = rollout_role(
         model,
         tokenizer,
         DEFAULT_SYSTEM,
-        prompts,
+        shared_prompts,
         max_tokens,
-        role="default-assistant",
+        role=DEFAULT_ASSISTANT_ROLE,
         exemplar=False,
         rollout_path=rollout_path,
     )
@@ -615,7 +611,7 @@ def collect_rollouts(
             model,
             tokenizer,
             system,
-            prompts[:role_prompts],
+            shared_prompts,
             max_tokens,
             role=name,
             exemplar=exemplar,
@@ -636,10 +632,16 @@ def build_axis_run(
     max_tokens: int = 192,
     exemplar: bool = True,
     min_expression: float = 0.34,
-    use_model_judge: bool = True,
+    use_model_judge: bool = False,
     progress: Any = None,
 ) -> tuple[dict[int, Any], dict[str, Any]]:
-    """Persist all generations, then score/filter them and compute the axis."""
+    """Persist all generations, then score/filter them and compute the axis.
+
+    ``use_model_judge`` defaults off, matching :func:`build_axis` (SPEC-004 §4): the judge is
+    the same policy that produced the rollouts, so scoring with it lets a persona-blind model
+    grade its own persona expression. The heuristic runs either way and
+    ``diagnostics["model_judge"]`` records which was used.
+    """
     default, role_responses, rollout_path = collect_rollouts(
         model,
         tokenizer,
@@ -1196,7 +1198,281 @@ def render_projection_markdown(
     return "\n".join(out)
 
 
+# --------------------------------------------------------------------------- P1 closure
+
+
+def load_rollouts(path: Path) -> list[dict[str, Any]]:
+    """Every record of a saved rollouts JSONL, in file order."""
+    records: list[dict[str, Any]] = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"{path}:{number}: not JSON ({error})") from error
+            if not isinstance(record, dict) or "role" not in record:
+                raise ValueError(f"{path}:{number}: a rollout record needs a 'role' field")
+            records.append(record)
+    return records
+
+
+def _heuristic_citation() -> str:
+    """``file:line`` of the scorer this record was produced with, resolved at run time.
+
+    Resolved rather than written down because the record is evidence: a stale anchor would
+    cite a line that no longer holds the function.
+    """
+    from local_llm_lab.project import PROJECT_ROOT
+
+    source = inspect.getsourcefile(heuristic_expression_score)
+    _lines, line = inspect.getsourcelines(heuristic_expression_score)
+    path = Path(source) if source else Path(__file__)
+    if PROJECT_ROOT in path.parents:
+        path = path.relative_to(PROJECT_ROOT)
+    return f"{path.as_posix()}:{line} heuristic_expression_score"
+
+
+def closure_summary(
+    records: list[dict[str, Any]],
+    *,
+    min_expression: float = 0.34,
+    progress: Any = None,
+) -> dict[str, Any]:
+    """Per-role persona-expression counts over a saved rollout corpus (SPEC-004 §4).
+
+    Heuristic only: no model is loaded and no judge is consulted, so the closure record is
+    produced from the saved text alone. Roles are scored in file order, which puts the default
+    assistant first. Note that :func:`heuristic_expression_score` returns 1.0 for a role name
+    it has no markers for, so the default assistant's count is a pass-through, not a
+    measurement; ``marker_backed`` records which entries are real measurements.
+    """
+    if not 0.0 <= min_expression <= 1.0:
+        raise ValueError(f"min_expression must be in [0, 1], got {min_expression}")
+    grouped: dict[str, list[str]] = {}
+    for record in records:
+        role = str(record["role"])
+        grouped.setdefault(role, []).append(str(record.get("response") or ""))
+    if not grouped:
+        raise ValueError("no rollouts to score")
+
+    entries: list[dict[str, Any]] = []
+    default_entry: dict[str, Any] | None = None
+    for number, (role, responses) in enumerate(grouped.items(), 1):
+        if progress is not None:
+            progress(number, len(grouped), role)
+        scores = [heuristic_expression_score(role, response) for response in responses]
+        entry = {
+            "role": role,
+            "group": ROLE_GROUPS.get(role),
+            "marker_backed": role in ROLE_MARKERS,
+            "at_or_above": int(sum(score >= min_expression for score in scores)),
+            "total": len(scores),
+            "mean": float(np.mean(scores)),
+            "max": float(np.max(scores)),
+            "scores": [float(score) for score in scores],
+        }
+        if role == DEFAULT_ASSISTANT_ROLE:
+            default_entry = entry
+        else:
+            entries.append(entry)
+
+    best = max(entries, key=lambda item: (item["at_or_above"], item["mean"])) if entries else None
+    return {
+        "min_expression": float(min_expression),
+        "records": len(records),
+        "n_roles": len(entries),
+        "roles_at_zero": sum(1 for entry in entries if entry["at_or_above"] == 0),
+        "best_role": best,
+        "default_assistant": default_entry,
+        "roles": entries,
+        "unscored_roles": [entry["role"] for entry in entries if not entry["marker_backed"]],
+        "expected": dict(SPEC_004_EXPECTED),
+    }
+
+
+def _count(entry: dict[str, Any] | None) -> str:
+    return "-" if entry is None else f"{entry['at_or_above']} of {entry['total']}"
+
+
+def render_closure_markdown(summary: dict[str, Any]) -> str:
+    """The human-readable closure record (SPEC-004 §4)."""
+    threshold = summary["min_expression"]
+    best = summary.get("best_role")
+    default = summary.get("default_assistant")
+    expected = summary.get("expected", {})
+    out = ["# P1 CLOSED: the assistant axis on the coder base", ""]
+    out.append(f"**Decision (SPEC-004 §4): {summary['decision']}.**")
+    out.append("")
+    out.append(
+        f"Measured on {summary['date']} from {summary['records']} saved rollouts by the lexical "
+        f"marker heuristic alone, at the ratified threshold {threshold:.2f}. No model was "
+        "loaded and no same-policy judge was consulted."
+    )
+    out.append("")
+
+    out.append("## Provenance")
+    out.append("")
+    out.append(
+        _table(
+            ["field", "value"],
+            [
+                ["rollouts", summary["rollouts"]["path"]],
+                ["rollouts sha256", summary["rollouts"]["sha256"]],
+                ["records", str(summary["records"])],
+                ["roles (excluding the default assistant)", str(summary["n_roles"])],
+                ["threshold (min_expression)", f"{threshold:.2f}"],
+                ["scorer", summary["heuristic"]],
+                ["git commit", summary["git_commit"]],
+                ["command", " ".join(summary["command"])],
+            ],
+        )
+    )
+    out.append("")
+
+    out.append("## Headline counts, measured against the pre-registered ones")
+    out.append("")
+    best_expected = (
+        "-"
+        if not expected
+        else f"{expected['best_role_at_or_above']} of {expected['best_role_total']}"
+    )
+    zero_expected = "-" if not expected else f"{expected['roles_at_zero']} of {expected['n_roles']}"
+    out.append(
+        _table(
+            ["quantity", "measured", "SPEC-004 §4 expected"],
+            [
+                [
+                    f"best role ({'-' if best is None else best['role']})",
+                    _count(best),
+                    best_expected,
+                ],
+                [
+                    "roles with no rollout at or above the threshold",
+                    f"{summary['roles_at_zero']} of {summary['n_roles']}",
+                    zero_expected,
+                ],
+                ["default assistant", _count(default), "not pre-registered"],
+            ],
+        )
+    )
+    out.append("")
+    if expected:
+        agreed = (
+            best is not None
+            and best["at_or_above"] == expected["best_role_at_or_above"]
+            and best["total"] == expected["best_role_total"]
+            and summary["roles_at_zero"] == expected["roles_at_zero"]
+            and summary["n_roles"] == expected["n_roles"]
+        )
+        out.append(
+            "The measured counts reproduce the pre-registered ones."
+            if agreed
+            else "The measured counts differ from the pre-registered ones; the measurement "
+            "stands and the difference is reported, not reconciled."
+        )
+        out.append("")
+
+    out.append("## Persona expression per role")
+    out.append("")
+    rows = [
+        [
+            entry["role"],
+            entry["group"] or "-",
+            _count(entry),
+            f"{entry['mean']:.3f}",
+            f"{entry['max']:.3f}",
+        ]
+        for entry in sorted(
+            summary["roles"], key=lambda item: (-item["at_or_above"], -item["mean"], item["role"])
+        )
+    ]
+    out.append(_table(["role", "group", "at or above threshold", "mean", "best"], rows))
+    out.append("")
+
+    out.append("## Reading")
+    out.append("")
+    out.append(
+        "The heuristic is the fraction of a role's lexical markers present in a reply, less a "
+        "penalty for explicit generic-assistant tells; a reply at or above the threshold is one "
+        "the axis build would have kept. `build_axis` requires twelve roles with three kept "
+        "rollouts each, so this corpus cannot produce an axis at all."
+    )
+    out.append("")
+    if default is not None and not default["marker_backed"]:
+        out.append(
+            f"The default assistant's {_count(default)} is not a persona measurement: the "
+            "heuristic has no markers for that name and returns 1.0 unfiltered for every "
+            "unknown role, so the row records the pass-through, not expression."
+        )
+        out.append("")
+    unscored = [role for role in summary.get("unscored_roles", []) if role]
+    if unscored:
+        out.append(
+            "Roles with no registered markers, scored unfiltered by the same rule: "
+            + ", ".join(unscored)
+            + "."
+        )
+        out.append("")
+    out.append(
+        "No further P1 work on this base. The pre-registered reopening condition is unchanged: "
+        "one `build` on the next base after its preflight passes, and `project` only if the "
+        "axis verdict passes."
+    )
+    return "\n".join(out)
+
+
 # --------------------------------------------------------------------------- CLI
+
+
+def _close(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    rollouts = Path(args.rollouts)
+    if not rollouts.is_file():
+        parser.error(f"no rollouts file at {rollouts}")
+    if not 0.0 <= args.min_expression <= 1.0:
+        parser.error(f"--min-expression must be in [0, 1], got {args.min_expression}")
+    digest = sha256_of(rollouts)
+    identity = {
+        "rollouts": str(rollouts),
+        "rollouts_sha256": digest,
+        "min_expression": args.min_expression,
+        "git_commit": git_commit(),
+    }
+    with RunLog.open(
+        args.output, name="assistant-axis-close", command=sys.argv, identity=identity
+    ) as log:
+        try:
+            records = load_rollouts(rollouts)
+        except ValueError as error:
+            parser.error(str(error))
+        log.info("loaded rollouts", records=len(records), path=str(rollouts))
+        try:
+            summary = closure_summary(
+                records,
+                min_expression=args.min_expression,
+                progress=lambda number, total, name: log.progress(number, total, f"role {name}"),
+            )
+        except ValueError as error:
+            parser.error(str(error))
+        summary.update(
+            {
+                "decision": CLOSURE_DECISION,
+                "rollouts": {"path": str(rollouts.resolve()), "sha256": digest},
+                "heuristic": _heuristic_citation(),
+                "git_commit": identity["git_commit"],
+                "date": datetime.now(UTC).date().isoformat(),
+                "command": list(sys.argv),
+            }
+        )
+        args.output.mkdir(parents=True, exist_ok=True)
+        (args.output / "closed.json").write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        markdown = render_closure_markdown(summary)
+        (args.output / "CLOSED.md").write_text(markdown + "\n", encoding="utf-8")
+        print(markdown)
+        log.info("wrote", path=str(args.output / "CLOSED.md"))
 
 
 def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -1236,7 +1512,9 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
             parser.error(str(error))
         layers = list(selection.indices)
         prompts = load_chat_prompts(args.prompts)
-        log.info("default assistant", prompts=len(prompts))
+        # Matched design: the default persona now generates against the roles' prompt list,
+        # taken from this pool, so the count it is rolled out on is `role_prompts`.
+        log.info("default assistant", prompts=args.role_prompts, pool=len(prompts))
         try:
             axis, diagnostics = build_axis_run(
                 model,
@@ -1373,13 +1651,16 @@ def main() -> None:
         "--exemplar",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="prepend each available in-character one-shot (default: on)",
+        help=(
+            "prepend each available in-character one-shot; none are registered since the "
+            "2026-09-05 ruling, so this is inert and recorded as False (default: on)"
+        ),
     )
     build.add_argument(
         "--judge",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="combine the marker score with a same-policy 0-3 judge (default: on)",
+        default=False,
+        help="combine the marker score with a same-policy 0-3 judge (default: off)",
     )
 
     projected = sub.add_parser(
@@ -1390,8 +1671,19 @@ def main() -> None:
     projected.add_argument("--layer", type=int, default=18)
     projected.add_argument("--limit", type=int, default=None)
 
+    # No model, no policy and no GPU guard: `close` reads saved text and scores it offline,
+    # so it does not take the `common` parent.
+    closed = sub.add_parser(
+        "close", help="the P1 closure record from a saved rollouts JSONL (SPEC-004 §4)"
+    )
+    closed.add_argument("--rollouts", type=Path, required=True)
+    closed.add_argument("--output", type=Path, required=True)
+    closed.add_argument("--min-expression", type=float, default=0.34)
+
     args = parser.parse_args()
     if args.command == "build":
         _build(args, build)
+    elif args.command == "close":
+        _close(args, closed)
     else:
         _project(args, projected)
