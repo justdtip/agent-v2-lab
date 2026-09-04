@@ -115,24 +115,28 @@ HEAD `112648b`+docs, pushed. Suite at the last clean gate **807 passed, exit 0**
 carries two in-flight lanes' uncommitted edits (R27 scorer in `patch.py`; the training-fix
 slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.py`.
 
-- **Training arm B4: not yet run.** Two live attempts failed before iteration one on our own
-  code: (1) the train stage loaded the unused test split, 15 of whose rows exceed the 2688
-  ceiling under the Qwen3.5 tokenizer; (2) `RenderedRowsDataset` lacks the `process` method
-  mlx_lm 0.31.3's `CacheDataset` requires. Both, plus the R26 error-path gap (a crashed run read
-  "healthy"), are in one fix slice in flight. The Director's ceiling change (7f11288) was
-  reverted (112648b): it broke the literal-pairwise-recipe test, and the loader fix removes the
-  need. Condition 6 is accepted (Director: "Go"); attempt 3 starts when the slice clears the
-  Chief's gate. Health logging worked on both failures (R26 in place: `c1f7d51`…`2405598`).
+- **Training arm B4: BLOCKED at the framework level (#50, ruling requested).** Three
+  Deputy-run attempts on the Director's acceptance. Attempts 1–2 died on our code (unused test
+  split over the ceiling; mlx-lm 0.31.3 dataset protocol) — fixed `9d5828c` (#47). Attempt 3
+  passed the loader and the first validation and died at the first optimiser step: Metal OOM.
+  Measured (real train loop, batch 1, one row): 495 tokens 11.4 GB OK; 997 tokens OOM at
+  19.2 GB (working set 17.8 GiB); adapting 8 or 16 layers still OOMs. Mechanism read in the
+  library: training bypasses the gradient-less Metal kernel and runs the gated-delta
+  recurrence as a per-token Python loop, retaining a 2 MiB state per step — linear in T. Latest
+  mlx-lm is the pinned 0.31.3. Proposed slice: chunked checkpointed recurrence for training
+  (exact; boundary states only), registry budget 22 → 17.8, memory estimate at preflight.
+  The recipe stays run B's (ceiling change reverted `112648b`). Health logging worked on every
+  failure; the #35 amendment made attempt 3 read `incomplete`.
 - **P6.** Run 1 artifact valid, rates uninterpretable (Chief's review; R27). Strict scorer
   implemented, R19-reviewed, two blocking findings fixed; work order **#46**: ledger primary
   READY; the `aggregate_report` secondary blocked on the #41 ruling (extractor for run C's
   `first half complete:` style; HEAD-alone eligibility, n = 2 vs 15). Rerun ~1.5 h after B4.
 - **Probes Section B.** Committed: P1 closure + three fixes (`3867cc6`, #42), P2 splits + R28
-  test (`2d9445c`, #43). At the Chief's gate: C7 refit **#44** (supported set unchanged, 96/96
-  cells, max margin change 0.0054; ratify generator_version = 2 for the hardened capture) and
-  `compare` + R29 sidecar **#45** (rebased onto B5; Holm-across-cells point for the Chief). In
-  flight: B1b capture sub-slice (conditions, dual capture, R18b `capture_dtype`, the
-  `task_difficulties` fix) in a worktree on top of B5.
+  test (`2d9445c`, #43). Committed: C7 refit `eca116b` (#44; supported set unchanged 96/96, generator binding
+  v1 labels / v2 reanalysis ratified; #15 closed) and `compare` + R29 sidecar `5e1f3b2` (#45).
+  At the Chief's gate: B1b capture sub-slice **#48** (conditions, dual capture with the
+  widening span, R18b `capture_dtype`, `task_difficulties` fix), R27 scorer **#46**, R30
+  refinements **#49** (after #46; F non-empty 8/15 deviation for the Chief).
 - Rulings R1 to R31 (R28 disjointness, R29 compare pairing, R30 P6 secondary + scorer
   refinements, **R31: any test of a library seam drives the library's real class on that
   side, fakes only for weights and compute** — drawn from three live-run defects that green
