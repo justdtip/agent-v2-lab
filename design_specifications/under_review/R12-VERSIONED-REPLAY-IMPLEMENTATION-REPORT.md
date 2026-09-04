@@ -65,3 +65,6 @@ independent exact `ModelSpec` schema assertion.  The fake-only path is parameter
 
 - Added replay-forwarding, top-level compatibility, explicit CLI, invalid-binding, and saved
   recovery NPZ/difficulty offline acceptance coverage.
+- Historical recovery reanalysis now exercises real offline rows and `reanalyse_dataset` under
+  hard-failing model/prompt seams, asserts a version-distinguishing lexical surface cell, and
+  pins returned generator-version metadata plus non-default saved difficulty.

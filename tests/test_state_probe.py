@@ -194,6 +194,35 @@ def test_saved_recovery_npz_offline_rows_use_historical_version_and_difficulty(t
     assert state_probe._offline_rows(saved, data_seed=20260902, generator_version=2)[1].shape == surface.shape
 
 
+def test_historical_recovery_reanalysis_reports_version_without_model_seams(tmp_path, monkeypatch) -> None:
+    from local_llm_lab.pipeline import evaluate
+
+    task = next(
+        item
+        for item in make_tasks("train", 144, difficulty=3)
+        if item.variant == "wrong_path"
+    )
+    dataset = state_probe.build_label_dataset([task], {task.task_id: 3})
+    dataset.meta.update({"generator_version": 2, "data_seed": 20260902, "keep_last": 2})
+    saved = state_probe.load_dataset(state_probe.save_dataset(dataset, tmp_path / "legacy.npz"))
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: pytest.fail("offline loader"))
+    monkeypatch.setattr(state_probe, "build_prompt", lambda *_args, **_kwargs: pytest.fail("offline prompt"))
+    monkeypatch.setattr(
+        state_probe,
+        "_analyse_cohort",
+        lambda *_args, **_kwargs: {"targets": {}},
+    )
+    legacy_surface = state_probe._offline_rows(saved, data_seed=20260902)[1]
+    saved.meta["generator_version"] = 4
+    head_surface = state_probe._offline_rows(saved, data_seed=20260902)[1]
+    differing = np.flatnonzero(legacy_surface[:, 1] != head_surface[:, 1])
+    assert len(differing) > 0
+    saved.meta["generator_version"] = 2
+    result = state_probe.reanalyse_dataset(saved, split_seeds=(1,), bootstrap_resamples=1)
+    assert result["metadata"]["generator_version"] == 2
+    assert saved.difficulty.tolist() == [3] * len(saved)
+
+
 def test_saved_npz_replay_rejects_inconsistent_family_metadata() -> None:
     dataset = state_probe.build_label_dataset(make_tasks("test", 1))
     dataset.family[1] = "search"
