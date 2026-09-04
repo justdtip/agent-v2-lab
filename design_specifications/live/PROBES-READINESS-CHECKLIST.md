@@ -5,8 +5,8 @@ conventions: updated by the Deputy after every commit, an item ticks only on a c
 file:line, or a checksummed artifact — re-measured, not re-read (Chief's standard, #21). Covers when probes may run and what the probe programme
 (SPEC-004) still needs. Training's arm 1 has its own list; the one shared item is marked.
 
-As of: `2405598` (R26 run logging committed for every probe CLI: P6/ablation/delta `0a79788`,
-state/axis `2405598`; position-groups fix `ac9c27a`; R25 `036e62c`), suite **754 passed, exit 0** bare.
+As of: `0b5227e` (scorer `0862c01`, R30 `68c1990`, B1b `1604f38`, B5 `eca116b`, B1c `5e1f3b2`,
+R26 logging, position groups, R25), suite **1016 passed, exit 0** bare (combined tree).
 Updated: 2026-09-05 by the Deputy (after the R26 commits). Every probe run now writes
 `run.log` + `events.jsonl` beside its artifact and reports per outer unit (R26 g); a probe lift
 request cites those files by path and SHA-256. Exception: the third P6 attempt was launched
@@ -106,8 +106,8 @@ post-alignment; seven cells). **The R25 slice is committed `036e62c` (#30, Chief
   computed with the integrity module's extraction, a content control, and the `aggregate_report`
   secondary condition scheduled with the rerun (~1.5 h on the lane after B4 training).
   **Scorer committed `0862c01` (#46) and R30 refinements `68c1990` (#49, schema `p6-patch-r30`).**
-  The ledger primary rerun needs only these and the Director's lift; the lane is free while
-  B4 is blocked (#50). Output must go to a NEW directory (run 1's artifact is a record).
+  **The ledger primary rerun is RUNNING** (Director-started 2026-09-05 ~21:38, own monitor;
+  `outputs/probes/patch-C-r27-2026-09-05/`, 42 cells, ~1 h 20). Run 1's artifact stays as a record.
 - [ ] B4. **§4 P1 on Qwen3.5 — four pre-registered code fixes first**, none applied:
   `outputs/probes/axis-corrected/CLOSED.md` absent (288 saved rollouts on disk); the
   matched-design flaw (default persona gets the full `prompts` list, `assistant_axis.py:600-609`,

@@ -6,7 +6,7 @@ gets its line re-derived, never assumed — re-measured, not re-read (Chief's st
 commit, a file:line, or an artifact with a checksum. Structure follows ruling R15; nothing here
 adds to or relaxes it.
 
-As of: `2405598`, suite **754 passed, exit 0** bare (green on every bare run since; earlier note: nine consecutive green runs including
+As of: `0b5227e`, suite **1016 passed, exit 0** bare (combined tree with lane 2 uncommitted) (green on every bare run since; earlier note: nine consecutive green runs including
 `tests/test_patch.py` alone and reversed file order; two auditors each saw one transient red in
 that file during an implementer's edit window, not reproduced since).
 Updated: 2026-09-05 by the Deputy after the four R26 commits `c1f7d51`…`2405598` (A8 met; carried
@@ -21,7 +21,10 @@ by docs commits `a9c1535`/`e6500ba`), then re-audited line by line (second audit
 
 ## Part A — first arm B4, the seven R15 conditions
 
-**A1. Preflight `passed: true` under R18a** — **MET** (A1.2).
+**A1. Preflight `passed: true` under R18a** — **MET** (A1.2) — *but R32(b)/(d) add the device
+working-set budget (17.8 GiB, not the registry's 22) and a calibrated training-footprint gate
+with 10% headroom (lane 2, uncommitted pending calibration from the probe); the 4B artifact
+must be regenerated under schema 3 when lane 2 lands, before any 4B stage.*
 - [x] A1.1 **MET — committed `ed88c96` (issue #23).** `run_preflight` gates on
   `native_manual_vs_native` (criterion `native_dtype_rms_roundoff_and_frobenius_relative`,
   derived floor AND Frobenius ≤ 1e-4; `preflight.py:288-330`); `fp32_manual_vs_native` is
@@ -69,11 +72,15 @@ Evidence: `cli.py:46,519` consumes `load_rendered_splits`; byte-identical migrat
 - [x] A5.2 **MET** — `criteria:` blocks recorded verbatim from SPEC-003 §5 in all three arm configs (B4 vs B, D3 vs B, D4 vs D3), committed `7dd251d` (issue #18); recorded, never used for selection.
 
 **A6. Execution claim free; cost stated and accepted.**
-- [x] A6.1 **Lane free; condition 6 accepted** (Director: "Can you run it?" / "Go"). Two
-  Deputy-run attempts on 2026-09-05 failed before iteration one on our code (unused test split
-  over the ceiling; mlx-lm 0.31.3 dataset protocol); fixes committed `9d5828c` (#47);
-  **attempt 3 running** (started 2026-09-05 by the Deputy). The ceiling change was reverted
-  (`112648b`); attempts 1 and 2 kept on disk as records. Previously: free since the Director's third P6 attempt completed
+- [ ] A6.1 **Lane held by the Director's P6 rerun (2026-09-05 evening); condition 6 accepted**
+  (Director: "Go"). Three attempts failed before iteration one: 1–2 on our code (fixed
+  `9d5828c`, #47); 3 on Metal OOM at the first optimiser step — the library's training-mode
+  gated-delta recurrence is an unrolled per-token loop (R32, #50). **Lane 1 of the remedy is
+  committed `0b5227e`** (chunked checkpointed recurrence; batch 1 × accumulation 4; chunk 64).
+  Attempt 4 gates (Chief, #51): the 2,257-token row steps under the device working set with
+  10% headroom at the chosen chunk, AND the clean per-step time projects 400 iterations at
+  ≤ 3 h; otherwise stage 2 first. The probe runs after P6 releases the lane. The ceiling
+  change was reverted (`112648b`); attempts 1–3 kept on disk as records. Previously: free since the Director's third P6 attempt completed
   (17:49–19:00 local, 2026-09-04, artifact `outputs/probes/patch-C-2026-09-04/`); earlier
   execution today: preflights 15:18/15:20, P6 attempts ~17:00 and ~18:30, all Director-run.
   No live agent holds `model-execution`. A P6 run and a training run cannot overlap.

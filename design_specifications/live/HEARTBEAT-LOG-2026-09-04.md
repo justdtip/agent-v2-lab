@@ -855,7 +855,7 @@ git add design_specifications/live/HEARTBEAT-LOG-2026-09-04.md && git commit -q 
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin codex/agent-v2-specs && git log --oneline -1; echo "=== tree after ==="; git status --short src tests configs | head; echo "=== P6 ==="; tail -1 outputs/probes/patch-C-r27-2026-09-05/run.log
 
-## 2026-09-05 — #51 ratified; lane 1 committed `bea311c` (message amended); R33
+## 2026-09-05 — #51 ratified; lane 1 committed `0b5227e` (bea311c amended in place); R33
 
 - Chief read the recurrence directly; ratified lane 1 now, lane 2 after a calibrated
   upper-envelope estimator fitted from the probe (points and coefficients recorded), schema
