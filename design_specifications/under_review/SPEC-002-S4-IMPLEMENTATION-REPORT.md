@@ -32,7 +32,7 @@ The owned source and test files changed are:
 | `tests/test_evaluate.py` | 87 | 0 |
 | `tests/test_pipeline.py` | 0 | 41 |
 | `docs/superpowers/plans/2026-09-04-spec-002-s4-remainder.md` | 221 (new) | 0 |
-| `design_specifications/under_review/SPEC-002-S4-IMPLEMENTATION-REPORT.md` | 241 (new) | 0 |
+| `design_specifications/under_review/SPEC-002-S4-IMPLEMENTATION-REPORT.md` | 252 (new) | 0 |
 
 The owned evidence paths are this report,
 the ephemeral `.superpowers/sdd/2026-09-04-spec-002-s4-remainder/task-1-report.md`, and the
@@ -232,6 +232,17 @@ Final handoff run after Lane D landed:
 - Exit: 0
 - Counts: 472 passed, 0 failed
 - Failing nodes: none (`[]`)
+
+Post-commit R13 evidence correction before independent review:
+
+- Tested HEAD: `7ed1973775c4dccfd812d44b74022e02cad616b1`
+- Command: `uv run pytest -q`
+- Exit: 0
+- Counts: 481 passed, 0 failed
+- Failing nodes: none (`[]`)
+- Index state before the run: empty; no staged paths.
+- Foreign dirty state: protected/user documents plus the active SPEC-004 adapter-delta lane's
+  report, implementation, and test paths. No durable Lane E code, test, or plan path was dirty.
 
 ## Deviations and unverified work
 
