@@ -50,6 +50,7 @@ from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST, build_prompt, par
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import capture_residuals, strip_state_fields
+from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
 __all__ = [
     "TARGETS",
@@ -2451,48 +2452,57 @@ def _main_reanalyse(argv: list[str]) -> None:
     parser.add_argument("--logistic-steps", type=int, default=120)
     args = parser.parse_args(argv)
     seeds = tuple(int(value) for value in args.split_seeds.split(",") if value.strip())
-    dataset = load_dataset(args.input)
-    capture_context = _captured_context(args.input)
-    if "generator_version" not in dataset.meta and "generator_version" in capture_context:
-        dataset.meta["generator_version"] = capture_context["generator_version"]
-    captured_data_seed = capture_context.get("data_seed", dataset.meta.get("data_seed"))
-    results = reanalyse_dataset(
-        dataset,
-        split_seeds=seeds,
-        bootstrap_resamples=args.bootstrap_resamples,
-        data_seed=args.data_seed,
-        captured_data_seed=captured_data_seed,
-        generator_version=args.generator_version,
-        logistic_steps=args.logistic_steps,
-    )
-    if capture_context:
-        results["metadata"]["model"] = {
-            "reference": capture_context.get("model"),
-            "artifact": capture_context.get("model_artifact"),
-        }
-        results["metadata"]["policy"] = capture_context.get("policy")
-        results["metadata"]["adapter_artifact"] = capture_context.get("adapter_artifact")
-        results["metadata"]["capture_context"] = capture_context
-    model_reference = capture_context.get("model", dataset.meta.get("model"))
-    if isinstance(model_reference, str):
-        from local_llm_lab.models import load_model_spec
+    identity = {
+        "input": str(args.input),
+        "input_sha256": sha256_of(args.input) if args.input.is_file() else None,
+        "git_commit": git_commit(),
+    }
+    with RunLog.open(
+        args.output, name="state-probe-report", command=sys.argv, identity=identity
+    ) as log:
+        dataset = load_dataset(args.input)
+        capture_context = _captured_context(args.input)
+        if "generator_version" not in dataset.meta and "generator_version" in capture_context:
+            dataset.meta["generator_version"] = capture_context["generator_version"]
+        captured_data_seed = capture_context.get("data_seed", dataset.meta.get("data_seed"))
+        results = reanalyse_dataset(
+            dataset,
+            split_seeds=seeds,
+            bootstrap_resamples=args.bootstrap_resamples,
+            data_seed=args.data_seed,
+            captured_data_seed=captured_data_seed,
+            generator_version=args.generator_version,
+            logistic_steps=args.logistic_steps,
+        )
+        if capture_context:
+            results["metadata"]["model"] = {
+                "reference": capture_context.get("model"),
+                "artifact": capture_context.get("model_artifact"),
+            }
+            results["metadata"]["policy"] = capture_context.get("policy")
+            results["metadata"]["adapter_artifact"] = capture_context.get("adapter_artifact")
+            results["metadata"]["capture_context"] = capture_context
+        model_reference = capture_context.get("model", dataset.meta.get("model"))
+        if isinstance(model_reference, str):
+            from local_llm_lab.models import load_model_spec
 
-        results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
-    results["metadata"]["command"] = shlex.join(sys.argv)
-    results["metadata"]["input"] = str(args.input)
-    results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
-    stem = args.input.name.removesuffix(".npz") + ".reanalysis"
-    json_path = args.output / f"{stem}.json"
-    markdown_path = args.output / f"{stem}.md"
-    _atomic_text(
-        json_path,
-        json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-    )
-    markdown = render_reanalysis_markdown(results, args.input.stem)
-    _atomic_text(markdown_path, markdown + "\n")
-    print(markdown)
-    print(f"Wrote {json_path}")
-    print(f"Wrote {markdown_path}")
+            results["metadata"]["model_spec"] = asdict(load_model_spec(model_reference))
+        results["metadata"]["command"] = shlex.join(sys.argv)
+        results["metadata"]["input"] = str(args.input)
+        results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
+        stem = args.input.name.removesuffix(".npz") + ".reanalysis"
+        json_path = args.output / f"{stem}.json"
+        markdown_path = args.output / f"{stem}.md"
+        _atomic_text(
+            json_path,
+            json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
+            + "\n",
+        )
+        markdown = render_reanalysis_markdown(results, args.input.stem)
+        _atomic_text(markdown_path, markdown + "\n")
+        print(markdown)
+        log.info("wrote", path=str(json_path))
+        log.info("wrote", path=str(markdown_path))
 
 
 # --------------------------------------------------------------------------- rendering
@@ -2919,141 +2929,162 @@ def main() -> None:  # noqa: C901 - pre-existing capture/reanalysis CLI orchestr
     stem = f"state-{args.policy}{'-stripped' if args.strip else ''}{suffix}"
     npz_path = args.output / f"{stem}.npz"
     preflight: dict[str, Any] | None = None
+    reusing = bool(args.reuse and npz_path.is_file())
+    # Resolved once, here, so the start event can name the adapter (R26(e)); the failure is
+    # deferred, not moved, so each branch still reports it exactly where it always did.
+    adapter: Path | None = None
+    policy_error: str | None = None
+    try:
+        adapter = resolve_policy(args.policy, spec)
+    except ValueError as error:
+        policy_error = str(error)
+    identity = {
+        "model": spec.name,
+        "hf_id": spec.hf_id,
+        "policy": args.policy,
+        "adapter": None if adapter is None else str(adapter),
+        "layers": args.layers,
+        "splits": [name for name, _ in plan],
+        "reused_capture": str(npz_path) if reusing else None,
+        "reused_capture_sha256": sha256_of(npz_path) if reusing else None,
+        "git_commit": git_commit(),
+    }
 
-    if args.reuse and npz_path.is_file():
-        dataset = load_dataset(npz_path)
-        try:
-            layers, layer_selection = _reuse_layer_selection(dataset, args.layers, spec)
-        except ValueError as error:
-            parser.error(str(error))
-        dataset.meta["layer_selection"] = layer_selection
-        if args.mix_difficulty:
-            preflight = validate_mixed_design(dataset, targets, args.seed)
-            if preflight["status"] != "PASS":
-                parser.error(
-                    "mixed-difficulty preflight failed: " + "; ".join(preflight["failures"])
-                )
-        print(f"Reusing {npz_path} ({len(dataset)} rows)")
-    else:
-        tasks: list[Task] = []
-        difficulties: dict[str, int] = {}
-        for name, perturb in plan:
-            made = (
-                make_tasks(name, args.limit, args.data_seed)
-                if perturb is None
-                else make_tasks(name, args.limit, args.data_seed, perturb=perturb)
-            )
-            tasks.extend(made)
-            difficulties.update(task_difficulties(name, made))
-        if args.mix_difficulty:
-            label_dataset = build_label_dataset(tasks, difficulties)
-            preflight = validate_mixed_design(label_dataset, targets, args.seed)
-            if preflight["status"] != "PASS":
-                parser.error(
-                    "mixed-difficulty preflight failed: " + "; ".join(preflight["failures"])
-                )
-            print(
-                "within-position preflight PASS: "
-                + ", ".join(
-                    f"{target}={entry['eligible_cells']} cells/{entry['n_test']} test rows"
-                    for target, entry in preflight["targets"].items()
-                ),
-                flush=True,
-            )
-        try:
-            adapter = resolve_policy(args.policy, spec)
-        except ValueError as error:
-            parser.error(str(error))
-        require_idle_gpu(parser, args, "capturing activations")
-        import mlx.core as mx
-
-        previous_cache_limit = set_mlx_cache_limit(mx, args.mlx_cache_limit_mib)
-        model: Any = None
-        checkpoint_dir = args.output / f"{stem}.checkpoints"
-        latest_memory: dict[str, Any] = {}
-        try:
-            model, tokenizer, view, _resolved = load_policy(spec, adapter)
+    with RunLog.open(args.output, name="state-probe", command=sys.argv, identity=identity) as log:
+        if reusing:
+            dataset = load_dataset(npz_path)
             try:
-                selection = resolve_layers(args.layers, spec, view.num_layers)
+                layers, layer_selection = _reuse_layer_selection(dataset, args.layers, spec)
             except ValueError as error:
                 parser.error(str(error))
-            layers = list(selection.indices)
-            layer_selection = selection.as_dict()
-            model_artifact = artifact_identity(args.model)
-            adapter_artifact = artifact_identity(adapter)
-            print(f"{len(tasks)} tasks from {[name for name, _ in plan]}", flush=True)
-            print(
-                f"MLX cache limited to {args.mlx_cache_limit_mib} MiB; "
-                f"task checkpoints in {checkpoint_dir}",
-                flush=True,
-            )
+            dataset.meta["layer_selection"] = layer_selection
+            if args.mix_difficulty:
+                preflight = validate_mixed_design(dataset, targets, args.seed)
+                if preflight["status"] != "PASS":
+                    parser.error(
+                        "mixed-difficulty preflight failed: " + "; ".join(preflight["failures"])
+                    )
+            log.info("reusing", path=str(npz_path), rows=len(dataset))
+        else:
+            tasks: list[Task] = []
+            difficulties: dict[str, int] = {}
+            for name, perturb in plan:
+                made = (
+                    make_tasks(name, args.limit, args.data_seed)
+                    if perturb is None
+                    else make_tasks(name, args.limit, args.data_seed, perturb=perturb)
+                )
+                tasks.extend(made)
+                difficulties.update(task_difficulties(name, made))
+            if args.mix_difficulty:
+                label_dataset = build_label_dataset(tasks, difficulties)
+                preflight = validate_mixed_design(label_dataset, targets, args.seed)
+                if preflight["status"] != "PASS":
+                    parser.error(
+                        "mixed-difficulty preflight failed: " + "; ".join(preflight["failures"])
+                    )
+                log.info(
+                    "within-position preflight PASS: "
+                    + ", ".join(
+                        f"{target}={entry['eligible_cells']} cells/{entry['n_test']} test rows"
+                        for target, entry in preflight["targets"].items()
+                    )
+                )
+            if policy_error is not None:
+                parser.error(policy_error)
+            require_idle_gpu(parser, args, "capturing activations")
+            import mlx.core as mx
 
-            def memory_progress(sample: dict[str, Any]) -> None:
-                latest_memory.clear()
-                latest_memory.update(sample)
-
-            def progress(number: int, total: int, rows: int) -> None:
-                mib = 2**20
-                source = "resumed" if latest_memory.get("resumed") else "captured"
-                peak = latest_memory.get("peak_bytes")
-                peak_text = "n/a" if peak is None else f"{peak / mib:.0f} MiB"
-                print(
-                    f"[{number:03d}/{total:03d}] {rows} rows available ({source}); "
-                    f"MLX active={latest_memory.get('active_bytes', 0) / mib:.0f} MiB, "
-                    f"cache={latest_memory.get('cache_bytes', 0) / mib:.0f} MiB, "
-                    f"task peak={peak_text}",
-                    flush=True,
+            previous_cache_limit = set_mlx_cache_limit(mx, args.mlx_cache_limit_mib)
+            model: Any = None
+            checkpoint_dir = args.output / f"{stem}.checkpoints"
+            latest_memory: dict[str, Any] = {}
+            try:
+                model, tokenizer, view, _resolved = load_policy(spec, adapter)
+                try:
+                    selection = resolve_layers(args.layers, spec, view.num_layers)
+                except ValueError as error:
+                    parser.error(str(error))
+                layers = list(selection.indices)
+                layer_selection = selection.as_dict()
+                model_artifact = artifact_identity(args.model)
+                adapter_artifact = artifact_identity(adapter)
+                log.info("capture plan", tasks=len(tasks), splits=[name for name, _ in plan])
+                log.info(
+                    "capture limits",
+                    mlx_cache_limit_mib=args.mlx_cache_limit_mib,
+                    checkpoint_dir=str(checkpoint_dir),
                 )
 
-            dataset = build_probe_dataset(
-                model,
-                tokenizer,
-                tasks,
-                layers,
-                args.strip,
-                keep_last=args.keep_last,
-                difficulties=difficulties,
-                progress=progress,
-                mlx_runtime=mx,
-                memory_progress=memory_progress,
-                checkpoint_dir=checkpoint_dir,
-                checkpoint_context={
-                    "model": args.model,
-                    "model_artifact": model_artifact,
-                    "policy": args.policy,
-                    "adapter_artifact": adapter_artifact,
-                    "splits": [name for name, _ in plan],
-                    "mix_difficulty": bool(args.mix_difficulty),
-                    "data_seed": args.data_seed,
-                    "generator_version": GENERATOR_VERSION,
-                    "layer_selection": layer_selection,
-                },
-                spec=spec,
-                layer_selection=layer_selection,
-            )
-        finally:
-            model = None
-            mx.clear_cache()
-            mx.set_cache_limit(previous_cache_limit)
-        dataset.meta["splits"] = [name for name, _ in plan]
-        dataset.meta["mix_difficulty"] = bool(args.mix_difficulty)
-        dataset.meta["mlx_cache_limit_mib"] = args.mlx_cache_limit_mib
-        dataset.meta["layer_selection"] = layer_selection
+                def memory_progress(sample: dict[str, Any]) -> None:
+                    latest_memory.clear()
+                    latest_memory.update(sample)
+
+                def progress(number: int, total: int, rows: int) -> None:
+                    mib = 2**20
+                    peak = latest_memory.get("peak_bytes")
+                    log.progress(
+                        number,
+                        total,
+                        "capture",
+                        rows=rows,
+                        source="resumed" if latest_memory.get("resumed") else "captured",
+                        active_mib=round(latest_memory.get("active_bytes", 0) / mib),
+                        cache_mib=round(latest_memory.get("cache_bytes", 0) / mib),
+                        task_peak_mib=None if peak is None else round(peak / mib),
+                    )
+
+                dataset = build_probe_dataset(
+                    model,
+                    tokenizer,
+                    tasks,
+                    layers,
+                    args.strip,
+                    keep_last=args.keep_last,
+                    difficulties=difficulties,
+                    progress=progress,
+                    mlx_runtime=mx,
+                    memory_progress=memory_progress,
+                    checkpoint_dir=checkpoint_dir,
+                    checkpoint_context={
+                        "model": args.model,
+                        "model_artifact": model_artifact,
+                        "policy": args.policy,
+                        "adapter_artifact": adapter_artifact,
+                        "splits": [name for name, _ in plan],
+                        "mix_difficulty": bool(args.mix_difficulty),
+                        "data_seed": args.data_seed,
+                        "generator_version": GENERATOR_VERSION,
+                        "layer_selection": layer_selection,
+                    },
+                    spec=spec,
+                    layer_selection=layer_selection,
+                )
+            finally:
+                model = None
+                mx.clear_cache()
+                mx.set_cache_limit(previous_cache_limit)
+            dataset.meta["splits"] = [name for name, _ in plan]
+            dataset.meta["mix_difficulty"] = bool(args.mix_difficulty)
+            dataset.meta["mlx_cache_limit_mib"] = args.mlx_cache_limit_mib
+            dataset.meta["layer_selection"] = layer_selection
+            if preflight is not None:
+                dataset.meta["deconfounding_preflight"] = preflight
+            save_dataset(dataset, npz_path)
+            log.info("wrote", path=str(npz_path), rows=len(dataset))
+
         if preflight is not None:
             dataset.meta["deconfounding_preflight"] = preflight
-        save_dataset(dataset, npz_path)
-        print(f"Wrote {npz_path} ({len(dataset)} rows)")
-
-    if preflight is not None:
-        dataset.meta["deconfounding_preflight"] = preflight
-    results = fit_probes(dataset, targets, layers, args.seed, within_position=within_position)
-    results["policy"] = args.policy
-    results["splits"] = [name for name, _ in plan]
-    results["split"] = ",".join(name for name, _ in plan)
-    (args.output / f"{stem}.json").write_text(
-        json.dumps(results, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    markdown = render_markdown(results, f"{args.policy}{' (stripped notes)' if args.strip else ''}")
-    (args.output / f"{stem}.md").write_text(markdown + "\n", encoding="utf-8")
-    print(markdown)
-    print(f"Wrote {args.output / f'{stem}.json'}")
+        results = fit_probes(dataset, targets, layers, args.seed, within_position=within_position)
+        results["policy"] = args.policy
+        results["splits"] = [name for name, _ in plan]
+        results["split"] = ",".join(name for name, _ in plan)
+        (args.output / f"{stem}.json").write_text(
+            json.dumps(results, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        markdown = render_markdown(
+            results, f"{args.policy}{' (stripped notes)' if args.strip else ''}"
+        )
+        (args.output / f"{stem}.md").write_text(markdown + "\n", encoding="utf-8")
+        print(markdown)
+        log.info("wrote", path=str(args.output / f"{stem}.json"))

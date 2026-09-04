@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -9,6 +11,19 @@ import pytest
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks
 from local_llm_lab.probes import state_probe
+
+
+def _events(output: Path) -> list[dict[str, Any]]:
+    """Every event the run log wrote to ``output/events.jsonl``, in order."""
+    lines = (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
+
+
+def _flat(event: dict[str, Any]) -> dict[str, Any]:
+    """One event's top-level keys with its ``fields`` object merged in."""
+    flat = {key: value for key, value in event.items() if key != "fields"}
+    flat.update(event.get("fields") or {})
+    return flat
 
 
 def test_explicit_registered_specs_preserve_legacy_bytes_and_qwen35_template_policy() -> None:
@@ -111,6 +126,7 @@ def test_state_probe_default_layers_use_actual_depth_and_persist_selection(
     from local_llm_lab.probes import guard, policies
 
     selected = SimpleNamespace(
+        name="qwen35-4b",
         hf_id="fake/hf",
         policies={},
         probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
@@ -191,6 +207,133 @@ def test_state_probe_default_layers_use_actual_depth_and_persist_selection(
     assert payload["meta"]["layer_selection"] == expected
 
 
+def test_state_probe_capture_writes_a_run_log_with_identity_and_progress(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """R26 (issue #35, clauses e and g): the capture CLI leaves run.log and events.jsonl,
+    the start event names what ran, and one progress line fires per captured task."""
+    import sys
+
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate, tasks
+    from local_llm_lab.probes import guard, policies
+
+    selected = SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.5, 1.0),
+    )
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: selected)
+    monkeypatch.setattr(
+        tasks,
+        "make_tasks",
+        lambda *_args, **_kwargs: [SimpleNamespace(task_id="t", difficulty=0)],
+    )
+    monkeypatch.setattr(state_probe, "task_difficulties", lambda *_args: {"t": 0})
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        evaluate,
+        "load_policy",
+        lambda *_args: (object(), object(), SimpleNamespace(num_layers=4), object()),
+    )
+    monkeypatch.setattr(state_probe, "artifact_identity", lambda *_args: {})
+    monkeypatch.setattr(state_probe, "set_mlx_cache_limit", lambda *_args: 0)
+    monkeypatch.setitem(
+        sys.modules,
+        "mlx.core",
+        SimpleNamespace(clear_cache=lambda: None, set_cache_limit=lambda _value: None),
+    )
+
+    mib = 2**20
+
+    def capture(_model, _tokenizer, _tasks, layers, *_args, **kwargs):
+        kwargs["memory_progress"](
+            {
+                "resumed": False,
+                "active_bytes": 3 * mib,
+                "cache_bytes": 5 * mib,
+                "peak_bytes": 7 * mib,
+            }
+        )
+        kwargs["progress"](1, 2, 4)
+        kwargs["memory_progress"](
+            {
+                "resumed": True,
+                "active_bytes": 11 * mib,
+                "cache_bytes": 13 * mib,
+                "peak_bytes": None,
+            }
+        )
+        kwargs["progress"](2, 2, 9)
+        return state_probe.ProbeDataset(
+            layers=list(layers),
+            features={layer: np.empty((0, 1), dtype=np.float32) for layer in layers},
+            labels={},
+            task_ids=np.array([], dtype=str),
+            meta={"layers": list(layers)},
+        )
+
+    monkeypatch.setattr(state_probe, "build_probe_dataset", capture)
+    monkeypatch.setattr(state_probe, "save_dataset", lambda _dataset, path: path)
+    monkeypatch.setattr(
+        state_probe,
+        "fit_probes",
+        lambda dataset, *_args, **_kwargs: {"meta": dataset.meta, "targets": {}},
+    )
+    monkeypatch.setattr(state_probe, "render_markdown", lambda *_args: "# fake")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["state-probe", "--model", "qwen35-4b", "--output", str(tmp_path), "--limit", "1"],
+    )
+
+    state_probe.main()
+
+    out = capsys.readouterr().out
+    assert (tmp_path / "run.log").is_file()
+    events = _events(tmp_path)
+    start = _flat(events[0])
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "state-probe"
+    assert start["model"] == "qwen35-4b"
+    assert start["hf_id"] == "fake/hf"
+    assert start["policy"] == "base"
+    assert start["adapter"] is None
+    assert start["splits"] == ["train"]
+    assert start["command"] == list(sys.argv)
+    assert isinstance(start["git_commit"], str)
+
+    progress = [_flat(event) for event in events if event["kind"] == "progress"]
+    assert [(item["step"], item["total"], item["label"]) for item in progress] == [
+        (1, 2, "capture"),
+        (2, 2, "capture"),
+    ]
+    assert [item["rows"] for item in progress] == [4, 9]
+    assert [item["source"] for item in progress] == ["captured", "resumed"]
+    assert [item["active_mib"] for item in progress] == [3, 11]
+    assert [item["cache_mib"] for item in progress] == [5, 13]
+    assert [item["task_peak_mib"] for item in progress] == [7, None]
+
+    npz_path = tmp_path / "state-base.npz"
+    wrote = [
+        item
+        for item in map(_flat, events)
+        if item["kind"] == "info" and item.get("path") == str(npz_path)
+    ]
+    assert [item["rows"] for item in wrote] == [0]
+
+    # The information the CLI used to print reaches stdout through the log lines.
+    assert "tasks=1" in out
+    assert 'splits=["train"]' in out
+    assert f"mlx_cache_limit_mib={state_probe.DEFAULT_MLX_CACHE_LIMIT_MIB}" in out
+    assert f"checkpoint_dir={tmp_path / 'state-base.checkpoints'}" in out
+    assert str(npz_path) in out
+    assert str(tmp_path / "state-base.json") in out
+    assert "[capture 1/2 50%]" in out
+    assert "# fake" in out.splitlines()  # print(markdown) is still the CLI's own contract
+
+
 def test_state_probe_rejects_malformed_layers_before_gpu_or_loader(monkeypatch, tmp_path) -> None:
     """Catches empty layer cells being discarded before the model-loading boundary."""
     from local_llm_lab import models
@@ -218,7 +361,7 @@ def test_state_probe_rejects_malformed_layers_before_gpu_or_loader(monkeypatch, 
 
 @pytest.mark.parametrize("has_selection", [False, True])
 def test_state_probe_reuse_discloses_legacy_or_preserves_recorded_selection(
-    monkeypatch, tmp_path, has_selection
+    monkeypatch, tmp_path, capsys, has_selection
 ) -> None:
     """Catches reused captures guessing depth/fractions or replacing recorded provenance."""
     expected = (
@@ -271,6 +414,21 @@ def test_state_probe_reuse_discloses_legacy_or_preserves_recorded_selection(
     payload = json.loads((tmp_path / "state-base.json").read_text(encoding="utf-8"))
     assert payload["layers_seen"] == [1, 2]
     assert payload["meta"]["layer_selection"] == expected
+
+    out = capsys.readouterr().out
+    events = _events(tmp_path)
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "state-probe"
+    reused = [
+        item
+        for item in map(_flat, events)
+        if item["kind"] == "info" and item["message"] == "reusing"
+    ]
+    assert [(item["path"], item["rows"]) for item in reused] == [
+        (str(tmp_path / "state-base.npz"), 1)
+    ]
+    assert str(tmp_path / "state-base.npz") in out
+    assert "# fake" in out.splitlines()
 
 
 def test_state_probe_legacy_reuse_rejects_fractional_layers_without_guessing_depth(
@@ -439,6 +597,54 @@ def test_reanalyse_cli_forwards_explicit_generator_version(monkeypatch, tmp_path
             ]
         )
     assert seen == [1]
+
+
+def test_reanalysis_cli_writes_a_run_log_and_keeps_markdown_on_stdout(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """R26 (issue #35, clause e): the offline report is as citable as a capture, and the
+    markdown the CLI contracts to print stays on stdout unchanged."""
+    import hashlib
+    import sys
+
+    capture_path = tmp_path / "capture.npz"
+    capture_path.write_bytes(b"capture")
+    dataset = state_probe.build_label_dataset(make_tasks("test", 1))
+    monkeypatch.setattr(state_probe, "load_dataset", lambda _path: dataset)
+    monkeypatch.setattr(state_probe, "_captured_context", lambda _path: {})
+    monkeypatch.setattr(
+        state_probe, "reanalyse_dataset", lambda *_args, **_kwargs: {"metadata": {}}
+    )
+    monkeypatch.setattr(
+        state_probe, "render_reanalysis_markdown", lambda *_args: "# fake-reanalysis"
+    )
+    argv = ["state-probe", "reanalyse", "--input", str(capture_path), "--output", str(tmp_path)]
+    monkeypatch.setattr("sys.argv", argv)
+
+    state_probe._main_reanalyse(sys.argv[2:])
+
+    out = capsys.readouterr().out
+    assert (tmp_path / "run.log").is_file()
+    events = _events(tmp_path)
+    start = _flat(events[0])
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "state-probe-report"
+    assert start["input"] == str(capture_path)
+    assert start["input_sha256"] == hashlib.sha256(b"capture").hexdigest()
+    assert isinstance(start["git_commit"], str)
+
+    wrote = [
+        item["path"]
+        for item in map(_flat, events)
+        if item["kind"] == "info" and item["message"] == "wrote"
+    ]
+    assert wrote == [
+        str(tmp_path / "capture.reanalysis.json"),
+        str(tmp_path / "capture.reanalysis.md"),
+    ]
+    assert "# fake-reanalysis" in out.splitlines()
+    assert str(tmp_path / "capture.reanalysis.json") in out
+    assert str(tmp_path / "capture.reanalysis.md") in out
 
 
 def test_v4_row_labels_match_nonvacuous_progress_note_oracles() -> None:

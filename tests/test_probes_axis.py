@@ -27,6 +27,19 @@ def _marker_reply(role: str) -> str:
     return "I speak in my own voice: " + ", ".join(assistant_axis.ROLE_MARKERS[role]) + "."
 
 
+def _events(output: Path) -> list[dict[str, Any]]:
+    """Every event the run log wrote to ``output/events.jsonl``, in order."""
+    lines = (output / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
+
+
+def _flat(event: dict[str, Any]) -> dict[str, Any]:
+    """One event's top-level keys with its ``fields`` object merged in."""
+    flat = {key: value for key, value in event.items() if key != "fields"}
+    flat.update(event.get("fields") or {})
+    return flat
+
+
 def test_trajectory_projections_forwards_the_selected_spec_to_prompt_rendering(
     monkeypatch, tmp_path
 ) -> None:
@@ -77,7 +90,7 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
     from local_llm_lab.pipeline import evaluate
     from local_llm_lab.probes import guard, policies
 
-    selected = SimpleNamespace(hf_id="fake/hf", policies={})
+    selected = SimpleNamespace(name="qwen35-4b", hf_id="fake/hf", policies={})
     seen = []
     args = argparse.Namespace(
         axis=tmp_path / "axis.npz",
@@ -123,10 +136,90 @@ def test_project_loads_and_dispatches_the_selected_spec(monkeypatch, tmp_path: P
         ("policy", "base", selected),
         ("dispatch", selected),
     ]
+    events = _events(tmp_path)
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "assistant-axis-project"
+    assert _flat(events[-1])["status"] == "error"
+
+
+def test_project_writes_a_run_log_with_identity_and_progress(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """R26 (issue #35, clauses e and g): the projection CLI records what it read by hash
+    and emits one progress line per projected trajectory."""
+    import hashlib
+
+    from local_llm_lab import models
+    from local_llm_lab.pipeline import evaluate
+    from local_llm_lab.probes import guard, policies
+
+    selected = SimpleNamespace(name="qwen35-4b", hf_id="fake/hf", policies={})
+    axis_path = tmp_path / "axis.npz"
+    axis_path.write_bytes(b"axis")
+    eval_path = tmp_path / "eval.json"
+    eval_path.write_text("{}", encoding="utf-8")
+    args = argparse.Namespace(
+        axis=axis_path,
+        layer=18,
+        model="qwen35-4b",
+        policy="base",
+        eval=eval_path,
+        limit=1,
+        output=tmp_path,
+    )
+    monkeypatch.setattr(models, "load_model_spec", lambda _name: selected)
+    monkeypatch.setattr(policies, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(
+        assistant_axis,
+        "load_axis",
+        lambda *_args: ({18: np.array([1.0])}, {"layers": {"18": {}}}),
+    )
+    monkeypatch.setattr(evaluate, "load_policy", lambda *_args: (None, None, None, None))
+    monkeypatch.setattr(
+        assistant_axis,
+        "trajectory_projections",
+        lambda *_args, **kwargs: kwargs["progress"](1, 2) or kwargs["progress"](2, 2) or [],
+    )
+    monkeypatch.setattr(assistant_axis, "summarize_projections", lambda _records: {})
+    monkeypatch.setattr(assistant_axis, "render_projection_markdown", lambda *_args: "# fake")
+
+    assistant_axis._project(args, argparse.ArgumentParser())
+
+    out = capsys.readouterr().out
+    assert (tmp_path / "run.log").is_file()
+    events = _events(tmp_path)
+    start = _flat(events[0])
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "assistant-axis-project"
+    assert start["model"] == "qwen35-4b"
+    assert start["hf_id"] == "fake/hf"
+    assert start["policy"] == "base"
+    assert start["adapter"] is None
+    assert start["layer"] == 18
+    assert start["axis_sha256"] == hashlib.sha256(b"axis").hexdigest()
+    assert start["eval_sha256"] == hashlib.sha256(b"{}").hexdigest()
+    assert isinstance(start["git_commit"], str)
+
+    progress = [_flat(event) for event in events if event["kind"] == "progress"]
+    assert [(item["step"], item["total"], item["label"]) for item in progress] == [
+        (1, 2, "project"),
+        (2, 2, "project"),
+    ]
+    json_path = tmp_path / "trajectories-base-layer18.json"
+    wrote = [
+        item
+        for item in map(_flat, events)
+        if item["kind"] == "info" and item["message"] == "wrote"
+    ]
+    assert [item["path"] for item in wrote] == [str(json_path)]
+    assert str(json_path) in out
+    assert "[project 1/2 50%]" in out
+    assert "# fake" in out.splitlines()  # print(markdown) is still the CLI's own contract
 
 
 def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, capsys
 ) -> None:
     """Catches hard-coded build layers, global policy lookup, or missing diagnostics."""
     from local_llm_lab import models
@@ -134,6 +227,7 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
     from local_llm_lab.probes import guard, policies
 
     selected = SimpleNamespace(
+        name="qwen35-4b",
         hf_id="fake/hf",
         policies={},
         probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
@@ -156,6 +250,8 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
 
     def build(_model, _tokenizer, _prompts, layers, *_args, **_kwargs):
         assert layers == [5, 11, 16, 21, 27, 32]
+        _kwargs["progress"](1, 2, "pirate")
+        _kwargs["progress"](2, 2, "chef")
         return {layer: np.ones(1, dtype=np.float32) for layer in layers}, {"layers": {}}
 
     monkeypatch.setattr(assistant_axis, "build_axis_run", build)
@@ -187,6 +283,36 @@ def test_axis_build_uses_actual_depth_selected_spec_and_records_layer_selection(
     payload = json.loads((tmp_path / "axis-base.json").read_text(encoding="utf-8"))
     assert payload["layer_selection"] == expected
     assert seen == [("policy", "base", selected)]
+
+    out = capsys.readouterr().out
+    assert (tmp_path / "run.log").is_file()
+    events = _events(tmp_path)
+    start = _flat(events[0])
+    assert events[0]["kind"] == "start"
+    assert events[0]["run"] == "assistant-axis-build"
+    assert start["model"] == "qwen35-4b"
+    assert start["hf_id"] == "fake/hf"
+    assert start["policy"] == "base"
+    assert start["adapter"] is None
+    assert start["prompts"] == 1
+    assert isinstance(start["git_commit"], str)
+
+    progress = [_flat(event) for event in events if event["kind"] == "progress"]
+    assert [(item["step"], item["total"], item["label"]) for item in progress] == [
+        (1, 2, "role pirate"),
+        (2, 2, "role chef"),
+    ]
+    npz_path = tmp_path / "axis-base.npz"
+    wrote = [
+        item
+        for item in map(_flat, events)
+        if item["kind"] == "info" and item["message"] == "wrote"
+    ]
+    assert [item["path"] for item in wrote] == [str(npz_path)]
+    assert "default assistant prompts=1" in out
+    assert str(npz_path) in out
+    assert "[role pirate 1/2 50%]" in out
+    assert "# fake" in out.splitlines()  # print(markdown) is still the CLI's own contract
 
 
 def test_axis_build_rejects_malformed_layers_before_gpu_or_loader(

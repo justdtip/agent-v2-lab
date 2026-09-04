@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ import numpy as np
 from local_llm_lab.compare_chat import CHAT_SYSTEM_PROMPT
 from local_llm_lab.probes import stats
 from local_llm_lab.probes.capture import response_mean_activations
+from local_llm_lab.runlog import RunLog, git_commit, sha256_of
 
 __all__ = [
     "ASSISTANT_TELLS",
@@ -1213,53 +1215,64 @@ def _build(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
         adapter = resolve_policy(args.policy, spec)
     except ValueError as error:
         parser.error(str(error))
-    require_idle_gpu(parser, args, "generating role rollouts")
-    model, tokenizer, view, _resolved = load_policy(spec, adapter)
-    try:
-        selection = resolve_layers(args.layers, spec, view.num_layers)
-    except ValueError as error:
-        parser.error(str(error))
-    layers = list(selection.indices)
-    prompts = load_chat_prompts(args.prompts)
-    print(f"default assistant: {len(prompts)} prompts", flush=True)
-    try:
-        axis, diagnostics = build_axis_run(
-            model,
-            tokenizer,
-            prompts,
-            layers,
-            args.output,
-            args.policy,
-            role_prompts=args.role_prompts,
-            max_tokens=args.max_tokens,
-            exemplar=args.exemplar,
-            min_expression=args.min_expression,
-            use_model_judge=args.judge,
-            progress=lambda number, total, name: print(
-                f"[{number:02d}/{total}] role {name}", flush=True
-            ),
+    identity = {
+        "model": spec.name,
+        "hf_id": spec.hf_id,
+        "policy": args.policy,
+        "adapter": None if adapter is None else str(adapter),
+        "layers": args.layers,
+        "prompts": args.prompts,
+        "role_prompts": args.role_prompts,
+        "git_commit": git_commit(),
+    }
+    with RunLog.open(
+        args.output, name="assistant-axis-build", command=sys.argv, identity=identity
+    ) as log:
+        require_idle_gpu(parser, args, "generating role rollouts")
+        model, tokenizer, view, _resolved = load_policy(spec, adapter)
+        try:
+            selection = resolve_layers(args.layers, spec, view.num_layers)
+        except ValueError as error:
+            parser.error(str(error))
+        layers = list(selection.indices)
+        prompts = load_chat_prompts(args.prompts)
+        log.info("default assistant", prompts=len(prompts))
+        try:
+            axis, diagnostics = build_axis_run(
+                model,
+                tokenizer,
+                prompts,
+                layers,
+                args.output,
+                args.policy,
+                role_prompts=args.role_prompts,
+                max_tokens=args.max_tokens,
+                exemplar=args.exemplar,
+                min_expression=args.min_expression,
+                use_model_judge=args.judge,
+                progress=lambda number, total, name: log.progress(number, total, f"role {name}"),
+            )
+        except ValueError as error:
+            parser.error(str(error))
+        diagnostics.update(
+            {
+                "policy": args.policy,
+                "model": args.model,
+                "prompts": len(prompts),
+                "role_prompts": args.role_prompts,
+                "layer_selection": selection.as_dict(),
+            }
         )
-    except ValueError as error:
-        parser.error(str(error))
-    diagnostics.update(
-        {
-            "policy": args.policy,
-            "model": args.model,
-            "prompts": len(prompts),
-            "role_prompts": args.role_prompts,
-            "layer_selection": selection.as_dict(),
-        }
-    )
-    args.output.mkdir(parents=True, exist_ok=True)
-    policy_stem = _policy_stem(args.policy)
-    save_axis(args.output / f"axis-{policy_stem}.npz", axis, diagnostics)
-    (args.output / f"axis-{policy_stem}.json").write_text(
-        json.dumps(diagnostics, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    markdown = render_build_markdown(diagnostics, args.policy)
-    (args.output / f"axis-{policy_stem}.md").write_text(markdown + "\n", encoding="utf-8")
-    print(markdown)
-    print(f"Wrote {args.output / f'axis-{policy_stem}.npz'}")
+        args.output.mkdir(parents=True, exist_ok=True)
+        policy_stem = _policy_stem(args.policy)
+        save_axis(args.output / f"axis-{policy_stem}.npz", axis, diagnostics)
+        (args.output / f"axis-{policy_stem}.json").write_text(
+            json.dumps(diagnostics, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        markdown = render_build_markdown(diagnostics, args.policy)
+        (args.output / f"axis-{policy_stem}.md").write_text(markdown + "\n", encoding="utf-8")
+        print(markdown)
+        log.info("wrote", path=str(args.output / f"axis-{policy_stem}.npz"))
 
 
 def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -1273,42 +1286,61 @@ def _project(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
         adapter = resolve_policy(args.policy, spec)
     except ValueError as error:
         parser.error(str(error))
-    require_idle_gpu(parser, args, "projecting trajectories")
-    axis, diagnostics = load_axis(args.axis)
-    if args.layer not in axis:
-        parser.error(f"axis file has layers {sorted(axis)}, not {args.layer}")
-    model, tokenizer, _view, _resolved = load_policy(spec, adapter)
-    records = trajectory_projections(
-        model,
-        tokenizer,
-        args.eval,
-        axis[args.layer],
-        args.layer,
-        limit=args.limit,
-        progress=lambda number, total: print(f"[{number:03d}/{total:03d}]", flush=True),
-        spec=spec,
-    )
-    summary = summarize_projections(records)
-    payload = {
+    axis_path = Path(args.axis)
+    eval_path = Path(args.eval)
+    identity = {
+        "model": spec.name,
+        "hf_id": spec.hf_id,
         "policy": args.policy,
-        "axis": str(Path(args.axis).resolve()),
-        "eval": str(Path(args.eval).resolve()),
+        "adapter": None if adapter is None else str(adapter),
         "layer": args.layer,
-        "chat_projection": diagnostics["layers"]
-        .get(str(args.layer), {})
-        .get("chat_projection_mean"),
-        "summary": summary,
-        "trajectories": records,
+        "axis": str(axis_path),
+        "axis_sha256": sha256_of(axis_path) if axis_path.is_file() else None,
+        "eval": str(eval_path),
+        "eval_sha256": sha256_of(eval_path) if eval_path.is_file() else None,
+        "git_commit": git_commit(),
     }
-    args.output.mkdir(parents=True, exist_ok=True)
-    stem = f"trajectories-{args.policy}-layer{args.layer}"
-    (args.output / f"{stem}.json").write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    markdown = render_projection_markdown(summary, records, f"{args.policy} @ layer {args.layer}")
-    (args.output / f"{stem}.md").write_text(markdown + "\n", encoding="utf-8")
-    print(markdown)
-    print(f"Wrote {args.output / f'{stem}.json'}")
+    with RunLog.open(
+        args.output, name="assistant-axis-project", command=sys.argv, identity=identity
+    ) as log:
+        require_idle_gpu(parser, args, "projecting trajectories")
+        axis, diagnostics = load_axis(args.axis)
+        if args.layer not in axis:
+            parser.error(f"axis file has layers {sorted(axis)}, not {args.layer}")
+        model, tokenizer, _view, _resolved = load_policy(spec, adapter)
+        records = trajectory_projections(
+            model,
+            tokenizer,
+            args.eval,
+            axis[args.layer],
+            args.layer,
+            limit=args.limit,
+            progress=lambda number, total: log.progress(number, total, "project"),
+            spec=spec,
+        )
+        summary = summarize_projections(records)
+        payload = {
+            "policy": args.policy,
+            "axis": str(Path(args.axis).resolve()),
+            "eval": str(Path(args.eval).resolve()),
+            "layer": args.layer,
+            "chat_projection": diagnostics["layers"]
+            .get(str(args.layer), {})
+            .get("chat_projection_mean"),
+            "summary": summary,
+            "trajectories": records,
+        }
+        args.output.mkdir(parents=True, exist_ok=True)
+        stem = f"trajectories-{args.policy}-layer{args.layer}"
+        (args.output / f"{stem}.json").write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        markdown = render_projection_markdown(
+            summary, records, f"{args.policy} @ layer {args.layer}"
+        )
+        (args.output / f"{stem}.md").write_text(markdown + "\n", encoding="utf-8")
+        print(markdown)
+        log.info("wrote", path=str(args.output / f"{stem}.json"))
 
 
 def main() -> None:
