@@ -557,3 +557,12 @@ forget. Each has an integration check in §6.
   no `load_policy` against real weights, and briefing §7 rule 4 ("never run a model to just
   check") still binds them. Briefing §1.1 needs the corresponding edit; its own wording
   anticipates the lift.
+
+- PROPOSED (Deputy, 2026-09-04 11:20): definition attaching to the model-execution ruling
+  (issue #12), from the Director. **Model execution means loading the model into memory and
+  running inference**; the rule exists to prevent multiple resident models competing for the
+  machine. A tokeniser load is not execution, so tokeniser downloads, chat-template rendering
+  and dataset generation are ordinary fake-only work available to any lane. The single
+  execution claim still gates `mlx_lm.load`, `load_policy` against real weights, safetensors
+  weight loads, and any forward or backward pass: preflight, training, evaluation, rollouts,
+  probe capture, and cache-equivalence attestation.
