@@ -793,3 +793,16 @@ recording the execution rule. No execution lane designated yet.
   latest release (mlx 0.32.2). Proposal: chunked checkpointed recurrence for training
   (exact by construction; boundary states only), registry budget → 17.8; ruling requested
   (new issue) with a slice design. Lane free. Work orders filed meanwhile: B1b #48, R30 #49.
+
+## 2026-09-05 — R32 ruled (#50); stage 1 dispatched in two lanes; no fallback model
+
+- R32: chunked checkpointing of the reference loop approved (stage 1, bit-exact, installed
+  only during `stage_train`); stage 2 (chunkwise-parallel) gated on measured step time; stage 3
+  a kernel VJP. Budget = min(registry, device working set) at preflight; `train.gated_delta_
+  chunk` (default 64) recorded; training footprint joins R15 condition 1 with 10% headroom;
+  validation on the kernel path via eval mode; batch 1 × accumulation 4 for the 4B.
+- Dispatched: lane 1 (`training/gated_delta_chunked.py`, installer, eval toggle, config
+  plumbing, batch/accumulation + pairwise-test amendment; `cli.py`, `test_cli.py`); lane 2
+  (`preflight.py`, `models.py`, registry: budget minimum, footprint gate with `--data`/
+  `--max-row-tokens`). The Deputy runs the lane probe (peak AND step time; chunk sweep) when
+  both are green. Director: no fallback model (Qwen3-4B) — stays a noted option only.
