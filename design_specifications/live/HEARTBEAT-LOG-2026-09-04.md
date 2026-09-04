@@ -775,3 +775,7 @@ recording the execution rule. No execution lane designated yet.
 - Diagnostic result: batch 1 step 1 OK (206 tokens, peak 6.8 GB, loss 0.848), step 2 OOM →
   a per-sequence spike, not batch size. Length probe running (one LoRA step at ~500/1000/
   1500/2000/max real train rows, peak per step; scratchpad script, outputs/scratch-b4-memprobe).
+- Length probe (real train loop, batch 1, 32 layers adapted): 495 tokens → 11.38 GB OK;
+  997 tokens → OOM at 19.17 GB peak (working set 17.8 GiB). Median train row 824 tokens.
+  Batch size is not the remedy. Probing: checkpoint coverage of both hybrid layer types;
+  peak vs adapted-layer depth (8/16) at 997/1592/2000 tokens.
