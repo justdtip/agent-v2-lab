@@ -67,7 +67,11 @@ def test_trajectory_projections_forwards_the_selected_spec_to_prompt_rendering(
                 variant="clean",
                 label="x",
                 prompt="task",
-                steps=[{"raw": "note"}],
+                # The parse-error step run_task records before breaking (runner.py:439-448):
+                # one generated turn to project and then a deliberate end. A step with neither
+                # ``action`` nor ``parse_error`` is now a malformed record and raises (ruling
+                # on #70), and this test is about which spec reaches build_prompt.
+                steps=[{"index": 0, "raw": "note", "parse_error": "boom"}],
                 verdict={"success": True},
             )
         ],

@@ -7,6 +7,7 @@ import os
 import sys
 from collections import Counter
 from dataclasses import asdict
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,7 @@ from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, load_model_spec
 from local_llm_lab.pipeline import data as data_module
 from local_llm_lab.pipeline.data import (
     PROTECTED_DATASETS,
+    DatasetManifestMissingError,
     DatasetRenderError,
     DatasetWriteGuardError,
     ProtectedDatasetError,
@@ -26,6 +28,7 @@ from local_llm_lab.pipeline.data import (
     read_jsonl,
     render_dataset,
     render_rows,
+    require_dataset_manifest,
     write_dataset,
     write_jsonl,
 )
@@ -34,6 +37,20 @@ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks
 from local_llm_lab.project import PROJECT_ROOT
 from local_llm_lab.runlog import write_text_atomic
 from local_llm_lab.tuner_data import RenderedRowsDataset
+
+
+def _stamped(directory: Path) -> Path:
+    """A dataset directory carrying the commit-point manifest its writer stamps last.
+
+    The chat-replay and rollout directories these stand in for are produced by
+    ``chat_replay.py`` and ``rollout.py``, both of which need a loaded policy this suite has
+    none of. Only the manifest's PRESENCE is read (``require_dataset_manifest``): it is the
+    sentinel saying the write finished, not a schema, so stamping it here still leaves every
+    row beside it coming from a real writer.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(directory / "manifest.json", "{}\n")
+    return directory
 
 
 def _legacy_spec() -> ModelSpec:
@@ -485,12 +502,10 @@ def test_split_specs_preserve_chunk_boundaries_effects_hashes_and_recovery_repea
 
 def test_split_specs_add_role_replay_once_and_reject_invalid_values(tmp_path) -> None:
     """Catch replay duplication on secondary chunks and malformed split declarations."""
-    chat = tmp_path / "chat"
-    chat.mkdir()
+    chat = _stamped(tmp_path / "chat")
     for role in ("train", "valid", "test"):
         write_jsonl(chat / f"{role}.jsonl", [{"metadata": {"source": "chat", "role": role}}])
-    extra = tmp_path / "extra"
-    extra.mkdir()
+    extra = _stamped(tmp_path / "extra")
     write_jsonl(extra / "train.jsonl", [{"metadata": {"source": "extra"}}])
     splits = {
         "train": SplitSpec(1, role="train"), "train1": SplitSpec(1, role="train"),
@@ -699,8 +714,15 @@ def test_render_dataset_guards_output_and_requires_a_complete_source(tmp_path) -
         render_dataset(tmp_path / "absent", fresh, _TargetTokenizer(), spec=_target_spec())
 
 
-def test_render_dataset_without_a_source_manifest_records_unknown_provenance(tmp_path) -> None:
-    """A pre-versioning source renders, carrying explicit nulls instead of current values."""
+def test_render_dataset_refuses_a_source_that_was_never_stamped(tmp_path) -> None:
+    """Ruled on #73: three complete role files and no manifest is a crashed write, not a source.
+
+    This inverts the old tolerance, which rendered such a directory and recorded
+    ``generator_version: null`` -- the same null a manifest that merely predates generator
+    versioning produces, so "the source is old" and "the source is unfinished" were written
+    down identically. The surviving half of that tolerance is tested below: a source WITH a
+    manifest that lacks the key still renders, and still carries the null.
+    """
     source = tmp_path / "src"
     row = {
         "messages": [
@@ -713,11 +735,71 @@ def test_render_dataset_without_a_source_manifest_records_unknown_provenance(tmp
     for role in ("train", "valid", "test"):
         write_jsonl(source / f"{role}.jsonl", [row])
 
+    with pytest.raises(DatasetManifestMissingError, match="manifest.json"):
+        render_dataset(source, tmp_path / "dst", _TargetTokenizer(), spec=_target_spec())
+    assert not (tmp_path / "dst").exists()
+
+    # The pre-versioning source proper: stamped, but by a writer older than GENERATOR_VERSION.
+    write_text_atomic(source / "manifest.json", json.dumps({"seed": 1}) + "\n")
     manifest = render_dataset(source, tmp_path / "dst", _TargetTokenizer(), spec=_target_spec())
 
     assert manifest["generator_version"] is None
-    assert "manifest_sha256" not in manifest["source"]
+    assert manifest["source"]["manifest_sha256"] == hashlib.sha256(
+        (source / "manifest.json").read_bytes()
+    ).hexdigest()
     assert manifest["outputs"]["train"]["rows"] == 1
+
+
+def test_write_dataset_refuses_unstamped_chat_and_extra_directories(tmp_path) -> None:
+    """Ruled on #73: the mixed-in directories are datasets too, and are read the same way.
+
+    ``chat_replay.py`` and ``rollout.py`` both write their rows and stamp the manifest after,
+    so an unstamped one is a run that died holding rows nothing has vouched for. Mixing those
+    into a training set is the case the ruling exists for: unusable downstream even though
+    ``guard_dataset_write`` will still let the crashed run be repeated over the top.
+    """
+    splits = {"train": SplitSpec(1), "valid": SplitSpec(1, role="valid"),
+              "test": SplitSpec(1, role="test")}
+
+    chat = tmp_path / "chat"
+    chat.mkdir()
+    for role in ("train", "valid", "test"):
+        write_jsonl(chat / f"{role}.jsonl", [{"metadata": {"source": "chat"}}])
+    with pytest.raises(DatasetManifestMissingError, match=str(chat)):
+        write_dataset(tmp_path / "out", splits, chat_dir=chat)
+
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    write_jsonl(extra / "train.jsonl", [{"metadata": {"source": "extra"}}])
+    with pytest.raises(DatasetManifestMissingError, match=str(extra)):
+        write_dataset(tmp_path / "out2", splits, extra_dirs=[extra])
+
+    # Stamped, both are read exactly as before.
+    manifest = write_dataset(
+        tmp_path / "out3", splits, chat_dir=_stamped(chat), extra_dirs=[_stamped(extra)]
+    )
+    assert manifest["outputs"]["train"]["chat_rows"] == 1
+    assert manifest["outputs"]["train"]["extra_rows"] == 1
+
+
+def test_require_dataset_manifest_is_the_read_side_of_the_write_guard(tmp_path) -> None:
+    """The pair the ruling asks for: unusable downstream, still overwritable upstream.
+
+    The manifest is written last and atomically by both dataset writers, so its absence marks
+    a write that died mid-flight. ``guard_dataset_write`` keeps letting that directory be
+    written over -- recovering from a crash must not need a manual delete -- which is exactly
+    why the refusal has to be on this side and not that one.
+    """
+    crashed = tmp_path / "crashed"
+    write_dataset(crashed, {"train": 1, "valid": 1, "test": 1})
+    (crashed / "manifest.json").unlink()
+
+    with pytest.raises(DatasetManifestMissingError, match=str(crashed)):
+        require_dataset_manifest(crashed)
+    assert guard_dataset_write(crashed) is False  # still re-runnable, deliberately
+
+    write_dataset(crashed, {"train": 1, "valid": 1, "test": 1})
+    assert require_dataset_manifest(crashed) == crashed / "manifest.json"
 
 
 def test_render_rows_verbatim_chat_fallback_is_an_explicit_allowlist() -> None:
@@ -988,8 +1070,9 @@ def test_render_carries_null_provenance_when_a_source_key_moves_off_its_level(
     assert {name: manifest[name] for name in _CARRIED_PROVENANCE if name != key} == {
         name: recorded[name] for name in _CARRIED_PROVENANCE if name != key
     }
-    # The one thing that still distinguishes "no manifest" from "a manifest missing a key":
-    # a source with no manifest at all records no hash, and this one does.
+    # "No manifest" no longer reaches here at all (it is refused, ruling on #73), so the
+    # relevelled key is now the only way to forge that null -- and the recorded hash is what
+    # a reader has to go to in order to tell the two apart.
     assert manifest["source"]["manifest_sha256"] == hashlib.sha256(
         manifest_path.read_bytes()
     ).hexdigest()

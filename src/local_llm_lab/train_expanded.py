@@ -21,6 +21,7 @@ from local_llm_lab.depth_expansion import (
     trainable_parameter_count,
 )
 from local_llm_lab.evaluate_agent import DEFAULT_MODEL
+from local_llm_lab.pipeline.data import require_dataset_manifest
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 
 
@@ -238,6 +239,11 @@ def main() -> None:
     print(f"Expanded layer indices: {added_indices}", flush=True)
 
     dataset_config = SimpleNamespace(mask_prompt=True)
+    # #73: `data/expanded_agent_sft` is stamped by `build_expanded_data.py` after its splits are
+    # written, so an unstamped one is a mix that died mid-write. mlx-lm's own loader reads the
+    # split files and knows nothing about that commit point, which makes this the one place the
+    # check can go before a full fine-tune starts on rows nothing has vouched for.
+    require_dataset_manifest(args.data.resolve())
     train_set, valid_set, test_set = load_local_dataset(
         args.data.resolve(), tokenizer, dataset_config
     )

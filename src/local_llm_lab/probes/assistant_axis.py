@@ -483,10 +483,19 @@ def role_expression_score(
 
 
 def load_chat_prompts(limit: int, split: str = "train") -> list[str]:
-    """The chat-replay user prompts (six categories), in file order."""
+    """The chat-replay user prompts (six categories), in file order.
+
+    ``data/chat_replay`` is a stamped dataset directory, so the manifest is required before a
+    split is opened (ruling on #73): the axis these prompts build is the instrument every
+    later projection is read against, and building it from a half-written replay set would
+    make a measurement error look like a result.
+    """
+    from local_llm_lab.pipeline.data import require_dataset_manifest
     from local_llm_lab.project import PROJECT_ROOT
 
-    path = PROJECT_ROOT / "data" / "chat_replay" / f"{split}.jsonl"
+    directory = PROJECT_ROOT / "data" / "chat_replay"
+    require_dataset_manifest(directory)
+    path = directory / f"{split}.jsonl"
     prompts: list[str] = []
     with path.open(encoding="utf-8") as handle:
         for line in handle:
@@ -991,6 +1000,14 @@ def _slope(values: list[float]) -> float:
     return float(np.polyfit(x, y, 1)[0])
 
 
+# The keys ``run_task`` puts on every executed turn that this reader then indexes with ``[]``
+# (runner.py:464-472). ``observation`` and ``thought`` are checked for the finish turn too,
+# where the reader happens to break before reading them: 6495 of the 6503 step records under
+# outputs/ carry all three and the other 8 are parse-error steps carrying none of them, so the
+# writer's two shapes are clean and there is no third one to be lenient towards.
+_EXECUTED_STEP_KEYS = ("action", "thought", "observation")
+
+
 def trajectory_projections(
     model: Any,
     tokenizer: Any,
@@ -1039,8 +1056,25 @@ def trajectory_projections(
                     model, tokenizer, prompt, raw, [layer], stats=capture_stats
                 )
                 projections.append(project(means[layer], axis_vector))
-            if "action" not in step:
+            if "parse_error" in step:
+                # The deliberate end of a trajectory. ``run_task`` records this step and then
+                # breaks (runner.py:439-460), so it is always the last one: the turn projected
+                # just above is the one that would not parse, and there is no action to carry
+                # the conversation forward. Stopping here agrees with the writer.
                 break
+            missing = [key for key in _EXECUTED_STEP_KEYS if key not in step]
+            if missing:
+                # Ruled (#70 slice 3): a step with no ``parse_error`` is an executed turn, and
+                # an executed turn our runner wrote carries all three of these (runner.py:
+                # 464-472). Absent one, the record is malformed, not terminal -- and reading it
+                # as terminal is what silently truncated every later turn while still reporting
+                # a mean, a slope and a min over whatever survived. The message names the file,
+                # the trajectory and the step because the caller holds a directory of these.
+                raise ValueError(
+                    f"{Path(eval_json_path)}: trajectory {record['task_id']!r} step "
+                    f"{step.get('index', '?')} is malformed -- no 'parse_error', so it is an "
+                    f"executed turn, but it is missing {', '.join(repr(k) for k in missing)}"
+                )
             action = Action(step["action"]["name"], dict(step["action"]["arguments"]))
             if action.name == "finish":
                 break

@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-from local_llm_lab.pipeline.data import guard_dataset_write
+from local_llm_lab.pipeline.data import guard_dataset_write, require_dataset_manifest
 from local_llm_lab.project import PROJECT_ROOT
 
 DECISION_REPEATS = {
@@ -67,6 +67,16 @@ def main() -> None:
     # R21: refuse before the mkdir and before any source split is read — a protected directory
     # unconditionally, an existing dataset outright, because this stage has no override flag.
     guard_dataset_write(output, override_flag=None)
+    # #73, the read side of the same boundary: every source is a stamped dataset directory, so
+    # all three are checked here rather than at first use. A mix that read two complete sources
+    # and refused on the third would leave a half-built output behind under its own guard.
+    complex_dir, original_dir, chat_dir = (
+        args.complex.resolve(),
+        args.original.resolve(),
+        args.chat.resolve(),
+    )
+    for source in (complex_dir, original_dir, chat_dir):
+        require_dataset_manifest(source)
     output.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
         "seed": args.seed,
@@ -76,9 +86,9 @@ def main() -> None:
         "splits": {},
     }
     for split in ("train", "valid", "test"):
-        complex_rows = _read_jsonl(args.complex.resolve() / f"{split}.jsonl")
-        original_rows = _read_jsonl(args.original.resolve() / f"{split}.jsonl")
-        chat_rows = _read_jsonl(args.chat.resolve() / f"{split}.jsonl")
+        complex_rows = _read_jsonl(complex_dir / f"{split}.jsonl")
+        original_rows = _read_jsonl(original_dir / f"{split}.jsonl")
+        chat_rows = _read_jsonl(chat_dir / f"{split}.jsonl")
         weighted_complex = (
             decision_balanced(complex_rows)
             if args.decision_balanced and split == "train"

@@ -6,6 +6,7 @@ import pytest
 from mlx_lm.tuner.datasets import CacheDataset
 from mlx_lm.tuner.trainer import iterate_batches
 
+from local_llm_lab.pipeline.data import DatasetManifestMissingError
 from local_llm_lab.tuner_data import RenderedRowsDataset, load_rendered_splits
 
 
@@ -89,11 +90,24 @@ def test_rendered_rows_dataset_sorts_unsorted_rows_by_sequence_length_stably() -
     ]
 
 
-def test_load_rendered_splits_validates_each_named_file(tmp_path) -> None:
-    for split in ("train", "valid", "test"):
-        (tmp_path / f"{split}.jsonl").write_text(
+def _write_splits(directory, splits: tuple[str, ...], *, stamped: bool = True) -> None:
+    """Rendered rows this tokenizer can read, plus the manifest the writer stamps last.
+
+    ``write_dataset`` renders rows through a real chat template, which ``_MergingTokenizer``
+    -- deliberately a four-word vocabulary, so a merge across the prompt/completion boundary
+    is visible in the source -- could not encode. Only the manifest's presence is read, so it
+    is stamped here and the rows stay the ones these tests are about.
+    """
+    for split in splits:
+        (directory / f"{split}.jsonl").write_text(
             json.dumps({"prompt": "prompt", "completion": "completion"}) + "\n", encoding="utf-8"
         )
+    if stamped:
+        (directory / "manifest.json").write_text("{}\n", encoding="utf-8")
+
+
+def test_load_rendered_splits_validates_each_named_file(tmp_path) -> None:
+    _write_splits(tmp_path, ("train", "valid", "test"))
 
     train, valid, test = load_rendered_splits(tmp_path, _MergingTokenizer(), max_seq_length=8)
 
@@ -102,10 +116,7 @@ def test_load_rendered_splits_validates_each_named_file(tmp_path) -> None:
 
 def test_load_rendered_splits_reads_only_the_named_splits(tmp_path) -> None:
     """The train stage never trains on test, so an unreadable test file must not stop it."""
-    for split in ("train", "valid"):
-        (tmp_path / f"{split}.jsonl").write_text(
-            json.dumps({"prompt": "prompt", "completion": "completion"}) + "\n", encoding="utf-8"
-        )
+    _write_splits(tmp_path, ("train", "valid"))
 
     loaded = load_rendered_splits(
         tmp_path, _MergingTokenizer(), max_seq_length=8, splits=("train", "valid")
@@ -113,6 +124,20 @@ def test_load_rendered_splits_reads_only_the_named_splits(tmp_path) -> None:
 
     assert [len(split) for split in loaded] == [1, 1]
     with pytest.raises(FileNotFoundError):
+        load_rendered_splits(tmp_path, _MergingTokenizer(), max_seq_length=8)
+
+
+def test_load_rendered_splits_refuses_a_dataset_that_was_never_stamped(tmp_path) -> None:
+    """Ruled on #73: this is the seam where a dataset becomes weights, so it checks first.
+
+    Every row can be present and readable while the write that produced them died before the
+    manifest, and there is nothing about the rows themselves that says which. Refusing here
+    is what keeps an unrepeatable training run from starting; the refusal precedes the
+    tokenization pass, so it costs nothing and reports the directory rather than a row.
+    """
+    _write_splits(tmp_path, ("train", "valid", "test"), stamped=False)
+
+    with pytest.raises(DatasetManifestMissingError, match="manifest.json"):
         load_rendered_splits(tmp_path, _MergingTokenizer(), max_seq_length=8)
 
 

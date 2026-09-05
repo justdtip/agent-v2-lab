@@ -1419,6 +1419,9 @@ def _write_rendered_splits(data_dir: Path, *, prompt_words: dict[str, int]) -> N
             json.dumps({"prompt": " ".join(["w"] * words), "completion": "c"}) + "\n",
             encoding="utf-8",
         )
+    # The commit-point stamp `load_rendered_splits` now requires (ruling on #73). Only its
+    # presence is read; the row lengths beside it are what these tests are about.
+    (data_dir / "manifest.json").write_text("{}\n", encoding="utf-8")
 
 
 def test_stage_train_loads_only_the_splits_it_trains_on(monkeypatch, tmp_path: Path) -> None:

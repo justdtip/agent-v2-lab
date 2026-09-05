@@ -64,6 +64,10 @@ class ProtectedDatasetError(DatasetWriteGuardError):
     """A dataset write targeted an irreplaceable directory; no override exists."""
 
 
+class DatasetManifestMissingError(RuntimeError):
+    """A dataset directory was read before anything stamped it with a manifest."""
+
+
 class DatasetRenderError(RuntimeError):
     """A render request named a source that is not a readable dataset directory."""
 
@@ -119,6 +123,30 @@ def guard_dataset_write(
             )
         return True
     return False
+
+
+def require_dataset_manifest(directory: Path) -> Path:
+    """Refuse to READ a dataset directory that carries no ``manifest.json`` (ruling on #73).
+
+    The manifest is the commit point. Every dataset writer emits its role files first and
+    stamps ``manifest.json`` last, through :func:`runlog.write_text_atomic`, so a directory
+    holding rows and no manifest is a write that died between the two: the rows look complete
+    and their completeness is unknown. ``guard_dataset_write`` deliberately leaves such a
+    directory unprotected — a crashed run must be re-runnable without a manual delete — so the
+    refusal has to live on this side. Half-written is unusable downstream and overwritable
+    upstream, which is the pair the ruling asks for.
+
+    Returns the manifest path, so a caller that goes on to read it need not spell it twice.
+    """
+    directory = Path(directory)
+    manifest = directory / "manifest.json"
+    if not manifest.is_file():
+        raise DatasetManifestMissingError(
+            f"refusing to read {directory}: it holds no manifest.json, so it is either not a "
+            "dataset directory or a write that died before its commit point. Re-run the stage "
+            "that produces it."
+        )
+    return manifest
 
 
 @dataclass(frozen=True)
@@ -394,8 +422,9 @@ def render_dataset(
     Task content (``messages`` and ``metadata``) is carried byte-identical from the source and
     only the ``prompt``/``completion`` rendering changes, so a cross-model training arm stays a
     controlled comparison. The generator is never invoked; the source manifest's
-    ``generator_version`` is carried through unchanged (``None`` when the source predates
-    generator versioning), never replaced with the current one.
+    ``generator_version`` is carried through unchanged (``None`` when the source MANIFEST
+    predates generator versioning — a source with no manifest at all is now refused outright,
+    ruling on #73), never replaced with the current one.
     """
     source = Path(source).resolve()
     overridden = guard_dataset_write(output, overwrite=overwrite)
@@ -405,13 +434,15 @@ def render_dataset(
     if missing:
         names = ", ".join(f"{role}.jsonl" for role in missing)
         raise DatasetRenderError(f"render source {source} is missing {names}")
+    # The source's own commit point, checked after the role files so a directory that is not a
+    # dataset at all still says which file it is missing. All three roles can be present and
+    # complete-looking while the write that produced them died before the stamp, and a render
+    # of rows of unknown completeness carries that unknowability into a training arm.
+    manifest_path = require_dataset_manifest(source)
     rendering_spec = _training_spec(spec)
     source_block: dict[str, Any] = {"directory": str(source)}
-    source_manifest: dict[str, Any] = {}
-    manifest_path = source / "manifest.json"
-    if manifest_path.is_file():
-        source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        source_block["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    source_manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source_block["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     source_block["sha256"] = {}
     rendered_roles: dict[str, list[dict[str, Any]]] = {}
     for role in _ROLES:
@@ -517,6 +548,11 @@ def _role_chat_rows(
 ) -> tuple[list[dict[str, Any]], bool]:
     if not enabled or chat_dir is None:
         return [], False
+    # #73: the retention rows come out of a dataset directory `chat_replay.py` stamps last, so
+    # this reader owes it the same manifest check as any other. Checked before the per-role
+    # file test, because "this role was not generated" and "this whole directory is a crashed
+    # write" are different answers and only the first may be absorbed into an empty list.
+    require_dataset_manifest(chat_dir)
     path = chat_dir / f"{role}.jsonl"
     if not path.is_file():
         return [], False
@@ -526,6 +562,10 @@ def _role_chat_rows(
 def _extra_rows(extra_dirs: list[Path] | None) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for extra in extra_dirs or []:
+        # #73: an --extra directory is a rollout output, and `rollout.py` writes train.jsonl
+        # before its manifest, so an unstamped one is a sampling run that died mid-write. Its
+        # kept rows would otherwise be mixed into training as though the run had finished.
+        require_dataset_manifest(extra)
         rows.extend(read_jsonl(extra / "train.jsonl"))
     return rows
 

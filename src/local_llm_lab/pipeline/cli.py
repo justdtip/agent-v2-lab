@@ -43,6 +43,7 @@ from local_llm_lab.runlog import (
     TrainingHealth,
     git_commit,
     sha256_of,
+    write_text_atomic,
 )
 from local_llm_lab.tuner_data import load_rendered_splits
 
@@ -1038,13 +1039,23 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
         "checkpoints": results,
     }
     selection_path = output / "selection.json"
-    selection_path.write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
+    # Atomic because this file is a stage sentinel like the dataset manifests: `best-adapter/`
+    # has already been copied by the time it is written, so a truncated selection.json is the
+    # one artifact saying WHICH checkpoint that copy is, left unparseable next to a directory
+    # that looks finished. Whole or absent, never half. This module's own _write_stage_manifest
+    # and health.json writes are still plain write_text; see DEBT(R21) in pipeline/data.py.
+    write_text_atomic(selection_path, json.dumps(selection, indent=2) + "\n")
     write_provenance(
         output,
         resolved=None,
         spec=spec,
         extra={
             "stage": "select",
+            # Read back from disk rather than embedded from `selection`: provenance records
+            # what was PERSISTED, not what was intended, so the block and the file cannot
+            # disagree. It is not redundant and must not be simplified to `selection` -- if
+            # the write above ever failed to land what it was given, this raises here instead
+            # of stamping a provenance that quietly outranks the file it describes.
             "selection": json.loads(selection_path.read_text(encoding="utf-8")),
         },
     )

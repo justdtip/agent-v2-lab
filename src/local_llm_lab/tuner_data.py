@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from local_llm_lab.pipeline.data import require_dataset_manifest
+
 __all__ = ["RenderedRow", "RenderedRowsDataset", "load_rendered_splits"]
 
 CANONICAL_SPLITS = ("train", "valid", "test")
@@ -86,7 +88,13 @@ def load_rendered_splits(
     train on a split must not ask for it: reading a split costs a full tokenization pass and
     fails closed on any row that cannot be tokenized, and a row nothing reads is no reason to
     refuse a run. Every split that *is* named still fails closed, unchanged.
+
+    The manifest is required first (ruling on #73). This is the seam where a dataset becomes
+    weights, so it is the one place where "the rows are all here" must not be allowed to stand
+    in for "the write that produced them finished": a dataset stamped by nothing is a run that
+    died between its last role file and its commit point, and training on it is unrepeatable.
     """
+    require_dataset_manifest(Path(data_dir))
     return tuple(
         RenderedRowsDataset(
             _read_rows(data_dir / f"{split}.jsonl"), tokenizer, max_seq_length=max_seq_length

@@ -1734,6 +1734,10 @@ def _write_rows(path: Path, rows: list[tuple[int, int]]) -> None:
         ),
         encoding="utf-8",
     )
+    # The commit-point manifest the dataset writers stamp last; `load_rendered_splits` refuses
+    # a directory without one (ruling on #73), and the gate reads its rows through that same
+    # loader on purpose. Only its presence is read, and the row lengths here are the point.
+    (path.parent / "manifest.json").write_text("{}\n", encoding="utf-8")
 
 
 def test_longest_row_tokens_reads_both_splits_through_the_real_dataset(tmp_path: Path) -> None:

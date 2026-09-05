@@ -2540,7 +2540,7 @@ def _eval_trajectories() -> list:
     ]
 
 
-def _eval_payload(tmp_path: Path) -> Path:
+def _eval_payload(tmp_path: Path, trajectories: list | None = None) -> Path:
     """An evaluation JSON written by ``evaluate.write_report`` -- the writer this reader reads.
 
     R38: ``assistant_axis.trajectory_projections`` parses an evaluation off disk, so the
@@ -2552,7 +2552,7 @@ def _eval_payload(tmp_path: Path) -> Path:
     from local_llm_lab.models import ResolvedSpec, load_model_spec
     from local_llm_lab.pipeline import evaluate
 
-    trajectories = _eval_trajectories()
+    trajectories = _eval_trajectories() if trajectories is None else trajectories
     summary = evaluate.summarize(trajectories)
     summary.update(
         evaluate.evaluation_metadata(
@@ -2740,39 +2740,107 @@ def _move_step_key(path: Path, key: str) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-@pytest.mark.parametrize("key", ["thought", "observation"])
-def test_trajectory_projections_depend_on_each_step_key_the_runner_writes(
+@pytest.mark.parametrize("key", ["action", "thought", "observation"])
+def test_trajectory_projections_reject_an_executed_step_missing_a_key_the_runner_writes(
     tmp_path, key: str
 ) -> None:
-    """The step keys that rebuild the next turn's prompt, both indexed with ``[]``."""
-    path = _eval_payload(tmp_path)
-    _move_step_key(path, key)
+    """Ruled (#70 slice 3): a step with no ``parse_error`` is executed, so it carries all three.
 
-    with pytest.raises(KeyError):
-        _project(path)
-
-
-def test_a_step_whose_action_key_moved_is_silently_read_as_the_end_of_the_trajectory(
-    tmp_path,
-) -> None:
-    """The second soft key, and the one with the largest effect: ``"action" not in step``.
-
-    That test is the reader's own signal for a turn that would not parse, so a renamed
-    ``action`` is not an error -- every trajectory is truncated after its first projected turn
-    and the record still looks well formed, with a mean, a slope and a min computed over the
-    single value that survived. Reported rather than tightened: the ``break`` is load-bearing
-    for real parse-error steps, and distinguishing "no action because the turn failed" from
-    "no action because the key moved" is a schema question about the step record, not
-    something this reader can settle on its own.
+    Slice 2 pinned ``action`` here as a SILENT truncation -- ``"action" not in step`` was the
+    reader's own end-of-trajectory signal, so a renamed key ended every trajectory after its
+    first projected turn and still reported a mean, a slope and a min over the one value that
+    survived. The ruling inverts that: what distinguishes the two cases is the PRESENCE of
+    ``parse_error``, not the absence of ``action``, and the runner's own artifacts say so --
+    6495 of the 6503 step records under outputs/ carry action, thought and observation, and
+    the other 8 are parse-error steps carrying none of them. The message names the missing
+    key rather than only the step, because a directory of evaluations is what the caller has.
     """
     path = _eval_payload(tmp_path)
     assert [record["turns"] for record in _project(path)] == [3, 2, 1]
 
-    _move_step_key(path, "action")
+    _move_step_key(path, key)
 
-    truncated = _project(path)
-    assert [record["turns"] for record in truncated] == [1, 1, 1]
-    assert all(not math.isnan(record["mean"]) for record in truncated)
+    with pytest.raises(ValueError, match=f"missing '{key}'"):
+        _project(path)
+
+
+def test_trajectory_projections_read_a_turn_written_in_the_legacy_tool_call_spelling(
+    tmp_path,
+) -> None:
+    """The one tolerance the ruling keeps, and it is not a missing-key tolerance at all.
+
+    ``protocol._locate_call`` names the legacy ``<tool_call>`` block explicitly, ahead of the
+    bare-brace fallback, so a turn generated in that spelling parses and the runner writes it
+    an ordinary executed step -- action, thought and observation all present. How the action
+    was SPELLED is the parser's business and is settled before this reader ever sees the file;
+    ``raw`` reaches here only to be projected. So the legacy layout has to read as a normal
+    step, and it does: the fields below are the parser's own output, not typed out by hand.
+    """
+    from local_llm_lab.pipeline.protocol import parse_turn
+    from local_llm_lab.pipeline.runner import Trajectory
+
+    legacy_raw = (
+        'note 0\n<tool_call>\n{"name": "read_file", "arguments": {"path": "a.txt"}}\n'
+        "</tool_call>"
+    )
+    turn = parse_turn(legacy_raw)
+    assert turn.action.name == "read_file" and turn.thought == "note 0"
+
+    step = {  # exactly the shape run_task appends for an executed turn (runner.py:464-472)
+        "index": 0,
+        "thinking": "",
+        "think_tokens": 0,
+        "thought": turn.thought,
+        "action": {"name": turn.action.name, "arguments": turn.action.arguments},
+        "observation": "contents 0",
+        "raw": legacy_raw,
+    }
+    path = _eval_payload(
+        tmp_path,
+        [
+            Trajectory(
+                task_id="t-legacy",
+                family="read",
+                variant="clean",
+                label="fake",
+                prompt="do t-legacy",
+                steps=[step, _axis_step(1, "finish")],
+                verdict={"success": True, "reasons": []},
+                turns=2,
+                valid_turns=2,
+                elapsed_seconds=1.0,
+                generated_tokens=10,
+                difficulty=1,
+            )
+        ],
+    )
+
+    ((record,)) = _project(path)
+
+    assert record["turns"] == 2 and record["success"] is True
+
+
+def test_trajectory_projections_end_cleanly_on_the_parse_error_step_the_runner_records(
+    tmp_path,
+) -> None:
+    """The other half of the same rule, and the half that makes it safe to have.
+
+    ``run_task`` records a step carrying ``parse_error`` and then breaks (runner.py:439-460),
+    so such a step is always the trajectory's last and its turn is real: generated, projected,
+    and followed by no action because the model produced none. Ending there is the reader
+    agreeing with the writer. Without this test, a later tightening that made every absent
+    ``action`` fatal would turn a turn the runner records on purpose into a crash.
+    """
+    path = _eval_payload(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    steps = [record["steps"] for record in payload["trajectories"]]
+    assert [step for step in steps[-1] if "parse_error" in step], "the fixture's parse step"
+    assert not any("action" in step for step in steps[-1])
+
+    parse = _project(path)[-1]
+
+    assert parse["turns"] == 1 and parse["failure_reason"] == "parse error"
+    assert not math.isnan(parse["mean"])
 
 
 def test_trajectory_projections_skip_a_turn_whose_raw_generation_moved(tmp_path) -> None:
