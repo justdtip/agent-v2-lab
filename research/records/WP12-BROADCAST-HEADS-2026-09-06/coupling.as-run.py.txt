@@ -1,0 +1,70 @@
+"""The last causal test of the Director's coupling hypothesis (layer-4 relays couple to band heads): each of the 16 heads
+writing layer 4 (block 3) is zeroed alone on the same documents and positions as singles.py; per head, (a) damage at the ten
+band readouts (one minus top-25 overlap with the unablated readout, mean over the ten), (b) the relative change it causes in
+each of the 26 in-band relays' own attention outputs at the sampled positions, mean over positions and relays, and (c) the same
+for the 54 unselected in-band heads. Reading: if the three layer-4 relays (selection_orth.json, layer 4) perturb the band relays
+no more than the other thirteen layer-4 heads do, and no more than they perturb the unselected band heads, the coupling
+hypothesis is refuted causally as well as by weight composition. Writes out/coupling.json."""
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; LENS = Path(sys.argv[1])
+DOCS, POS, DOC_TOKENS = 8, 64, 512
+BAND_PAIRS = ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28)); BAND = tuple(sorted(L for pr in BAND_PAIRS for L in pr))
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_next as q3n
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None); model.eval()
+att_blocks = [b for b, l in enumerate(model.language_model.model.layers) if not l.is_linear]
+BAND_ATT = tuple(L for L in BAND if (L - 1) in att_blocks); assert len(BAND_ATT) == 5, BAND_ATT
+SRC_BLOCK = 3; assert SRC_BLOCK in att_blocks and SRC_BLOCK + 1 == 4
+lens = np.load(LENS); J = {L: mx.array(lens[f"J{L - 1}"].astype(np.float32)) for L in BAND}
+sel = json.load(open(OUT / "selection_orth.json"))["selected_attention"]
+relays = sorted({(r["block"], r["head"]) for r in sel if r["layer_written"] in BAND_ATT}); src_relays = sorted(r["head"] for r in sel if r["block"] == SRC_BLOCK)
+unsel = sorted({(L - 1, h) for L in BAND_ATT for h in range(16)} - set(relays))
+CAP_BLOCKS = sorted({b for b, h in relays} | {b for b, h in unsel})
+ABLATE = {}; CAP = {}; POSN = {"pos": None}; _orig = q3n.scaled_dot_product_attention; _ctr = {"i": 0}
+def hooked(queries, keys, values, cache, scale, mask, *a, **kw):
+    out = _orig(queries, keys, values, cache, scale, mask, *a, **kw)
+    b = att_blocks[_ctr["i"] % len(att_blocks)]; _ctr["i"] += 1; hs = ABLATE.get(b)
+    if hs:
+        m = np.ones((1, out.shape[1], 1, 1), dtype=np.float32); m[0, list(hs)] = 0.0; out = out * mx.array(m).astype(out.dtype)
+    if b in CAP_BLOCKS and POSN["pos"] is not None: CAP[b] = out[0, :, POSN["pos"], :].astype(mx.float32)   # (heads, POS, d)
+    return out
+q3n.scaled_dot_product_attention = hooked
+corpus = json.load(open(HERE.parent / "retrieval" / "corpus.json")); docs = [encode(tokenizer, c["text"])[:DOC_TOKENS] for c in corpus[:DOCS]]
+rng = np.random.default_rng(0); positions = [sorted(rng.choice(np.arange(16, len(d)), POS, replace=False).tolist()) for d in docs]
+def run(ablate):
+    ABLATE.clear(); ABLATE.update(ablate); tops = {L: [] for L in BAND}; caps = []
+    for d, pos in zip(docs, positions):
+        POSN["pos"] = mx.array(pos); _ctr["i"] = 0; CAP.clear(); res = view.residuals(d, list(BAND)); mx.eval(*CAP.values())
+        caps.append({b: np.array(v) for b, v in CAP.items()})
+        for L in BAND:
+            h = res[L][0][pos] if res[L].ndim == 3 else res[L][pos]
+            read = view.unembed(view.final_norm(h.astype(mx.float32) @ J[L].T)); tops[L].append(np.array(mx.argsort(read, axis=-1)[:, -25:]).tolist())
+    return tops, caps
+def overlap(base, test): return {L: float(np.mean([len(set(a) & set(b)) / 25 for da, db in zip(base[L], test[L]) for a, b in zip(da, db)])) for L in BAND}
+def rel_change(base_caps, caps, heads):
+    vals = []
+    for bc, c in zip(base_caps, caps):
+        for b, h in heads:
+            x0 = bc[b][h]; x1 = c[b][h]; vals.append(float(np.linalg.norm(x1 - x0, axis=1).mean() / (np.linalg.norm(x0, axis=1).mean() + 1e-9)))
+    return float(np.mean(vals))
+base_tops, base_caps = run({}); rep_tops, rep_caps = run({})
+identical = all(overlap(base_tops, rep_tops)[L] == 1.0 for L in BAND) and rel_change(base_caps, rep_caps, relays) == 0.0
+print(json.dumps({"event": "reproducibility", "bit_identical": identical, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+rows = []
+for h in range(16):
+    tops, caps = run({SRC_BLOCK: {h}}); ov = overlap(base_tops, tops)
+    rows.append({"head": h, "layer4_relay": h in src_relays, "damage_ten": 1 - float(np.mean([ov[L] for L in BAND])), "damage_at_28": 1 - ov[28], "relay_output_change": rel_change(base_caps, caps, relays), "unselected_output_change": rel_change(base_caps, caps, unsel)})
+    print(json.dumps({"event": "head", **rows[-1], "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+    json.dump({"rows": rows, "partial": True}, open(OUT / "coupling.json", "w"), indent=1)
+from scipy.stats import mannwhitneyu
+a = [r for r in rows if r["layer4_relay"]]; o = [r for r in rows if not r["layer4_relay"]]
+summary = {"layer4_relays": src_relays, "relay_output_change": {"layer4_relays_median": float(np.median([r["relay_output_change"] for r in a])), "others_median": float(np.median([r["relay_output_change"] for r in o])), "mannwhitney_p_greater": float(mannwhitneyu([r["relay_output_change"] for r in a], [r["relay_output_change"] for r in o], alternative="greater").pvalue)},
+           "selectivity_relays_vs_unselected_targets": {"layer4_relays": [round(r["relay_output_change"] / (r["unselected_output_change"] + 1e-9), 3) for r in a], "others": [round(r["relay_output_change"] / (r["unselected_output_change"] + 1e-9), 3) for r in o]},
+           "damage_ten": {"layer4_relays_median": float(np.median([r["damage_ten"] for r in a])), "others_median": float(np.median([r["damage_ten"] for r in o]))}, "bit_identical": identical, "elapsed_s": round(time.time() - T0, 1)}
+json.dump({"rows": rows, "summary": summary}, open(OUT / "coupling.json", "w"), indent=1); print(json.dumps({"event": "done", **summary}), flush=True)

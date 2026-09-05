@@ -1,7 +1,7 @@
 """Is the relay property in the shared value projection (the key-value group) or in the per-head output slice?
 Three tests on the in-band attention blocks (R41e pairs' attention members, derived from the model's layer kinds),
 on the orthogonalised population of stage 1 (the arm the selection stands on), same seed, NROT rotations and MLP-row draws:
-  A. value projection alone: the row-space map P -> (P Wv_g^T) Wv_g for each group g (residual -> 128-dim value subspace -> residual
+  A. value projection alone: the row-space map P -> (P Wv_g^T) Wv_g for each group g (residual -> d-dim value subspace, d = head_dim read from the model, 256 here -> residual
      through the transpose), label preservation against the null draws, and the energy the projection captures from the lens
      population relative to random directions;
   B. the cross table: every head's output slice paired with every group's value projection, (P Wv_g^T) Wo_h^T, 64 maps per block,
@@ -63,15 +63,25 @@ def rule(m):
     rot = np.array([m[f"J_rot{i}"]["mrr"] for i in range(NROT)]); mlp = np.array([m[f"MLP_rows{i}"]["mrr"] for i in range(NROT)])
     J = m["J"]["mrr"]; return {"J_mrr": round(J, 4), "null_max": round(float(max(rot.max(), mlp.max())), 4), "null_med": round(float(max(np.median(rot), np.median(mlp))), 4), "passes": bool(J > max(rot.max(), mlp.max()) and J >= 2 * max(np.median(rot), np.median(mlp))), "gain": round(m["J"]["gain"], 3)}
 def energy(Wv_g, pops):
-    """fraction of a population's energy inside the value projection's row space, J against the null draws (a 128-dim subspace of H captures 128/H = 0.05 of an isotropic direction)."""
-    def cap(P): return float(mx.mean(mx.sum((P @ Wv_g.T) ** 2, axis=1)).item())   # P is unit-norm rowwise
-    rot = [cap(pops[f"J_rot{i}"]) for i in range(NROT)]; mlp = [cap(pops[f"MLP_rows{i}"]) for i in range(NROT)]
-    return {"J": round(cap(pops["J"]), 4), "random": round(cap(pops["random"]), 4), "rot_med": round(float(np.median(rot)), 4), "rot_max": round(float(max(rot)), 4), "mlp_med": round(float(np.median(mlp)), 4), "mlp_max": round(float(max(mlp)), 4)}
+    """Two forms, each with its own isotropic expectation stated beside the draws (the Head, 08:30). (1) quadratic: mean v^T Wv^T Wv v over
+    unit rows v, the form of the first run; its isotropic expectation is ||Wv||_F^2 / H, not d/H, because the projection's rows are not
+    orthonormal. (2) row-space share: mean ||P_row v||^2 with P_row the orthogonal projector onto Wv's row space (Wv^T (Wv Wv^T)^-1 Wv),
+    scale-free; its isotropic expectation is d/H exactly. The rotated draws estimate each expectation directly."""
+    Hd = Wv_g.shape[1]; d = Wv_g.shape[0]
+    G = Wv_g @ Wv_g.T; Ginv = mx.linalg.inv(G, stream=mx.cpu)
+    def quad(P): return float(mx.mean(mx.sum((P @ Wv_g.T) ** 2, axis=1)).item())
+    def share(P): X = P @ Wv_g.T; return float(mx.mean(mx.sum((X @ Ginv) * X, axis=1)).item())     # v^T Wv^T G^-1 Wv v = ||P_row v||^2
+    out = {"isotropic_quadratic": round(float(mx.sum(Wv_g ** 2).item()) / Hd, 4), "isotropic_share": round(d / Hd, 4)}
+    for name, f in (("quadratic", quad), ("share", share)):
+        rot = [f(pops[f"J_rot{i}"]) for i in range(NROT)]; mlp = [f(pops[f"MLP_rows{i}"]) for i in range(NROT)]
+        out[name] = {"J": round(f(pops["J"]), 4), "random": round(f(pops["random"]), 4), "rot_med": round(float(np.median(rot)), 4), "rot_max": round(float(max(rot)), 4), "mlp_med": round(float(np.median(mlp)), 4), "mlp_max": round(float(max(mlp)), 4)}
+    return out
 res = {"parameters": {"primary": "pre-registered 07:20 before the run: per block, F(between/within group) of lens preservation over the 16 real heads beyond all 40 null-population F values; result = number of blocks among five", "NPOP": NPOP, "NROT": NROT, "population": "lens minus identity component" if POP_ORTH else "lens", "checkpoint": spec.hf_id, "blocks": BAND_ATT_BLOCKS, "rule": "J label preservation beyond every rotated-J and MLP-row draw and at least double their medians (stage 1)"}, "blocks": {}}
 for b in BAND_ATT_BLOCKS:
     a = layers[b].self_attn; Wv = dense(a.v_proj); Wo = dense(a.o_proj); n_q = a.num_attention_heads; n_kv = a.num_key_value_heads; d = a.head_dim; grp = n_q // n_kv
+    assert Wo.shape == (H, n_q * d) and Wv.shape == (n_kv * d, H), (Wo.shape, Wv.shape, n_q, n_kv, d)   # the head dimension is read from the model and checked against the weights (256 here, not the recurrent path's 128; the Head, 08:20)
     pops = populations(b); mx.eval(*pops.values())
-    entry = {"layer_written": b + 1, "value_alone": {}, "cross": {}, "energy": {}}
+    entry = {"layer_written": b + 1, "head_dim": d, "isotropic_energy_share": round(d / H, 4), "value_alone": {}, "cross": {}, "energy": {}}
     diag = {}
     for h in range(n_q):                                                  # the real heads first: full per-population metrics kept for the pre-registered statistic
         g = h // grp; Wv_g = Wv[g * d:(g + 1) * d, :]; Wo_h = Wo[:, h * d:(h + 1) * d]
@@ -83,6 +93,14 @@ for b in BAND_ATT_BLOCKS:
         msb = sum(len(gr) * (mi - m) ** 2 for gr, mi in zip(groups, mg)) / (n_kv - 1)
         msw = sum((x - mi) ** 2 for gr, mi in zip(groups, mg) for x in gr) / (n_q - n_kv)
         return msb / (msw + 1e-12)
+    # D. the pairing control (pre-registered 08:12): each head's own output slice against 20 rotated versions of its own group's value
+    #    projection, rotated in the d-dimensional head space between them (d read from the model, 256 here), so the directions read and written are kept and only their correspondence is scrambled
+    ROTD = [mx.array(np.linalg.qr(rng.standard_normal((d, d)).astype(np.float32))[0]) for _ in range(NROT)]
+    entry["pairing"] = {}
+    for h in range(n_q):
+        g = h // grp; Wv_g = Wv[g * d:(g + 1) * d, :]; Wo_h = Wo[:, h * d:(h + 1) * d]
+        vals = [mrr_gain(lambda P, W=Wv_g, O=Wo_h, Q=Q: ((P @ W.T) @ Q.T) @ O.T, {"J": pops["J"], "random": pops["random"]})["J"]["mrr"] for Q in ROTD]
+        entry["pairing"][str(h)] = {"J_mrr_real": round(diag[h]["J"]["mrr"], 4), "pairing_null_max": round(max(vals), 4), "pairing_null_median": round(float(np.median(vals)), 4), "beats_pairing_null": bool(diag[h]["J"]["mrr"] > max(vals)), "own_group": g}
     F_J = F_ratio([diag[h]["J"]["mrr"] for h in range(n_q)])
     F_null = {name: F_ratio([diag[h][name]["mrr"] for h in range(n_q)]) for name in pops if name not in ("J", "random")}
     entry["prereg"] = {"statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations", "F_J": round(F_J, 3), "F_null_max": round(max(F_null.values()), 3), "F_null_median": round(float(np.median(list(F_null.values()))), 3), "draws_at_or_above_F_J": int(sum(v >= F_J for v in F_null.values())), "beyond_all_draws": bool(F_J > max(F_null.values())), "per_head_J_mrr": [round(diag[h]["J"]["mrr"], 4) for h in range(n_q)], "per_group_mean_J_mrr": [round(sum(diag[h]["J"]["mrr"] for h in range(g * grp, (g + 1) * grp)) / grp, 4) for g in range(n_kv)], "F_null_by_family": {"rot_median": round(float(np.median([F_null[f"J_rot{i}"] for i in range(NROT)])), 3), "mlp_median": round(float(np.median([F_null[f"MLP_rows{i}"] for i in range(NROT)])), 3)}}
@@ -101,7 +119,9 @@ for b in BAND_ATT_BLOCKS:
                         "median_J_mrr_by_group": {str(g): round(float(np.median([entry["cross"][f"h{h}_g{g}"]["J_mrr"] for h in range(n_q)])), 4) for g in range(n_kv)},
                         "median_J_mrr_by_head": {str(h): round(float(np.median([entry["cross"][f"h{h}_g{g}"]["J_mrr"] for g in range(n_kv)])), 4) for h in range(n_q)}}
     res["blocks"][str(b)] = entry
+    entry["pairing_summary"] = {"relays_beating": sum(1 for h, v in entry["pairing"].items() if v["beats_pairing_null"] and entry["cross"][f"h{h}_g{v['own_group']}"]["passes"]), "relays": sum(1 for h in range(n_q) if entry["cross"][f"h{h}_g{h // grp}"]["passes"]), "chance_per_head": round(1 / (NROT + 1), 4)}
+    print(json.dumps({"event": "pairing", "block": b, "layer": b + 1, "head_dim": d, "relays_beating_of_relays": [entry["pairing_summary"]["relays_beating"], entry["pairing_summary"]["relays"]], "heads_beating_pairing_null": [h for h, v in entry["pairing"].items() if v["beats_pairing_null"]], "median_real": round(float(np.median([v["J_mrr_real"] for v in entry["pairing"].values()])), 4), "median_pairing_null_max": round(float(np.median([v["pairing_null_max"] for v in entry["pairing"].values()])), 4)}), flush=True)
     print(json.dumps({"event": "prereg", "block": b, "layer": b + 1, **{k: v for k, v in entry["prereg"].items() if k != "statistic"}}), flush=True)
-    print(json.dumps({"event": "block", "block": b, "layer": b + 1, "value_alone": {g: (v["J_mrr"], v["null_max"], v["passes"]) for g, v in entry["value_alone"].items()}, "energy_J_vs_rotmax": {g: (v["J"], v["rot_max"], v["mlp_max"]) for g, v in entry["energy"].items()}, "cross_passes_by_group": entry["summary"]["passes_by_group_over_16_heads"], "cross_passes_by_head": entry["summary"]["passes_by_head_over_4_groups"], "diagonal": entry["summary"]["diagonal_passes"], "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+    print(json.dumps({"event": "block", "block": b, "layer": b + 1, "value_alone": {g: (v["J_mrr"], v["null_max"], v["passes"]) for g, v in entry["value_alone"].items()}, "energy_share_J_rotmed_iso": {g: (v["share"]["J"], v["share"]["rot_med"], v["isotropic_share"]) for g, v in entry["energy"].items()}, "energy_quadratic_J_rotmed_iso": {g: (v["quadratic"]["J"], v["quadratic"]["rot_med"], v["isotropic_quadratic"]) for g, v in entry["energy"].items()}, "cross_passes_by_group": entry["summary"]["passes_by_group_over_16_heads"], "cross_passes_by_head": entry["summary"]["passes_by_head_over_4_groups"], "diagonal": entry["summary"]["diagonal_passes"], "elapsed_s": round(time.time() - T0, 1)}), flush=True)
 res["parameters"]["elapsed_s"] = round(time.time() - T0, 1)
 json.dump(res, open(OUT / "kvgroup.json", "w"), indent=1); print(json.dumps({"event": "done", "out": str(OUT / "kvgroup.json")}))

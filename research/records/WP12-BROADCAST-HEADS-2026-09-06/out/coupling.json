@@ -1,0 +1,172 @@
+{
+ "rows": [
+  {
+   "head": 0,
+   "layer4_relay": false,
+   "damage_ten": 0.09186718750000011,
+   "damage_at_28": 0.09476562499999996,
+   "relay_output_change": 0.057193528211568125,
+   "unselected_output_change": 0.07691815001588245
+  },
+  {
+   "head": 1,
+   "layer4_relay": false,
+   "damage_ten": 0.08729687500000005,
+   "damage_at_28": 0.0859375,
+   "relay_output_change": 0.05509127031277435,
+   "unselected_output_change": 0.070900762081793
+  },
+  {
+   "head": 2,
+   "layer4_relay": false,
+   "damage_ten": 0.11760937500000002,
+   "damage_at_28": 0.11296874999999995,
+   "relay_output_change": 0.08773240761813493,
+   "unselected_output_change": 0.09522241029534834
+  },
+  {
+   "head": 3,
+   "layer4_relay": false,
+   "damage_ten": 0.09644531249999999,
+   "damage_at_28": 0.09578124999999993,
+   "relay_output_change": 0.06590711918005791,
+   "unselected_output_change": 0.08759469507882993
+  },
+  {
+   "head": 4,
+   "layer4_relay": true,
+   "damage_ten": 0.22139843749999988,
+   "damage_at_28": 0.20257812499999983,
+   "relay_output_change": 0.1771758753591432,
+   "unselected_output_change": 0.1988277226574374
+  },
+  {
+   "head": 5,
+   "layer4_relay": false,
+   "damage_ten": 0.09445312499999992,
+   "damage_at_28": 0.08781249999999996,
+   "relay_output_change": 0.06417786669827855,
+   "unselected_output_change": 0.07703632106185304
+  },
+  {
+   "head": 6,
+   "layer4_relay": false,
+   "damage_ten": 0.08230468749999997,
+   "damage_at_28": 0.07914062499999996,
+   "relay_output_change": 0.05292997404915066,
+   "unselected_output_change": 0.06887975478915635
+  },
+  {
+   "head": 7,
+   "layer4_relay": false,
+   "damage_ten": 0.0762890624999999,
+   "damage_at_28": 0.08031250000000001,
+   "relay_output_change": 0.044823046536363945,
+   "unselected_output_change": 0.05442582384933269
+  },
+  {
+   "head": 8,
+   "layer4_relay": false,
+   "damage_ten": 0.08464062499999991,
+   "damage_at_28": 0.082890625,
+   "relay_output_change": 0.058054541636150904,
+   "unselected_output_change": 0.0766631103405315
+  },
+  {
+   "head": 9,
+   "layer4_relay": false,
+   "damage_ten": 0.07032812499999996,
+   "damage_at_28": 0.06710937500000003,
+   "relay_output_change": 0.044817237640157916,
+   "unselected_output_change": 0.05769803445609459
+  },
+  {
+   "head": 10,
+   "layer4_relay": true,
+   "damage_ten": 0.11531249999999993,
+   "damage_at_28": 0.11148437499999997,
+   "relay_output_change": 0.061843074580582864,
+   "unselected_output_change": 0.08029726731668536
+  },
+  {
+   "head": 11,
+   "layer4_relay": false,
+   "damage_ten": 0.08009374999999996,
+   "damage_at_28": 0.07929687500000004,
+   "relay_output_change": 0.05696651412514397,
+   "unselected_output_change": 0.07145099326886271
+  },
+  {
+   "head": 12,
+   "layer4_relay": true,
+   "damage_ten": 0.09834374999999995,
+   "damage_at_28": 0.10015624999999995,
+   "relay_output_change": 0.0718557581018943,
+   "unselected_output_change": 0.07942482310398999
+  },
+  {
+   "head": 13,
+   "layer4_relay": false,
+   "damage_ten": 0.30402343750000005,
+   "damage_at_28": 0.26734375,
+   "relay_output_change": 0.16019857169773716,
+   "unselected_output_change": 0.19298119155185608
+  },
+  {
+   "head": 14,
+   "layer4_relay": false,
+   "damage_ten": 0.19169531250000005,
+   "damage_at_28": 0.17421874999999987,
+   "relay_output_change": 0.1074178614295446,
+   "unselected_output_change": 0.14618841981886094
+  },
+  {
+   "head": 15,
+   "layer4_relay": false,
+   "damage_ten": 0.17660156249999992,
+   "damage_at_28": 0.15773437499999998,
+   "relay_output_change": 0.08116977186784005,
+   "unselected_output_change": 0.10226374735659058
+  }
+ ],
+ "summary": {
+  "layer4_relays": [
+   4,
+   10,
+   12
+  ],
+  "relay_output_change": {
+   "layer4_relays_median": 0.0718557581018943,
+   "others_median": 0.058054541636150904,
+   "mannwhitney_p_greater": 0.11964285714285713
+  },
+  "selectivity_relays_vs_unselected_targets": {
+   "layer4_relays": [
+    0.891,
+    0.77,
+    0.905
+   ],
+   "others": [
+    0.744,
+    0.777,
+    0.921,
+    0.752,
+    0.833,
+    0.768,
+    0.824,
+    0.757,
+    0.777,
+    0.797,
+    0.83,
+    0.735,
+    0.794
+   ]
+  },
+  "damage_ten": {
+   "layer4_relays_median": 0.11531249999999993,
+   "others_median": 0.09186718750000011
+  },
+  "bit_identical": true,
+  "elapsed_s": 159.8
+ }
+}

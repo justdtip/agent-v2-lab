@@ -668,3 +668,269 @@ unselected heads separately: over the eighty it is high partly because the selec
 high-damage from low-damage heads, which is already known; if preservation orders the unselected
 too, it is a general ranking of causal importance; if only the selected, the threshold is doing the
 work.
+
+**Correction, 08:22 (the Head's check of test D's dimension).** The attention head dimension in this
+model is 256, not 128; 128 is the recurrent path's key and value head dimension. `kvgroup.py` reads
+the dimension from the model (`a.head_dim`) and its rotations were always 256 by 256, so the code
+was right and the description above ("the 128-dimensional head space") was the slip; the script now
+asserts the projection shapes against the model's head count and dimension so a wrong dimension
+raises rather than rotating a subspace silently. The same slip reached one number in the energy
+reading: a d-dimensional row space captures d/H of an isotropic direction, which is 256/2560 = 0.10,
+not 0.05. The energy comparisons above are against the rotated and MLP-row draws and stand as
+written; the phrase "isotropic expectation 0.05" does not, and group 0's 0.099 at layer 20 sits at
+the isotropic level rather than twice it, which does not change the confound reading. For the
+pairing control, each head passes by chance at one in twenty-one, so about 1.2 of the 26 relays
+pass by chance; the count is reported against that expectation.
+
+**Correction, 08:32 (the Head's check of the energy nulls against isotropy).** The draws' median
+energy sits well below 0.10 at every block (rotated medians 0.033 to 0.074 at layers 12 to 24 and
+0.080 to 0.161 at 28, varying by group), and the reason is the measure, not the null. The quantity
+the first run computed is the quadratic form v^T Wv^T Wv v over unit vectors, and its isotropic
+expectation is the squared Frobenius norm of the value projection over the width, not d over H,
+because the projection's rows are not orthonormal; the four groups' projections differ in scale,
+which is why the rotated medians differ by group. The rotated draws, which scatter isotropically in
+the residual space, estimate exactly that expectation, so the null was neutral and "isotropic 0.10"
+was the wrong expectation for that form. On the corrected expectation, group 0 at layer 20 (0.099
+against its rotated median of 0.051) is a genuine excess of about two, so the confound reading
+stands; at layer 28 group 1's 0.150 sits below its own rotated median of 0.161 and is no excess.
+The rerun adds the scale-free form, the share of energy inside the projection's row space through
+the orthogonal projector, whose isotropic expectation is d over H exactly (0.10 here), and reports
+both forms with both expectations beside the draws; a self-test on a random projection returned the
+share at d over H and the quadratic form at the Frobenius expectation.
+
+**Which energy form carries which claim, 08:40 (the Head, conceding the null was neutral).** For a
+unit vector uniform on the sphere the expectation of the quadratic form is the trace of the map's
+Gram matrix over the width, the squared Frobenius norm over the width; d over H is the special case
+of an orthogonal projector, which the value projection is not. The group hypothesis is an alignment
+claim, and the quadratic form conflates alignment with the map's scale, which differs across the
+four groups, so any cross-group statement ("group 0 captures more than group 1") rests on the
+scale-free share through the orthogonal projector, whose isotropic expectation is d over H, and no
+such comparison has yet been made on a statistic that supports it. The quadratic form is read only
+within a group against its own rotated null, where scale cancels: group 0 at layer 20 (0.099
+against 0.051) stands as an excess of about two, and group 1 at layer 28 (0.150 against 0.161) as
+a clean null. The rerun reports both forms with both expectations per block and group.
+
+## The single-head sweep, 08:45: preservation does not predict a head's causal effect, the relays are not individually stronger than the rest at any layer, and the relay set is strongly redundant
+
+Every one of the 80 in-band heads zeroed alone (`singles.as-run.py.txt`, `run-singles.log`,
+`out/singles.json`; 21 minutes, one load; bit-identical reproducibility; the readouts upstream of
+every head exactly 1.0 for all 80, so the gate held eighty times). Damage is one minus the top-25
+overlap with the unablated readout at layer 28, the one readout downstream of every head; the
+ten-layer mean is used for the products.
+
+**Pre-registered Spearman of preservation against single-head damage at layer 28:** over the 80,
+rho = −0.17 (p = 0.13); within the 26 relays, 0.09 (p = 0.65); within the 54 unselected heads,
+−0.31 (p = 0.022). Preservation does not order heads by effect anywhere, and among the unselected
+it runs the wrong way. **Relays against the rest:** median damage 0.061 against 0.075, one-sided
+Mann-Whitney p = 0.97; by layer (relays against unselected, medians): 12: 0.109 against 0.091;
+16: 0.061 against 0.091; 20: 0.063 against 0.061; 24: 0.052 against 0.055; 28: 0.067 against 0.061.
+At no layer are the relays stronger as a class. The ten strongest single heads in the band by this
+measure are block 11 head 8 (0.218, preservation 0.899, unselected because it also preserves the
+null draws, a copy map), block 11 head 10 (0.161, relay rank 2), block 23 head 14 (0.159,
+preservation 0.001), block 11 heads 3, 9, 4 and 11 (0.14 to 0.12, preservation 0.001), block 15
+head 5 (0.138, 0.001), block 27 head 5 (0.129, relay rank 9) and block 19 head 8 (0.122, 0.001).
+Seven of the ten preserve no lens directions at all.
+
+**Pre-registered redundancy test, multiplicative null:** measured k-arm overlap against the
+product of the top-k single-head overlaps, ten layers: k = 2, 0.832 against 0.817; k = 4, 0.824
+against 0.796; k = 8, 0.803 against 0.713; k = 16, 0.722 against 0.538. Measured above the product
+at every k and increasingly so: **redundant**, the heads damage the same content, and the dip at
+ranks three to eight in the cumulative curve is redundancy, not an ordering that puts weak heads
+early; rank 4 (block 27 head 6) does 0.082 alone at layer 28, rank 8 (block 27 head 4) 0.112, rank
+9 (block 27 head 5) 0.129, while adding almost nothing to the cumulative curve.
+
+**The reading of stage 2 changes.** (1) The set-level result stands as measured: the top relays
+zeroed together damage the readout more than layer-matched random sets, and the sets are redundant.
+(2) But the set effect is not lens-specific transport by individually special heads. Rank 2, block
+11 head 10, does 0.162 alone over ten layers, which is above the median of its layer but below block
+11 head 8 and level with heads there that preserve nothing; the cumulative curve's small-k advantage
+is that one strong layer-12 head, counted at all ten readouts, plus redundancy among the rest. (3)
+Single-head damage to the lens readout is dominated by a head's general influence on the residual,
+not by whether its output map preserves lens directions: the heads that preserve nothing damage the
+readout as much as the relays. The Head's warning stands in its strongest form: this metric is
+damage to the model's prior output, and it is not the paper's recall of an injected concept. (4)
+So the paper's causal claim, that the heads picked out by lens preservation are the ones that carry
+workspace content, is not supported at single-head resolution on this model, and the weight
+arithmetic of stage 1 does not predict what ablation does. What stage 1 finds is real (selective
+preservation, band-favoured, group-structured, surviving orthogonalisation), and what it finds is
+not causal importance for the readout. (5) The lens-specific causal test the paper actually ran,
+injection of a concept along a lens direction at one layer with its recall measured downstream with
+and without the relays, is the one experiment that could still separate "relays carry workspace
+content" from "relays preserve directions that anything can carry"; it is filed as the follow-up
+and not run tonight, because the Director's overnight order takes the model once this thread is
+closed.
+
+## The group rerun, 08:50: the pairing control is beaten by nearly every head, relay or not, and the value projections do not carry the lens directions differentially
+
+Rerun with the pairing control and both energy forms (`kvgroup.as-run.py.txt`, `run-kvgroup-2.log`,
+`out/kvgroup.json`, 131 seconds). The pre-registered F values are unchanged (12: 1.14 beyond a
+maximum of 0.78; 16: 0.65 against 0.85, no; 20: 2.45 against 2.74, no; 24: 3.12 against 2.37;
+28: 2.83 against 1.81; three of five).
+
+**Pairing control.** 25 of the 26 relays beat all twenty pairing rotations, against a chance
+expectation of 1.2; so do 36 of the 54 non-relays (12: 8 of 14; 16: 9 of 14; 20: 8 of 9; 24: 8 of
+10; 28: 3 of 7). The scrambled maps preserve at 0.004 to 0.006, chance for a population of 2,000,
+and the real maps of most heads preserve far above it. So the control is passed by trained heads
+generally and does not single out the relays: what it shows is that a head's output slice works
+with its own value projection and not with a scrambled correspondence, which the Head said in
+advance is true of any network and not about the lens. The reading "the property lives in the
+trained pair" is correct and empty; the relay-specific evidence remains stage 1's selectivity
+against rotated and MLP-row draws, and the group structure of preservation at three of five blocks.
+
+**Energy, scale-free share (isotropic 0.10 exactly, the rotated medians at 0.099 to 0.101
+everywhere, so the null is neutral by construction).** Lens share by group 0 to 3: layer 12:
+0.081, 0.084, 0.092, 0.069; 16: 0.074, 0.076, 0.066, 0.082; 20: 0.217, 0.090, 0.110, 0.122; 24:
+0.104, 0.101, 0.114, 0.093; 28: 0.105, 0.091, 0.093, 0.115. The one cross-group excess is layer
+20's group 0 at 2.2 times isotropic, the copy-map group, which is the confound seen twice. At layer
+28 the group holding all four relays (group 3, 0.115) and the group holding none (group 0, 0.105)
+are indistinguishable, so the value projections there do not carry the lens directions
+differentially, and the group structure of preservation at layer 28 (F 2.83 beyond every draw) has
+no mechanism at the level of value-projection alignment with the lens. At layers 12 and 16 every
+group captures less than isotropic (0.07 to 0.09): the lens directions are slightly
+under-represented in the value subspaces there. The quadratic form agrees with its Frobenius
+expectation within a few percent at every group except layer 20's group 0, as the corrected
+account said it would.
+
+## Pre-registered before it runs, 09:00: the injection test, ruled necessary to close (the Head)
+
+Strong redundancy is the signature of a redundantly encoded quantity: heads that damage the same
+content carry the same content, removing any one changes little because the others still write
+it, and the single-head null is what that signature predicts. So the sweep and the redundancy
+result are ambiguous between two opposite conclusions, the relays not being special against the
+relays redundantly carrying the same workspace content, and nothing measured so far separates
+them. The injection test does (`inject.py`). A lens direction for a concept token, the direction
+the layer-12 lens reads as that token, is added to the residual stream at layer 12, after block 11
+so that the in-band relays at blocks 15, 19, 23 and 27 are downstream, at eight positions per
+document spaced 56 apart, sixteen concept tokens over 64 events; the lens is read downstream for
+recall@25 of the injected concept at the same position at every deeper band layer and at later
+positions (+1, +2, +4, +8, +16) at layers 16, 20, 24 and 28, the broadcast across tokens. Magnitude
+alpha times the median residual norm at layer 12, alpha the smaller of 0.5 and 1.0 giving
+same-position recall at layer 16 of at least 0.9 on the unablated arm, chosen before any ablation
+arm is read; a no-injection baseline gives the chance rate. Arms: the 24 downstream relays zeroed
+by absolute preservation at k = 4, 8, 16, 24, against layer-matched random sets from the unselected
+heads at the same blocks, five seeds. Reading: the broadcast hypothesis survives redundancy if, at
+k = 8 or 16, the relays' recall of the injected concept at layer 28, at the same position or four
+positions later, falls below the minimum of the five random sets; it closes negative if the relays
+sit within the random range at both. Every k, layer and offset is reported. Two corrections to the
+sweep's account carried with it: the within-layer comparison is the clean evidence and carries the
+argument; the pooled Spearman and the top-ten list are confounded by source depth (six of the ten
+strongest single heads are at the shallowest band block, whose perturbations pass through sixteen
+more blocks) and come out of the reasoning; every damage figure in the sweep section is at the
+layer-28 readout unless it says ten-layer; and the gate held exactly at 1.0 eighty times, the
+strongest form that check has taken.
+
+## The coupling test, 09:02: the layer-4 relays do not couple to the band relays
+
+The last causal test of the Director's hypothesis that the out-of-band relays at layer 4 couple
+to heads in later layers (`coupling.as-run.py.txt`, `run-coupling.log`, `out/coupling.json`; 160
+seconds, bit-identical reproducibility). Each of the sixteen heads writing layer 4 was zeroed alone
+on the same documents and positions, and per head: the damage at the ten band readouts, the
+relative change it causes in the 26 in-band relays' own attention outputs at the sampled positions,
+and the same for the 54 unselected in-band heads. The three layer-4 relays (block 3 heads 4, 10,
+12) change the band relays' outputs by a median of 0.072 against 0.058 for the other thirteen
+heads (one-sided Mann-Whitney p = 0.12), and their general damage is likewise a little larger
+(0.115 against 0.092 over ten layers): a slightly larger general influence, not a coupling. The
+selectivity ratio, the change they cause in the relays over the change they cause in the unselected
+band heads, is 0.89, 0.77 and 0.91 for the three relays against 0.74 to 0.92 for the others: every
+layer-4 head, relay or not, perturbs the unselected band heads more than it perturbs the relays,
+and the relays are not more selective than the rest. With the weight-composition result of stage
+1b (composition at the rotation null, content not addresses), the coupling hypothesis is not
+supported by either the weights or the causal test. What the layer-4 relays are remains what
+stage 1 found: heads whose output maps preserve lens content selectively, out of band, with
+nothing measured tonight that distinguishes their downstream effect from that of their neighbours.
+
+**Pre-registration amended, 09:12, before the k = 16 arm is read (the Head, urgent): one primary
+comparison and a permutation statistic, not a minimum over five seeds.** "Below the minimum of
+five random sets" is a one-in-six event under exchangeability, and allowing two values of k and
+two positions gives four chances, so the original criterion returned "survives" by chance with
+probability 0.52, the threshold that could not fail arriving at the last experiment. Primary
+comparison: k = 16, same position, layer 28. Statistic: the 64 injection events are shared across
+the six arms at that k (the relays and five random sets), so under exchangeability the relay arm is
+one of six labels per event; the relay arm's mean recall over the 64 events is compared with the
+distribution of the same statistic when, independently per event, one of the six arms is relabelled
+as the relay arm, 10,000 draws. Reading: p < 0.05 one-sided (relays lower) means the hypothesis
+survives redundancy; otherwise it closes negative. The other k values and the +4 offset are
+secondary and descriptive; the script's own "survives" flag encodes the superseded criterion and is
+not read. Two design notes carried with it: the pairing control's difference between relays (25 of
+26) and non-relays (36 of 54), one-sided p = 0.0023, is confounded with the selection by
+construction, since a head chosen for preserving well has more room above its own scrambled floor,
+and is reported as a confounded difference rather than as a control that singles out no relay; and
+the injection set is the 24 relays downstream of layer 12 and excludes block 11 head 10, the head
+that drove the small-k advantage in the ablation curve, so a negative here is a negative about the
+downstream relays and not about that effect.
+
+**Pre-registration amended a third time, 09:25, before any arm of the corrected run is read (the
+Head).** The per-event permutation of 09:12 is withdrawn as anti-conservative: the unit of
+randomisation is the head set, not the injection event, and relabelling arms per event averages
+away the arm-level variance (the five-seed control range at k = 2 in the ablation curve implies a
+per-arm deviation of about 0.022, which 64 events do not reduce), so its null is too narrow by
+half again. Resolution on the comparison between arms is bought only with more arms. Primary
+comparison as before, k = 16, same position, layer 28; statistic: the relay arm's rank among
+twenty arms, the relays and nineteen layer-matched random head sets, p = rank over 20, ties split;
+the hypothesis survives redundancy only if the relays are the lowest of the twenty (p = 0.05). The
+other k values keep five random arms and are descriptive, with the relay arm's rank reported the
+same way. Sharing the 64 events across arms is kept for precision on each arm's mean.
+
+**The first injection run is a failed instrument, recorded as such (`run-inject.log`,
+`out/inject.json`).** It injected the gradient direction J^T u_c, which raises the concept's logit
+fastest per unit norm but does not make the lens read the concept: with the magnitude at the
+residual's own norm, same-position recall at layer 13, one recurrent block after the injection,
+was 0.27 and at layer 28 zero on every arm, relays and random alike; nothing reached the readout
+and the arms compare zeros. The readout is unembed(norm(J h)), so the vector that makes the lens
+read c is the one whose image under J is u_c, the pseudo-inverse direction J^+ u_c, which the
+corrected run (`inject_events.as-run.py.txt`) uses, with a direction check (the cosine of J v_c
+with u_c) printed before anything else, a no-injection baseline, and a magnitude grid of 0.25,
+0.5, 1 and 2 times the residual norm with the smallest reaching 0.9 same-position recall at layer
+16 chosen before any ablation arm is read. This is the instrument proving it injects before its
+readings are read (R52).
+
+**Pre-registration amended a fourth time, 09:32, before any ablation arm of the corrected run is
+read (the Head, on F10).** The lens-to-identity cosine is 0.63 at layer 24 and 0.71 at 28, so a
+layer-28 lens readout is about two thirds an output readout, and "the injected concept is still
+recalled at 28" is largely "the injection still influences what the model would say", a weaker and
+different claim from workspace transport. Primary comparison: **k = 16, same position, layer 24**,
+downstream of the relays at blocks 15, 19 and 23 but not block 27, three quarters of the set against
+a readout 0.63 output-aligned; layer 28 reported beside it, all four blocks against a readout 0.71
+aligned, the trade-off stated rather than resolved: a result at 24 and not at 28 means the transport
+is workspace-specific; at 28 and not at 24 means block 27 is doing it or it is output influence. The
+rank statistic and the nineteen random arms are unchanged. Calibration rules: the grid point
+selected is reported; if no grid point reaches 0.9 same-position recall at layer 16, the instrument
+has failed and the arms are not read, since a pre-image direction needing more than twice the
+residual norm to register says the concept is not writable at that layer. The pseudo-inverse uses
+numpy's default relative cutoff on singular values; the cutoff, the condition number of the
+layer-12 lens and the number of singular values it truncates are recorded beside the direction
+check (the cosine of J v_c with u_c came back 1.0 at minimum and median, so nothing was truncated
+at that tolerance).
+
+**The second injection run is a failed instrument too, and the third form is pre-registered
+before it runs, 09:40.** The exact pre-image J^+ u_c read at zero at every layer and every
+magnitude on the grid, before any arm was read: the layer-12 lens has a condition number of
+636,000 (singular values from 13.2 down to 2e-5; 1,419 of 2,560 below a hundredth of the largest,
+none truncated at numpy's default cutoff of 5.7e-13), so the pre-image lives in the near-null
+space, its image under J has the right direction (cosine 1.0) and negligible size at any unit
+norm, and the injection is invisible to the readout. The run was stopped during its arms, which
+were comparing zeros. Third form: the regularised pre-image (J^T J + lambda I)^-1 J^T u_c, the
+gradient on the small singular directions and the pre-image on the large ones, lambda relative to
+the largest singular value squared on a grid of 0.01, 0.1 and 1, magnitude on a grid of 0.5, 1 and
+2 times the residual norm; the calibration selects the smallest magnitude reaching 0.9
+same-position recall at the first readout with an attention block between it and the injection
+(layer 16 for injection at 12), then the lambda reading best there, before any ablation arm is
+read; the direction check now prints the cosine and the size of J v_c per unit norm for each
+lambda. Failure rule as pre-registered: no grid point at 0.9 means the concept is not writable at
+that layer by this instrument and the arms are not run. Fallback, pre-registered now: if layer 12
+is not writable, inject at layer 16 (lens-to-identity cosine 0.29), with the relays downstream of
+it (blocks 19, 23, 27; 21 heads) as the set, the primary readout at layer 24 (downstream of blocks
+19 and 23) and layer 28 beside, the same rank statistic among twenty arms at k = 16, and the
+calibration readout at layer 20. A negative at 16 is then a negative about the 21 downstream
+relays.
+
+**Added before the run, 09:45 (the Head): room at the primary readout.** The calibration guards
+layer 16; the comparison happens at 24. Rule: the unablated arm's same-position recall at layer 24
+is stated before any ablation arm is read and must be at least 0.5; if the grid point chosen at
+16 leaves it lower, the grid moves up among the points that register at 16; if none gives room,
+the finding is that the injected content does not survive to layer 24 with every relay intact,
+which is itself the answer, and the arms are not run. The cosine of 1.0 in the direction check is
+the expected value when J has full row rank, confirming the algebra and that nothing was truncated,
+and it says nothing about whether the direction is injectable at a sane magnitude; the grid is the
+check that can fail informatively, and the condition number and the count of small singular values
+explain a failed grid.

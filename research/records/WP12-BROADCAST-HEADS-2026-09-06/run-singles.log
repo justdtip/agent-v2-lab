@@ -1,0 +1,8 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2778.42it/s]
+{"event": "reproducibility", "bit_identical": true, "elapsed_s": 32.9}
+{"event": "layer", "layer": 12, "selected_n": 2, "selected_median_overlap_at_28": 0.891, "unselected_median_overlap_at_28": 0.909, "upstream_exact_all": true, "elapsed_s": 285.2}
+{"event": "layer", "layer": 16, "selected_n": 2, "selected_median_overlap_at_28": 0.939, "unselected_median_overlap_at_28": 0.909, "upstream_exact_all": true, "elapsed_s": 535.9}
+{"event": "layer", "layer": 20, "selected_n": 7, "selected_median_overlap_at_28": 0.937, "unselected_median_overlap_at_28": 0.939, "upstream_exact_all": true, "elapsed_s": 786.6}
+{"event": "layer", "layer": 24, "selected_n": 6, "selected_median_overlap_at_28": 0.948, "unselected_median_overlap_at_28": 0.945, "upstream_exact_all": true, "elapsed_s": 1037.4}
+{"event": "layer", "layer": 28, "selected_n": 9, "selected_median_overlap_at_28": 0.933, "unselected_median_overlap_at_28": 0.939, "upstream_exact_all": true, "elapsed_s": 1288.1}
+{"event": "done", "spearman_preservation_vs_damage_at_28_all_80": [-0.17128859096574342, 0.12871436183321874], "spearman_within_selected": [0.09334929184132947, 0.6501363411197676], "reproducibility_bit_identical": true, "readout_layers": [12, 13, 16, 17, 19, 20, 23, 24, 27, 28], "ablated_layers": [12, 16, 20, 24, 28], "elapsed_s": 1289.0}

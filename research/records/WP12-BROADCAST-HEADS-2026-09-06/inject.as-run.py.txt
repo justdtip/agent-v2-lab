@@ -1,0 +1,118 @@
+"""The injection test (the Head, 08:55: necessary to close, because strong redundancy is the signature of a redundantly encoded
+quantity and the single-head null is what that signature predicts). Inject a lens direction for a concept token into the residual
+stream at layer 12 (after block 11, so that the in-band relays at blocks 15, 19, 23, 27 are downstream) at spaced positions, and
+read the lens downstream: recall@25 of the injected concept at the same position at every deeper band layer, and at later positions
+(+1, +2, +4, +8, +16) at layers 16, 20, 24, 28, the broadcast across tokens. Arms: unablated; the downstream relays zeroed k at a
+time by absolute preservation (k = 4, 8, 16, all 24); layer-matched random sets from the unselected heads at the same blocks, five
+seeds. Magnitude: alpha times the median residual norm at layer 12, alpha chosen on the unablated arm as the smaller of 0.5 and
+1.0 giving same-position recall at layer 16 of at least 0.9, before any ablation arm is read. Pre-registered reading: the broadcast
+hypothesis survives redundancy if, at k = 8 or 16, the relays' recall of the injected concept at layer 28 (same position, or +4)
+falls below the minimum of the five random sets; it closes negative if the relays sit within the random range at both.
+Writes out/inject.json."""
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; LENS = Path(sys.argv[1])
+DOCS, DOC_TOKENS, NCONCEPT, EVENTS_PER_DOC, SPACING, START = 8, 512, 16, 8, 56, 40
+OFFSETS = (1, 2, 4, 8, 16); NSEED = int(os.environ.get("NSEED", "5")); K_LIST = [int(k) for k in os.environ.get("K_LIST", "4,8,16").split(",")]
+BAND_PAIRS = ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28)); BAND = tuple(sorted(L for pr in BAND_PAIRS for L in pr)); L_INJ = 12
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_next as q3n
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None); model.eval()
+att_blocks = [b for b, l in enumerate(model.language_model.model.layers) if not l.is_linear]
+BAND_ATT = tuple(L for L in BAND if (L - 1) in att_blocks); assert len(BAND_ATT) == 5, BAND_ATT
+DOWN_BLOCKS = tuple(L - 1 for L in BAND_ATT if L > L_INJ)                       # 15, 19, 23, 27
+lens = np.load(LENS); J = {L: mx.array(lens[f"J{L - 1}"].astype(np.float32)) for L in BAND}
+READ = tuple(L for L in BAND if L > L_INJ)                                        # 13, 16, 17, 19, 20, 23, 24, 27, 28
+ABLATE = {}; _orig = q3n.scaled_dot_product_attention; _ctr = {"i": 0}
+def hooked(queries, keys, values, cache, scale, mask, *a, **kw):
+    out = _orig(queries, keys, values, cache, scale, mask, *a, **kw)
+    b = att_blocks[_ctr["i"] % len(att_blocks)]; _ctr["i"] += 1; hs = ABLATE.get(b)
+    if hs:
+        m = np.ones((1, out.shape[1], 1, 1), dtype=np.float32); m[0, list(hs)] = 0.0; out = out * mx.array(m).astype(out.dtype)
+    return out
+q3n.scaled_dot_product_attention = hooked
+corpus = json.load(open(HERE.parent / "retrieval" / "corpus.json")); docs = [encode(tokenizer, c["text"])[:DOC_TOKENS] for c in corpus[:DOCS]]
+assert all(len(d) >= START + (EVENTS_PER_DOC - 1) * SPACING + max(OFFSETS) + 1 for d in docs), [len(d) for d in docs]
+positions = [START + i * SPACING for i in range(EVENTS_PER_DOC)]
+rng = np.random.default_rng(20260906)
+embed = model.language_model.model.embed_tokens.weight
+if hasattr(model.language_model.model.embed_tokens, "scales"): embed = mx.dequantize(embed, model.language_model.model.embed_tokens.scales, model.language_model.model.embed_tokens.biases, model.language_model.model.embed_tokens.group_size, model.language_model.model.embed_tokens.bits)
+V = embed.shape[0]
+def clean(t):
+    s = tokenizer.decode([int(t)]); return s.startswith(" ") and s[1:].isalpha() and len(s) >= 5 and s[1:].islower()
+cands = [int(t) for t in rng.permutation(V) if clean(t)][:NCONCEPT]
+concepts = cands; assert len(concepts) == NCONCEPT
+dirs = {c: None for c in concepts}
+Jinj = J[L_INJ]; U = embed[mx.array(concepts)].astype(mx.float32); D = U @ Jinj.T             # row c: the direction the lens at layer 12 reads as concept c (h @ J.T is the readout)
+D = D / (mx.linalg.norm(D, axis=1, keepdims=True) + 1e-12); mx.eval(D); DIRS = {c: D[i] for i, c in enumerate(concepts)}
+events = [(di, p, concepts[(di * EVENTS_PER_DOC + i) % NCONCEPT]) for di in range(DOCS) for i, p in enumerate(positions)]
+def forward(d, inj, alpha):
+    """residuals at READ with the concept directions added at layer L_INJ at the given positions; inj: list of (pos, concept) or None."""
+    ids = mx.array(d)[None]; h = view.embed(ids); masks = view.masks(h, None); captured = {}; _ctr["i"] = 0
+    for index in range(max(READ)):
+        h = view.run_block(index, h, masks, None)
+        if index + 1 == L_INJ:
+            captured["norm"] = float(mx.median(mx.linalg.norm(h[0].astype(mx.float32), axis=-1)).item())
+            if inj:
+                A = np.zeros((h.shape[1], h.shape[2]), dtype=np.float32)
+                for p, c in inj: A[p] = np.array(DIRS[c]) * alpha * captured["norm"]
+                h = h + mx.array(A)[None].astype(h.dtype)
+        if index + 1 in READ: captured[index + 1] = h
+    mx.eval(*[v for k, v in captured.items() if k != "norm"]); return captured
+def top25(h, L, pos): return np.array(mx.argsort(view.unembed(view.final_norm(h[0][mx.array(pos)].astype(mx.float32) @ J[L].T)), axis=-1)[:, -25:])
+def measure(ablate, alpha, inject=True):
+    ABLATE.clear(); ABLATE.update(ablate)
+    same = {L: [] for L in READ}; later = {(L, o): [] for L in (16, 20, 24, 28) for o in OFFSETS}; norms = []
+    for di, d in enumerate(docs):
+        inj = [(p, c) for (dd, p, c) in events if dd == di] if inject else None
+        cap = forward(d, inj, alpha); norms.append(cap["norm"])
+        ev = [(p, c) for (dd, p, c) in events if dd == di]
+        for L in READ:
+            t = top25(cap[L], L, [p for p, c in ev])
+            for i, (p, c) in enumerate(ev): same[L].append(int(c in t[i]))
+        for L in (16, 20, 24, 28):
+            for o in OFFSETS:
+                t = top25(cap[L], L, [p + o for p, c in ev])
+                for i, (p, c) in enumerate(ev): later[(L, o)].append(int(c in t[i]))
+    return {"same": {L: float(np.mean(v)) for L, v in same.items()}, "later": {f"{L}+{o}": float(np.mean(v)) for (L, o), v in later.items()}, "median_norm_L12": float(np.median(norms))}
+# ---- baseline without injection, then alpha calibration on the unablated arm
+base0 = measure({}, 0.0, inject=False)
+print(json.dumps({"event": "no_injection_baseline", "same": base0["same"], "later_28": {k: v for k, v in base0["later"].items() if k.startswith("28")}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+cal = {}
+for alpha in (0.5, 1.0):
+    cal[alpha] = measure({}, alpha); print(json.dumps({"event": "calibration", "alpha": alpha, "same": cal[alpha]["same"], "later": cal[alpha]["later"], "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+ALPHA = 0.5 if cal[0.5]["same"][16] >= 0.9 else 1.0
+print(json.dumps({"event": "alpha_chosen", "alpha": ALPHA, "rule": "smaller of 0.5 and 1.0 with same-position recall at layer 16 >= 0.9"}), flush=True)
+# ---- arms
+sel = json.load(open(OUT / "selection_orth.json"))["selected_attention"]
+ordered = [(r["block"], r["head"]) for r in sorted([r for r in sel if r["block"] in DOWN_BLOCKS], key=lambda r: -r["J_mrr"])]
+selset = set(ordered)
+def by_block(heads):
+    d = {}
+    for b, h in heads: d.setdefault(b, set()).add(h)
+    return d
+def random_set(heads, seed):
+    r = np.random.default_rng(seed); out = []
+    for b, hs in by_block(heads).items():
+        pool = [h for h in range(16) if (b, h) not in selset]; n = len(hs)
+        take = [int(h) for h in r.choice(pool, min(n, len(pool)), replace=False)]
+        if n > len(pool): take += [int(h) for h in r.choice(sorted(hs), n - len(pool), replace=False)]
+        out += [(b, h) for h in take]
+    return out
+ks = [k for k in K_LIST if k < len(ordered)] + [len(ordered)]; results = {"alpha": ALPHA, "unablated": cal[ALPHA], "no_injection": base0, "arms": []}
+for k in ks:
+    top = ordered[:k]; rel = measure(by_block(top), ALPHA); ctl = []
+    for s in range(NSEED):
+        rs = random_set(top, s); ctl.append({"seed": s, "heads": rs, "overlap": len(set(rs) & selset), **measure(by_block(rs), ALPHA)})
+    arm = {"k": k, "heads": top, "relays": rel, "controls": ctl,
+           "summary": {key: {"relays": rel["same"][28] if key == "same_28" else rel["later"]["28+4"], "control_mean": float(np.mean([c["same"][28] if key == "same_28" else c["later"]["28+4"] for c in ctl])), "control_min": float(min(c["same"][28] if key == "same_28" else c["later"]["28+4"] for c in ctl)), "control_max": float(max(c["same"][28] if key == "same_28" else c["later"]["28+4"] for c in ctl))} for key in ("same_28", "later_28+4")}}
+    arm["summary"]["survives"] = bool(arm["summary"]["same_28"]["relays"] < arm["summary"]["same_28"]["control_min"] or arm["summary"]["later_28+4"]["relays"] < arm["summary"]["later_28+4"]["control_min"])
+    results["arms"].append(arm); json.dump(results, open(OUT / "inject.json", "w"), indent=1)
+    print(json.dumps({"event": "k", "k": k, "same_28": arm["summary"]["same_28"], "later_28+4": arm["summary"]["later_28+4"], "relays_same_all": rel["same"], "survives": arm["summary"]["survives"], "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+results["parameters"] = {"L_INJ": L_INJ, "READ": READ, "OFFSETS": OFFSETS, "concepts": concepts, "concept_strings": [tokenizer.decode([c]) for c in concepts], "events": len(events), "positions": positions, "DOWN_BLOCKS": DOWN_BLOCKS, "ordered": ordered, "K_LIST": ks, "NSEED": NSEED, "elapsed_s": round(time.time() - T0, 1)}
+json.dump(results, open(OUT / "inject.json", "w"), indent=1); print(json.dumps({"event": "done", "alpha": ALPHA, "verdicts": {a["k"]: a["summary"]["survives"] for a in results["arms"]}}), flush=True)
