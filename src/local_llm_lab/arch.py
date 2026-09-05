@@ -108,6 +108,7 @@ class ArchitectureView:
         cache: list[Any] | None,
         *,
         hidden_spans: Sequence[tuple[int, int]] | None = None,
+        record: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build the attention and SSM masks through the model's own helpers.
 
@@ -121,14 +122,28 @@ class ArchitectureView:
         ``None`` (the default) leaves this method exactly as inference runs it.  An empty
         sequence forces the explicit array and hides nothing, which is the only way to compare
         the array route against the sentinel route on an otherwise identical forward.
+
+        ``record``, when given, is filled in **by the branch that runs** with the route's name,
+        the resolved column ranges the mask indexed and the shape it came out at.  Two mask
+        forms exist by design and either can be correct, so an artifact that only said which
+        spans were *requested* would leave a reader unable to tell which code path produced the
+        number in front of them -- and the two come apart precisely when something is wrong.
         """
         entries = self._cache_entries(cache)
         attention_cache = self._first_cache(entries, _ATTENTION_KIND)
         linear_cache = self._first_cache(entries, _LINEAR_ATTENTION_KIND)
         if hidden_spans is None:
             attention_mask = self._attention_mask(h, attention_cache)
+            if record is not None:
+                record["attention_mask_route"] = "model helper, unmodified"
+                record["hidden_spans"] = ()
+                record["query_tokens"] = int(h.shape[1])
+                record["cache_offset"] = _cache_offset(attention_cache)
+                record["attention_mask_shape"] = _mask_shape(attention_mask)
         else:
-            attention_mask = self._span_masked_attention(h, attention_cache, hidden_spans)
+            attention_mask = self._span_masked_attention(
+                h, attention_cache, hidden_spans, record
+            )
         return {
             _ATTENTION_KIND: attention_mask,
             _LINEAR_ATTENTION_KIND: self._ssm_mask(h, linear_cache),
@@ -139,6 +154,7 @@ class ArchitectureView:
         h: Any,
         attention_cache: Any | None,
         hidden_spans: Sequence[tuple[int, int]],
+        record: dict[str, Any] | None = None,
     ) -> Any:
         """The model's own attention mask as a boolean array, with hidden columns set False.
 
@@ -161,8 +177,10 @@ class ArchitectureView:
         offset = _cache_offset(attention_cache)
         total = offset + queries
         mask = self._attention_mask(h, attention_cache, return_array=True)
+        route = "library array, hidden columns ANDed"
         if mask is None:
             mask = create_causal_mask(queries, offset)
+            route = "row constructed at a single step"
         elif not isinstance(mask, mx.array):
             # A helper that answers the sentinel despite ``return_array`` would take a
             # different attention path than the array the span has to be ANDed into.
@@ -172,12 +190,23 @@ class ArchitectureView:
             )
         columns = mx.arange(total)
         hidden = mx.zeros((total,), dtype=mx.bool_)
+        resolved: list[tuple[int, int]] = []
         for span in hidden_spans:
             start, end = _validate_hidden_span(span, total)
+            resolved.append((start, end))
             hidden = hidden | ((columns >= start) & (columns < end))
         # The column axis is last on both the 2-D and the padded 4-D mask shapes, so one row
         # of hidden columns broadcasts across every query and head without reshaping.
-        return mask & ~hidden
+        masked = mask & ~hidden
+        if record is not None:
+            # Written after the AND, from the values the mask was actually built from, so the
+            # artifact carries the derivation's output rather than its input.
+            record["attention_mask_route"] = route
+            record["hidden_spans"] = tuple(resolved)
+            record["query_tokens"] = queries
+            record["cache_offset"] = offset
+            record["attention_mask_shape"] = _mask_shape(masked)
+        return masked
 
     def run_block(
         self,
@@ -331,6 +360,7 @@ class ArchitectureView:
         *,
         hidden_spans: Sequence[tuple[int, int]] | None = None,
         position: int = -1,
+        record: dict[str, Any] | None = None,
     ) -> Any:
         """Run every block over ``cache`` and return the logits at one position.
 
@@ -342,7 +372,9 @@ class ArchitectureView:
         The per-kind masks are built here rather than accepted from the caller because their
         shape is a function of the very ``h`` and cache offset this forward uses; a dict built
         anywhere else can only be right by accident.  ``hidden_spans`` is therefore how a
-        caller hides text from the attention blocks -- see ``masks``.
+        caller hides text from the attention blocks -- see ``masks``, which also documents
+        ``record``: the mask route and resolved columns this forward really used, for an
+        artifact that has to say what happened rather than what was asked for.
 
         Only the scored row is unembedded.  Projecting every position to a vocabulary this size
         would dominate the cost of a probe point that reads exactly one distribution.  The
@@ -354,7 +386,7 @@ class ArchitectureView:
         entries = self._cache_entries(cache)
         h = self.embed(ids)
         index = _validate_scored_position(position, int(h.shape[1]))
-        masks = self.masks(h, entries, hidden_spans=hidden_spans)
+        masks = self.masks(h, entries, hidden_spans=hidden_spans, record=record)
         for block_index in range(self.num_layers):
             h = self.run_block(block_index, h, masks, entries[block_index])
         return self.unembed(self.final_norm(h)[:, index, :])
@@ -441,6 +473,17 @@ class ArchitectureView:
         ):
             raise ValueError(f"block index must lie in [0, {self.num_layers - 1}]; got {index!r}")
         return index
+
+
+def _mask_shape(mask: Any) -> tuple[int, ...] | None:
+    """The mask's shape for the record, or ``None`` where the route produced no array.
+
+    Both the ``'causal'`` sentinel and the library's ``None`` at a single step are legitimate
+    returns of the unmodified helper, and neither has a shape; reporting ``None`` for them says
+    so, where reaching for ``.shape`` would turn a recorded fact into an exception.
+    """
+    shape = getattr(mask, "shape", None)
+    return tuple(int(value) for value in shape) if shape is not None else None
 
 
 def _cache_offset(entry: Any | None) -> int:

@@ -41,6 +41,7 @@ agent-v2-probe-state = "local_llm_lab.probes.state_probe:main"
 agent-v2-probe-axis = "local_llm_lab.probes.assistant_axis:main"
 agent-v2-probe-patch = "local_llm_lab.probes.patch:main"
 agent-v2-jspace-sweep = "local_llm_lab.probes.jspace_sweep:main"
+agent-v2-state-swap = "local_llm_lab.probes.state_swap:main"
 
 [dependency-groups]
 dev = [

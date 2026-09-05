@@ -347,13 +347,19 @@ def cpu_stream():
         yield
 
 
-def make_tiny_hybrid_model():
+def make_tiny_hybrid_model(num_hidden_layers: int = 4):
     """A real ``mlx_lm`` Qwen3.5 text model at toy dimensions with random weights.
 
     Same block layout as the 4B in miniature -- ``full_attention_interval`` puts recurrent
     ``GatedDeltaNet`` blocks everywhere except the last of each group of four -- so
     ``make_cache`` returns the production mix of ``ArraysCache(size=2)`` and ``KVCache`` that
     EXP-002 runs over. No checkpoint is read and nothing is loaded; the weights are random.
+
+    ``num_hidden_layers`` defaults to one group of four, which has exactly one attention block
+    and it is the last. That is enough for every mask-shape question S1 and S2 ask, and it is
+    *not* enough for a question about information reaching the decision through attention: with
+    no attention block before the last, nothing an earlier position read can propagate. S3 asks
+    that question and passes eight.
     """
     from mlx_lm.models.qwen3_5 import TextModel, TextModelArgs
 
@@ -362,7 +368,7 @@ def make_tiny_hybrid_model():
         model_type="qwen3_5_text",
         hidden_size=16,
         intermediate_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=num_hidden_layers,
         num_attention_heads=2,
         num_key_value_heads=1,
         head_dim=8,
@@ -676,3 +682,60 @@ def test_cache_offset_refuses_to_default_a_missing_offset() -> None:
     for entry in (object(), type("Entry", (), {"offset": -1})(), type("E", (), {"offset": 1.0})()):
         with pytest.raises(ValueError):
             _cache_offset(entry)
+
+
+# ------------------------------- EXP-002 S3: the artifact records the route that actually ran
+#
+# Two mask forms exist by design and either can be correct at the scored step: the library's
+# own boolean array with the hidden columns ANDed to False, and the row built here when the
+# library answers ``None`` at a single token. They are different code paths with different
+# failure modes, so a reader of an arm-A result has to be told which one ran rather than left
+# to re-derive it. The same principle governs the spans: the artifact records the resolved
+# absolute column ranges the mask indexed, not the message boundaries they came from, because
+# those come apart exactly when something is wrong.
+
+
+def test_masks_record_the_route_and_the_resolved_spans_that_ran(cpu_stream) -> None:
+    """Both routes must name themselves, with the columns the mask actually used."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    cache = view.make_cache()
+    _run_cached(view, prefix, cache)
+    offset = cache[3].offset
+
+    multi: dict[str, object] = {}
+    view.masks(view.embed(_tiny_ids((2, 5, 6))), cache, hidden_spans=((2, 5),), record=multi)
+    assert multi["attention_mask_route"] == "library array, hidden columns ANDed"
+    assert multi["hidden_spans"] == ((2, 5),)
+    assert multi["query_tokens"] == 3
+    assert multi["cache_offset"] == offset
+    assert multi["attention_mask_shape"] == (3, offset + 3)
+
+    single: dict[str, object] = {}
+    view.masks(view.embed(_tiny_ids((4,))), cache, hidden_spans=((2, 5), (7, 8)), record=single)
+    assert single["attention_mask_route"] == "row constructed at a single step"
+    assert single["hidden_spans"] == ((2, 5), (7, 8))
+    assert single["attention_mask_shape"] == (1, offset + 1)
+
+
+def test_masks_record_the_default_route_when_no_span_is_hidden(cpu_stream) -> None:
+    """A record that only ever fills in on the span route could not report arm B's forward."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    cache = view.make_cache()
+    record: dict[str, object] = {}
+
+    view.masks(view.embed(_tiny_ids((3, 1, 4, 6))), cache, record=record)
+    assert record["attention_mask_route"] == "model helper, unmodified"
+    assert record["hidden_spans"] == ()
+
+
+def test_cached_logits_carry_the_record_out_of_the_scored_forward(cpu_stream) -> None:
+    """S3 scores through ``cached_logits`` alone, so the record has to survive that call."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    cache = view.make_cache()
+    view.cached_logits(_tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9)), cache)
+    record: dict[str, object] = {}
+
+    view.cached_logits(_tiny_ids((4,)), cache, hidden_spans=((2, 6),), record=record)
+    assert record["attention_mask_route"] == "row constructed at a single step"
+    assert record["hidden_spans"] == ((2, 6),)
