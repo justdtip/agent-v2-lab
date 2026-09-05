@@ -918,15 +918,36 @@ def _validation_losses(output: Path) -> dict[int, float]:
     return losses
 
 
-def _counts(summary: dict[str, Any], name: str, fallback: tuple[str, str]) -> tuple[int, int]:
+def _counts(
+    summary: dict[str, Any], name: str, fallback: tuple[str, str] | None
+) -> tuple[int, int]:
+    """Exact numerator and denominator for one rate, from ``rate_counts`` or a flat pair.
+
+    ``fallback`` names the pre-``rate_counts`` keys carrying the same two numbers, for the
+    evaluation JSONs written before that block existed. ``None`` means no such pair was ever
+    written: the artifact must carry ``rate_counts`` or it is not one this can score.
+    """
     record = summary.get("rate_counts", {}).get(name, {})
     if isinstance(record, dict) and {"numerator", "denominator"} <= record.keys():
         return (int(record["numerator"]), int(record["denominator"]))
+    if fallback is None:
+        raise ValueError(
+            f"evaluation summary carries no rate_counts[{name!r}] and no flat equivalent "
+            "was ever written; refusing to score a checkpoint on counts it does not have"
+        )
     return (int(summary[fallback[0]]), int(summary[fallback[1]]))
 
 
 def _selection_components(summaries: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate screen cells from exact counts so ranking never uses rounded rates."""
+    """Aggregate screen cells from exact counts so ranking never uses rounded rates.
+
+    A summary with no ``by_family`` raises rather than scoring zero. ``family_macro_success``
+    is the FIRST key :func:`_selection_key` compares on, so a block one level from where
+    ``summarize`` writes it would give every checkpoint the same 0.0, drop the comparison
+    through to micro success, and leave ``selection.json`` recording a macro-first
+    ``criterion`` for a ranking that never used it. The recorded criterion and the comparison
+    actually made must not be able to disagree.
+    """
     success = [0, 0]
     clean = [0, 0]
     valid = [0, 0]
@@ -935,12 +956,20 @@ def _selection_components(summaries: list[dict[str, Any]]) -> dict[str, Any]:
         for target, source, fallback in (
             (success, "success", ("successes", "tasks")),
             (clean, "clean", ("clean_successes", "tasks")),
-            (valid, "valid_actions", ("valid_turns", "turns")),
+            # No flat fallback: ``summarize`` has never written ``valid_turns``/``turns`` at
+            # the top level, and no evaluation JSON under outputs/ carries either, so the
+            # pair named here before raised KeyError on exactly the legacy files it was for.
+            (valid, "valid_actions", None),
         ):
             numerator, denominator = _counts(summary, source, fallback)
             target[0] += numerator
             target[1] += denominator
-        for family, stats in summary.get("by_family", {}).items():
+        if "by_family" not in summary:
+            raise ValueError(
+                "evaluation summary carries no by_family block; refusing to rank checkpoints "
+                "on a family macro success of zero while recording a macro-first criterion"
+            )
+        for family, stats in summary["by_family"].items():
             bucket = families.setdefault(str(family), [0, 0])
             bucket[0] += int(stats["successes"])
             bucket[1] += int(stats["tasks"])

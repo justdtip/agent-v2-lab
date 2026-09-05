@@ -722,14 +722,29 @@ def _refit_capture(*, data_seed: int = 20260902) -> Any:
     return dataset
 
 
-def _refit_baseline() -> dict[str, Any]:
-    """The baseline a refit is measured against, produced by the reanalysis itself."""
+def _refit_baseline(**overrides: Any) -> dict[str, Any]:
+    """The baseline a refit is measured against, produced by the reanalysis itself.
+
+    ``overrides`` reach ``reanalyse_dataset``'s own fit constants, so a test can prove the
+    reader takes the writer's numbers rather than defaults that happen to agree with them.
+    """
     return state_probe.reanalyse_dataset(
         _refit_capture(),
         split_seeds=_REFIT_SPLIT_SEEDS,
         bootstrap_resamples=_REFIT_RESAMPLES,
         data_seed=20260902,
+        **overrides,
     )
+
+
+def _refit_baseline_json(**overrides: Any) -> dict[str, Any]:
+    """The baseline as ``refit-bf16`` READS it: the writer's output, through a JSON round trip.
+
+    R38 (issue #70): ``_refit_baseline`` already comes from ``reanalyse_dataset``, but the CLI
+    hands ``baseline_reanalysis_parameters`` a ``json.loads`` of a file, so a tuple that
+    survives in memory and becomes a list on disk would be invisible to a test fed the dict.
+    """
+    return json.loads(_canonical(_refit_baseline(**overrides)))
 
 
 def _canonical(payload: Any) -> str:
@@ -788,6 +803,83 @@ def test_bfloat16_rounding_helper_matches_the_mlx_cast_bitwise_on_a_random_array
 
     assert np.array_equal(rounded.view(np.uint32), expected.view(np.uint32))
     assert np.array_equal(state_probe._round_to_bfloat16(rounded), rounded)
+
+
+def test_baseline_parameters_read_every_key_at_the_level_the_reanalysis_writes_it() -> None:
+    """R38 on the refit's baseline reader (#70): non-default constants, so no default can pass.
+
+    ``reanalyse_dataset`` is asked for a fit nothing defaults to. Had the reader kept its old
+    ``fit.get(..., 10.0)`` fallbacks, every one of these three would have come back as the
+    default and looked perfectly reasonable, which is exactly the failure R38 is about.
+    """
+    baseline = _refit_baseline_json(ridge_alpha=7.5, logistic_l2=0.25, logistic_steps=11)
+
+    parameters = state_probe.baseline_reanalysis_parameters(baseline)
+
+    assert parameters == {
+        "split_seeds": _REFIT_SPLIT_SEEDS,
+        "bootstrap_resamples": _REFIT_RESAMPLES,
+        "data_seed": 20260902,
+        "generator_version": baseline["metadata"]["generator_version"],
+        "ridge_alpha": 7.5,
+        "logistic_l2": 0.25,
+        "logistic_steps": 11,
+    }
+    # The seeds survive the JSON round trip as a list and are returned as a tuple, which is
+    # the one shape difference between the record in memory and the record on disk.
+    assert baseline["metadata"]["split_seeds"] == list(_REFIT_SPLIT_SEEDS)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("metadata",),
+        ("metadata", "split_seeds"),
+        ("metadata", "bootstrap_resamples"),
+        ("metadata", "data_seed"),
+        ("metadata", "fit"),
+        ("metadata", "fit", "ridge_alpha"),
+        ("metadata", "fit", "logistic_l2"),
+        ("metadata", "fit", "logistic_steps"),
+    ],
+)
+def test_baseline_parameters_refuse_a_key_that_moved_off_its_level(path: tuple[str, ...]) -> None:
+    """R38 step four: every required key renamed in turn, in the writer's own output.
+
+    ``fit`` and its three constants join the seeds here. They used to fall back to
+    ``reanalyse_dataset``'s defaults for a class of baseline that has never existed -- the
+    ``fit`` block landed in the same commit as the writer -- so a moved block refitted at the
+    defaults and reported the comparison as if it had matched the baseline's own constants.
+    """
+    baseline = _refit_baseline_json(ridge_alpha=7.5, logistic_l2=0.25, logistic_steps=11)
+    parent = baseline
+    for key in path[:-1]:
+        parent = parent[key]
+    parent[f"moved_{path[-1]}"] = parent.pop(path[-1])
+
+    with pytest.raises(ValueError, match="refusing to guess"):
+        state_probe.baseline_reanalysis_parameters(baseline)
+
+
+def test_baseline_parameters_keep_generator_version_soft_for_the_ratified_baseline() -> None:
+    """The one soft read that has a real subject, so it is pinned rather than tightened.
+
+    ``state-base-mix.reanalysis.json`` -- the ratified P2 baseline every refit is measured
+    against -- predates R23 and records no ``generator_version``. The refit binds one from
+    ``--generator-version`` in that case and refuses a conflicting one, which is the branch
+    this softness exists to reach; tightening it would refuse the only baseline on disk.
+    """
+    baseline = _refit_baseline_json()
+    assert baseline["metadata"]["generator_version"] is not None
+
+    baseline["metadata"]["moved_generator_version"] = baseline["metadata"].pop("generator_version")
+
+    parameters = state_probe.baseline_reanalysis_parameters(baseline)
+
+    assert parameters["generator_version"] is None
+    # Nothing else about the record changes, which is why the CLI must supply the version
+    # rather than this read reporting a problem.
+    assert parameters["data_seed"] == 20260902
 
 
 def test_refit_without_rounding_reproduces_the_baseline_exactly(tmp_path) -> None:

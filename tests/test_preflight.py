@@ -191,6 +191,18 @@ class _NativeDivergentView(_View):
         return super().diagnostic_native_final_residual(ids) + 0.5
 
 
+class _NativeDivergentHybridView(_HybridView):
+    """The same structural defect on the hybrid, so only the residual gate differs.
+
+    ``_complete_artifact`` uses this for the failed-view case: the recurrence blocks are still
+    discoverable, so the training footprint comes out exactly as it does for the passing
+    artifact and the only thing the training consumer sees change is the evidence it ignores.
+    """
+
+    def diagnostic_native_final_residual(self, ids: np.ndarray) -> np.ndarray:
+        return super().diagnostic_native_final_residual(ids) + 0.5
+
+
 class _RecordingPreflightView(_View):
     """A full preflight view that records whether the loader's own instance did the work."""
 
@@ -318,32 +330,47 @@ def _resolved(spec: ModelSpec) -> ResolvedSpec:
 
 
 def _complete_artifact(
+    tmp_path: Path,
     *,
-    passed: bool = True,
     residual_passed: bool = True,
-    footprint: dict[str, object] | None = None,
+    footprint: str = "fits",
 ) -> dict[str, object]:
-    # The default footprint is a computed estimate that fits, which is what the training
-    # consumer requires: every other case here then fails for the reason it names rather
-    # than for a footprint that was never run.
-    if footprint is None:
-        footprint = {"passed": True, "refused": False, "skipped": False}
-    return {
-        "schema_version": 3,
-        "model_name": "fake-model",
-        "hf_id": "org/fake-model",
-        "snapshot_revision": "current",
-        "passed": passed,
-        "memory": {"within_budget": True},
-        "thinking_prompts": [
-            {"mode": mode, "prompt": f"{mode}-prompt", "token_count": 1}
-            for mode in ("unsupported", "off", "inference", "trained")
-        ],
-        "lora": {"keys": ["layers.0.q_proj"], "trainable_parameters": 1},
-        "residual_equivalence": {"passed": residual_passed},
-        "jvp": {"finite": True},
-        "training_footprint": footprint,
-    }
+    """The artifact ``require_preflight`` reads, produced by ``run_preflight`` (R38, issue #70).
+
+    This used to be a dict laid out from memory, which certifies its author's belief about the
+    preflight artifact rather than the artifact -- and this file's sibling reader of the same
+    artifact, ``state_probe.preflight_precision_block``, is one of the two defects the R38
+    audit has found, so this shape has already proved able to mislead somebody. Every key below
+    now comes from the writer, at the level and under the name the writer puts it.
+
+    ``footprint`` names one of the four blocks ``_training_footprint`` can produce, since the
+    block is computed rather than supplied: a fitting estimate, one over the budget, one
+    skipped for want of a row count, one refusing an unmeasured recurrence form. The
+    ``passed`` flag the hand-made version took separately is gone -- ``run_preflight`` derives
+    the report's ``passed`` from the residual, JVP and memory evidence, so ``passed=True``
+    beside ``residual_passed=False`` was a combination no writer can emit.
+
+    The revision is ``"current"`` because every caller reads with
+    ``revision_reader=lambda spec: "current"``; a mismatch there is its own rejection.
+    """
+    view = _HybridView() if residual_passed else _NativeDivergentHybridView()
+    # Budget 1.0 GiB still admits the model itself, so an over-budget block fails for the
+    # training peak alone rather than dragging ``memory.within_budget`` down with it.
+    spec = _spec(memory_budget_gib=1.0 if footprint == "over_budget" else 22.0)
+    overrides: dict[str, object] = {"revision_reader": lambda given: "current"}
+    if footprint != "skipped":
+        # A row count is what a footprint is skipped for want of, so every other case needs one.
+        overrides |= {"max_row_tokens": 997, "gated_delta_chunk": 64}
+    if footprint == "refused":
+        # A recurrence form the calibration lane never measured, refused by name.
+        overrides["gated_delta_mode"] = "fused"
+    if residual_passed:
+        return _preflight(spec, view, tmp_path, **overrides)
+    # A failed model-level gate still writes its evidence and then exits, so the artifact a
+    # training consumer may legitimately read is the one the raising command left behind.
+    with pytest.raises(SystemExit, match="preflight failed"):
+        _preflight(spec, view, tmp_path, **overrides)
+    return json.loads((tmp_path / "fake-model.json").read_text(encoding="utf-8"))
 
 
 def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> None:
@@ -884,8 +911,7 @@ def test_require_preflight_rejects_invalid_artifacts_before_actions(
 
 def test_require_preflight_accepts_current_evidence_and_skip_avoids_reads(tmp_path: Path) -> None:
     """A valid artifact permits the caller, while skip bypasses artifact and cache inspection."""
-    artifact = _complete_artifact()
-    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    artifact = _complete_artifact(tmp_path)
     assert (
         require_preflight(_spec(), output_root=tmp_path, revision_reader=lambda spec: "current")
         == artifact
@@ -902,8 +928,7 @@ def test_require_preflight_allows_training_evidence_without_view_equivalence(
     tmp_path: Path,
 ) -> None:
     """Training may use sufficient non-view evidence while the default view consumer fails."""
-    artifact = _complete_artifact(passed=False, residual_passed=False)
-    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    artifact = _complete_artifact(tmp_path, residual_passed=False)
 
     with pytest.raises(SystemExit, match="view evidence"):
         require_preflight(_spec(), output_root=tmp_path, revision_reader=lambda spec: "current")
@@ -935,7 +960,7 @@ def test_require_preflight_rejects_malformed_consumer_evidence(
     tmp_path: Path, consumer: str, mutate
 ) -> None:
     """Each consumer must reject a missing prerequisite before it can invoke an action."""
-    artifact = _complete_artifact()
+    artifact = _complete_artifact(tmp_path)
     mutate(artifact)
     (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
     action: list[str] = []
@@ -944,6 +969,67 @@ def test_require_preflight_rejects_malformed_consumer_evidence(
         require_preflight(
             _spec(),
             consumer=consumer,
+            output_root=tmp_path,
+            revision_reader=lambda spec: "current",
+            action=lambda: action.append("loaded"),
+        )
+    assert action == []
+
+
+@pytest.mark.parametrize(
+    ("path", "consumer", "message"),
+    [
+        # A path is walked with dict keys and list indices alike; the last element is renamed.
+        (("schema_version",), "view", "schema version"),
+        (("model_name",), "view", "model name"),
+        (("hf_id",), "view", "hf_id"),
+        (("snapshot_revision",), "view", "snapshot revision"),
+        (("passed",), "view", "view evidence"),
+        (("memory",), "view", "training evidence"),
+        (("memory", "within_budget"), "view", "training evidence"),
+        (("thinking_prompts",), "view", "training evidence"),
+        # Inside one prompt entry: all four modes, the text and its token count are required.
+        (("thinking_prompts", 0, "mode"), "view", "training evidence"),
+        (("thinking_prompts", 0, "prompt"), "view", "training evidence"),
+        (("thinking_prompts", 0, "token_count"), "view", "training evidence"),
+        (("lora",), "view", "training evidence"),
+        (("lora", "keys"), "view", "training evidence"),
+        (("lora", "trainable_parameters"), "view", "training evidence"),
+        (("residual_equivalence",), "view", "view evidence"),
+        (("residual_equivalence", "passed"), "view", "view evidence"),
+        (("jvp",), "view", "view evidence"),
+        (("jvp", "finite"), "view", "view evidence"),
+        (("training_footprint",), "training", "no training footprint block"),
+        (("training_footprint", "passed"), "training", "does not fit the memory budget"),
+    ],
+)
+def test_require_preflight_goes_red_when_any_key_it_reads_moves_off_its_level(
+    tmp_path: Path, path: tuple[str | int, ...], consumer: str, message: str
+) -> None:
+    """R38 step four: a rebuilt fixture that merely still passes proves nothing (issue #70).
+
+    Every key this reader reaches for is renamed in turn, in the artifact ``run_preflight``
+    wrote, and the read must fail. Renaming rather than deleting is deliberate: it is the
+    move-one-level mistake both defects this audit found were made of, and the value stays in
+    the file so nothing else about the artifact looks wrong.
+
+    ``skipped`` and ``refused`` are absent from the table because they are not conditions the
+    reader requires: a moved ``refused`` falls through to the ``skipped`` clause and a moved
+    ``skipped`` to ``passed``, both of which still refuse the run. They are covered by the
+    test that reads a refused block back from the writer instead.
+    """
+    artifact = _complete_artifact(tmp_path)
+    parent: dict = artifact
+    for key in path[:-1]:
+        parent = parent[key]
+    parent[f"moved_{path[-1]}"] = parent.pop(path[-1])
+    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    action: list[str] = []
+
+    with pytest.raises(SystemExit, match=message):
+        require_preflight(
+            _spec(),
+            consumer=consumer,  # type: ignore[arg-type]
             output_root=tmp_path,
             revision_reader=lambda spec: "current",
             action=lambda: action.append("loaded"),
@@ -1304,8 +1390,7 @@ def test_a_failed_footprint_stops_training_and_leaves_the_view_consumer_alone(
     through a training step and never reaches ``max_seq_length``, so a training peak it will
     never allocate is not evidence against it.
     """
-    artifact = _complete_artifact(footprint={"passed": False, "refused": False, "skipped": False})
-    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    artifact = _complete_artifact(tmp_path, footprint="over_budget")
     action: list[str] = []
 
     with pytest.raises(SystemExit, match="training footprint"):
@@ -1330,15 +1415,10 @@ def test_a_skipped_footprint_serves_a_view_consumer_and_stops_training(tmp_path:
     training run must not clear the gate on an estimate that was never computed, and the
     rejection has to say which input was missing.
     """
-    artifact = _complete_artifact(
-        footprint={
-            "passed": True,
-            "refused": False,
-            "skipped": True,
-            "skip_reason": "no training row token count; pass --data <dir> or --max-row-tokens",
-        }
-    )
-    (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
+    artifact = _complete_artifact(tmp_path, footprint="skipped")
+    # The reason is the writer's own wording, not a sentence retyped here to match the assertion.
+    assert artifact["training_footprint"]["skipped"] is True
+    assert "--max-row-tokens" in artifact["training_footprint"]["skip_reason"]
     action: list[str] = []
 
     assert (
@@ -1361,19 +1441,22 @@ def test_a_skipped_footprint_serves_a_view_consumer_and_stops_training(tmp_path:
     [
         # A refused block returns before the line that clears ``skipped``, so a guard that read
         # ``skipped`` first would blame a missing row count for an unmeasured recurrence form.
-        ({"passed": False, "refused": True, "skipped": True}, "recurrence form"),
+        # Built through the writer, which is what shows the block really does leave ``skipped``
+        # standing on a refusal -- the assertion below reads it back rather than asserting it.
+        ("refused", "recurrence form"),
         (None, "no training footprint block"),
     ],
 )
 def test_training_says_which_footprint_it_cannot_accept_and_view_reads_none_of_it(
-    tmp_path: Path, footprint: dict[str, object] | None, expected: str
+    tmp_path: Path, footprint: str | None, expected: str
 ) -> None:
     """The reason must name the real defect, and the view consumer must not consult the block."""
-    artifact = _complete_artifact()
+    artifact = _complete_artifact(tmp_path, footprint=footprint or "fits")
     if footprint is None:
         del artifact["training_footprint"]
     else:
-        artifact["training_footprint"] = footprint
+        block = artifact["training_footprint"]
+        assert (block["refused"], block["skipped"], block["passed"]) == (True, True, False)
     (tmp_path / "fake-model.json").write_text(json.dumps(artifact), encoding="utf-8")
 
     with pytest.raises(SystemExit, match=expected):

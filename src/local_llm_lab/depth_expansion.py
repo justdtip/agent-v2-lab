@@ -5,6 +5,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+#: Recipe versions this module knows how to apply. A ``version`` field exists to say that a
+#: recipe is NOT one of these, so it is compared rather than merely required (#75): reading it
+#: and never checking it makes it a comment with a type annotation.
+SUPPORTED_VERSIONS: tuple[int, ...] = (1,)
+
 
 @dataclass(frozen=True)
 class ExpansionSpec:
@@ -23,6 +28,15 @@ class ExpansionSpec:
             raise ValueError("layer indices must be non-negative")
         if self.initialization != "copied_identity":
             raise ValueError(f"unsupported initialization: {self.initialization}")
+        # Validated here rather than in ``load`` so a spec constructed directly cannot bypass
+        # the check that a file cannot; ``load`` builds through this constructor, so it is
+        # covered by construction. An older version is refused rather than migrated: a
+        # migration that does not exist must not be implied by silence (#75).
+        if self.version not in SUPPORTED_VERSIONS:
+            raise ValueError(
+                f"unsupported expansion recipe version {self.version!r}; "
+                f"this code applies {list(SUPPORTED_VERSIONS)}"
+            )
 
     @classmethod
     def evenly_spaced(cls, base_layers: int, added_layers: int) -> ExpansionSpec:
@@ -36,11 +50,24 @@ class ExpansionSpec:
 
     @classmethod
     def load(cls, path: Path) -> ExpansionSpec:
+        """Read back what :meth:`save` wrote, requiring all three fields it always writes.
+
+        R38 (issue #70): ``initialization`` and ``version`` used to be read with the dataclass
+        defaults. ``save`` serialises through ``asdict``, so it has emitted all three since the
+        file's first commit and no spec lacking them has ever been written -- the fallbacks had
+        no subjects. They were not harmless either: the defaults are the only values these
+        fields have ever taken, so a key one level from where ``save`` puts it read back as
+        exactly the right answer, and ``version`` is the field whose whole job is to say that a
+        recipe is NOT the one this code knows how to apply.
+        """
         payload = json.loads(path.read_text(encoding="utf-8"))
+        missing = {"insertion_after", "initialization", "version"} - payload.keys()
+        if missing:
+            raise ValueError(f"{path}: expansion spec is missing {sorted(missing)}")
         return cls(
             insertion_after=tuple(payload["insertion_after"]),
-            initialization=payload.get("initialization", "copied_identity"),
-            version=payload.get("version", 1),
+            initialization=payload["initialization"],
+            version=payload["version"],
         )
 
     def save(self, path: Path) -> None:

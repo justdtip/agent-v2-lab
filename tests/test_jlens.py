@@ -430,19 +430,70 @@ class _BroadcastView(_View):
         return lambda value: mx.cumsum(value.astype(mx.float32), axis=1)
 
 
+def _preflight_artifact(tmp_path, *, forward_finite: bool):
+    """Write the preflight artifact ``resolve_jvp_method`` reads, through ``run_preflight``.
+
+    R38 (issue #70): the reader's fixture used to be a one-key dict typed out here, which
+    certifies this file's belief about the artifact rather than the artifact. It is built by
+    the writer now, and the method is not chosen -- ``run_preflight`` tries forward mode and
+    records whichever survived, so ``forward_finite=False`` makes it establish
+    ``finite_difference`` the way SPEC-001 §2 says it does, instead of the string being typed
+    in and asserted back. Shares ``test_preflight``'s fakes for the same reason: one set of
+    stand-ins, so a change to what ``run_preflight`` needs moves both files at once.
+
+    No model is loaded and no MLX device is touched: the array runtime is numpy.
+    """
+    from test_preflight import _preflight, _spec, _View
+
+    def jvp(view, layer, primal, tangent, *, method: str):
+        del view, layer, tangent
+        finite = forward_finite or method == "finite_difference"
+        return np.ones_like(primal) if finite else np.full_like(primal, np.nan)
+
+    spec = _spec(memory_budget_gib=22.0)
+    return spec, _preflight(spec, _View(), tmp_path, jvp=jvp)
+
+
 def test_jvp_method_defaults_to_the_method_the_preflight_recorded(tmp_path) -> None:
     """R18a/EXP-001 §3.2: the established method, not the literal ``forward``."""
-    spec = SimpleNamespace(name="fake-model")
-    (tmp_path / "fake-model.json").write_text(
-        json.dumps({"jvp": {"finite": True, "layer": 4, "method": "finite_difference"}}),
-        encoding="utf-8",
-    )
+    spec, report = _preflight_artifact(tmp_path, forward_finite=False)
+    assert report["jvp"] == {"finite": True, "layer": 2, "method": "finite_difference"}
 
     assert jlens.resolve_jvp_method(None, spec, output_root=tmp_path) == (
         "finite_difference",
         "preflight",
     )
     assert jlens.resolve_jvp_method("forward", spec, output_root=tmp_path) == ("forward", "cli")
+
+
+def test_jvp_method_reads_forward_back_when_that_is_what_survived(tmp_path) -> None:
+    """The other branch of the same writer, so the reader is not pinned to one literal."""
+    spec, report = _preflight_artifact(tmp_path, forward_finite=True)
+    assert report["jvp"]["method"] == "forward"
+
+    assert jlens.resolve_jvp_method(None, spec, output_root=tmp_path) == ("forward", "preflight")
+
+
+@pytest.mark.parametrize("path", [("jvp",), ("jvp", "method")])
+def test_jvp_method_fails_closed_when_the_key_it_reads_moves_off_its_level(tmp_path, path) -> None:
+    """R38 step four: a rebuilt fixture that merely still passes proves nothing (issue #70).
+
+    Both keys are renamed in the artifact the writer produced -- the block, then the field
+    inside it. Renaming rather than deleting is the move-one-level mistake both defects this
+    audit found were made of, and the value stays in the file so nothing else looks wrong.
+    Neither may resolve to ``forward``, which on the hybrid is the unsupported method.
+    """
+    spec, _ = _preflight_artifact(tmp_path, forward_finite=False)
+    path_json = tmp_path / "fake-model.json"
+    record = json.loads(path_json.read_text(encoding="utf-8"))
+    parent = record
+    for key in path[:-1]:
+        parent = parent[key]
+    parent[f"moved_{path[-1]}"] = parent.pop(path[-1])
+    path_json.write_text(json.dumps(record), encoding="utf-8")
+
+    with pytest.raises(jlens.JvpMethodUnresolved):
+        jlens.resolve_jvp_method(None, spec, output_root=tmp_path)
 
 
 def test_jvp_method_without_a_flag_or_a_preflight_record_fails_closed(tmp_path) -> None:

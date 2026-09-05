@@ -136,6 +136,14 @@ def require_dataset_manifest(directory: Path) -> Path:
     refusal has to live on this side. Half-written is unusable downstream and overwritable
     upstream, which is the pair the ruling asks for.
 
+    PRESENCE ONLY. This reads whether the file exists and never opens it, so an empty object,
+    an unparseable byte or a manifest describing some other dataset all pass. That is the whole
+    contract, and test fixtures across the suite lean on it: several stand up a guarded
+    directory with a hand-written ``manifest.json`` holding ``{}`` beside rows that came from a
+    real writer. A change that starts reading the CONTENTS here breaks every one of them, which
+    is the point of saying so — those fixtures must then be rebuilt through a writer that emits
+    whatever the new check requires, not padded until the check passes.
+
     Returns the manifest path, so a caller that goes on to read it need not spell it twice.
     """
     directory = Path(directory)

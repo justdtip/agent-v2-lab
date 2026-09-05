@@ -154,6 +154,82 @@ def test_stage_select_aggregates_two_cells_and_writes_deterministic_metadata(
     assert first["checkpoints"][0]["val_loss"] == pytest.approx(0.2)
 
 
+def _write_metrics(output: Path) -> None:
+    """Drive the real ``metrics.jsonl`` writer over one train report and one validation report.
+
+    R38 (issue #70): ``_validation_losses`` is the fifteenth on-disk reader in ``src/`` and the
+    only one issue #70's table of fourteen leaves out, so its fixtures were still hand-typed
+    dicts. ``_TrainingMetrics`` is the writer, in this same module, and its docstring already
+    says the keys and the ``iteration + 1`` validation-step convention are frozen because this
+    reader depends on them -- so the file below is produced rather than described.
+
+    No model and no trainer: the callbacks take plain metric dicts, which is exactly what
+    mlx-lm hands them.
+    """
+    from local_llm_lab.runlog import HealthThresholds, RunLog, TrainingHealth
+
+    with (
+        (output / "metrics.jsonl").open("w", encoding="utf-8") as handle,
+        RunLog.open(output, name="test-metrics") as log,
+    ):
+        metrics = cli._TrainingMetrics(
+            handle,
+            0.0,
+            log=log,
+            health=TrainingHealth(HealthThresholds(), iters=200),
+            iters=200,
+            budget_gib=None,
+        )
+        metrics.on_train_loss_report({"iteration": 100, "train_loss": 1.0, "trained_tokens": 8})
+        metrics.on_val_loss_report({"iteration": 99, "val_loss": 0.2})
+        metrics.on_val_loss_report({"iteration": 199, "val_loss": 0.1})
+
+
+def test_validation_losses_read_the_records_the_training_writer_actually_emits(
+    tmp_path: Path,
+) -> None:
+    """R38: the reader's contract with ``_TrainingMetrics``, checked against the writer."""
+    output = tmp_path / "run"
+    output.mkdir()
+    _write_metrics(output)
+
+    losses = cli._validation_losses(output)
+
+    # ``iteration + 1``: the validation record is stamped with the step whose checkpoint it
+    # belongs to, which is what makes these keys line up with ``checkpoint_dirs``.
+    assert losses == {100: 0.2, 200: 0.1}
+    records = [
+        json.loads(line)
+        for line in (output / "metrics.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    fields = {"step", "train_loss", "val_loss", "tokens", "elapsed"}
+    assert all(record.keys() == fields for record in records)
+
+
+@pytest.mark.parametrize("key", ["step", "train_loss", "val_loss", "tokens", "elapsed"])
+def test_validation_losses_refuse_a_metrics_field_that_moved_off_its_name(
+    tmp_path: Path, key: str
+) -> None:
+    """R38 step four: the reader demands the writer's exact field set, so every rename is red.
+
+    An exact set rather than a subset is what makes this reader safe where the others needed
+    fixing: there is no soft default to turn a moved key into a plausible number. The second
+    writer of a file by this name, ``train_expanded.JsonlMetrics``, emits ``stage``/``kind``
+    records instead, and this is the check that refuses one rather than reading half of it.
+    """
+    output = tmp_path / "run"
+    output.mkdir()
+    _write_metrics(output)
+    path = output / "metrics.jsonl"
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    for record in records:
+        record[f"moved_{key}"] = record.pop(key)
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid metrics fields"):
+        cli._validation_losses(output)
+
+
 def test_validation_losses_ignores_train_rows_and_rejects_malformed_metrics(tmp_path: Path) -> None:
     output = tmp_path / "run"
     output.mkdir()
@@ -224,39 +300,52 @@ def test_selection_components_read_every_key_at_the_level_summarize_writes_it() 
     assert components["valid_action_rate"] == pytest.approx(1.0)
 
 
-def test_selection_components_score_zero_macro_when_by_family_moves_off_its_level() -> None:
-    """Reported, not changed: the softest read here feeds the FIRST ranking key.
+def test_selection_components_refuse_a_summary_whose_by_family_moved_off_its_level() -> None:
+    """Ruled after slice 3 reported it: the softest read here fed the FIRST ranking key.
 
-    ``by_family`` is taken with ``.get(..., {})``, so a bucket one level from where
-    ``summarize`` puts it is not refused -- every checkpoint scores ``family_macro_success``
-    0.0, the comparison silently falls through to micro success, and ``selection.json`` still
-    records a macro-first ``criterion`` string. That is a plausible artifact rather than an
-    error, which is the case R38 exists to surface. Tightening it is a schema ruling about the
-    evaluation summary, not something this reader settles: the sibling probe readers of the
-    same artifact are equally permissive about it.
+    ``by_family`` used to be taken with ``.get(..., {})``, so a bucket one level from where
+    ``summarize`` puts it was not refused -- every checkpoint scored ``family_macro_success``
+    0.0, the comparison fell through to micro success, and ``selection.json`` still recorded a
+    macro-first ``criterion`` string. A plausible artifact rather than an error, which is the
+    case R38 exists to surface. It now raises, so the recorded criterion can never disagree
+    with the comparison actually made.
     """
     summary = _summarized(3, 4)
     assert cli._selection_components([summary])["family_macro_success"] == pytest.approx(0.75)
 
     summary["moved_by_family"] = summary.pop("by_family")
 
-    relevelled = cli._selection_components([summary])
-
-    assert relevelled["family_macro_success"] == 0.0
-    assert relevelled["by_family"] == {}
-    # The counted components are untouched, so nothing else looks wrong about the row.
-    assert relevelled["micro_success"] == pytest.approx(0.75)
+    with pytest.raises(ValueError, match="by_family"):
+        cli._selection_components([summary])
 
 
-def test_selection_components_legacy_fallback_names_counts_no_writer_has_ever_emitted() -> None:
-    """The dead half of ``_counts``, found by taking its fallback names to the writer.
+def test_selection_components_keep_the_two_flat_fallbacks_real_artifacts_resolve_against() -> None:
+    """The kept half of ``_counts``: both named pairs exist in every evaluation JSON on disk.
 
-    ``_counts`` reads ``rate_counts[name]`` and falls back to a flat pre-``rate_counts``
-    layout. Two of the three fallbacks name keys ``summarize`` still emits (``successes``/
-    ``tasks`` and ``clean_successes``/``tasks``) and resolve to the same numbers. The third
-    names ``valid_turns``/``turns``, which ``summarize`` does not write and which appear in
-    none of the eighteen evaluation JSONs under outputs/ -- so on exactly the artifacts the
-    fallback exists for, it raises. Loud, not a wrong answer, but dead where it was needed.
+    All eighteen evaluation artifacts under outputs/ predate ``rate_counts`` and carry
+    ``successes``, ``tasks`` and ``clean_successes`` at the top of their summary, so blinding
+    those two entries must leave the aggregate unchanged. Blinding is done to a summary the
+    real writer produced rather than to a dict typed from memory, so the pairs are checked
+    against the layout ``summarize`` actually emits.
+    """
+    summary = _summarized(3, 4)
+    expected = cli._selection_components([summary])
+
+    blinded = _summarized(3, 4)
+    del blinded["rate_counts"]["success"], blinded["rate_counts"]["clean"]
+
+    assert cli._selection_components([blinded]) == expected
+    # The pair each fallback names, at the level it reads them: the legacy shape it is for.
+    assert {"successes", "tasks", "clean_successes"} <= blinded.keys()
+
+
+def test_selection_components_refuse_valid_actions_rather_than_name_a_dead_legacy_pair() -> None:
+    """The dead half of ``_counts``, removed after slice 3 found it by taking it to the writer.
+
+    The third fallback named ``valid_turns``/``turns``, which ``summarize`` does not write and
+    which appear in none of the eighteen evaluation JSONs under outputs/ -- so on exactly the
+    legacy artifacts it existed for it raised ``KeyError: 'valid_turns'``. It is gone, and the
+    missing block is now refused by name instead.
     """
     from local_llm_lab.pipeline.evaluate import summarize
     from local_llm_lab.pipeline.runner import Trajectory
@@ -264,11 +353,12 @@ def test_selection_components_legacy_fallback_names_counts_no_writer_has_ever_em
     written = summarize([Trajectory(task_id="t", family="read", variant="clean", label="x",
                                     prompt="p", verdict={"success": True}, turns=1, valid_turns=1)])
     assert "valid_turns" not in written and "turns" not in written
+    assert written["rate_counts"]["valid_actions"] == {"numerator": 1, "denominator": 1}
 
     summary = _summarized(3, 4)
     summary["moved_rate_counts"] = summary.pop("rate_counts")
 
-    with pytest.raises(KeyError, match="valid_turns"):
+    with pytest.raises(ValueError, match="valid_actions"):
         cli._selection_components([summary])
 
 

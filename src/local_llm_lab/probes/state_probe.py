@@ -4304,9 +4304,21 @@ def baseline_reanalysis_parameters(baseline: dict[str, Any]) -> dict[str, Any]:
     """The reanalysis parameters a saved reanalysis records, so a refit can repeat it exactly.
 
     Fail closed: a baseline that does not record a seed is not a baseline anything can be
-    compared against, so this refuses rather than substituting a default. The three fit
-    constants fall back to :func:`reanalyse_dataset`'s own defaults, which is what a baseline
-    written before the ``fit`` block existed used.
+    compared against, so this refuses rather than substituting a default.
+
+    The three fit constants are required for the same reason, corrected under R38 (issue #70).
+    They used to fall back to :func:`reanalyse_dataset`'s own defaults, justified as what a
+    baseline written before the ``fit`` block used -- but ``reanalyse_dataset`` and its ``fit``
+    block arrived in the same commit (f90578b) and this function a day later (eca116b), so no
+    baseline lacking the block has ever been written, and both reanalysis JSONs under outputs/
+    carry it. The fallback therefore had no subjects, and a ``fit`` block one level from where
+    the writer puts it would have refitted at 10.0/0.01/120 while reporting a comparison
+    against a baseline fitted at something else. Silently, which is worse than the loud
+    failure the seeds get.
+
+    ``generator_version`` stays soft, and is the one read here that genuinely needs to be: the
+    ratified ``state-base-mix.reanalysis.json`` predates R23 and records none, so the refit
+    binds it from ``--generator-version`` and refuses a conflict instead.
     """
     metadata = baseline.get("metadata")
     if not isinstance(metadata, dict):
@@ -4320,15 +4332,17 @@ def baseline_reanalysis_parameters(baseline: dict[str, Any]) -> dict[str, Any]:
     data_seed = metadata.get("data_seed")
     if not isinstance(data_seed, int) or isinstance(data_seed, bool):
         raise ValueError("baseline records no data_seed; refusing to guess it")
-    fit = metadata.get("fit") or {}
+    fit = metadata.get("fit")
+    if not isinstance(fit, dict) or not {"ridge_alpha", "logistic_l2", "logistic_steps"} <= fit.keys():
+        raise ValueError("baseline records no complete fit block; refusing to guess its constants")
     return {
         "split_seeds": tuple(int(value) for value in seeds),
         "bootstrap_resamples": int(resamples),
         "data_seed": int(data_seed),
         "generator_version": metadata.get("generator_version"),
-        "ridge_alpha": float(fit.get("ridge_alpha", 10.0)),
-        "logistic_l2": float(fit.get("logistic_l2", 0.01)),
-        "logistic_steps": int(fit.get("logistic_steps", 120)),
+        "ridge_alpha": float(fit["ridge_alpha"]),
+        "logistic_l2": float(fit["logistic_l2"]),
+        "logistic_steps": int(fit["logistic_steps"]),
     }
 
 
