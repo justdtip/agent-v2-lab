@@ -1,0 +1,58 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2566.74it/s]
+{"event": "loaded", "elapsed_s": 2.4, "layers": 32, "hidden": 2560, "vocab": 248320}
+{"event": "progress", "elapsed_s": 3.9, "block": 0, "kind": "recurrent", "heads_done": 32, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 4.7, "block": 1, "kind": "recurrent", "heads_done": 64, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 5.5, "block": 2, "kind": "recurrent", "heads_done": 96, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 6.0, "block": 3, "kind": "attention", "heads_done": 112, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 6.8, "block": 4, "kind": "recurrent", "heads_done": 144, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 7.6, "block": 5, "kind": "recurrent", "heads_done": 176, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 8.3, "block": 6, "kind": "recurrent", "heads_done": 208, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 8.8, "block": 7, "kind": "attention", "heads_done": 224, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 9.6, "block": 8, "kind": "recurrent", "heads_done": 256, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 10.4, "block": 9, "kind": "recurrent", "heads_done": 288, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 11.2, "block": 10, "kind": "recurrent", "heads_done": 320, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 11.6, "block": 11, "kind": "attention", "heads_done": 336, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 12.4, "block": 12, "kind": "recurrent", "heads_done": 368, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 13.2, "block": 13, "kind": "recurrent", "heads_done": 400, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 14.0, "block": 14, "kind": "recurrent", "heads_done": 432, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 14.5, "block": 15, "kind": "attention", "heads_done": 448, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 15.3, "block": 16, "kind": "recurrent", "heads_done": 480, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 16.1, "block": 17, "kind": "recurrent", "heads_done": 512, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 16.9, "block": 18, "kind": "recurrent", "heads_done": 544, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 17.3, "block": 19, "kind": "attention", "heads_done": 560, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 18.1, "block": 20, "kind": "recurrent", "heads_done": 592, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 18.9, "block": 21, "kind": "recurrent", "heads_done": 624, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 19.7, "block": 22, "kind": "recurrent", "heads_done": 656, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 20.2, "block": 23, "kind": "attention", "heads_done": 672, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 20.9, "block": 24, "kind": "recurrent", "heads_done": 704, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 21.7, "block": 25, "kind": "recurrent", "heads_done": 736, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 22.5, "block": 26, "kind": "recurrent", "heads_done": 768, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 23.0, "block": 27, "kind": "attention", "heads_done": 784, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 23.8, "block": 28, "kind": "recurrent", "heads_done": 816, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 24.6, "block": 29, "kind": "recurrent", "heads_done": 848, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 25.4, "block": 30, "kind": "recurrent", "heads_done": 880, "peak_gib": 5.99}
+{"event": "progress", "elapsed_s": 25.8, "block": 31, "kind": "attention", "heads_done": 896, "peak_gib": 5.99}
+{
+ "retrieval_heads_rank_among_128_attention": {
+  "b19_h2": 28,
+  "b23_h9": 17,
+  "b19_h12": 11,
+  "b27_h1": 114,
+  "b3_h15": 128,
+  "b19_h15": 12
+ },
+ "parameters": {
+  "NPOP": 2000,
+  "seed": 0,
+  "lens": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/deb40d2b-8582-408f-9668-d04785f882e8/scratchpad/jlens_hosted/Qwen3.5-4B_jacobian_lens_n1000.npz",
+  "checkpoint": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "selection_rule": "gain on J > both controls AND mrr on J > both controls; ordered by min margin",
+  "elapsed_s": 25.8
+ }
+}
+attention {'heads': 128, 'broadcast_J': 24, 'in_band_heads': 64, 'in_band_broadcast_J': 12, 'J_gain_median': 0.9261212581480461, 'J_rot_gain_median': 1.0024917629212826, 'MLP_gain_median': 0.9589623783640895, 'J_mrr_median': 0.17824022471904755, 'J_rot_mrr_median': 0.011154718231409788, 'MLP_mrr_median': 0.07628848031163216, 'random_mrr_median': 0.012773435562849045}
+  by layer: {4: (0.96, 0.112, 3), 8: (0.82, 0.631, 2), 12: (0.92, 0.652, 0), 16: (0.86, 0.35, 0), 20: (1.13, 0.445, 8), 24: (1.0, 0.219, 4), 28: (0.85, 0.098, 0), 32: (1.21, 0.017, 7)}
+  top 5: [(19, 0, 1.42, 0.664, 0.44), (31, 11, 1.54, 0.027, 0.24), (3, 4, 1.37, 0.1, 0.23), (31, 6, 1.19, 0.168, 0.18), (31, 5, 1.19, 0.019, 0.17)]
+recurrent {'heads': 768, 'broadcast_J': 112, 'in_band_heads': 128, 'in_band_broadcast_J': 36, 'J_gain_median': 0.977484300196334, 'J_rot_gain_median': 1.0005082093563908, 'MLP_gain_median': 1.0221314973606703, 'J_mrr_median': 0.006131314439699054, 'J_rot_mrr_median': 0.004275880288332701, 'MLP_mrr_median': 0.009521590080112219, 'random_mrr_median': 0.004469048697501421}
+  by layer: {1: (1.13, 0.004, 3), 2: (0.99, 0.005, 4), 3: (0.94, 0.004, 3), 5: (0.85, 0.005, 0), 6: (0.82, 0.005, 0), 7: (0.69, 0.007, 4), 9: (0.78, 0.005, 1), 10: (0.75, 0.006, 0), 11: (0.8, 0.008, 3), 13: (0.78, 0.007, 1), 14: (0.81, 0.005, 1), 15: (0.86, 0.005, 1), 17: (0.89, 0.006, 4), 18: (0.92, 0.006, 2), 19: (0.98, 0.009, 4), 21: (1.02, 0.01, 9), 22: (1.0, 0.008, 9), 23: (0.99, 0.01, 7), 25: (1.03, 0.012, 13), 26: (1.01, 0.007, 7), 27: (1.0, 0.006, 3), 29: (1.0, 0.008, 10), 30: (1.0, 0.006, 8), 31: (1.04, 0.008, 15)}
+  top 5: [(16, 10, 1.61, 0.048, 0.61), (18, 9, 1.51, 0.029, 0.48), (16, 12, 1.54, 0.044, 0.45), (18, 25, 1.36, 0.009, 0.39), (1, 5, 1.45, 0.008, 0.38)]

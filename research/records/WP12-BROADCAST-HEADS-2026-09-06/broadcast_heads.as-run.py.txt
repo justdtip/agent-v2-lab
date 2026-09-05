@@ -1,0 +1,123 @@
+"""WP12 stage 1: the paper's broadcast-head metrics (§4.3.2) on Qwen3.5-4B, from weights and the hosted lens.
+
+For every attention head (8 blocks x 16 query heads; GQA over 4 kv heads) the weight-only OV map
+M_h v = W_O[:, h] (W_V[kv(h)] v), a fixed linear map from residual to residual; this omits the
+attention pattern (by construction) and the block's sigmoid output gate. For every recurrent value
+path (24 blocks x 32 value heads) the weight-only composition M_h v = out_proj[:, h] (in_proj_v[h] v),
+which OMITS the causal conv1d, its silu, the gated-delta state and the gated RMSNorm before out_proj,
+all input-dependent: the two channels' columns are different objects and are reported apart.
+
+Populations at the block's input layer L = b (file key J{b-1}; layer L = residual after block L-1;
+the lens maps h -> J h so the direction for token w is J^T u_w with u_w the tied embedding row):
+J (2,000 sampled vocabulary tokens), J-rotated (the same vectors under one fixed random orthogonal
+rotation), MLP rows (2,000 down_proj output directions of the block before b), and isotropic random
+directions for normalisation. Metrics per head and population, as in the paper: gain = mean ||M v||
+over the population divided by the median ||M r|| over random unit r; label preservation = mean
+reciprocal rank of cos(M v_i, v_i) among {cos(M v_i, v_j)}_j, with the same on random directions.
+
+Selection rule, fixed in advance (the Head, WP12 amendment 1): no percentile. A head "broadcasts J"
+when its gain on J exceeds its gain on BOTH controls and its label preservation on J exceeds BOTH
+controls'; the count is reported as n of N per channel and the whole list is written ordered by the
+worse of the two J-minus-best-control margins (in units of the control's value)."""
+from __future__ import annotations
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO WP12 stage 1")
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; OUT.mkdir(exist_ok=True)
+NPOP = int(os.environ.get("NPOP", "2000")); SEED = 0
+LENS = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO.parent / "jlens_hosted" / "Qwen3.5-4B_jacobian_lens_n1000.npz"
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+T0 = time.time()
+spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None)
+lm = model.language_model; layers = lm.model.layers; H = view.hidden_size; V = view.vocab_size
+print(json.dumps({"event": "loaded", "elapsed_s": round(time.time() - T0, 1), "layers": len(layers), "hidden": H, "vocab": V}), flush=True)
+lens = np.load(LENS)
+def dense(linear):
+    """Weight as a float32 (out, in) matrix, dequantised when the layer is quantised."""
+    w = linear.weight
+    if hasattr(linear, "scales"):
+        w = mx.dequantize(w, linear.scales, linear.biases, linear.group_size, linear.bits)
+    return w.astype(mx.float32)
+embed = dense(lm.model.embed_tokens)                                   # (V, H), tied unembedding
+rng = np.random.default_rng(SEED)
+tokens = mx.array(rng.choice(V, NPOP, replace=False))
+Q_rot, _ = np.linalg.qr(rng.standard_normal((H, H)).astype(np.float32)); Q_rot = mx.array(Q_rot)
+def unit(x): return x / (mx.linalg.norm(x, axis=1, keepdims=True) + 1e-12)
+def populations(b):
+    """J, J-rotated, MLP rows and random unit directions at the input layer of block b."""
+    Jl = mx.array(lens[f"J{b - 1}"].astype(np.float32)) if b >= 1 else None
+    U = embed[tokens]                                                    # (NPOP, H)
+    J = unit(U @ Jl) if Jl is not None else unit(U)                      # rows u_w^T J = (J^T u_w)^T
+    Jrot = unit(J @ Q_rot.T)
+    prev = layers[b - 1] if b >= 1 else layers[0]
+    mlp = getattr(prev, "mlp", None)
+    down = dense(mlp.down_proj) if mlp is not None and hasattr(mlp, "down_proj") else None    # (H, inter)
+    cols = mx.array(rng.choice(down.shape[1], NPOP, replace=False)) if down is not None else None
+    M = unit(down[:, cols].T) if down is not None else unit(mx.random.normal((NPOP, H)))
+    R = unit(mx.random.normal((NPOP, H)))
+    return {"J": J, "J_rot": Jrot, "MLP_rows": M, "random": R}
+def metrics(apply, pops):
+    """apply: (NPOP, H) -> (NPOP, H) images under the head's map."""
+    out = {}
+    imgR = apply(pops["random"]); med_r = float(mx.median(mx.linalg.norm(imgR, axis=1)).item()) + 1e-12
+    for name, P in pops.items():
+        img = apply(P); gain = float(mx.mean(mx.linalg.norm(img, axis=1)).item()) / med_r
+        C = unit(img) @ P.T                                              # cos(M v_i, v_j)
+        diag = mx.diagonal(C)[:, None]
+        rank = mx.sum(C > diag, axis=1) + 1                              # 1 = own label best preserved
+        out[name] = {"gain": gain, "mrr": float(mx.mean(1.0 / rank.astype(mx.float32)).item())}
+    return out
+rows = []
+att_index = 0; rec_index = 0
+for b, layer in enumerate(layers):
+    kind = "attention" if not layer.is_linear else "recurrent"
+    pops = populations(b); mx.eval(*pops.values())
+    if kind == "attention":
+        a = layer.self_attn; Wv = dense(a.v_proj); Wo = dense(a.o_proj); n_q = a.num_attention_heads; n_kv = a.num_key_value_heads; d = a.head_dim; grp = n_q // n_kv
+        for h in range(n_q):
+            kv = h // grp
+            Wv_h = Wv[kv * d:(kv + 1) * d, :]; Wo_h = Wo[:, h * d:(h + 1) * d]
+            m = metrics(lambda P, Wv_h=Wv_h, Wo_h=Wo_h: (P @ Wv_h.T) @ Wo_h.T, pops)
+            rows.append({"channel": "attention", "block": b, "layer_written": b + 1, "attention_index": att_index, "head": h, "kv_head": kv, **{f"{k}_{s}": v[s] for k, v in m.items() for s in ("gain", "mrr")}})
+        att_index += 1
+    else:
+        r = layer.linear_attn; Wqkv = dense(r.in_proj_qkv); Wout = dense(r.out_proj)
+        n_v = r.num_v_heads; dv = r.head_v_dim; key_dim = r.key_dim
+        for h in range(n_v):
+            Wv_h = Wqkv[2 * key_dim + h * dv: 2 * key_dim + (h + 1) * dv, :]; Wo_h = Wout[:, h * dv:(h + 1) * dv]
+            m = metrics(lambda P, Wv_h=Wv_h, Wo_h=Wo_h: (P @ Wv_h.T) @ Wo_h.T, pops)
+            rows.append({"channel": "recurrent", "block": b, "layer_written": b + 1, "recurrent_index": rec_index, "head": h, "key_head": h // (n_v // r.num_k_heads), **{f"{k}_{s}": v[s] for k, v in m.items() for s in ("gain", "mrr")}})
+        rec_index += 1
+    print(json.dumps({"event": "progress", "elapsed_s": round(time.time() - T0, 1), "block": b, "kind": kind, "heads_done": len(rows), "peak_gib": round(mx.get_peak_memory() / 2**30, 2)}), flush=True)
+for r in rows:
+    r["gain_margin"] = (r["J_gain"] - max(r["J_rot_gain"], r["MLP_rows_gain"])) / max(r["J_rot_gain"], r["MLP_rows_gain"], 1e-9)
+    r["mrr_margin"] = (r["J_mrr"] - max(r["J_rot_mrr"], r["MLP_rows_mrr"])) / max(r["J_rot_mrr"], r["MLP_rows_mrr"], 1e-9)
+    r["broadcasts_J"] = bool(r["gain_margin"] > 0 and r["mrr_margin"] > 0)
+    r["score"] = min(r["gain_margin"], r["mrr_margin"])
+ordered = sorted(rows, key=lambda r: -r["score"])
+band = {16, 20, 24, 28}
+summary = {}
+for ch in ("attention", "recurrent"):
+    rs = [r for r in rows if r["channel"] == ch]; inband = [r for r in rs if r["layer_written"] in band or (r["layer_written"] - 1) in band]
+    summary[ch] = {"heads": len(rs), "broadcast_J": int(sum(r["broadcasts_J"] for r in rs)), "in_band_heads": len(inband), "in_band_broadcast_J": int(sum(r["broadcasts_J"] for r in inband)),
+                   "J_gain_median": float(np.median([r["J_gain"] for r in rs])), "J_rot_gain_median": float(np.median([r["J_rot_gain"] for r in rs])), "MLP_gain_median": float(np.median([r["MLP_rows_gain"] for r in rs])),
+                   "J_mrr_median": float(np.median([r["J_mrr"] for r in rs])), "J_rot_mrr_median": float(np.median([r["J_rot_mrr"] for r in rs])), "MLP_mrr_median": float(np.median([r["MLP_rows_mrr"] for r in rs])), "random_mrr_median": float(np.median([r["random_mrr"] for r in rs])),
+                   "by_layer": {L: {"J_gain_median": float(np.median([r["J_gain"] for r in rs if r["layer_written"] == L])), "J_mrr_median": float(np.median([r["J_mrr"] for r in rs if r["layer_written"] == L])), "broadcast_J": int(sum(r["broadcasts_J"] for r in rs if r["layer_written"] == L)), "n": len([r for r in rs if r["layer_written"] == L])} for L in sorted({r["layer_written"] for r in rs})},
+                   "top_20": [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()} for r in ordered if r["channel"] == ch][:20]}
+# the retrieval heads of the RETRIEVAL-CHANNELS run: (repo block, head) of the strongest attention records
+retrieval_heads = [(19, 2), (23, 9), (19, 12), (27, 1), (3, 15), (19, 15)]
+rank_in_att = {f"b{b}_h{h}": next((i + 1 for i, r in enumerate([x for x in ordered if x["channel"] == "attention"]) if r["block"] == b and r["head"] == h), None) for b, h in retrieval_heads}
+summary["retrieval_heads_rank_among_128_attention"] = rank_in_att
+summary["parameters"] = {"NPOP": NPOP, "seed": SEED, "lens": str(LENS), "checkpoint": spec.hf_id, "selection_rule": "gain on J > both controls AND mrr on J > both controls; ordered by min margin", "elapsed_s": round(time.time() - T0, 1)}
+json.dump({"rows": ordered, "summary": summary}, open(OUT / "broadcast_heads.json", "w"))
+json.dump(summary, open(OUT / "summary.json", "w"), indent=1)
+print(json.dumps({k: v for k, v in summary.items() if k != "attention" and k != "recurrent"}, indent=1))
+for ch in ("attention", "recurrent"):
+    s = summary[ch]; print(ch, {k: v for k, v in s.items() if k not in ("by_layer", "top_20")})
+    print("  by layer:", {L: (round(v["J_gain_median"], 2), round(v["J_mrr_median"], 3), v["broadcast_J"]) for L, v in s["by_layer"].items()})
+    print("  top 5:", [(r["block"], r["head"], round(r["J_gain"], 2), round(r["J_mrr"], 3), round(r["score"], 2)) for r in s["top_20"][:5]])

@@ -246,10 +246,13 @@ real / null: layer 4: 0.34 / 0.05; 8: 0.29 / 0.05; 12: 0.16 / 0.05; 16: 0.14 / 0
 24: 0.12 / 0.05; 28: 0.30 / 0.05; 32: 0.22 / 0.05. The six candidate heads: 0.16, 0.16, 0.12, 0.13,
 0.17, 0.18 against nulls 0.14, 0.14, 0.10, 0.10, 0.18, 0.19.
 
-**Reading, and F8's wording.** (1) The recurrent sink is real, modest, and the store's: in the
-longest-gate heads about a sixth of the far read mass sits in the opening five percent of the
-context, three times the uniform share, and the random-query null has the same sixth, so the bias is
-in what the store holds and not in where the query points. It is strongest in exactly the heads the
+**Reading, and F8's wording (magnitude restated on the Head's correction, 02:40).** (1) The recurrent
+sink is real and large, and it is the store's: a random query on a long-gate head puts 0.152 of its
+far mass on the opening five percent against a uniform 0.05, so the store over-represents the
+opening threefold, and the real query adds a tenth on top (0.167). The sink is the null itself, not
+the gap between the two numbers; it does not live in the query. Attention's own null sits at uniform
+(0.052) and its real query reaches 0.205, so attention's sink is query-directed and the recurrent one
+is not: that is the contrast in one line. It is strongest in exactly the heads the
 delta-rule mechanism predicts, the longest gates (0.167 against 0.052 for gates under 1,000), and it
 is never dominance: five sixths of a long-gate head's far mass lies outside the opening. F8's
 running-summary description therefore survives with an early-position bias noted: the recurrent

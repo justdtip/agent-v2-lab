@@ -165,3 +165,28 @@ J-space content.
 stage 2 is one model load. The Head reviews the design before stage 1 runs (R38(g)); the Director's
 instruction is to pursue two threads in parallel, implementing one while running the other, and
 this is the second thread beside training efficiency.
+
+
+**WP12, amended on the Head's review (02:40; adopted).** (1) *No percentile selection.* The paper's
+top one percent is a few hundred heads at their scale and about five at ours, hostage to which metric
+is worse on the day; every head exceeding its control distribution is reported, as n of N, with the
+whole ordered list in the artifact (the named-exception rule of WP3, for the same reason: a quantile
+over a small population manufactures a selection). (2) *The two channels' output maps are different
+objects.* Attention's OV is a fixed linear map from residual to residual, W_O composed with W_V per
+head. The recurrent path has the state between its value projection and its output projection, and
+after the state an input-dependent gated normalisation; a weight-only composition out_proj ∘ in_proj_v
+omits the gate and the normalisation, which are exactly the parts that are not weights. Stage 1
+computes that composition and says so in every table; the two columns are not commensurable and are
+not read as if they were. (3) *Stage 2 carries the paper's specificity control.* The next-token change
+rate is reported beside recall@25 under the same ablations, with the threshold stated in advance: a
+recall drop counts only if the next-token change rate stays within twice the layer-matched random
+control's. (4) *The second prediction restated in testable form.* The recurrent value paths should
+show lower alignment with the lens directions than the attention paths at matched layers; the sink
+finding is motivation, not evidence, since it measured which positions long-gate heads read and not
+what directions they write. (5) *Dependency stated.* EXP-002's injection arm is not built and is held
+behind WP3 and its pre-check; stage 2 as a whole does not wait on it: layer-matched random-head
+ablation with recall@25 and the next-token change rate is a complete stage 2 on its own, and the
+behavioural arm follows when the arm exists, with its mapping onto the paper's injected-thought
+report stated then rather than asserted now. Stage 1 runs on the fixed design; the first prediction,
+whether the broadcast heads are the retrieval heads of blocks 19 and 23 or different heads at the
+same layers, is the one that matters.
