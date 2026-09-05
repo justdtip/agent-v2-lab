@@ -102,24 +102,82 @@ class ArchitectureView:
             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
         return self.text_module.embed_tokens(token_ids).astype(mx.float32)
 
-    def masks(self, h: Any, cache: list[Any] | None) -> dict[str, Any]:
-        """Build the attention and SSM masks through the model's own helpers."""
-        entries: list[Any | None]
-        if cache is None:
-            entries = [None] * self.num_layers
-        else:
-            entries = list(cache)
-            if len(entries) != self.num_layers:
-                raise ValueError(
-                    "cache must contain one entry per block; "
-                    f"got {len(entries)} for {self.num_layers}"
-                )
+    def masks(
+        self,
+        h: Any,
+        cache: list[Any] | None,
+        *,
+        hidden_spans: Sequence[tuple[int, int]] | None = None,
+    ) -> dict[str, Any]:
+        """Build the attention and SSM masks through the model's own helpers.
+
+        ``hidden_spans`` hides absolute key positions from the **attention** blocks only, as
+        half-open ``(start, end)`` ranges over ``[0, offset + N)``.  The recurrent blocks keep
+        the mask the model's own SSM helper returns, because the asymmetry between the two
+        paths is the measurement EXP-002 makes; masking both would measure nothing.  Hiding is
+        never deletion: the columns stay in place, so every later position keeps its index and
+        the rotary embeddings are untouched.
+
+        ``None`` (the default) leaves this method exactly as inference runs it.  An empty
+        sequence forces the explicit array and hides nothing, which is the only way to compare
+        the array route against the sentinel route on an otherwise identical forward.
+        """
+        entries = self._cache_entries(cache)
         attention_cache = self._first_cache(entries, _ATTENTION_KIND)
         linear_cache = self._first_cache(entries, _LINEAR_ATTENTION_KIND)
+        if hidden_spans is None:
+            attention_mask = self._attention_mask(h, attention_cache)
+        else:
+            attention_mask = self._span_masked_attention(h, attention_cache, hidden_spans)
         return {
-            _ATTENTION_KIND: self._attention_mask(h, attention_cache),
+            _ATTENTION_KIND: attention_mask,
             _LINEAR_ATTENTION_KIND: self._ssm_mask(h, linear_cache),
         }
+
+    def _span_masked_attention(
+        self,
+        h: Any,
+        attention_cache: Any | None,
+        hidden_spans: Sequence[tuple[int, int]],
+    ) -> Any:
+        """The model's own attention mask as a boolean array, with hidden columns set False.
+
+        Two returns have to be handled because they are the same library function on different
+        inputs, both measured against the real caches rather than read off ``base.py``:
+
+        * an array comes back for ``N > 1``, shaped ``(N, offset + N)`` with ``True`` meaning
+          *attend*.  The span is **ANDed into it**, never substituted for it, or the cache's
+          own causality and offset handling would be discarded along with it.
+        * ``None`` comes back at ``N == 1``, with ``return_array=True`` as well and whether or
+          not a cache is present, so no flag forces an array out of the library at a single
+          scored step.  There is nothing to AND into, so the whole ``(1, offset + 1)`` row is
+          built here -- through the library's own causal-mask constructor, so the row agrees
+          with what the cached route would have produced.
+        """
+        import mlx.core as mx
+        from mlx_lm.models.base import create_causal_mask
+
+        queries = int(h.shape[1])
+        offset = _cache_offset(attention_cache)
+        total = offset + queries
+        mask = self._attention_mask(h, attention_cache, return_array=True)
+        if mask is None:
+            mask = create_causal_mask(queries, offset)
+        elif not isinstance(mask, mx.array):
+            # A helper that answers the sentinel despite ``return_array`` would take a
+            # different attention path than the array the span has to be ANDed into.
+            raise ValueError(
+                f"attention mask helper returned {mask!r} for return_array=True; "
+                "an explicit boolean array is required to hide a span"
+            )
+        columns = mx.arange(total)
+        hidden = mx.zeros((total,), dtype=mx.bool_)
+        for span in hidden_spans:
+            start, end = _validate_hidden_span(span, total)
+            hidden = hidden | ((columns >= start) & (columns < end))
+        # The column axis is last on both the 2-D and the padded 4-D mask shapes, so one row
+        # of hidden columns broadcasts across every query and head without reshaping.
+        return mask & ~hidden
 
     def run_block(
         self,
@@ -266,6 +324,41 @@ class ArchitectureView:
                 captured[index + 1] = h
         return captured
 
+    def cached_logits(
+        self,
+        ids: Any,
+        cache: list[Any] | None,
+        *,
+        hidden_spans: Sequence[tuple[int, int]] | None = None,
+        position: int = -1,
+    ) -> Any:
+        """Run every block over ``cache`` and return the logits at one position.
+
+        ``residuals`` runs with no cache and ``tail`` takes none, so neither can score a
+        decision under a cache that persists across turns.  This one does: it advances the
+        entries it is given, so successive calls continue one sequence rather than restarting
+        it, and ``cache=None`` runs the plain uncached forward.
+
+        The per-kind masks are built here rather than accepted from the caller because their
+        shape is a function of the very ``h`` and cache offset this forward uses; a dict built
+        anywhere else can only be right by accident.  ``hidden_spans`` is therefore how a
+        caller hides text from the attention blocks -- see ``masks``.
+
+        Only the scored row is unembedded.  Projecting every position to a vocabulary this size
+        would dominate the cost of a probe point that reads exactly one distribution.  The
+        residual stream is bit-identical to the model's own forward either way; unembedding one
+        row rather than the whole sequence is a differently shaped matmul, which costs up to one
+        float32 epsilon on a logit.  Two calls through this method cancel it, so an identity
+        gate comparing two such calls is unaffected.
+        """
+        entries = self._cache_entries(cache)
+        h = self.embed(ids)
+        index = _validate_scored_position(position, int(h.shape[1]))
+        masks = self.masks(h, entries, hidden_spans=hidden_spans)
+        for block_index in range(self.num_layers):
+            h = self.run_block(block_index, h, masks, entries[block_index])
+        return self.unembed(self.final_norm(h)[:, index, :])
+
     def tail(self, layer: int) -> Callable[[Any], Any]:
         """Return ``blocks[layer:] + final_norm`` with model-native per-kind masks."""
         if (
@@ -285,6 +378,18 @@ class ArchitectureView:
             return self.final_norm(hidden)
 
         return apply_tail
+
+    def _cache_entries(self, cache: list[Any] | None) -> list[Any | None]:
+        """One cache entry per block, or one ``None`` per block when running uncached."""
+        if cache is None:
+            return [None] * self.num_layers
+        entries = list(cache)
+        if len(entries) != self.num_layers:
+            raise ValueError(
+                f"cache must contain one entry per block; got {len(entries)} "
+                f"for {self.num_layers}"
+            )
+        return entries
 
     def _first_cache(self, cache: list[Any | None], kind: str) -> Any | None:
         for index, entry in enumerate(cache):
@@ -336,6 +441,57 @@ class ArchitectureView:
         ):
             raise ValueError(f"block index must lie in [0, {self.num_layers - 1}]; got {index!r}")
         return index
+
+
+def _cache_offset(entry: Any | None) -> int:
+    """Absolute key position already held by an attention cache entry.
+
+    Every attention cache mlx-lm builds carries ``offset``; a missing one is raised on rather
+    than defaulted to zero, because a silent zero would put the span's columns at the wrong
+    absolute positions and hide the wrong text while the forward still ran cleanly.
+    """
+    if entry is None:
+        return 0
+    offset = getattr(entry, "offset", None)
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError(
+            f"attention cache {type(entry).__name__} must expose a non-negative integer "
+            f"offset; got {offset!r}"
+        )
+    return offset
+
+
+def _validate_scored_position(position: Any, length: int) -> int:
+    """Resolve the scored row, allowing Python's negative indexing from the end."""
+    if isinstance(position, bool) or not isinstance(position, int):
+        raise ValueError(f"scored position must be an integer; got {position!r}")
+    if not -length <= position < length:
+        raise ValueError(
+            f"scored position must lie in [{-length}, {length - 1}]; got {position}"
+        )
+    return position
+
+
+def _validate_hidden_span(span: Any, total: int) -> tuple[int, int]:
+    """Check one half-open ``(start, end)`` span against the key range it must lie in.
+
+    An empty or inverted span is rejected rather than ignored: it would hide nothing while the
+    arm still reported itself as masked, which is the failure mode that reads as a null.
+    """
+    try:
+        pair = tuple(span)
+    except TypeError as error:
+        raise ValueError(f"hidden span must be a (start, end) pair; got {span!r}") from error
+    if len(pair) != 2 or any(
+        isinstance(value, bool) or not isinstance(value, int) for value in pair
+    ):
+        raise ValueError(f"hidden span must be a pair of integers; got {span!r}")
+    start, end = pair
+    if not 0 <= start < end <= total:
+        raise ValueError(
+            f"hidden span must satisfy 0 <= start < end <= {total}; got {span!r}"
+        )
+    return start, end
 
 
 def _embedding_dimensions(embedding: Any) -> tuple[int, int]:

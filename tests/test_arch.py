@@ -324,3 +324,355 @@ def test_adapter_wrapped_quantized_fixture_keeps_every_structural_answer() -> No
     for layer in layers:
         assert residuals[layer].shape == expected[layer].shape
         assert float(mx.max(mx.abs(residuals[layer] - expected[layer])).item()) == 0.0
+
+
+# ------------------------------------------- EXP-002 S1: the attention-only span mask
+#
+# R31/R38: the seam under test is mlx-lm's own mask contract, so these fixtures drive the
+# library's real classes on every side that decides an outcome -- ``ArraysCache`` and
+# ``KVCache`` for the caches, ``qwen3_5.DecoderLayer``/``GatedDeltaNet``/``Qwen3NextAttention``
+# for the blocks, and the library's ``create_attention_mask`` for the mask itself. Only the
+# weights and the dimensions are ours. A hand-written double cannot show any of what follows:
+# that ``ArraysCache`` is untrimmable is inherited from ``_BaseCache`` and absent from the
+# subclass, and that ``make_mask`` returns ``None`` at a single step is a fact about the
+# library's function, not about a shape a fake could be given.
+
+TINY_HYBRID_SEED = 96
+
+
+@pytest.fixture
+def cpu_stream():
+    """Keep these slices off the GPU: they are toy weights and nothing here needs a device."""
+    with mx.stream(mx.cpu):
+        yield
+
+
+def make_tiny_hybrid_model():
+    """A real ``mlx_lm`` Qwen3.5 text model at toy dimensions with random weights.
+
+    Same block layout as the 4B in miniature -- ``full_attention_interval`` puts recurrent
+    ``GatedDeltaNet`` blocks everywhere except the last of each group of four -- so
+    ``make_cache`` returns the production mix of ``ArraysCache(size=2)`` and ``KVCache`` that
+    EXP-002 runs over. No checkpoint is read and nothing is loaded; the weights are random.
+    """
+    from mlx_lm.models.qwen3_5 import TextModel, TextModelArgs
+
+    mx.random.seed(TINY_HYBRID_SEED)
+    args = TextModelArgs(
+        model_type="qwen3_5_text",
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=4,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=8,
+        vocab_size=24,
+        linear_num_value_heads=2,
+        linear_num_key_heads=1,
+        linear_key_head_dim=4,
+        linear_value_head_dim=4,
+        linear_conv_kernel_dim=4,
+        tie_word_embeddings=True,
+        full_attention_interval=4,
+        max_position_embeddings=256,
+    )
+    model = TextModel(args)
+    mx.eval(model.parameters())
+    return model
+
+
+def _tiny_ids(values: tuple[int, ...]) -> mx.array:
+    return mx.array([list(values)], dtype=mx.int32)
+
+
+def _run_cached(view: ArchitectureView, ids: mx.array, cache: list[object], **kwargs) -> mx.array:
+    """One forward over a live cache through the view's own primitives, returning logits."""
+    h = view.embed(ids)
+    masks = view.masks(h, cache, **kwargs)
+    for index in range(view.num_layers):
+        h = view.run_block(index, h, masks, cache[index])
+    return view.unembed(view.final_norm(h))
+
+
+def test_tiny_hybrid_fixture_is_the_real_cache_mix(cpu_stream) -> None:
+    """The fixture is only worth anything if it really is the library's classes."""
+    from mlx_lm.models.cache import ArraysCache, KVCache
+
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    cache = view.make_cache()
+
+    assert [type(entry) for entry in cache] == [ArraysCache, ArraysCache, ArraysCache, KVCache]
+    assert [view.layer_kind(index) for index in range(view.num_layers)] == [
+        "linear_attention",
+        "linear_attention",
+        "linear_attention",
+        "attention",
+    ]
+    # The premise EXP-002's regime rests on, taken from the real class rather than asserted:
+    # ``ArraysCache`` defines neither name and inherits ``False``, so a persistent cache
+    # cannot be rewound and each probe point needs its own prefill.
+    assert "is_trimmable" not in vars(ArraysCache) and "trim" not in vars(ArraysCache)
+    assert cache[0].is_trimmable() is False and cache[3].is_trimmable() is True
+    assert view.cache_trimmable is False
+
+
+def test_hidden_spans_match_the_library_route_on_the_full_sequence_path(cpu_stream) -> None:
+    """S1 acceptance, part one: forcing the array must not move the logits by itself.
+
+    With a cache present the default route returns the ``'causal'`` sentinel, which MLX's
+    attention kernel handles itself. Arm A needs an explicit array instead, so every arm would
+    be measured through a different attention path than EXP-001's baseline unless the two agree
+    exactly on a prompt that hides nothing. ``hidden_spans=()`` is that condition: the array is
+    built and nothing is ANDed to False.
+    """
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    scored = _tiny_ids((2, 5, 6))
+    sentinel_cache = view.make_cache()
+    array_cache = view.make_cache()
+    _run_cached(view, prefix, sentinel_cache)
+    _run_cached(view, prefix, array_cache)
+
+    offset = sentinel_cache[3].offset
+    h = view.embed(scored)
+    default = view.masks(h, sentinel_cache)
+    forced = view.masks(h, sentinel_cache, hidden_spans=())
+
+    assert offset == prefix.shape[1]
+    assert default["attention"] == "causal"
+    assert isinstance(forced["attention"], mx.array)
+    assert forced["attention"].dtype == mx.bool_
+    assert forced["attention"].shape == (scored.shape[1], offset + scored.shape[1])
+
+    sentinel_logits = _run_cached(view, scored, sentinel_cache)
+    array_logits = _run_cached(view, scored, array_cache, hidden_spans=())
+    assert float(mx.max(mx.abs(sentinel_logits - array_logits)).item()) == 0.0
+
+
+def test_hidden_spans_match_the_library_route_at_a_cached_single_step(cpu_stream) -> None:
+    """S1 acceptance, part two: the scored step is one token, where the library gives nothing.
+
+    Measured, not read off ``base.py``: ``KVCache.make_mask(1, ...)`` returns ``None`` with
+    ``return_array=True`` as well, so no flag forces an array out of the library here and the
+    whole ``(1, offset + 1)`` row is the view's to build. This is the step at which an unmasked
+    read would be invisible, so the built row must agree with the library's ``None`` exactly.
+    """
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    step = _tiny_ids((4,))
+    sentinel_cache = view.make_cache()
+    array_cache = view.make_cache()
+    _run_cached(view, prefix, sentinel_cache)
+    _run_cached(view, prefix, array_cache)
+
+    offset = sentinel_cache[3].offset
+    h = view.embed(step)
+    assert sentinel_cache[3].make_mask(1, return_array=True, window_size=None) is None
+    assert view.masks(h, sentinel_cache)["attention"] is None
+
+    forced = view.masks(h, sentinel_cache, hidden_spans=())["attention"]
+    assert isinstance(forced, mx.array)
+    assert forced.shape == (1, offset + 1)
+    assert bool(mx.all(forced).item())
+
+    sentinel_logits = _run_cached(view, step, sentinel_cache)
+    array_logits = _run_cached(view, step, array_cache, hidden_spans=())
+    assert float(mx.max(mx.abs(sentinel_logits - array_logits)).item()) == 0.0
+
+
+def test_hidden_spans_hide_exactly_the_named_columns_and_keep_causality(cpu_stream) -> None:
+    """The mask must cover the named span and nothing else, on both mask routes."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    cache = view.make_cache()
+    _run_cached(view, prefix, cache)
+    offset = cache[3].offset
+
+    for queries, spans in (((2, 5, 6), ((2, 5), (7, 8))), ((4,), ((2, 5),))):
+        ids = _tiny_ids(queries)
+        length = ids.shape[1]
+        mask = view.masks(view.embed(ids), cache, hidden_spans=spans)["attention"]
+        rows = mx.arange(offset, offset + length)[:, None]
+        columns = mx.arange(offset + length)[None]
+        hidden = mx.zeros(columns.shape, dtype=mx.bool_)
+        for start, end in spans:
+            hidden = hidden | ((columns >= start) & (columns < end))
+        # Masking never deletes, so every later position keeps its index and RoPE is untouched;
+        # what changes is only which columns a query may attend to.
+        assert bool(mx.array_equal(mask, (rows >= columns) & ~hidden).item())
+
+
+def test_hidden_spans_move_the_scored_distribution(cpu_stream) -> None:
+    """A mask that changed nothing would make every equivalence check above vacuous."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    step = _tiny_ids((4,))
+    open_cache = view.make_cache()
+    masked_cache = view.make_cache()
+    _run_cached(view, prefix, open_cache)
+    _run_cached(view, prefix, masked_cache)
+
+    open_logits = _run_cached(view, step, open_cache, hidden_spans=())
+    masked_logits = _run_cached(view, step, masked_cache, hidden_spans=((2, 6),))
+    assert float(mx.max(mx.abs(open_logits - masked_logits)).item()) > 0.0
+
+
+def test_hidden_spans_leave_the_recurrent_mask_untouched(cpu_stream) -> None:
+    """The recurrent blocks take no span mask; that asymmetry is the whole experiment."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    cache = view.make_cache()
+    ids = _tiny_ids((3, 1, 4, 6))
+    h = view.embed(ids)
+    # ``ArraysCache.make_mask`` answers ``None`` until a batch length is prepared; prepare one
+    # so the comparison below is between two real arrays rather than between two ``None``s.
+    for entry in cache[:3]:
+        entry.prepare(lengths=[3])
+
+    default = view.masks(h, cache)["linear_attention"]
+    with_spans = view.masks(h, cache, hidden_spans=((1, 3),))["linear_attention"]
+    assert isinstance(default, mx.array)
+    assert bool(mx.array_equal(default, with_spans).item())
+
+
+@pytest.mark.parametrize(
+    "spans",
+    [((1, 1),), ((3, 2),), ((-1, 2),), ((0, 99),), ((True, 2),), ((1, 2, 3),)],
+)
+def test_hidden_spans_reject_a_span_that_cannot_name_hidden_text(cpu_stream, spans) -> None:
+    """An empty, inverted, out-of-range or malformed span hides nothing while running cleanly."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    cache = view.make_cache()
+    h = view.embed(_tiny_ids((3, 1, 4, 6)))
+
+    with pytest.raises(ValueError):
+        view.masks(h, cache, hidden_spans=spans)
+
+
+# ------------------------------------ EXP-002 S2: a cached forward that scores one position
+#
+# ``residuals`` runs with no cache and ``tail`` takes none, so nothing in the probe path could
+# score a decision under a persistent cache. These tests read the same real tiny hybrid as S1's,
+# so the cache the forward advances is the production mix of ``ArraysCache`` and ``KVCache``.
+
+
+def test_cached_logits_match_the_models_own_forward_over_the_same_cache(cpu_stream) -> None:
+    """The view's hand-run loop and the model's own loop must agree over one live cache.
+
+    The model builds its masks from the first attention entry and the first recurrent entry;
+    the view picks the same two structurally, so a disagreement here would mean the probe path
+    scores a decision through different masks than inference uses.
+    """
+    model = make_tiny_hybrid_model()
+    view = ArchitectureView.from_model(model)
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    step = _tiny_ids((4,))
+
+    native_cache = model.make_cache()
+    model(prefix, cache=native_cache)
+    native = model(step, cache=native_cache)
+
+    view_cache = view.make_cache()
+    view.cached_logits(prefix, view_cache)
+    scored = view.cached_logits(step, view_cache)
+
+    assert scored.shape == (1, view.vocab_size)
+    assert view_cache[3].offset == native_cache[3].offset
+    assert float(mx.max(mx.abs(scored - native[:, -1, :])).item()) == 0.0
+
+
+def test_cached_logits_score_the_chosen_position_only(cpu_stream) -> None:
+    """A decision is scored at one position, so the readout is taken at that row alone.
+
+    Measured, and the reason this row is not asserted bit-identical: the block loop and the
+    final norm agree with the model exactly, and the whole difference comes from unembedding
+    one row instead of the whole sequence, which is a differently shaped matmul. It is one
+    float32 epsilon on a logit, and it exists because projecting every position to the
+    vocabulary would dominate the cost of a probe point that reads one distribution.
+    """
+    model = make_tiny_hybrid_model()
+    view = ArchitectureView.from_model(model)
+    ids = _tiny_ids((3, 1, 4, 6, 5))
+    native = model(ids)
+
+    h = view.embed(ids)
+    masks = view.masks(h, None)
+    for index in range(view.num_layers):
+        h = view.run_block(index, h, masks, None)
+    assert float(mx.max(mx.abs(view.unembed(view.final_norm(h)) - native)).item()) == 0.0
+
+    for position in (0, 2, 4, -1, -5):
+        scored = view.cached_logits(ids, None, position=position)
+        assert scored.shape == (1, view.vocab_size)
+        difference = float(mx.max(mx.abs(scored - native[:, position, :])).item())
+        assert difference <= float(mx.finfo(mx.float32).eps)
+
+
+def test_cached_logits_advance_the_persistent_cache(cpu_stream) -> None:
+    """Two calls over one cache must continue the sequence, not restart it."""
+    model = make_tiny_hybrid_model()
+    view = ArchitectureView.from_model(model)
+    whole = _tiny_ids((3, 1, 4, 6, 5, 2))
+    head, tail = _tiny_ids((3, 1, 4, 6)), _tiny_ids((5, 2))
+
+    cache = view.make_cache()
+    view.cached_logits(head, cache)
+    assert cache[3].offset == head.shape[1]
+    continued = view.cached_logits(tail, cache)
+    assert cache[3].offset == whole.shape[1]
+
+    assert float(mx.max(mx.abs(continued - view.cached_logits(whole, None))).item()) == 0.0
+
+
+def test_cached_logits_carry_the_span_mask_to_the_attention_blocks(cpu_stream) -> None:
+    """S1's mask has to reach the blocks through this forward, since S3 calls only this one.
+
+    ``hidden_spans=()`` forces the explicit array and hides nothing, so it must leave the
+    scored distribution exactly where the default route leaves it; a real span must move it.
+    """
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    prefix = _tiny_ids((3, 1, 4, 6, 5, 2, 7, 8, 1, 9))
+    step = _tiny_ids((4,))
+    caches = [view.make_cache() for _ in range(3)]
+    for cache in caches:
+        view.cached_logits(prefix, cache)
+
+    default = view.cached_logits(step, caches[0])
+    forced = view.cached_logits(step, caches[1], hidden_spans=())
+    masked = view.cached_logits(step, caches[2], hidden_spans=((2, 6),))
+
+    assert float(mx.max(mx.abs(default - forced)).item()) == 0.0
+    assert float(mx.max(mx.abs(default - masked)).item()) > 0.0
+
+
+def test_cached_logits_reject_a_position_outside_the_scored_window(cpu_stream) -> None:
+    """Scoring the wrong row would answer about a token the arm never asked about."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    ids = _tiny_ids((3, 1, 4, 6))
+
+    for position in (4, -5, True, 1.0):
+        with pytest.raises(ValueError):
+            view.cached_logits(ids, None, position=position)
+
+
+def test_cached_logits_reject_a_cache_that_does_not_match_the_blocks(cpu_stream) -> None:
+    """A short cache would silently run later blocks uncached against an advancing prefix."""
+    view = ArchitectureView.from_model(make_tiny_hybrid_model())
+    ids = _tiny_ids((3, 1, 4, 6))
+
+    with pytest.raises(ValueError):
+        view.cached_logits(ids, view.make_cache()[:-1])
+
+
+def test_cache_offset_refuses_to_default_a_missing_offset() -> None:
+    """A silent zero would put the span's columns at the wrong absolute positions.
+
+    Every attention cache mlx-lm builds carries ``offset`` -- ``KVCache`` above is checked
+    against the real class -- so this covers only the guard, whose input is deliberately not
+    a cache: the point is that an object that cannot answer is rejected rather than assumed.
+    """
+    from local_llm_lab.arch import _cache_offset
+
+    assert _cache_offset(None) == 0
+    for entry in (object(), type("Entry", (), {"offset": -1})(), type("E", (), {"offset": 1.0})()):
+        with pytest.raises(ValueError):
+            _cache_offset(entry)
