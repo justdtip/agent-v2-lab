@@ -1,7 +1,7 @@
 """EXP-002 S3: the four arms, the identity gate and the artifact.
 
-Fakes and tiny real models only (R10): no checkpoint, no tokenizer from the Hub, nothing on the
-GPU. Two seams are driven for real because a stand-in cannot show what they do (R31):
+Fakes and tiny real models only (R10): no checkpoint, nothing on the GPU. Three seams are driven
+for real because a stand-in cannot show what they do (R31):
 
 * ``pipeline.data.build_rows``, ``pipeline.protocol.window_messages`` and
   ``pipeline.protocol.build_prompt`` over real generated tasks, because the B6 invariant is a
@@ -9,7 +9,17 @@ GPU. Two seams are driven for real because a stand-in cannot show what they do (
   satisfy it by construction;
 * ``mlx_lm``'s own ``ArraysCache`` and ``KVCache`` through a toy Qwen3.5 for the identity gate,
   because whether captured cache state round-trips -- and whether re-injecting it restores the
-  attention offset -- is a fact about those classes and not about a shape a fake could be given.
+  attention offset -- is a fact about those classes and not about a shape a fake could be given;
+* **the real 4B chat template**, which the earlier revision of this file explicitly excluded and
+  which that exclusion cost a run. Every test here rendered through a hand-written stand-in
+  until EXP-002 died three seconds in on ``[system]`` alone -- a shape the stand-in accepted and
+  the real Qwen3.5 template refuses -- with all 39 of them green. A reader tested against a
+  stand-in passes exactly when the stand-in differs from the writer in the way its author
+  assumed it would not (R38). A tokenizer is not a checkpoint: it loads from the project cache
+  in seconds, with no weights and no device, so R10 does not reach it. The ``real_tokenizer``
+  fixture loads it and skips **loudly** when it is not cached, and
+  ``test_the_real_tokenizer_coverage_cannot_be_skipped_into_nothing`` never skips, so deleting
+  or quietly disabling that coverage turns the suite red rather than green-with-an-``s``.
 
 The decoder itself is faked wherever the arms are being compared, and deliberately so: the fake
 has an attention route and a recurrent route that can be switched independently, so a test can
@@ -20,10 +30,12 @@ instrument's.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
 import json
 import tomllib
+import warnings
 from pathlib import Path
 
 import mlx.core as mx
@@ -64,14 +76,64 @@ def _ledger_tasks(count: int = 60):
     ]
 
 
+#: The roles Qwen3.5's template knows. Anything else is ``Unexpected message role.``.
+_TEMPLATE_ROLES = frozenset({"system", "user", "assistant", "tool"})
+
+
 class _SwapTokenizer:
-    """One id per character, and a chat template whose renders nest as prefixes.
+    """One id per character, a prefix-additive render, and the real template's refusals.
 
     ``additive=False`` builds the one template shape the span locator cannot survive: a render
     of ``messages[:k]`` that is not a prefix of the render of ``messages[:k + 1]``. Real chat
     templates are prefix-additive over these conversations, but a template that merged or
     re-rendered earlier turns would silently move every boundary, so the locator has to check
     rather than assume.
+
+    **What this stand-in refuses, and why the list is here.** The earlier version rendered every
+    conversation it was handed, including ``[system]`` alone. The real Qwen3.5 template refuses
+    that -- it scans the message list in reverse for a user query and raises ``No user query
+    found in messages.`` when there is none -- and the whole suite passed while the run died
+    three seconds in on the first prefix ``_rendered_boundaries`` renders. A stand-in that
+    accepts more than the writer does passes exactly when it differs from the writer in the way
+    its author assumed it would not (R38), so every refusal the real template makes on a shape
+    reachable from ``build_prompt`` is reproduced here, with the same ``TemplateError`` type:
+
+    * an empty conversation (``transformers`` raises ``ValueError`` before Jinja is entered);
+    * no user turn whose content, **once trimmed**, is not a ``<tool_response>`` wrapper -- the
+      template trims first, so a padded wrapper is still a wrapper and still not a query;
+    * a system message anywhere but index 0, or a second one;
+    * a role the template does not know;
+    * content that is not a string. Narrower in the writer, which also accepts ``None`` and a
+      list of content items; this stand-in refuses both. That is an over-refusal, which can only
+      fail a test that should pass, and closing it means reimplementing the multimodal
+      ``render_content`` macro. Nothing in this repo puts anything but a string in ``content``.
+
+    Divergences that are **not** refusals stay unmodelled and are recorded rather than fixed:
+    the real template ``|trim``s each content, injects ``<think>\\n...\\n</think>\\n\\n`` into
+    every assistant turn after the last user query, and frames tool messages as ``user`` turns
+    wrapped in ``<tool_response>`` with consecutive ones merged. Modelling those would make this
+    a second implementation of the template rather than a stand-in, and the two shapes where
+    they break prefix-additivity -- adjacent tool messages, and a second user turn later -- are
+    unreachable through ``_rendered_boundaries``: every producer appends assistant and tool in
+    pairs, and ``window_messages``, ``strip_pending`` and ``_strip_messages`` all preserve count
+    and role. The real-tokenizer tests below are what covers the rendered text itself.
+
+    **The ``</think>`` handling, stated precisely, because a loose statement of it points a
+    follow-up at the wrong file.** Template lines 94-96 split an assistant content on
+    ``</think>``; lines 100-104 then choose what to do with the halves, and the choice is what
+    matters. For an assistant *after* the last user query the pre-``</think>`` half is
+    **relocated** into the emitted reasoning block -- moved, not lost. Only the ``else`` limb,
+    taken for an assistant at or before the last user query, emits the remainder alone and
+    **discards** everything before the tag. So the discard needs a conversation with an
+    assistant turn followed by a later user turn, and the agent loop never builds one: the
+    ``assistant_message`` appends in ``pipeline.runner.run_task`` and ``pipeline.branch`` sit in
+    conversations with exactly one user turn, at index 1, so every assistant they append takes
+    the relocating limb. The one producer of the discard-eligible shape in this repo is
+    ``chat_replay.make_chat_prompts``, whose ``follow_up`` branch yields ``[user, assistant,
+    user]`` -- and those are the ``pre-expansion-policy-replay`` rows ``render_rows``
+    allow-lists. Nothing is lost there today, because that middle assistant is a fixed literal
+    with no ``</think>`` in it; a follow-up that wants to test the mechanism has to go there,
+    and there is no point looking at the agent loop.
     """
 
     bos_token = None
@@ -87,18 +149,54 @@ class _SwapTokenizer:
     def decode(self, ids):
         return "".join(chr(65 + int(i) % 26) for i in ids)
 
+    @staticmethod
+    def _refuse(messages) -> None:
+        """Raise exactly where the real Qwen3.5 template raises, on string content."""
+        from jinja2.exceptions import TemplateError
+
+        if not messages:
+            raise ValueError("Cannot apply chat template to an empty conversation.")
+        for index, message in enumerate(messages):
+            role = message.get("role")
+            if role not in _TEMPLATE_ROLES:
+                raise TemplateError("Unexpected message role.")
+            if role == "system" and index:
+                raise TemplateError("System message must be at the beginning.")
+            if not isinstance(message.get("content"), str):
+                raise TemplateError("Unexpected content type.")
+        if not any(
+            # ``|trim`` before the wrapper test, as the template does -- its reverse scan reads
+            # ``render_content(message.content, false)|trim`` and only then asks whether the
+            # result opens and closes with the wrapper. Testing the untrimmed string made this
+            # stand-in accept a padded ``<tool_response>`` the writer refuses: it read the
+            # padding as ordinary user text and counted a query the template does not.
+            message["role"] == "user"
+            and not (
+                message["content"].strip().startswith("<tool_response>")
+                and message["content"].strip().endswith("</tool_response>")
+            )
+            for message in messages
+        ):
+            raise TemplateError("No user query found in messages.")
+
     def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=False, **kwargs):
         del tokenize
         self.template_calls.append(dict(kwargs))
+        self._refuse(messages)
         bodies = [str(message["content"]) for message in messages]
         if not self.additive and bodies:
             bodies[0] = f"{len(bodies)}{bodies[0]}"
         body = "\n".join(bodies)
         if not add_generation_prompt:
             return body
-        from local_llm_lab.pipeline.protocol import generation_suffix
-
-        return body + "\n" + generation_suffix(load_model_spec("qwen35-4b"))
+        # Honour ``enable_thinking`` rather than hardcoding one spec's suffix. The real template
+        # emits a closed ``<think>\n\n</think>\n\n`` only when it is False, and an *open*
+        # ``<think>`` otherwise; a stand-in that ignored the kwarg could neither confirm nor
+        # refute the model-agnostic rendering SPEC-001 is about.
+        assistant = "<|im_start|>assistant\n"
+        if kwargs.get("enable_thinking") is False:
+            return body + "\n" + assistant + "<think>\n\n</think>\n\n"
+        return body + "\n" + assistant
 
 
 # ------------------------------------------------------------------- the installed entry
@@ -160,7 +258,13 @@ def test_an_unwindowed_history_windows_back_to_arm_cs_own_text() -> None:
 
 
 def test_message_token_spans_partition_the_rendered_prompt() -> None:
-    """Spans are located in token space, and must tile the render with no gap or overlap."""
+    """Spans are located in token space, and must tile the render with no gap or overlap.
+
+    The head block is one chunk covering ``head_count`` messages, so the chunks are one shorter
+    than the message list for each message the template refuses to render on its own. The
+    partition property is unchanged: contiguous, starting at column 0, ending at the render's
+    length.
+    """
     tokenizer = _SwapTokenizer()
     spec = load_model_spec("qwen35-4b")
     messages = _ledger_tasks()[0]
@@ -168,13 +272,23 @@ def test_message_token_spans_partition_the_rendered_prompt() -> None:
 
     messages = build_rows(messages, keep_last=99)[PROBE_STEP]["messages"][:-1]
 
-    spans, prompt_tokens = state_swap.message_token_spans(tokenizer, messages, spec=spec)
+    head_count, spans, prompt_tokens = state_swap.message_token_spans(
+        tokenizer, messages, spec=spec
+    )
 
-    assert len(spans) == len(messages)
+    assert head_count == 2, "the system prompt alone is not a conversation this template renders"
+    assert len(spans) == len(messages) - head_count + 1
     assert spans[0][0] == 0
     assert [span[0] for span in spans[1:]] == [span[1] for span in spans[:-1]]
     assert spans[-1][1] == prompt_tokens
     assert all(start < end for start, end in spans)
+    # Message index -> chunk, and only outside the head: the two lists are shifted, so indexing
+    # the chunk tuple by message index would take a real span belonging to another message.
+    by_message = state_swap._spans_by_message(head_count, spans)
+    assert sorted(by_message) == list(range(head_count, len(messages)))
+    assert by_message[len(messages) - 1] == spans[-1]
+    with pytest.raises(KeyError):
+        by_message[head_count - 1]
 
 
 def test_message_token_spans_refuse_a_template_that_is_not_prefix_additive() -> None:
@@ -187,6 +301,380 @@ def test_message_token_spans_refuse_a_template_that_is_not_prefix_additive() -> 
 
     with pytest.raises(ValueError, match="prefix"):
         state_swap.message_token_spans(tokenizer, messages, spec=spec)
+
+
+# ------------------------------------------- the real tokenizer, because a stand-in cannot
+
+
+def _shaped(*roles: str) -> list[dict]:
+    """A conversation of the given roles, with the fields ``build_prompt`` reads."""
+    return [
+        {
+            "role": role,
+            "content": f"{role} content",
+            **({"name": "read_file"} if role == "tool" else {}),
+        }
+        for role in roles
+    ]
+
+
+#: ``(label, conversation, the writer renders it)``. Measured on the real 4B tokenizer; the
+#: stand-in is required to agree row for row, which is the property whose absence let a
+#: system-only prefix pass every test and kill the run.
+_TEMPLATE_SHAPES = (
+    ("system alone -- every conversation's first prefix", _shaped("system"), False),
+    ("assistant alone", _shaped("assistant"), False),
+    ("tool alone", _shaped("tool"), False),
+    ("system then assistant", _shaped("system", "assistant"), False),
+    ("system then tool", _shaped("system", "tool"), False),
+    ("no user at any length", _shaped("system", "assistant", "tool"), False),
+    ("user alone", _shaped("user"), True),
+    ("system and user -- the shortest shape this repo renders", _shaped("system", "user"), True),
+    ("assistant then user", _shaped("assistant", "user"), True),
+    ("the probe's own opening", _shaped("system", "user", "assistant", "tool"), True),
+    (
+        "a system message that is not first",
+        _shaped("system", "user", "assistant", "system"),
+        False,
+    ),
+    ("a role the template does not know", _shaped("system", "user", "narrator"), False),
+    (
+        "a user turn that is only a tool_response wrapper",
+        [
+            {"role": "system", "content": "system content"},
+            {"role": "user", "content": "<tool_response>listing</tool_response>"},
+        ],
+        False,
+    ),
+    (
+        "content that is not a string",
+        [{"role": "system", "content": "system content"}, {"role": "user", "content": 7}],
+        False,
+    ),
+    # The template trims before it tests for the wrapper (``render_content(...)|trim`` at the
+    # head of its reverse scan), so padding does not smuggle a tool response past the check.
+    # These two rows are here because a stand-in that tested the untrimmed string accepted both
+    # while the writer refused them -- the same over-acceptance as the system-only prefix, one
+    # rule further in.
+    (
+        "a tool_response wrapper padded with spaces",
+        [
+            {"role": "system", "content": "system content"},
+            {"role": "user", "content": "  <tool_response>listing</tool_response>  "},
+        ],
+        False,
+    ),
+    (
+        "a tool_response wrapper padded with newlines",
+        [
+            {"role": "system", "content": "system content"},
+            {"role": "user", "content": "\n<tool_response>listing</tool_response>\n"},
+        ],
+        False,
+    ),
+)
+
+
+def _renders(tokenizer, messages, spec) -> bool:
+    """Whether ``build_prompt`` gets a render out of this tokenizer for this conversation."""
+    from jinja2.exceptions import TemplateError
+
+    from local_llm_lab.pipeline.protocol import build_prompt
+
+    try:
+        build_prompt(
+            tokenizer, list(messages), keep_last=len(messages), spec=spec, generation=False
+        )
+    except (TemplateError, ValueError):
+        # ``generation=False`` skips ``build_prompt``'s own suffix assertion, so the only
+        # ``ValueError`` reachable here is ``transformers`` refusing an empty conversation.
+        return False
+    return True
+
+
+def _cached_tokenizer_directory(spec) -> Path:
+    """Where ``configure_local_cache`` would have put this model's tokenizer."""
+    from local_llm_lab.project import configure_local_cache
+
+    return configure_local_cache() / "hub" / ("models--" + spec.hf_id.replace("/", "--"))
+
+
+@pytest.fixture(name="real_tokenizer", scope="session")
+def _real_tokenizer():
+    """The tokenizer the run renders through, or a skip that says out loud what it cost.
+
+    A tokenizer is not a model: it loads from the project cache in a couple of seconds with no
+    weights and no GPU, so R10's ban on Hub checkpoints does not reach it. Every test in this
+    file used a hand-written stand-in until EXP-002 died three seconds into a real run on the
+    first prefix ``_rendered_boundaries`` renders, with all 39 of them green -- a reader tested
+    against a stand-in passes precisely when the stand-in differs from the writer in the way its
+    author assumed it would not (R38).
+
+    The skip is deliberately noisy and deliberately narrow. Noisy, because a silent ``s`` in the
+    pytest output is how this blind spot comes back. Narrow, because the *only* condition that
+    skips is a snapshot that is demonstrably not on disk: the load itself is not wrapped, so a
+    cached-but-broken tokenizer fails the suite instead of quietly disabling it.
+    """
+    spec = load_model_spec("qwen35-4b")
+    directory = _cached_tokenizer_directory(spec)
+    if not list(directory.glob("snapshots/*/tokenizer_config.json")):
+        message = (
+            f"the real {spec.hf_id} tokenizer is not cached under {directory}, so the only "
+            "tests in this file that render through the writer rather than a stand-in did not "
+            "run. That is the blind spot EXP-002 died in. Populate the cache with "
+            "`uv run python -c \"from local_llm_lab.project import configure_local_cache; "
+            "configure_local_cache(); from transformers import AutoTokenizer; "
+            f"AutoTokenizer.from_pretrained('{spec.hf_id}')\"` and re-run."
+        )
+        warnings.warn(message, stacklevel=2)
+        pytest.skip(message)
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(spec.hf_id, local_files_only=True)
+
+
+def test_the_real_template_refuses_the_system_only_prefix_and_the_locator_starts_past_it(
+    real_tokenizer,
+) -> None:
+    """The failure itself, on the writer: prefix 1 is refused and prefix 2 is where it begins.
+
+    Qwen2.5's template rendered ``[system]`` alone, so a locator that started at count 1 was
+    correct by accident on the 3B. Qwen3.5's scans in reverse for a user query and refuses when
+    it finds none. Both halves are asserted here -- the refusal, so the reason the head block
+    exists is on the record, and the head block's size, so a template that later accepted the
+    shorter prefix would show up as a change rather than pass unnoticed.
+    """
+    from jinja2.exceptions import TemplateError
+
+    from local_llm_lab.pipeline.data import build_rows
+    from local_llm_lab.pipeline.protocol import build_prompt
+
+    spec = load_model_spec("qwen35-4b")
+    task = _ledger_tasks()[0]
+    history = build_rows(task, keep_last=len(task.steps) + 1)[PROBE_STEP]["messages"][:-1]
+
+    assert [message["role"] for message in history[:2]] == ["system", "user"]
+    with pytest.raises(TemplateError, match="No user query found in messages"):
+        build_prompt(real_tokenizer, history[:1], keep_last=1, spec=spec, generation=False)
+
+    head_count, chunks, total = state_swap.message_token_spans(
+        real_tokenizer, history, spec=spec
+    )
+
+    assert head_count == 2
+    assert len(chunks) == len(history) - 1
+    assert chunks[0][0] == 0
+    assert [chunk[0] for chunk in chunks[1:]] == [chunk[1] for chunk in chunks[:-1]]
+    assert chunks[-1][1] == total
+    assert all(start < end for start, end in chunks)
+
+
+def test_the_real_locator_puts_every_hidden_observation_outside_the_head_block(
+    real_tokenizer,
+) -> None:
+    """``select_points`` end to end on the writer: the spans it masks are real columns.
+
+    The head block loses one boundary -- the split *inside* ``[system, user]`` -- and nothing
+    indexes it, which is the claim this test makes rather than asserts in a comment: every
+    hidden observation is a tool message at an index at or past the head, and the filename lands
+    inside one of the character spans that came back.
+    """
+    spec = load_model_spec("qwen35-4b")
+
+    points, rejected = state_swap.select_points(_ledger_tasks()[:6], real_tokenizer, spec=spec)
+
+    assert points, f"no usable probe point on the real tokenizer; rejections: {rejected}"
+    for point in points:
+        assert point["head_messages"] == 2
+        assert point["prefill_chunks"][0] == (0, point["prefill_chunks"][0][1])
+        assert len(point["prefill_chunks"]) >= 2
+        for start, end in point["hidden_spans"]:
+            assert point["prefill_chunks"][0][1] <= start < end
+        for record in point["hidden_span_records"]:
+            assert record["role"] == "tool"
+            assert record["message_index"] >= point["head_messages"]
+        prompt = point["persistent_prompt"]
+        assert prompt.count(point["filename"]) == 1
+        where = prompt.index(point["filename"])
+        assert any(start <= where < end for start, end in point["hidden_character_spans"])
+
+
+def test_the_real_locator_refuses_the_two_shapes_the_head_block_cannot_carry(
+    real_tokenizer,
+) -> None:
+    """Renderability is not monotone, and a silent head can swallow an observation.
+
+    Both are measured facts about the 3.5 template rather than hypotheses. A late system message
+    renders at three messages and raises at four, so "the first prefix that renders means the
+    rest render" is wrong. And a tool observation before the first user query sits inside a
+    four-message head with *no* error from the template -- the locator has to refuse it itself,
+    because a span it never located is a mask that never happened.
+    """
+    spec = load_model_spec("qwen35-4b")
+
+    with pytest.raises(ValueError, match="refused the first 4"):
+        state_swap.message_token_spans(
+            real_tokenizer, _shaped("system", "user", "assistant", "system"), spec=spec
+        )
+
+    with pytest.raises(ValueError, match="head block"):
+        state_swap.message_token_spans(
+            real_tokenizer,
+            _shaped("system", "tool", "assistant", "user", "assistant", "tool"),
+            spec=spec,
+        )
+
+
+def test_the_stand_in_and_the_writer_agree_row_for_row_on_the_shape_table(
+    real_tokenizer,
+) -> None:
+    """The R38 gap itself, pinned against the writer over the table below.
+
+    The stand-in's job is to be wrong in no way its user could not survive. Acceptance is the
+    one property ``_rendered_boundaries`` depends on and the one the old stand-in got wrong, so
+    it is compared row for row against the writer. When the writer is not cached this test does
+    not run -- and ``test_the_stand_in_refuses_the_shapes_the_real_template_refuses`` keeps the
+    table pinned against the stand-in alone, so a skipped session still fails on a regression.
+
+    **The name says "the shape table" and not "exactly", because the equality is the table's,
+    not the template's.** An earlier name claimed the stand-in refuses exactly what the writer
+    refuses; a differential sweep over 195 conversations found that untrue in two directions.
+    One was a real defect and is fixed: the template ``|trim``s before testing for the
+    ``<tool_response>`` wrapper and this stand-in did not, so a padded wrapper was read as a
+    user query here and as a tool response there -- the same over-acceptance that killed
+    EXP-002, one rule further in. Those two shapes are rows in the table now.
+
+    The other direction is recorded and left alone. On ``content`` that is ``None`` or a list of
+    content items the writer renders (``''`` and the concatenated items) and this stand-in
+    raises ``Unexpected content type.``. That is an over-*refusal*, the harmless direction: it
+    can only fail a test that should pass, never pass a run that should fail. Closing it would
+    mean reproducing the multimodal ``render_content`` macro here, which is the second
+    implementation of the template this stand-in exists to avoid being -- and nothing in this
+    repo puts anything but a string in ``content``. So the compared domain is the string-content
+    conversations the locator can actually reach, plus the near-misses around them, and that
+    domain is exactly what ``_TEMPLATE_SHAPES`` enumerates.
+    """
+    spec = load_model_spec("qwen35-4b")
+    fake = _SwapTokenizer()
+
+    real = {
+        label: _renders(real_tokenizer, messages, spec)
+        for label, messages, _ in _TEMPLATE_SHAPES
+    }
+    stand_in = {label: _renders(fake, messages, spec) for label, messages, _ in _TEMPLATE_SHAPES}
+    expected = {label: accepted for label, _messages, accepted in _TEMPLATE_SHAPES}
+
+    assert real == expected
+    assert stand_in == real
+
+
+def test_the_stand_in_refuses_the_shapes_the_real_template_refuses() -> None:
+    """The same table without the writer, so the property survives an uncached machine."""
+    spec = load_model_spec("qwen35-4b")
+    fake = _SwapTokenizer()
+
+    assert {label: _renders(fake, messages, spec) for label, messages, _ in _TEMPLATE_SHAPES} == {
+        label: accepted for label, _messages, accepted in _TEMPLATE_SHAPES
+    }
+    # The stand-in refuses through the same exception type the writer uses, or the locator's
+    # narrow catch would be exercised by nothing.
+    from jinja2.exceptions import TemplateError
+
+    from local_llm_lab.pipeline.protocol import build_prompt
+
+    with pytest.raises(TemplateError, match="No user query found in messages"):
+        build_prompt(fake, _shaped("system"), keep_last=1, spec=spec, generation=False)
+
+
+def test_the_real_tokenizer_coverage_cannot_be_skipped_into_nothing() -> None:
+    """Never skips, so deleting or disabling the writer-backed tests turns the suite red.
+
+    A skip that is legitimate on a machine without the cache is indistinguishable, in pytest's
+    output, from a skip caused by a typo, a renamed fixture or a swallowed import. This test is
+    the difference: it reads this module's own source and asserts that the writer-backed
+    coverage still exists, still loads through ``AutoTokenizer.from_pretrained``, and still
+    skips on exactly one checked condition with nothing caught around the load.
+
+    The first version of this guard asserted only that *some* writer-backed tests existed, and
+    a verifier emptied the one test that compares the stand-in against the writer into a bare
+    docstring with the suite still green -- the guard counted three surviving neighbours and was
+    satisfied. Counting tests is not the property; the property is that the comparison itself is
+    still being made, over a table that is still non-degenerate. Both are checked below, by
+    what the test *does* rather than by its name, so a rename keeps it and a gutted body loses
+    it.
+    """
+    module = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    functions = {
+        node.name: node for node in module.body if isinstance(node, ast.FunctionDef)
+    }
+
+    fixture = functions["_real_tokenizer"]
+    fixture_source = ast.unparse(fixture)
+    assert "AutoTokenizer.from_pretrained" in fixture_source
+    assert "local_files_only=True" in fixture_source
+    assert "warnings.warn" in fixture_source
+    assert fixture_source.count("pytest.skip") == 1
+    assert not [node for node in ast.walk(fixture) if isinstance(node, ast.Try)], (
+        "a try/except around the load would turn a broken tokenizer into a silent skip"
+    )
+
+    users = {
+        name: node
+        for name, node in functions.items()
+        if name.startswith("test_")
+        and any(argument.arg == "real_tokenizer" for argument in node.args.args)
+    }
+    assert len(users) >= 3, f"the writer-backed tests have gone missing: {sorted(users)}"
+    sources = {name: ast.unparse(node) for name, node in users.items()}
+    assert any(
+        "_rendered_boundaries" in source or "message_token_spans" in source
+        for source in sources.values()
+    )
+    assert any("select_points" in source for source in sources.values())
+
+    # The blind spot this guard exists to close is not "a writer-backed test disappeared" but
+    # "the stand-in drifted from the writer and nothing noticed". Exactly one test in this
+    # repository can notice that: the one rendering the same conversations through both. It is
+    # identified by what it does -- builds a ``_SwapTokenizer`` and renders through the
+    # ``real_tokenizer`` fixture -- because a name is the one part of a test a refactor is free
+    # to change and a gutted body is the mutant that got past the first version of this guard.
+    comparisons = [
+        name
+        for name in users
+        if "_SwapTokenizer(" in sources[name] and "_renders(real_tokenizer" in sources[name]
+    ]
+    assert comparisons, (
+        "no test renders the same conversations through both the stand-in and the writer, so "
+        "nothing here would notice the stand-in accepting a shape the real template refuses -- "
+        "the exact gap that killed EXP-002 with all 39 tests green"
+    )
+    # An equality over the shared table, not a spot check: the comparison has to fail when the
+    # two disagree on any row, so ``==`` against something derived from ``_TEMPLATE_SHAPES`` is
+    # required. Emptying the body drops both and this assertion is what turns red.
+    assert any(
+        "_TEMPLATE_SHAPES" in sources[name]
+        and any(
+            isinstance(statement, ast.Assert)
+            and isinstance(statement.test, ast.Compare)
+            and any(isinstance(operator, ast.Eq) for operator in statement.test.ops)
+            for statement in ast.walk(users[name])
+        )
+        for name in comparisons
+    ), (
+        "the stand-in/writer comparison no longer asserts an equality over _TEMPLATE_SHAPES, so "
+        "it can pass while the two disagree"
+    )
+
+    # And the table itself is non-degenerate, because two dicts built from an empty table are
+    # equal for free -- deleting the rows would satisfy every assertion above. The row checked
+    # by name is the shape the run actually died on; the rest are checked by kind.
+    accepted = {label for label, _messages, renders in _TEMPLATE_SHAPES if renders}
+    refused = {label for label, _messages, renders in _TEMPLATE_SHAPES if not renders}
+    assert accepted, "a table with nothing the writer accepts cannot catch an over-refusal"
+    assert refused, "a table with nothing the writer refuses cannot catch an over-acceptance"
+    assert any("system alone" in label for label in refused), (
+        "the system-only prefix is the shape EXP-002 died on; it must stay in the table"
+    )
 
 
 # ------------------------------------------------------------------------ B6, both ways
@@ -426,10 +914,14 @@ def _synthetic_point(task_id="point-0", *, true_token=7, false_token=9, filler=1
         "persistent_ids": ids,
         "windowed_ids": [filler, filler, false_token, filler, filler, filler],
         "windowed_chunks": ((0, 2), (2, 4)),
+        "windowed_head_messages": 2,
         "windowed_scored_chunk": (4, 6),
         "windowed_prompt": "windowed",
         "persistent_prompt": "persistent",
         "prefill_chunks": ((0, 2), (2, 5), (5, 7)),
+        # The first prefill chunk covers the two messages the chat template will not render
+        # apart, as it does on the real 4B; see ``_rendered_boundaries``.
+        "head_messages": 2,
         "scored_chunk": (7, len(ids)),
         "hidden_spans": (hidden_span,),
         "hidden_character_spans": ((0, 1),),
@@ -1102,6 +1594,14 @@ def test_the_artifact_records_the_forward_schedule_so_the_masking_is_auditable(
         schedule = record["forward_schedule"]
         chunks = schedule["persistent_chunks"]
         assert chunks[-1]["scored"] is True
+        # The chunk count is one short of the message count for each message the template will
+        # not render on its own, so the artifact says how many the first chunk covers -- without
+        # it a reader cannot tell an undivided head from a lost boundary.
+        assert schedule["persistent_head_messages"] >= 1
+        assert schedule["arm_c_head_messages"] >= 1
+        assert all(
+            span["start"] >= chunks[0]["end"] for span in record["hidden_spans"]
+        ), "a hidden span inside the undivided head block would be a mask over unlocated text"
         assert all(chunk["tokens"] == chunk["end"] - chunk["start"] for chunk in chunks)
         # No gap and no overlap across the whole forward sequence.
         assert [chunk["start"] for chunk in chunks[1:]] == [

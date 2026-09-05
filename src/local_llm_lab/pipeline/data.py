@@ -253,6 +253,35 @@ def render_rows(
         target = messages[-1]
         if not isinstance(target, dict) or target.get("role") != "assistant":
             raise ValueError("rendered row must end with an assistant target")
+        # The prompt is ``messages[:-1]``, and a chat template may refuse a conversation that
+        # carries no user query at all -- Qwen3.5's scans in reverse for one and raises
+        # ``No user query found in messages.`` when it finds none. Every producer in this repo
+        # starts a row ``[system, user, ...]`` so the slice always keeps one, but ``render_rows``
+        # is also reached by ``render_dataset`` over a ``--source`` directory given on the
+        # command line, where a row shaped ``[system, assistant]`` renders as ``[system]`` and
+        # dies inside the template.
+        #
+        # This closes that one class and no other, and the reason is the slice. Qwen3.5 makes
+        # four refusals; the other three -- a system message that is not first, an unknown role,
+        # content that is not a string -- are properties of the row **as supplied**, and the
+        # template names each one accurately ("System message must be at the beginning.",
+        # "Unexpected message role.", "Unexpected content type.") about the very messages the
+        # author wrote. A check here would be a second copy of that guard with a worse message.
+        # The missing user turn is the exception because it is *not* a property of the row: the
+        # row ``[system, assistant]`` is well formed to anyone reading their own file, and only
+        # dropping the assistant target makes it unrenderable. Naming that here is the only way
+        # the complaint describes a list the author actually has. Whoever meets the other three
+        # meets them as ``jinja2.exceptions.TemplateError`` out of the ``build_prompt`` below.
+        #
+        # Narrower still is the template's real user-query rule -- a user turn whose *trimmed*
+        # content is not wrapped in ``<tool_response>`` -- and that stays unchecked for the same
+        # reason: nothing in or out of this repo emits a row whose only user turn is a tool
+        # response, and the template names it if one ever arrives.
+        if not any(
+            isinstance(message, dict) and message.get("role") == "user"
+            for message in messages[:-1]
+        ):
+            raise ValueError("rendered row's prompt must contain a user turn")
         content = target.get("content")
         if not isinstance(content, str):
             raise ValueError("assistant target content must be a string")

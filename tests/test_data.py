@@ -838,6 +838,35 @@ def test_render_rows_verbatim_chat_fallback_is_an_explicit_allowlist() -> None:
         )
 
 
+def test_render_rows_refuses_a_prompt_slice_that_keeps_no_user_turn() -> None:
+    """``messages[:-1]`` must still be a conversation the chat template will render.
+
+    A chat template may refuse a conversation carrying no user query -- Qwen3.5's scans in
+    reverse for one and raises ``No user query found in messages.`` -- so a row shaped
+    ``[system, assistant]`` renders its prompt as ``[system]`` alone and dies inside Jinja.
+    Every producer in this repo opens ``[system, user, ...]``, but ``render_dataset`` runs this
+    over a ``--source`` directory named on the command line, and the existing checks (non-empty,
+    ends with an assistant target, string content) all pass on that shape.
+
+    This is the one refusal ``render_rows`` renames, and deliberately: it is the only one caused
+    by ``render_rows``' own slice rather than by the row. Qwen3.5's other three -- system not
+    first, unknown role, non-string content -- are defects in the messages as written, and the
+    template names each of them about those same messages, so they still surface as
+    ``jinja2.exceptions.TemplateError`` from ``build_prompt`` and this test does not cover them.
+    See the comment at the check for why a second copy of those guards would say less.
+    """
+    orphan = {
+        "messages": [
+            {"role": "system", "content": "rules"},
+            {"role": "assistant", "content": "plain reply with no tool call"},
+        ],
+        "metadata": {"source": "pre-expansion-policy-replay"},
+    }
+
+    with pytest.raises(ValueError, match="must contain a user turn"):
+        render_rows([orphan], _LegacyTokenizer(), spec=_legacy_spec())
+
+
 class _TruncatingWriter:
     """A file object that writes a prefix and then fails, standing in for a full disk."""
 

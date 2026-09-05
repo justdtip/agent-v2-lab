@@ -444,6 +444,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
+    { name = "jinja2" },
     { name = "mlx-lm", extra = ["train"] },
     { name = "mlx-tune" },
 ]
@@ -457,6 +458,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "datasets", specifier = ">=2.14,<4" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "mlx-lm", extras = ["train"], specifier = "==0.31.3" },
     { name = "mlx-tune", specifier = "==0.6.0" },
 ]

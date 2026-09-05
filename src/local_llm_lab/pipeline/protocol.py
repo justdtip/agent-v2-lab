@@ -259,6 +259,20 @@ def build_prompt(
     caller that omits ``spec`` (``tests/test_probes.py``, an uncommitted slice at the Chief's
     gate) can be updated. The dead ``tools=`` seam, never passed to the template and never
     supplied by any caller, is gone.
+
+    **Precondition on ``messages``, which the template enforces and this function does not.**
+    Qwen3.5's chat template scans the list in reverse for a ``user`` turn whose content, once
+    trimmed, is not a ``<tool_response>`` wrapper, and raises ``jinja2`` ``TemplateError: No
+    user query found in messages.`` when it finds none; it also refuses a system message
+    anywhere but index 0, an unknown role, and content that is neither a string, ``None``, nor a
+    list of content items. Qwen2.5's template has none of these guards, so a
+    caller that was correct on the 3B is not thereby correct on the 4B -- EXP-002 died three
+    seconds into a run on ``[system]`` alone, a prefix that renders fine under 2.5. Every
+    caller in this repo builds ``[system, user, ...]`` and only ever appends, so the precondition
+    holds by construction; the two places that render a *slice* of a conversation rather than
+    the whole of it check it explicitly (``pipeline.data.render_rows``, which drops the
+    assistant target, and ``probes.state_swap._rendered_boundaries``, which walks every prefix).
+    A new caller that slices, filters or reorders messages owes the same check.
     """
     compatibility_mode = spec is None
     resolved_spec = _compatibility_spec() if compatibility_mode else spec

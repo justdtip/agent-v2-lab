@@ -403,6 +403,11 @@ def run_task(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": task.prompt},
     ]
+    # ``[:2]`` is the whole list, built two lines above, and it is written as a slice only to
+    # say that the cache prefix is the system-and-user opening. It is safe because that opening
+    # contains a user turn: a chat template may refuse a conversation that carries none --
+    # Qwen3.5's raises ``No user query found in messages.`` -- so a prefix slice that dropped the
+    # user message would die inside the template. Anything appended below keeps it.
     prefix_prompt = build_prompt(
         tokenizer,
         messages[:2],

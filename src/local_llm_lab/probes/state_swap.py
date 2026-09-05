@@ -147,8 +147,8 @@ def hidden_message_indices(
 
 def _rendered_boundaries(
     tokenizer: Any, messages: Sequence[dict[str, Any]], *, spec: Any
-) -> tuple[list[int], list[int]]:
-    """Cumulative token and character counts at every message boundary of the render.
+) -> tuple[int, list[int], list[int]]:
+    """The head block's size, and cumulative token and character counts at every boundary after it.
 
     The boundaries are found by rendering each prefix of the conversation through the same
     ``build_prompt`` the scored prompt goes through, and taking the length. That is only valid
@@ -158,19 +158,69 @@ def _rendered_boundaries(
     Chat templates separate turns with atomic special tokens, so both hold in practice -- but a
     silently wrong span hides the wrong text while the forward still runs cleanly, which is the
     failure this experiment cannot afford.
+
+    **Not every prefix is a conversation the template will render, so the scan discovers where
+    it can start rather than assuming index 1.** Qwen3.5's template scans the message list in
+    reverse for a user query and refuses outright when it finds none, so ``[system]`` alone --
+    the first prefix of every conversation this repo builds -- raises ``No user query found in
+    messages.``. The 2.5 template has no such guard, which is why a locator that started at
+    count 1 was correct by accident on the 3B and died three seconds into the 4B run. The
+    smallest renderable count ``k0`` becomes the **head block**: messages ``[0, k0)`` are
+    located as one chunk rather than individually, and everything from ``k0`` on keeps its own
+    boundary. At ``k0 == 1`` this is exactly the per-message scheme it replaces.
+
+    Two things are deliberately *not* inferred from the first success. Renderability is **not
+    monotone** -- ``[system, user, assistant]`` renders and ``[system, user, assistant, system]``
+    raises ``System message must be at the beginning.`` -- so every count past the head is
+    required to render and a refusal there is a hard error. And a tool observation inside the
+    head block would have no locatable span at all while the scan reported success: a shape like
+    ``[system, tool, assistant, user, ...]`` yields ``k0 == 4`` with an unlocatable observation
+    at index 1 and no error raised. That is refused here, where the reason is structural, rather
+    than left to the caller's index check, which only sees the observations this run happens to
+    hide.
     """
+    # ``jinja2`` is what raises when a chat template refuses a conversation, and this catch is
+    # the only thing standing between that refusal and a crash, so the package is declared in
+    # pyproject rather than relied on as a transitive of ``mlx-lm``.
+    from jinja2.exceptions import TemplateError
+
     from local_llm_lab.pipeline.protocol import build_prompt
 
+    head_count = 0
     token_counts = [0]
     char_counts = [0]
     previous_text = ""
     previous_ids: list[int] = []
+    refusal = "the conversation is empty"
     for count in range(1, len(messages) + 1):
         # ``keep_last`` is the whole prefix, so the render windows nothing: these boundaries
         # have to describe the unwindowed history the persistent arms actually prefill.
-        text = build_prompt(
-            tokenizer, list(messages[:count]), keep_last=count, spec=spec, generation=False
-        )
+        try:
+            text = build_prompt(
+                tokenizer, list(messages[:count]), keep_last=count, spec=spec, generation=False
+            )
+        except TemplateError as error:
+            if head_count:
+                raise ValueError(
+                    f"chat template rendered the first {head_count} messages but refused the "
+                    f"first {count}, so the boundaries after the head block cannot be located: "
+                    f"{type(error).__name__}: {error}"
+                ) from error
+            refusal = f"{type(error).__name__}: {error}"
+            continue
+        if not head_count:
+            head_count = count
+            unlocatable = [
+                index
+                for index, message in enumerate(messages[:count])
+                if message["role"] == "tool"
+            ]
+            if unlocatable:
+                raise ValueError(
+                    "chat template refused every prefix shorter than "
+                    f"{count} messages, so messages {unlocatable} are tool observations inside "
+                    "an undivided head block and have no span the mask could index"
+                )
         if not text.startswith(previous_text):
             raise ValueError(
                 f"chat template is not prefix-additive at message {count - 1}: the render of "
@@ -186,16 +236,27 @@ def _rendered_boundaries(
         token_counts.append(len(ids))
         char_counts.append(len(text))
         previous_text, previous_ids = text, ids
-    return token_counts, char_counts
+    if not head_count:
+        raise ValueError(
+            "chat template refused every prefix of this conversation, so no message boundary "
+            f"can be located: {refusal}"
+        )
+    return head_count, token_counts, char_counts
 
 
 def message_token_spans(
     tokenizer: Any, messages: Sequence[dict[str, Any]], *, spec: Any
-) -> tuple[tuple[tuple[int, int], ...], int]:
-    """Half-open token span of each message in the rendered prompt, and the render's length."""
-    token_counts, _chars = _rendered_boundaries(tokenizer, messages, spec=spec)
+) -> tuple[int, tuple[tuple[int, int], ...], int]:
+    """The head block's size, the render's chunk spans, and its token length.
+
+    ``spans[0]`` covers ``messages[:head_count]`` as one block -- see ``_rendered_boundaries``
+    for why the template may refuse to render a shorter prefix -- and ``spans[j]`` for ``j >= 1``
+    covers message ``head_count - 1 + j``. Use ``_spans_by_message`` rather than indexing this
+    tuple by message index; the two coincide only when ``head_count == 1``.
+    """
+    head_count, token_counts, _chars = _rendered_boundaries(tokenizer, messages, spec=spec)
     spans = tuple(zip(token_counts[:-1], token_counts[1:], strict=True))
-    return spans, token_counts[-1]
+    return head_count, spans, token_counts[-1]
 
 
 def _unwindowed_keep_last(task: Any) -> int:
@@ -311,7 +372,26 @@ def select_points(
         if strip_notes:
             history = strip_pending(history)
 
-        token_spans, char_spans = _persistent_spans(tokenizer, history, spec=spec)
+        head_count, token_spans, char_spans = _persistent_spans(tokenizer, history, spec=spec)
+        if min(hidden_indices) < head_count:
+            # The head block is the prefix the chat template would not render one message at a
+            # time, so it carries no interior boundary. A hidden observation inside it has no
+            # span for the mask to index, and there is no defensible run under that condition:
+            # this raises rather than joining the ``reject`` tally, because a structural break
+            # in the instrument must not be reported as a property of the data.
+            #
+            # It cannot fire today, and the reason it is kept is the reason it cannot.
+            # ``_rendered_boundaries`` already refuses a head block containing a ``role ==
+            # "tool"`` message, which is *its copy* of the rule that the observations
+            # ``window_messages`` hides are tool messages. This check owns no copy of that rule:
+            # it reads the hidden set ``hidden_message_indices`` derived from ``window_messages``
+            # itself, so it is what survives a change to what the windowing hides.
+            raise ValueError(
+                f"hidden observation at message {min(hidden_indices)} falls inside the "
+                f"{head_count}-message head block, which has no per-message boundary"
+            )
+        token_by_message = _spans_by_message(head_count, token_spans)
+        char_by_message = _spans_by_message(head_count, char_spans)
         persistent_prompt = (
             build_prompt(tokenizer, history, keep_last=len(history), spec=spec) + prefix
         )
@@ -325,8 +405,8 @@ def select_points(
             reject("scored_render_diverged")
             continue
 
-        hidden_spans = tuple(token_spans[index] for index in hidden_indices)
-        hidden_character_spans = tuple(char_spans[index] for index in hidden_indices)
+        hidden_spans = tuple(token_by_message[index] for index in hidden_indices)
+        hidden_character_spans = tuple(char_by_message[index] for index in hidden_indices)
         occurrences = persistent_prompt.count(filename)
         inside = occurrences == 1 and any(
             start <= persistent_prompt.index(filename) < end
@@ -354,7 +434,7 @@ def select_points(
             continue
 
         # Arm C's own chunking, so it runs the same forward path as the persistent arms.
-        windowed_token_spans, _windowed_chars = _persistent_spans(
+        windowed_head_count, windowed_token_spans, _windowed_chars = _persistent_spans(
             tokenizer, stripped_windowed, spec=spec
         )
         windowed_ids = encode(tokenizer, windowed_prompt)
@@ -384,10 +464,16 @@ def select_points(
                 "windowed_prompt": windowed_prompt,
                 "windowed_ids": windowed_ids,
                 "windowed_chunks": windowed_token_spans,
+                "windowed_head_messages": windowed_head_count,
                 "windowed_scored_chunk": (windowed_token_spans[-1][1], len(windowed_ids)),
                 "persistent_prompt": persistent_prompt,
                 "persistent_ids": persistent_ids,
                 "prefill_chunks": token_spans,
+                # How many messages the first prefill chunk covers. Recorded because the chunk
+                # count is otherwise one short of the message count with nothing in the artifact
+                # to say why, and because it is what lets a reader check from the record alone
+                # that no hidden observation fell inside the undivided head.
+                "head_messages": head_count,
                 "scored_chunk": (token_spans[-1][1], len(persistent_ids)),
                 "hidden_spans": hidden_spans,
                 "hidden_character_spans": hidden_character_spans,
@@ -457,13 +543,33 @@ def naive_rule_comparison(
 
 def _persistent_spans(
     tokenizer: Any, messages: Sequence[dict[str, Any]], *, spec: Any
-) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
-    """Token and character spans of every message, from one pass over the prefix renders."""
-    token_counts, char_counts = _rendered_boundaries(tokenizer, messages, spec=spec)
+) -> tuple[int, tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    """The head block's size and the render's token and character chunks, in one pass.
+
+    The chunks tile the render contiguously from column 0, which is what ``prefill`` needs; they
+    are **not** indexed by message. ``_spans_by_message`` is the only supported way to go from a
+    message index to its span.
+    """
+    head_count, token_counts, char_counts = _rendered_boundaries(tokenizer, messages, spec=spec)
     return (
+        head_count,
         tuple(zip(token_counts[:-1], token_counts[1:], strict=True)),
         tuple(zip(char_counts[:-1], char_counts[1:], strict=True)),
     )
+
+
+def _spans_by_message(
+    head_count: int, chunks: Sequence[tuple[int, int]]
+) -> dict[int, tuple[int, int]]:
+    """Message index -> its chunk, defined only for messages outside the head block.
+
+    A dict rather than the chunk tuple, because the chunk tuple is shorter than the message list
+    and shifted by ``head_count - 1`` whenever the template refuses the shortest prefixes.
+    Indexing it positionally by message index would take a real span belonging to the wrong
+    message and mask the wrong text -- clean-running and wrong, the one failure mode this
+    module's boundaries exist to prevent. A missing key raises instead.
+    """
+    return {head_count - 1 + position: span for position, span in enumerate(chunks) if position}
 
 
 def suffix_occurrences_outside(
@@ -558,13 +664,18 @@ def forward_schedule(point: dict[str, Any]) -> dict[str, Any]:
     arm_c.append(described(point["windowed_scored_chunk"], scored=True, spans=()))
     return {
         "persistent_chunks": persistent,
+        "persistent_head_messages": point["head_messages"],
         "arm_c_chunks": arm_c,
+        "arm_c_head_messages": point["windowed_head_messages"],
         "note": (
             "arms A, B and the control share the persistent boundaries; carried_spans is arm "
             "A's masking, arm B carries none at any chunk, and the control carries the foreign "
             "point's spans at these same boundaries. A chunk carrying nothing while a hidden "
             "span lies inside it is the rule, not a gap: the observation is read as it arrives "
-            "so the recurrent state acquires it, and only later forwards are blinded to it"
+            "so the recurrent state acquires it, and only later forwards are blinded to it. "
+            "The first prefill chunk covers head_messages messages rather than one: the chat "
+            "template refuses to render a shorter prefix, so that block has no interior "
+            "boundary. No hidden span may start inside it and select_points raises if one does"
         ),
     }
 
