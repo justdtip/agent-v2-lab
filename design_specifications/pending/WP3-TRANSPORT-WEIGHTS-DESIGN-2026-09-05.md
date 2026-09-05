@@ -36,10 +36,20 @@ repository convention attaches to blocks 10, 14, 18, 22, 26, and every one of th
 block. The measurement would silently return DeltaNet statistics where attention was intended and
 would not raise.
 
-  - In-band (13 to 29) attention blocks are **15, 19, 23, 27**, writing layers 16, 20, 24, 28.
-    Four, not five: block 11 writes layer 12, one layer below the band's onset.
-  - Head count for the "top 1 percent of workspace-layer heads" argument becomes 4 x 16 = **64**
-    query heads, not 80. The argument that a 1 percent selection is not meaningful survives.
+  - Attention blocks needed by the measurement are **11, 15, 19, 23, 27**, writing layers 12, 16,
+    20, 24, 28. *Corrected 2026-09-05 late by the Deputy.* This section originally said four,
+    excluding block 11 because layer 12 sits one below the band's onset at 13. That was right about
+    the band and wrong about the measurement, because R41b's pairs are 12/13, 15/16, 19/20, 23/24
+    and 27/28, and layer 12 is the attention member of pair 12/13 — the one pair whose recurrent
+    layer pairs upward rather than down, which is exactly the member any list derived from "the
+    in-band attention layers are 16, 20, 24, 28" drops. Admitting layer 12 was the resolution I
+    argued for in the WP1/WP5 verdicts, so this design should have followed R41b to five and did
+    not. Note for anyone comparing versions: the Chief's original five, "attention layers 11, 15,
+    19, 23, 27", was five block indices misread as layer numbers and was wrong for its own reason;
+    arriving at the same five here does not make that derivation right.
+  - Head count for the "top 1 percent of workspace-layer heads" argument is therefore **80** query
+    heads over five blocks, which was the Chief's original figure, not the 64 this section first
+    gave. The argument that a 1 percent selection is not meaningful survives at either number.
   - Every layer set in this design is written as `block b -> layer L` so the pair cannot be lost.
 
   Second-order consequence for R40b, raised here because this design is the first to depend on
