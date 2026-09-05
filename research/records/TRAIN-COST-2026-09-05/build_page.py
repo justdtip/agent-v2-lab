@@ -18,11 +18,11 @@ CHUNKWISE_INTERCEPT = 10.12 - FLOOR_SLOPE * 2874        # preflight's single chu
 
 def load():
     rows = []
-    for name in ("rows-probe1.jsonl", "rows-probe2.jsonl", "rows-probe3.jsonl", "rows.jsonl"):
+    for name in ("rows-probe1.jsonl", "rows-probe2.jsonl", "rows-probe3.jsonl", "rows-probe4.jsonl", "rows-probe5.jsonl"):
         f = HERE / name
         if f.exists():
             rows += [json.loads(line) for line in f.read_text().splitlines() if line.strip()]
-    ok = {v: sorted([r for r in rows if r.get("ok") and r["variant"] == v], key=lambda r: r["tokens"]) for v in "ABCDEF"}
+    ok = {v: sorted([r for r in rows if r.get("ok") and r["variant"] == v], key=lambda r: r["tokens"]) for v in "ABCDEFGJKLMN"}
     stops = {r["variant"]: r for r in rows if not r.get("ok")}
     return ok, stops
 
@@ -42,9 +42,9 @@ def fit(points):
 
 def main():
     ok, stops = load()
-    fits = {v: fit(ok[v]) for v in "ABCDEF"}
+    fits = {v: fit(ok[v]) for v in "ABCDEFGJKLMN"}
     summary = {}
-    for v in "ABCDEF":
+    for v in "ABCDEFGJKLMN":
         f = fits[v]
         if f:
             a, b = f
@@ -69,13 +69,14 @@ def main():
         return "n/a" if x is None else f"{x:,.{d}f}"
 
     A = summary.get("A", {}); B = summary.get("B", {}); C = summary.get("C", {}); Dv = summary.get("D", {})
+    E = summary.get("E", {}); F = summary.get("F", {}); J = summary.get("J", {}); K = summary.get("K", {}); M = summary.get("M", {}); N = summary.get("N", {})
     have_b = bool(B)
     lever_line = (
         f"Removing the full logits cuts the slope from {fmt(A.get('slope_mib_per_token'),2)} to {fmt(B.get('slope_mib_per_token'),2)} MiB per token and moves the working-set ceiling from about {fmt(A.get('ceiling_tokens_ws'),0)} to about {fmt(B.get('ceiling_tokens_ws'),0)} tokens."
         if have_b else "Variant B is still running; the comparison fills in when it lands."
     )
     table_rows = []
-    for v in "ABCDEF":
+    for v in "ABCDEFGJKLMN":
         for r in ok[v]:
             table_rows.append(f"<tr><td>{v}</td><td>{r['tokens']:,}</td><td>{r['peak_gib']:.2f}</td><td>{r['peak_ws_share']:.2f}</td><td>{r['step_s']:.1f}</td><td>{r['step_tokens_per_s']:.0f}</td><td>{r['loss_step2']:.2f}</td></tr>")
         s = stops.get(v)
@@ -143,9 +144,9 @@ code {{ font-family:"IBM Plex Mono", monospace; font-size:.9em; }}
 
 <div class="charts">
   <div class="chart"><h3>Peak memory per step</h3><p class="sub">GiB against row length. Dashed: the Metal working set and the 85 percent launch cap. Dotted: preflight's chunkwise envelope, a single-point fit.</p><div id="mem"></div>
-    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A · trainer as it stands</span><span><i class="sw" style="background:var(--b)"></i>B · chunked cross-entropy</span><span><i class="sw" style="background:var(--c)"></i>C · checkpointing off</span><span><i class="sw" style="background:var(--d)"></i>D · recurrence backward removed</span><span><i class="sw" style="background:var(--ws)"></i>working set</span><span><i class="sw" style="background:var(--pre)"></i>preflight envelope</span></div></div>
+    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A · trainer as it stands</span><span><i class="sw" style="background:var(--b)"></i>B · chunked cross-entropy</span><span><i class="sw" style="background:var(--c)"></i>J · forward only, no gradient</span><span><i class="sw" style="background:var(--d)"></i>M · adapters on the top 8 layers</span><span><i class="sw" style="background:var(--ws)"></i>working set</span><span><i class="sw" style="background:var(--pre)"></i>preflight envelope</span></div></div>
   <div class="chart"><h3>Step throughput</h3><p class="sub">Tokens per second for one optimiser step, the second of two at each length so kernel compilation is excluded.</p><div id="tps"></div>
-    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A</span><span><i class="sw" style="background:var(--b)"></i>B</span><span><i class="sw" style="background:var(--c)"></i>C</span><span><i class="sw" style="background:var(--d)"></i>D</span></div></div>
+    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A · all 32 layers</span><span><i class="sw" style="background:var(--b)"></i>D · recurrence backward removed</span><span><i class="sw" style="background:var(--c)"></i>N · top 16 layers</span><span><i class="sw" style="background:var(--d)"></i>M · top 8 layers</span></div></div>
 </div>
 
 <h2>What the slope is made of</h2>
@@ -156,10 +157,16 @@ code {{ font-family:"IBM Plex Mono", monospace; font-size:.9em; }}
 <tr><td>B</td><td>full logits never resident</td><td>{fmt(B.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-B.get('slope_mib_per_token',0),2)}</td><td>21.0 s</td></tr>
 <tr><td>C</td><td>gradient checkpointing off</td><td>{fmt(C.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-C.get('slope_mib_per_token',0),2)}</td><td>faster by a quarter</td></tr>
 <tr><td>D</td><td>recurrence's backward removed</td><td>{fmt(Dv.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-Dv.get('slope_mib_per_token',0),2)}</td><td>15.8 s</td></tr>
-<tr><td>E</td><td>no LoRA on the MLP projections</td><td>{fmt(summary.get('E',{{}}).get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-summary.get('E',{{}}).get('slope_mib_per_token',0),2)}</td><td>20.9 s</td></tr>
-<tr><td>F</td><td>adapters in bfloat16</td><td>{fmt(summary.get('F',{{}}).get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-summary.get('F',{{}}).get('slope_mib_per_token',0),2)}</td><td>20.5 s</td></tr>
+<tr><td>E</td><td>no LoRA on the MLP projections</td><td>{fmt(E.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-E.get('slope_mib_per_token',0),2)}</td><td>20.9 s</td></tr>
+<tr><td>F</td><td>adapters in bfloat16</td><td>{fmt(F.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-F.get('slope_mib_per_token',0),2)}</td><td>20.5 s</td></tr>
+<tr><td>G</td><td>staged gradient evaluation, last layer first</td><td>higher than A at every length</td><td></td><td>order matters</td></tr>
+<tr><td>J</td><td>forward only, training mode, no gradient</td><td>{fmt(J.get('slope_mib_per_token'),2)}</td><td></td><td>4.1 s at 2,048</td></tr>
+<tr><td>K</td><td>forward only, inference mode, no gradient</td><td>{fmt(K.get('slope_mib_per_token'),2)}</td><td></td><td>3.9 s at 2,048</td></tr>
+<tr><td>L</td><td>sixteen of thirty-two layers checkpointed</td><td>about 7.2 (linearity check only)</td><td></td><td></td></tr>
+<tr><td>N</td><td>adapters on the top 16 layers only</td><td>{fmt(N.get('slope_mib_per_token'),2)}</td><td></td><td>9.9 s at 2,048</td></tr>
+<tr><td>M</td><td>adapters on the top 8 layers only</td><td>{fmt(M.get('slope_mib_per_token'),2)}</td><td></td><td>7.4 s at 2,048</td></tr>
 </table></div>
-<div class="callout">Checkpointing works: switched off, the step costs 13.9 MiB per token, so the hook discards about 11.5 of it. The recurrence's backward is a quarter of the step time and none of the memory: removing it leaves every peak identical to the hundredth. The logits, the MLP adapters and the adapter dtype are each worth a tenth. What survives all of that, about 2.2 MiB per token, matches to a few percent the sum over all thirty-two layers of the activations each layer's backward needs: gate, up and product for the SwiGLU, the projections' inputs, the residual. A checkpoint that recomputed one layer at a time would hold one layer's worth, about 80 KiB per token, not thirty-two. The standing hypothesis is that MLX's lazy evaluation runs every checkpointed layer's recompute before the gradient chain frees them; the test is a staged evaluation of the gradients on the real model and a depth-scaling run of a model-free stack, both in progress.</div>
+<div class="callout">Checkpointing works: switched off, the step costs 13.9 MiB per token, so the hook discards about 11.5 of it. The recurrence's backward is a quarter of the step time and none of the memory. The logits, the MLP adapters and the adapter dtype are each worth a tenth. Then two cuts locate what is left. The forward pass alone, with no gradient in the graph, carries about 1 MiB per token in either mode, so roughly half the slope exists before any backward begins; and the backward's extra 1 MiB per token is the same whether eight, sixteen or thirty-two layers are in the chain, so it does not come from the layers. What a chunked loss saves is length-dependent, 1.3 GiB at 2,048 tokens and 0.7 at 4,096, which says the peak moment moves with row length: the loss at short rows, one attention block's quadratic scores under recompute at long ones. Evaluation order matters too: forcing the last layer's gradients first raises the peak by half. The engineering levers that survive: a loss that never holds the full logits in forward or backward, and, for speed rather than memory, adapters on fewer layers, since the top eight train at 276 tokens a second against 126 for all thirty-two at nearly the same memory.</div>
 
 <h2>Every row</h2>
 <div class="wrap"><table>
@@ -190,13 +197,14 @@ function chart(id, series, opts) {{
     for (const p of se.pts) s += `<circle cx="${{X(p[0])}}" cy="${{Y(p[1])}}" r="4" fill="${{css(se.c)}}"/>`; }}
   document.getElementById(id).innerHTML = s + '</svg>';
 }}
-const A = D.rows.A, B = D.rows.B, C = D.rows.C, Dd = D.rows.D;
-chart('mem', [{{pts:A.map(r=>[r.tokens,r.peak_gib]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.peak_gib]), c:'--b'}}, {{pts:C.map(r=>[r.tokens,r.peak_gib]), c:'--c'}}, {{pts:Dd.map(r=>[r.tokens,r.peak_gib]), c:'--d'}}],
+const A = D.rows.A, B = D.rows.B, C = D.rows.C, Dd = D.rows.D, J = D.rows.J, K = D.rows.K, M = D.rows.M, N = D.rows.N;
+chart('mem', [{{pts:A.map(r=>[r.tokens,r.peak_gib]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.peak_gib]), c:'--b'}}, {{pts:J.map(r=>[r.tokens,r.peak_gib]), c:'--c'}}, {{pts:M.map(r=>[r.tokens,r.peak_gib]), c:'--d'}}],
   {{label:'peak memory per step', ylabel:'peak GiB', ymax: 20, xmax: 9000, yticks:[0,5,10,15,20], xticks:[0,2048,4096,6144,8192],
    hlines:[{{y:D.ws, c:'--ws', d:'6 4', t:'working set 17.76 GiB'}}, {{y:D.ws*D.cap, c:'--ws', d:'2 3', t:'85% launch cap'}}],
    lines:[{{a:D.chunkwise_intercept, b:D.floor_slope, c:'--pre'}}]}});
-chart('tps', [{{pts:A.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--b'}}, {{pts:C.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--c'}}, {{pts:Dd.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--d'}}],
-  {{label:'step throughput', ylabel:'tokens per second', ymax: 180, xmax: 9000, yticks:[0,50,100,150], xticks:[0,2048,4096,6144,8192], hlines:[]}});
+chart('tps', [{{pts:A.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--a'}}, {{pts:Dd.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--b'}}, {{pts:N.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--c'}}, {{pts:M.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--d'}}],
+  {{label:'step throughput', ylabel:'tokens per second', ymax: 320, yticks:[0,100,200,300], xticks:[0,2048,4096,6144,8192], hlines:[]}});
+// xmax: 9000, yticks:[0,50,100,150], xticks:[0,2048,4096,6144,8192], hlines:[]}});
 </script>
 """
     OUT.write_text(html, encoding="utf-8")

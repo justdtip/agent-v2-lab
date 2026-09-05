@@ -41,7 +41,7 @@ def progress(**fields):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--variant", choices=["A", "B", "C", "D", "E", "F", "G", "J", "K", "L"], required=True)
+    ap.add_argument("--variant", choices=["A", "B", "C", "D", "E", "F", "G", "J", "K", "L", "M", "N"], required=True)
     ap.add_argument("--tokens", type=int, required=True)
     ap.add_argument("--ce-chunk", type=int, default=1024)
     ap.add_argument("--out", type=Path, required=True)
@@ -94,8 +94,13 @@ def main() -> int:
         if args.variant == "E":
             keys = [k for k in keys if not any(m in k for m in ("gate_proj", "up_proj", "down_proj", "mlp."))]
             row["recipe"]["lora_keys_used"] = keys
+        # M and N: adapters on the top 8 or 16 layers only, so the backward chain stops there
+        # and the layers below need no recompute; the memory slope's dependence on backward
+        # depth is the model-side version of the depth sweep.
+        lora_depth = {"M": 8, "N": 16}.get(args.variant, resolved.num_layers)
+        row["recipe"]["lora_layers"] = lora_depth
         linear_to_lora_layers(
-            model, resolved.num_layers,
+            model, lora_depth,
             {"keys": keys, "rank": train["rank"], "scale": train["scale"],
              "dropout": train.get("dropout", 0.0)},
         )

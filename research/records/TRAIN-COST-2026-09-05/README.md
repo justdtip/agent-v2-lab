@@ -73,3 +73,41 @@ inference mode) and L (sixteen of thirty-two layers checkpointed) run at 22:56; 
 `rows-probe4.jsonl` when they land. The convexity on A's rows is one attention block's scores and
 probabilities under recompute, two to three T-squared matrices, not eight blocks; it goes into
 issue 85 as a named term with the linear residual fitted around it.
+
+## Addendum, 22:48 to 22:54: probes 4 and 5 (variants G, J, K, L, M, N)
+
+Rows in `rows-probe4.jsonl` (G, J, K, L) and `rows-probe5.jsonl` (M, N); logs `launcher-probe4.log`,
+`launcher-probe5.log`; per-row files `row-G-*` to `row-N-*` (G's carry a `staged` block).
+
+| variant | change against A | peak at 2,048 tokens (GiB) | slope 512 to 2,048 (MiB per token) | step at 2,048 |
+| --- | --- | --- | --- | --- |
+| A | full step, adapters on all 32 layers | 7.42 | 2.16 | 14.9 s |
+| J | forward only, training mode, no gradient | 4.95 | 1.12 | 4.1 s |
+| K | forward only, inference mode, no gradient | 4.95 | 0.89 | 3.9 s |
+| N | adapters on the top 16 layers only | 7.08 | 2.08 | 9.9 s |
+| M | adapters on the top 8 layers only | 6.90 | 2.03 | 7.4 s |
+| G | staged evaluation, last layer's gradients first | 7.99 at 1,024 against A's 5.30 | | |
+| L | sixteen of thirty-two layers checkpointed | 10.21 at 1,024 | about 7.2 | |
+
+**Reading.** (1) The forward pass alone carries about 1 MiB per token in either mode, with the
+same peak at 2,048 tokens, so roughly half the step's slope exists before any backward begins and
+does not depend on the training-mode recurrence path. (2) The backward adds about 1 MiB per token
+and that addition is the same with 8, 16 or 32 layers in the chain (0.91, 0.96, 1.04), where a
+per-layer origin would give 0.26, 0.52, 1.04; the backward's memory does not come from the
+layers. (3) The chunked cross-entropy's saving is length-dependent (1.3 GiB at 2,048, 0.7 at
+4,096), so the peak moment moves with row length: the loss's tensors at short rows, one attention
+block's quadratic scores and probabilities under recompute at long ones, which is also the
+Deputy's convexity. (4) Evaluation order matters: forcing the last layer's gradients first raises
+the 1,024-token peak from 5.30 to 7.99 GiB; the default order is the better one. (5) L is a
+linearity check only (the Head withdrew it as a discriminator before its rows): 7.2 against the
+8.15 that linear interpolation between C and A predicts. (6) A speed lever that fell out on the
+side: adapters on the top 8 layers train at 276 tokens per second against 126 for all 32, and on
+the top 16 at 206, at nearly the same memory; whether the quality holds is an R35 named difference
+to test on the evaluation, not assumed.
+
+**What the record does not claim.** The 2.4 MiB per token is not decomposed to a single tensor
+set. The measurements bound it: about 1 forward (logits and loss), about 1 backward and
+depth-independent (consistent with the loss's backward tensors), 0.16 layer boundaries, and a
+quadratic attention term that takes the peak over above about 3k tokens. The float32-adapter and
+per-layer-accumulation readings are refuted (E, F, M, N); the scheduler reading is refuted for a
+plain stack by the Head's depth sweep and unsupported for the model by M and N.

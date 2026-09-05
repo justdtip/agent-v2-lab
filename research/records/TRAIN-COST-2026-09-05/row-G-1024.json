@@ -1,0 +1,66 @@
+{
+  "variant": "G",
+  "tokens": 1024,
+  "ce_chunk": null,
+  "recipe": {
+    "rank": 16,
+    "scale": 32.0,
+    "batch_size": 1,
+    "grad_checkpoint": true,
+    "gated_delta_mode": "chunkwise",
+    "gated_delta_chunk": 64,
+    "max_seq_length_in_config": 2688
+  },
+  "working_set_gib": 17.760009765625,
+  "ok": true,
+  "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "lora_keys": [
+    "self_attn.q_proj",
+    "self_attn.k_proj",
+    "self_attn.v_proj",
+    "self_attn.o_proj",
+    "mlp.gate_proj",
+    "mlp.up_proj",
+    "mlp.down_proj",
+    "linear_attn.in_proj_qkv",
+    "linear_attn.in_proj_z",
+    "linear_attn.in_proj_b",
+    "linear_attn.in_proj_a",
+    "linear_attn.out_proj"
+  ],
+  "num_layers": 32,
+  "load_peak_gib": 2.2049326971173286,
+  "staged": [
+    {
+      "stage": "grads of layer 31 only",
+      "peak_gib": 4.994004290550947,
+      "active_gib": 3.078434754163027
+    },
+    {
+      "stage": "grads through layer 15",
+      "peak_gib": 7.743766838684678,
+      "active_gib": 6.5644389651715755
+    },
+    {
+      "stage": "grads of layer 31 only",
+      "peak_gib": 5.298935789614916,
+      "active_gib": 3.2261856086552143
+    },
+    {
+      "stage": "grads through layer 15",
+      "peak_gib": 7.985649162903428,
+      "active_gib": 6.8751079104840755
+    }
+  ],
+  "loss_step1": 14.062225341796875,
+  "loss_step2": 13.65374755859375,
+  "loss_tokens": 1024,
+  "first_step_s": 7.160183875006624,
+  "step_s": 6.919952291995287,
+  "step_tokens_per_s": 147.97789880495571,
+  "peak_gib": 7.985649162903428,
+  "peak_ws_share": 0.44964216057808015,
+  "active_after_gib": 2.5677600279450417,
+  "cache_after_gib": 10.050654293969274,
+  "total_s": 16.246156041976064
+}
