@@ -93,3 +93,50 @@ at 0.049 against 0.05.
 **Files added.** `out-full/summary.json`, `out-full/retrieval_probe.json` (every head-record),
 `run-full.log` (progress lines with the gate value per item), `retrieval-channels.html` (the page;
 also a private artifact).
+
+## Corrections on the Head's review, 01:15 (adopted; the reading above is amended by this section)
+
+**The mechanism is the read operation, not the query.** The paragraph above on query cosine is
+wrong as an explanation and is retracted as one: attention's read query turns barely more than the
+recurrent one between two retrieval questions (0.93 against 0.983) and attention retrieves anyway
+(hit-at-10 56 percent against 7.7). Query mobility was never the mechanism, in either channel.
+What separates the channels is the read: attention's read is a softmax over positions, a
+competition in which a small margin in the dot product becomes a large margin in mass, so a nearly
+static query still selects; the recurrent read is a linear sum in which every stored item
+contributes in proportion to its raw alignment with no sharpening. At about 1,500 positions the one
+matching key contributes roughly eleven times a non-matching one and there are about 1,499
+non-matching ones, so the crosstalk swamps the signal by two orders of magnitude and the span share
+lands at uniform: not because the store was not addressed, but because a linear read of a
+superposed store cannot separate one entry from the rest at that count. This is the classical
+capacity result for linear associative memories, on the order of one item per dimension because
+retrieval signal-to-noise falls with every stored pattern, reproduced in a production model; softmax
+attention holds far more because the exponential suppresses the non-matches. Same store, different
+reader. "The query does not move" is not the finding and should not be repeated as one.
+
+**The three weak key-head candidates from the ledger run close.** Block 1 key-head 7, block 6
+key-head 0 and block 15 key-head 3 were each measured on every context here (96 records each). Their
+median ratios are 0.92, 1.11 and 1.25, their best single records 1.77, 1.83 and 2.07, ranking 952nd,
+789th and 478th of 13,479. On the corpus where they should have declared themselves they did not.
+The item, open since the ledger run, is closed.
+
+**Block numbering.** "Blocks 4 to 6 and block 0" above are indices into the eight attention blocks.
+In the repository's numbering those are blocks 19, 23, 27 and 3, writing layers 20, 24, 28 and 4.
+The per-layer attention profile (median ratio, hit-at-10): layer 4: 1.8, 0.30; layer 8: 2.6, 0.41;
+layer 12: 2.6, 0.36; layer 16: 3.5, 0.46; layer 20: 15.2, 0.75; layer 24: 19.5, 0.84; layer 28: 9.1,
+0.74; layer 32: 6.3, 0.64. The reading is done in the band, layers 20 to 28, which is where R41e's
+pairs sit.
+
+**The within-context query contrast is a corpus limitation, not a result.** The retrieval
+questions share a template and the controls do not, so the contrast measures wording variety and
+not retrieval intent; it cannot support a claim about queries in either direction. The pairing the
+Head asked for did not work as designed and needs matched templates on both arms to run.
+
+**Counts and what remains untested.** Measured recurrent heads per context (gate constant at least
+200 tokens): 276, 272, 273, 256, 287, 288, 299, 298 of 768, mean 281; the other 487 cannot carry a
+far fact and were not measured. The correctness stratification could not run at 48 of 48 and is
+untested, not passed; whether attention's concentration tracks retrieval rather than accompanying it
+needs a harder corpus, which is the next step before anyone writes that it does. The Deputy's note
+on the instrument: the attention reconstruction gate passed at 0.0486 against 0.05, 97 percent of its
+limit, discriminating by a factor of 25 against the wrong-pairing mutant; a longer context can fail
+it without announcing that it is about to, so the next run re-measures the gate at the lengths it
+uses, before any statistic, and reports n of N.
