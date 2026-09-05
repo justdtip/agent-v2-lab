@@ -1,0 +1,107 @@
+"""Is the relay property in the shared value projection (the key-value group) or in the per-head output slice?
+Three tests on the in-band attention blocks (R41e pairs' attention members, derived from the model's layer kinds),
+on the orthogonalised population of stage 1 (the arm the selection stands on), same seed, NROT rotations and MLP-row draws:
+  A. value projection alone: the row-space map P -> (P Wv_g^T) Wv_g for each group g (residual -> 128-dim value subspace -> residual
+     through the transpose), label preservation against the null draws, and the energy the projection captures from the lens
+     population relative to random directions;
+  B. the cross table: every head's output slice paired with every group's value projection, (P Wv_g^T) Wo_h^T, 64 maps per block,
+     each scored by the stage-1 rule (preservation beyond every null draw and at least double their medians); the diagonal g = h // 4
+     is stage 1. If the property lives in Wv, columns (groups) separate and rows (heads) do not;
+  C. the per-group relay counts are computed from the selection file by the caller (kvgroup_clustering.json): no evidence either way.
+PRE-REGISTERED PRIMARY STATISTIC (the Head, 07:20, written before the run): per in-band block, on the sixteen real heads only
+(the diagonal), the ratio of between-group to within-group variance of lens preservation (one-way F over four groups of four),
+against the same statistic computed on each of the forty null populations (twenty rotated-J, twenty MLP-row draws) under the
+same real heads. Reading: the property lives in the shared value projection at a block if F on the lens population exceeds F on
+every one of the forty draws; the result is the number of such blocks among five. The null is the group structure the real heads
+impose on an arbitrary population, so passing means the group structure is specific to the lens directions. Tests A and B are
+secondary. In B the diagonal is real and the other 48 cells are maps the model never computes: a factorial probe of where the
+property sits, not 64 head measurements.
+Reads: the lens npz (argv[1]). Writes: out/kvgroup.json."""
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; LENS = Path(sys.argv[1])
+NPOP = int(os.environ.get("NPOP", "2000")); SEED = 0; NROT = int(os.environ.get("NROT", "20")); POP_ORTH = os.environ.get("POP_ORTH", "1") == "1"
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None)
+lm = model.language_model; layers = lm.model.layers; H = view.hidden_size; V = view.vocab_size
+lens = np.load(LENS)
+BAND_PAIRS = ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))   # R41e, asserted as the recorded ruling (R38(f))
+att_blocks = [b for b, l in enumerate(layers) if not l.is_linear]
+BAND_ATT_BLOCKS = tuple(L - 1 for pr in BAND_PAIRS for L in pr if (L - 1) in att_blocks)
+assert len(BAND_ATT_BLOCKS) == len(BAND_PAIRS), BAND_ATT_BLOCKS
+def dense(linear):
+    w = linear.weight
+    if hasattr(linear, "scales"): w = mx.dequantize(w, linear.scales, linear.biases, linear.group_size, linear.bits)
+    return w.astype(mx.float32)
+embed = dense(lm.model.embed_tokens)
+rng = np.random.default_rng(SEED)
+tokens = mx.array(rng.choice(V, NPOP, replace=False))
+ROTS = [mx.array(np.linalg.qr(rng.standard_normal((H, H)).astype(np.float32))[0]) for _ in range(NROT)]
+def unit(x): return x / (mx.linalg.norm(x, axis=1, keepdims=True) + 1e-12)
+def populations(b):
+    Jl = mx.array(lens[f"J{b - 1}"].astype(np.float32)); U = embed[tokens]; J = unit(U @ Jl); Un = unit(U); shared = mx.sum(J * Un, axis=1, keepdims=True)
+    if POP_ORTH: J = unit(J - shared * Un)
+    down = dense(layers[b - 1].mlp.down_proj)
+    pops = {"J": J, "random": unit(mx.random.normal((NPOP, H)))}
+    for i, Q in enumerate(ROTS): pops[f"J_rot{i}"] = unit(J @ Q.T)
+    for i in range(NROT):
+        cols = mx.array(rng.choice(down.shape[1], NPOP, replace=False)); pops[f"MLP_rows{i}"] = unit(down[:, cols].T)
+    return pops
+def mrr_gain(apply, pops):
+    imgR = apply(pops["random"]); med_r = float(mx.median(mx.linalg.norm(imgR, axis=1)).item()) + 1e-12; out = {}
+    for name, P in pops.items():
+        img = apply(P); gain = float(mx.mean(mx.linalg.norm(img, axis=1)).item()) / med_r
+        C = unit(img) @ P.T; diag = mx.diagonal(C)[:, None]; rank = mx.sum(C > diag, axis=1) + 1
+        out[name] = {"gain": gain, "mrr": float(mx.mean(1.0 / rank.astype(mx.float32)).item())}
+    return out
+def rule(m):
+    """stage 1's selection rule on one map's metrics: J preservation beyond every null draw and at least double their medians."""
+    rot = np.array([m[f"J_rot{i}"]["mrr"] for i in range(NROT)]); mlp = np.array([m[f"MLP_rows{i}"]["mrr"] for i in range(NROT)])
+    J = m["J"]["mrr"]; return {"J_mrr": round(J, 4), "null_max": round(float(max(rot.max(), mlp.max())), 4), "null_med": round(float(max(np.median(rot), np.median(mlp))), 4), "passes": bool(J > max(rot.max(), mlp.max()) and J >= 2 * max(np.median(rot), np.median(mlp))), "gain": round(m["J"]["gain"], 3)}
+def energy(Wv_g, pops):
+    """fraction of a population's energy inside the value projection's row space, J against the null draws (a 128-dim subspace of H captures 128/H = 0.05 of an isotropic direction)."""
+    def cap(P): return float(mx.mean(mx.sum((P @ Wv_g.T) ** 2, axis=1)).item())   # P is unit-norm rowwise
+    rot = [cap(pops[f"J_rot{i}"]) for i in range(NROT)]; mlp = [cap(pops[f"MLP_rows{i}"]) for i in range(NROT)]
+    return {"J": round(cap(pops["J"]), 4), "random": round(cap(pops["random"]), 4), "rot_med": round(float(np.median(rot)), 4), "rot_max": round(float(max(rot)), 4), "mlp_med": round(float(np.median(mlp)), 4), "mlp_max": round(float(max(mlp)), 4)}
+res = {"parameters": {"primary": "pre-registered 07:20 before the run: per block, F(between/within group) of lens preservation over the 16 real heads beyond all 40 null-population F values; result = number of blocks among five", "NPOP": NPOP, "NROT": NROT, "population": "lens minus identity component" if POP_ORTH else "lens", "checkpoint": spec.hf_id, "blocks": BAND_ATT_BLOCKS, "rule": "J label preservation beyond every rotated-J and MLP-row draw and at least double their medians (stage 1)"}, "blocks": {}}
+for b in BAND_ATT_BLOCKS:
+    a = layers[b].self_attn; Wv = dense(a.v_proj); Wo = dense(a.o_proj); n_q = a.num_attention_heads; n_kv = a.num_key_value_heads; d = a.head_dim; grp = n_q // n_kv
+    pops = populations(b); mx.eval(*pops.values())
+    entry = {"layer_written": b + 1, "value_alone": {}, "cross": {}, "energy": {}}
+    diag = {}
+    for h in range(n_q):                                                  # the real heads first: full per-population metrics kept for the pre-registered statistic
+        g = h // grp; Wv_g = Wv[g * d:(g + 1) * d, :]; Wo_h = Wo[:, h * d:(h + 1) * d]
+        diag[h] = mrr_gain(lambda P, W=Wv_g, O=Wo_h: (P @ W.T) @ O.T, pops)
+        entry["cross"][f"h{h}_g{g}"] = {**rule(diag[h]), "own_group": True}
+    def F_ratio(vals):
+        """one-way F: between-group mean square over within-group mean square, four groups of four in head order."""
+        groups = [vals[g * grp:(g + 1) * grp] for g in range(n_kv)]; m = sum(vals) / len(vals); mg = [sum(gr) / len(gr) for gr in groups]
+        msb = sum(len(gr) * (mi - m) ** 2 for gr, mi in zip(groups, mg)) / (n_kv - 1)
+        msw = sum((x - mi) ** 2 for gr, mi in zip(groups, mg) for x in gr) / (n_q - n_kv)
+        return msb / (msw + 1e-12)
+    F_J = F_ratio([diag[h]["J"]["mrr"] for h in range(n_q)])
+    F_null = {name: F_ratio([diag[h][name]["mrr"] for h in range(n_q)]) for name in pops if name not in ("J", "random")}
+    entry["prereg"] = {"statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations", "F_J": round(F_J, 3), "F_null_max": round(max(F_null.values()), 3), "F_null_median": round(float(np.median(list(F_null.values()))), 3), "draws_at_or_above_F_J": int(sum(v >= F_J for v in F_null.values())), "beyond_all_draws": bool(F_J > max(F_null.values())), "per_head_J_mrr": [round(diag[h]["J"]["mrr"], 4) for h in range(n_q)], "per_group_mean_J_mrr": [round(sum(diag[h]["J"]["mrr"] for h in range(g * grp, (g + 1) * grp)) / grp, 4) for g in range(n_kv)], "F_null_by_family": {"rot_median": round(float(np.median([F_null[f"J_rot{i}"] for i in range(NROT)])), 3), "mlp_median": round(float(np.median([F_null[f"MLP_rows{i}"] for i in range(NROT)])), 3)}}
+    for g in range(n_kv):
+        Wv_g = Wv[g * d:(g + 1) * d, :]
+        entry["value_alone"][str(g)] = rule(mrr_gain(lambda P, W=Wv_g: (P @ W.T) @ W, pops))
+        entry["energy"][str(g)] = energy(Wv_g, pops)
+        for h in range(n_q):
+            if h // grp == g: continue
+            Wo_h = Wo[:, h * d:(h + 1) * d]
+            entry["cross"][f"h{h}_g{g}"] = {**rule(mrr_gain(lambda P, W=Wv_g, O=Wo_h: (P @ W.T) @ O.T, pops)), "own_group": False}
+    passes = {(h, g): entry["cross"][f"h{h}_g{g}"]["passes"] for h in range(n_q) for g in range(n_kv)}
+    entry["summary"] = {"passes_by_group_over_16_heads": {str(g): sum(passes[(h, g)] for h in range(n_q)) for g in range(n_kv)},
+                        "passes_by_head_over_4_groups": {str(h): sum(passes[(h, g)] for g in range(n_kv)) for h in range(n_q)},
+                        "diagonal_passes": sum(passes[(h, h // grp)] for h in range(n_q)),
+                        "median_J_mrr_by_group": {str(g): round(float(np.median([entry["cross"][f"h{h}_g{g}"]["J_mrr"] for h in range(n_q)])), 4) for g in range(n_kv)},
+                        "median_J_mrr_by_head": {str(h): round(float(np.median([entry["cross"][f"h{h}_g{g}"]["J_mrr"] for g in range(n_kv)])), 4) for h in range(n_q)}}
+    res["blocks"][str(b)] = entry
+    print(json.dumps({"event": "prereg", "block": b, "layer": b + 1, **{k: v for k, v in entry["prereg"].items() if k != "statistic"}}), flush=True)
+    print(json.dumps({"event": "block", "block": b, "layer": b + 1, "value_alone": {g: (v["J_mrr"], v["null_max"], v["passes"]) for g, v in entry["value_alone"].items()}, "energy_J_vs_rotmax": {g: (v["J"], v["rot_max"], v["mlp_max"]) for g, v in entry["energy"].items()}, "cross_passes_by_group": entry["summary"]["passes_by_group_over_16_heads"], "cross_passes_by_head": entry["summary"]["passes_by_head_over_4_groups"], "diagonal": entry["summary"]["diagonal_passes"], "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+res["parameters"]["elapsed_s"] = round(time.time() - T0, 1)
+json.dump(res, open(OUT / "kvgroup.json", "w"), indent=1); print(json.dumps({"event": "done", "out": str(OUT / "kvgroup.json")}))

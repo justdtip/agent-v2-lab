@@ -422,3 +422,249 @@ curve answers: the gate (margin rule and floor) identifies the relays, the order
 preservation puts the heads carrying the most lens content first, so the small-k arms test whether
 the heads that carry the most lens content carry the effect, which is a different claim from whether
 every head the rule identified carries it; the k = 21 to 26 arms answer the second.
+
+**Pre-registration, 07:20, before the key-value group test runs (the Head's statistic).** The
+membership pattern is no evidence either way: relays per group of four at layers 20, 24 and 28 are
+1, 4, 0, 2; 2, 3, 1, 0; 0, 3, 2, 4 (orthogonalised rule, no floor), with exact enumeration giving
+p = 0.055, 0.33 and 0.055 for the dispersion of the four counts and a Fisher combination of 0.032;
+under the floor of 0.1 the same combination is 0.34. Evidence that moves by a factor of ten under a
+rule change made for unrelated reasons is not weak evidence, it is none, and the weight test is the
+only test there has been of the group hypothesis. Its primary statistic, fixed before it runs: per
+in-band block, over the sixteen real heads, the ratio of between-group to within-group variance of
+lens preservation (one-way F over four groups of four), against the same ratio computed on each of
+the forty null populations, twenty rotated-lens and twenty MLP-row draws, under the same real heads.
+The property lives in the shared value projection at a block if F on the lens population exceeds F on
+every one of the forty draws; the result is the number of such blocks among five. The null is the
+group structure the real heads impose on an arbitrary population, so passing means the structure is
+specific to the lens directions. Secondary and reported beside it: A, each value projection alone as
+the row-space map through its transpose, and the energy it captures from the lens population against
+the draws; B, the 16 by 4 cross table of output slices against value projections scored by the
+stage-1 rule, in which the diagonal is real and the other 48 cells are maps the model never
+computes, a factorial probe of where the property sits and not 64 head measurements. The script is
+`kvgroup.py`; it runs when the ablation releases the model. Two notes carried from the Head on the
+ablation's reading: at floor 0.05 the layer-28 control has exactly one possible set, so that arm's
+control variance is stated as zero rather than as a small number; and the floor sensitivity
+collapsing into three extra arms of one run, because the floor only trims the tail of an absolute
+ordering, is the design that turned a cost into arms.
+
+## Stage 2 result, 07:35: the top two relays do the damage of nine random heads, and the factor falls with k
+
+Run as pre-registered above (`ablation.as-run.py.txt`, `run-ablation-floors.log`,
+`out/ablation_inband_floors.json`): the 26 in-band relays of the orthogonalised rule on the five-layer
+band, ordered by absolute lens preservation, zeroed k at a time; five layer-matched random sets of
+the same size from the unselected heads at the same layers; readout at all ten band layers on eight
+512-token documents at 64 positions; bit-identical reproducibility of the unablated readout.
+
+**The metric is top-25 overlap with the unablated readout**, the share of the unablated lens
+readout's top-25 tokens that survive at readout layers with an ablated head at or below them. It is
+1.0 at k = 0 by construction and measures damage to the model's prior output, not recall of anything
+external. The paper's recall at 25 scored recovery of an externally known target and starts at 0.86;
+it is not the same quantity and the two are not compared.
+
+| k | arm | overlap, relays | overlap, random (range over 5 seeds) | change rate, relays / random | specificity (within 2×) | random heads for the same damage |
+|---|---|---|---|---|---|---|
+| 0 | unablated | 1.000 | 1.000 | 0 / 0 | | |
+| 2 | | 0.832 | 0.893 (0.841 to 0.928) | 0.059 / 0.037 | holds | 9.0 (4.5×), between the arms at 8 and 16 |
+| 4 | | 0.824 | 0.874 (0.825 to 0.923) | 0.084 / 0.054 | holds | 10.1 (2.5×), arms 8 to 16 |
+| 8 | | 0.803 | 0.840 (0.824 to 0.864) | 0.098 / 0.073 | holds | 13.3 (1.7×), arms 8 to 16 |
+| 16 | | 0.722 | 0.789 (0.762 to 0.809) | 0.156 / 0.100 | holds | 23.5 (1.5×), arms 23 to 24 |
+| 21 | floor 0.2 | 0.686 | 0.752 (0.725 to 0.792) | 0.178 / 0.118 | holds | beyond 26 |
+| 23 | floor 0.1 | 0.678 | 0.727 (0.683 to 0.761) | 0.209 / 0.127 | holds | beyond 26 |
+| 24 | floor 0.05 | 0.675 | 0.717 (0.691 to 0.740) | 0.223 / 0.134 | holds | beyond 26 |
+| 26 | no floor | 0.666 | 0.727 (0.673 to 0.790) | 0.271 / 0.133 | fails, 2.04× | beyond 26 |
+
+Equivalent random heads are interpolated linearly in log2(k + 1) between the two measured random
+arms that bracket the selected value, named beside each figure because the transform does real
+work. "Beyond 26" means the random curve's lowest measured value, 0.727 at 26 heads, is still above
+the selected value, so the equivalent is a bound: the twenty-one relays at floor 0.2 do more damage
+than twenty-six arbitrary heads at the same layers, and so do the sixteen strongest (0.722 against
+0.727 at 26, a bound by 0.005). The control at k = 24 has one possible set at layer 28 (eight
+selected, eight unselected), so its variance there is zero; the k = 26 arm has a forced overlap of
+two at layer 28 in every seed and is the contaminated arm.
+
+**Reading.** (1) The paper's claim reproduces at the top of the ordering: two heads, block 23 head 0
+and block 11 head 10, do the damage of nine random heads at the same layers, a concentration of 4.5.
+(2) Random ablation of any two heads already costs ten points, and the selection adds six on top;
+the ten points of general damage is a fact about this measurement and stands beside the increment.
+(3) The concentration lives in the top two to four heads, not in the set the rule produced: the
+factor runs 4.5, 2.5, 1.7, 1.5 over k = 2, 4, 8, 16, and the tail arms from 21 to 26 add 0.020 of
+damage where random adds 0.025. The rule identifies a population within which a few heads matter;
+it does not identify twenty-six heads that matter (the Head). (4) The falling factor is not decay:
+the ordering is by absolute preservation, so a factor that falls monotonically with k is evidence
+that preservation ranks heads by causal importance, a validated ranking beneath the concentration,
+which means the stage-1 weight arithmetic predicts what ablation does without running the model.
+(5) Per step, selected drop against random drop: 2: 0.168 against 0.107; 4: 0.009 against 0.019;
+8: 0.020 against 0.034; 16: 0.082 against 0.051; 21: 0.036 against 0.037; 23: 0.008 against 0.025;
+24: 0.003 against 0.010; 26: 0.009 against a control gain of 0.010. Heads three and four (block 23
+head 1, block 27 head 6) did less than two random heads, so the gap narrowed at k = 4 because the
+control caught up; heads nine to sixteen, which include block 27 heads 5, 8 and 12, did more than
+random again; below rank 21 the selection is ordinary or weaker. The one-head datum on block 27
+head 6 at k = 4 does not generalise to the layer-28 members as a class. (6) Specificity holds at
+every floored arm: at k = 21 the selection changes the next token at 0.178 of positions against the
+random sets' 0.118 while damaging the readout more; breaking the model would move the output far
+more than a control that damages the readout less, so the overlap damage is not the model being
+broken. It fails only at the no-floor arm (2.04 times), which is also the arm with forced overlaps.
+(7) By readout layer at k = 26, relays against random: 12: 0.903 against 0.894; 13: 0.899 against
+0.885; 16: 0.811 against 0.770; 17: 0.799 against 0.766; 19: 0.755 against 0.736; 20: 0.572 against
+0.681; 23: 0.581 against 0.696; 24: 0.482 against 0.641; 27: 0.482 against 0.643; 28: 0.373 against
+0.560. The damage the relays do beyond random grows with depth and is largest at the deepest band
+layers, which is where the lens converges on the output (F10). (8) The hard upstream gate had no
+layer to fire on in any arm, because block 11 head 10 enters at k = 2 and layer 12 is the lowest
+readout; a single-head arm on block 23 head 0, with layers 12 to 20 upstream and required
+bit-identical, restores it and is running as the next load (the Head). (9) A process note: the
+first attempt to write this section chained the record path behind a page build that failed, so the
+copies went to the root and were refused and the append never reached the file; nothing was lost,
+and it is the R49(f) pattern, caught by its own failure.
+
+**Correction, 07:50 (the Head, withdrawing a claim made at 07:30; the Chief had adopted it in
+reading (4) above, which is withdrawn with it).** The cumulative equivalence factor falls whenever
+later heads add less than the running average, so 4.5, 2.5, 1.7, 1.5 is arithmetic and not a test
+of the ordering. The per-step contributions are the test. Per head ablated, the selection adds
+0.084, 0.0043, 0.0051, 0.0102, 0.0072, 0.0041, 0.0031, 0.0044 over the steps to k = 2, 4, 8, 16,
+21, 23, 24, 26 (the selected curve is deterministic, no seeds); ranks three to eight add about half
+of what ranks nine to sixteen add, so the ordering is not monotone in effect. Against random per
+head: 0.053, 0.0095, 0.0085, 0.0064, 0.0074, 0.0127, 0.0098, and a gain of 0.005, ratios 1.57,
+0.45, 0.60, 1.59, 0.97, 0.32, 0.31 and negative. The random per-step values are differences of
+independent five-seed means; the per-head standard deviation of the random step is 0.019, 0.026,
+0.010, 0.003, 0.006, 0.021, 0.041, 0.025 at those steps, so the ratios at the 2-to-4 step and past
+21 are within their own noise, 4-to-8 is marginal, and 8-to-16 (1.59 at a step deviation of 0.003)
+is solid. The supportable statement, adopted in place of readings (3) and (4): a small number of
+heads carry a disproportionate share; they are not contiguous in the preservation ordering; the
+metric identifies a population containing them without ordering them correctly within it. By name,
+ranks one and two are block 23 head 0 and block 11 head 10; ranks three to eight are block 23 heads
+1 and 9, block 27 heads 6 and 4, block 19 head 0 and block 15 head 6; ranks nine to sixteen are
+block 27 heads 5, 8 and 12, block 19 heads 7, 12 and 6, block 11 head 15 and block 23 head 6. Layer
+28 has two heads in the weak stretch and three in the strong one, so neither of the two layer-28
+data points generalises to that layer's members as a class. The question is settled by single-head
+ablation of every in-band head (`singles.py`, 80 arms, one load, the next run): per head the overlap
+at every readout layer, at layer 28 which is downstream of all of them, and the change rate; the
+rank correlation of preservation with damage over the 80 and within the 26; selected against
+unselected at each layer.
+
+**The depth gradient normalised (the Head).** At k = 16 the gap between random and relays per
+readout layer is 0.031, 0.034, 0.041, 0.099, 0.100, 0.120, 0.101, 0.151 at layers 16, 17, 19, 20,
+23, 24, 27, 28, with 3, 3, 3, 7, 7, 11, 11, 16 ablated heads upstream: per upstream ablated head
+0.010, 0.011, 0.014, 0.014, 0.014, 0.011, 0.009, 0.009, flat with depth; at layers 12 and 13, with
+only the two layer-12 relays upstream, the gap is zero (0.006 in random's favour and 0.005). The
+gradient is arithmetic of how many ablated heads lie upstream; the per-head excess is about 0.01 at
+every depth past 13. At k = 26 the gap is in random's favour at every readout from 12 to 19 (0.009
+to 0.041), because the tail heads at layers 12, 16 and 20 do less than random at the shallow
+readouts, and in the relays' favour from 20 on (0.109 to 0.187, 0.007 to 0.010 per upstream head).
+The five-seed range of the random sets is in the table above at every arm.
+
+## The key-value group test, 07:58: the group structure is lens-specific at three of five blocks, and the property lives in the head's own output slice paired with its group's value projection
+
+Pre-registered statistic (`kvgroup.as-run.py.txt`, `run-kvgroup.log`, `out/kvgroup.json`; 104
+seconds, weights only): per in-band block, over the sixteen real heads, the ratio of between-group
+to within-group variance of lens preservation, against the same ratio on each of forty null
+populations under the same heads.
+
+| layer written | F, lens | null median (rotated, MLP) | null max | draws at or above | beyond all draws | group means of preservation, 0 to 3 |
+|---|---|---|---|---|---|---|
+| 12 | 1.14 | 0.65 (0.70, 0.61) | 0.78 | 0 of 40 | yes | 0.68, 0.74, 0.45, 0.22 |
+| 16 | 0.65 | 0.74 (0.82, 0.65) | 0.85 | 31 of 40 | no | 0.50, 0.58, 0.49, 0.17 |
+| 20 | 2.45 | 2.50 (2.52, 2.46) | 2.74 | 31 of 40 | no | 0.91, 0.26, 0.49, 0.41 |
+| 24 | 3.12 | 2.00 (1.79, 2.30) | 2.35 | 0 of 40 | yes | 0.66, 0.25, 0.56, 0.09 |
+| 28 | 2.83 | 1.31 (1.41, 1.27) | 1.81 | 0 of 40 | yes | 0.07, 0.49, 0.21, 0.15 |
+
+**Result: 3 of 5 blocks.** At layers 12, 24 and 28 the heads sharing a value projection preserve
+the lens alike beyond what the same group structure does to arbitrary populations; at layer 28,
+where the membership pattern was first seen, F on the lens is 2.83 against a null maximum of 1.81,
+and group 0's four heads preserve at a mean of 0.07 against group 1's 0.49. At layer 20 the group
+structure is as strong on the nulls as on the lens (2.45 against a median of 2.50): group 0 there
+holds three near-identity copy maps (0.99) that preserve any population, which is group structure
+without lens specificity. At layer 16 there is no group structure on either.
+
+**Where the property lives, from the cross table (secondary, B).** Of the 320 cells, 64 per block,
+only diagonal cells pass the stage-1 rule: every passing head passes with its own group's value
+projection and with no other, and the off-diagonal cells preserve at a median of 0.004 at every
+block. An output slice composed with a foreign value projection relays nothing, so the property is
+not in the value projection alone; a value projection composed with a foreign output slice relays
+nothing, so it is not in the output slice alone. It is in the trained pair: the shared value
+projection constrains which lens directions a group's heads can read, which is the group structure
+the primary statistic detects, and the head's own output slice determines whether they are written
+back into the lens directions, which is why membership alone could not settle it. The 48
+off-diagonal cells per block are maps the model never computes.
+
+**Test A is degenerate as designed and is recorded as such.** A value projection alone as the
+row-space map through its transpose preserves labels at 1.0 for the lens and for every null draw,
+because a symmetric projection onto any 128-dimensional subspace keeps each vector nearer its own
+image than any other's. Its energy half is reported beside: the share of a population's energy inside
+the projection's row space (isotropic expectation 0.05) exceeds every null draw for group 0 at layer
+20 (0.099 against 0.054, the copy-map group), for groups 2 and 3 at 20, group 2 at 24, and groups 0
+and 3 at 28; at layer 28 group 1 captures 0.150 of the lens energy but rotated draws reach 0.166
+there, so it is not beyond the null. The energy measure is not the pre-registered statistic and is
+not read as one.
+
+**The gate arm and the replicate (`out/ablation_k1.json`, `run-ablation-k1.log`).** Block 23 head
+0 alone, writing layer 24: the readouts at layers 12, 13, 16, 17, 19, 20 and 23 are exactly 1.0,
+bit-identical to the unablated readout, so the intervention does not reach where it cannot reach.
+Downstream, at layers 24, 27 and 28, the overlap is 0.917 against 0.942 for a random layer-24 head
+(0.929 to 0.945 over five seeds), change rate 0.016 against 0.021; this arm reads over three layers
+where the curve reads over ten, so it is reported beside the curve and not on it. The run's final
+arm replicated the 26-head arm under the same seeds: relays 0.666 and 0.666, random sets 0.727 and
+0.727, change 0.271 and 0.271, identical to the last digit. Under the same seeds that is a check of
+determinism, not a variance estimate; the variance across seeds is the range in the stage-2 table.
+
+**Next load, launched 08:00: the single-head sweep** (`singles.as-run.py.txt`, 80 arms), which
+tests whether preservation orders heads by effect and gives the per-head table.
+
+**Pre-registered before the single-head sweep lands, 08:05 (the Head).** (a) The primary evidence
+on whether preservation orders heads by effect is the sweep, not the curve: eighty single-head
+damages with no differencing of means and no cumulative confound; the statistic is the Spearman
+rank correlation of preservation with single-head damage over the eighty in-band heads, and within
+the 26 relays. (b) Redundancy against synergy: for k = 2, 4, 8 and 16, the sum of the top-k heads'
+single-head damages, each taken as one minus the mean overlap over all ten readout layers so that
+every head is scored on the same layers, is compared with the measured k-arm's damage on the same
+ten layers. If the sum exceeds the arm, the heads are redundant, carrying the same content by
+different routes, and the dip at ranks three to eight in the cumulative curve is explained without
+any fault in the ordering: ranks one and two already removed what those heads carry. If the sum
+falls short, the heads are synergistic. The two experiments together distinguish a bad ordering
+from redundancy where neither can alone. (c) The energy half of test A at layer 20, group 0 (0.099
+against a null maximum of 0.054): a near-identity output map on a population requires the value
+projection to capture that population's energy, so the energy excess and the copy-map property of
+that group's heads are one fact seen twice, confounded by construction; the energy reading cannot
+separate them and is not read as evidence about relaying at that block.
+
+**Corrections and a pre-registration, 08:12 (the Head).** (a) Attribution: the null that made
+layer 20 a clean negative was the Chief's refinement, not the Head's specification. The Head asked
+for the between-group over within-group variance ratio against the forty draws; the Chief set it as
+the F on the lens against the same F computed on each null population under the same real heads,
+because a shared projection imposes group structure on any population, and the Head said at the
+time it was the better version. (b) The asymmetric reading above, that the value projection
+constrains and the output slice determines, is not a reading of the cross table alone and is
+re-attributed: the cross table is symmetric in what it shows, swapping either component destroys
+the property, which says both matter and not what each does; the asymmetry comes from the
+combination of the F test, where heads sharing a value projection behave alike at three blocks,
+giving the projection a group-level effect, and the diagonal, which gives the output slice a
+head-level one. Two tests, one inference. (c) The off-diagonal half of the cross table is weaker
+evidence than it looks: an output slice composed with a value projection it was never trained with
+composes to noise generically, so a median of 0.004 is near what any network would give and says
+nothing specific about the lens. The finding rests on the diagonal, and the diagonal needs a control
+that preserves scale and structure while destroying only the pairing. Pre-registered, to run when the
+sweep releases the model: each head's output slice scored against twenty rotated versions of its own
+group's value projection, the rotation applied in the 128-dimensional head space between them, so
+that the directions read (the projection's row space) and the directions written (the slice's column
+space) are kept and only their correspondence is scrambled. Reading: the trained pairing is the
+property at a head if its lens preservation exceeds all twenty pairing rotations; the result is the
+count among the 26 relays. If the relays do not beat it, the table shows only that trained matrices
+work with their own partners and not with strangers, which is true of any network. (d) The stage-2
+table's caption: the selected arm has no seed variance by construction, the heads and documents being
+fixed, so the range column is the whole variance estimate, and a deterministic row is not a
+converged one. (e) The Head's synthesis, recorded as R53 in the wiring map: near-identity copy maps
+confounded four measurements tonight, and every statistic built on preservation carries a copy-map
+control by default.
+
+**Pre-registration amended before the sweep lands, 08:16 (the Head): the redundancy null is
+multiplicative, not additive.** Damage is one minus an overlap and is bounded by one, but a sum of k
+damages is not: at the 0.084 per head the curve implies, the sum reaches 1.34 at k = 16 while the
+arm cannot exceed 1.0, so the additive rule would report redundancy from arithmetic at the k where
+the question matters. Overlap is a surviving fraction, so the independence null is the product of the
+top-k single-head overlaps, each over all ten readout layers; the measured arm's ten-layer overlap
+above the product reads as redundant (the heads damage the same content), below it as synergistic.
+At k = 2 the two constructions agree to a thousandth, which is why the defect was invisible where it
+could be checked. The Spearman is reported over all eighty, within the 26 relays and within the 54
+unselected heads separately: over the eighty it is high partly because the selection separates
+high-damage from low-damage heads, which is already known; if preservation orders the unselected
+too, it is a general ranking of causal importance; if only the selected, the threshold is doing the
+work.

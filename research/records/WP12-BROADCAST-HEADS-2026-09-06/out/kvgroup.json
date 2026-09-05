@@ -1,0 +1,3360 @@
+{
+ "parameters": {
+  "primary": "pre-registered 07:20 before the run: per block, F(between/within group) of lens preservation over the 16 real heads beyond all 40 null-population F values; result = number of blocks among five",
+  "NPOP": 2000,
+  "NROT": 20,
+  "population": "lens minus identity component",
+  "checkpoint": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "blocks": [
+   11,
+   15,
+   19,
+   23,
+   27
+  ],
+  "rule": "J label preservation beyond every rotated-J and MLP-row draw and at least double their medians (stage 1)",
+  "elapsed_s": 103.7
+ },
+ "blocks": {
+  "11": {
+   "layer_written": 12,
+   "value_alone": {
+    "0": {
+     "J_mrr": 0.9998,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.803
+    },
+    "1": {
+     "J_mrr": 0.9993,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.822
+    },
+    "2": {
+     "J_mrr": 0.9997,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.979
+    },
+    "3": {
+     "J_mrr": 0.9846,
+     "null_max": 1.0,
+     "null_med": 0.9999,
+     "passes": false,
+     "gain": 0.924
+    }
+   },
+   "cross": {
+    "h0_g0": {
+     "J_mrr": 0.75,
+     "null_max": 0.4913,
+     "null_med": 0.4748,
+     "passes": false,
+     "gain": 0.888,
+     "own_group": true
+    },
+    "h1_g0": {
+     "J_mrr": 0.9833,
+     "null_max": 0.9755,
+     "null_med": 0.9598,
+     "passes": false,
+     "gain": 0.864,
+     "own_group": true
+    },
+    "h2_g0": {
+     "J_mrr": 0.9957,
+     "null_max": 0.9995,
+     "null_med": 0.9978,
+     "passes": false,
+     "gain": 0.845,
+     "own_group": true
+    },
+    "h3_g0": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0005,
+     "null_med": 0.0005,
+     "passes": false,
+     "gain": 0.897,
+     "own_group": true
+    },
+    "h4_g1": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0018,
+     "null_med": 0.001,
+     "passes": false,
+     "gain": 0.979,
+     "own_group": true
+    },
+    "h5_g1": {
+     "J_mrr": 0.9713,
+     "null_max": 0.582,
+     "null_med": 0.5424,
+     "passes": false,
+     "gain": 0.947,
+     "own_group": true
+    },
+    "h6_g1": {
+     "J_mrr": 0.9935,
+     "null_max": 1.0,
+     "null_med": 0.9985,
+     "passes": false,
+     "gain": 0.921,
+     "own_group": true
+    },
+    "h7_g1": {
+     "J_mrr": 0.986,
+     "null_max": 0.7715,
+     "null_med": 0.7258,
+     "passes": false,
+     "gain": 0.918,
+     "own_group": true
+    },
+    "h8_g2": {
+     "J_mrr": 0.8992,
+     "null_max": 0.8201,
+     "null_med": 0.8053,
+     "passes": false,
+     "gain": 0.939,
+     "own_group": true
+    },
+    "h9_g2": {
+     "J_mrr": 0.0006,
+     "null_max": 0.006,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.948,
+     "own_group": true
+    },
+    "h10_g2": {
+     "J_mrr": 0.903,
+     "null_max": 0.3501,
+     "null_med": 0.332,
+     "passes": true,
+     "gain": 0.93,
+     "own_group": true
+    },
+    "h11_g2": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0021,
+     "null_med": 0.0015,
+     "passes": false,
+     "gain": 0.973,
+     "own_group": true
+    },
+    "h12_g3": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0048,
+     "null_med": 0.003,
+     "passes": false,
+     "gain": 0.82,
+     "own_group": true
+    },
+    "h13_g3": {
+     "J_mrr": 0.0031,
+     "null_max": 0.1084,
+     "null_med": 0.0984,
+     "passes": false,
+     "gain": 0.785,
+     "own_group": true
+    },
+    "h14_g3": {
+     "J_mrr": 0.4596,
+     "null_max": 0.9595,
+     "null_med": 0.939,
+     "passes": false,
+     "gain": 0.829,
+     "own_group": true
+    },
+    "h15_g3": {
+     "J_mrr": 0.4121,
+     "null_max": 0.0463,
+     "null_med": 0.0397,
+     "passes": true,
+     "gain": 0.839,
+     "own_group": true
+    },
+    "h4_g0": {
+     "J_mrr": 0.0032,
+     "null_max": 0.0056,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 0.844,
+     "own_group": false
+    },
+    "h5_g0": {
+     "J_mrr": 0.0062,
+     "null_max": 0.0054,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.847,
+     "own_group": false
+    },
+    "h6_g0": {
+     "J_mrr": 0.0056,
+     "null_max": 0.0064,
+     "null_med": 0.0049,
+     "passes": false,
+     "gain": 0.849,
+     "own_group": false
+    },
+    "h7_g0": {
+     "J_mrr": 0.0051,
+     "null_max": 0.0072,
+     "null_med": 0.005,
+     "passes": false,
+     "gain": 0.844,
+     "own_group": false
+    },
+    "h8_g0": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0061,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.87,
+     "own_group": false
+    },
+    "h9_g0": {
+     "J_mrr": 0.0054,
+     "null_max": 0.005,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.857,
+     "own_group": false
+    },
+    "h10_g0": {
+     "J_mrr": 0.0027,
+     "null_max": 0.0075,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.854,
+     "own_group": false
+    },
+    "h11_g0": {
+     "J_mrr": 0.0032,
+     "null_max": 0.0059,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.868,
+     "own_group": false
+    },
+    "h12_g0": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0056,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.848,
+     "own_group": false
+    },
+    "h13_g0": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0055,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.869,
+     "own_group": false
+    },
+    "h14_g0": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0061,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.832,
+     "own_group": false
+    },
+    "h15_g0": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0058,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.847,
+     "own_group": false
+    },
+    "h0_g1": {
+     "J_mrr": 0.0081,
+     "null_max": 0.0068,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.871,
+     "own_group": false
+    },
+    "h1_g1": {
+     "J_mrr": 0.0056,
+     "null_max": 0.0051,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.86,
+     "own_group": false
+    },
+    "h2_g1": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0059,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.867,
+     "own_group": false
+    },
+    "h3_g1": {
+     "J_mrr": 0.003,
+     "null_max": 0.0067,
+     "null_med": 0.0036,
+     "passes": false,
+     "gain": 0.864,
+     "own_group": false
+    },
+    "h8_g1": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0062,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.895,
+     "own_group": false
+    },
+    "h9_g1": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0067,
+     "null_med": 0.0048,
+     "passes": false,
+     "gain": 0.862,
+     "own_group": false
+    },
+    "h10_g1": {
+     "J_mrr": 0.0033,
+     "null_max": 0.0051,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.861,
+     "own_group": false
+    },
+    "h11_g1": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0055,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.864,
+     "own_group": false
+    },
+    "h12_g1": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0063,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.874,
+     "own_group": false
+    },
+    "h13_g1": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0054,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 0.874,
+     "own_group": false
+    },
+    "h14_g1": {
+     "J_mrr": 0.009,
+     "null_max": 0.0057,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.873,
+     "own_group": false
+    },
+    "h15_g1": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0062,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.872,
+     "own_group": false
+    },
+    "h0_g2": {
+     "J_mrr": 0.0053,
+     "null_max": 0.0062,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.969,
+     "own_group": false
+    },
+    "h1_g2": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0059,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.956,
+     "own_group": false
+    },
+    "h2_g2": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0073,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.961,
+     "own_group": false
+    },
+    "h3_g2": {
+     "J_mrr": 0.0055,
+     "null_max": 0.007,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.963,
+     "own_group": false
+    },
+    "h4_g2": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0061,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 0.967,
+     "own_group": false
+    },
+    "h5_g2": {
+     "J_mrr": 0.004,
+     "null_max": 0.0061,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.957,
+     "own_group": false
+    },
+    "h6_g2": {
+     "J_mrr": 0.0029,
+     "null_max": 0.0075,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.96,
+     "own_group": false
+    },
+    "h7_g2": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0066,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.96,
+     "own_group": false
+    },
+    "h12_g2": {
+     "J_mrr": 0.005,
+     "null_max": 0.0058,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.972,
+     "own_group": false
+    },
+    "h13_g2": {
+     "J_mrr": 0.0031,
+     "null_max": 0.006,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.954,
+     "own_group": false
+    },
+    "h14_g2": {
+     "J_mrr": 0.0051,
+     "null_max": 0.0071,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.963,
+     "own_group": false
+    },
+    "h15_g2": {
+     "J_mrr": 0.0028,
+     "null_max": 0.0061,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.953,
+     "own_group": false
+    },
+    "h0_g3": {
+     "J_mrr": 0.0028,
+     "null_max": 0.0076,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.865,
+     "own_group": false
+    },
+    "h1_g3": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0053,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.872,
+     "own_group": false
+    },
+    "h2_g3": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0062,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.87,
+     "own_group": false
+    },
+    "h3_g3": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0059,
+     "null_med": 0.0036,
+     "passes": false,
+     "gain": 0.867,
+     "own_group": false
+    },
+    "h4_g3": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0057,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.869,
+     "own_group": false
+    },
+    "h5_g3": {
+     "J_mrr": 0.0066,
+     "null_max": 0.0068,
+     "null_med": 0.0051,
+     "passes": false,
+     "gain": 0.883,
+     "own_group": false
+    },
+    "h6_g3": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0071,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.869,
+     "own_group": false
+    },
+    "h7_g3": {
+     "J_mrr": 0.0063,
+     "null_max": 0.0051,
+     "null_med": 0.0036,
+     "passes": false,
+     "gain": 0.881,
+     "own_group": false
+    },
+    "h8_g3": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0055,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.861,
+     "own_group": false
+    },
+    "h9_g3": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0054,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.861,
+     "own_group": false
+    },
+    "h10_g3": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0066,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.88,
+     "own_group": false
+    },
+    "h11_g3": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0058,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.877,
+     "own_group": false
+    }
+   },
+   "energy": {
+    "0": {
+     "J": 0.0257,
+     "random": 0.0358,
+     "rot_med": 0.0356,
+     "rot_max": 0.0377,
+     "mlp_med": 0.0651,
+     "mlp_max": 0.0661
+    },
+    "1": {
+     "J": 0.0309,
+     "random": 0.0409,
+     "rot_med": 0.0414,
+     "rot_max": 0.0433,
+     "mlp_med": 0.0682,
+     "mlp_max": 0.0696
+    },
+    "2": {
+     "J": 0.0309,
+     "random": 0.033,
+     "rot_med": 0.0328,
+     "rot_max": 0.034,
+     "mlp_med": 0.0302,
+     "mlp_max": 0.0306
+    },
+    "3": {
+     "J": 0.0294,
+     "random": 0.0392,
+     "rot_med": 0.0392,
+     "rot_max": 0.0403,
+     "mlp_med": 0.0502,
+     "mlp_max": 0.0512
+    }
+   },
+   "prereg": {
+    "statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations",
+    "F_J": 1.136,
+    "F_null_max": 0.783,
+    "F_null_median": 0.649,
+    "draws_at_or_above_F_J": 0,
+    "beyond_all_draws": true,
+    "per_head_J_mrr": [
+     0.75,
+     0.9833,
+     0.9957,
+     0.0005,
+     0.0005,
+     0.9713,
+     0.9935,
+     0.986,
+     0.8992,
+     0.0006,
+     0.903,
+     0.0005,
+     0.0005,
+     0.0031,
+     0.4596,
+     0.4121
+    ],
+    "per_group_mean_J_mrr": [
+     0.6824,
+     0.7378,
+     0.4508,
+     0.2188
+    ],
+    "F_null_by_family": {
+     "rot_median": 0.698,
+     "mlp_median": 0.609
+    }
+   },
+   "summary": {
+    "passes_by_group_over_16_heads": {
+     "0": 0,
+     "1": 0,
+     "2": 1,
+     "3": 1
+    },
+    "passes_by_head_over_4_groups": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0,
+     "5": 0,
+     "6": 0,
+     "7": 0,
+     "8": 0,
+     "9": 0,
+     "10": 1,
+     "11": 0,
+     "12": 0,
+     "13": 0,
+     "14": 0,
+     "15": 1
+    },
+    "diagonal_passes": 2,
+    "median_J_mrr_by_group": {
+     "0": 0.0049,
+     "1": 0.0043,
+     "2": 0.0037,
+     "3": 0.0046
+    },
+    "median_J_mrr_by_head": {
+     "0": 0.0067,
+     "1": 0.0052,
+     "2": 0.0041,
+     "3": 0.0034,
+     "4": 0.0034,
+     "5": 0.0064,
+     "6": 0.0052,
+     "7": 0.0057,
+     "8": 0.004,
+     "9": 0.0037,
+     "10": 0.004,
+     "11": 0.004,
+     "12": 0.0042,
+     "13": 0.0033,
+     "14": 0.007,
+     "15": 0.0038
+    }
+   }
+  },
+  "15": {
+   "layer_written": 16,
+   "value_alone": {
+    "0": {
+     "J_mrr": 1.0,
+     "null_max": 1.0,
+     "null_med": 0.9998,
+     "passes": false,
+     "gain": 0.798
+    },
+    "1": {
+     "J_mrr": 0.9975,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.833
+    },
+    "2": {
+     "J_mrr": 0.9993,
+     "null_max": 1.0,
+     "null_med": 0.9997,
+     "passes": false,
+     "gain": 0.755
+    },
+    "3": {
+     "J_mrr": 0.9962,
+     "null_max": 1.0,
+     "null_med": 0.9996,
+     "passes": false,
+     "gain": 0.888
+    }
+   },
+   "cross": {
+    "h0_g0": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0068,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.843,
+     "own_group": true
+    },
+    "h1_g0": {
+     "J_mrr": 0.9949,
+     "null_max": 0.9965,
+     "null_med": 0.9945,
+     "passes": false,
+     "gain": 0.837,
+     "own_group": true
+    },
+    "h2_g0": {
+     "J_mrr": 0.9858,
+     "null_max": 0.94,
+     "null_med": 0.9231,
+     "passes": false,
+     "gain": 0.86,
+     "own_group": true
+    },
+    "h3_g0": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0078,
+     "null_med": 0.0054,
+     "passes": false,
+     "gain": 0.859,
+     "own_group": true
+    },
+    "h4_g1": {
+     "J_mrr": 0.6892,
+     "null_max": 0.4539,
+     "null_med": 0.4385,
+     "passes": false,
+     "gain": 0.88,
+     "own_group": true
+    },
+    "h5_g1": {
+     "J_mrr": 0.0005,
+     "null_max": 0.001,
+     "null_med": 0.0006,
+     "passes": false,
+     "gain": 0.907,
+     "own_group": true
+    },
+    "h6_g1": {
+     "J_mrr": 0.6542,
+     "null_max": 0.2407,
+     "null_med": 0.2282,
+     "passes": true,
+     "gain": 0.854,
+     "own_group": true
+    },
+    "h7_g1": {
+     "J_mrr": 0.9627,
+     "null_max": 0.9948,
+     "null_med": 0.9882,
+     "passes": false,
+     "gain": 0.874,
+     "own_group": true
+    },
+    "h8_g2": {
+     "J_mrr": 0.9677,
+     "null_max": 0.8559,
+     "null_med": 0.8013,
+     "passes": false,
+     "gain": 0.795,
+     "own_group": true
+    },
+    "h9_g2": {
+     "J_mrr": 0.0021,
+     "null_max": 0.0298,
+     "null_med": 0.0245,
+     "passes": false,
+     "gain": 0.788,
+     "own_group": true
+    },
+    "h10_g2": {
+     "J_mrr": 0.0166,
+     "null_max": 0.114,
+     "null_med": 0.101,
+     "passes": false,
+     "gain": 0.784,
+     "own_group": true
+    },
+    "h11_g2": {
+     "J_mrr": 0.9676,
+     "null_max": 0.8847,
+     "null_med": 0.846,
+     "passes": false,
+     "gain": 0.79,
+     "own_group": true
+    },
+    "h12_g3": {
+     "J_mrr": 0.0026,
+     "null_max": 0.0649,
+     "null_med": 0.0537,
+     "passes": false,
+     "gain": 0.901,
+     "own_group": true
+    },
+    "h13_g3": {
+     "J_mrr": 0.3173,
+     "null_max": 0.2066,
+     "null_med": 0.1942,
+     "passes": false,
+     "gain": 0.917,
+     "own_group": true
+    },
+    "h14_g3": {
+     "J_mrr": 0.0767,
+     "null_max": 0.1103,
+     "null_med": 0.1041,
+     "passes": false,
+     "gain": 0.87,
+     "own_group": true
+    },
+    "h15_g3": {
+     "J_mrr": 0.2628,
+     "null_max": 0.1147,
+     "null_med": 0.0998,
+     "passes": true,
+     "gain": 0.889,
+     "own_group": true
+    },
+    "h4_g0": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0083,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.82,
+     "own_group": false
+    },
+    "h5_g0": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0063,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.824,
+     "own_group": false
+    },
+    "h6_g0": {
+     "J_mrr": 0.0051,
+     "null_max": 0.006,
+     "null_med": 0.0048,
+     "passes": false,
+     "gain": 0.828,
+     "own_group": false
+    },
+    "h7_g0": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0061,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.817,
+     "own_group": false
+    },
+    "h8_g0": {
+     "J_mrr": 0.004,
+     "null_max": 0.0048,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.825,
+     "own_group": false
+    },
+    "h9_g0": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0053,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.819,
+     "own_group": false
+    },
+    "h10_g0": {
+     "J_mrr": 0.0055,
+     "null_max": 0.0069,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.819,
+     "own_group": false
+    },
+    "h11_g0": {
+     "J_mrr": 0.0053,
+     "null_max": 0.0059,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.815,
+     "own_group": false
+    },
+    "h12_g0": {
+     "J_mrr": 0.0046,
+     "null_max": 0.0057,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.817,
+     "own_group": false
+    },
+    "h13_g0": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0068,
+     "null_med": 0.0048,
+     "passes": false,
+     "gain": 0.818,
+     "own_group": false
+    },
+    "h14_g0": {
+     "J_mrr": 0.0033,
+     "null_max": 0.007,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.816,
+     "own_group": false
+    },
+    "h15_g0": {
+     "J_mrr": 0.004,
+     "null_max": 0.0056,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.821,
+     "own_group": false
+    },
+    "h0_g1": {
+     "J_mrr": 0.0034,
+     "null_max": 0.006,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.845,
+     "own_group": false
+    },
+    "h1_g1": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0059,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.851,
+     "own_group": false
+    },
+    "h2_g1": {
+     "J_mrr": 0.0054,
+     "null_max": 0.0068,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.862,
+     "own_group": false
+    },
+    "h3_g1": {
+     "J_mrr": 0.0037,
+     "null_max": 0.006,
+     "null_med": 0.0049,
+     "passes": false,
+     "gain": 0.855,
+     "own_group": false
+    },
+    "h8_g1": {
+     "J_mrr": 0.0047,
+     "null_max": 0.006,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.859,
+     "own_group": false
+    },
+    "h9_g1": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0061,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.858,
+     "own_group": false
+    },
+    "h10_g1": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0077,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.853,
+     "own_group": false
+    },
+    "h11_g1": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0059,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.851,
+     "own_group": false
+    },
+    "h12_g1": {
+     "J_mrr": 0.0046,
+     "null_max": 0.0064,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.856,
+     "own_group": false
+    },
+    "h13_g1": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0054,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.877,
+     "own_group": false
+    },
+    "h14_g1": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0083,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.877,
+     "own_group": false
+    },
+    "h15_g1": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0073,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.869,
+     "own_group": false
+    },
+    "h0_g2": {
+     "J_mrr": 0.0032,
+     "null_max": 0.0056,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.778,
+     "own_group": false
+    },
+    "h1_g2": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0056,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.774,
+     "own_group": false
+    },
+    "h2_g2": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0056,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.776,
+     "own_group": false
+    },
+    "h3_g2": {
+     "J_mrr": 0.0055,
+     "null_max": 0.0061,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.776,
+     "own_group": false
+    },
+    "h4_g2": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0058,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.773,
+     "own_group": false
+    },
+    "h5_g2": {
+     "J_mrr": 0.0033,
+     "null_max": 0.0053,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 0.772,
+     "own_group": false
+    },
+    "h6_g2": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0055,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.776,
+     "own_group": false
+    },
+    "h7_g2": {
+     "J_mrr": 0.0058,
+     "null_max": 0.0061,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.773,
+     "own_group": false
+    },
+    "h12_g2": {
+     "J_mrr": 0.003,
+     "null_max": 0.005,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.776,
+     "own_group": false
+    },
+    "h13_g2": {
+     "J_mrr": 0.0022,
+     "null_max": 0.0066,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.772,
+     "own_group": false
+    },
+    "h14_g2": {
+     "J_mrr": 0.006,
+     "null_max": 0.0069,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.77,
+     "own_group": false
+    },
+    "h15_g2": {
+     "J_mrr": 0.004,
+     "null_max": 0.0068,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.779,
+     "own_group": false
+    },
+    "h0_g3": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0057,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.882,
+     "own_group": false
+    },
+    "h1_g3": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0053,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.891,
+     "own_group": false
+    },
+    "h2_g3": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0061,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.886,
+     "own_group": false
+    },
+    "h3_g3": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0055,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.899,
+     "own_group": false
+    },
+    "h4_g3": {
+     "J_mrr": 0.0045,
+     "null_max": 0.006,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.917,
+     "own_group": false
+    },
+    "h5_g3": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0063,
+     "null_med": 0.0048,
+     "passes": false,
+     "gain": 0.887,
+     "own_group": false
+    },
+    "h6_g3": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0058,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.887,
+     "own_group": false
+    },
+    "h7_g3": {
+     "J_mrr": 0.0042,
+     "null_max": 0.006,
+     "null_med": 0.0035,
+     "passes": false,
+     "gain": 0.888,
+     "own_group": false
+    },
+    "h8_g3": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0056,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.901,
+     "own_group": false
+    },
+    "h9_g3": {
+     "J_mrr": 0.0021,
+     "null_max": 0.0061,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.887,
+     "own_group": false
+    },
+    "h10_g3": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0065,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.898,
+     "own_group": false
+    },
+    "h11_g3": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0064,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.89,
+     "own_group": false
+    }
+   },
+   "energy": {
+    "0": {
+     "J": 0.0343,
+     "random": 0.0505,
+     "rot_med": 0.0506,
+     "rot_max": 0.0515,
+     "mlp_med": 0.0655,
+     "mlp_max": 0.0675
+    },
+    "1": {
+     "J": 0.0331,
+     "random": 0.0458,
+     "rot_med": 0.0462,
+     "rot_max": 0.0474,
+     "mlp_med": 0.0665,
+     "mlp_max": 0.068
+    },
+    "2": {
+     "J": 0.0298,
+     "random": 0.0491,
+     "rot_med": 0.0487,
+     "rot_max": 0.0515,
+     "mlp_med": 0.07,
+     "mlp_max": 0.0722
+    },
+    "3": {
+     "J": 0.0296,
+     "random": 0.037,
+     "rot_med": 0.0373,
+     "rot_max": 0.0385,
+     "mlp_med": 0.0394,
+     "mlp_max": 0.0405
+    }
+   },
+   "prereg": {
+    "statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations",
+    "F_J": 0.646,
+    "F_null_max": 0.855,
+    "F_null_median": 0.742,
+    "draws_at_or_above_F_J": 31,
+    "beyond_all_draws": false,
+    "per_head_J_mrr": [
+     0.0005,
+     0.9949,
+     0.9858,
+     0.0005,
+     0.6892,
+     0.0005,
+     0.6542,
+     0.9627,
+     0.9677,
+     0.0021,
+     0.0166,
+     0.9676,
+     0.0026,
+     0.3173,
+     0.0767,
+     0.2628
+    ],
+    "per_group_mean_J_mrr": [
+     0.4954,
+     0.5766,
+     0.4885,
+     0.1648
+    ],
+    "F_null_by_family": {
+     "rot_median": 0.818,
+     "mlp_median": 0.648
+    }
+   },
+   "summary": {
+    "passes_by_group_over_16_heads": {
+     "0": 0,
+     "1": 1,
+     "2": 0,
+     "3": 1
+    },
+    "passes_by_head_over_4_groups": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0,
+     "5": 0,
+     "6": 1,
+     "7": 0,
+     "8": 0,
+     "9": 0,
+     "10": 0,
+     "11": 0,
+     "12": 0,
+     "13": 0,
+     "14": 0,
+     "15": 1
+    },
+    "diagonal_passes": 2,
+    "median_J_mrr_by_group": {
+     "0": 0.0043,
+     "1": 0.0043,
+     "2": 0.0043,
+     "3": 0.0043
+    },
+    "median_J_mrr_by_head": {
+     "0": 0.0033,
+     "1": 0.0047,
+     "2": 0.0049,
+     "3": 0.0039,
+     "4": 0.0045,
+     "5": 0.0032,
+     "6": 0.0046,
+     "7": 0.005,
+     "8": 0.0043,
+     "9": 0.0029,
+     "10": 0.0052,
+     "11": 0.0052,
+     "12": 0.0038,
+     "13": 0.0032,
+     "14": 0.0051,
+     "15": 0.004
+    }
+   }
+  },
+  "19": {
+   "layer_written": 20,
+   "value_alone": {
+    "0": {
+     "J_mrr": 0.9993,
+     "null_max": 1.0,
+     "null_med": 0.9998,
+     "passes": false,
+     "gain": 1.294
+    },
+    "1": {
+     "J_mrr": 0.9995,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.903
+    },
+    "2": {
+     "J_mrr": 1.0,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 1.022
+    },
+    "3": {
+     "J_mrr": 1.0,
+     "null_max": 1.0,
+     "null_med": 0.9996,
+     "passes": false,
+     "gain": 1.082
+    }
+   },
+   "cross": {
+    "h0_g0": {
+     "J_mrr": 0.6632,
+     "null_max": 0.0438,
+     "null_med": 0.0395,
+     "passes": true,
+     "gain": 1.381,
+     "own_group": true
+    },
+    "h1_g0": {
+     "J_mrr": 0.9916,
+     "null_max": 0.8898,
+     "null_med": 0.8619,
+     "passes": false,
+     "gain": 1.456,
+     "own_group": true
+    },
+    "h2_g0": {
+     "J_mrr": 0.9894,
+     "null_max": 0.9951,
+     "null_med": 0.9914,
+     "passes": false,
+     "gain": 1.412,
+     "own_group": true
+    },
+    "h3_g0": {
+     "J_mrr": 0.9944,
+     "null_max": 0.9774,
+     "null_med": 0.9657,
+     "passes": false,
+     "gain": 1.428,
+     "own_group": true
+    },
+    "h4_g1": {
+     "J_mrr": 0.048,
+     "null_max": 0.0202,
+     "null_med": 0.0147,
+     "passes": true,
+     "gain": 0.88,
+     "own_group": true
+    },
+    "h5_g1": {
+     "J_mrr": 0.2279,
+     "null_max": 0.016,
+     "null_med": 0.0123,
+     "passes": true,
+     "gain": 0.924,
+     "own_group": true
+    },
+    "h6_g1": {
+     "J_mrr": 0.3363,
+     "null_max": 0.0492,
+     "null_med": 0.0422,
+     "passes": true,
+     "gain": 0.934,
+     "own_group": true
+    },
+    "h7_g1": {
+     "J_mrr": 0.4143,
+     "null_max": 0.0912,
+     "null_med": 0.0816,
+     "passes": true,
+     "gain": 0.927,
+     "own_group": true
+    },
+    "h8_g2": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0215,
+     "null_med": 0.0162,
+     "passes": false,
+     "gain": 1.084,
+     "own_group": true
+    },
+    "h9_g2": {
+     "J_mrr": 0.0255,
+     "null_max": 0.048,
+     "null_med": 0.0402,
+     "passes": false,
+     "gain": 1.073,
+     "own_group": true
+    },
+    "h10_g2": {
+     "J_mrr": 0.9488,
+     "null_max": 0.5581,
+     "null_med": 0.5122,
+     "passes": false,
+     "gain": 1.032,
+     "own_group": true
+    },
+    "h11_g2": {
+     "J_mrr": 0.9859,
+     "null_max": 0.9855,
+     "null_med": 0.9804,
+     "passes": false,
+     "gain": 1.086,
+     "own_group": true
+    },
+    "h12_g3": {
+     "J_mrr": 0.3902,
+     "null_max": 0.0421,
+     "null_med": 0.0372,
+     "passes": true,
+     "gain": 1.133,
+     "own_group": true
+    },
+    "h13_g3": {
+     "J_mrr": 0.2438,
+     "null_max": 0.0244,
+     "null_med": 0.0223,
+     "passes": true,
+     "gain": 1.12,
+     "own_group": true
+    },
+    "h14_g3": {
+     "J_mrr": 0.9549,
+     "null_max": 0.7378,
+     "null_med": 0.7188,
+     "passes": false,
+     "gain": 1.084,
+     "own_group": true
+    },
+    "h15_g3": {
+     "J_mrr": 0.0367,
+     "null_max": 0.0245,
+     "null_med": 0.0192,
+     "passes": false,
+     "gain": 1.124,
+     "own_group": true
+    },
+    "h4_g0": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0061,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.375,
+     "own_group": false
+    },
+    "h5_g0": {
+     "J_mrr": 0.004,
+     "null_max": 0.0054,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.37,
+     "own_group": false
+    },
+    "h6_g0": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0057,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.367,
+     "own_group": false
+    },
+    "h7_g0": {
+     "J_mrr": 0.0036,
+     "null_max": 0.006,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 1.362,
+     "own_group": false
+    },
+    "h8_g0": {
+     "J_mrr": 0.0033,
+     "null_max": 0.0072,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.376,
+     "own_group": false
+    },
+    "h9_g0": {
+     "J_mrr": 0.0051,
+     "null_max": 0.0067,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.365,
+     "own_group": false
+    },
+    "h10_g0": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0054,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.386,
+     "own_group": false
+    },
+    "h11_g0": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0065,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.368,
+     "own_group": false
+    },
+    "h12_g0": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0052,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.375,
+     "own_group": false
+    },
+    "h13_g0": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0059,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.376,
+     "own_group": false
+    },
+    "h14_g0": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0058,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.372,
+     "own_group": false
+    },
+    "h15_g0": {
+     "J_mrr": 0.0042,
+     "null_max": 0.006,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.376,
+     "own_group": false
+    },
+    "h0_g1": {
+     "J_mrr": 0.0027,
+     "null_max": 0.0053,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.951,
+     "own_group": false
+    },
+    "h1_g1": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0059,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.924,
+     "own_group": false
+    },
+    "h2_g1": {
+     "J_mrr": 0.0031,
+     "null_max": 0.006,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.93,
+     "own_group": false
+    },
+    "h3_g1": {
+     "J_mrr": 0.0038,
+     "null_max": 0.007,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.943,
+     "own_group": false
+    },
+    "h8_g1": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0063,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.924,
+     "own_group": false
+    },
+    "h9_g1": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0053,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.933,
+     "own_group": false
+    },
+    "h10_g1": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0065,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 0.909,
+     "own_group": false
+    },
+    "h11_g1": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0056,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.923,
+     "own_group": false
+    },
+    "h12_g1": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0057,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.919,
+     "own_group": false
+    },
+    "h13_g1": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0061,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 0.922,
+     "own_group": false
+    },
+    "h14_g1": {
+     "J_mrr": 0.0058,
+     "null_max": 0.0058,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.949,
+     "own_group": false
+    },
+    "h15_g1": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0061,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.939,
+     "own_group": false
+    },
+    "h0_g2": {
+     "J_mrr": 0.005,
+     "null_max": 0.0056,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.04,
+     "own_group": false
+    },
+    "h1_g2": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0063,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.035,
+     "own_group": false
+    },
+    "h2_g2": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0057,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.039,
+     "own_group": false
+    },
+    "h3_g2": {
+     "J_mrr": 0.0046,
+     "null_max": 0.006,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.035,
+     "own_group": false
+    },
+    "h4_g2": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0067,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 1.029,
+     "own_group": false
+    },
+    "h5_g2": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0067,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 1.027,
+     "own_group": false
+    },
+    "h6_g2": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0057,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.035,
+     "own_group": false
+    },
+    "h7_g2": {
+     "J_mrr": 0.0045,
+     "null_max": 0.006,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.031,
+     "own_group": false
+    },
+    "h12_g2": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0058,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 1.026,
+     "own_group": false
+    },
+    "h13_g2": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0054,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.024,
+     "own_group": false
+    },
+    "h14_g2": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0052,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.033,
+     "own_group": false
+    },
+    "h15_g2": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0056,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 1.027,
+     "own_group": false
+    },
+    "h0_g3": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0046,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.092,
+     "own_group": false
+    },
+    "h1_g3": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0057,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.093,
+     "own_group": false
+    },
+    "h2_g3": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0048,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.09,
+     "own_group": false
+    },
+    "h3_g3": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0055,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.098,
+     "own_group": false
+    },
+    "h4_g3": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0067,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.091,
+     "own_group": false
+    },
+    "h5_g3": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0055,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.083,
+     "own_group": false
+    },
+    "h6_g3": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0055,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.098,
+     "own_group": false
+    },
+    "h7_g3": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0058,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.092,
+     "own_group": false
+    },
+    "h8_g3": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0044,
+     "null_med": 0.0036,
+     "passes": false,
+     "gain": 1.09,
+     "own_group": false
+    },
+    "h9_g3": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0055,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 1.101,
+     "own_group": false
+    },
+    "h10_g3": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0066,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.103,
+     "own_group": false
+    },
+    "h11_g3": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0063,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.088,
+     "own_group": false
+    }
+   },
+   "energy": {
+    "0": {
+     "J": 0.0985,
+     "random": 0.0516,
+     "rot_med": 0.0508,
+     "rot_max": 0.0543,
+     "mlp_med": 0.0276,
+     "mlp_max": 0.0283
+    },
+    "1": {
+     "J": 0.048,
+     "random": 0.0564,
+     "rot_med": 0.0569,
+     "rot_max": 0.0589,
+     "mlp_med": 0.0501,
+     "mlp_max": 0.0519
+    },
+    "2": {
+     "J": 0.0793,
+     "random": 0.0737,
+     "rot_med": 0.0739,
+     "rot_max": 0.077,
+     "mlp_med": 0.0474,
+     "mlp_max": 0.049
+    },
+    "3": {
+     "J": 0.0567,
+     "random": 0.0472,
+     "rot_med": 0.0478,
+     "rot_max": 0.0493,
+     "mlp_med": 0.0382,
+     "mlp_max": 0.0401
+    }
+   },
+   "prereg": {
+    "statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations",
+    "F_J": 2.453,
+    "F_null_max": 2.741,
+    "F_null_median": 2.505,
+    "draws_at_or_above_F_J": 31,
+    "beyond_all_draws": false,
+    "per_head_J_mrr": [
+     0.6632,
+     0.9916,
+     0.9894,
+     0.9944,
+     0.048,
+     0.2279,
+     0.3363,
+     0.4143,
+     0.0005,
+     0.0255,
+     0.9488,
+     0.9859,
+     0.3902,
+     0.2438,
+     0.9549,
+     0.0367
+    ],
+    "per_group_mean_J_mrr": [
+     0.9096,
+     0.2566,
+     0.4902,
+     0.4064
+    ],
+    "F_null_by_family": {
+     "rot_median": 2.518,
+     "mlp_median": 2.459
+    }
+   },
+   "summary": {
+    "passes_by_group_over_16_heads": {
+     "0": 1,
+     "1": 4,
+     "2": 0,
+     "3": 2
+    },
+    "passes_by_head_over_4_groups": {
+     "0": 1,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 1,
+     "5": 1,
+     "6": 1,
+     "7": 1,
+     "8": 0,
+     "9": 0,
+     "10": 0,
+     "11": 0,
+     "12": 1,
+     "13": 1,
+     "14": 0,
+     "15": 0
+    },
+    "diagonal_passes": 7,
+    "median_J_mrr_by_group": {
+     "0": 0.0043,
+     "1": 0.004,
+     "2": 0.0046,
+     "3": 0.0043
+    },
+    "median_J_mrr_by_head": {
+     "0": 0.0043,
+     "1": 0.0044,
+     "2": 0.004,
+     "3": 0.0045,
+     "4": 0.0045,
+     "5": 0.004,
+     "6": 0.005,
+     "7": 0.0044,
+     "8": 0.0034,
+     "9": 0.0047,
+     "10": 0.0041,
+     "11": 0.0044,
+     "12": 0.0042,
+     "13": 0.0043,
+     "14": 0.0055,
+     "15": 0.0043
+    }
+   }
+  },
+  "23": {
+   "layer_written": 24,
+   "value_alone": {
+    "0": {
+     "J_mrr": 0.9993,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 1.008
+    },
+    "1": {
+     "J_mrr": 1.0,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.99
+    },
+    "2": {
+     "J_mrr": 0.9984,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 1.065
+    },
+    "3": {
+     "J_mrr": 0.9995,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.913
+    }
+   },
+   "cross": {
+    "h0_g0": {
+     "J_mrr": 0.905,
+     "null_max": 0.4642,
+     "null_med": 0.4405,
+     "passes": true,
+     "gain": 1.02,
+     "own_group": true
+    },
+    "h1_g0": {
+     "J_mrr": 0.7262,
+     "null_max": 0.2816,
+     "null_med": 0.2696,
+     "passes": true,
+     "gain": 0.996,
+     "own_group": true
+    },
+    "h2_g0": {
+     "J_mrr": 0.9932,
+     "null_max": 0.9971,
+     "null_med": 0.994,
+     "passes": false,
+     "gain": 1.007,
+     "own_group": true
+    },
+    "h3_g0": {
+     "J_mrr": 0.0005,
+     "null_max": 0.005,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 1.014,
+     "own_group": true
+    },
+    "h4_g1": {
+     "J_mrr": 0.1859,
+     "null_max": 0.0836,
+     "null_med": 0.0767,
+     "passes": true,
+     "gain": 1.002,
+     "own_group": true
+    },
+    "h5_g1": {
+     "J_mrr": 0.1469,
+     "null_max": 0.0832,
+     "null_med": 0.0728,
+     "passes": true,
+     "gain": 0.996,
+     "own_group": true
+    },
+    "h6_g1": {
+     "J_mrr": 0.4112,
+     "null_max": 0.1188,
+     "null_med": 0.109,
+     "passes": true,
+     "gain": 1.001,
+     "own_group": true
+    },
+    "h7_g1": {
+     "J_mrr": 0.2428,
+     "null_max": 0.0727,
+     "null_med": 0.0641,
+     "passes": true,
+     "gain": 0.994,
+     "own_group": true
+    },
+    "h8_g2": {
+     "J_mrr": 0.6224,
+     "null_max": 0.6964,
+     "null_med": 0.6478,
+     "passes": false,
+     "gain": 1.065,
+     "own_group": true
+    },
+    "h9_g2": {
+     "J_mrr": 0.6689,
+     "null_max": 0.1407,
+     "null_med": 0.125,
+     "passes": true,
+     "gain": 1.055,
+     "own_group": true
+    },
+    "h10_g2": {
+     "J_mrr": 0.0455,
+     "null_max": 0.0371,
+     "null_med": 0.028,
+     "passes": false,
+     "gain": 1.045,
+     "own_group": true
+    },
+    "h11_g2": {
+     "J_mrr": 0.9091,
+     "null_max": 0.6923,
+     "null_med": 0.6508,
+     "passes": false,
+     "gain": 1.046,
+     "own_group": true
+    },
+    "h12_g3": {
+     "J_mrr": 0.2445,
+     "null_max": 0.1491,
+     "null_med": 0.1376,
+     "passes": false,
+     "gain": 0.937,
+     "own_group": true
+    },
+    "h13_g3": {
+     "J_mrr": 0.0488,
+     "null_max": 0.0444,
+     "null_med": 0.0395,
+     "passes": false,
+     "gain": 0.912,
+     "own_group": true
+    },
+    "h14_g3": {
+     "J_mrr": 0.0005,
+     "null_max": 0.012,
+     "null_med": 0.0097,
+     "passes": false,
+     "gain": 0.95,
+     "own_group": true
+    },
+    "h15_g3": {
+     "J_mrr": 0.0573,
+     "null_max": 0.0402,
+     "null_med": 0.0332,
+     "passes": false,
+     "gain": 0.864,
+     "own_group": true
+    },
+    "h4_g0": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0063,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.014,
+     "own_group": false
+    },
+    "h5_g0": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0061,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 1.013,
+     "own_group": false
+    },
+    "h6_g0": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0056,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.012,
+     "own_group": false
+    },
+    "h7_g0": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0059,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.013,
+     "own_group": false
+    },
+    "h8_g0": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0053,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.017,
+     "own_group": false
+    },
+    "h9_g0": {
+     "J_mrr": 0.0029,
+     "null_max": 0.0066,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.015,
+     "own_group": false
+    },
+    "h10_g0": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0059,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.015,
+     "own_group": false
+    },
+    "h11_g0": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0061,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.016,
+     "own_group": false
+    },
+    "h12_g0": {
+     "J_mrr": 0.004,
+     "null_max": 0.0056,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 1.011,
+     "own_group": false
+    },
+    "h13_g0": {
+     "J_mrr": 0.0029,
+     "null_max": 0.005,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 1.01,
+     "own_group": false
+    },
+    "h14_g0": {
+     "J_mrr": 0.0038,
+     "null_max": 0.006,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 1.011,
+     "own_group": false
+    },
+    "h15_g0": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0059,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.007,
+     "own_group": false
+    },
+    "h0_g1": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0058,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.997,
+     "own_group": false
+    },
+    "h1_g1": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0059,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 0.997,
+     "own_group": false
+    },
+    "h2_g1": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0065,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.993,
+     "own_group": false
+    },
+    "h3_g1": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0055,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.994,
+     "own_group": false
+    },
+    "h8_g1": {
+     "J_mrr": 0.004,
+     "null_max": 0.0052,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.999,
+     "own_group": false
+    },
+    "h9_g1": {
+     "J_mrr": 0.0054,
+     "null_max": 0.0058,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.994,
+     "own_group": false
+    },
+    "h10_g1": {
+     "J_mrr": 0.0032,
+     "null_max": 0.0064,
+     "null_med": 0.0047,
+     "passes": false,
+     "gain": 0.995,
+     "own_group": false
+    },
+    "h11_g1": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0063,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.992,
+     "own_group": false
+    },
+    "h12_g1": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0053,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.994,
+     "own_group": false
+    },
+    "h13_g1": {
+     "J_mrr": 0.0046,
+     "null_max": 0.006,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.003,
+     "own_group": false
+    },
+    "h14_g1": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0055,
+     "null_med": 0.0047,
+     "passes": false,
+     "gain": 0.999,
+     "own_group": false
+    },
+    "h15_g1": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0061,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.007,
+     "own_group": false
+    },
+    "h0_g2": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0055,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.065,
+     "own_group": false
+    },
+    "h1_g2": {
+     "J_mrr": 0.0044,
+     "null_max": 0.006,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.074,
+     "own_group": false
+    },
+    "h2_g2": {
+     "J_mrr": 0.0033,
+     "null_max": 0.0053,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 1.06,
+     "own_group": false
+    },
+    "h3_g2": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0061,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.063,
+     "own_group": false
+    },
+    "h4_g2": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0062,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 1.069,
+     "own_group": false
+    },
+    "h5_g2": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0054,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.064,
+     "own_group": false
+    },
+    "h6_g2": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0065,
+     "null_med": 0.0048,
+     "passes": false,
+     "gain": 1.058,
+     "own_group": false
+    },
+    "h7_g2": {
+     "J_mrr": 0.0032,
+     "null_max": 0.0057,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.055,
+     "own_group": false
+    },
+    "h12_g2": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0056,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.057,
+     "own_group": false
+    },
+    "h13_g2": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0058,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.06,
+     "own_group": false
+    },
+    "h14_g2": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0059,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.059,
+     "own_group": false
+    },
+    "h15_g2": {
+     "J_mrr": 0.0043,
+     "null_max": 0.006,
+     "null_med": 0.0045,
+     "passes": false,
+     "gain": 1.056,
+     "own_group": false
+    },
+    "h0_g3": {
+     "J_mrr": 0.005,
+     "null_max": 0.0069,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.93,
+     "own_group": false
+    },
+    "h1_g3": {
+     "J_mrr": 0.0033,
+     "null_max": 0.0052,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.938,
+     "own_group": false
+    },
+    "h2_g3": {
+     "J_mrr": 0.0039,
+     "null_max": 0.005,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.932,
+     "own_group": false
+    },
+    "h3_g3": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0056,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.929,
+     "own_group": false
+    },
+    "h4_g3": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0056,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.928,
+     "own_group": false
+    },
+    "h5_g3": {
+     "J_mrr": 0.0036,
+     "null_max": 0.008,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.939,
+     "own_group": false
+    },
+    "h6_g3": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0069,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.934,
+     "own_group": false
+    },
+    "h7_g3": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0053,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 0.936,
+     "own_group": false
+    },
+    "h8_g3": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0055,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.936,
+     "own_group": false
+    },
+    "h9_g3": {
+     "J_mrr": 0.004,
+     "null_max": 0.005,
+     "null_med": 0.0035,
+     "passes": false,
+     "gain": 0.925,
+     "own_group": false
+    },
+    "h10_g3": {
+     "J_mrr": 0.004,
+     "null_max": 0.0053,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.939,
+     "own_group": false
+    },
+    "h11_g3": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0053,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.933,
+     "own_group": false
+    }
+   },
+   "energy": {
+    "0": {
+     "J": 0.074,
+     "random": 0.0716,
+     "rot_med": 0.0719,
+     "rot_max": 0.0748,
+     "mlp_med": 0.0607,
+     "mlp_max": 0.0643
+    },
+    "1": {
+     "J": 0.059,
+     "random": 0.0593,
+     "rot_med": 0.0591,
+     "rot_max": 0.0617,
+     "mlp_med": 0.0572,
+     "mlp_max": 0.0605
+    },
+    "2": {
+     "J": 0.0652,
+     "random": 0.0573,
+     "rot_med": 0.0572,
+     "rot_max": 0.0603,
+     "mlp_med": 0.0464,
+     "mlp_max": 0.0487
+    },
+    "3": {
+     "J": 0.0515,
+     "random": 0.059,
+     "rot_med": 0.0592,
+     "rot_max": 0.0613,
+     "mlp_med": 0.0378,
+     "mlp_max": 0.0397
+    }
+   },
+   "prereg": {
+    "statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations",
+    "F_J": 3.12,
+    "F_null_max": 2.354,
+    "F_null_median": 2.002,
+    "draws_at_or_above_F_J": 0,
+    "beyond_all_draws": true,
+    "per_head_J_mrr": [
+     0.905,
+     0.7262,
+     0.9932,
+     0.0005,
+     0.1859,
+     0.1469,
+     0.4112,
+     0.2428,
+     0.6224,
+     0.6689,
+     0.0455,
+     0.9091,
+     0.2445,
+     0.0488,
+     0.0005,
+     0.0573
+    ],
+    "per_group_mean_J_mrr": [
+     0.6562,
+     0.2467,
+     0.5615,
+     0.0878
+    ],
+    "F_null_by_family": {
+     "rot_median": 1.792,
+     "mlp_median": 2.297
+    }
+   },
+   "summary": {
+    "passes_by_group_over_16_heads": {
+     "0": 2,
+     "1": 4,
+     "2": 1,
+     "3": 0
+    },
+    "passes_by_head_over_4_groups": {
+     "0": 1,
+     "1": 1,
+     "2": 0,
+     "3": 0,
+     "4": 1,
+     "5": 1,
+     "6": 1,
+     "7": 1,
+     "8": 0,
+     "9": 1,
+     "10": 0,
+     "11": 0,
+     "12": 0,
+     "13": 0,
+     "14": 0,
+     "15": 0
+    },
+    "diagonal_passes": 7,
+    "median_J_mrr_by_group": {
+     "0": 0.0038,
+     "1": 0.0043,
+     "2": 0.0043,
+     "3": 0.004
+    },
+    "median_J_mrr_by_head": {
+     "0": 0.0047,
+     "1": 0.0041,
+     "2": 0.0041,
+     "3": 0.0034,
+     "4": 0.0043,
+     "5": 0.0035,
+     "6": 0.0043,
+     "7": 0.0043,
+     "8": 0.004,
+     "9": 0.0047,
+     "10": 0.0039,
+     "11": 0.0039,
+     "12": 0.0045,
+     "13": 0.0044,
+     "14": 0.0037,
+     "15": 0.0041
+    }
+   }
+  },
+  "27": {
+   "layer_written": 28,
+   "value_alone": {
+    "0": {
+     "J_mrr": 1.0,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 1.143
+    },
+    "1": {
+     "J_mrr": 0.9996,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 1.086
+    },
+    "2": {
+     "J_mrr": 1.0,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 0.972
+    },
+    "3": {
+     "J_mrr": 0.9987,
+     "null_max": 1.0,
+     "null_med": 1.0,
+     "passes": false,
+     "gain": 1.169
+    }
+   },
+   "cross": {
+    "h0_g0": {
+     "J_mrr": 0.2014,
+     "null_max": 0.159,
+     "null_med": 0.1441,
+     "passes": false,
+     "gain": 1.025,
+     "own_group": true
+    },
+    "h1_g0": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0125,
+     "null_med": 0.0097,
+     "passes": false,
+     "gain": 1.016,
+     "own_group": true
+    },
+    "h2_g0": {
+     "J_mrr": 0.0016,
+     "null_max": 0.0347,
+     "null_med": 0.028,
+     "passes": false,
+     "gain": 0.99,
+     "own_group": true
+    },
+    "h3_g0": {
+     "J_mrr": 0.0602,
+     "null_max": 0.0379,
+     "null_med": 0.0322,
+     "passes": false,
+     "gain": 0.992,
+     "own_group": true
+    },
+    "h4_g1": {
+     "J_mrr": 0.6495,
+     "null_max": 0.1827,
+     "null_med": 0.1598,
+     "passes": true,
+     "gain": 0.923,
+     "own_group": true
+    },
+    "h5_g1": {
+     "J_mrr": 0.597,
+     "null_max": 0.1366,
+     "null_med": 0.1299,
+     "passes": true,
+     "gain": 0.943,
+     "own_group": true
+    },
+    "h6_g1": {
+     "J_mrr": 0.6976,
+     "null_max": 0.2056,
+     "null_med": 0.198,
+     "passes": true,
+     "gain": 0.94,
+     "own_group": true
+    },
+    "h7_g1": {
+     "J_mrr": 0.0005,
+     "null_max": 0.0052,
+     "null_med": 0.0026,
+     "passes": false,
+     "gain": 0.934,
+     "own_group": true
+    },
+    "h8_g2": {
+     "J_mrr": 0.459,
+     "null_max": 0.0417,
+     "null_med": 0.0371,
+     "passes": true,
+     "gain": 0.96,
+     "own_group": true
+    },
+    "h9_g2": {
+     "J_mrr": 0.0006,
+     "null_max": 0.0088,
+     "null_med": 0.0064,
+     "passes": false,
+     "gain": 0.936,
+     "own_group": true
+    },
+    "h10_g2": {
+     "J_mrr": 0.0443,
+     "null_max": 0.0858,
+     "null_med": 0.0764,
+     "passes": false,
+     "gain": 0.918,
+     "own_group": true
+    },
+    "h11_g2": {
+     "J_mrr": 0.319,
+     "null_max": 0.095,
+     "null_med": 0.0858,
+     "passes": true,
+     "gain": 0.923,
+     "own_group": true
+    },
+    "h12_g3": {
+     "J_mrr": 0.3694,
+     "null_max": 0.171,
+     "null_med": 0.154,
+     "passes": true,
+     "gain": 1.03,
+     "own_group": true
+    },
+    "h13_g3": {
+     "J_mrr": 0.0019,
+     "null_max": 0.0012,
+     "null_med": 0.0006,
+     "passes": true,
+     "gain": 1.052,
+     "own_group": true
+    },
+    "h14_g3": {
+     "J_mrr": 0.1199,
+     "null_max": 0.0051,
+     "null_med": 0.0032,
+     "passes": true,
+     "gain": 1.065,
+     "own_group": true
+    },
+    "h15_g3": {
+     "J_mrr": 0.0903,
+     "null_max": 0.0131,
+     "null_med": 0.0103,
+     "passes": true,
+     "gain": 1.042,
+     "own_group": true
+    },
+    "h4_g0": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0066,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.029,
+     "own_group": false
+    },
+    "h5_g0": {
+     "J_mrr": 0.0035,
+     "null_max": 0.0048,
+     "null_med": 0.0037,
+     "passes": false,
+     "gain": 1.037,
+     "own_group": false
+    },
+    "h6_g0": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0057,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.036,
+     "own_group": false
+    },
+    "h7_g0": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0059,
+     "null_med": 0.0051,
+     "passes": false,
+     "gain": 1.035,
+     "own_group": false
+    },
+    "h8_g0": {
+     "J_mrr": 0.0054,
+     "null_max": 0.0057,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.043,
+     "own_group": false
+    },
+    "h9_g0": {
+     "J_mrr": 0.003,
+     "null_max": 0.0055,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.039,
+     "own_group": false
+    },
+    "h10_g0": {
+     "J_mrr": 0.0041,
+     "null_max": 0.0065,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.037,
+     "own_group": false
+    },
+    "h11_g0": {
+     "J_mrr": 0.0046,
+     "null_max": 0.0067,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.034,
+     "own_group": false
+    },
+    "h12_g0": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0062,
+     "null_med": 0.0039,
+     "passes": false,
+     "gain": 1.041,
+     "own_group": false
+    },
+    "h13_g0": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0051,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.045,
+     "own_group": false
+    },
+    "h14_g0": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0056,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 1.047,
+     "own_group": false
+    },
+    "h15_g0": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0056,
+     "null_med": 0.0047,
+     "passes": false,
+     "gain": 1.055,
+     "own_group": false
+    },
+    "h0_g1": {
+     "J_mrr": 0.004,
+     "null_max": 0.0061,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.953,
+     "own_group": false
+    },
+    "h1_g1": {
+     "J_mrr": 0.0036,
+     "null_max": 0.0053,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.975,
+     "own_group": false
+    },
+    "h2_g1": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0058,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.974,
+     "own_group": false
+    },
+    "h3_g1": {
+     "J_mrr": 0.0037,
+     "null_max": 0.006,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.97,
+     "own_group": false
+    },
+    "h8_g1": {
+     "J_mrr": 0.0056,
+     "null_max": 0.0066,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.972,
+     "own_group": false
+    },
+    "h9_g1": {
+     "J_mrr": 0.0048,
+     "null_max": 0.0058,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.957,
+     "own_group": false
+    },
+    "h10_g1": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0065,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.965,
+     "own_group": false
+    },
+    "h11_g1": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0059,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.962,
+     "own_group": false
+    },
+    "h12_g1": {
+     "J_mrr": 0.003,
+     "null_max": 0.0061,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.964,
+     "own_group": false
+    },
+    "h13_g1": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0051,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.968,
+     "own_group": false
+    },
+    "h14_g1": {
+     "J_mrr": 0.0031,
+     "null_max": 0.0052,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.966,
+     "own_group": false
+    },
+    "h15_g1": {
+     "J_mrr": 0.0052,
+     "null_max": 0.0062,
+     "null_med": 0.0047,
+     "passes": false,
+     "gain": 0.975,
+     "own_group": false
+    },
+    "h0_g2": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0061,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.964,
+     "own_group": false
+    },
+    "h1_g2": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0058,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.957,
+     "own_group": false
+    },
+    "h2_g2": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0066,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.94,
+     "own_group": false
+    },
+    "h3_g2": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0059,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.935,
+     "own_group": false
+    },
+    "h4_g2": {
+     "J_mrr": 0.0037,
+     "null_max": 0.0065,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 0.954,
+     "own_group": false
+    },
+    "h5_g2": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0063,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.955,
+     "own_group": false
+    },
+    "h6_g2": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0061,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.944,
+     "own_group": false
+    },
+    "h7_g2": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0056,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 0.961,
+     "own_group": false
+    },
+    "h12_g2": {
+     "J_mrr": 0.0049,
+     "null_max": 0.0056,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 0.951,
+     "own_group": false
+    },
+    "h13_g2": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0056,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 0.957,
+     "own_group": false
+    },
+    "h14_g2": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0052,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 0.952,
+     "own_group": false
+    },
+    "h15_g2": {
+     "J_mrr": 0.0043,
+     "null_max": 0.0064,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 0.945,
+     "own_group": false
+    },
+    "h0_g3": {
+     "J_mrr": 0.0044,
+     "null_max": 0.0056,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.087,
+     "own_group": false
+    },
+    "h1_g3": {
+     "J_mrr": 0.0068,
+     "null_max": 0.0064,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.098,
+     "own_group": false
+    },
+    "h2_g3": {
+     "J_mrr": 0.0039,
+     "null_max": 0.0061,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.089,
+     "own_group": false
+    },
+    "h3_g3": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0066,
+     "null_med": 0.0049,
+     "passes": false,
+     "gain": 1.053,
+     "own_group": false
+    },
+    "h4_g3": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0054,
+     "null_med": 0.0042,
+     "passes": false,
+     "gain": 1.089,
+     "own_group": false
+    },
+    "h5_g3": {
+     "J_mrr": 0.0042,
+     "null_max": 0.0057,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.083,
+     "own_group": false
+    },
+    "h6_g3": {
+     "J_mrr": 0.0034,
+     "null_max": 0.0055,
+     "null_med": 0.0038,
+     "passes": false,
+     "gain": 1.087,
+     "own_group": false
+    },
+    "h7_g3": {
+     "J_mrr": 0.0045,
+     "null_max": 0.0062,
+     "null_med": 0.0041,
+     "passes": false,
+     "gain": 1.085,
+     "own_group": false
+    },
+    "h8_g3": {
+     "J_mrr": 0.0058,
+     "null_max": 0.0055,
+     "null_med": 0.0046,
+     "passes": false,
+     "gain": 1.106,
+     "own_group": false
+    },
+    "h9_g3": {
+     "J_mrr": 0.0047,
+     "null_max": 0.0067,
+     "null_med": 0.004,
+     "passes": false,
+     "gain": 1.093,
+     "own_group": false
+    },
+    "h10_g3": {
+     "J_mrr": 0.0038,
+     "null_max": 0.0065,
+     "null_med": 0.0043,
+     "passes": false,
+     "gain": 1.09,
+     "own_group": false
+    },
+    "h11_g3": {
+     "J_mrr": 0.0065,
+     "null_max": 0.0057,
+     "null_med": 0.0044,
+     "passes": false,
+     "gain": 1.084,
+     "own_group": false
+    }
+   },
+   "energy": {
+    "0": {
+     "J": 0.0866,
+     "random": 0.0806,
+     "rot_med": 0.0799,
+     "rot_max": 0.0853,
+     "mlp_med": 0.0413,
+     "mlp_max": 0.0434
+    },
+    "1": {
+     "J": 0.1504,
+     "random": 0.1608,
+     "rot_med": 0.1607,
+     "rot_max": 0.1657,
+     "mlp_med": 0.0909,
+     "mlp_max": 0.095
+    },
+    "2": {
+     "J": 0.0971,
+     "random": 0.1061,
+     "rot_med": 0.1068,
+     "rot_max": 0.1097,
+     "mlp_med": 0.0517,
+     "mlp_max": 0.0549
+    },
+    "3": {
+     "J": 0.0997,
+     "random": 0.0837,
+     "rot_med": 0.0832,
+     "rot_max": 0.0874,
+     "mlp_med": 0.0423,
+     "mlp_max": 0.0443
+    }
+   },
+   "prereg": {
+    "statistic": "between/within-group variance ratio of lens preservation over the 16 real heads, against the same ratio on each of the 40 null populations",
+    "F_J": 2.826,
+    "F_null_max": 1.81,
+    "F_null_median": 1.306,
+    "draws_at_or_above_F_J": 0,
+    "beyond_all_draws": true,
+    "per_head_J_mrr": [
+     0.2014,
+     0.0049,
+     0.0016,
+     0.0602,
+     0.6495,
+     0.597,
+     0.6976,
+     0.0005,
+     0.459,
+     0.0006,
+     0.0443,
+     0.319,
+     0.3694,
+     0.0019,
+     0.1199,
+     0.0903
+    ],
+    "per_group_mean_J_mrr": [
+     0.067,
+     0.4861,
+     0.2057,
+     0.1454
+    ],
+    "F_null_by_family": {
+     "rot_median": 1.406,
+     "mlp_median": 1.269
+    }
+   },
+   "summary": {
+    "passes_by_group_over_16_heads": {
+     "0": 0,
+     "1": 3,
+     "2": 2,
+     "3": 4
+    },
+    "passes_by_head_over_4_groups": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 1,
+     "5": 1,
+     "6": 1,
+     "7": 0,
+     "8": 1,
+     "9": 0,
+     "10": 0,
+     "11": 1,
+     "12": 1,
+     "13": 1,
+     "14": 1,
+     "15": 1
+    },
+    "diagonal_passes": 9,
+    "median_J_mrr_by_group": {
+     "0": 0.0041,
+     "1": 0.0043,
+     "2": 0.0043,
+     "3": 0.0045
+    },
+    "median_J_mrr_by_head": {
+     "0": 0.0042,
+     "1": 0.0043,
+     "2": 0.0039,
+     "3": 0.0044,
+     "4": 0.0039,
+     "5": 0.0046,
+     "6": 0.0037,
+     "7": 0.0043,
+     "8": 0.0057,
+     "9": 0.0039,
+     "10": 0.004,
+     "11": 0.0055,
+     "12": 0.0043,
+     "13": 0.0043,
+     "14": 0.0039,
+     "15": 0.0049
+    }
+   }
+  }
+ }
+}

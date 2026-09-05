@@ -1,0 +1,125 @@
+"""WP12 stage 2: graded ablation of the lens-relay heads (the Head's design, 03:50).
+
+Ablate the top k attention heads by preservation margin (k in K_LIST, and the full selected set),
+zeroing each head's attention output at every position before the output gate and o_proj, against
+layer-matched random sets of the same size (NSEED seeds), on DOCS documents of POS sampled
+positions each. Measures, per k and per set: recall@25 of the hosted-lens readout at the band
+layers (the fraction of the unablated run's top-25 tokens at a position that remain in the top 25),
+and the next-token change rate (the fraction of positions whose top-1 prediction changes). The
+threshold, stated in advance: a recall drop counts only if the change rate stays within twice the
+layer-matched random control's at the same k."""
+from __future__ import annotations
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO WP12 stage 2")
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; OUT.mkdir(exist_ok=True)
+if (Path(__file__).resolve().parent / "HOLD").exists():
+    print(json.dumps({"event": "held", "reason": "the ablation waits for the orthogonalised selection and the control decision (the Head, 05:55)"}), flush=True); raise SystemExit("held")
+LENS = Path(sys.argv[1]); K_LIST = [int(k) for k in os.environ.get("K_LIST", "2,4,8,16").split(",")]; NSEED = int(os.environ.get("NSEED", "5")); SET = os.environ.get("SET", "all"); SEL_FILE = os.environ.get("SEL_FILE", "selection_nulldist.json"); TAG = os.environ.get("TAG", "")
+DOCS, POS, DOC_TOKENS = 8, 64, 512
+BAND_PAIRS = ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))   # R41e (wiring map, 2026-09-05 22:30): asserted as the recorded ruling, not derived (R38(f)); an earlier draft typed four attention layers and dropped 12, the fourth such omission (the Deputy, 06:55)
+BAND = tuple(sorted(L for pr in BAND_PAIRS for L in pr))          # the ten band layers: readout layers for recall@25
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_next as q3n
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None); model.eval()
+att_blocks = [b for b, l in enumerate(model.language_model.model.layers) if not l.is_linear]
+BAND_ATT = tuple(L for L in BAND if (L - 1) in att_blocks)        # the pairs' attention members, derived from the model's layer kinds: 12, 16, 20, 24, 28 written by blocks 11, 15, 19, 23, 27
+assert len(BAND_ATT) == len(BAND_PAIRS) and all(sum((L - 1) in att_blocks for L in pr) == 1 for pr in BAND_PAIRS), (BAND_ATT, BAND_PAIRS)
+FLOOR = float(os.environ.get("FLOOR", "0"))   # absolute preservation floor on J_mrr (0 = the margin rule alone); the margin rule admits tiny-number passes (block 27 head 13: 0.002 over a null of 0.001)
+ORDER = os.environ.get("ORDER", "margin")   # "margin": by preservation margin over the nulls (the selection file's order); "abs": by absolute preservation, so the small-k arms hold the strongest relays rather than the smallest nulls
+sel = json.load(open(OUT / SEL_FILE)); _rows = [r for r in sel["selected_attention"] if (SET == "all" or (SET == "inband" and r["layer_written"] in BAND_ATT)) and r["J_mrr"] >= FLOOR]
+if ORDER == "abs": _rows = sorted(_rows, key=lambda r: -r["J_mrr"])
+ordered = [(r["block"], r["head"]) for r in _rows]
+print(json.dumps({"event": "set", "set": SET, "floor": FLOOR, "order": ORDER, "n": len(ordered), "by_layer": {str(L): sum(1 for r in _rows if r["layer_written"] == L) for L in sorted({r["layer_written"] for r in _rows})}, "first_layer_28_at_k": next((i + 1 for i, r in enumerate(_rows) if r["layer_written"] == 28), None), "ordered": [(r["layer_written"], r["block"], r["head"], round(r["J_mrr"], 3)) for r in _rows]}), flush=True)
+lens = np.load(LENS); J = {L: mx.array(lens[f"J{L - 1}"].astype(np.float32)) for L in BAND}
+# ---- the ablation hook: zero selected heads' outputs per block
+ABLATE = {}            # block -> set of heads
+_orig = q3n.scaled_dot_product_attention
+_block_counter = {"i": 0}
+def hooked(queries, keys, values, cache, scale, mask, *a, **kw):
+    out = _orig(queries, keys, values, cache, scale, mask, *a, **kw)
+    b = att_blocks[_block_counter["i"] % len(att_blocks)]; _block_counter["i"] += 1
+    hs = ABLATE.get(b)
+    if hs:
+        m = np.ones((1, out.shape[1], 1, 1), dtype=np.float32); m[0, list(hs)] = 0.0
+        out = out * mx.array(m).astype(out.dtype)
+    return out
+q3n.scaled_dot_product_attention = hooked
+# ---- documents and positions
+corpus = json.load(open(HERE.parent / "retrieval" / "corpus.json"))
+docs = [encode(tokenizer, c["text"])[:DOC_TOKENS] for c in corpus[:DOCS]]
+rng = np.random.default_rng(0)
+positions = [sorted(rng.choice(np.arange(16, len(d)), POS, replace=False).tolist()) for d in docs]
+def run(ablate):
+    """residuals at the band layers and logits at sampled positions; returns top-25 lens tokens per (layer, doc, pos) and top-1 next tokens."""
+    ABLATE.clear(); ABLATE.update(ablate); tops, top1 = {L: [] for L in BAND}, []
+    for d, pos in zip(docs, positions):
+        _block_counter["i"] = 0
+        res = view.residuals(d, list(BAND))
+        _block_counter["i"] = 0
+        logits = model(mx.array(d)[None])[0]; top1.append(np.array(mx.argmax(logits[pos], axis=-1)).tolist())
+        for L in BAND:
+            h = res[L][0][pos] if res[L].ndim == 3 else res[L][pos]
+            read = view.unembed(view.final_norm(h.astype(mx.float32) @ J[L].T))
+            tops[L].append(np.array(mx.argsort(read, axis=-1)[:, -25:]).tolist())
+    mx.eval(); return tops, top1
+def recall(base, test):
+    return {L: float(np.mean([len(set(a) & set(b)) / 25 for da, db in zip(base[L], test[L]) for a, b in zip(da, db)])) for L in BAND}
+UPSTREAM_FLOOR = {"recall": 1.0, "change": 0.0}   # set from the reproducibility pass below: the gate is on recall@25 and the top-1 change rate, exact equality if the unablated readout reproduces bit-identically
+def stratify(heads, rec):
+    """recall at readout layers with at least one ablated head writing at or below them (the measurement), and at
+    layers with none (the control, which must be unchanged); the number of upstream ablated heads per layer beside it."""
+    written = [b + 1 for b, h in heads]
+    up = {L: sum(1 for w in written if w <= L) for L in BAND}
+    above = {L: rec[L] for L in BAND if up[L] > 0}; below = {L: rec[L] for L in BAND if up[L] == 0}
+    if any(v < UPSTREAM_FLOOR["recall"] for v in below.values()):
+        raise SystemExit(f"upstream control failed: recall@25 at readout layers with no ablated head at or below them fell below the reproducibility floor {UPSTREAM_FLOOR['recall']}: {below}")
+    return {"upstream_heads_per_layer": up, "recall_downstream": above, "recall_downstream_mean": float(np.mean(list(above.values()))) if above else None, "recall_upstream_control": below}
+def change(base, test): return float(np.mean([a != b for da, db in zip(base, test) for a, b in zip(da, db)]))
+base_tops, base_top1 = run({})
+rep_tops, rep_top1 = run({})                                          # the reproducibility pass: the same readout twice with no ablation
+rep_recall = recall(base_tops, rep_tops); rep_change = change(base_top1, rep_top1)
+identical = all(v == 1.0 for v in rep_recall.values()) and rep_change == 0.0
+UPSTREAM_FLOOR["recall"] = 1.0 if identical else min(rep_recall.values()); UPSTREAM_FLOOR["change"] = rep_change
+print(json.dumps({"event": "reproducibility", "bit_identical": identical, "recall_run_to_run": rep_recall, "top1_change_run_to_run": rep_change, "upstream_gate_on": "recall@25 at upstream readout layers, exact equality" if identical else f"recall@25 at upstream readout layers >= measured floor {UPSTREAM_FLOOR['recall']}", "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+def by_block(heads):
+    d = {}
+    for b, h in heads: d.setdefault(b, set()).add(h)
+    return d
+CONTROL = os.environ.get("CONTROL", "exclude")   # "exclude": unselected heads at the layer where possible, forced overlap only where the pool is short; "all": the paper's draw from all sixteen
+def layer_matched_random(heads, seed):
+    """Equal-sized random sets at the same layers. Under CONTROL=exclude the draw avoids the selection where
+    the layer's unselected pool is large enough and takes the shortfall from the selection (forced overlap,
+    counted); under CONTROL=all it draws from all sixteen heads. Both biases are stated in the record: the
+    exclude draw is the weakest heads at a saturated layer, the all draw is more than half treatment there."""
+    r = np.random.default_rng(seed); out = []; sel = set(map(tuple, heads))
+    for b, hs in by_block(heads).items():
+        if CONTROL == "all":
+            out += [(b, int(h)) for h in r.choice(16, len(hs), replace=False)]; continue
+        pool = [h for h in range(16) if (b, h) not in sel]; n = len(hs)
+        take = [int(h) for h in r.choice(pool, min(n, len(pool)), replace=False)]
+        if n > len(pool): take += [int(h) for h in r.choice(sorted(hs), n - len(pool), replace=False)]
+        out += [(b, h) for h in take]
+    return out
+results = []
+ks = [k for k in K_LIST if k < len(ordered)] + [len(ordered)]
+for k in ks:
+    top = ordered[:k]; tops, t1 = run(by_block(top)); rec = recall(base_tops, tops); ch = change(base_top1, t1); strat = stratify(top, rec)
+    ctl = []
+    for s in range(NSEED):
+        rs = layer_matched_random(top, s); tops_r, t1_r = run(by_block(rs)); rr = recall(base_tops, tops_r)
+        ctl.append({"seed": s, "heads": rs, "overlap_with_selection": len(set(map(tuple, rs)) & set(map(tuple, top))), "control": CONTROL, "recall": rr, "change": change(base_top1, t1_r), "stratified": stratify(rs, rr)})
+    ctl_rec = {L: float(np.mean([c["recall"][L] for c in ctl])) for L in BAND}; ctl_ch = float(np.mean([c["change"] for c in ctl]))
+    ctl_down = float(np.mean([c["stratified"]["recall_downstream_mean"] for c in ctl if c["stratified"]["recall_downstream_mean"] is not None]))
+    results.append({"k": k, "heads": top, "recall_by_layer": rec, "stratified": strat, "change_rate": ch, "control_recall_by_layer_mean": ctl_rec, "control_recall_downstream_mean": ctl_down, "control_change_rate_mean": ctl_ch, "controls": ctl,
+                    "specificity_holds": bool(ch <= 2 * ctl_ch), "downstream_recall_drop_vs_control": ctl_down - strat["recall_downstream_mean"]})
+    json.dump({"results": results, "partial": True, "reproducibility": {"bit_identical": identical, "recall_run_to_run": rep_recall, "top1_change_run_to_run": rep_change, "upstream_floor": UPSTREAM_FLOOR}}, open(OUT / f"ablation{TAG}.json", "w"), indent=1)
+    print(json.dumps({"event": "k", "k": k, "recall_downstream": round(strat["recall_downstream_mean"], 3), "control_downstream": round(ctl_down, 3), "upstream_control": strat["recall_upstream_control"], "change": round(ch, 3), "control_change": round(ctl_ch, 3), "specificity_holds": bool(ch <= 2 * ctl_ch), "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+json.dump({"results": results, "reproducibility": {"bit_identical": identical, "recall_run_to_run": rep_recall, "top1_change_run_to_run": rep_change, "upstream_floor": UPSTREAM_FLOOR}, "parameters": {"K_LIST": ks, "NSEED": NSEED, "DOCS": DOCS, "POS": POS, "DOC_TOKENS": DOC_TOKENS, "BAND_PAIRS": BAND_PAIRS, "BAND_readout": BAND, "BAND_ATT": BAND_ATT, "threshold": "change rate within 2x the layer-matched control's, applied at interpretation; every k reported", "upstream_control": "recall@25 at readout layers with no ablated head at or below them must equal the measured reproducibility floor (exact equality when the unablated readout reproduces bit-identically); hard fail", "selection": sel["rule"] if "rule" in sel else None, "set": SET, "selection_file": SEL_FILE, "control": CONTROL, "floor": FLOOR, "order": ORDER, "ordered": [(r["layer_written"], r["block"], r["head"], round(r["J_mrr"], 3)) for r in _rows]}}, open(OUT / f"ablation{TAG}.json", "w"), indent=1)
+print("done", round(time.time() - T0, 1), "s")
