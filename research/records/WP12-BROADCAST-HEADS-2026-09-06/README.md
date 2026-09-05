@@ -80,3 +80,56 @@ channels' columns are not commensurable and are not read as if they were.
 primary set and layer-matched random heads as control, measured by recall@25 of the hosted-lens
 readout and the next-token change rate under the threshold stated in the design. The Head's review
 of this reading precedes it.
+
+## Corrections on review (the Head and the Deputy, 03:30; adopted). The selection rule changes and the result above is amended by this section.
+
+**Layer 32 is out, on our own ruling.** R43a puts layer 32 outside the lens family: the lens files
+cover blocks 0 to 30 and the lens is the identity at layer 32 by construction, so label preservation
+against J there measures whether a head preserves directions the unembedding can read, trivially
+true next to the output. Its seven passing heads are that degeneracy and are excluded; N is 112.
+
+**The gain criterion does not transfer, so the set is selected on preservation with gain reported
+beside it.** Among the 112, 17 heads pass both metrics against both controls, 41 pass preservation
+against both controls and fail only gain, and 14 pass gain only. The gain medians are 0.93 on J,
+1.00 rotated and 0.96 MLP rows, flat across populations, so the paper's worse-of-two rule drops
+strong relays for failing the half that does not discriminate here. **Selectivity lives in label
+preservation, not amplification: a genuine difference from the paper, stated as its own line.** The
+rule, with the Deputy's margin so that it carries the claim: a head relays the lens when its label
+preservation on J is at least double the best control (`mrr_margin >= 1`); gain is reported beside
+it. Under that rule: **28 of 112 attention heads, 23 of 64 in the band; by layer written, 4: 3, 8:
+0, 12: 2, 16: 2, 20: 7, 24: 5, 28: 9.** The earlier "none at 16 or 28" was the gain criterion's
+artefact; layer 28 holds the most. Among the 28 the gain median is 0.90 against 1.00 for the best
+control and a quarter have gain above both controls. The ordered set with every number is in
+`out/selection_preservation_rule.json`.
+
+**The near-identity copy maps at layers 8 and 12 are caught by the margin, which is the control
+working.** Rotated-J label preservation medians are 0.24 at layer 8 and 0.18 at layer 12 against
+0.03 or less at every other layer: those heads preserve any direction set, and the margin against
+the rotated control keeps them out (layer 8: 0 of 16 selected; layer 12: 2). The metric is not
+rewarding direction-preserving maps as such.
+
+**The rotated control is matched by construction.** It is one fixed random orthogonal rotation of
+the whole residual space applied to the J population, which preserves the population's Gram matrix
+and therefore its spectrum, pairwise geometry and effective dimensionality; it is the paper's
+control exactly, not a rotation within a lower-dimensional subspace.
+
+**The recurrent paths, stated as magnitude.** Under the sign rule 112 of 768 pass, which is what a
+bare inequality on tiny numbers admits and is not a finding; under the margin rule 20 of 768; with an
+absolute floor at the attention median, none. The recurrent median on J, 0.0061, loses to its own
+MLP-row control, 0.0095, and the strongest recurrent path, 0.071, is below the attention median of
+0.178: not one of the 768 reaches even the median attention head, let alone a relay. With the
+stated omission of the conv, the state and the gated norm, the weight-only recurrent value path is
+not a J-space relay.
+
+**The retrieval heads, as six heads and not a rate.** Under the margin rule, block 19 head 12 (rank
+6 by preservation margin, 0.366 against 0.039) and block 23 head 9 (rank 13, 0.575 against 0.136)
+are selective lens relays; block 19 head 15 preserves at 0.040 against 0.024 (margin 0.68, below
+the double) and is not; block 19 head 2 preserves at 0.988 but so does its rotated control at 0.994,
+a copy map that relays everything and is not selective; block 27 head 1 and block 3 head 15 do not
+relay at all. So of the six strongest retrieval heads two are selective relays, one is a copy head,
+and three are not relays; the strongest relay, block 19 head 0, was not a strong retrieval head.
+That supports the claim that entry and retrieval are not one operation and share heads; it does
+not support a rate.
+
+**Stage 2 set.** The 28, with the 23 in-band heads primary, layer-matched random controls,
+recall@25 of the hosted-lens readout and the next-token change rate under the stated threshold.
