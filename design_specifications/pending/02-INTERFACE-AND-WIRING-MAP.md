@@ -764,6 +764,19 @@ forget. Each has an integration check in §6.
   ruling or computation it came from, so the next reader can recompute it instead of trusting
   it; a figure with no named source is an estimate and is labelled as one.
 
+- **R34 amended (2026-09-05; proposed by the Head of Interpretability, ratified by the Chief):
+  context-constant lens rows enter no Holm family (#78).** Holm families in the J-space sweep
+  are built on the paired statistic, not on `matched_p`; a row with zero discordant pairs has an
+  undefined paired test and enters no family by construction; the discordant-pair count is
+  recorded per row and zero renders as unresolved; the conformance block states that
+  `matched_p` is an unpaired test against a fair coin, reported and not decisive. No magnitude
+  floor: the phenomenon is per-case agreement of the two contexts' win indicators (42/42 at
+  `jlens_L5_future`, `jlens_L20_future`, `jlens_L12_self`, `logit_lens_L12` on the 4B artifact),
+  not float32 resolution (0/84 equal cells) and not magnitude (`jlens_L12_self` constant at
+  8.5e-3 while `jlens_L5_all` discriminates at 6.9e-7). The Chief's earlier resolution-floor
+  ruling is withdrawn. Implementation changes the Holm code; a filter in front of the old
+  families is not this ruling. Full text: §8, PROPOSED (Interp) 2026-09-05, ratified.
+
 ## 8. Implementer amendments (append-only, dated)
 
 - PROPOSED (Deputy, 2026-09-04 00:20): §2.13/§2.14 amendments to match the disclosed Task 3
@@ -841,3 +854,42 @@ forget. Each has an integration check in §6.
   what this work repaired — the old estimator's analytic retained-state sum predicted a 2.12x
   spread across chunk lengths where the measurement is 1.07x. Do not re-derive one; the note in
   `training/gated_delta_chunkwise.py`'s docstring says so at the site.
+
+- **RATIFIED by the Chief (2026-09-05, promoted to §7) — PROPOSED (Interp) 2026-09-05: R34 amendment — unresolved lens rows, and the family they must
+  not enter (#78).** For the Chief to promote into §7. Occasioned by rows in
+  `outputs/probes/jspace-qwen35-4b-base-2026-09-05-rerun/sweep.json` whose matched and mismatched
+  columns are the same data.
+
+  **The phenomenon.** A readout can give the *same* per-case answer whether the candidate pair is
+  scored against its own task's context or a foreign one. Exact diagnostic: per-case agreement
+  between the two win-indicator vectors. Measured on that artifact, `jlens_L5_future`,
+  `jlens_L20_future`, `jlens_L12_self` and `logit_lens_L12` each agree in **42 of 42** cases.
+  Such a row carries no information about context, cannot inform a matched-versus-mismatched
+  test, and yet its unpaired p-value against a fair coin consumes Holm correction from rows that
+  can.
+
+  **Two things it is not, both checked rather than assumed.** It is *not* a float32 resolution
+  problem: at `jlens_L5_future`, **0 of 84** cells hold two values equal in float32 and the median
+  gap is **7.0e6 ulps**. And it is *not* predicted by magnitude: `jlens_L12_self` is
+  context-constant at a median probability of 8.5e-03 while `jlens_L5_all` discriminates at
+  6.9e-07 and `logit_lens_L11` at 1.6e-06. **A magnitude floor would exclude rows that
+  discriminate and keep rows that do not**, which is why this amendment states no floor.
+
+  **Ruled.**
+  1. **Holm families are built on the paired statistic, not on `matched_p`.** The paired test uses
+     only discordant pairs, so a row with **zero discordant pairs has an undefined paired test and
+     enters no family by construction.** No threshold, no calibration.
+  2. **The discordant-pair count is recorded per row**, and a row with zero renders as
+     **unresolved** rather than as a rate.
+  3. **The conformance block states that `matched_p` is an unpaired test against a fair coin**,
+     reported but not decisive and the basis of no family.
+
+  **Implementation note for the dispatch:** this changes the sweep's Holm code rather than adding
+  a filter in front of it. A floor plus a paired test bolted on afterwards is not this ruling.
+
+  **Scope.** Verdicts resting on the model's own output distribution or on the P(true) /
+  P(already-read) decomposition are untouched: neither is an ordering statistic over lens rows.
+  On the 4B artifact the rows carrying the verdict sit at the bottom of the agreement ranking
+  (`jlens_L27_future` 32 of 42, `jlens_L32_self` 34 of 42), which is what a row that responds to
+  context looks like. EXP-001's conclusion stands and stands more firmly once context-constant
+  rows stop consuming correction.

@@ -201,3 +201,14 @@ them.
 - **Instrument record:** every probe artifact before 2026-09-05 carried a null R18a precision
   block (reader at the wrong level, 6f84217); the R38 audit found four wrong readers in fifteen,
   all with soft defaults (`under_review/R38-AUDIT-SUMMARY-2026-09-05.md`).
+
+**Power statements (WO-STAT-001 Part A, 2026-09-05; source
+`under_review/POWER-ANALYSIS-2026-09-05.md`).** P6's 4/5 against zero controls is a real
+contrast (one-sided Fisher p 0.024) and not a measurement of the rate: at n = 5 only 4/5 and 5/5
+separate from zero controls, and 80% power detects 0.83, above the observed 0.8. EXP-001's paired
+decisive row (10 v 4, p 0.18) is an absence of evidence, not a null: power 0.27 against the
+observed effect; 135 points detect it at 80%, 135 new points confirm a positive on new data
+alone. The decomposition's interval on 19/42, [0.31, 0.60], is the bound that carries the
+verdict: no trace of the size World B pre-registered (P(true) > 0.5; observed maximum 0.23), and
+not "no trace of any size". Collection to close each gap is costed in WO-STAT-001 §2 and §5 and
+awaits the Director's lifts.

@@ -569,3 +569,57 @@ Worktree `wt-p6-scorer`; two files. Read in full; `tests/test_patch.py` 98 passe
   secondary restricted to single-drop cases with the restriction named as a limitation of the
   family) before the rerun is scheduled. The 41/195 versus 124/350 note counts differ by
   denominator and are not load-bearing; §5a states both with their denominators.
+
+**Landed:** P6 scorer fix as `b080e41` (two files; lookahead fix included; §5a all four parts). No rerun (§5b). #26, #76 closed.
+
+## Gate: EXP-002 S1 and S2 (span mask; cached scoring forward), 2026-09-05 afternoon
+
+Worktree `wt-exp002`; `arch.py` and `tests/test_arch.py`. Read in full; 28 passed on my run.
+**Approved to commit.**
+- S1: `masks(hidden_spans=...)` hides absolute key columns from the attention blocks only; the
+  span is ANDed into the library's own boolean array where one is returned, and at a single
+  scored step (where `make_mask` returns `None` regardless of `return_array`, asserted in the
+  test) the whole `(1, offset + 1)` row is built through the library's `create_causal_mask`.
+  Hiding is never deletion. An empty span list forces the array route and hides nothing, which
+  is what makes the equivalence check possible. Invalid spans raise rather than hide nothing.
+- Acceptance as the order required: a tiny real `qwen3_5` `TextModel` (real `DecoderLayer`,
+  `GatedDeltaNet`, `Qwen3NextAttention`), the production cache mix (three `ArraysCache`, one
+  `KVCache`) from the model's own `make_cache`, discovered through `ArchitectureView`; array
+  route against sentinel route equal to exactly 0.0 on both the full-sequence and the cached
+  single-step path; the recurrent mask untouched; untrimmability pinned as an assertion.
+- S2: `cached_logits` advances the given cache and returns the logits at one position; it
+  builds its own masks (a deviation from S2's wording, ratified: the mask's shape is a function
+  of the very hidden state and offset the forward uses). A missing cache offset raises. Only the
+  scored row is unembedded; the residual stream is bit-identical to the model's forward.
+- Reported, not caught by the tests: dropping the offset from the single-step row build stays
+  green because the full-width row broadcasts. Kept explicit with the reason. First slice in
+  two days with every measured claim in the brief confirmed.
+- **Side finding (#78), verified by me on the 4B artifact:** cells whose candidate gap is below
+  float32 resolution: `jlens_L5_future` 84/84, `jlens_L12_future` 62/84, `jlens_L5_all` 13,
+  `logit_lens_L11` 7, `logit_lens_L12` 4; the decisive row's smallest gap is 2.0e-03. Those rows
+  are not measurements; their p-values enter the Holm families. Ruling below; the ratified
+  verdict is untouched.
+
+**#78 corrected (same afternoon):** the Chief's resolution-floor ruling is withdrawn. The offending rows are context-constant (matched and mismatched win indicators agree 42/42), not unresolvable (0/84 exactly-equal cells), and magnitude does not predict it. Ruling: Holm families on the paired statistic; zero discordant pairs means no family by construction; discordant counts recorded; matched_p reported as non-decisive. Head of Interpretability's finding, verified by the Chief.
+
+## Gate: WO-STAT-001 Part A, power analysis, 2026-09-05 afternoon
+
+Worktree `wt-power`; `probes/power.py`, `tests/test_power.py`, the report
+`under_review/POWER-ANALYSIS-2026-09-05.md`. Read in full; 55 passed on my run; every headline
+figure recomputed independently by the Chief (paired power 0.2709 at n = 42; 135 for 80%; Fisher
+0.7373 at n = 5 against 0.8; the n = 3/4 sawtooth 0.512/0.410; r = 0.713 → 0.8000).
+**Approved to commit.**
+- The module enumerates exactly, imports `math` only, restates `wilson` and `sign_test` with
+  tests pinning them to the repository's own, and names its three objects (two-sample Fisher;
+  exact McNemar unconditional over the discordant count, with the conditional figure beside it;
+  unconditional sign test). Observed statistics read from the artifacts by path and field.
+- Answers: P6 at n = 5 claims the rate is not zero and nothing about its size (only 4/5 and 5/5
+  separate from zero controls; 80% detects 0.8314). EXP-001's paired row is an absence of
+  evidence, not a null: power 0.2709 against the observed effect; 135 points for 80%, and 135
+  *new* points (177 total) to confirm a positive on new data alone under the corrected pooling
+  rule. The decomposition's interval [0.312, 0.601] is the tighter statement and is what the
+  verdict prints beside it: no trace of the size World B pre-registered (P > 0.5, observed
+  maximum 0.227), not "no trace of any size".
+- Corrections to the work order recorded in its §5: family sizes 5/5/6 and 8/8/9; A3's
+  threshold 0.713; §4's p at n = 10 one-sided 0.00036; the "0.001" figure not reproduced (about
+  0.0025); Fisher power is not monotone in n, so every n-for-80% is a stable crossing.

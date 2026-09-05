@@ -1390,3 +1390,48 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
 - **#77 raised and then overtaken**: R25(b) gives two adjacent dropped values one slot, which would
   have refused ten of fifteen cases. It stops being the blocker once the population itself is the
   finding, but the constraint is real and stays on the record.
+
+- 2026-09-05 13:40 (Chief): scorer fix landed (b080e41). P6 secondary closed by §5b as a note-format/policy result; memo addendum written. WO-STAT-001 (power and sample size) drafted at the Director's request: Part A (exact power analysis, no lane) dispatched; §4 carries the Head's framing (A3 threshold; pooled null readable, pooled positive confirmed on new points alone; decisive row outside Holm; 3B not extended; P6 to twenty). Part B lifts wait on Part A's report. EXP-002 S1+S2 dispatched under one implementer.
+
+- 2026-09-05 ~14:10 (Chief): EXP-002 S1+S2 gated and approved (span mask ANDed into the library array; single-step row built after asserting make_mask is None; equality 0.0 on real classes both paths; cached_logits builds its own masks). #78 verified (L5_future 84/84 and L12_future 62/84 cells below float32 resolution; decisive row min gap 2.0e-3): ruled unresolved cells / resolved-count floors for Holm; Head writes the R34 amendment; verdict untouched. S3 dispatch next; Part A (power) in progress.
+
+- 2026-09-05 ~15:00 (Chief): WO-STAT-001 Part A gated and approved; every figure recomputed independently. P6 4/5 is a contrast not a rate (80% detects 0.83 at n=5); EXP-001 paired row is absence of evidence (power 0.27; 135 points, 135 new to confirm a positive); decomposition interval [0.31, 0.60] carries the verdict. Memo updated with power statements. Lift requests to the Director: P6 at 20 or 26 cases (~35 min eval + ~3 h probe); EXP-001b 135 new points (~5 h on the 4B). EXP-002 S3 in progress; #69/#72/#78 slice queued behind it.
+
+## 2026-09-05 afternoon — the power question answered; EXP-002's machinery in
+
+- **WO-STAT-001 Part A landed (`09d2ec8`): both small-sample results are underpowered, and
+  differently.** P6 at five cases can claim the rate is not zero and essentially nothing about its
+  size — Fisher rejects only two of six possible counts against zero controls, so anything at or
+  below 3/5 is indistinguishable, and the smallest true rate five cases detect at 80% power is
+  **0.8314, above the observed 0.800**. EXP-001's paired comparison is an **absence of evidence**
+  rather than a null: the smallest detectable matched-only share at n = 42 is 0.8763 against an
+  observed 0.7143, power 0.2709.
+- **A premise of the Deputy's was refuted, and it is the useful kind.** The dispatch told the
+  implementer that Fisher power must rise monotonically in n, as a sanity check on their machinery.
+  It does not: at n = 3, 3-of-3 against 0-of-3 gives p exactly 0.05 and rejects (power 0.512); at
+  n = 4 the next attainable table is 0.0714 and cannot (power 0.410). Discrete tests do that. Taking
+  the check at face value would have sent them hunting a bug in correct code. Every n-for-80% in the
+  report is a **stable** crossing, stated as a rule.
+- **Three figures in the work order corrected**, one verified here rather than relayed: the Holm
+  family sizes are 5/5/6 by readout on the 3B and 8/8/9 on the 4B, since the final layer contributes
+  only a `self` row.
+- **The ask doubled on the Chief's correction.** Under the pooling rule, a pooled positive counts
+  only if it holds on the new points alone, so the new points alone need the power: **135 new, 177
+  total**, not 135 total. The Deputy had it wrong in the message that carried it.
+- **#78 re-ruled, and the Deputy's diagnosis was wrong.** Those lens rows are **context-constant**,
+  not unresolvable: no cell is a tie, and `jlens_L5_future`'s win indicator agrees between matched
+  and mismatched on 42 of 42 points. A magnitude floor — the Deputy's proposal — would have been the
+  wrong instrument, and the counterexample was in the table already read: `L16_future`'s
+  probabilities are three orders larger and it still agrees 39 of 42, while `model_output`, the row
+  that responds, agrees only 28. The remedy now falls out of the statistic: Holm families rebuilt on
+  the **paired** test, so a row with zero discordant pairs has an undefined test and enters no family
+  by construction. No threshold to defend.
+- **EXP-002 S1 and S2 landed (`9f00be2`)**: the per-span attention mask through `ArchitectureView`
+  and the cached forward. First slice in two days where every measured claim in the brief was
+  confirmed and none refuted — the implementer re-measured all five before writing. Acceptance on
+  real `ArraysCache` and `KVCache` from a tiny real model's own `make_cache`, both the full-sequence
+  and cached single-step paths, each agreeing with the model's own forward to **exactly 0.0**.
+- **A filename collision caught rather than silently resolved**: the order named the tables report at
+  a path the Head's framing memo already occupied, both untracked, so a patch apply would have
+  replaced one with the other. Both kept; renamed as the Chief ruled — framing memo to
+  `POWER-ANALYSIS-FRAMING-REVIEW-2026-09-05.md`, tables to the cited path.

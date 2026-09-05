@@ -180,3 +180,74 @@ a stable sample, not the first one available.
 **All four EXP-001 runs are complete and the verdict above is unchanged by either.**
 
 — Head of Interpretability
+
+---
+
+## Addendum 2: unresolved lens rows (#78), and a correction to the proposed mechanism
+
+The Deputy found, and the Chief ruled, that some lens rows are not measurements. The phenomenon
+is real and worse than described. **The stated mechanism is wrong, and the proposed remedy would
+select the wrong rows.** Measured on this artifact.
+
+### It is not a float32 resolution problem
+
+`jlens_L5_future`'s two candidate probabilities sit near 2.2e-9, but they are **not** unresolvable:
+in **0 of 84** cells are they equal in float32, and the median gap is **7.0e6 ulps**. The median
+*relative* gap is 0.72. These are large differences at a small absolute scale, not rounding.
+
+### What is actually wrong: those rows do not respond to the manipulation at all
+
+The exact diagnostic is per-case agreement between the matched and mismatched win indicators.
+
+| readout | median P(true) | matched / mismatched | per-case agreement |
+| --- | --- | --- | --- |
+| `jlens_L5_future` | 2.2e-09 | 22 / 22 | **42 of 42** |
+| `jlens_L20_future` | 2.4e-04 | 23 / 23 | **42 of 42** |
+| `jlens_L12_self` | **8.5e-03** | 23 / 23 | **42 of 42** |
+| `logit_lens_L12` | 1.0e-05 | 22 / 22 | **42 of 42** |
+| `jlens_L5_all` | 6.9e-07 | 18 / 21 | 39 of 42 |
+| `logit_lens_L11` | 1.6e-06 | 18 / 20 | 36 of 42 |
+| `jlens_L27_future` | 3.0e-02 | 29 / 21 | 32 of 42 |
+
+A row agreeing in 42 of 42 gives the *same* answer whether the candidates are scored against their
+own task's context or a foreign one. Its two columns are the same data. It cannot inform a
+matched-versus-mismatched test, and its unpaired p-value against a fair coin is nonetheless
+consuming Holm correction from rows that can.
+
+### Why a magnitude floor is the wrong rule
+
+The table above is the counter-example in both directions. `jlens_L12_self` is context-constant at
+a median probability of **8.5e-03**, four orders of magnitude above `jlens_L5_all`, which *does*
+discriminate at 6.9e-07. **Magnitude does not predict resolution.** A floor would exclude rows
+that discriminate and keep rows that do not.
+
+### Proposed R34 amendment (`PROPOSED (Interp)`), and it needs no new threshold
+
+The fix already exists in this morning's paired-null ruling and only needs to be carried into the
+families:
+
+1. **Build the Holm families on the paired statistic, not on `matched_p`.** The paired test uses
+   only discordant pairs. A row with **zero discordant pairs has an undefined paired test** and
+   therefore enters no family. No floor, no calibration, no arbitrary number.
+2. **Record the discordant-pair count per row** in the artifact, and render a row with zero as
+   **unresolved** rather than as a rate.
+3. **State in the conformance block** that `matched_p` is an unpaired test against a fair coin,
+   reported but not decisive and not the basis of any family.
+
+This unifies with the paired correction instead of adding a second mechanism beside it, and it is
+exact where a magnitude floor would be a judgement call.
+
+### Effect on the verdict: none, and here is why
+
+The verdict rests on the model's own output distribution and on the decomposition, neither of
+which is an ordering statistic over lens rows. The decomposition compares P(true) and
+P(already-read) matched against mismatched as continuous quantities; it is unaffected. The rows
+carrying the verdict sit at the *bottom* of the agreement ranking — `jlens_L27_future` at 32 of
+42, `jlens_L32_self` at 34 — which is what a row that responds to context looks like.
+
+**The lens-row statements in §4 above should be read with this caveat:** of the four readouts
+listed there as reaching paired significance, all four have discordant pairs and are unaffected.
+The claim that no primary layer beats its null after Holm stands, and stands more firmly once the
+context-constant rows stop consuming correction.
+
+— Head of Interpretability
