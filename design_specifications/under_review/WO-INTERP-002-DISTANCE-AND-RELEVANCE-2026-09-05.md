@@ -97,11 +97,92 @@ costed until the curve exists.
 buys precision on a question you have correctly identified as not live. This programme asks the
 question that is.
 
-## 6. What I am asking you for
+## 6. The two open questions, now answered
 
-Not approval to run. Approval to **write EXP-003 as a full spec with pre-registered predictions**,
-which then goes through the usual chain. Two things I would want your view on first: whether the
-turn-versus-token axis should be fixed on turns (which matches the note contract) or tokens (which
-matches the mechanism), and whether a five-level curve is the right resolution to start at.
+Answered by the research division's literature review
+(`under_review/LIT-REVIEW-WO-INTERP-002-AXIS-AND-RESOLUTION-2026-09-05.md`), three parallel
+literature agents and two local measurements, no model runs. I have verified both local claims
+and one of them needs its population named. Findings adopted with three additions.
+
+### 6.1 The axis is **tokens**, with turns recorded alongside
+
+The mechanistic literature is unanimous and it is the literature we are in: Khandelwal et al.
+(arXiv:1805.04623) set this exact decay-curve pattern in tokens, with an effective horizon near
+200 and an order-sensitivity break near 50; the same axis in DeciMamba (2406.14528), Forgetting
+Curve (2410.04727), Zoology (2312.04927), Repeat After Me (2402.01032) and the SSM recency bound
+(2501.00658). **No precedent exists for a recurrent or hybrid memory horizon measured in turns.**
+Turn count has been rejected in the words my own question used: Audio MultiChallenge
+(2512.14865) drops it because "each turn's length is also arbitrarily defined"; PsychoPass
+(2606.03136) is its nuisance-variable form. The one paper indexing by turn (2605.12922) finds the
+failure turn linear in the token window at R² > 0.999, so its turn axis *is* a rescaled token
+axis — an equivalence that holds only when turn lengths are homogeneous, as in Lost in the Middle
+(2307.03172) where chunks are capped at 100 tokens.
+
+**Addition (Head of Interpretability): the instrument's own paper uses the token axis too.**
+Gurnee et al. (2607.15495) report the workspace band on a depth scale and the J-lens
+autocorrelation across *positions*, not turns. That is the most directly relevant citation
+available and the review does not make it.
+
+**Correction to the local figure, and it does not change the finding.** The review reports
+per-message length p10 62, p50 ~200, p90 1646, a 26.5x spread, "400 rows each". Reproduced here,
+that is the **test** split; `train` gives p90 999 and **16.4x**, `valid` 1624 and 26.2x. Under
+R38 the figure names its split. Both spreads are enormous and the conclusion is untouched: "five
+turns back" is not one distance, adjacent turn levels overlap in token distance, and a real
+token-distance decay would present as a flat or noisy turn curve — the false-null shape.
+
+The instrument already indexes tokens: `--source-positions` takes fractions or absolute indices,
+resolved per context by `resolve_source_positions` (`pipeline/jlens.py:242`, verified). A turn
+axis needs a new mapping layer written and reviewed; the token axis needs nothing.
+
+**Ruled: sweep on token distance. Record the turn index and the containing message's token length
+for every point, and report the turn mapping in the results, because the note contract is stated
+in turns and must be readable off the curve.** The review's honest gap stands and is worth
+stating in the spec: no paper plots one dataset on both axes and shows the conclusions diverge.
+Recording both supplies that demonstration at no cost.
+
+### 6.2 The grid is **seven levels, geometric ratio 2, 32 to 2048 tokens**
+
+Five levels identify a decay and cannot discriminate its shape: a p-parameter model needs at
+least p levels, D-optimal designs for exponential and Emax models sit at exactly p points (Box
+and Lucas 1959; Dette et al. 2010), any design collapses to p+1 without information loss (de la
+Garza 1954), and levels beyond p buy lack-of-fit and model discrimination — which is EXP-003's
+stated output. Spacing is geometric because exponential cannot be separated from power-law except
+on a log grid spanning one to two decades (Clauset, Shalizi and Newman 2009). Our configured
+window is 2688 tokens (`configs/agent_v2d_qwen35_4b.yaml:40`, verified), so 32 / 64 / 128 / 256 /
+512 / 1024 / 2048 spans about 1.8 decades and brackets Khandelwal's 50-to-200 horizon with three
+levels rather than one.
+
+### 6.3 The budget tension the review names, resolved
+
+The review is right that after WO-STAT-001 we cannot afford another underpowered curve, and its
+own recommendation does not fit its own budget. At EXP-001's measured 133 s per probe point:
+
+| per-level n | power vs a 0.70 effect | 7 levels | lane hours |
+| --- | --- | --- | --- |
+| 27 | 0.41 | 189 | 7.0 |
+| 42 (EXP-001's n) | 0.74 | 294 | **10.9** |
+
+Seven levels at EXP-001's sample size costs eleven hours, not the 70% of a day the review
+budgets; and what fits in seven hours is 27 per level at **0.41** power, which is the underpowered
+curve we were told not to buy.
+
+**It resolves on EXP-001's own finding.** The decisive measurement is the model's own output
+distribution, and it needs **no Jacobians** — one forward per point, not nine layers times sixteen
+contexts times three sources of finite differences. The 133 s figure is the *lens* rate. So:
+
+1. **Sweep the full seven-level grid on the output measurement**, at EXP-001's n or better. This
+   is prefill-bound and costs a small fraction of a day.
+2. **Take lens readouts at three levels only** — the two endpoints and the knee once located —
+   for corroboration, which is the role EXP-001 established for them.
+3. **Allocate replicates unequally.** The extremes are near-certain outcomes and a proportion near
+   0 or 1 needs fewer points for the same interval; the knee needs the most. Equal allocation is
+   not what a discrimination design asks for.
+4. **Pre-register replicates per level with a power statement**, as WO-STAT-001 requires, and
+   hold about 30% of the budget for second-stage re-placement once the knee is located.
+
+## 7. What I am asking you for
+
+Not approval to run. Approval to **write EXP-003 as a full spec with pre-registered predictions**
+on the footing above, which then goes through the usual chain.
 
 — Head of Interpretability

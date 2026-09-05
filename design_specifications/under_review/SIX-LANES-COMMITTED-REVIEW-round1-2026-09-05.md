@@ -673,3 +673,53 @@ Worktree `wt-s3`; five files. Delta read in full; 70 passed on my run (`test_sta
   gate's tolerance. The cancellation is real and partial, as it can only be.
 - The module docstring names arm A's four ways to be quietly wrong, each guarded where the
   choice is made, with a test that fails if the two timing branches are merged.
+
+## Pre-gate read: EXP-002 first-render fix (worktree `wt-template-prefix` off `24ca77b`), 2026-09-05 evening
+
+Read ahead of the Deputy's report. Design better than the ruling: `_rendered_boundaries`
+discovers the smallest renderable prefix (the head block) by scanning rather than assuming two
+messages; a refusal past the head is a hard error (renderability is not monotone:
+`[system, user, assistant, system]` is refused); a tool observation inside the head block is
+refused as structurally unlocatable; spans are mapped to messages through `_spans_by_message`
+rather than by position, so a shifted tuple cannot mask the wrong text; `select_points` raises
+if a hidden observation falls inside the head; the forward schedule records the head sizes.
+`render_rows` now refuses a prompt slice with no user turn (writer-side guard); `runner.py`
+gains a comment only; `jinja2` pinned explicitly for the `TemplateError` import. Tests: the
+stand-in tokenizer now refuses exactly what the real template refuses, verified against the
+real one; seven real-tokenizer tests (session fixture over the cached 4B snapshot, named skip
+with the command to warm the cache) **executed on this machine, 7 passed, 0 skipped**; end to
+end `select_points` on the real tokenizer. `test_state_swap.py` ruff-clean; the three
+`test_data.py` findings are pre-existing at `24ca77b`. Suite per the workflow: 1485 passed.
+Gate on the Deputy's report (the audit of other prefix-rendering sites and the divergence
+surface).
+
+**Gate (same evening): first-render fix approved** on the worktree's current state (eight files;
+the added `protocol.py` docstring records the template's precondition and the two slicing sites
+that check it). The cold-cache guard is stricter than ruled: the session fixture skips on exactly
+one condition with no `try` around the load and warns on skip; a structural test parses the
+module and asserts the writer-backed tests exist, load through `AutoTokenizer.from_pretrained`
+with `local_files_only`, and cover the locator and `select_points`, so the coverage cannot be
+disabled quietly. Seven real-tokenizer tests executed on this machine. Condition: the audit of
+every other prefix-rendering site and the stand-in's divergence surface are recorded in the
+commit message, with any unsafe site fixed in the same commit or filed. Rerun on the existing
+lift after the commit.
+
+**First-render fix, verification in (held under the veto; nothing lands).** The Deputy's
+independent verification: sixteen render sites enumerated from scratch, no unfixed site carries
+a user-less conversation, `_rendered_boundaries` is the only prefix-render locator, `:357` was a
+live second instance covered by the same path, the production path runs end to end on the real
+tokenizer (42 points; head block 2 for all; minimum hidden index 3; partition invariants hold
+under all four strip/hide combinations), and with the shipped code restored the improved
+stand-in alone turns the original defect red at 18 to 22 tests, which is R38's argument holding
+without a tokenizer present. **Four corrections are conditions on the commit when the hold
+lifts, none touching the boundary logic:** (1) the meta-guard test that is supposed to stop the
+blind spot returning does not do what its docstring says: emptying the writer-versus-stand-in
+comparison leaves the suite green; make it fail on that. (2) The stand-in still accepts two
+shapes the real template refuses (the template trims content before testing the `tool_response`
+wrapper; the stand-in does not): either close them or narrow the test's name to the shapes it
+covers. (3) The `render_rows` comment claims to close the foreign-source door and closes one of
+four refusals (system not first, unknown role, non-string content still arrive as Jinja
+tracebacks): cover them or say it closes one class. (4) The `k0 == 1` docstring sentence is
+false; fix it. Plus: the deferred divergence is misdiagnosed to two sites where it cannot fire;
+the shape that can fire is `chat_replay`'s multi-user rows, which `render_rows` allow-lists;
+the follow-up issue names that site.

@@ -214,3 +214,14 @@ not "no trace of any size". Collection to close each gap is costed in WO-STAT-00
 awaits the Director's lifts. Guard for when the P6 extension lands: twenty ledger cases resolve
 the rate's precision, not the finding's generality; the generalisation question (a second family
 whose notes keep list structure past an omission) stays exactly where SPEC-004 §5b left it.
+
+**Reframing of EXP-001 on the Director's critique (2026-09-05 evening; WO-INTERP-002 §1,
+ratified).** No claim in the J-space literature asserts a model represents content fully outside
+its window, and our own runner guarantees the recurrent state at EXP-001's decision was computed
+from tokens that never contained the filename. EXP-001 therefore tested a claim the deployment
+already guaranteed. What it earned: a validated instrument, the decomposition method now required
+programme-wide, five defects found and fixed, two arms on one instrument. World A's licence for
+D4's note discipline rests on "the state never had it", not "the model cannot hold it". EXP-002
+survives the critique as a question about a persistent-cache regime we do not run and might
+build. The live questions are inside the window: the distance curve (EXP-003) and relevance and
+implicit elicitation (EXP-004), on a token axis with turns recorded alongside.

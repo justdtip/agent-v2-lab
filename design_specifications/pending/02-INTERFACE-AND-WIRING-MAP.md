@@ -769,6 +769,13 @@ forget. Each has an integration check in §6.
   identical logits (0.0) there and differed by 0.232 on an eight-block fixture with two
   attention blocks. The seam test's fixture must be able to exhibit the failure the test is for:
   where the mechanism is propagation, the fixture needs somewhere for it to propagate through.
+- **R38 amended (2026-09-05 evening; proposed by the research division via the Head of
+  Interpretability): a figure names the rows read against the rows available.** Naming the
+  population is not enough: a script that asked for 400 rows of a split holding 381 read the
+  whole population while reporting a 400-row sample, and a spread quoted from the mild end of a
+  split read as the split's. Every count, sample or window states "n of N" with N the rows the
+  source holds, so a sample that exceeds its population, or a window inside one, is visible on
+  its face.
 
 - **R34 amended (2026-09-05; proposed by the Head of Interpretability, ratified by the Chief):
   context-constant lens rows enter no Holm family (#78).** Holm families in the J-space sweep
@@ -782,6 +789,16 @@ forget. Each has an integration check in §6.
   8.5e-3 while `jlens_L5_all` discriminates at 6.9e-7). The Chief's earlier resolution-floor
   ruling is withdrawn. Implementation changes the Holm code; a filter in front of the old
   families is not this ruling. Full text: §8, PROPOSED (Interp) 2026-09-05, ratified.
+
+- **R39 (2026-09-05 evening; proposed by the Head of Interpretability with the research
+  division, ruled by the Chief): a choice carries the reason that decided it.** A tie-break, a
+  convention (sidedness, tie handling, a threshold) or a design constant recorded in a spec, a
+  ruling or a reading is recorded with the reason it was chosen over its alternatives, so the
+  next reader can check the choice rather than trust it. Kept separate from R38, which is
+  mechanically checkable (a figure names its source and its n of N); this is a discipline about
+  rules rather than numbers. Worked examples: EXP-003's partner for layer 16 (17 over 15 on a
+  balance criterion, with the measurements that decided it); the P6 contrast's one-sided Fisher
+  figure, which nearly escaped without its convention named.
 
 ## 8. Implementer amendments (append-only, dated)
 
@@ -899,3 +916,42 @@ forget. Each has an integration check in §6.
   (`jlens_L27_future` 32 of 42, `jlens_L32_self` 34 of 42), which is what a row that responds to
   context looks like. EXP-001's conclusion stands and stands more firmly once context-constant
   rows stop consuming correction.
+
+
+### R40 (2026-09-05, evening; Director approved D1 to D6 of pending/03)
+
+- **R40a, reading instrument.** The hosted Jacobian lens (`neuronpedia/jacobian-lens`, `qwen3.5-4b`, n1000 file, SHA-256 in `outputs/probes/jlens-hosted-qwen35-4b-2026-09-05/provenance.json`) is the programme's readout for J-lens measurements. Readout = `softmax(unembed(final_norm(h @ J.T)))` through `ArchitectureView`; file index l is repository layer L = l + 1; L = 32 is the identity. The finite-difference JVP path is legacy, kept only for the self-only and future-only variants, and is not used for reading. Holm families are the layers under one instrument.
+- **R40b, probe layers.** `probes.layer_fractions` is replaced by band-based layers 13, 16, 20, 24, 28 for Qwen3.5-4B; the kind-matched partner rule of EXP-001 section 3.5 is unchanged. EXP-001 stands as recorded on the old fractions. EXP-003 and EXP-004 adopt the band before any code. The 9B entry is a placeholder until its band is measured with the same corpus stage.
+- **R40c, standing lift.** See `live/STANDING-LIFT-EXPERIMENTS-2026-09-05.md`: ready-and-validated experiments run without a per-run lift; one model-loading experiment at a time; every result reported to the Director; visualisations are a deliverable. **Status (2026-09-05 evening): heard directly by the Chief; reported by the Proxy as not yet confirmed by the Director. For the Deputy and the Head the per-run gate stands until the Director confirms; see the banner on the live note.**
+- **R40d, dispositions.** Per `pending/03` section 5: land wt-template-prefix (after the four account corrections), wt-r38-slice1 to 4, wt-p6-scorer, wt-hybrid-period; hold wt-power; keep wt-s3; fold wt-exp002 into WP4.
+
+### R41 (2026-09-05, evening; on the Head's WP3 design)
+
+- **R41a, WP3 ratified with the Head's four corrections.** `pending/WP3-TRANSPORT-WEIGHTS-DESIGN-2026-09-05.md` is the WP3 specification. C1: attention blocks are block indices 3, 7, ..., 31 and write layers 4, 8, ..., 32; in-band attention blocks 15, 19, 23, 27 write layers 16, 20, 24, 28 (64 query heads); every layer set is written as block-to-layer. C2: the absolute threshold is withdrawn (|alpha| <= 0.0884 beta by the library's q and k scaling); the retention ratio normalised to bin 1-4 and the mass share against a uniform null are the statistics, readings R1 to R4 as written. C3: the R31 fixture uses Hv/Hk = 2 with distinguishable per-head keys against the library's own ops; the pairing is h // 2 by mx.repeat. C4: bins to 2688. Production path: the backward scan; oracle: the explicit product. Scope limit carried into every reading: a recurrent null is a content-transport null with routing frozen. All four verified by the Chief in code and on random tensors on 2026-09-05.
+- **R41b, R40b amended.** The probe layers 13, 16, 20, 24, 28 were kind-confounded (four of five written by attention blocks). The set becomes the kind pairs 12/13, 15/16, 19/20, 23/24, 27/28, ten layers, one DeltaNet-written and one attention-written at each depth, named as pairs in the registry under WP2. Any WP3 or WP5 result is reported per pair. EXP-001 stays as recorded.
+- **R41c, order of the Head's work.** WP7 design, then WP9, then R36 verdicts on WP1 and WP5 as those slices arrive.
+
+### R42 (2026-09-05, evening; on the Head's WP7 and WP9 designs)
+
+- **R42a, the J-space is the paper's, not the span.** `pending/WP7-WP9-PROBE-DESIGNS-2026-09-05.md` is ratified with one restatement that runs through all five probes. The J-space at a layer is the union of nonnegative cones spanned by at most k = 25 J-lens vectors (paper section 2.3 and appendix A.8); the J-space component of a direction is its gradient-pursuit fit with that k, and the remainder is what the fit leaves. The "dims for 90 percent variance" statistic of the hosted-lens memo (0.23 to 0.55 across the band) describes the linear span of all J-lens vectors and is context only; it is not the J-space's size, and the design's derived figures (about 947 dimensions at layer 20; a random direction carrying about 37 percent of its variance in the J-space; a remainder of about 63 percent) are withdrawn from every reading. The Head's structural requirement stands and is made exact: every share, rank and readout is reported as a percentile against spectrum-matched random directions at the same layer put through the same k-sparse pursuit, which is the paper's own "same-size random control"; every clamp is compared to the remainder and to a k-matched random control, the pursuit fit of a spectrum-matched random direction with the same k, at matched norm. With that null the paper's precedent of a 6 to 15 percent share is comparable again, and stays context rather than criterion (R35).
+- **R42b, WP7(d) layers.** The state probes move to the R41b kind pairs 12/13, 15/16, 19/20, 23/24, 27/28, reported per pair; "13, 16, 20, 24, 28" in the design is superseded. Re-run, not re-analysis, as the design says.
+- **R42c, WP9 prerequisite and criterion.** Adopted as written: the intermediate must be present by rank at band layers on at least a third of items before any clamp runs; the 54 percent Haiku figure is discussion, not criterion; the reading is the three-way contrast with the k-matched random control of R42a in place of the dimension-matched subspace.
+- **R42d, order and dependencies.** WP7(d), WP7(c), the shared projector and clamp (gradient pursuit at k = 25 against the hosted dictionary; the paper's lens-coordinate patch with the pseudoinverse on the selected vectors), then WP7(a) with WP9, then WP7(b). All after WP1 lands. WP5's run waits on WP3's measured curve; the WP5 re-specification proceeds meanwhile.
+- **R42e, the Base fork.** WP7(b)'s pre-written fork is adopted: if the Base shows the same paired differences, the checkpoint-pair contrast is retired on this lineage and Thread 1 is tested on training we control (WP7(c), WP10).
+
+### R38(d) (2026-09-05, evening; general form of three fixture findings, at the Deputy's request)
+
+A fixture must be able to fail in the way the code can fail. Three instances in two days lost that property without anyone noticing: the EXP-002 mask fixture that could not show the mask defect; the fake tokenizer that accepted a system-only prefix the real template refuses; and the read-weight fixture at equal key and value head counts that cannot exercise the h // 2 pairing `mx.repeat` performs. The recurring shapes are equal-sized dimensions where the code distinguishes sizes, single-kind blocks where the code branches on kind, and permissive stand-ins where the real class refuses. Every fixture that guards a branch names, in its docstring, the failure it can show and the shape that makes that failure reachable; a reviewer who cannot find that sentence treats the fixture as absent (R31 form).
+
+### R43 (2026-09-05, evening; the Head's R36 verdicts on WP1 and WP5, `under_review/R36-VERDICTS-WP1-WP5-2026-09-05.md`)
+
+- **R43a, WP1 proceeds with four amendments.** (1) The 42-case table is a validation run, not a fixture: WP1 carries a unit fixture on the seams in R31 form (no model load) and, separately, a validation run compared to the recorded table. (2) No count tolerance: the candidate ordering is deterministic given the same activations, lens file and dtype, so the validation run reproduces the table exactly or names the source of nondeterminism. (3) Layer 32 is reported and excluded from the J-lens Holm family; the lens covers blocks 0 to 30 and layer 32 is the identity, so a claim there is a claim about the output. (4) The quantisation gap is measured: a few tens of prompts through the bfloat16 post-trained model, top-k agreement and rank correlation at band layers against the 4-bit checkpoint; until it exists every WP7 and WP9 reading carries that conditional in one line. The bfloat16 pull is a model-loading run under the standing lift and is queued behind the calibration.
+- **R43b, WP5 re-specification.** Full-vocabulary ranks, never a top-k dump, so the paired Wilcoxon on log-rank has no censored observations; the continuous rank is primary; recovery depth is descriptive over the R41b pairs plus "never", with no significance claim; the masked arm on EXP-002's arm-A machinery is carried in the re-specification from the start, because under F4 a flat open-render curve is the prediction and the masked arm is the informative experiment. B2 and B3 recorded as raised and settled by R41b.
+
+### R44 (2026-09-05, late evening; standing rule at the Head's proposal, on the third instance in one day)
+
+Every threshold gets the null its own generative form implies, and the null is stated with the threshold. A uniform or zero null is admissible only when the statistic's generative form makes it the expectation. Three instances on 2026-09-05: the 0.05 retention threshold (not scale-free; the library's scaling bounds the quantity below it), the linear-span variance share (a random direction scores it), and the top-ten source concentration (write strength times random alignment concentrates by itself). Companion to R38(d) and to the per-head rule of the WP3 design section 9.
+
+### R38(e) (2026-09-05, late evening; the Deputy's corollary from the worktree cleanup)
+
+A difference from the branch tip is not evidence of unlanded work: a landed change diverges from the tip whenever a later commit touches the same file. Absence of a line from the tip needs the history checked before it means unlanded: a line superseded by a later fix is absent for a reason. The check that answers "is this landed" asks whether each added line appears in the branch and, for those that do not, whether they appeared in an earlier commit and were superseded since. Recorded after the first-render fix landed as a922013 and the ten scratchpad worktrees were removed on that check.
