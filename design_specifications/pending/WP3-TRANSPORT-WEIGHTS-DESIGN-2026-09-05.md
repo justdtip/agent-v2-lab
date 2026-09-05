@@ -231,6 +231,17 @@ attention blocks 15, 19, 23, 27 writing layers 16, 20, 24, 28):
   permutation's only effect comes through the changing far-source eligibility window, which
   confounds it. A named head is a memory head when its overlap exceeds the write-strength null
   *and* its queries move.
+- **R3e.** *Added 2026-09-05 after the per-head cross.* R3d's overlap-to-cosine table is an
+  aggregate calibration and must not be used to infer a cosine for an individual head. It mapped a
+  mean overlap of 3.24 to a cosine near 0.8 and the measurement came back at 0.83, but across the
+  230 entries the rank correlation between overlap and query cosine is only 0.248, so the mapping
+  is weak head by head even though it held on the mean. Classification is done on the measured
+  cosine per head, never inferred from overlap. The per-head cross confirms the verdict at every
+  threshold: no entry has overlap above 1.5 times the query null with a read-position cosine below
+  0.5, and the five entries below that cosine have overlap ratios of 0.42, 0.13, 1.25, 1.22 and
+  0.48, all at or below the null. The four largest overlap ratios, 5.9 to 6.8, all carry cosines
+  of 0.88 to 0.93, which is the inverse of what retrieval predicts: the heads with the most stable
+  far-source sets are the ones whose queries move least.
 - **R4.** Secondary, reported but not decisive: mass shares on both channels against their
   uniform nulls, and `E[log g]`, `tau_head` and the interference constant per head on real text.
   These are the bound; `alpha` is the measurement, and where they disagree the measurement wins.
@@ -373,3 +384,34 @@ Section 10d classified the population by its median query cosine, which is the p
 The five entries with cosine below 0.5 have overlap ratios of 0.13 to 1.25, at or below the null; the two entries above ratio 2 with cosine below 0.6 sit at 0.58 and 0.60 (context 1 block 7 head 31; context 0 block 9 head 13) and are borderline on both axes. Spearman correlation of overlap with read-position cosine across entries is 0.25, so the population's overlap spread is real and mostly comes from other head properties (key stability, write-strength distribution, eligible window), and none of it lands at the retrieval end.
 
 Consequence, now on a per-head basis: **the retrieval quadrant is empty at every threshold tried; the 2 by 2 runs at the size the read-share pre-check licenses.** WP3 proper reports this cross for every named head on every context class, and the memory criterion of section 10d (overlap above the query null and query cosine below 0.3) stands, with the two borderline heads named for inspection of their source positions.
+
+## 10f. Precision items for the named-head record (Chief, 2026-09-05 late evening, on the Deputy's and the Head's readings of the artifact)
+
+- **Query stability is the model's, key stability is the population's.** Read-position query cosine is 0.832 for the 230 long-gate entries and 0.818 for the other 1,306: no separation. Key cosine over 60 positions separates them, 0.509 against 0.336. Any mechanism sentence for what makes a long-gate head different points at the gate and at key stability, not at the query. Section 10d's "these heads point a nearly fixed query" describes the model.
+- **Cosine fields are key-head properties.** `gated_delta.py:242-244` repeats q and k so value head h uses key head h // 2; every consecutive value-head pair carries identical query and key cosine. Behind the 230 long-gate entries are 170 distinct (context, block, key head) measurements; the 219 above 0.6 are 161 distinct; the 2 below 0.3 are 2. The inflation factor is 1.35, not 2, because 110 of the 768 key heads have one long-gate value head and one not. Every percentile or count on query or key cosine carries the distinct key-head n, and WP3 proper's named-head fields state which n applies.
+- **The memory criterion names its position set.** Below 0.3 on the four read positions: 2 of 230 long-gate entries against 10 of 1,306 others, the same rate. Below 0.3 on the 60 spread positions: still 2 of 230 inside against 110 of 1,306 outside, nine times commoner in the heads the criterion is not applied to. The criterion of section 10d is therefore stated on the read positions, and the predicted result on this corpus, written into issue 81, is an empty memory-candidate table (two entries before the overlap leg, neither passing it). A control table reports both cosines for the long-gate set and its complement so a reader sees which carries the distinction.
+
+Addendum to 10e (the Head, verified independently from `overlap_by_cosine.json`). The four largest overlap ratios, 5.9 to 6.8, carry query cosines of 0.88 to 0.93: the biggest overlaps belong to the heads whose queries move least, the inverse of what retrieval predicts, so the extreme of the distribution points the same way as the bulk. And R3e: the overlap-to-cosine calibration of R3d is an aggregate mapping that held on the mean (3.24 mapped to about 0.8; measured 0.83) and, at a rank correlation of 0.25 across entries, would not have held on any individual head; classification is done on the measured cosine and never inferred from overlap.
+
+## 10g. The measure was never named: the retrieval quadrant depends on the position set (Chief, 2026-09-05 late evening, on the Deputy's reading of `overlap_by_cosine.json`)
+
+Section 10e's cross used the query cosine over the four read positions (50, 75, 90 and 100 percent of the context), on which the retrieval quadrant is empty. The same rows carry the cosine over sixty positions spread across the whole context, and on it the quadrant is not empty: at overlap ratio above 1.5 with cosine below 0.5, 33 entries against 0; at ratio above 2, 18 against 0; cosine below 0.5 overall, 51 of 230 against 5. The matched measure has the right argument, that the overlap was computed across exactly those positions, but the four positions sit in the back half, so queries measured there are close together for a positional reason and not a head property; the gap between 0.832 and 0.676 on the same entries is that clustering. And overlap tracks neither cosine at the head level (Spearman 0.25 and 0.14), so the direct cosine measurement carries the whole conclusion and which positions it is measured on is the entire question. F8 is held. The re-measurement: read positions spread from a quarter of the way in to the end, overlap and cosine on exactly those positions, the cross per head, the eighteen entries inspected by name, and the file given a summary and provenance. On the Deputy's distinct-key-head control (60 key heads with both value heads long-gate, 110 mixed, 598 neither): read-position query cosine 0.853 against 0.818, still no separation; sixty-position query cosine 0.697 against 0.604; key cosine 0.581 against 0.324, wider than the contaminated comparison; the mixed key heads sit between on all three.
+
+## 10h. The matched measure on positions spanning the context, and F8 rewritten with the measure named (Chief, 2026-09-05 late evening; `overlap_spread.py`, `overlap_spread.json`)
+
+Overlap and query cosine measured on the same seven read positions at 25, 35, 50, 65, 80, 90 and 100 percent of each context (21 pairs per entry), 200 query-null draws, 230 entries over the 115 long-gate heads, distinct key-head n 170.
+
+| statistic | value |
+| --- | --- |
+| mean top-ten far-source overlap across spread read positions | 1.78 of 10 |
+| query-randomised null | 1.30 |
+| median ratio | 1.32 |
+| query cosine on those positions, 10th percentile | 0.41 |
+| entries with cosine below 0.5 | 54 (42 distinct key heads), ratio median 1.2 |
+| loose retrieval quadrant, ratio above 1.5 and cosine below 0.5 | 10 entries, 9 distinct heads |
+| heads in that quadrant in both contexts | 1: block 6 head 1 (ratios 2.00 and 1.76, cosines 0.35 and 0.25, key cosines 0.30 and 0.45) |
+| strict quadrant, ratio above 2 and cosine below 0.5 | 1 entry, block 16 head 5 in context 0 (2.11, 0.30); its context-1 counterpart 1.47 |
+| ratio above 2 and cosine below 0.3 | 0 |
+| the eighteen entries flagged on the sixty-position cosine, on this measure | ratio median 1.37, cosine median 0.43; one reaches ratio 2 |
+
+Readings. The 3.24 of sections 10b to 10e was inflated by the clustering of back-half read positions: on positions spanning the context the population's overlap is 1.78 against a null of 1.30. The Deputy's objection was right and the matched measure on spread positions is the one F8 is written on. On it the recurrent channel shows at most weak, inconsistent retrieval-like behaviour: one head, block 6 head 1, exceeds one and a half times the query null with a query cosine below 0.5 in both contexts, at ratios of 1.8 to 2.0; no head exceeds twice the null with cosine below 0.5 in both contexts; and the low-cosine heads as a group sit near the null. Block 6 head 1 is named for WP3 proper's inspection of its source positions. F8 is released from hold and rewritten in the plan with the measure named.
