@@ -111,3 +111,17 @@ depth-independent (consistent with the loss's backward tensors), 0.16 layer boun
 quadratic attention term that takes the peak over above about 3k tokens. The float32-adapter and
 per-layer-accumulation readings are refuted (E, F, M, N); the scheduler reading is refuted for a
 plain stack by the Head's depth sweep and unsupported for the model by M and N.
+
+**Deputy's notes on probes 4 and 5, accepted (23:30).** (1) "Depth-independent" is 84 percent right: a fit
+to the three backward additions gives 0.87 MiB per token independent of adapted depth plus 0.0054
+per adapted layer, so 16 percent of the backward's cost at full depth rises monotonically with the
+number of adapted layers (+14 percent from 8 to 32). A flat extrapolation is not supported; the
+conclusion that the bulk is not from the layers is. (2) The budget does not close: forward-only
+about 1.00 plus the backward's about 1.04 is 2.04 against A's slope of 2.40, and 15 percent is
+unaccounted, most likely the attention term at the lengths where the forward-only rows were taken,
+or the peak moment differing between variants. It is stated here rather than rounded away. (3) The
+migration finding, the chunked loss's saving falling from 1.3 GiB at 2,048 tokens to 0.7 at 4,096,
+is the convexity from the other side and gives issue 87 a stated expiry: a saving quoted at one
+length is not a saving at another. (4) The as-run scripts are kept as `*.as-run.py.txt`, byte-exact
+copies of what ran that cannot be imported or executed by accident; the guarded `*.py` beside them
+are the runnable forms and carry the refusal. Issue 89 makes that a repository rule.
