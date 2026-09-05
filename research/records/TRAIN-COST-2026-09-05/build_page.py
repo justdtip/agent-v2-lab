@@ -17,8 +17,12 @@ CHUNKWISE_INTERCEPT = 10.12 - FLOOR_SLOPE * 2874        # preflight's single chu
 
 
 def load():
-    rows = [json.loads(line) for line in ROWS.read_text().splitlines() if line.strip()]
-    ok = {v: sorted([r for r in rows if r.get("ok") and r["variant"] == v], key=lambda r: r["tokens"]) for v in "AB"}
+    rows = []
+    for name in ("rows-probe1.jsonl", "rows-probe2.jsonl", "rows-probe3.jsonl", "rows.jsonl"):
+        f = HERE / name
+        if f.exists():
+            rows += [json.loads(line) for line in f.read_text().splitlines() if line.strip()]
+    ok = {v: sorted([r for r in rows if r.get("ok") and r["variant"] == v], key=lambda r: r["tokens"]) for v in "ABCDEF"}
     stops = {r["variant"]: r for r in rows if not r.get("ok")}
     return ok, stops
 
@@ -26,6 +30,8 @@ def load():
 def fit(points):
     """Least squares peak = a + b * tokens over rows >= 1024."""
     pts = [(r["tokens"], r["peak_gib"]) for r in points if r["tokens"] >= 1024]
+    if len(pts) < 2:
+        pts = [(r["tokens"], r["peak_gib"]) for r in points]
     if len(pts) < 2:
         return None
     n = len(pts); sx = sum(t for t, _ in pts); sy = sum(p for _, p in pts)
@@ -36,9 +42,9 @@ def fit(points):
 
 def main():
     ok, stops = load()
-    fits = {v: fit(ok[v]) for v in "AB"}
+    fits = {v: fit(ok[v]) for v in "ABCDEF"}
     summary = {}
-    for v in "AB":
+    for v in "ABCDEF":
         f = fits[v]
         if f:
             a, b = f
@@ -62,14 +68,14 @@ def main():
     def fmt(x, d=1):
         return "n/a" if x is None else f"{x:,.{d}f}"
 
-    A = summary.get("A", {}); B = summary.get("B", {})
+    A = summary.get("A", {}); B = summary.get("B", {}); C = summary.get("C", {}); Dv = summary.get("D", {})
     have_b = bool(B)
     lever_line = (
         f"Removing the full logits cuts the slope from {fmt(A.get('slope_mib_per_token'),2)} to {fmt(B.get('slope_mib_per_token'),2)} MiB per token and moves the working-set ceiling from about {fmt(A.get('ceiling_tokens_ws'),0)} to about {fmt(B.get('ceiling_tokens_ws'),0)} tokens."
         if have_b else "Variant B is still running; the comparison fills in when it lands."
     )
     table_rows = []
-    for v in "AB":
+    for v in "ABCDEF":
         for r in ok[v]:
             table_rows.append(f"<tr><td>{v}</td><td>{r['tokens']:,}</td><td>{r['peak_gib']:.2f}</td><td>{r['peak_ws_share']:.2f}</td><td>{r['step_s']:.1f}</td><td>{r['step_tokens_per_s']:.0f}</td><td>{r['loss_step2']:.2f}</td></tr>")
         s = stops.get(v)
@@ -83,15 +89,15 @@ def main():
 <style>
 :root {{
   --ground:#f7f5f0; --panel:#ffffff; --ink:#1d2229; --muted:#5b6470; --rule:#d9d4ca;
-  --a:#0f6e73; --b:#c2601a; --ws:#9b2c2c; --pre:#7a7f87; --grid:#e6e1d7; --accent-soft:#e2f0ef;
+  --a:#0f6e73; --b:#c2601a; --c:#5b4b9e; --d:#7a8a1f; --ws:#9b2c2c; --pre:#7a7f87; --grid:#e6e1d7; --accent-soft:#e2f0ef;
 }}
 @media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{
   --ground:#14171b; --panel:#1c2026; --ink:#e8e6e1; --muted:#a2a8b1; --rule:#343a42;
-  --a:#5fc3c8; --b:#f0954f; --ws:#f28b8b; --pre:#9aa0a8; --grid:#2a3038; --accent-soft:#1f3436;
+  --a:#5fc3c8; --b:#f0954f; --c:#b3a3f0; --d:#c6d65a; --ws:#f28b8b; --pre:#9aa0a8; --grid:#2a3038; --accent-soft:#1f3436;
 }} }}
 :root[data-theme="dark"] {{
   --ground:#14171b; --panel:#1c2026; --ink:#e8e6e1; --muted:#a2a8b1; --rule:#343a42;
-  --a:#5fc3c8; --b:#f0954f; --ws:#f28b8b; --pre:#9aa0a8; --grid:#2a3038; --accent-soft:#1f3436;
+  --a:#5fc3c8; --b:#f0954f; --c:#b3a3f0; --d:#c6d65a; --ws:#f28b8b; --pre:#9aa0a8; --grid:#2a3038; --accent-soft:#1f3436;
 }}
 body {{ background:var(--ground); color:var(--ink); font-family:"IBM Plex Sans", system-ui, sans-serif; font-size:16px; line-height:1.5; margin:0; }}
 main {{ max-width:1040px; margin:0 auto; padding:40px 24px 64px; }}
@@ -131,18 +137,29 @@ code {{ font-family:"IBM Plex Mono", monospace; font-size:.9em; }}
   <div class="tile"><div class="n">{fmt(B.get('slope_mib_per_token'),2)}</div><div class="l">MiB per token with chunked cross-entropy (variant B)</div></div>
   <div class="tile"><div class="n">{fmt(A.get('ceiling_tokens_ws'),0)}</div><div class="l">row ceiling at the 17.76 GiB working set, variant A</div></div>
   <div class="tile"><div class="n">{fmt(B.get('ceiling_tokens_ws'),0)}</div><div class="l">row ceiling at the working set, variant B</div></div>
+  <div class="tile"><div class="n">{fmt(C.get('slope_mib_per_token'),2)}</div><div class="l">MiB per token with gradient checkpointing off (variant C)</div></div>
+  <div class="tile"><div class="n">{fmt(Dv.get('slope_mib_per_token'),2)}</div><div class="l">MiB per token with the recurrence's backward removed (variant D)</div></div>
 </div>
 
 <div class="charts">
   <div class="chart"><h3>Peak memory per step</h3><p class="sub">GiB against row length. Dashed: the Metal working set and the 85 percent launch cap. Dotted: preflight's chunkwise envelope, a single-point fit.</p><div id="mem"></div>
-    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A · trainer as it stands</span><span><i class="sw" style="background:var(--b)"></i>B · chunked cross-entropy</span><span><i class="sw" style="background:var(--ws)"></i>working set</span><span><i class="sw" style="background:var(--pre)"></i>preflight envelope</span></div></div>
+    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A · trainer as it stands</span><span><i class="sw" style="background:var(--b)"></i>B · chunked cross-entropy</span><span><i class="sw" style="background:var(--c)"></i>C · checkpointing off</span><span><i class="sw" style="background:var(--d)"></i>D · recurrence backward removed</span><span><i class="sw" style="background:var(--ws)"></i>working set</span><span><i class="sw" style="background:var(--pre)"></i>preflight envelope</span></div></div>
   <div class="chart"><h3>Step throughput</h3><p class="sub">Tokens per second for one optimiser step, the second of two at each length so kernel compilation is excluded.</p><div id="tps"></div>
-    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A</span><span><i class="sw" style="background:var(--b)"></i>B</span></div></div>
+    <div class="legend"><span><i class="sw" style="background:var(--a)"></i>A</span><span><i class="sw" style="background:var(--b)"></i>B</span><span><i class="sw" style="background:var(--c)"></i>C</span><span><i class="sw" style="background:var(--d)"></i>D</span></div></div>
 </div>
 
 <h2>What the slope is made of</h2>
-<p>The vocabulary is 248,320 tokens wide, so by arithmetic the bf16 logits, their fp32 log-softmax and the logit gradient would cost {vocab_slope_mib:.2f} MiB per token, three-quarters of the {FLOOR_SLOPE*1024:.2f} MiB per token that preflight's calibration measured for the no-recurrence floor. That arithmetic was the hypothesis behind variant B, and the measurement refutes it: the two variants differ by {fmt(summary.get('vocab_measured_mib'),2)} MiB per token, about a tenth of the slope, and their step times are identical. MLX never holds the whole logit block, its log-softmax and its gradient at once, so the loss was never where the memory went.</p>
-<div class="callout">{lever_line} Roughly 2 MiB per token of row remains unexplained by the logits, the layer-boundary residuals (0.16 MiB) or the attention scores (quadratic, and too small below 4k). The candidates are gradient checkpointing not holding in MLX's lazy graph, so that many layers' activations are alive at once, or the recurrence retaining per-token tensors. That is the next probe: the same step with checkpointing off, and with the recurrence's backward removed, up to the recipe's own row length.</div>
+<p>The vocabulary is 248,320 tokens wide, so by arithmetic the bf16 logits, their fp32 log-softmax and the logit gradient would cost {vocab_slope_mib:.2f} MiB per token, three-quarters of the {FLOOR_SLOPE*1024:.2f} MiB per token that preflight's calibration measured for the no-recurrence floor. That arithmetic was the hypothesis behind variant B, and the measurement refuted it. Four further interventions then each removed one candidate, and each moved the slope by a tenth or less:</p>
+<div class="wrap"><table>
+<tr><th>variant</th><th>what changed</th><th>slope, MiB per token</th><th>against A</th><th>step at 2,688 tokens</th></tr>
+<tr><td>A</td><td>the trainer as it stands</td><td>{fmt(A.get('slope_mib_per_token'),2)}</td><td></td><td>21.4 s</td></tr>
+<tr><td>B</td><td>full logits never resident</td><td>{fmt(B.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-B.get('slope_mib_per_token',0),2)}</td><td>21.0 s</td></tr>
+<tr><td>C</td><td>gradient checkpointing off</td><td>{fmt(C.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-C.get('slope_mib_per_token',0),2)}</td><td>faster by a quarter</td></tr>
+<tr><td>D</td><td>recurrence's backward removed</td><td>{fmt(Dv.get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-Dv.get('slope_mib_per_token',0),2)}</td><td>15.8 s</td></tr>
+<tr><td>E</td><td>no LoRA on the MLP projections</td><td>{fmt(summary.get('E',{{}}).get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-summary.get('E',{{}}).get('slope_mib_per_token',0),2)}</td><td>20.9 s</td></tr>
+<tr><td>F</td><td>adapters in bfloat16</td><td>{fmt(summary.get('F',{{}}).get('slope_mib_per_token'),2)}</td><td>{fmt(A.get('slope_mib_per_token',0)-summary.get('F',{{}}).get('slope_mib_per_token',0),2)}</td><td>20.5 s</td></tr>
+</table></div>
+<div class="callout">Checkpointing works: switched off, the step costs 13.9 MiB per token, so the hook discards about 11.5 of it. The recurrence's backward is a quarter of the step time and none of the memory: removing it leaves every peak identical to the hundredth. The logits, the MLP adapters and the adapter dtype are each worth a tenth. What survives all of that, about 2.2 MiB per token, matches to a few percent the sum over all thirty-two layers of the activations each layer's backward needs: gate, up and product for the SwiGLU, the projections' inputs, the residual. A checkpoint that recomputed one layer at a time would hold one layer's worth, about 80 KiB per token, not thirty-two. The standing hypothesis is that MLX's lazy evaluation runs every checkpointed layer's recompute before the gradient chain frees them; the test is a staged evaluation of the gradients on the real model and a depth-scaling run of a model-free stack, both in progress.</div>
 
 <h2>Every row</h2>
 <div class="wrap"><table>
@@ -173,12 +190,12 @@ function chart(id, series, opts) {{
     for (const p of se.pts) s += `<circle cx="${{X(p[0])}}" cy="${{Y(p[1])}}" r="4" fill="${{css(se.c)}}"/>`; }}
   document.getElementById(id).innerHTML = s + '</svg>';
 }}
-const A = D.rows.A, B = D.rows.B;
-chart('mem', [{{pts:A.map(r=>[r.tokens,r.peak_gib]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.peak_gib]), c:'--b'}}],
+const A = D.rows.A, B = D.rows.B, C = D.rows.C, Dd = D.rows.D;
+chart('mem', [{{pts:A.map(r=>[r.tokens,r.peak_gib]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.peak_gib]), c:'--b'}}, {{pts:C.map(r=>[r.tokens,r.peak_gib]), c:'--c'}}, {{pts:Dd.map(r=>[r.tokens,r.peak_gib]), c:'--d'}}],
   {{label:'peak memory per step', ylabel:'peak GiB', ymax: 20, xmax: 9000, yticks:[0,5,10,15,20], xticks:[0,2048,4096,6144,8192],
    hlines:[{{y:D.ws, c:'--ws', d:'6 4', t:'working set 17.76 GiB'}}, {{y:D.ws*D.cap, c:'--ws', d:'2 3', t:'85% launch cap'}}],
    lines:[{{a:D.chunkwise_intercept, b:D.floor_slope, c:'--pre'}}]}});
-chart('tps', [{{pts:A.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--b'}}],
+chart('tps', [{{pts:A.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--a'}}, {{pts:B.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--b'}}, {{pts:C.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--c'}}, {{pts:Dd.map(r=>[r.tokens,r.step_tokens_per_s]), c:'--d'}}],
   {{label:'step throughput', ylabel:'tokens per second', ymax: 180, xmax: 9000, yticks:[0,50,100,150], xticks:[0,2048,4096,6144,8192], hlines:[]}});
 </script>
 """

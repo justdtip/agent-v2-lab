@@ -1,0 +1,83 @@
+22:39:45 start variants=['E', 'F'] lengths=[512, 1024, 2048, 2688] share_cap=0.6
+22:39:45 E 512: launching (projection n/a)
+22:39:46   [E 512] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:39:46   [E 512] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2838.40it/s]
+22:39:48   [E 512] {"event": "progress", "stage": "loaded", "elapsed_s": 2.5, "peak_gib": 2.205, "ws_share": 0.124}
+22:39:51   [E 512] {"event": "progress", "stage": "step1", "tokens": 512, "elapsed_s": 5.9, "step_s": 3.32, "peak_gib": 3.563, "ws_share": 0.201}
+22:39:54   [E 512] {"event": "progress", "stage": "step2", "tokens": 512, "elapsed_s": 9.1, "step_s": 3.17, "peak_gib": 3.815, "ws_share": 0.215}
+22:39:54   [E 512] {"event": "row", "variant": "E", "tokens": 512, "ok": true, "peak_gib": 3.8149691447615623, "step_s": 3.172532374970615, "error": null}
+22:39:54 E 512: ok peak 3.81 GiB (0.21 ws) step 3.2s (161 tok/s)
+22:39:54 E 1024: launching (projection n/a)
+22:39:55   [E 1024] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:39:55   [E 1024] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 3065.56it/s]
+22:39:56   [E 1024] {"event": "progress", "stage": "loaded", "elapsed_s": 2.0, "peak_gib": 2.205, "ws_share": 0.124}
+22:40:03   [E 1024] {"event": "progress", "stage": "step1", "tokens": 1024, "elapsed_s": 8.9, "step_s": 6.85, "peak_gib": 4.89, "ws_share": 0.275}
+22:40:04 guard pid=98815 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3803.56M  free = 1316.44M  (encrypted)]
+22:40:10   [E 1024] {"event": "progress", "stage": "step2", "tokens": 1024, "elapsed_s": 15.5, "step_s": 6.57, "peak_gib": 4.997, "ws_share": 0.281}
+22:40:10   [E 1024] {"event": "row", "variant": "E", "tokens": 1024, "ok": true, "peak_gib": 4.9971397668123245, "step_s": 6.573861499957275, "error": null}
+22:40:10 E 1024: ok peak 5.00 GiB (0.28 ws) step 6.6s (156 tok/s)
+22:40:10 E 2048: launching (projection 7.36 GiB)
+22:40:11   [E 2048] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:40:11   [E 2048] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 3017.70it/s]
+22:40:12   [E 2048] {"event": "progress", "stage": "loaded", "elapsed_s": 2.0, "peak_gib": 2.205, "ws_share": 0.124}
+22:40:20 guard pid=99070 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3803.56M  free = 1316.44M  (encrypted)]
+22:40:27   [E 2048] {"event": "progress", "stage": "step1", "tokens": 2048, "elapsed_s": 16.9, "step_s": 14.85, "peak_gib": 6.977, "ws_share": 0.393}
+22:40:30 guard pid=99070 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3787.56M  free = 1332.44M  (encrypted)]
+22:40:40 guard pid=99070 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3787.56M  free = 1332.44M  (encrypted)]
+22:40:41   [E 2048] {"event": "progress", "stage": "step2", "tokens": 2048, "elapsed_s": 31.1, "step_s": 14.17, "peak_gib": 7.084, "ws_share": 0.399}
+22:40:41   [E 2048] {"event": "row", "variant": "E", "tokens": 2048, "ok": true, "peak_gib": 7.0838272999972105, "step_s": 14.166492916003335, "error": null}
+22:40:41 E 2048: ok peak 7.08 GiB (0.40 ws) step 14.2s (145 tok/s)
+22:40:41 E 2688: launching (projection 8.39 GiB)
+22:40:43   [E 2688] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:40:43   [E 2688] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2834.37it/s]
+22:40:44   [E 2688] {"event": "progress", "stage": "loaded", "elapsed_s": 2.8, "peak_gib": 2.205, "ws_share": 0.124}
+22:40:51 guard pid=99747 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3779.56M  free = 1340.44M  (encrypted)]
+22:41:01 guard pid=99747 pressure=2 critical_run=0 swap=[total = 5120.00M  used = 3779.56M  free = 1340.44M  (encrypted)]
+22:41:05   [E 2688] {"event": "progress", "stage": "step1", "tokens": 2688, "elapsed_s": 23.4, "step_s": 20.61, "peak_gib": 8.459, "ws_share": 0.476}
+22:41:11 guard pid=99747 pressure=2 critical_run=0 swap=[total = 5120.00M  used = 3779.56M  free = 1340.44M  (encrypted)]
+22:41:21 guard pid=99747 pressure=2 critical_run=0 swap=[total = 5120.00M  used = 3890.75M  free = 1229.25M  (encrypted)]
+22:41:25   [E 2688] {"event": "progress", "stage": "step2", "tokens": 2688, "elapsed_s": 44.3, "step_s": 20.89, "peak_gib": 8.567, "ws_share": 0.482}
+22:41:25   [E 2688] {"event": "row", "variant": "E", "tokens": 2688, "ok": true, "peak_gib": 8.566656334325671, "step_s": 20.892930582980625, "error": null}
+22:41:26 E 2688: ok peak 8.57 GiB (0.48 ws) step 20.9s (129 tok/s)
+22:41:26 F 512: launching (projection n/a)
+22:41:28   [F 512] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:41:28   [F 512] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2410.80it/s]
+22:41:29   [F 512] {"event": "progress", "stage": "loaded", "elapsed_s": 3.4, "peak_gib": 2.205, "ws_share": 0.124}
+22:41:33   [F 512] {"event": "progress", "stage": "step1", "tokens": 512, "elapsed_s": 7.1, "step_s": 3.73, "peak_gib": 3.523, "ws_share": 0.198}
+22:41:36 guard pid=628 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3890.75M  free = 1229.25M  (encrypted)]
+22:41:36   [F 512] {"event": "progress", "stage": "step2", "tokens": 512, "elapsed_s": 10.4, "step_s": 3.3, "peak_gib": 3.769, "ws_share": 0.212}
+22:41:36   [F 512] {"event": "row", "variant": "F", "tokens": 512, "ok": true, "peak_gib": 3.769315492361784, "step_s": 3.2971237499732524, "error": null}
+22:41:36 F 512: ok peak 3.77 GiB (0.21 ws) step 3.3s (155 tok/s)
+22:41:36 F 1024: launching (projection n/a)
+22:41:37   [F 1024] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:41:37   [F 1024] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2195.74it/s]
+22:41:38   [F 1024] {"event": "progress", "stage": "loaded", "elapsed_s": 2.1, "peak_gib": 2.205, "ws_share": 0.124}
+22:41:45   [F 1024] {"event": "progress", "stage": "step1", "tokens": 1024, "elapsed_s": 9.1, "step_s": 7.02, "peak_gib": 4.781, "ws_share": 0.269}
+22:41:46 guard pid=861 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3882.75M  free = 1237.25M  (encrypted)]
+22:41:52   [F 1024] {"event": "progress", "stage": "step2", "tokens": 1024, "elapsed_s": 16.0, "step_s": 6.87, "peak_gib": 4.898, "ws_share": 0.276}
+22:41:52   [F 1024] {"event": "row", "variant": "F", "tokens": 1024, "ok": true, "peak_gib": 4.897620379924774, "step_s": 6.8713356670341454, "error": null}
+22:41:52 F 1024: ok peak 4.90 GiB (0.28 ws) step 6.9s (149 tok/s)
+22:41:52 F 2048: launching (projection 7.15 GiB)
+22:41:53   [F 2048] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:41:53   [F 2048] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 3324.33it/s]
+22:41:54   [F 2048] {"event": "progress", "stage": "loaded", "elapsed_s": 2.0, "peak_gib": 2.205, "ws_share": 0.124}
+22:42:02 guard pid=1143 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3866.75M  free = 1253.25M  (encrypted)]
+22:42:09   [F 2048] {"event": "progress", "stage": "step1", "tokens": 2048, "elapsed_s": 17.1, "step_s": 15.09, "peak_gib": 6.93, "ws_share": 0.39}
+22:42:12 guard pid=1143 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3866.75M  free = 1253.25M  (encrypted)]
+22:42:22 guard pid=1143 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3858.75M  free = 1261.25M  (encrypted)]
+22:42:24   [F 2048] {"event": "progress", "stage": "step2", "tokens": 2048, "elapsed_s": 31.8, "step_s": 14.62, "peak_gib": 7.051, "ws_share": 0.397}
+22:42:24   [F 2048] {"event": "row", "variant": "F", "tokens": 2048, "ok": true, "peak_gib": 7.050564436241984, "step_s": 14.622155208955519, "error": null}
+22:42:24 F 2048: ok peak 7.05 GiB (0.40 ws) step 14.6s (140 tok/s)
+22:42:24 F 2688: launching (projection 8.40 GiB)
+22:42:26   [F 2688] Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+22:42:26   [F 2688] Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 4338.34it/s]
+22:42:27   [F 2688] {"event": "progress", "stage": "loaded", "elapsed_s": 2.7, "peak_gib": 2.205, "ws_share": 0.124}
+22:42:34 guard pid=1669 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3850.75M  free = 1269.25M  (encrypted)]
+22:42:44 guard pid=1669 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3850.75M  free = 1269.25M  (encrypted)]
+22:42:48   [F 2688] {"event": "progress", "stage": "step1", "tokens": 2688, "elapsed_s": 23.6, "step_s": 20.88, "peak_gib": 8.394, "ws_share": 0.473}
+22:42:54 guard pid=1669 pressure=2 critical_run=0 swap=[total = 5120.00M  used = 3842.75M  free = 1277.25M  (encrypted)]
+22:43:04 guard pid=1669 pressure=2 critical_run=0 swap=[total = 5120.00M  used = 3834.75M  free = 1285.25M  (encrypted)]
+22:43:08   [F 2688] {"event": "progress", "stage": "step2", "tokens": 2688, "elapsed_s": 44.1, "step_s": 20.49, "peak_gib": 8.516, "ws_share": 0.48}
+22:43:08   [F 2688] {"event": "row", "variant": "F", "tokens": 2688, "ok": true, "peak_gib": 8.51600798778236, "step_s": 20.486798083002213, "error": null}
+22:43:09 F 2688: ok peak 8.52 GiB (0.48 ws) step 20.5s (131 tok/s)
+22:43:09 done
