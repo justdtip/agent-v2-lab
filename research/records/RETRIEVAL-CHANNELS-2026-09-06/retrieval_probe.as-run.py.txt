@@ -1,0 +1,223 @@
+"""Recurrent and attention channels on retrieval-heavy text (Director, 2026-09-06; Head's review adopted).
+
+One forward per (context, question) with both channels hooked: gated_delta_update for the recurrent
+blocks (q, k, gate, beta captured) and qwen3_next's scaled_dot_product_attention for the attention
+blocks (post-rotary queries and keys captured). The read position t is the last token. The model's
+top-1 next token is scored against the answer. For every head of either channel the read weights
+over sources s <= t are formed (|alpha[t, s]| by the backward scan for recurrent heads; softmax
+probabilities for attention heads) and ONE function, span_stats, computes the far-source
+(gap >= GAP) mass share on the known span, the uniform share, hit-at-K, and the same statistics
+under the query-randomised null (NDRAW random unit queries at the real norm). Controls are
+no-lookup questions on the same context with a placebo span. Query cosine is reported per head
+within a context (read positions differing only in the question) and across contexts.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO retrieval probe")
+HERE = Path(__file__).resolve().parent
+OUT = HERE / (sys.argv[1] if len(sys.argv) > 1 else "out")
+LIMIT_ITEMS = int(os.environ.get("LIMIT_ITEMS", "0"))
+TAU_MIN = float(os.environ.get("TAU_MIN", "200"))
+GAP, K, NDRAW = 257, 10, int(os.environ.get("NDRAW", "50"))
+WS = 17.76 * 2**30
+
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_5 as q35
+from mlx_lm.models import qwen3_next as q3n
+from mlx_lm.models import gated_delta as gd
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+
+rec_caps, att_caps = [], []
+_orig_gd = q35.gated_delta_update
+def hooked_gd(q, k, v, a, b, A_log, dt_bias, state=None, mask=None, use_kernel=True):
+    out, st = _orig_gd(q, k, v, a, b, A_log, dt_bias, state, mask, use_kernel); mx.eval(out)
+    rec_caps.append({"q": q, "k": k, "a": a, "b": b, "A_log": A_log, "dt_bias": dt_bias}); return out, st
+q35.gated_delta_update = hooked_gd
+_orig_sdpa = q3n.scaled_dot_product_attention
+ATT_GATE = float(os.environ.get("ATT_GATE", "0.05"))   # worst reconstruction error allowed, relative to the block output scale (bf16 kernel against float32)
+MUTATE_PAIRING = os.environ.get("MUTATE_PAIRING") == "1"   # deliberately wrong query-to-kv-head pairing: the gate must fail on it
+def hooked_sdpa(queries, keys, values, cache, scale, mask, *args, **kwargs):
+    out = _orig_sdpa(queries, keys, values, cache, scale, mask, *args, **kwargs); mx.eval(out)
+    att_caps.append({"q_last": queries[0, :, -1, :], "keys": keys[0], "values": values[0], "out_last": out[0, :, -1, :], "scale": scale,
+                     "mask": mask if isinstance(mask, str) else ("array" if mask is not None else None)})   # post-split, post-norm, post-rotary
+    return out
+q3n.scaled_dot_product_attention = hooked_sdpa
+
+
+def progress(**f):
+    print(json.dumps({"event": "progress", "elapsed_s": round(time.time() - T0, 1), "peak_gib": round(mx.get_peak_memory() / 2**30, 2),
+                      "ws_share": round(mx.get_peak_memory() / WS, 3), **f}), flush=True)
+
+
+def alpha_all_heads(q, k, g, beta, t, Hk):
+    T, Hv = g.shape; rep = Hv // Hk
+    kk = np.repeat(k, rep, axis=1); w = np.repeat(q, rep, axis=1)[t].copy(); out = np.zeros((t + 1, Hv))
+    for r in range(t, -1, -1):
+        kr = kk[r]; d = np.einsum("hd,hd->h", kr, w); out[r] = beta[r] * d
+        w = g[r][:, None] * (w - beta[r][:, None] * kr * d[:, None])
+    return out
+
+
+def alpha_batch(Q, kk, g, beta, t):
+    W = Q.copy(); out = np.zeros((t + 1, Q.shape[0]))
+    for r in range(t, -1, -1):
+        kr = kk[r]; d = W @ kr; out[r] = beta[r] * d; W = g[r] * (W - beta[r] * d[:, None] * kr[None, :])
+    return out
+
+
+def softmax_rows(scores):
+    m = scores.max(axis=-1, keepdims=True); e = np.exp(scores - m); return e / e.sum(axis=-1, keepdims=True)
+
+
+def span_stats(weights, span_mask, n_elig):
+    """The one function both channels go through. weights: (n_sources,) nonnegative for one
+    query, or (n_sources, D) for D null queries; returns share on the span, uniform share, hit@K."""
+    far = weights[:n_elig]
+    if far.ndim == 1:
+        tot = far.sum() + 1e-30; share = far[span_mask].sum() / tot
+        hit = bool(any(span_mask[s] for s in np.argsort(far)[-K:]))
+        return float(share), float(span_mask.mean()), hit
+    tot = far.sum(axis=0) + 1e-30; share = far[span_mask].sum(axis=0) / tot
+    hits = np.mean([any(span_mask[s] for s in np.argsort(far[:, d])[-K:]) for d in range(far.shape[1])])
+    return share, float(span_mask.mean()), float(hits)
+
+
+T0 = time.time()
+spec = load_model_spec("qwen35-4b")
+model, tokenizer, view, resolved = load_policy(spec, None)
+model.eval()
+progress(stage="loaded")
+corpus = json.load(open(HERE / "corpus.json"))
+rng = np.random.default_rng(0)
+records, items, read_queries = [], [], []     # read_queries: (kind, context, query_index, control, channel, block, head, vector)
+worst_att, att_gate_checks = 0.0, 0
+OUT.mkdir(parents=True, exist_ok=True)
+n_done = 0
+for ctx in corpus:
+    for qi, qry in enumerate(ctx["queries"]):
+        if LIMIT_ITEMS and n_done >= LIMIT_ITEMS: break
+        prefix = ctx["text"][: ctx["text"].find(qry["fact"])]
+        span_start = len(encode(tokenizer, prefix)); span_end = len(encode(tokenizer, prefix + qry["fact"]))
+        ids = encode(tokenizer, ctx["text"] + qry["query"]); t = len(ids) - 1
+        # teacher-forced scoring: the model's top-1 at every answer position given the correct
+        # prefix, all of which must match; a bare-space first token cannot score on its own
+        answer_ids = tokenizer.encode(qry["answer"], add_special_tokens=False)
+        scored = model(mx.array(ids + answer_ids[:-1])[None]); mx.eval(scored)
+        preds = [int(mx.argmax(scored[0, t + i]).item()) for i in range(len(answer_ids))]
+        correct = preds == answer_ids
+        greedy = tokenizer.decode(preds)
+        rec_caps.clear(); att_caps.clear(); block_errs = []
+        out = model(mx.array(ids)[None]); mx.eval(out); logits = out[0, -1]
+        top1 = int(mx.argmax(logits).item())
+        gap = t - span_end; n_elig = t - GAP + 1
+        item = {"kind": ctx["kind"], "context": ctx["index"], "query": qi, "control": bool(qry.get("control")), "T": t + 1, "span": [span_start, span_end],
+                "gap_to_read": gap, "far": gap >= GAP and n_elig >= 50, "answer": qry["answer"], "greedy": greedy, "top1": tokenizer.decode([top1]), "correct": bool(correct)}
+        items.append(item)
+        span_mask = np.zeros(max(n_elig, 1), bool)
+        if item["far"]: span_mask[span_start:min(span_end, n_elig)] = True
+        base = {"kind": ctx["kind"], "context": ctx["index"], "query": qi, "control": item["control"], "correct": bool(correct), "n_elig": int(n_elig), "far": item["far"]}
+        # ---- recurrent channel
+        for b, cap in enumerate(rec_caps):
+            q = np.array(cap["q"].astype(mx.float32))[0]; k = np.array(cap["k"].astype(mx.float32))[0]
+            beta = np.array(mx.sigmoid(cap["b"]).astype(mx.float32))[0]; g = np.array(gd.compute_g(cap["A_log"], cap["a"], cap["dt_bias"]).astype(mx.float32))[0]
+            Hk = q.shape[1]; Hv = g.shape[1]; rep = Hv // Hk
+            tau = 1.0 / np.maximum(-np.log(np.clip(g, 1e-30, 1.0)).mean(axis=0), 1e-12)
+            A = np.abs(alpha_all_heads(q, k, g, beta, t, Hk))
+            for h in range(Hv):
+                if tau[h] < TAU_MIN: continue
+                read_queries.append((ctx["kind"], ctx["index"], qi, item["control"], "recurrent", b, h, q[t, h // rep]))
+                if not item["far"]: continue
+                share, uni, hit = span_stats(A[:, h], span_mask, n_elig)
+                kk = k[:, h // rep]; qq = q[t, h // rep]
+                Qr = rng.standard_normal((NDRAW, kk.shape[1])); Qr *= np.linalg.norm(qq) / np.linalg.norm(Qr, axis=1, keepdims=True)
+                nshare, _, nhit = span_stats(np.abs(alpha_batch(Qr, kk, g[:, h], beta[:, h], t)), span_mask, n_elig)
+                records.append({**base, "channel": "recurrent", "block": b, "head": h, "key_head": h // rep, "tau": float(tau[h]), "span_share": share, "uniform_share": uni,
+                                "null_share_mean": float(nshare.mean()), "null_share_p95": float(np.percentile(nshare, 95)), "ratio_null": float(share / max(nshare.mean(), 1e-12)),
+                                "ratio_uniform": float(share / max(uni, 1e-12)), "hit_at_k": hit, "null_hit_rate": nhit})
+        # ---- attention channel, same statistic, behind a reconstruction gate on every block
+        for ab, cap in enumerate(att_caps):
+            qL = np.array(cap["q_last"].astype(mx.float32)); Kf = np.array(cap["keys"].astype(mx.float32)); Vf = np.array(cap["values"].astype(mx.float32))
+            outL = np.array(cap["out_last"].astype(mx.float32)); scale = float(cap["scale"])
+            Hq, D = qL.shape; Hkv = Kf.shape[0]; grp = Hq // Hkv
+            assert cap["mask"] in ("causal", None), cap["mask"]
+            # reconstruct the block's own output at the read position from the recomputed probabilities
+            pair = (lambda h: (h // grp + 1) % Hkv) if MUTATE_PAIRING else (lambda h: h // grp)
+            P = np.stack([softmax_rows((Kf[pair(h)] @ qL[h]) * scale) for h in range(Hq)])       # (Hq, T)
+            recon = np.einsum("hs,hsd->hd", P, Vf[[pair(h) for h in range(Hq)]])                  # (Hq, D)
+            err = np.abs(recon - outL).max(axis=1); rel_block = float(err.max() / (np.abs(outL).max() + 1e-12))
+            block_errs.append({"block": ab, "abs": float(err.max()), "rel": rel_block, "out_scale": float(np.abs(outL).max()), "head": int(err.argmax())})
+            worst_att = max(worst_att, rel_block); att_gate_checks += 1
+            if rel_block > ATT_GATE:
+                raise SystemExit(f"attention reconstruction gate failed: block {ab} worst error {err.max():.4f} is {rel_block:.3f} of the output scale > {ATT_GATE} (head {int(err.argmax())}); the recomputed probabilities are not the block's")
+            for h in range(Hq):
+                kk = Kf[h // grp]                                   # (T, D)
+                read_queries.append((ctx["kind"], ctx["index"], qi, item["control"], "attention", ab, h, qL[h]))
+                if not item["far"]: continue
+                p = P[h]                                            # over all s <= t
+                share, uni, hit = span_stats(p, span_mask, n_elig)
+                Qr = rng.standard_normal((NDRAW, D)); Qr *= np.linalg.norm(qL[h]) / np.linalg.norm(Qr, axis=1, keepdims=True)
+                Pn = softmax_rows((Qr @ kk.T) * scale).T            # (T, NDRAW)
+                nshare, _, nhit = span_stats(Pn, span_mask, n_elig)
+                records.append({**base, "channel": "attention", "block": ab, "head": h, "key_head": h // grp, "tau": None, "span_share": share, "uniform_share": uni,
+                                "null_share_mean": float(nshare.mean()), "null_share_p95": float(np.percentile(nshare, 95)), "ratio_null": float(share / max(nshare.mean(), 1e-12)),
+                                "ratio_uniform": float(share / max(uni, 1e-12)), "hit_at_k": hit, "null_hit_rate": nhit})
+        n_done += 1
+        progress(stage="item", kind=ctx["kind"], context=ctx["index"], query=qi, control=item["control"], T=t + 1, gap=gap, far=item["far"], correct=bool(correct),
+                 greedy=greedy, answer=qry["answer"], attention_recon_worst=round(worst_att, 5), block_errs=block_errs)
+    if LIMIT_ITEMS and n_done >= LIMIT_ITEMS: break
+
+# ---- query cosine: within-context (different questions, retrieval only) and across-context, per channel and head
+def cos(a, b): return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+by_head = {}
+for kind, ci, qi, ctrl, ch, b, h, v in read_queries: by_head.setdefault((ch, b, h), []).append((kind, ci, qi, ctrl, v))
+cos_records = []
+for (ch, b, h), lst in by_head.items():
+    within, within_ctrl, cc, across = [], [], [], []
+    for i in range(len(lst)):
+        for j in range(i + 1, len(lst)):
+            (k1, c1, q1, t1, v1), (k2, c2, q2, t2, v2) = lst[i], lst[j]
+            if (k1, c1) == (k2, c2):
+                if not t1 and not t2: within.append(cos(v1, v2))          # retrieval question against retrieval question
+                elif t1 and t2: cc.append(cos(v1, v2))                    # control against control: wording alone
+                else: within_ctrl.append(cos(v1, v2))
+            elif not t1 and not t2 and q1 == 0 and q2 == 0: across.append(cos(v1, v2))
+    cos_records.append({"channel": ch, "block": b, "head": h, "within_context_retrieval_median": float(np.median(within)) if within else None,
+                        "within_context_control_median": float(np.median(cc)) if cc else None,
+                        "retrieval_minus_control": (float(np.median(within)) - float(np.median(cc))) if within and cc else None,
+                        "retrieval_vs_control_median": float(np.median(within_ctrl)) if within_ctrl else None, "across_context_median": float(np.median(across)) if across else None})
+
+def pct(v, ps=(10, 50, 90, 99)): return {p: float(np.percentile(v, p)) for p in ps} if len(v) else {}
+def summarise(rs):
+    if not rs: return {}
+    return {"n": len(rs), "ratio_null_percentiles": pct([r["ratio_null"] for r in rs]), "ratio_uniform_percentiles": pct([r["ratio_uniform"] for r in rs]),
+            "frac_ratio_null_over_3": float(np.mean([r["ratio_null"] > 3 for r in rs])), "frac_ratio_null_over_10": float(np.mean([r["ratio_null"] > 10 for r in rs])),
+            "hit_at_k_rate": float(np.mean([r["hit_at_k"] for r in rs])), "null_hit_rate_mean": float(np.mean([r["null_hit_rate"] for r in rs])),
+            "span_share_median": float(np.median([r["span_share"] for r in rs])), "uniform_share_median": float(np.median([r["uniform_share"] for r in rs]))}
+summary = {"items": len(items), "items_far": int(sum(i["far"] for i in items)), "accuracy_retrieval": float(np.mean([i["correct"] for i in items if not i["control"]])) if items else None,
+           "accuracy_controls": float(np.mean([i["correct"] for i in items if i["control"]])) if any(i["control"] for i in items) else None,
+           "accuracy_by_kind": {k: float(np.mean([i["correct"] for i in items if i["kind"] == k and not i["control"]])) for k in sorted({i["kind"] for i in items})},
+           "by_channel": {ch: {"retrieval": summarise([r for r in records if r["channel"] == ch and not r["control"]]), "control": summarise([r for r in records if r["channel"] == ch and r["control"]]),
+                               "retrieval_correct": summarise([r for r in records if r["channel"] == ch and not r["control"] and r["correct"]]),
+                               "retrieval_incorrect": summarise([r for r in records if r["channel"] == ch and not r["control"] and not r["correct"]]),
+                               "by_kind": {k: summarise([r for r in records if r["channel"] == ch and not r["control"] and r["kind"] == k]) for k in sorted({r["kind"] for r in records})}}
+                          for ch in ("recurrent", "attention")},
+           "top_heads": {ch: sorted(({k: r[k] for k in ("kind", "context", "query", "block", "head", "key_head", "tau", "span_share", "null_share_mean", "ratio_null", "hit_at_k", "correct")}
+                                    for r in records if r["channel"] == ch and not r["control"]), key=lambda r: -r["ratio_null"])[:20] for ch in ("recurrent", "attention")},
+           "query_cosine": {ch: {m: pct([r[m] for r in cos_records if r["channel"] == ch and r[m] is not None]) for m in ("within_context_retrieval_median", "within_context_control_median", "retrieval_minus_control", "retrieval_vs_control_median", "across_context_median")} for ch in ("recurrent", "attention")},
+           "attention_reconstruction": {"worst_relative_error": worst_att, "gate_relative": ATT_GATE, "blocks_checked": att_gate_checks, "mutated_pairing": MUTATE_PAIRING},
+           "parameters": {"GAP": GAP, "K": K, "NDRAW": NDRAW, "TAU_MIN": TAU_MIN, "seed": 0, "checkpoint": spec.hf_id}, "elapsed_s": round(time.time() - T0, 1)}
+json.dump({"items": items, "records": records, "query_cosine": cos_records, "summary": summary}, open(OUT / "retrieval_probe.json", "w"))
+json.dump(summary, open(OUT / "summary.json", "w"), indent=1)
+print(json.dumps(summary, indent=1)[:4000], flush=True)

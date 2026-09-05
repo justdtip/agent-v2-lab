@@ -1,0 +1,102 @@
+<title>Retrieval Channels</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root { --ground:#f6f4ef; --panel:#fff; --ink:#1c2128; --muted:#5c6570; --rule:#d8d3c8; --rec:#2a6f97; --att:#c8591b; --null:#8a8f96; --grid:#e7e2d8; --soft:#e7eef3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground:#14171b; --panel:#1c2026; --ink:#e8e6e1; --muted:#a2a8b1; --rule:#343a42; --rec:#7cc1ea; --att:#f0955a; --null:#a0a6ae; --grid:#2a3038; --soft:#1e2c36; } }
+:root[data-theme="dark"] { --ground:#14171b; --panel:#1c2026; --ink:#e8e6e1; --muted:#a2a8b1; --rule:#343a42; --rec:#7cc1ea; --att:#f0955a; --null:#a0a6ae; --grid:#2a3038; --soft:#1e2c36; }
+body { background:var(--ground); color:var(--ink); font-family:"IBM Plex Sans", system-ui, sans-serif; font-size:16px; line-height:1.5; margin:0; }
+main { max-width:1040px; margin:0 auto; padding:40px 24px 64px; }
+h1 { font-family:"Fraunces", Georgia, serif; font-weight:700; font-size:2.4rem; line-height:1.1; margin:0 0 8px; text-wrap:balance; }
+h2 { font-family:"Fraunces", Georgia, serif; font-weight:500; font-size:1.35rem; margin:36px 0 10px; }
+.lede { font-size:1.1rem; max-width:64ch; color:var(--muted); margin:0 0 28px; }
+.eyebrow { font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+.tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin:20px 0 8px; }
+.tile { background:var(--panel); border:1px solid var(--rule); border-radius:6px; padding:14px 16px; }
+.tile .n { font-family:"IBM Plex Mono", monospace; font-size:1.7rem; font-variant-numeric:tabular-nums; }
+.tile .l { font-size:.85rem; color:var(--muted); }
+.tile.rec .n { color:var(--rec); } .tile.att .n { color:var(--att); }
+.charts { display:grid; grid-template-columns:1fr; gap:18px; }
+@media (min-width: 880px) { .charts { grid-template-columns:1fr 1fr; } }
+.chart { background:var(--panel); border:1px solid var(--rule); border-radius:6px; padding:12px 12px 6px; }
+.chart h3 { margin:0 0 4px; font-size:1rem; font-weight:600; } .chart .sub { font-size:.85rem; color:var(--muted); margin:0 0 6px; }
+svg { width:100%; height:auto; display:block; }
+.legend { display:flex; gap:16px; flex-wrap:wrap; font-size:.85rem; color:var(--muted); margin:6px 4px 4px; }
+.sw { display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:6px; border-radius:2px; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:.92rem; }
+th, td { text-align:right; padding:6px 10px; border-bottom:1px solid var(--rule); } th:first-child, td:first-child { text-align:left; }
+th { font-weight:600; color:var(--muted); font-size:.8rem; letter-spacing:.06em; text-transform:uppercase; }
+.wrap { overflow-x:auto; } p { max-width:70ch; }
+.callout { background:var(--soft); border-left:4px solid var(--rec); padding:12px 16px; border-radius:4px; max-width:70ch; }
+code { font-family:"IBM Plex Mono", monospace; font-size:.9em; }
+</style>
+<main>
+<div class="eyebrow">Qwen3.5-4B · 4-bit · retrieval-heavy text · 72 questions · 2026-09-06</div>
+<h1>Retrieval Channels</h1>
+<p class="lede">When the model has to look something up, which channel reads the place where the answer sits: the recurrent heads that carry a running summary, or the attention heads? Every read weight is tested against the answer's known token span, under one statistic for both channels.</p>
+<div class="tiles">
+  <div class="tile rec"><div class="n">1.04</div><div class="l">recurrent heads: median mass on the answer span, as a multiple of the random-query null</div></div>
+  <div class="tile att"><div class="n">5.46</div><div class="l">attention heads: the same statistic</div></div>
+  <div class="tile rec"><div class="n">0.13 / 0.10</div><div class="l">recurrent: answer span in the top-10 far sources, real / null</div></div>
+  <div class="tile att"><div class="n">0.56 / 0.08</div><div class="l">attention: answer span in the top-10 far sources, real / null</div></div>
+  <div class="tile"><div class="n">1.00</div><div class="l">the model's accuracy on the retrieval questions, whole answer under teacher forcing</div></div>
+  <div class="tile"><div class="n">0.049</div><div class="l">worst attention reconstruction error, share of the block's output scale, across 576 blocks</div></div>
+</div>
+<div class="charts">
+  <div class="chart"><h3>Mass on the answer span, by layer</h3><p class="sub">Median (solid) and 99th percentile (thin) across heads and questions of the span mass as a multiple of the random-query null. One means no more than a random query would put there.</p><div id="layers"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--rec)"></i>recurrent blocks</span><span><i class="sw" style="background:var(--att)"></i>attention blocks</span><span><i class="sw" style="background:var(--null)"></i>null = 1</span></div></div>
+  <div class="chart"><h3>Does the query move with the question?</h3><p class="sub">Median cosine between a head's read queries on the same context: two retrieval questions, two no-lookup controls, and across contexts. A query that moves more for retrieval than for wording is dynamic addressing.</p><div id="cos"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--rec)"></i>recurrent</span><span><i class="sw" style="background:var(--att)"></i>attention</span></div></div>
+</div>
+<h2>By context type</h2>
+<div class="wrap"><table><tr><th>type</th><th>model correct</th><th>recurrent ratio, median / p99</th><th>attention ratio, median / p99</th><th>recurrent hit@10 vs null</th><th>attention hit@10 vs null</th></tr><tr><td>code</td><td>12/12</td><td>1.04 / 2.57</td><td>3.92 / 102.65</td><td>0.05 vs 0.02</td><td>0.43 vs 0.06</td></tr><tr><td>icl_mapping</td><td>12/12</td><td>1.10 / 2.35</td><td>9.54 / 86.06</td><td>0.21 vs 0.17</td><td>0.73 vs 0.08</td></tr><tr><td>kv_needles</td><td>12/12</td><td>0.99 / 2.01</td><td>3.00 / 57.74</td><td>0.08 vs 0.07</td><td>0.44 vs 0.09</td></tr><tr><td>reference_back</td><td>12/12</td><td>1.03 / 3.49</td><td>8.17 / 140.30</td><td>0.16 vs 0.13</td><td>0.64 vs 0.08</td></tr></table></div>
+<h2>Correct against incorrect, and controls</h2>
+<div class="wrap"><table><tr><th>slice</th><th>records</th><th>recurrent ratio median / p99</th><th>attention ratio median / p99</th><th>attention hit@10 vs null</th></tr>
+<tr><td>retrieval, model correct</td><td>13479 / 6144</td><td>1.04 / 2.70</td><td>5.46 / 102.30</td><td>0.56 vs 0.08</td></tr>
+<tr><td>retrieval, model incorrect</td><td>0 / 0</td><td>n/a / n/a</td><td>n/a / n/a</td><td>n/a vs n/a</td></tr>
+<tr><td>controls, placebo span</td><td>6708 / 3072</td><td>0.97 / 2.11</td><td>0.71 / 9.04</td><td>0.10 vs 0.07</td></tr>
+</table></div>
+<h2>The strongest heads</h2>
+<div class="charts">
+<div class="chart"><h3>Attention</h3><div class="wrap"><table><tr><th>head</th><th>type</th><th>span share</th><th>null share</th><th>ratio</th><th>hit@10</th><th>correct</th></tr><tr><td>L20 b4 h2</td><td>reference_back</td><td>0.869</td><td>0.003</td><td>340.9</td><td>yes</td><td>yes</td></tr><tr><td>L24 b5 h9</td><td>reference_back</td><td>0.762</td><td>0.003</td><td>287.1</td><td>yes</td><td>yes</td></tr><tr><td>L20 b4 h12</td><td>reference_back</td><td>0.881</td><td>0.003</td><td>286.9</td><td>yes</td><td>yes</td></tr><tr><td>L28 b6 h1</td><td>reference_back</td><td>0.720</td><td>0.003</td><td>239.8</td><td>yes</td><td>yes</td></tr><tr><td>L4 b0 h15</td><td>code</td><td>0.757</td><td>0.003</td><td>235.8</td><td>yes</td><td>yes</td></tr><tr><td>L20 b4 h12</td><td>reference_back</td><td>0.407</td><td>0.002</td><td>216.4</td><td>yes</td><td>yes</td></tr><tr><td>L20 b4 h15</td><td>reference_back</td><td>0.591</td><td>0.003</td><td>215.7</td><td>yes</td><td>yes</td></tr><tr><td>L4 b0 h15</td><td>code</td><td>0.698</td><td>0.003</td><td>201.0</td><td>yes</td><td>yes</td></tr></table></div></div>
+<div class="chart"><h3>Recurrent</h3><div class="wrap"><table><tr><th>head</th><th>type</th><th>span share</th><th>null share</th><th>ratio</th><th>hit@10</th><th>correct</th></tr><tr><td>L18 b13 h26</td><td>reference_back</td><td>0.009</td><td>0.002</td><td>5.0</td><td>yes</td><td>yes</td></tr><tr><td>L14 b10 h25</td><td>reference_back</td><td>0.009</td><td>0.002</td><td>4.9</td><td>no</td><td>yes</td></tr><tr><td>L17 b12 h20</td><td>reference_back</td><td>0.008</td><td>0.002</td><td>4.8</td><td>no</td><td>yes</td></tr><tr><td>L7 b5 h27</td><td>reference_back</td><td>0.028</td><td>0.006</td><td>4.8</td><td>yes</td><td>yes</td></tr><tr><td>L27 b20 h29</td><td>reference_back</td><td>0.028</td><td>0.006</td><td>4.6</td><td>yes</td><td>yes</td></tr><tr><td>L18 b13 h0</td><td>reference_back</td><td>0.014</td><td>0.003</td><td>4.4</td><td>yes</td><td>yes</td></tr><tr><td>L27 b20 h29</td><td>reference_back</td><td>0.029</td><td>0.007</td><td>4.1</td><td>yes</td><td>yes</td></tr><tr><td>L21 b15 h20</td><td>icl_mapping</td><td>0.035</td><td>0.009</td><td>4.1</td><td>yes</td><td>yes</td></tr></table></div></div>
+</div>
+<h2>Method</h2>
+<p>Eight seeded contexts of four kinds (sixteen key-value needles, reference-back prose with a two-hop form, code constants, in-context learning of a symbol-to-digit mapping), facts early and questions at the end with at least 300 tokens between, six retrieval questions and three no-lookup controls each, every question its own forward through the 4-bit checkpoint. Recurrent read weights are |alpha| by the backward scan at the read position for heads whose gate constant on the context exceeds 200 tokens; attention weights are the softmax recomputed from the post-rotary queries and keys and checked by reconstructing each block's own output (gate 0.05 of the output scale, proven to fail on a wrong head pairing). Both channels go through one statistic: the share of far-source (gap at least 257) mass on the answer's token span, against the uniform share and against 50 random unit queries at the real norm. Controls use a placebo span from the context's own facts. The model's answers are scored under teacher forcing over the whole answer.</p>
+</main>
+<script>
+const SER = {"recurrent": [[1, 1.0375924558080598, 1.5384667813296375, 2.193770543272479, 768], [2, 1.0510839656046007, 1.6526888688473913, 2.7087148445512597, 432], [3, 1.1100571171366198, 1.7208532908373888, 2.913571683522779, 270], [5, 1.0042592397130763, 1.4923043448431965, 2.225172347234392, 516], [6, 1.0088257309168422, 1.5995837456909976, 2.82512733705557, 480], [7, 1.0688936487474314, 1.6149888524948723, 2.9041400068383814, 412], [9, 1.0974928918544322, 1.6371289014408767, 2.3097957971521383, 636], [10, 1.0071751951001233, 1.4404870019127867, 1.9976624032505725, 684], [11, 0.9952924816308005, 1.445053784514186, 2.151056110161926, 585], [13, 1.0453154861200766, 1.5424476941720642, 2.051620489804606, 882], [14, 0.9322528384863128, 1.4883589212392254, 2.1954339425429406, 363], [15, 0.9606142628218725, 1.392196998432685, 2.1279592987000826, 385], [17, 1.0090904751690275, 1.6447234776222988, 3.204835112433196, 648], [18, 1.0785971174059896, 1.6308696478246336, 2.3726256205798717, 396], [19, 1.0343875629394768, 1.718987069805292, 2.9551326952694064, 516], [21, 1.12811885680214, 2.044174018682883, 3.4413084093102166, 654], [22, 0.9786845689712105, 1.5064754018648523, 2.207839213297511, 636], [23, 1.0559334158673992, 1.7540832647098765, 2.225938332464125, 378], [25, 1.0032151682842732, 1.4876709472246867, 2.166010220719095, 768], [26, 1.2181810600671241, 2.1493735326274233, 3.0704403869974843, 550], [27, 1.18527676375577, 2.208109895597842, 3.7896589162870025, 450], [29, 1.060919806224903, 1.7142833254260657, 2.441596384866373, 648], [30, 1.0345413628077726, 1.6110424429412091, 2.7711173683868706, 678], [31, 0.9732784456428152, 1.4489131716253676, 2.335439747932365, 744]], "attention": [[4, 1.8067453398398006, 17.15561620854544, 101.40713091926186, 768], [8, 2.5813362435440466, 18.017539953224546, 51.09793382765092, 768], [12, 2.6224345884459974, 11.294143054186614, 30.789105530852808, 768], [16, 3.457115643292604, 21.442786752615586, 58.449271300157456, 768], [20, 15.209822956765581, 61.21430618244759, 154.0439284587435, 768], [24, 19.462543550134207, 57.994832218748435, 110.36910633927198, 768], [28, 9.120796586320752, 44.38368695657064, 116.0636688113149, 768], [32, 6.288789680057333, 24.710919471842253, 66.75456497786823, 768]]}; const QC = {"recurrent": {"within_context_retrieval_median": 0.9833482205867767, "within_context_control_median": 0.8781445324420929, "across_context_median": 0.7395256161689758}, "attention": {"within_context_retrieval_median": 0.9298248142004013, "within_context_control_median": 0.7490688562393188, "across_context_median": 0.5266218036413193}};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function layers() {
+  const W=520, H=330, m={l:52, r:14, t:12, b:40};
+  const all = [...SER.recurrent, ...SER.attention]; const ymax = Math.max(2, ...all.map(s => s[3])) * 1.08;
+  const X = L => m.l + ((L - 1) / 32) * (W - m.l - m.r), Y = v => H - m.b - (Math.log10(Math.max(v, 0.05)) - Math.log10(0.05)) / (Math.log10(ymax) - Math.log10(0.05)) * (H - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="mass on the answer span by layer">`;
+  for (const v of [0.1, 0.3, 1, 3, 10, 30, 100]) if (v < ymax) s += `<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v===1?css('--null'):css('--grid')}" stroke-width="${v===1?1.5:1}"/><text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="${css('--muted')}">${v}</text>`;
+  for (const L of [4,8,12,16,20,24,28,32]) s += `<text x="${X(L)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="${css('--muted')}">${L}</text>`;
+  s += `<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="${css('--muted')}">layer written by the block</text>`;
+  s += `<text transform="rotate(-90)" x="${-(H)/2}" y="14" text-anchor="middle" font-size="11" fill="${css('--muted')}">span mass / null (log)</text>`;
+  for (const [ch, c] of [["recurrent","--rec"],["attention","--att"]]) {
+    const pts = SER[ch];
+    s += `<path d="${pts.map((p,i)=>`${i?'L':'M'}${X(p[0])} ${Y(p[3])}`).join(' ')}" fill="none" stroke="${css(c)}" stroke-width="1" opacity=".7"/>`;
+    s += `<path d="${pts.map((p,i)=>`${i?'L':'M'}${X(p[0])} ${Y(p[1])}`).join(' ')}" fill="none" stroke="${css(c)}" stroke-width="2.5"/>`;
+    for (const p of pts) s += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="${css(c)}"/>`;
+  }
+  document.getElementById('layers').innerHTML = s + '</svg>';
+}
+function cosine() {
+  const W=520, H=330, m={l:52, r:14, t:12, b:60};
+  const cats = [["within_context_retrieval_median","two retrieval questions"],["within_context_control_median","two control questions"],["across_context_median","across contexts"]];
+  const X = (i, k) => m.l + (i + 0.2 + k * 0.3) * ((W - m.l - m.r) / cats.length), Y = v => H - m.b - v * (H - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="query cosine">`;
+  for (const v of [0, 0.25, 0.5, 0.75, 1]) s += `<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css('--grid')}"/><text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="${css('--muted')}">${v}</text>`;
+  s += `<line x1="${m.l}" x2="${W-m.r}" y1="${Y(0.83)}" y2="${Y(0.83)}" stroke="${css('--null')}" stroke-dasharray="6 4"/><text x="${W-m.r-4}" y="${Y(0.83)-5}" text-anchor="end" font-size="11" fill="${css('--null')}">ledger run 0.83</text>`;
+  cats.forEach(([k, label], i) => {
+    s += `<text x="${m.l + (i + 0.5) * ((W - m.l - m.r) / cats.length)}" y="${H-m.b+18}" text-anchor="middle" font-size="11" fill="${css('--muted')}">${label}</text>`;
+    [["recurrent","--rec"],["attention","--att"]].forEach(([ch, c], j) => { const v = QC[ch][k]; if (v == null) return;
+      const bw = (W - m.l - m.r) / cats.length * 0.28; s += `<rect x="${X(i, j) - bw/2}" y="${Y(v)}" width="${bw}" height="${Y(0) - Y(v)}" fill="${css(c)}"/><text x="${X(i, j)}" y="${Y(v)-5}" text-anchor="middle" font-size="11" fill="${css('--ink')}">${v.toFixed(2)}</text>`; });
+  });
+  s += `<text transform="rotate(-90)" x="${-(H)/2}" y="14" text-anchor="middle" font-size="11" fill="${css('--muted')}">median query cosine</text>`;
+  document.getElementById('cos').innerHTML = s + '</svg>';
+}
+layers(); cosine();
+</script>
