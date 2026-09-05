@@ -10,6 +10,8 @@ Variant B swaps the loss for a chunked cross-entropy: the backbone runs once, an
 projection plus the loss are computed per position chunk under ``mx.checkpoint``, so the full
 (tokens x vocab) logits are never resident. The difference A - B is the vocabulary term.
 """
+from __future__ import annotations
+
 # RECORD, NOT A LAUNCHER (2026-09-05). This script produced the rows in summary.json. It loads the
 # model, so it must not be started by hand: runs go through the package entry points under R47 and
 # R48, in a window the Director declares, and take the model-run lock of issue 83.
@@ -18,7 +20,6 @@ if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
     _sys.exit("refusing to run: this file is a record of the 2026-09-05 training-cost probe, not a "
               "launcher; runs go through the package entry points under R47 and R48")
 
-from __future__ import annotations
 
 import argparse
 import json
