@@ -92,3 +92,36 @@ intervals. Every number carries its provenance (issue 84).
 It does not change the protocol, the selection rule or the test splits; it does not use the
 throughput lever on the deliverable arm; it does not train on test3's horizon; it does not run the
 rollout stage. Those are the next run's questions, and the comparison table is what decides them.
+
+## 2 (revised, 10:05, after the Head's review; supersedes section 2 above, which is not to be computed on any adapter)
+
+The Head found five faults, two of which would move the headline the wrong way: a trajectory that
+succeeds in eight steps has a coherence length of eight and one that succeeds in twelve has
+twelve, so a faster adapter reports a shorter length; and completion is correlated with capability,
+so censoring at completion is informative and the survival machinery's assumption is violated by
+construction. The standard is therefore restated:
+
+1. **Headline: the fraction of trajectories coherent to completion**, per task, with Wilson
+   intervals, per family and per difficulty and overall. One task per evaluation point, unchanged.
+2. **Competing risks, never pooled into a first-of-any length.** The four causes, note-integrity
+   violation, detected loop, invalid or non-executable action, unrecovered tool error, are reported
+   separately as the cause-specific hazard per step (events of that cause at step s over the
+   trajectories still at risk at s) and the cumulative incidence by cause. An adapter that halves
+   loops while worsening tool errors then shows as exactly that.
+3. **Tool errors get a window.** An error at step s is an event if it is not recovered, by the rule
+   evaluate.py already uses for recovered_errors, by step s + k with k = 3; the last k steps of every
+   trajectory are censored for that cause. The event time then depends only on the past.
+4. **No median coherence length.** If a length is reported at all it is the Kaplan-Meier median
+   with "not reached" when fewer than half of trajectories fail, as a descriptive only, with the
+   informative-censoring caveat stated beside it; the per-step hazard against the number actually at
+   risk is the only step-indexed summary the report carries.
+5. **Cross-cell comparisons only on scale-free quantities.** Horizons increase by construction
+   across families and difficulties, so comparisons across cells use the per-step hazard or steps as
+   a fraction of the task's own required steps (the generator knows each task's horizon); the report
+   says which quantities are comparable across cells and which are not.
+
+The four signals and the precondition on step indices stand. The Deputy's reading of the code
+(10:00): violations carry a step; parse errors carry one on the step; detect_loop returns a bool
+and must return the index of the last step of the first window in which the repetition closed, None
+for no loop, with the flag derived from it; "unrecovered" is defined through the existing
+recovered_errors rule, cited by line in the docstring.

@@ -1,0 +1,90 @@
+{
+ "unembedding_source": "gaussian proxy (data type 'bfloat16' not understood)",
+ "layers": {
+  "12": {
+   "sigma_max": 13.242,
+   "condition_number": 636585.7,
+   "participation_ratio": 516.5,
+   "n_sv_ge_1pct": 1141,
+   "n_sv_ge_10pct": 268,
+   "median_share_of_u_c_in_top_1pct_subspace": 0.45,
+   "merit_median_logit_gain_per_unit_injection": {
+    "pre-image (0)": 0.0008,
+    "0.001": 0.4096,
+    "0.01": 0.7047,
+    "0.1": 0.9165,
+    "1": 0.9839,
+    "gradient (inf)": 0.9917
+   },
+   "svd_s": 1.5
+  },
+  "16": {
+   "sigma_max": 15.97,
+   "condition_number": 1008853.2,
+   "participation_ratio": 742.2,
+   "n_sv_ge_1pct": 1558,
+   "n_sv_ge_10pct": 284,
+   "median_share_of_u_c_in_top_1pct_subspace": 0.612,
+   "merit_median_logit_gain_per_unit_injection": {
+    "pre-image (0)": 0.0009,
+    "0.001": 0.5571,
+    "0.01": 0.8689,
+    "0.1": 1.077,
+    "1": 1.1395,
+    "gradient (inf)": 1.1486
+   },
+   "svd_s": 1.5
+  },
+  "20": {
+   "sigma_max": 10.811,
+   "condition_number": 87556.7,
+   "participation_ratio": 1409.6,
+   "n_sv_ge_1pct": 2395,
+   "n_sv_ge_10pct": 686,
+   "median_share_of_u_c_in_top_1pct_subspace": 0.936,
+   "merit_median_logit_gain_per_unit_injection": {
+    "pre-image (0)": 0.0078,
+    "0.001": 0.6215,
+    "0.01": 0.8893,
+    "0.1": 1.0504,
+    "1": 1.0997,
+    "gradient (inf)": 1.1057
+   },
+   "svd_s": 1.5
+  },
+  "24": {
+   "sigma_max": 8.405,
+   "condition_number": 72562.6,
+   "participation_ratio": 1877.4,
+   "n_sv_ge_1pct": 2519,
+   "n_sv_ge_10pct": 1563,
+   "median_share_of_u_c_in_top_1pct_subspace": 0.984,
+   "merit_median_logit_gain_per_unit_injection": {
+    "pre-image (0)": 0.0077,
+    "0.001": 0.8013,
+    "0.01": 1.0786,
+    "0.1": 1.2641,
+    "1": 1.3046,
+    "gradient (inf)": 1.3077
+   },
+   "svd_s": 1.6
+  },
+  "28": {
+   "sigma_max": 6.686,
+   "condition_number": 9604.8,
+   "participation_ratio": 2049.9,
+   "n_sv_ge_1pct": 2539,
+   "n_sv_ge_10pct": 2159,
+   "median_share_of_u_c_in_top_1pct_subspace": 0.992,
+   "merit_median_logit_gain_per_unit_injection": {
+    "pre-image (0)": 0.0408,
+    "0.001": 0.9118,
+    "0.01": 1.1666,
+    "0.1": 1.3778,
+    "1": 1.4316,
+    "gradient (inf)": 1.4356
+   },
+   "svd_s": 1.6
+  }
+ }
+}

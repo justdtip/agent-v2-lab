@@ -934,3 +934,40 @@ the expected value when J has full row rank, confirming the algebra and that not
 and it says nothing about whether the direction is injectable at a sane magnitude; the grid is the
 check that can fail informatively, and the condition number and the count of small singular values
 explain a failed grid.
+
+## The band lenses' spectra, 09:55: the lens at the start of the band is a narrow filter, and where injection is feasible was knowable without a model (the Head)
+
+Computed from the lens file alone (`out/lens_spectra.json`; the reachability and merit columns use
+200 random unit directions as a proxy for unembedding rows, because the bf16 embedding could not be
+read into numpy in the time; the spectra themselves are exact):
+
+| layer | largest singular value | condition number | participation ratio | singular values at or above 1% of the largest | share of a random direction reachable in that subspace |
+|---|---|---|---|---|---|
+| 12 | 13.2 | 636,586 | 517 | 1,141 | 0.45 |
+| 16 | 16.0 | 1,008,853 | 742 | 1,558 | 0.61 |
+| 20 | 10.8 | 87,557 | 1,410 | 2,395 | 0.94 |
+| 24 | 8.4 | 72,563 | 1,877 | 2,519 | 0.98 |
+| 28 | 6.7 | 9,605 | 2,050 | 2,539 | 0.99 |
+
+**F11 (instrument).** The lens at the start of the band is a heavily filtered low-dimensional
+projection: at layer 12 fewer than half of the residual's directions reach the readout at a
+hundredth of the largest gain and the participation ratio is 517 of 2,560, so a claim of the form
+"the lens shows X at layer 12" inherits a narrow filter on the residual. The conditioning improves
+monotonically through the band, with the effective dimensionality rising from a fifth at 12 to
+four fifths at 28, which is the geometry the hosted-lens work saw from the other side as the lens
+vectors' effective dimensionality rising from about a tenth at layer 12 to nearly half at 20. F11
+sits beside F10 as the second thing learned about the lens by trying to use it rather than by
+reading it, and both bear on WP5 and WP7: the lens is a sharp instrument at 24 and 28, where it is
+also two thirds an output readout, and a blunt one at 12 and 16, where it is not.
+
+**The merit and why both instruments failed.** The logit gain per unit injection norm is the
+product of the size of J v and its cosine with the readout direction; per unit norm it is maximised
+exactly by the gradient direction (Cauchy-Schwarz), and the regularised pre-image trades gain for
+alignment: at layer 12 the medians are 0.70, 0.92, 0.98 and 0.99 for lambda 0.01, 0.1, 1 and the
+gradient, against 0.0008 for the exact pre-image. So the gradient was the best direction by gain,
+and it read at 0.27 one block downstream because gain is not the quantity: the readout is a softmax
+over 248,320 tokens after normalisation, and the injected direction must lift the concept over
+every competitor, which the gradient does not at any magnitude that keeps the residual sane. The
+calibration grid is the only test of that, and the spectra say where it can pass: at layer 12 the
+concept's own readout direction is mostly outside the reachable subspace, and at 20 it is almost
+entirely inside.
