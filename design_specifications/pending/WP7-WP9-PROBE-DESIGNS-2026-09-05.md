@@ -77,6 +77,56 @@ Consequences for the designs below, which are mine to carry and are not optional
 - **WP7(d)** is least affected, since the state probes are trained classifiers on residuals rather
   than lens readouts, but the layer set is still reported per pair.
 
+## 0b. F11, and what it says together with F10 (added 2026-09-06)
+
+WP12's spectra of the hosted lens, computed from the lens files with no model, give per band layer
+the condition number, the participation ratio out of 2560, and the share of a direction lying in
+the reachable subspace: layer 12, 636,586 and 517 and 0.45; layer 16, 1,008,853 and 742 and 0.61;
+layer 20, 87,557 and 1,410 and 0.94; layer 24, 72,563 and 1,877 and 0.98; layer 28, 9,605 and
+2,050 and 0.99. For the sixteen concept tokens' own unembedding rows the reachability is *lower*
+than for random directions, 0.42 at layer 12 and 0.82 at layer 20, so the fit does not
+preferentially align its image with unembedding rows.
+
+**Consequence for these designs.** At 12/13 and 15/16 the lens reads under two thirds of the
+residual space, so a J-space component there is a component of a narrow filter and the remainder
+is most of the space. The `k`-sparse pursuit, the variance share and the clamp all inherit that,
+and a J-versus-remainder contrast at 12/13 is structurally a different comparison from the same
+contrast at 27/28. Every per-pair row therefore carries the reachable share alongside the
+lens-identity cosine already required by section 0a, and no statistic is pooled across pairs.
+
+**The two findings together say something neither says alone, and it bears on every lens reading
+this programme makes.** *Updated 2026-09-06 with the real-token reachability for all five layers,
+which strengthens the argument rather than weakening it.*
+
+| layer | reachable share, real tokens (min) | lens-identity cosine | share x (1 - cosine) |
+| --- | --- | --- | --- |
+| 12 | 0.42 (0.23) | 0.29 | 0.298 |
+| 16 | 0.56 (0.29) | 0.29 | 0.398 |
+| **20** | **0.82 (0.43)** | **0.48** | **0.426** |
+| 24 | 0.87 (0.52) | 0.63 | 0.322 |
+| 28 | 0.88 (0.55) | 0.71 | 0.255 |
+
+The two defects run in opposite directions, so **no band layer is both wide and independent**.
+Shallow layers give a narrow instrument genuinely distinct from the output; deep layers give a
+broad instrument that is substantially the output. Layer 20 is the best available compromise and
+the last column ranks it first.
+
+The real-token column makes that case stronger than the random-direction proxy did. On the proxy,
+layers 24 and 28 looked meaningfully wider than 20 at 0.98 and 0.99 against 0.94, so their extra
+width partly paid for their contamination. On the tokens actually being read they are barely wider,
+0.87 and 0.88 against 0.82, while the contamination keeps climbing. The trade-off collapses.
+
+**Reachability is a property of the direction, not only of the layer, and the designs must carry
+it per direction.** The minima across sixteen concepts are 0.23, 0.29, 0.43, 0.52 and 0.55, so at
+layer 20 the worst-read direction sits at 0.43 against a median of 0.82. WP7(a)'s pursuit and
+WP9's clamp operate on specific directions, so each result carries its own direction's reachable
+share and not the layer's median; a clamp on a direction at 0.43 is clamping less than half of it
+and a null there is not a null about the direction. Report the per-direction share in every row.
+
+This also explains, after the fact, why WP12's injection failed at layer 12 and why its writable
+layer came out at 20 from an entirely separate calculation: two independent routes to the same
+layer. Recorded by the Chief as F12 with rule R54.
+
 ## WP7(a). Assistant axis against its role-play personas
 
 **Seams that exist.** `probes/assistant_axis.py`: `build_axis`, `project`,

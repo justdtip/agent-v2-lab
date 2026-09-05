@@ -1119,3 +1119,29 @@ redundancy; inside the range means the set-level leg closes as general influence
 the suppression hypothesis has its first test in its favour, at 24 rather than at the
 output-aligned readout; a primary with no dynamic range (nineteen ties) is reported as
 uninformative and not ranked.
+
+**Contrast run amended before it runs, 10:58 (the Head).** (1) k matched to the readout: block 27
+writes layer 28 and cannot affect layer 24, so the layer-24 primary is the six block-23 relays
+against nineteen random sets of six from block 23, and the layer-28 comparison is all thirteen
+against nineteen random sets; same data, each readout tested with the heads that can reach it. (2)
+Three outcomes pre-registered, not two: the relays lowest at 24 means broadcast, the set carrying
+the injected content specifically; the layer-28 reversal shrinking toward the null under a
+better-constructed, less foreign injection means the suppression is about how off-manifold the
+content is, the first confirmation of the hypothesis the last run generated; the reversal
+unchanged means the suppression is not about foreignness and needs another explanation. (3) The
+selected magnitude is reported against the previous run's twice the residual norm: a direction
+built for the margin should register at a smaller multiple, and if it still needs twice the norm
+the injection is as off-manifold as before and the shrinkage prediction has no room to be tested.
+(4) Concepts are chosen absent from the top 25 at every injection site, since the contrast
+subtracts the mean of those 25 and a concept among them partly cancels itself; the number of
+candidates dropped for being present is reported. (5) A readout whose nineteen random arms span
+less than 1.5 events of 64 is reported as uninformative and not ranked. The exclude control is
+exact at both blocks (ten unselected against six needed at 23, nine against seven at 27), the
+first arm tonight with no forced overlap and no deterministic control.
+
+**F12 and R54, 11:05.** F10 and F11 together: no band layer is both wide and independent; layer
+20 is the only one wide (real-token reachability 0.82) while still mostly independent (cosine
+0.48), and it is the programme's primary lens readout by R54, the other four pairs a profile with
+both defects stated per row. Recorded in the wiring map; carried into WP7 and WP9 as the Head's
+section 0b. The real-token reachability at all five layers (0.42, 0.56, 0.82, 0.87, 0.88) replaces
+the proxy wherever the proxy was quoted.
