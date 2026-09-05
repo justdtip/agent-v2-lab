@@ -133,3 +133,142 @@ not support a rate.
 
 **Stage 2 set.** The 28, with the 23 in-band heads primary, layer-matched random controls,
 recall@25 of the hosted-lens readout and the next-token change rate under the stated threshold.
+
+
+## Re-scoring on the Head's third review, 03:50 (adopted; a null-distribution rerun follows and re-scores again)
+
+**Prediction 1 changes verdict and the record says so.** Scored on the gain-and-preservation set
+(24 heads, layer 32 in): confirmed, with the relays at layer 20 over 24 and none at 16 or 28. Scored
+on the preservation-margin set (28 heads, layer 32 out): **refuted**. In band by layer written, 16
+has two, 20 has seven, 24 has five and 28 has nine; the first half of the band holds nine and the
+second half fourteen, and the single largest layer is the last in the band. The paper's finding that
+broadcast heads concentrate in the first half of the workspace layers does not reproduce on this
+model; that is a difference from the paper and a finding. R38(h) is recorded from this: a corrected
+selection rule re-scores every prediction written against the old one, both scorings shown.
+
+**The rotated control becomes a distribution.** One fixed orthogonal rotation is the right
+construction but one realisation, so "at least double the best control" compared against a single
+draw. Stage 1 is rerun with twenty independent rotations and twenty independent MLP-row samples per
+block; the criterion becomes label preservation on J beyond every one of the forty draws and at
+least double their medians, with layer 32 excluded and gain reported beside. The set, the layer
+counts, the retrieval-head statuses and both predictions are re-scored on that run below.
+
+**Stage 2 is graded, or it answers nothing.** Twenty-eight of 112 is a quarter of the attention
+heads; ablating a quarter of attention and seeing the lens readout fall shows that attention matters,
+which is not in doubt. The paper's finding was that a very small set carries the effect. Stage 2
+therefore ablates the top k heads by preservation margin for k of 2, 4, 8, 16 and the full set, each
+against a layer-matched random set of the same size (five seeds), and reports recall@25 of the
+hosted-lens readout at the band layers and the next-token change rate as functions of k. If a small k
+takes most of the recall drop while the random set of the same size does not, the paper's claim
+reproduces; if the curve is flat in k and tracks the random control, the set is not special and the
+ablation is measuring damage.
+
+**The recurrent result, stated positively first.** The recurrent value paths carry lens-readable
+content less well than they carry a control direction set: the median J preservation, 0.0061, is
+below the median MLP-row control, 0.0095. Separately, the strongest of the 768, 0.071, is below the
+median attention head, 0.178. Both statements stand on their own.
+
+## Final stage-1 selection under null distributions, 04:20 (`broadcast_heads_nulldist.as-run.py.txt`, `make_selection.py` (renamed from `select.py`, which shadowed the standard library module and broke the model import chain in the first composition run), `out/selection_nulldist.json`; 241 s)
+
+Twenty independent orthogonal rotations of the lens population and twenty independent samples of
+2,000 MLP-row directions per block; the rule: label preservation on J beyond every one of the forty
+draws and at least double their medians, layer 32 excluded, gain reported beside.
+
+**29 of 112 attention heads; 24 of 64 in the band. By layer written: 4: 3, 8: 0, 12: 2, 16: 2, 20: 8,
+24: 5, 28: 9.** The set differs from the single-draw set by one head (block 19 head 15 enters, at a
+margin of 1.07 and beyond all forty draws); every other member is common. Among the 29 the gain
+median is 0.91 and 28 percent have gain above both controls; the strongest heads by preservation are
+block 11 head 10 (0.938 against a worst draw of 0.349), block 15 head 6 (0.733 against 0.248), block
+19 head 0 (0.664 against 0.047), block 23 head 1 (0.655 against 0.289) and block 23 head 9 (0.575
+against 0.134). Copy maps at layers 8 and 12 (rotated-J medians 0.26 and 0.19) stay out.
+
+**Prediction 1, re-scored on the final set: refuted, as on the corrected single-draw set.** First half
+of the band (16, 20): 10; second half (24, 28): 14; largest single layer 28. Scored three ways for the
+record: confirmed on the gain-contaminated set, refuted on the preservation set, refuted on the
+null-distribution set. The paper's first-half concentration does not reproduce on this model.
+
+**Prediction 2, re-scored: confirmed.** Recurrent value paths: 23 of 768 pass the same rule on tiny
+numbers; the median J preservation, 0.0061, is below the median MLP-row control, 0.0095, so the
+paths carry lens-readable content less well than a control direction set; the strongest of 768,
+0.071, is below the attention median, now 0.254 with layer 32 out, and none of the 768 reaches it.
+
+**The six retrieval heads under the final rule.** Block 19 head 12 (rank 7; 0.366 against a worst
+draw of 0.043) and block 23 head 9 (rank 13; 0.575 against 0.134) are selective relays; block 19 head
+15 enters at the margin (rank 29; 0.040 against 0.026, double its medians and beyond all draws);
+block 19 head 2 preserves at 0.988 with its rotated draws at 0.995 to 0.997, a copy map; block 27
+head 1 and block 3 head 15 do not relay. Three of six are relays, one marginal; one is a copy head;
+two are not. Six heads, no rate.
+
+**What is fixed for stage 2.** The ordered set of 29 with the 24 in-band primary, ablated at k = 2,
+4, 8, 16 and 29 against layer-matched random sets of the same size, five seeds, recall@25 and the
+next-token change rate as functions of k, the drop counting only if the change rate stays within
+twice the control's. The script `ablation.py` is written and reads this selection; it runs on the
+Head's word.
+
+## Stage 1b and stage 2 as reviewed, running from 04:50 (`composition.py`, `separation.py`, `ablation.py`; one chain, one model load at a time)
+
+**Stage 1b, the Director's hypothesis (04:00).** Layers 4 and 8 are outside the band, so relays
+there "must be coupling heads that couple to heads in later layers": composition in the
+transformer-circuits sense. For each of the three layer-4 relays (block 3 heads 4, 10, 12) and each
+of the 64 band heads, the Q-, K- and V-composition scores of Elhage et al., ‖W_X^B W_OV^A‖_F over the
+factors' norms, against twenty rotations of the relay's OV map (Q W_OV Q^T, same spectrum, scrambled
+directions) and against the population of every layer-4 and layer-8 head paired with every band
+head. Predictions written before the rows: (1) the layer-4 relays K-compose with the band relays
+above the null, with the retrieval heads of blocks 19 and 23 among the partners; (2) they preserve
+token identity at least as well as lens directions, so their relay status is address-writing rather
+than workspace content. The Head's correction before the rows: token identity and lens directions
+share the unembedding, so a head preserving one tends to preserve the other; the separation control
+therefore adds the lens direction with its projection on the same token's identity direction
+removed, and reports the mean absolute cosine between the two, so the prediction is about the margin
+over the shared component and the size of that component is visible.
+
+**Stage 2, the Head's graded design (03:50) with two changes (04:35) and a calibrated gate
+(04:45).** Ablate the top k heads by preservation margin for k = 2, 4, 8, 16 and all 29, zeroing each
+head's attention output at every position before the output gate, against layer-matched random sets
+of the same size (five seeds), on eight documents of 512 tokens with 64 sampled positions each.
+Measurements: recall@25 of the hosted-lens readout, reported only at readout layers with at least
+one ablated head writing at or below them, with the number of upstream ablated heads beside each
+layer; the next-token change rate; both at every k with the control beside each, and the specificity
+rule (a recall drop counts only if the change rate stays within twice the control's) applied at
+interpretation, never to the data. Hard control: readout layers with no ablated head at or below
+them cannot be affected, so their recall@25 must equal the reproducibility floor, measured first by
+running the unablated readout twice; exact equality if that pass is bit-identical, the measured floor
+otherwise, stated on the quantity it gates. If the curve in k is steep and the random control flat,
+the paper's small-set claim reproduces; if it is flat in k and tracks the control, the 29 are not a
+special set and the ablation measures damage.
+
+## Stage 1b result, 05:05: the layer-4 relays do not compose with the band by weight, and they carry lens content, not addresses
+
+**Composition (192 pairs, three layer-4 relays × 64 band heads; 38 s).** Q-, K- and V-composition
+scores sit at the rotation null: median ratios to the null 1.00, 0.98 and 0.95; the raw scores
+(0.019 to 0.021) are what a random map of the same spectrum gives; no pair exceeds the 99th
+percentile of the population of every layer-4 and layer-8 head paired with the band (0 of 192 on
+each of Q, K, V against about 1.9 by chance). The strongest single ratios are 1.06 (Q) and 1.01 (K,
+V). Per relay, the share of band heads above the rotation null's maximum is 0 to 12 percent on K
+and 0 to 6 percent on V; block 3 head 10 reaches 59 percent on Q, but at ratios of 1.05, which is
+the noise floor of a twenty-draw maximum and not composition. **Prediction 1 of stage 1b is
+refuted:** by weight-only composition scores, the layer-4 relays do not address the band relays or
+the retrieval heads above what a random map does. Limitation stated: the Frobenius composition
+score is a weight-only, direction-agnostic statistic and is known to be blunt; the causal test is
+to patch a layer-4 relay's output on real text and read the band relays' attention and the lens
+readout downstream, which stage 2's machinery can do and which is filed as the follow-up.
+
+**Separation (the orthogonalised control the Head asked for).** For the three layer-4 relays, label
+preservation is 0.100, 0.121 and 0.164 on the lens directions, 0.004, 0.007 and 0.017 on token
+identity (at the random level of 0.005, 0.008, 0.023), and 0.099, 0.112 and 0.155 on the lens
+directions with the identity component removed. The shared component is small at layer 4: mean
+absolute cosine between a lens direction and its token's identity direction 0.101. **Prediction 2
+of stage 1b is refuted the other way:** the layer-4 relays do not write addresses; they relay the
+part of the lens direction that is not the embedding, which is workspace content in the lens's
+sense, at a layer before the band. The thirteen layer-4 non-relays preserve the lens at a median of
+0.107 too, with identity at 0.063, so at layer 4 the relay status is a margin over the null draws
+and not a categorical difference. Two further numbers bear on the whole distinction: the shared
+component grows with depth, 0.41 at layer 20 and 0.69 at layer 28, so by the top of the band lens
+directions and token identity are largely the same directions and address-versus-content cannot be
+drawn there from these populations, as the Head anticipated; and the in-band relays' preservation
+survives the orthogonalisation (block 19 head 0: 0.664 on the lens, 0.663 with the identity
+component removed), so they too relay content and not identity.
+
+**Reading.** The out-of-band relays are lens-content relays at layer 4 whose coupling to the band,
+if any, is not visible in weight composition. The Director's hypothesis stands as a causal question
+for a patching run; it is not supported as a weight-space fact.

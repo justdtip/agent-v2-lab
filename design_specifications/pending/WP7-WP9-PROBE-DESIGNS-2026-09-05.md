@@ -42,6 +42,41 @@ beside it reports the instrument's prior as the model's content.
 the paper's lens-coordinate patch with the pseudoinverse on the selected vectors. WP7(a) and WP9
 both need it; it is built once, with the `k`-matched random control on the same path.
 
+## 0a. F10: the band layers are not equivalent instruments (added 2026-09-06)
+
+WP12's separation control measured the mean absolute cosine between the lens directions and the
+token-identity directions, per layer: **0.101 at layer 4, 0.41 at layer 20, 0.69 at layer 28.**
+The degeneracy that put layer 32 outside the J-lens family under R43a is not a cliff at 32. It is
+a ramp, and by the top of the band a lens reading is roughly two thirds an ordinary unembedding
+reading. This is the hosted-lens memo's two-lens convergence measured directly rather than
+inferred from their agreement.
+
+Consequences for the designs below, which are mine to carry and are not optional caveats:
+
+- **Every result is reported per R41e pair with that pair's cosine beside it.** Pooling across the
+  five pairs mixes instruments whose independence from the unembedding differs by a factor of
+  seven. This is the second independent reason to report per pair rather than pooled; the first
+  was layer 16's checkpoint instability under R43c. Two different arguments, same disposition.
+- **WP7(a).** The axis's J-space share at 23/24 and 27/28 is substantially its output-readable
+  share, so a large share at depth is weaker evidence than the same share at 12/13 or 16/17. The
+  `k`-sparse pursuit is run additionally against the **orthogonalised** dictionary, the lens
+  directions with their projection on the same token's identity direction removed, and the raw and
+  orthogonalised shares are reported together. A component that survives orthogonalisation at
+  depth is the finding; one that does not is a statement about the unembedding.
+- **WP7(c).** Reading an adapter direction through the lens at 27/28 is close to reading it through
+  the plain unembedding, so the lens adds least where the pursuit is easiest. The blinded-rater
+  comparison gains a third arm: adapter directions read through the orthogonalised lens. If the
+  lens and the unembedding are indistinguishable to the rater at 27/28 and distinguishable at
+  12/13, that is the instrument's own profile and belongs in the report.
+- **WP9.** Clamping the J-space component at depth is substantially clamping the output-readable
+  component, so a J-versus-remainder win at 27/28 is weaker than the same win at 16/17. The
+  `k`-matched random control is unaffected, being matched by construction, but the **orthogonalised
+  clamp** is added as a fourth arm at the two deepest pairs. Causal privilege that survives it is
+  privilege of workspace content; privilege that does not is privilege of the output direction,
+  which is a different and much less interesting claim.
+- **WP7(d)** is least affected, since the state probes are trained classifiers on residuals rather
+  than lens readouts, but the layer set is still reported per pair.
+
 ## WP7(a). Assistant axis against its role-play personas
 
 **Seams that exist.** `probes/assistant_axis.py`: `build_axis`, `project`,

@@ -1,0 +1,39 @@
+"""Separation control for the layer-4 relays with the shared component removed (the Head, 04:35): label
+preservation on lens directions, on token-identity directions, on lens directions orthogonalised against the
+same token's identity direction (the part of the lens direction that is not the embedding), and on random
+directions; for the three layer-4 relays and, for context, every layer-4 head and the five strongest band relays."""
+from __future__ import annotations
+import json, os, sys
+from pathlib import Path
+import numpy as np
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO WP12 separation")
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; LENS = Path(sys.argv[1]); NPOP = 2000
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None)
+lm = model.language_model; layers = lm.model.layers; H = view.hidden_size; V = view.vocab_size
+def dense(linear):
+    w = linear.weight
+    if hasattr(linear, "scales"): w = mx.dequantize(w, linear.scales, linear.biases, linear.group_size, linear.bits)
+    return w.astype(mx.float32)
+def unit(x): return x / (mx.linalg.norm(x, axis=1, keepdims=True) + 1e-12)
+def mrr(apply, P):
+    img = apply(P); C = unit(img) @ P.T; diag = mx.diagonal(C)[:, None]; rank = mx.sum(C > diag, axis=1) + 1
+    return float(mx.mean(1.0 / rank.astype(mx.float32)).item())
+sel = json.load(open(OUT / "selection_nulldist.json")); relays = [(r["block"], r["head"]) for r in sel["selected_attention"]]
+targets = [(b, h) for (b, h) in relays if b + 1 == 4] + [(3, h) for h in range(16) if (3, h) not in relays] + [(b, h) for (b, h) in relays if b + 1 in (16, 20, 24, 28)][:5]
+embed = dense(lm.model.embed_tokens); lens = np.load(LENS); rng = np.random.default_rng(0); tokens = mx.array(rng.choice(V, NPOP, replace=False))
+U = unit(embed[tokens])
+out = []
+for (b, h) in targets:
+    a = layers[b].self_attn; Wv = dense(a.v_proj); Wo = dense(a.o_proj); d = a.head_dim; grp = a.num_attention_heads // a.num_key_value_heads; kv = h // grp
+    Wv_h = Wv[kv * d:(kv + 1) * d, :]; Wo_h = Wo[:, h * d:(h + 1) * d]; apply = lambda P: (P @ Wv_h.T) @ Wo_h.T
+    Jl = mx.array(lens[f"J{b - 1}"].astype(np.float32)); J = unit(embed[tokens] @ Jl)
+    shared = mx.sum(J * U, axis=1, keepdims=True); J_orth = unit(J - shared * U)          # the lens direction minus its projection on the same token's identity direction
+    cos_shared = float(mx.mean(mx.abs(shared)).item())
+    out.append({"block": b, "head": h, "layer": b + 1, "relay": (b, h) in relays, "mrr_lens": mrr(apply, J), "mrr_token_identity": mrr(apply, U), "mrr_lens_orthogonal_to_identity": mrr(apply, J_orth), "mrr_random": mrr(apply, unit(mx.random.normal((NPOP, H)))), "mean_abs_cos_lens_identity": cos_shared})
+    print(json.dumps(out[-1]), flush=True)
+json.dump(out, open(OUT / "separation.json", "w"), indent=1); print("wrote", OUT / "separation.json")

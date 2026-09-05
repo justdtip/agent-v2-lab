@@ -1,0 +1,59 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 3026.85it/s]
+{"event": "loaded", "elapsed_s": 2.0, "layers": 32, "hidden": 2560, "vocab": 248320}
+{"event": "progress", "elapsed_s": 18.2, "block": 0, "kind": "recurrent", "heads_done": 32, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 26.3, "block": 1, "kind": "recurrent", "heads_done": 64, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 34.3, "block": 2, "kind": "recurrent", "heads_done": 96, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 38.8, "block": 3, "kind": "attention", "heads_done": 112, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 46.8, "block": 4, "kind": "recurrent", "heads_done": 144, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 54.8, "block": 5, "kind": "recurrent", "heads_done": 176, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 62.9, "block": 6, "kind": "recurrent", "heads_done": 208, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 67.5, "block": 7, "kind": "attention", "heads_done": 224, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 75.7, "block": 8, "kind": "recurrent", "heads_done": 256, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 84.1, "block": 9, "kind": "recurrent", "heads_done": 288, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 92.5, "block": 10, "kind": "recurrent", "heads_done": 320, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 97.2, "block": 11, "kind": "attention", "heads_done": 336, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 105.6, "block": 12, "kind": "recurrent", "heads_done": 368, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 113.8, "block": 13, "kind": "recurrent", "heads_done": 400, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 122.2, "block": 14, "kind": "recurrent", "heads_done": 432, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 126.7, "block": 15, "kind": "attention", "heads_done": 448, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 135.0, "block": 16, "kind": "recurrent", "heads_done": 480, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 143.1, "block": 17, "kind": "recurrent", "heads_done": 512, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 151.2, "block": 18, "kind": "recurrent", "heads_done": 544, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 155.7, "block": 19, "kind": "attention", "heads_done": 560, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 163.7, "block": 20, "kind": "recurrent", "heads_done": 592, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 171.8, "block": 21, "kind": "recurrent", "heads_done": 624, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 179.8, "block": 22, "kind": "recurrent", "heads_done": 656, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 184.2, "block": 23, "kind": "attention", "heads_done": 672, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 192.2, "block": 24, "kind": "recurrent", "heads_done": 704, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 200.1, "block": 25, "kind": "recurrent", "heads_done": 736, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 208.1, "block": 26, "kind": "recurrent", "heads_done": 768, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 212.4, "block": 27, "kind": "attention", "heads_done": 784, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 220.4, "block": 28, "kind": "recurrent", "heads_done": 816, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 228.4, "block": 29, "kind": "recurrent", "heads_done": 848, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 236.4, "block": 30, "kind": "recurrent", "heads_done": 880, "peak_gib": 7.22}
+{"event": "progress", "elapsed_s": 240.9, "block": 31, "kind": "attention", "heads_done": 896, "peak_gib": 7.22}
+{
+ "retrieval_heads_rank_among_128_attention": {
+  "b19_h2": 77,
+  "b23_h9": 17,
+  "b19_h12": 8,
+  "b27_h1": 114,
+  "b3_h15": 128,
+  "b19_h15": 36
+ },
+ "parameters": {
+  "NPOP": 2000,
+  "seed": 0,
+  "lens": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/deb40d2b-8582-408f-9668-d04785f882e8/scratchpad/jlens_hosted/Qwen3.5-4B_jacobian_lens_n1000.npz",
+  "checkpoint": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "selection_rule": "J label preservation above the maximum of 20 rotated-J draws and of 20 MLP-row draws, and at least double their medians; layer 32 excluded; gain reported beside; ordered by preservation margin",
+  "NROT": 20,
+  "elapsed_s": 240.9
+ }
+}
+attention {'heads': 128, 'broadcast_J': 29, 'in_band_heads': 64, 'in_band_broadcast_J': 24, 'J_gain_median': 0.9273336697621741, 'J_rot_gain_median': 1.0011994751748192, 'MLP_gain_median': 0.964982430773216, 'J_mrr_median': 0.17824022471904755, 'J_rot_mrr_median': 0.012158602243289351, 'MLP_mrr_median': 0.07454021833837032, 'random_mrr_median': 0.013679860159754753}
+  by layer: {4: (0.96, 0.112, 3), 8: (0.82, 0.631, 0), 12: (0.92, 0.652, 2), 16: (0.86, 0.35, 2), 20: (1.13, 0.445, 8), 24: (1.0, 0.219, 5), 28: (0.85, 0.098, 9), 32: (1.21, 0.017, 0)}
+  top 5: [(27, 14, 0.9, 0.088, 22.54), (19, 0, 1.42, 0.664, 15.64), (19, 5, 0.9, 0.196, 15.55), (11, 15, 0.85, 0.512, 12.72), (19, 13, 1.13, 0.289, 12.15)]
+recurrent {'heads': 768, 'broadcast_J': 23, 'in_band_heads': 128, 'in_band_broadcast_J': 8, 'J_gain_median': 0.9761218184025068, 'J_rot_gain_median': 1.0020936843753694, 'MLP_gain_median': 1.0227928189787268, 'J_mrr_median': 0.006131314439699054, 'J_rot_mrr_median': 0.004347511916421354, 'MLP_mrr_median': 0.009510696399956942, 'random_mrr_median': 0.004510918166488409}
+  by layer: {1: (1.13, 0.004, 0), 2: (0.99, 0.005, 2), 3: (0.94, 0.004, 0), 5: (0.85, 0.005, 0), 6: (0.82, 0.005, 0), 7: (0.7, 0.007, 1), 9: (0.79, 0.005, 0), 10: (0.75, 0.006, 0), 11: (0.8, 0.008, 1), 13: (0.78, 0.007, 0), 14: (0.81, 0.005, 2), 15: (0.86, 0.005, 0), 17: (0.89, 0.006, 2), 18: (0.92, 0.006, 2), 19: (0.97, 0.009, 2), 21: (1.02, 0.01, 4), 22: (1.01, 0.008, 2), 23: (0.99, 0.01, 1), 25: (1.03, 0.012, 2), 26: (1.01, 0.007, 0), 27: (1.0, 0.006, 1), 29: (1.0, 0.008, 0), 30: (1.01, 0.006, 1), 31: (1.04, 0.008, 0)}
+  top 5: [(20, 5, 1.13, 0.05, 2.97), (21, 8, 1.02, 0.018, 2.45), (18, 25, 1.36, 0.009, 1.76), (26, 28, 1.02, 0.016, 1.7), (17, 6, 1.26, 0.02, 1.64)]

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 HERE = Path(__file__).resolve().parent
 d = json.load(open(HERE / "out" / "broadcast_heads.json")); rows = d["rows"]; S = d["summary"]
-SEL = json.load(open(HERE / "out" / "selection_preservation_rule.json"))
+SEL = json.load(open(HERE / "out" / "selection_nulldist.json"))
 selset = {(r["block"], r["head"]) for r in SEL["selected_attention"]}
 for r in rows: r["selected"] = (r["channel"] == "attention" and (r["block"], r["head"]) in selset)
 att = [r for r in rows if r["channel"] == "attention" and r["layer_written"] != 32]; rec = [r for r in rows if r["channel"] == "recurrent"]
@@ -15,7 +15,7 @@ def layer_series(rs, key):
     for r in rs: out.setdefault(r["layer_written"], []).append(r[key])
     return [[L, float(np.median(v)), float(np.percentile(v, 90)), len(v)] for L, v in sorted(out.items())]
 series = {"att_mrr": layer_series(att, "J_mrr"), "att_mrr_rot": layer_series(att, "J_rot_mrr"), "rec_mrr": layer_series(rec, "J_mrr"), "rec_mrr_rot": layer_series(rec, "J_rot_mrr"),
-          "att_count": [[int(L), c, 16] for L, c in SEL["by_layer"].items()], "rec_count": [[int(L), sum(1 for r in rec if r["layer_written"] == int(L) and r["mrr_margin"] >= 1.0), 32] for L in S["recurrent"]["by_layer"]]}
+          "att_count": [[int(L), c, 16] for L, c in SEL["by_layer"].items()], "rec_count": [[int(L), sum(1 for r in rec if r["layer_written"] == int(L) and r.get("broadcasts_J")), 32] for L in S["recurrent"]["by_layer"]]}
 retr = {(19, 2): "b19 h2", (23, 9): "b23 h9", (19, 12): "b19 h12", (27, 1): "b27 h1", (3, 15): "b3 h15", (19, 15): "b19 h15"}
 top_att = sorted(att, key=lambda r: -r['mrr_margin'])[:12]
 def head_row(r):
@@ -51,18 +51,18 @@ th {{ font-weight:600; color:var(--muted); font-size:.8rem; letter-spacing:.06em
 <h1>Broadcast Heads</h1>
 <p class="lede">Which attention mediates entry to the workspace? Following the paper's section 4.3.2, every head's output map is scored on how strongly and how faithfully it relays the lens's own directions, against the same directions rotated and against MLP output rows. A head that relays the lens selectively scores high on both and low on the controls.</p>
 <div class="tiles">
-  <div class="tile att"><div class="n">{len(SEL['selected_attention'])} / 112</div><div class="l">attention heads whose label preservation on the lens is at least double the best control (layer 32 excluded: the lens is the identity there)</div></div>
+  <div class="tile att"><div class="n">{len(SEL['selected_attention'])} / 112</div><div class="l">attention heads whose label preservation on the lens is at least double the best control (beyond every one of twenty rotated and twenty MLP-row draws and double their medians; layer 32 excluded, the lens being the identity there)</div></div>
   <div class="tile att"><div class="n">{SEL['in_band']} / 64</div><div class="l">of those, in the band (layers 16 to 28)</div></div>
   <div class="tile att"><div class="n">{fmt(S['attention']['J_mrr_median'],3)} / {fmt(S['attention']['J_rot_mrr_median'],3)}</div><div class="l">attention: label preservation on the lens directions / on the same directions rotated</div></div>
   <div class="tile rec"><div class="n">{fmt(S['recurrent']['J_mrr_median'],4)} / {fmt(S['recurrent']['random_mrr_median'],4)}</div><div class="l">recurrent value paths: label preservation on the lens / on random directions</div></div>
 </div>
 <div class="charts">
-  <div class="chart"><h3>Where the relays are</h3><p class="sub">Heads whose label preservation on the lens directions is at least double the best control, by the layer the block writes, as a share of the heads there. Gain did not discriminate between populations here, so the set is selected on preservation and gain is reported beside it.</p><div id="count"></div>
+  <div class="chart"><h3>Where the relays are</h3><p class="sub">Heads whose label preservation on the lens directions exceeds every one of forty null draws and doubles their medians, by the layer the block writes, as a share of the heads there. Gain did not discriminate between populations here, so the set is selected on preservation and gain is reported beside it.</p><div id="count"></div>
     <div class="legend"><span><i class="sw" style="background:var(--att)"></i>attention (16 heads per layer)</span><span><i class="sw" style="background:var(--rec)"></i>recurrent value paths (32 per layer)</span></div></div>
   <div class="chart"><h3>How faithfully the lens directions survive each map</h3><p class="sub">Median label preservation (mean reciprocal rank) by layer: solid on the lens directions, dotted on the same directions rotated. Attention preserves them; the recurrent weight-only paths do not.</p><div id="mrr"></div>
     <div class="legend"><span><i class="sw" style="background:var(--att)"></i>attention</span><span><i class="sw" style="background:var(--rec)"></i>recurrent</span><span><i class="sw" style="background:var(--ctl)"></i>rotated control</span></div></div>
 </div>
-<div class="callout">Entry and retrieval share heads without being one operation, said of six heads and not as a rate. Of the six strongest retrieval heads from the retrieval run, block 19 head 12 and block 23 head 9 are selective lens relays; block 19 head 2 preserves every direction, a copy head, and is not selective; block 19 head 15, block 27 head 1 and block 3 head 15 are not relays. The strongest relay, block 19 head 0, was not a strong retrieval head. The relays concentrate at layers 20, 24 and 28. The recurrent value paths are not relays by magnitude: their median loses to its own control and the strongest of 768 sits below the median attention head.</div>
+<div class="callout">Entry and retrieval share heads without being one operation, said of six heads and not as a rate. Of the six strongest retrieval heads from the retrieval run, block 19 head 12 and block 23 head 9 are selective lens relays and block 19 head 15 enters at the margin; block 19 head 2 preserves every direction, a copy head, and is not selective; block 27 head 1 and block 3 head 15 are not relays. The strongest relay, block 19 head 0, was not a strong retrieval head. The relays sit at layers 20, 24 and 28, with the largest count at 28: the paper's finding that they concentrate in the first half of the workspace does not reproduce here, a prediction written before the run and refuted. The recurrent value paths are not relays by magnitude: their median loses to its own control and the strongest of 768 sits below the median attention head.</div>
 <h2>The strongest attention heads, ordered by preservation margin</h2>
 <div class="wrap"><table><tr><th>head</th><th>gain: lens / rotated / MLP rows</th><th>label preservation: lens / rotated / MLP rows</th><th>relays the lens</th></tr>{''.join(head_row(r) for r in top_att)}</table></div>
 <h2>Method</h2>

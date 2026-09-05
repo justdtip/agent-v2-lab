@@ -1,0 +1,91 @@
+"""WP12 stage 1b: do the out-of-band relays compose with the band heads? (the Director's hypothesis, 03:55)
+
+For every pair (A, B) of attention heads with A written at a layer below B's, the Q-, K- and
+V-composition scores of Elhage et al.: ||W_X^B W_OV^A||_F / (||W_X^B||_F ||W_OV^A||_F) for X in
+{Q, K, V}, where W_OV^A = W_O^A W_V^A (H x H) and W_X^B is B's projection restricted to its head
+(for K and V, the kv head B reads). Nulls: (a) the same score with W_OV^A under twenty random
+orthogonal rotations (same spectrum, scrambled directions), (b) the distribution over all (A, B)
+pairs at the same two layers. Separation control for the early relays: what their OV preserves on
+token-identity directions (2,000 embedding rows) against lens directions, by the stage-1 label
+preservation metric. Reads the relay sets from out/selection_nulldist.json (early = relays at
+layers 4 and 8; band = all heads at layers 16 to 28, with the relays and the retrieval heads flagged)."""
+from __future__ import annotations
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO WP12 stage 1b")
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; OUT.mkdir(exist_ok=True)
+NROT, NPOP, SEED = 20, 2000, 0
+LENS = Path(sys.argv[1])
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None)
+lm = model.language_model; layers = lm.model.layers; H = view.hidden_size; V = view.vocab_size
+def dense(linear):
+    w = linear.weight
+    if hasattr(linear, "scales"): w = mx.dequantize(w, linear.scales, linear.biases, linear.group_size, linear.bits)
+    return w.astype(mx.float32)
+sel = json.load(open(OUT / "selection_nulldist.json"))
+relays = {(r["block"], r["head"]) for r in sel["selected_attention"]}
+early = sorted((b, h) for (b, h) in relays if b + 1 in (4, 8))
+band_blocks = [b for b, l in enumerate(layers) if not l.is_linear and (b + 1) in (16, 20, 24, 28)]
+retrieval = {(19, 2), (23, 9), (19, 12), (27, 1), (3, 15), (19, 15)}
+print(json.dumps({"event": "sets", "early_relays": early, "band_blocks": band_blocks, "n_relays": len(relays)}), flush=True)
+rng = np.random.default_rng(SEED)
+ROTS = [mx.array(np.linalg.qr(rng.standard_normal((H, H)).astype(np.float32))[0]) for _ in range(NROT)]
+heads = {}
+for b, layer in enumerate(layers):
+    if layer.is_linear: continue
+    a = layer.self_attn; Wq = dense(a.q_proj); Wk = dense(a.k_proj); Wv = dense(a.v_proj); Wo = dense(a.o_proj)
+    n_q, n_kv, d = a.num_attention_heads, a.num_key_value_heads, a.head_dim; grp = n_q // n_kv
+    for h in range(n_q):
+        kv = h // grp
+        heads[(b, h)] = {"Wq": Wq[h * 2 * d: h * 2 * d + d, :] if Wq.shape[0] == n_q * 2 * d else Wq[h * d:(h + 1) * d, :],   # q_proj emits query and gate halves per head
+                         "Wk": Wk[kv * d:(kv + 1) * d, :], "Wv": Wv[kv * d:(kv + 1) * d, :], "Wo": Wo[:, h * d:(h + 1) * d], "layer": b + 1}
+def fro(x): return float(mx.sqrt(mx.sum(x * x)).item())
+def ov(A):
+    a = heads[A]; return a["Wo"] @ a["Wv"]                     # (H, H): v -> W_O W_V v
+def comp(WX, OVA):
+    return fro(WX @ OVA) / (fro(WX) * fro(OVA) + 1e-12)
+rows = []
+band_heads = [(b, h) for (b, h) in heads if b in band_blocks]
+for A in early:
+    OVA = ov(A); mx.eval(OVA)
+    rot_ovs = [Q @ OVA @ Q.T for Q in ROTS]                    # rotate the map's input and output directions together
+    for B in band_heads:
+        hb = heads[B]
+        rec = {"A": list(A), "A_layer": heads[A]["layer"], "B": list(B), "B_layer": hb["layer"], "B_is_relay": B in relays, "B_is_retrieval": B in retrieval}
+        for X in ("Wq", "Wk", "Wv"):
+            real = comp(hb[X], OVA); null = [comp(hb[X], R) for R in rot_ovs]; K = X[1].upper()
+            rec[f"{K}_comp"] = real; rec[f"{K}_null_med"] = float(np.median(null)); rec[f"{K}_null_max"] = float(np.max(null)); rec[f"{K}_ratio"] = real / (float(np.median(null)) + 1e-12)
+        rows.append(rec)
+    print(json.dumps({"event": "progress", "elapsed_s": round(time.time() - T0, 1), "A": list(A), "pairs": len(rows)}), flush=True)
+# pair-population null: composition of RANDOM early heads (all heads at layers 4 and 8, relay or not) with the same band heads
+early_all = [(b, h) for (b, h) in heads if heads[(b, h)]["layer"] in (4, 8)]
+pop = {X: [] for X in "QKV"}
+for A in early_all:
+    OVA = ov(A)
+    for B in band_heads:
+        for X, W in (("Q", "Wq"), ("K", "Wk"), ("V", "Wv")): pop[X].append(comp(heads[B][W], OVA))
+pop_pct = {X: {p: float(np.percentile(v, p)) for p in (50, 90, 95, 99)} for X, v in pop.items()}
+# separation control: the early relays' label preservation on token-identity directions vs lens directions
+embed = dense(lm.model.embed_tokens); tokens = mx.array(rng.choice(V, NPOP, replace=False)); lens = np.load(LENS)
+def unit(x): return x / (mx.linalg.norm(x, axis=1, keepdims=True) + 1e-12)
+def mrr(apply, P):
+    img = apply(P); C = unit(img) @ P.T; diag = mx.diagonal(C)[:, None]; rank = mx.sum(C > diag, axis=1) + 1
+    return float(mx.mean(1.0 / rank.astype(mx.float32)).item())
+sep = []
+for A in early:
+    b = A[0]; Jl = mx.array(lens[f"J{b - 1}"].astype(np.float32)); U = embed[tokens]
+    Jpop = unit(U @ Jl); Ipop = unit(U)
+    a = heads[A]; apply = lambda P, a=a: (P @ a["Wv"].T) @ a["Wo"].T
+    sep.append({"A": list(A), "layer": a["layer"], "mrr_lens": mrr(apply, Jpop), "mrr_token_identity": mrr(apply, Ipop), "mrr_random": mrr(apply, unit(mx.random.normal((NPOP, H))))})
+summary = {"early_relays": early, "band_heads": len(band_heads), "pair_population_percentiles": pop_pct, "separation_control": sep,
+           "top_pairs_by_K_ratio": sorted(rows, key=lambda r: -r["K_ratio"])[:15], "top_pairs_by_V_ratio": sorted(rows, key=lambda r: -r["V_ratio"])[:15], "top_pairs_by_Q_ratio": sorted(rows, key=lambda r: -r["Q_ratio"])[:15],
+           "pairs_above_p99_of_pair_population": {X: int(sum(r[f"{X}_comp"] > pop_pct[X][99] for r in rows)) for X in "QKV"}, "n_pairs": len(rows),
+           "retrieval_targets": {X: [r for r in sorted(rows, key=lambda r: -r[f"{X}_ratio"]) if r["B_is_retrieval"]][:6] for X in "QKV"}, "elapsed_s": round(time.time() - T0, 1)}
+json.dump({"rows": rows, "summary": summary}, open(OUT / "composition.json", "w")); json.dump(summary, open(OUT / "composition_summary.json", "w"), indent=1)
+print(json.dumps({k: v for k, v in summary.items() if k not in ("top_pairs_by_K_ratio", "top_pairs_by_V_ratio", "top_pairs_by_Q_ratio", "retrieval_targets")}, indent=1)[:2500])
