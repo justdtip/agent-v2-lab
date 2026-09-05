@@ -1,0 +1,224 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 3103.90it/s]
+{"event": "progress", "elapsed_s": 9.3, "kind": "kv_needles", "context": 0, "query": 0, "rows": 404}
+{"event": "progress", "elapsed_s": 17.2, "kind": "kv_needles", "context": 0, "query": 1, "rows": 808}
+{"event": "progress", "elapsed_s": 24.9, "kind": "kv_needles", "context": 0, "query": 2, "rows": 1212}
+{"event": "progress", "elapsed_s": 32.8, "kind": "kv_needles", "context": 0, "query": 3, "rows": 1616}
+{"event": "progress", "elapsed_s": 40.6, "kind": "kv_needles", "context": 0, "query": 4, "rows": 2020}
+{"event": "progress", "elapsed_s": 48.4, "kind": "kv_needles", "context": 0, "query": 5, "rows": 2424}
+{"event": "progress", "elapsed_s": 56.0, "kind": "kv_needles", "context": 1, "query": 0, "rows": 2824}
+{"event": "progress", "elapsed_s": 63.6, "kind": "kv_needles", "context": 1, "query": 1, "rows": 3224}
+{"event": "progress", "elapsed_s": 71.1, "kind": "kv_needles", "context": 1, "query": 2, "rows": 3624}
+{"event": "progress", "elapsed_s": 78.7, "kind": "kv_needles", "context": 1, "query": 3, "rows": 4024}
+{"event": "progress", "elapsed_s": 86.3, "kind": "kv_needles", "context": 1, "query": 4, "rows": 4424}
+{"event": "progress", "elapsed_s": 93.9, "kind": "kv_needles", "context": 1, "query": 5, "rows": 4824}
+{"event": "progress", "elapsed_s": 99.4, "kind": "reference_back", "context": 0, "query": 0, "rows": 5224}
+{"event": "progress", "elapsed_s": 104.9, "kind": "reference_back", "context": 0, "query": 1, "rows": 5624}
+{"event": "progress", "elapsed_s": 110.4, "kind": "reference_back", "context": 0, "query": 2, "rows": 6025}
+{"event": "progress", "elapsed_s": 115.8, "kind": "reference_back", "context": 0, "query": 3, "rows": 6424}
+{"event": "progress", "elapsed_s": 121.3, "kind": "reference_back", "context": 0, "query": 4, "rows": 6825}
+{"event": "progress", "elapsed_s": 126.8, "kind": "reference_back", "context": 0, "query": 5, "rows": 7225}
+{"event": "progress", "elapsed_s": 131.7, "kind": "reference_back", "context": 1, "query": 0, "rows": 7609}
+{"event": "progress", "elapsed_s": 136.6, "kind": "reference_back", "context": 1, "query": 1, "rows": 7993}
+{"event": "progress", "elapsed_s": 141.5, "kind": "reference_back", "context": 1, "query": 2, "rows": 8377}
+{"event": "progress", "elapsed_s": 146.4, "kind": "reference_back", "context": 1, "query": 3, "rows": 8761}
+{"event": "progress", "elapsed_s": 151.3, "kind": "reference_back", "context": 1, "query": 4, "rows": 9145}
+{"event": "progress", "elapsed_s": 156.1, "kind": "reference_back", "context": 1, "query": 5, "rows": 9529}
+{"event": "progress", "elapsed_s": 162.3, "kind": "code", "context": 0, "query": 0, "rows": 9944}
+{"event": "progress", "elapsed_s": 168.4, "kind": "code", "context": 0, "query": 1, "rows": 10359}
+{"event": "progress", "elapsed_s": 174.6, "kind": "code", "context": 0, "query": 2, "rows": 10774}
+{"event": "progress", "elapsed_s": 180.7, "kind": "code", "context": 0, "query": 3, "rows": 11189}
+{"event": "progress", "elapsed_s": 186.8, "kind": "code", "context": 0, "query": 4, "rows": 11604}
+{"event": "progress", "elapsed_s": 193.0, "kind": "code", "context": 0, "query": 5, "rows": 12019}
+{"event": "progress", "elapsed_s": 199.0, "kind": "code", "context": 1, "query": 0, "rows": 12433}
+{"event": "progress", "elapsed_s": 205.1, "kind": "code", "context": 1, "query": 1, "rows": 12848}
+{"event": "progress", "elapsed_s": 211.2, "kind": "code", "context": 1, "query": 2, "rows": 13262}
+{"event": "progress", "elapsed_s": 217.3, "kind": "code", "context": 1, "query": 3, "rows": 13678}
+{"event": "progress", "elapsed_s": 223.4, "kind": "code", "context": 1, "query": 4, "rows": 14094}
+{"event": "progress", "elapsed_s": 229.5, "kind": "code", "context": 1, "query": 5, "rows": 14510}
+{"event": "progress", "elapsed_s": 234.2, "kind": "icl_mapping", "context": 0, "query": 0, "rows": 14936}
+{"event": "progress", "elapsed_s": 239.0, "kind": "icl_mapping", "context": 0, "query": 1, "rows": 15362}
+{"event": "progress", "elapsed_s": 243.6, "kind": "icl_mapping", "context": 0, "query": 2, "rows": 15788}
+{"event": "progress", "elapsed_s": 248.3, "kind": "icl_mapping", "context": 0, "query": 3, "rows": 16215}
+{"event": "progress", "elapsed_s": 253.1, "kind": "icl_mapping", "context": 0, "query": 4, "rows": 16641}
+{"event": "progress", "elapsed_s": 257.8, "kind": "icl_mapping", "context": 0, "query": 5, "rows": 17067}
+{"event": "progress", "elapsed_s": 262.6, "kind": "icl_mapping", "context": 1, "query": 0, "rows": 17493}
+{"event": "progress", "elapsed_s": 267.4, "kind": "icl_mapping", "context": 1, "query": 1, "rows": 17919}
+{"event": "progress", "elapsed_s": 272.2, "kind": "icl_mapping", "context": 1, "query": 2, "rows": 18345}
+{"event": "progress", "elapsed_s": 277.0, "kind": "icl_mapping", "context": 1, "query": 3, "rows": 18771}
+{"event": "progress", "elapsed_s": 281.7, "kind": "icl_mapping", "context": 1, "query": 4, "rows": 19197}
+{"event": "progress", "elapsed_s": 286.5, "kind": "icl_mapping", "context": 1, "query": 5, "rows": 19623}
+{
+ "recurrent_all": {
+  "first_1pct": {
+   "real": {
+    "10": 0.003960516053105492,
+    "50": 0.029593402556015957,
+    "90": 0.09284451253790972
+   },
+   "null": {
+    "10": 0.0034807044091027545,
+    "50": 0.025535388795531782,
+    "90": 0.08074441097708941
+   }
+  },
+  "first_5pct": {
+   "real": {
+    "10": 0.017904773137548135,
+    "50": 0.10973953135236635,
+    "90": 0.25947818860108757
+   },
+   "null": {
+    "10": 0.015549503613998912,
+    "50": 0.09489204907579793,
+    "90": 0.22584937734379662
+   }
+  },
+  "first_10pct": {
+   "real": {
+    "10": 0.03687536174644499,
+    "50": 0.17461646200090153,
+    "90": 0.3700956577859346
+   },
+   "null": {
+    "10": 0.03219795353525279,
+    "50": 0.15379997944754656,
+    "90": 0.33907037977165433
+   }
+  },
+  "pos0": {
+   "real": {
+    "10": 0.0003692806802219767,
+    "50": 0.004759051561257217,
+    "90": 0.033665010194788854
+   },
+   "null": {
+    "10": 0.000542970338148645,
+    "50": 0.0050636733456771756,
+    "90": 0.02250511482492778
+   }
+  },
+  "n": 13479
+ },
+ "recurrent_tau_200_1000": {
+  "first_1pct": {
+   "real": {
+    "10": 0.0021697690981109822,
+    "50": 0.012860172184168014,
+    "90": 0.04298507223583835
+   },
+   "null": {
+    "10": 0.0018277157702139297,
+    "50": 0.011060178652394424,
+    "90": 0.03330121122770043
+   }
+  },
+  "first_5pct": {
+   "real": {
+    "10": 0.00968808351852398,
+    "50": 0.052078303738388586,
+    "90": 0.14770563472881174
+   },
+   "null": {
+    "10": 0.008600668072280488,
+    "50": 0.04537157509655436,
+    "90": 0.12004067714696454
+   }
+  },
+  "first_10pct": {
+   "real": {
+    "10": 0.020780817463552443,
+    "50": 0.09396007989586797,
+    "90": 0.2223873403101466
+   },
+   "null": {
+    "10": 0.018050648827236507,
+    "50": 0.08426291244358236,
+    "90": 0.1909673323484433
+   }
+  },
+  "pos0": {
+   "real": {
+    "10": 0.0001803633649035755,
+    "50": 0.0018923654289837808,
+    "90": 0.012617678021031052
+   },
+   "null": {
+    "10": 0.00028401848011897683,
+    "50": 0.0019123655228361711,
+    "90": 0.007672040324059968
+   }
+  },
+  "n": 7034
+ },
+ "recurrent_tau_over_1000": {
+  "first_1pct": {
+   "real": {
+    "10": 0.024307304812943797,
+    "50": 0.05614586101192064,
+    "90": 0.12154282885428873
+   },
+   "null": {
+    "10": 0.02245330551905682,
+    "50": 0.051017260831232716,
+    "90": 0.09933820652390558
+   }
+  },
+  "first_5pct": {
+   "real": {
+    "10": 0.08547407397440876,
+    "50": 0.166912538340389,
+    "90": 0.32285571346187647
+   },
+   "null": {
+    "10": 0.07424688774991176,
+    "50": 0.1523934208485896,
+    "90": 0.2859198930200803
+   }
+  },
+  "first_10pct": {
+   "real": {
+    "10": 0.1411364214752472,
+    "50": 0.2559192351638436,
+    "90": 0.4413153000148149
+   },
+   "null": {
+    "10": 0.12757056553667498,
+    "50": 0.2318529311977635,
+    "90": 0.3927644910441718
+   }
+  },
+  "pos0": {
+   "real": {
+    "10": 0.0015253963787906053,
+    "50": 0.012079013264176324,
+    "90": 0.052490289733513516
+   },
+   "null": {
+    "10": 0.0038560607683792523,
+    "50": 0.011135916879461624,
+    "90": 0.03269368825179448
+   }
+  },
+  "n": 6445
+ },
+ "attention_all": {
+  "first_1pct": {
+   "real": {
+    "10": 0.010855031106621029,
+    "50": 0.06374099850654602,
+    "90": 0.22194763869047165
+   },
+   "null": {
+    "10": 0.007080971504602651,
+    "50": 0.010891072389987839,
+    "90": 0.017587428279041032
+   }
+  },
+  "first_5pct": {
+   "real": {
+    "10": 0.030687066353857522,
+    "50": 0.20518432557582855,
+    "90": 0.5336088001728058
+   },
+   "null": {
+    "10": 0.039

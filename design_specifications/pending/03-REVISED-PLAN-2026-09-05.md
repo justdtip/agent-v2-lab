@@ -123,3 +123,45 @@ No implementing subagents. The Deputy commits; the Chief never commits or pushes
 ## F9 (2026-09-06, 01:30): where attention reads is an inverted U on layers 20 to 24, converging with the lens fan-out
 
 On retrieval-heavy text (RETRIEVAL-CHANNELS-2026-09-06, 72 items, both channels under one span statistic), attention's concentration on the answer's known span by layer is 1.8, 2.6, 2.6, 3.5 at layers 4 to 16, then 15.2 at 20, 19.5 at 24, 9.1 at 28 and 6.3 at 32 (medians, as multiples of the random-query null). The peak coincides with the hosted-lens fan-out region at layers 18 to 25 and sits on the attention members of R41e's pairs 19/20 and 23/24. Two instruments with no shared machinery land on the same place. The recurrent heads that could physically have retrieved at that range read the span at the uniform share on every kind (F8 confirmed where its author said it had not been tested); the mechanism is the read operation, softmax competition against a linear sum over a superposed store, not query mobility. Bears on WP5: the distance curve reads at exactly those pairs and should be most sensitive there.
+
+## WP12 (2026-09-06, 02:20; the Director's flag): which attention mediates entry to the J-space — the paper's broadcast heads on Qwen3.5-4B
+
+**The paper's claim, read verbatim (§4.3.2, "Broadcast Across Tokens").** For an attention head H and a
+population P of unit directions, two weight-based metrics on the head's OV circuit: *gain*, the mean
+of ‖W_OV v‖ over v ∈ P normalised by the head's gain on isotropic random directions; and *label
+preservation*, the mean reciprocal rank of cos(W_OV v_i, v_i) among {cos(W_OV v_i, v_j)}_j,
+contrasted against the same statistic on random directions so that a head that copies everything
+indiscriminately scores zero. Broadcast heads for P are the top 1 percent of workspace-layer heads
+by the worse of the two ranks. Populations: the J-lens vectors J; J under a fixed random orthogonal
+rotation (same spectrum and pairwise geometry); SAE decoder directions in three kurtosis strata; MLP
+output-weight rows. The heads selected for J separate cleanly from every control on both metrics and
+concentrate in the first half of the workspace layers, where the J-space's effective rank is lowest.
+Ablating them (zeroing their outputs at every position) drops recall@25 of the J-lens readout at
+mid-workspace layers to 0.67 against 0.86 for layer-matched random heads, changes the top-1 next
+token at 5 percent of positions against 2, cuts the injected-thought report rate from 0.54 to 0.09,
+and reproduces about a third of the experiential-language drop of full J-space ablation. The
+appendix (A.20) adds the aggregate composition of J-space directions with attention weight matrices,
+and A.24 shows individual heads whose Q, K, V and O projections have interpretable J-lens readouts.
+
+**On our model.** The population J at band layer L is the set of residual directions the hosted lens
+maps to unembedding directions, J_L^T u_w for a sample of tokens w, from the 31 fitted matrices we
+already hold. The candidates are the 128 attention heads (8 blocks × 16 query heads; GQA over 4 kv
+heads) and, because this model is a hybrid, the 768 recurrent value paths (out_proj ∘ in_proj_v per
+head), which the paper had no occasion to test: does the recurrent channel broadcast J-space content
+at all? Stage 1 is weight arithmetic with no forward pass: dequantise W_V and W_O, form each head's
+OV map, compute gain and label preservation against J, J-rotated and the MLP output rows, rank, and
+name the broadcast heads per channel with their layers. Stage 2 is the ablation under the lift:
+zero the named heads at every position on a pretraining-style corpus and the EXP-001 cases, and
+measure recall@25 of the hosted-lens readout at the band layers against layer-matched random heads,
+plus the top-1 change rate; the injected-thought analogue is EXP-002's injection arm. Two links to
+tonight's record are the predictions to write before running: F9 put attention's reading of far
+content in layers 20 to 24, and the strongest retrieval heads sit in blocks 19 and 23; if the
+broadcast heads are the same heads, entry to the workspace and retrieval are one operation, and if
+they are different heads at the same layers the two are separable. The recurrent-sink finding
+predicts that recurrent value paths in long-gate heads carry the opening of the context rather than
+J-space content.
+
+**Capacity.** Stage 1 needs no model run and can be computed while issue 81 and 87 are implemented;
+stage 2 is one model load. The Head reviews the design before stage 1 runs (R38(g)); the Director's
+instruction is to pursue two threads in parallel, implementing one while running the other, and
+this is the second thread beside training efficiency.

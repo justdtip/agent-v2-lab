@@ -1,0 +1,88 @@
+"""Recurrent-sink measurement, both channels (the Head, 02:05). For every retrieval item and every
+recurrent head with gate constant >= TAU_MIN, the fraction of total far-source |alpha| mass (gap >=
+GAP) in the first 1, 5 and 10 percent of the eligible range and at position 0 alone, against the
+uniform fraction and the random-query null; the same for every attention head from the recomputed
+probabilities. Summaries by channel, by gate-constant band, and by layer."""
+from __future__ import annotations
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO sink probe")
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out-sink"; OUT.mkdir(exist_ok=True)
+GAP, NDRAW, TAU_MIN = 257, int(os.environ.get("NDRAW", "20")), 200.0
+FRACS = (0.01, 0.05, 0.10)
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_5 as q35
+from mlx_lm.models import qwen3_next as q3n
+from mlx_lm.models import gated_delta as gd
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+rec_caps, att_caps = [], []
+_og = q35.gated_delta_update
+def hooked_gd(q, k, v, a, b, A_log, dt_bias, state=None, mask=None, use_kernel=True):
+    out, st = _og(q, k, v, a, b, A_log, dt_bias, state, mask, use_kernel); mx.eval(out)
+    rec_caps.append({"q": q, "k": k, "a": a, "b": b, "A_log": A_log, "dt_bias": dt_bias}); return out, st
+q35.gated_delta_update = hooked_gd
+_os = q3n.scaled_dot_product_attention
+def hooked_sdpa(queries, keys, values, cache, scale, mask, *a, **kw):
+    out = _os(queries, keys, values, cache, scale, mask, *a, **kw); att_caps.append({"q_last": queries[0, :, -1, :], "keys": keys[0], "scale": scale}); return out
+q3n.scaled_dot_product_attention = hooked_sdpa
+def alpha_all_heads(q, k, g, beta, t, Hk):
+    T, Hv = g.shape; rep = Hv // Hk; kk = np.repeat(k, rep, axis=1); w = np.repeat(q, rep, axis=1)[t].copy(); out = np.zeros((t + 1, Hv))
+    for r in range(t, -1, -1):
+        kr = kk[r]; d = np.einsum("hd,hd->h", kr, w); out[r] = beta[r] * d; w = g[r][:, None] * (w - beta[r][:, None] * kr * d[:, None])
+    return out
+def alpha_batch(Q, kk, g, beta, t):
+    W = Q.copy(); out = np.zeros((t + 1, Q.shape[0]))
+    for r in range(t, -1, -1):
+        kr = kk[r]; d = W @ kr; out[r] = beta[r] * d; W = g[r] * (W - beta[r] * d[:, None] * kr[None, :])
+    return out
+def softmax_rows(s): m = s.max(axis=-1, keepdims=True); e = np.exp(s - m); return e / e.sum(axis=-1, keepdims=True)
+def early(weights, n_elig):
+    """fractions of far mass in the first 1/5/10 percent of the eligible range, and at position 0; weights (n,) or (n, D)."""
+    far = weights[:n_elig]; tot = far.sum(axis=0) + 1e-30
+    out = {f"first_{int(f*100)}pct": (far[: max(1, int(n_elig * f))].sum(axis=0) / tot) for f in FRACS}
+    out["pos0"] = far[0] / tot
+    return out
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None); model.eval()
+corpus = json.load(open(HERE / "corpus.json")); rng = np.random.default_rng(0); rows = []
+for ctx in corpus:
+    for qi, qry in enumerate(ctx["queries"]):
+        if qry.get("control"): continue
+        ids = encode(tokenizer, ctx["text"] + qry["query"]); t = len(ids) - 1; n_elig = t - GAP + 1
+        rec_caps.clear(); att_caps.clear(); out = model(mx.array(ids)[None]); mx.eval(out)
+        for b, cap in enumerate(rec_caps):
+            q = np.array(cap["q"].astype(mx.float32))[0]; k = np.array(cap["k"].astype(mx.float32))[0]
+            beta = np.array(mx.sigmoid(cap["b"]).astype(mx.float32))[0]; g = np.array(gd.compute_g(cap["A_log"], cap["a"], cap["dt_bias"]).astype(mx.float32))[0]
+            Hk = q.shape[1]; Hv = g.shape[1]; rep = Hv // Hk; tau = 1.0 / np.maximum(-np.log(np.clip(g, 1e-30, 1.0)).mean(axis=0), 1e-12)
+            A = np.abs(alpha_all_heads(q, k, g, beta, t, Hk))
+            for h in range(Hv):
+                if tau[h] < TAU_MIN: continue
+                e = early(A[:, h], n_elig)
+                kk = k[:, h // rep]; qq = q[t, h // rep]; Qr = rng.standard_normal((NDRAW, kk.shape[1])); Qr *= np.linalg.norm(qq) / np.linalg.norm(Qr, axis=1, keepdims=True)
+                en = early(np.abs(alpha_batch(Qr, kk, g[:, h], beta[:, h], t)), n_elig)
+                rows.append({"channel": "recurrent", "kind": ctx["kind"], "context": ctx["index"], "query": qi, "block": b, "head": h, "tau": float(tau[h]), "n_elig": int(n_elig),
+                             **{kk_: float(v) for kk_, v in e.items()}, **{"null_" + kk_: float(np.mean(v)) for kk_, v in en.items()}})
+        for ab, cap in enumerate(att_caps):
+            qL = np.array(cap["q_last"].astype(mx.float32)); Kf = np.array(cap["keys"].astype(mx.float32)); scale = float(cap["scale"]); Hq, D = qL.shape; grp = Hq // Kf.shape[0]
+            for h in range(Hq):
+                kk = Kf[h // grp]; p = softmax_rows((kk @ qL[h]) * scale); e = early(p, n_elig)
+                Qr = rng.standard_normal((NDRAW, D)); Qr *= np.linalg.norm(qL[h]) / np.linalg.norm(Qr, axis=1, keepdims=True); en = early(softmax_rows((Qr @ kk.T) * scale).T, n_elig)
+                rows.append({"channel": "attention", "kind": ctx["kind"], "context": ctx["index"], "query": qi, "block": ab, "head": h, "tau": None, "n_elig": int(n_elig),
+                             **{kk_: float(v) for kk_, v in e.items()}, **{"null_" + kk_: float(np.mean(v)) for kk_, v in en.items()}})
+        print(json.dumps({"event": "progress", "elapsed_s": round(time.time() - T0, 1), "kind": ctx["kind"], "context": ctx["index"], "query": qi, "rows": len(rows)}), flush=True)
+def q(v, ps=(10, 50, 90)): return {p: float(np.percentile(v, p)) for p in ps} if len(v) else {}
+def summ(rs):
+    return {m: {"real": q([r[m] for r in rs]), "null": q([r["null_" + m] for r in rs])} for m in ("first_1pct", "first_5pct", "first_10pct", "pos0")} | {"n": len(rs)}
+rec = [r for r in rows if r["channel"] == "recurrent"]; att = [r for r in rows if r["channel"] == "attention"]
+summary = {"recurrent_all": summ(rec), "recurrent_tau_200_1000": summ([r for r in rec if r["tau"] < 1000]), "recurrent_tau_over_1000": summ([r for r in rec if r["tau"] >= 1000]),
+           "attention_all": summ(att),
+           "recurrent_by_block": {b: {"first_5pct_median": float(np.median([r["first_5pct"] for r in rec if r["block"] == b])), "null": float(np.median([r["null_first_5pct"] for r in rec if r["block"] == b])), "n": len([r for r in rec if r["block"] == b])} for b in sorted({r["block"] for r in rec})},
+           "attention_by_layer": {4 * ab + 4: {"first_5pct_median": float(np.median([r["first_5pct"] for r in att if r["block"] == ab])), "null": float(np.median([r["null_first_5pct"] for r in att if r["block"] == ab])), "pos0_median": float(np.median([r["pos0"] for r in att if r["block"] == ab]))} for ab in range(8)},
+           "candidates": {f"b{b}_h{h}": {"first_5pct_median": float(np.median([r["first_5pct"] for r in rec if r["block"] == b and r["head"] == h])), "null": float(np.median([r["null_first_5pct"] for r in rec if r["block"] == b and r["head"] == h]))} for (b, h) in [(1, 14), (1, 15), (6, 0), (6, 1), (15, 6), (15, 7)]},
+           "parameters": {"GAP": GAP, "NDRAW": NDRAW, "TAU_MIN": TAU_MIN, "fractions": FRACS}, "elapsed_s": round(time.time() - T0, 1)}
+json.dump({"rows": rows, "summary": summary}, open(OUT / "sink.json", "w")); json.dump(summary, open(OUT / "summary.json", "w"), indent=1)
+print(json.dumps(summary, indent=1)[:3500], flush=True)

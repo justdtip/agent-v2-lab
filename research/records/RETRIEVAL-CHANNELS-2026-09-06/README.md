@@ -210,3 +210,57 @@ falls below a random head's best. The Head's reading was right in kind, position
 and the position is the beginning of the context; the one-in-eight-thousand figure is explained by
 the low variance rather than by independent selection. The three candidates close as
 start-of-context readers, and the ledger run's "stable far sources" were those first tokens.
+
+**The mechanism in full, and its name (the Head, 02:05; adopted).** The delta rule writes the
+correction term, the new value minus what the store already holds at that address. At the opening
+of a context the store is empty, so that term is the whole value and the earliest tokens are
+written at full strength into an unopposed state; everything after them has to overcome what is
+already there, and in a head whose gate stays near one nothing removes them. The sink is therefore
+not an accident of those three heads but what the write rule does to the first tokens of any
+long-gate head, and it predicts the effect strongest in exactly the heads selected for long gates.
+This is the recurrent counterpart of the attention sink, which is well documented for attention and
+which neither of us has seen reported for a DeltaNet-style state; it is named here as the
+**recurrent sink**. The Head's earlier one-in-ten-thousand was computed against a reference class
+that does not apply to a start-pinned read, and is withdrawn; the independence caveat was the wrong
+caveat. Two numbers decide how far the finding reaches and are measured next: the fraction of
+total far mass in the first five percent of the range per head (if small, F8's running-summary
+description survives with an early-position bias; if large, a read dominated by the opening is not
+a running summary of everything), and whether attention's far mass sinks on the same tokens (if
+both channels sink there it is a property of the model; if only the recurrent channel does, it is
+specific to the state mechanism).
+
+**The two numbers, 02:25 (`sink_probe.as-run.py.txt`, `out-sink/`, `run-sink.log`; 48 items, both
+channels, 20 random queries per head).** Share of total far-source mass (gap >= 257) in the opening of
+the eligible range; the uniform share of the first 5 percent is 0.05.
+
+| population | first 1 percent, real / null | first 5 percent, real / null | first 10 percent, real / null | position 0 alone |
+| --- | --- | --- | --- | --- |
+| recurrent, all measured heads (13,479) | 0.030 / 0.026 | 0.110 / 0.095 | 0.175 / 0.154 | 0.005 / 0.005 |
+| recurrent, gate constant 200 to 1,000 (7,034) | 0.013 / 0.011 | 0.052 / 0.045 | 0.094 / 0.084 | 0.002 / 0.002 |
+| recurrent, gate constant over 1,000 (6,445) | 0.056 / 0.051 | 0.167 / 0.152 | 0.256 / 0.232 | 0.012 / 0.011 |
+| attention, all heads (6,144) | 0.064 / 0.011 | 0.205 / 0.052 | 0.377 / 0.103 | 0.024 / 0.001 |
+
+Medians; the null is the random-query value on the same head. Recurrent by block: 0.03 to 0.18 real
+against 0.03 to 0.16 null, every block within 0.03 of its null. Attention by layer, first 5 percent
+real / null: layer 4: 0.34 / 0.05; 8: 0.29 / 0.05; 12: 0.16 / 0.05; 16: 0.14 / 0.05; 20: 0.15 / 0.06;
+24: 0.12 / 0.05; 28: 0.30 / 0.05; 32: 0.22 / 0.05. The six candidate heads: 0.16, 0.16, 0.12, 0.13,
+0.17, 0.18 against nulls 0.14, 0.14, 0.10, 0.10, 0.18, 0.19.
+
+**Reading, and F8's wording.** (1) The recurrent sink is real, modest, and the store's: in the
+longest-gate heads about a sixth of the far read mass sits in the opening five percent of the
+context, three times the uniform share, and the random-query null has the same sixth, so the bias is
+in what the store holds and not in where the query points. It is strongest in exactly the heads the
+delta-rule mechanism predicts, the longest gates (0.167 against 0.052 for gates under 1,000), and it
+is never dominance: five sixths of a long-gate head's far mass lies outside the opening. F8's
+running-summary description therefore survives with an early-position bias noted: the recurrent
+read is a write-strength-weighted running summary of the context in which the opening is
+over-represented by the delta rule's unopposed first writes, most in the heads that forget least.
+(2) Attention sinks on the opening too, and differently: four times the uniform share at the median
+(0.205), more than half of far mass at the 90th percentile, and far above its own random-query null
+(0.052), so attention's sink is query-driven, the known attention sink, where the recurrent one is
+store-driven. It is largest at layers 4, 8 and 28 (0.29 to 0.34) and smallest in the band, layers 20
+and 24 (0.15, 0.12), which are where attention reads the answer span. So both channels sink on the
+same tokens and the finding is a property of the model, with two mechanisms: a query-directed sink
+in attention and a write-rule sink in the recurrent state. (3) The three candidates sit at their
+nulls and at the long-gate typical value; nothing distinguishes them from the population, which is
+the close.
