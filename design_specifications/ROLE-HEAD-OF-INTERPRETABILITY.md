@@ -42,19 +42,36 @@ chain implements; the Director lifts executions.
 
 ## 4. What has been established (do not re-derive; cite)
 
-- **J-space (3B, adapters A/B):** World A. The hidden filename is not held internally; the
-  note creates the state (`research/jspace_probe.md`; positive control at layer 24, p = 2e-6).
+- **J-space, 3B and 4B, EXP-001 (2026-09-05):** World A on both. The hidden filename is not held
+  internally on either base; the note creates the state. 4B decisive row, paired against the
+  mismatched null: 10 against 4, p = 0.180; P(true suffix) median 0.102 against a uniform 0.1 and
+  0 of 42 cases above 0.5. Every readout reaching paired significance decomposes onto the
+  *visible* candidate, P(true) p = 0.644 to 0.878 while P(already-read) p = 0.0001 to 0.0029.
+  Control passes at p = 0.0001. (`outputs/probes/jspace-qwen35-4b-base-2026-09-05-rerun/`,
+  `outputs/probes/jspace-qwen25-coder-3b-base-2026-09-05-rerun/`, readings in
+  `under_review/EXP-001-RUN{1,2}-RESULT-READ-2026-09-05.md`.) The 2026-09-02 table in
+  `research/jspace_probe.md` is **superseded, not contradicted**: it was drawn under the
+  self-only readout at corpus 8 with forward-mode derivatives, and its layer-24 cell reproduces
+  to within one case.
 - **P2 (3B base, notes intact, hardened run + reanalysis + bfloat16 refit):** pending count,
   phase, bucket count decodable beyond position and surface baselines at layers 6–24; the
   precision caveat bounded as immaterial (supported set unchanged under rounding).
+  (`outputs/probes/state-corrected-hardened-20260903T172549/`, bfloat16 refit under
+  `refit-bf16/`; commit `eca116b`, issue #44.)
 - **P5 (A/B/C):** effective rank 12–13 of 16; B–C subspace agreement 0.40 vs 0.10 random.
-  Weakly informative. Block ablation not yet run.
+  Weakly informative. Block ablation not yet run. (`outputs/probes/delta/`.)
 - **P6 (C vs B, five ledger cases, strict scoring):** patching B's note-region residuals into
   C at layers 6–18 restores the dropped value 4/5; all three controls zero; the content swap
   writes the swapped number. The failure is the early-layer representation of the note's
   list; downstream computation intact. (`under_review/P6-RESULT-REVIEW-round2-2026-09-05.md`)
 - **P1 (3B coder base):** closed; no usable persona space (best role 3/8, 21/24 silent).
-- **Verdict:** regimen-bound, from both the read side and the write side.
+  (`outputs/probes/axis-corrected/CLOSED.md` and `closed.json`; commit `3867cc6`, issue #42.)
+- **Verdict:** regimen-bound, from both the read side and the write side. **Unsourced by
+  construction** — this is the programme's reading of the five entries above, not a measurement,
+  and R38 requires that to be said rather than left to look like one.
+
+*Every figure in this section names the artifact, commit or reading it came from (R38, amended
+2026-09-05). A figure that acquires no source is an estimate and says so.*
 
 ## 5. Rules that bind every experiment you define
 

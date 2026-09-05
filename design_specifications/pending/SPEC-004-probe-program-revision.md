@@ -131,7 +131,18 @@ domain).**
 2. **Skip, never abandon.** A case whose note still cannot be located is skipped with its reason
    recorded per case, and the section scores the rest, reporting scored and skipped counts. The
    section refuses only if fewer than the minimum remain.
-3. **An unscored section is not a clean run.** A run whose secondary section is unscored does not
+3. **Two numbers, five and fifteen (Chief, 2026-09-05, correcting #26).** Score **every
+   placeable case of the fifteen**; **refuse only below five** scored cases, the primary's own
+   count; report scored and skipped counts **out of fifteen**, with the reason per skip, and the
+   interval over the scored count. **Fifteen** is the population R30's HEAD-alone basis selects
+   and is what this run selected.
+
+   *There is no "ten".* The figure entered #26 by transcription from a size estimate in the run
+   plan and was then read as a designed count. It predates R30 and never described the
+   population. #26 is corrected. This is the third figure today that was right when written and
+   outlived its ruling, and all three survived in prose rather than in code, where nothing
+   recomputes them.
+4. **An unscored section is not a clean run.** A run whose secondary section is unscored does not
    end `status=ok`: the `end` event and the health block carry the unscored section, and the
    markdown says so at the top.
 

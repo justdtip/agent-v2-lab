@@ -1342,3 +1342,16 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   `create_attention_mask` with different signatures, so a reader reasoning from `base.py` is
   reading the wrong one; and the mask to match is `mlx.core.bool` of shape `(N, offset + N)`,
   measured. The work order is now at nine traps.
+
+- 2026-09-05 11:35 (Chief): R38 audit closed (ba6435b; 15 readers, 4 wrong). P6 secondary ran 1:21 and scored nothing: aggregate_report notes repeat values (202/720 split-wide; 2 of the 15 selected, first in order) and the locator refuses duplicates, one case aborting the section. Primary reproduction byte-identical. Ruled in SPEC-004 §5a (locate by field occurrence; skip per case, minimum five; unscored section never status=ok); scorer fix dispatched ahead of EXP-002 S1; rerun needs a fresh lift. EXP-002 spec and work order ratified (eleven traps).
+- **R38's third amendment: a quoted figure names its source.** Nothing recomputes a sentence.
+  Three figures in one morning were right when written and outlived their ruling, all in prose and
+  none in code. A fourth followed within the hour, and it was the Deputy's: "thirteen would score"
+  was measured on the **last note of each task**, when the scorer reads the last note *before that
+  task's decision step* (`patch.py:1241`, over the history truncated at the decision). The figure
+  reached the Chief, the Head and an issue before its author read the ratified spec whose own
+  measurement contradicts it: 41 of 195 notes ambiguous, all fifteen tasks carrying at least one.
+  Compatible only if ambiguity is not monotonic in note position, which makes the final-note
+  assumption wrong and the figure a bound in neither direction. Corrected on #76 against myself;
+  the operative count is now an explicit deliverable of the scorer fix, measured at each task's own
+  decision step, because it is the number that says whether a rerun clears the floor of five.

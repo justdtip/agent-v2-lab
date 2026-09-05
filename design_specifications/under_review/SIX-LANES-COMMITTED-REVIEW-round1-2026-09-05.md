@@ -534,3 +534,5 @@ small items to land in the same commit, and the commit held for the Metal run.**
   carried by the records commit), not only a commit message.
 - Totals on the Deputy's count: fifteen readers, four wrong; two fixtures already built from
   the real writer still hid a defect, found only by moving the key.
+
+**Landed:** slice four as `ba6435b` (nine files, declared scope; `SUPPORTED_VERSIONS = (1,)` check in `ExpansionSpec`; full suite on Metal 1362 passed). #70 and #75 closed. Audit summary ratified; R38 amended twice (soft defaults; confirm-or-refute binds the officers).

@@ -755,6 +755,14 @@ forget. Each has an integration check in §6.
   subclass; a default that changes a return type), two the Deputy's, one the Head's, one the
   Chief's ("a cached run never reaches the sentinel": `KVCache.make_mask` returns `'causal'` by
   default). Each was caught by someone re-measuring rather than accepting.
+- **R38 amended (2026-09-05, proposed by the Head of Interpretability): a quoted figure names
+  its source.** Nothing recomputes a sentence. Three figures in one morning were right when
+  written and outlived their ruling, all in prose: a "ten cases" size estimate transcribed into a
+  pre-registration as a designed count; a summary describing a corrected rerun beside the
+  attempt it did not describe; a readiness assertion against a tree that had moved. A number
+  quoted in a checklist, a role document, a pre-registration or a reading names the artifact,
+  ruling or computation it came from, so the next reader can recompute it instead of trusting
+  it; a figure with no named source is an estimate and is labelled as one.
 
 ## 8. Implementer amendments (append-only, dated)
 
