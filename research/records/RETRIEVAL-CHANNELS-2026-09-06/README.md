@@ -140,3 +140,33 @@ on the instrument: the attention reconstruction gate passed at 0.0486 against 0.
 limit, discriminating by a factor of 25 against the wrong-pairing mutant; a longer context can fail
 it without announcing that it is about to, so the next run re-measures the gate at the lengths it
 uses, before any statistic, and reports n of N.
+
+## Three additions on the Head's second review, 01:30 (adopted)
+
+**The candidates are below chance's best, not merely unremarkable.** Each of the three was measured
+96 times, and the best of 96 random draws from the measured recurrent distribution has a median at
+its 99.28th percentile, which is 2.92 (2.92 by resampling; the 5th percentile of that maximum is 2.16).
+Their best single records, 1.77, 1.83 and 2.07, are all below it, and 97 percent of random heads
+would exceed 2.07 somewhere in 96 draws by chance. The strongest thing each candidate managed across
+the whole retrieval corpus is weaker than a random head's best would have been; the ranks of 952nd,
+789th and 478th are best-of-96 selections and not evidence of anything. The item closes without
+residue.
+
+**The layer profile is a finding in its own right (F9).** Attention's concentration on the answer
+span rises gently across layers 4 to 16 (medians 1.8, 2.6, 2.6, 3.5), jumps roughly fourfold to 15.2
+at layer 20, peaks at 19.5 at layer 24, and falls to 9.1 and 6.3 at 28 and 32: an inverted U centred
+on layers 20 to 24. That coincides with the fan-out region of the lens geometry at layers 18 to 25
+from the hosted-lens run, and its two peak layers are the attention members of two of R41e's pairs
+(19/20 and 23/24). Two instruments with no shared machinery, a persistence-and-dimensionality band
+read through the lens and a span-concentration statistic on attention probabilities, land on the same
+place. It bears on WP5 directly: the distance curve reads at exactly those pairs and should be most
+sensitive there.
+
+**The null, scoped precisely.** 256 to 299 of 768 recurrent heads were measured per context, and the
+excluded ones were excluded because their gate constants are too short to carry anything across
+three hundred tokens. The claim is therefore not that no recurrent head retrieved; it is that among
+the heads that could physically have retrieved at that range, none did, which forecloses the
+objection that the interesting heads were filtered out.
+
+The sentence marking "the query does not move" as not to be repeated stays, at the Head's request,
+since the wrong version was put in front of the Director and would otherwise return.
