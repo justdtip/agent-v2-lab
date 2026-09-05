@@ -148,3 +148,37 @@ here by the Chief under the standing order; test and test3 remain byte-identical
 gains a per-family and per-variant breakdown of loop and exhaustion counts, pre-registered as the
 measurement that could refute the addendum's mechanism (that the current note form narrates rather
 than tracks); without it the next run changes the data and nobody can attribute the result.
+
+**Projection checked against the base evaluation, 11:35.** The base-model evaluation of 180 test
+tasks at max_steps 24 and max_tokens 200 has run 67 minutes and reached about task 140, so a task
+costs about 27 seconds on the 4-bit 4B and the 180-task split about 80 minutes. The memo's "two
+hours of evaluation per arm" was low: per arm, test and test3 (240 tasks) are about 1.8 hours and
+the four selection screens (4 × 56 tasks at the resized screen) about 1.7 hours, so about 3.5 hours
+of evaluation beside 4.5 hours of training, eight hours for arm A. The night holds arm A and its
+comparison; arm B (top 16) goes to the day, and the selection screens can be cut to two checkpoints
+(steps 200 and 400) if the morning is needed for the table, a change the Chief makes at launch and
+records in the heartbeat. The training half remains projected, not measured, until the first ten
+steps report tokens per second.
+
+**The training projection's basis, 11:45 (the Deputy's question).** The 4.5 hours was computed on
+actual row lengths, not on the cap: the v2d Qwen rendering has 2,826 training rows averaging 1,082
+tokens (median 1,090, p90 1,785, maximum 2,874; nine rows over 2,688 and none over 3,584), so a
+step of four rows is about 4,300 tokens, 34 seconds at the 126 tokens per second measured on
+2,688-token rows and 42 seconds at the 102 measured on 4,096-token rows, which brackets 400 steps
+between 3.8 and 4.7 hours. Raising the cap to 3,584 keeps nine rows whole that were truncated before
+and changes throughput by nothing measurable; the new difficulty-2 training rows will lift the mean
+toward the valid split's 1,219, so the projection is 4 to 5 hours and the heartbeat announcement
+carries this basis (mean row tokens, tokens per step, the throughput figure used and the row length
+it was measured at) so the number can be checked against the first ten steps' tokens per second.
+Noted for the next run rather than changed tonight: 400 steps at batch 4 is 0.57 of an epoch of the
+v2d rows and less of the enlarged data; whether more steps help is a comparison the table can ask
+for, not a change to make blind.
+
+**11:50 (the Deputy).** The step is four sequential single-row passes (batch 1, accumulation 4),
+each at its own length's throughput, and the probe's row nearest the real length, 1,024 tokens,
+ran at 147 tokens per second, which would put 400 steps at 3.3 hours, below the bracketed range;
+the bracket from the two measured lengths stays as the announced projection because it rests on
+direct measurements, and the first ten steps settle it. Both arms train the same number of steps
+on the same data and so see the same fraction of it, which is what makes the comparison between
+them mean what it says; a run that sees just over half its data once is a different object from
+one trained to convergence, and the table is read with that in view.
