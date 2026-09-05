@@ -1744,7 +1744,10 @@ def test_patch_probe_refuses_a_source_group_shorter_than_the_target(monkeypatch)
     )
     resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
 
-    with pytest.raises(ValueError, match="treatment.*cardinality"):
+    # R30a(2) moves where the refusal lands: ``align_groups`` still refuses the short source
+    # (asserted directly in the R25 tests), but the case carrying it is now skipped rather
+    # than raised through, and the section refuses on what is left — here, nothing.
+    with pytest.raises(ValueError, match=r"scored 0 of 2 selected case\(s\)"):
         patch.run_patch_probe(
             object(),
             Tokenizer(),
@@ -2707,9 +2710,19 @@ def test_note_values_match_on_word_boundaries_not_substrings() -> None:
     assert fixture.tokenizer.decode(
         [fixture.target_ids[position] for position in fixture.target_values["32"]]
     ) == "32"
-    # A genuine duplicate is still refused.
-    with pytest.raises(ValueError, match="note_value token span is missing or ambiguous"):
-        _aligned(["41", "41"], ["41", "41", "78"])
+    # R30a(1) overturns this test's last clause: a genuine duplicate under one label used to
+    # be refused as ambiguous, and is now the field's first and second value. The pairing
+    # that ``align_groups`` does by string identity still needs one span per string, so the
+    # canonical span is the first occurrence and the second contributes its tokens to the
+    # group alone.
+    duplicate = _aligned(["41", "41"], ["41", "41", "78"])
+    assert duplicate.alignment["shared_value_tokens"].record()["shared_values"] == ["41"]
+    located = duplicate.target_groups["note_value_tokens"]
+    assert duplicate.tokenizer.decode(
+        [duplicate.target_ids[position] for position in located]
+    ) == "4141"
+    canonical = duplicate.target_values["41"]
+    assert canonical == located[: len(canonical)]
 
 
 def test_alignment_refuses_a_source_group_shorter_than_the_target() -> None:
@@ -4597,3 +4610,497 @@ def test_written_patch_artifact_carries_the_recorded_version_in_both_sections(
     # HEAD is what the flip scoring ran under, recorded in both sections by run_patch_probe.
     assert written["scoring_generator_version"] == patch.GENERATOR_VERSION
     assert written["secondary"]["scoring_generator_version"] == patch.GENERATOR_VERSION
+
+
+# --- R30a (SPEC-004 §5a): locating note values in a family whose values repeat -------------
+
+_GENERATOR_SEED = 20260902
+"""The data seed the saved runs were generated under; the fixtures below name the same
+tasks the aborted secondary condition selected, so they are that run's own notes."""
+
+
+def _generator_note(step_index: int, *, generator_version: int | None = None) -> str:
+    """One real ``aggregate_report`` note, rendered by the generator that writes them.
+
+    R38 applies here literally: a hand-written ambiguous note is the author writing down
+    what they believe the generator produces, and this scorer broke on the difference. Task
+    ``0011`` is the first ``aggregate_report`` of the test split, and the run that scored
+    nothing selected it; its metric list repeats ``18``, so its own notes carry the
+    repetition without a fixture inventing any. ``generator_version`` names the note
+    template: HEAD's single ``values so far`` list when omitted, and the two-field
+    ``first half``/``second half`` shape of version 1, which is the shape run C writes.
+    """
+    from local_llm_lab.pipeline.tasks import make_tasks, render_expert_note, replay_task_from_id
+
+    task_id = "test-aggregate_report-0011-clean"
+    if generator_version is None:
+        task = next(
+            task for task in make_tasks("test", 720, _GENERATOR_SEED) if task.task_id == task_id
+        )
+    else:
+        task = replay_task_from_id(task_id, _GENERATOR_SEED, generator_version)
+    return render_expert_note(task, step_index)
+
+
+def _locate_note_values(note: str):
+    """Run ``_groups_for`` over a one-note prompt and return (prompt, groups, value spans).
+
+    The character tokenizer makes a token position a character position, so a located span
+    can be compared directly with a character span measured on the note itself.
+    """
+    from local_llm_lab.agent_protocol import Action
+    from local_llm_lab.pipeline.protocol import assistant_message, tool_message
+    from local_llm_lab.probes import patch
+
+    class CharacterTokenizer:
+        def encode(self, text, add_special_tokens=False):
+            assert add_special_tokens is False
+            return [ord(character) for character in text]
+
+    tokenizer = CharacterTokenizer()
+    messages = [
+        {"role": "system", "content": "SYS"},
+        {"role": "user", "content": "TASK-aggregate_report"},
+        assistant_message("Plan: inspect the state.", Action("list_files", {"directory": "/m"})),
+        tool_message("list_files", "OBS0"),
+        assistant_message(note, Action("calculate", {"expression": "1 + 1"})),
+        tool_message("calculate", "OBS1"),
+    ]
+    prompt = "|".join(message["content"] for message in messages)
+    groups, _repairs, spans = patch._groups_for(
+        tokenizer, tokenizer.encode(prompt), messages, prompt_text=prompt, keep_last=2
+    )
+    return prompt, groups, spans
+
+
+def test_a_repeated_note_value_is_located_by_its_field_occurrence() -> None:
+    """R30a(1): the k-th number under a label is that label's k-th value.
+
+    The generator's own step-7 note lists ``18`` twice and then names ``18``, ``14`` and
+    ``75`` again in the subtotal it is about to compute. Searching the whole note for a
+    unique match refuses every one of those; searching inside the field that carries them
+    gives each a position by construction.
+    """
+    from local_llm_lab.probes import patch
+
+    note = _generator_note(7)
+    assert note.count("18") > 1, "the fixture must be the generator's repeating note"
+    prompt, groups, _spans = _locate_note_values(note)
+
+    values = patch._note_values(note)
+    located = "".join(chr(ord(prompt[position])) for position in groups["note_value_tokens"])
+    # Every value keeps its own tokens, repeats included, in note order.
+    assert located == "".join(values)
+    assert len(groups["note_value_tokens"]) == sum(len(value) for value in values)
+    # The subtotal arithmetic after the list is never a match candidate, and neither is the
+    # ``split after 3 of 6`` clause, whose numbers are not values at all.
+    note_start = prompt.index(note)
+    tail_start = note_start + note.index(";")
+    assert max(groups["note_value_tokens"]) < tail_start
+
+
+def test_moving_a_value_between_fields_moves_the_span_it_is_located_at() -> None:
+    """R30a(1) is a claim about fields, so the test moves a value from one to the other.
+
+    Version 1's note -- the shape run C writes -- carries two fields and ``18`` in both.
+    Moving the second ``18`` into the first field changes which label owns it and changes
+    the note's value order; a locator reading each value inside its own field follows it,
+    and one holding any earlier notion of where the fields are does not.
+    """
+    from local_llm_lab.probes import patch
+
+    note = _generator_note(7, generator_version=1)
+    moved = note.replace(
+        "first half complete: 18 + 14 + 75; second half complete: 72 + 18 + 79",
+        "first half complete: 18 + 14 + 75 + 18; second half complete: 72 + 79",
+    )
+    assert moved != note, "the fixture note must carry the two fields the move needs"
+    # The move is the test: the value order itself changes, so an expectation copied from
+    # the unmoved note cannot pass.
+    assert patch._note_values(note) == ["18", "14", "75", "72", "18", "79"]
+    assert patch._note_values(moved) == ["18", "14", "75", "18", "72", "79"]
+
+    for text, owner in ((note, "second half complete"), (moved, "first half complete")):
+        prompt, groups, _spans = _locate_note_values(text)
+        fields = {
+            " ".join(match.group(1).split()).casefold(): (match.start(2), match.end(2))
+            for match in patch._VALUE_FIELD.finditer(text)
+        }
+        start, end = fields[owner]
+        offset = prompt.index(text)
+        # The repeated 18 is the note's fourth or fifth value depending on the move; take it
+        # by position in the located run rather than by name, since the name is ambiguous.
+        index = patch._note_values(text).index("18", 1)
+        positions = groups["note_value_tokens"]
+        before = sum(len(value) for value in patch._note_values(text)[:index])
+        span = positions[before : before + len("18")]
+        assert all(offset + start <= position < offset + end for position in span)
+
+
+def _residue_note() -> str:
+    """A real generator note the field-scoped locator still refuses.
+
+    R38 again: the residue is measured, not imagined, and it was re-measured when the class it
+    used to belong to disappeared. This note's ``76`` appears twice -- once under ``loads so
+    far`` and again under ``highest so far`` -- and sits under no *list* field, so the
+    field-scoped locator cannot give it a position and falls back to the unique search, which
+    refuses a value matching twice. It is the residue R30a(2) turns into a skipped case rather
+    than an abandoned section.
+
+    The earlier fixture here was a ``ledger_reconcile`` note whose only value ended a clause
+    before a full stop. That refused for too FEW matches, not too many, and widening
+    ``_value_pattern``'s trailing lookahead removed the whole class -- which is why this
+    fixture had to move. A residue of repetition survives that change; a residue of
+    clause-final punctuation does not.
+    """
+    from local_llm_lab.pipeline.tasks import render_expert_note, replay_task_from_id
+
+    task = replay_task_from_id("test-conditional_update-0009-clean", _GENERATOR_SEED, 4)
+    return render_expert_note(task, 3)
+
+
+def _locator_refusal() -> ValueError:
+    """The refusal the real locator raises on the real residue note, not a copy of its text."""
+    from local_llm_lab.probes import patch
+
+    with pytest.raises(ValueError) as raised:
+        _locate_note_values(_residue_note())
+    assert isinstance(raised.value, ValueError)
+    del patch
+    return raised.value
+
+
+def _skipping_fixture(monkeypatch, cases, skipped_task_id):
+    """The shared probe fixture, with each case's prompts named after its own task.
+
+    ``_probe_fixture`` gives every case the same two prompts, so nothing downstream can tell
+    them apart; naming them lets exactly one case's locator refuse.
+    """
+    from local_llm_lab.probes import patch
+
+    # Taken before the fixture runs: ``_probe_fixture`` replaces ``_groups_for`` with a fake
+    # that cannot refuse anything, so the real locator has to be asked first.
+    refusal = _locator_refusal()
+    _tokenizer, captures = _probe_fixture(monkeypatch, cases)
+
+    class Tokenizer:
+        def encode(self, text, add_special_tokens=False):
+            del add_special_tokens
+            return list(range(10)) if text.startswith("f") else list(range(1, 11))
+
+    monkeypatch.setattr(
+        patch,
+        "replay_counterfactual",
+        lambda case: (
+            [{"role": "user", "content": f"f{case.task.task_id}"}],
+            [{"role": "user", "content": f"c{case.task.task_id}"}],
+            {"counterfactual_source": "passing_transcript", "counterfactual_basis": "fixture"},
+        ),
+    )
+
+    def groups_for(_tokenizer, ids, messages, **_kwargs):
+        if messages[0]["content"].endswith(skipped_task_id):
+            raise refusal
+        return (
+            {name: (0,) for name in patch.PROMPT_GROUPS},
+            {name: 0 for name in patch.PROMPT_GROUPS},
+            {"7": (0,)} if ids[0] == 0 else {"7": (0,), "9": (1,)},
+        )
+
+    monkeypatch.setattr(patch, "_groups_for", groups_for)
+    return Tokenizer(), captures, refusal
+
+
+def test_an_unlocatable_case_is_skipped_with_its_reason_and_the_section_scores_the_rest(
+    monkeypatch,
+) -> None:
+    """R30a(2): one unlocatable case cost all fifteen; it now costs itself.
+
+    The refusal is the real locator's, raised on a real note, so what is asserted is the
+    control flow around it and not a fixture's imitation of the failure.
+    """
+    from local_llm_lab.probes import patch
+
+    cases = [_probe_case(index, judgements=_judgements(1)) for index in range(3)]
+    skipped = cases[1].task.task_id
+    tokenizer, captures, refusal = _skipping_fixture(monkeypatch, cases, skipped)
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1], policy="base",
+        keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    # Two cases prepared and captured, one skipped before any residual was taken.
+    assert len(captures) == 4
+    assert (payload["scored_cases"], payload["skipped_cases"]) == (2, 1)
+    assert payload["selected_cases"] == len(cases)
+    assert payload["skipped_reasons"] == {"note_values_unlocatable": 1}
+    assert payload["headline_task_ids"] == [cases[0].task.task_id, cases[2].task.task_id]
+    assert payload["headline_cases"] == 2
+    # The skip is recorded in the primary's own container, with the locator's own words.
+    skips = [
+        record for record in payload["excluded_cases"]
+        if record["excluded_reason"] == "note_values_unlocatable"
+    ]
+    assert [record["task_id"] for record in skips] == [skipped]
+    assert skips[0]["excluded_detail"] == str(refusal)
+    assert "missing or ambiguous" in skips[0]["excluded_detail"]
+
+
+def test_a_section_refuses_below_its_minimum_scored_count_naming_both_numbers(
+    monkeypatch,
+) -> None:
+    """R30a(2)/(3): the section refuses only when too few placeable cases remain."""
+    from local_llm_lab.probes import patch
+
+    cases = [_probe_case(index, judgements=_judgements(1)) for index in range(3)]
+    tokenizer, _captures, _refusal = _skipping_fixture(
+        monkeypatch, cases, cases[1].task.task_id
+    )
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    with pytest.raises(ValueError, match=r"2 of 3 selected"):
+        patch.run_patch_probe(
+            object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1],
+            policy="base", keep_last=2, max_tokens=1, seed=7, command=["patch"],
+            minimum_scored=3,
+        )
+
+
+def test_the_markdown_reports_the_scored_and_skipped_counts_out_of_the_selection(
+    monkeypatch,
+) -> None:
+    """R30a(2): a reader must see what the rates were taken over without opening the JSON."""
+    from local_llm_lab.probes import patch
+
+    cases = [_probe_case(index, judgements=_judgements(1)) for index in range(3)]
+    tokenizer, _captures, _refusal = _skipping_fixture(
+        monkeypatch, cases, cases[1].task.task_id
+    )
+    resolved = SimpleNamespace(as_dict=lambda: {"name": "fake"})
+
+    payload = patch.run_patch_probe(
+        object(), tokenizer, cases, spec=object(), resolved=resolved, layers=[1], policy="base",
+        keep_last=2, max_tokens=1, seed=7, command=["patch"],
+    )
+
+    markdown = patch.render_markdown(payload)
+    assert "2 of 3 selected case(s) scored; 1 skipped" in markdown
+    assert "note_values_unlocatable" in markdown
+
+
+def test_an_unscored_secondary_section_does_not_end_the_run_ok(monkeypatch, tmp_path) -> None:
+    """R30a(4): the ``error`` field was honest and the end line was not.
+
+    The 2026-09-05 run wrote its refusal into the artifact and then closed ``status=ok``,
+    because nothing raised — the record reported that the code finished, not that the
+    measurement happened. The section's state now reaches the end event, the health block,
+    the top of the markdown and the exit status, so no reader has to open the JSON to learn
+    that a scheduled section scored nothing.
+    """
+    from local_llm_lab.probes import guard, patch
+
+    passing, failing = tmp_path / "passing.json", tmp_path / "failing.json"
+    passing.write_text("{}", encoding="utf-8")
+    failing.write_text("{}", encoding="utf-8")
+    spec = SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.25,),
+        resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1,)),
+    )
+    primary_case = patch.PatchCase(
+        _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"), 0, (), None, *_judgements(0)
+    )
+    secondary_case = patch.PatchCase(
+        _Task("test-aggregate_report-0-clean", "aggregate_report"),
+        0,
+        (),
+        None,
+        *_judgements(0),
+        "aggregate_report_secondary",
+    )
+
+    def select(*_args, **kwargs):
+        condition = kwargs.get("secondary_condition")
+        provenance = {
+            "data_seeds": {},
+            "eligibility": {},
+            "condition": "aggregate_report_secondary" if condition else patch.PRIMARY_CONDITION,
+            "counterfactual_label": "designed_correct" if condition else "empirically_passing",
+        }
+        return ([secondary_case] if condition else [primary_case]), provenance
+
+    minimums = []
+
+    def run(_model, _tokenizer, cases, **kwargs):
+        minimums.append(kwargs.get("minimum_scored"))
+        if cases[0].task.family == "aggregate_report":
+            raise ValueError("P6 section scored 1 of 15 selected case(s), below the minimum of 5")
+        return {"cells": {}, "groups": [], "layers": [], "controls": [], "condition": "x"}
+
+    monkeypatch.setattr(patch, "select_patch_cases", select)
+    monkeypatch.setattr(patch, "load_model_spec", lambda _name: spec)
+    monkeypatch.setattr(patch, "require_preflight", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(patch, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        patch,
+        "load_policy",
+        lambda _spec, _adapter: (
+            object(),
+            object(),
+            SimpleNamespace(num_layers=4),
+            SimpleNamespace(as_dict=dict),
+        ),
+    )
+    monkeypatch.setattr(patch, "run_patch_probe", run)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-probe-patch",
+            "--passing-eval", str(passing),
+            "--failing-eval", str(failing),
+            "--output", str(tmp_path),
+            "--secondary-condition", "aggregate_report",
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="secondary"):
+        patch.main()
+
+    # The floor the ruling names reaches the section that was ruled on.
+    assert minimums == [None, patch.MINIMUM_SCORED_CASES]
+    # The artifact is still written: an unscored section is a finding, not a lost run.
+    payload = json.loads((tmp_path / "patch.json").read_text(encoding="utf-8"))
+    assert payload["secondary"]["error"].startswith("P6 section scored 1 of 15")
+    assert payload["health"] == {
+        "verdict": "unscored_section",
+        "status": "error",
+        "unscored_sections": ["secondary"],
+        "section_errors": {"secondary": payload["secondary"]["error"]},
+    }
+    # The end event carries the same state as the health block, not "ok".
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    end = next(event for event in events if event["kind"] == "end")
+    assert end["status"] == "error"
+    assert end["fields"]["unscored_sections"] == ["secondary"]
+    # And the markdown says it before anything a reader could mistake for a result.
+    markdown = (tmp_path / "patch.md").read_text(encoding="utf-8").splitlines()
+    assert "secondary" in markdown[2]
+    assert markdown[2].startswith("**Unscored")
+
+
+def test_a_fully_scored_run_still_ends_ok_and_carries_a_healthy_block(
+    monkeypatch, tmp_path
+) -> None:
+    """The complement: R30a(4) must not turn every run into an error."""
+    from local_llm_lab.probes import guard, patch
+
+    passing, failing = tmp_path / "passing.json", tmp_path / "failing.json"
+    passing.write_text("{}", encoding="utf-8")
+    failing.write_text("{}", encoding="utf-8")
+    spec = SimpleNamespace(
+        name="qwen35-4b",
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(0.25,),
+        resolve=lambda *_args: SimpleNamespace(num_layers=4, probe_layers=(1,)),
+    )
+    case = patch.PatchCase(
+        _Task("test-ledger_reconcile-1-clean", "ledger_reconcile"), 0, (), None, *_judgements(0)
+    )
+    monkeypatch.setattr(
+        patch,
+        "select_patch_cases",
+        lambda *_args, **_kwargs: ([case], {"data_seeds": {}, "eligibility": {}}),
+    )
+    monkeypatch.setattr(patch, "load_model_spec", lambda _name: spec)
+    monkeypatch.setattr(patch, "require_preflight", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(guard, "require_idle_gpu", lambda *_args: None)
+    monkeypatch.setattr(patch, "resolve_policy", lambda _name, _spec: None)
+    monkeypatch.setattr(
+        patch,
+        "load_policy",
+        lambda _spec, _adapter: (
+            object(),
+            object(),
+            SimpleNamespace(num_layers=4),
+            SimpleNamespace(as_dict=dict),
+        ),
+    )
+    monkeypatch.setattr(
+        patch,
+        "run_patch_probe",
+        lambda *_args, **_kwargs: {
+            "cells": {}, "groups": [], "layers": [], "controls": [], "condition": "x"
+        },
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "agent-v2-probe-patch",
+            "--passing-eval", str(passing),
+            "--failing-eval", str(failing),
+            "--output", str(tmp_path),
+        ],
+    )
+
+    patch.main()
+
+    payload = json.loads((tmp_path / "patch.json").read_text(encoding="utf-8"))
+    assert payload["health"] == {
+        "verdict": "scored",
+        "status": "ok",
+        "unscored_sections": [],
+        "section_errors": {},
+    }
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    end = next(event for event in events if event["kind"] == "end")
+    assert end["status"] == "ok"
+    assert end["fields"]["unscored_sections"] == []
+    assert not (tmp_path / "patch.md").read_text(encoding="utf-8").startswith("**Unscored")
+
+
+def test_a_value_ending_a_clause_is_located_rather_than_refused_for_too_few_hits() -> None:
+    """The trailing lookahead rejected a full stop of any kind, so a clause-final value matched
+    nowhere and its note was refused for having too FEW occurrences rather than too many.
+
+    R38: the note comes from the generator, not from this file. ``replay_task_from_id`` step 8 of
+    ``test-ledger_reconcile-0007-clean`` under generator version 1 renders
+    ``Approved total = 359. Inspecting the summary before editing.`` -- a real note, found by
+    scanning the split rather than constructed to make the point.
+
+    The decimal exclusion the old form was written for is kept: ``72`` must still not match inside
+    ``72.5``. Splitting the lookahead separates the two cases the single character class conflated.
+    """
+    import re
+
+    from local_llm_lab.pipeline.tasks import render_expert_note, replay_task_from_id
+    from local_llm_lab.probes.patch import _note_values, _value_pattern
+
+    note = render_expert_note(
+        replay_task_from_id("test-ledger_reconcile-0007-clean", 20260902, 1), 8
+    )
+    assert note.rstrip().startswith("Approved total = 359."), "the generator still renders this note"
+
+    values = _note_values(note)
+    assert values, "the note carries a value to locate"
+    for value in values:
+        assert len(list(re.finditer(_value_pattern(value), note))) == 1
+
+    # The old form, kept here as the thing being changed rather than described: it found nothing.
+    superseded = rf"(?<![0-9.\-]){re.escape(values[0])}(?![0-9.])"
+    assert not list(re.finditer(superseded, note))
+
+    # And the case the exclusion existed for is unaffected.
+    assert not list(re.finditer(_value_pattern("72"), "the rate was 72.5 today"))
+    assert len(list(re.finditer(_value_pattern("32"), "values 132 and 32 differ"))) == 1

@@ -91,6 +91,11 @@ ARTIFACT_SCHEMA = "p6-patch-r30"
 """Names the artifact shape; the payload carried no schema/version field before R25."""
 _FAMILIES = frozenset({"aggregate_report", "ledger_reconcile"})
 
+MINIMUM_SCORED_CASES = 5
+"""R30a(3): the fewest scored cases a secondary section may be read from — the primary's own
+count, and the only floor in this file that is a judgement rather than a structural need. It
+is not a target: the section scores every placeable case it has and reports the count."""
+
 PRIMARY_CONDITION = "primary"
 SECONDARY_CONDITIONS = ("aggregate_report",)
 """R27(5): the bound secondary condition (issue #26) — ``aggregate_report`` failures scored
@@ -584,14 +589,22 @@ def _char_span_once(text: str, needle: str, *, start: int, label: str) -> tuple[
 
 
 def _value_pattern(value: str) -> str:
-    """A numeric value matched on its own boundaries, never inside a longer number.
+    r"""A numeric value matched on its own boundaries, never inside a longer number.
 
     ``32`` occurring inside ``132`` is a different value, not a second occurrence of this one
     (issue #29): matching by plain substring aborted such a note as ambiguous.  The lookarounds
     exclude a neighbouring digit, decimal point, or sign, so a genuine duplicate still matches
     twice and is still refused.
+
+    The trailing lookahead is ``(?![0-9])(?!\.[0-9])`` rather than ``(?![0-9.])``.  The older form
+    rejected a full stop of any kind, so a value ending a clause -- ``Approved total = 359.`` --
+    matched nowhere and the note was refused for having *too few* occurrences rather than too
+    many.  That was 420 of 5,226 v1 notes and 167 of 5,226 v4 notes across the test split, and
+    fifteen of the seventy value-level failures behind the unscored ``aggregate_report``
+    secondary.  Splitting the lookahead keeps ``72`` out of ``72.5``, which is what the decimal
+    exclusion was for, while admitting a sentence-final value, which it never intended to reject.
     """
-    return rf"(?<![0-9.\-]){re.escape(value)}(?![0-9.])"
+    return rf"(?<![0-9.\-]){re.escape(value)}(?![0-9])(?!\.[0-9])"
 
 
 def _common_prefix_length(left: Sequence[int], right: Sequence[int]) -> int:
@@ -693,19 +706,42 @@ def position_groups(
         cursor = note_span[1]
     values: list[int] = []
     spans: dict[str, tuple[int, ...]] = {}
+    region = "" if note_span is None else prompt_text[note_span[0] : note_span[1]]
+    # R30a(1): the note's own list fields, each value carrying the span it was read from, in
+    # the order ``_note_values`` yields them.  ``aggregate_report`` repeats a value on
+    # purpose -- the running list carries it twice and the subtotal arithmetic names it
+    # again -- so a search of the whole note for a unique match refuses the data instead of
+    # locating it.  Consuming the field slots in step with ``note_values`` gives the k-th
+    # number under a label one position by construction, and never lets the arithmetic
+    # outside a list field stand in as a candidate.
+    slots = _field_value_slots(region)
+    slot_index = 0
     for value in note_values:
         if note_span is None:
             raise ValueError("note_value token span is missing or ambiguous in the substituted note")
-        region = prompt_text[note_span[0] : note_span[1]]
-        found = list(re.finditer(_value_pattern(value), region))
-        if len(found) != 1:
-            raise ValueError("note_value token span is missing or ambiguous in the substituted note")
-        offset = note_span[0] + found[0].start()
+        if slot_index < len(slots) and slots[slot_index][0] == value:
+            start, _end = slots[slot_index][1]
+            slot_index += 1
+            offset = note_span[0] + start
+        else:
+            # The residue: a value no list field carries -- a subtotal, a running maximum --
+            # keeps the pre-R30a rule, one match over the note or none. It is the only path
+            # that can still refuse a note, and R30a(2) makes that refusal a skipped case.
+            found = list(re.finditer(_value_pattern(value), region))
+            if len(found) != 1:
+                raise ValueError(
+                    "note_value token span is missing or ambiguous in the substituted note"
+                )
+            offset = note_span[0] + found[0].start()
         tokens, repaired = _token_span(
             tokenizer, prompt_text, ids, (offset, offset + len(value)), label="note_value_tokens"
         )
         repairs["note_value_tokens"] += repaired
-        spans[value] = tokens
+        # R25 pairs values across the two prompts by string identity, so a repeated value
+        # needs exactly one canonical span: the first, which is the one the two notes share
+        # when only one of them repeats it. Every occurrence still contributes its own
+        # tokens to the group.
+        spans.setdefault(value, tokens)
         values.extend(tokens)
     observation_spans: list[tuple[int, ...]] = []
     cursor = after_task
@@ -984,13 +1020,31 @@ def _note_value_fields(note: str) -> dict[str, tuple[str, ...]]:
     return fields
 
 
+def _field_value_slots(note: str) -> list[tuple[str, tuple[int, int]]]:
+    """Every list-field value with the character span it was read from, in note order.
+
+    R30a(1): this is the locator's whole basis. The span is measured on the note itself, so
+    the k-th number under a label needs no search to be placed, and a value the arithmetic
+    repeats outside the field is not a candidate for it. ``_note_values`` opens with exactly
+    this sequence, which is what lets ``position_groups`` walk the two in step; defining the
+    values in terms of the slots rather than beside them is what keeps the two from drifting
+    apart, and a scorer reading the note differently from the writer is how this path came
+    to abandon a section in the first place.
+    """
+    thought = note.split("\n```json", maxsplit=1)[0]
+    slots: list[tuple[str, tuple[int, int]]] = []
+    for match in _VALUE_FIELD.finditer(thought):
+        base = match.start(2)
+        for number in re.finditer(_NUMBER, match.group(2)):
+            slots.append((number.group(0), (base + number.start(), base + number.end())))
+    return slots
+
+
 def _note_values(note: str) -> list[str]:
     """Return numeric fact values, excluding labels, ordinals, and action expressions."""
     thought = note.split("\n```json", maxsplit=1)[0]
     number = _NUMBER
-    values: list[str] = []
-    for match in _VALUE_FIELD.finditer(thought):
-        values.extend(re.findall(number, match.group(2)))
+    values: list[str] = [value for value, _span in _field_value_slots(note)]
     values.extend(
         match.group(1)
         for match in re.finditer(
@@ -1718,6 +1772,7 @@ def run_patch_probe(
     max_tokens: int,
     seed: int,
     command: Sequence[str],
+    minimum_scored: int = 0,
     progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any]:
     """Run the P6 cells and return per-generation, JSON-safe records.
@@ -1725,6 +1780,12 @@ def run_patch_probe(
     The headline cells run over scoring-version-stable cases (R24) whose dropped value is
     NOT visible in the retained observations (R27(3)); every other case is listed under
     ``excluded_cases`` with its reason and both judgements, and never merged into a cell.
+    R30a(2) puts a case whose note the locator cannot place in the same container, for the
+    same reason: it is a case that was not measured, and one of those must not decide the
+    fate of the ones behind it, which is what happened to the 2026-09-05 secondary run.
+    ``minimum_scored`` is the caller's floor on how many cases must survive that filter for
+    the section to be worth reading; zero leaves only the structural minimum of two that
+    the unrelated-task control needs.
     Aggregate-only artifacts are not permitted for P6 (R27(2)), so every generation's note
     text, parsed value set and outcome is recorded in the top-level ``generations`` list —
     one flat row per (case, layer, cell, condition), which keeps ``cells`` comparable with
@@ -1807,29 +1868,70 @@ def run_patch_probe(
     prepared: list[dict[str, Any]] = []
     case_provenance: list[dict[str, Any]] = []
     source_counts: dict[str, int] = {}
+    skipped_reasons: dict[str, int] = {}
+
+    def _record_skip(
+        case: PatchCase, provenance: dict[str, Any], reason: str, error: ValueError
+    ) -> None:
+        """File a case that could not be prepared beside the cases excluded before it.
+
+        Same container, same fields, one more reason: a reader counting the fifteen finds
+        every one of them in ``excluded_cases`` or in the headline, and never has to infer a
+        case's fate from its absence.
+        """
+        skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
+        record = {**case_record(case, provenance), "excluded_reason": reason}
+        record["excluded_detail"] = str(error)
+        if case.task.task_id in scorings:
+            record["value_sets"] = scorings[case.task.task_id].record()
+        excluded.append(record)
+
     for case_number, case in enumerate(hidden, start=1):
         failing, counterfactual, provenance = replay_counterfactual(case)
-        source = provenance.get("counterfactual_source") or "none"
-        source_counts[source] = source_counts.get(source, 0) + 1
         failing_prompt = build_prompt(tokenizer, failing, spec=spec, keep_last=keep_last)
         counter_prompt = build_prompt(tokenizer, counterfactual, spec=spec, keep_last=keep_last)
         failing_ids = list(tokenizer.encode(failing_prompt, add_special_tokens=False))
         counter_ids = list(tokenizer.encode(counter_prompt, add_special_tokens=False))
-        failing_groups, failing_repairs, failing_values = _groups_for(
-            tokenizer, failing_ids, failing, prompt_text=failing_prompt, keep_last=keep_last
-        )
-        counter_groups, counter_repairs, counter_values = _groups_for(
-            tokenizer, counter_ids, counterfactual, prompt_text=counter_prompt, keep_last=keep_last
-        )
-        alignment = align_groups(
-            tokenizer,
-            source_groups=counter_groups,
-            source_values=counter_values,
-            source_ids=counter_ids,
-            target_groups=failing_groups,
-            target_values=failing_values,
-            target_ids=failing_ids,
-        )
+        # R30a(2): preparing one case must not decide the fate of the ones behind it. The two
+        # refusals reachable here name the two things that can still leave a case with no
+        # positions to patch -- a note value the locator cannot place, and a pair of dropped
+        # values R25's slot rule cannot give distinct separators -- and each is recorded
+        # against its own case, with the refusal's own words, instead of raised.
+        try:
+            failing_groups, failing_repairs, failing_values = _groups_for(
+                tokenizer, failing_ids, failing, prompt_text=failing_prompt, keep_last=keep_last
+            )
+            counter_groups, counter_repairs, counter_values = _groups_for(
+                tokenizer,
+                counter_ids,
+                counterfactual,
+                prompt_text=counter_prompt,
+                keep_last=keep_last,
+            )
+        except ValueError as error:
+            _record_skip(case, provenance, "note_values_unlocatable", error)
+            if progress is not None:
+                progress(case_number, len(hidden), f"skip {case.task.task_id}")
+            continue
+        try:
+            alignment = align_groups(
+                tokenizer,
+                source_groups=counter_groups,
+                source_values=counter_values,
+                source_ids=counter_ids,
+                target_groups=failing_groups,
+                target_values=failing_values,
+                target_ids=failing_ids,
+            )
+        except ValueError as error:
+            _record_skip(case, provenance, "alignment_unplaceable", error)
+            if progress is not None:
+                progress(case_number, len(hidden), f"skip {case.task.task_id}")
+            continue
+        # Counted only for a case that survived preparation, so the source tally describes
+        # the cases the cells were actually taken over.
+        source = provenance.get("counterfactual_source") or "none"
+        source_counts[source] = source_counts.get(source, 0) + 1
         alignment_record = {group: cell.record() for group, cell in alignment.items()}
         scoring = scorings[case.task.task_id]
         case_provenance.append(
@@ -1861,6 +1963,19 @@ def run_patch_probe(
         )
         if progress is not None:
             progress(case_number, len(hidden), f"capture {case.task.task_id}")
+    # R30a(2)/(3): the section refuses on the count that survived preparation, not on the
+    # first case that did not. Two is structural -- the unrelated-task control patches from
+    # another case's context and has nowhere to read one from below it -- and the caller's
+    # floor sits above it.
+    if len(prepared) < max(2, minimum_scored):
+        raise ValueError(
+            f"P6 section scored {len(prepared)} of {len(cases)} selected case(s), below the "
+            f"minimum of {max(2, minimum_scored)}: "
+            + (
+                ", ".join(f"{count} {reason}" for reason, count in sorted(skipped_reasons.items()))
+                or "no case was skipped in preparation"
+            )
+        )
     cells: dict[str, dict[str, Any]] = {}
     generations: list[dict[str, Any]] = []
     cell_total = len(layers) * len(POSITION_GROUPS)
@@ -2012,10 +2127,17 @@ def run_patch_probe(
         "scoring_generator_version": GENERATOR_VERSION,
         "stable_cases": len(stable),
         "unstable_cases": len(unstable),
-        "headline_cases": len(hidden),
+        "headline_cases": len(prepared),
         "visibility_excluded_cases": len(visible_cases),
         "flip_unsatisfiable_cases": len(unsatisfiable),
-        "headline_task_ids": [case.task.task_id for case in hidden],
+        # R30a(2)/(3): scored and skipped out of the selection, so a rate is never read as
+        # covering cases nothing was measured on. ``skipped_cases`` counts every selected
+        # case that reached no cell, whichever filter took it.
+        "selected_cases": len(cases),
+        "scored_cases": len(prepared),
+        "skipped_cases": len(cases) - len(prepared),
+        "skipped_reasons": dict(sorted(skipped_reasons.items())),
+        "headline_task_ids": [item["case"].task.task_id for item in prepared],
         "cases": case_provenance,
         "generations": generations,
         "excluded_cases": excluded,
@@ -2064,6 +2186,46 @@ def _outcome_counts_table(payload: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _run_health(payload: dict[str, Any]) -> dict[str, Any]:
+    """R30a(4): the run's own verdict, named by the sections that scored nothing.
+
+    A section is unscored when it carries an ``error`` where its cells belong; that is the
+    only shape a refusal takes here, and it is the shape the aborted run wrote. The verdict
+    follows R26(c)'s vocabulary for a non-training stage: a run that did not do the thing it
+    was asked to do is not healthy, whatever its exit code used to say.
+    """
+    unscored = [
+        name
+        for name in ("secondary",)
+        if isinstance(payload.get(name), dict) and payload[name].get("error")
+    ]
+    return {
+        "verdict": "unscored_section" if unscored else "scored",
+        "status": "error" if unscored else "ok",
+        "unscored_sections": unscored,
+        "section_errors": {name: str(payload[name]["error"]) for name in unscored},
+    }
+
+
+def _coverage_lines(payload: dict[str, Any]) -> list[str]:
+    """R30a(2): how many of the selected cases were scored, how many skipped, and why.
+
+    Placed above the rates rather than below them, because a rate over a third of the
+    selection is a different number from the same rate over all of it, and the reader meets
+    the rate first.  A payload written before R30a carries no counts and gets no line.
+    """
+    if "scored_cases" not in payload:
+        return []
+    reasons = payload.get("skipped_reasons") or {}
+    detail = ", ".join(f"{count} {reason}" for reason, count in sorted(reasons.items()))
+    return [
+        f"{payload['scored_cases']} of {payload['selected_cases']} selected case(s) scored; "
+        f"{payload['skipped_cases']} skipped"
+        + (f" ({detail})." if detail else "."),
+        "",
+    ]
+
+
 def render_markdown(payload: dict[str, Any]) -> str:
     """Render a compact layer×group treatment table and named-control tables.
 
@@ -2075,8 +2237,24 @@ def render_markdown(payload: dict[str, Any]) -> str:
     """
     groups = payload["groups"]
     lines = ["# P6 causal patching", ""]
+    health = payload.get("health")
+    if health and health.get("unscored_sections"):
+        # R30a(4): before the condition, before the rates. A reader who stops after the
+        # first screen must not stop believing the run measured what it set out to.
+        lines.extend(
+            [
+                "**Unscored section(s): "
+                + ", ".join(
+                    f"{name} — {health['section_errors'][name]}"
+                    for name in health["unscored_sections"]
+                )
+                + "**",
+                "",
+            ]
+        )
     if payload.get("condition"):
         lines.extend([f"Condition: `{payload['condition']}`.", ""])
+    lines.extend(_coverage_lines(payload))
     lines.extend(["## Treatment flip rate", ""])
     if "stable_cases" in payload:
         lines.extend(
@@ -2410,6 +2588,10 @@ def main() -> None:
                         max_tokens=args.max_tokens,
                         seed=args.seed,
                         command=sys.argv,
+                        # R30a(3): the floor the ruling names, applied to the section it was
+                        # ruled on. The primary keeps only the structural minimum, so a
+                        # count that has always been read stays readable.
+                        minimum_scored=MINIMUM_SCORED_CASES,
                         progress=log.progress,
                     ),
                 }
@@ -2417,6 +2599,13 @@ def main() -> None:
                 section["error"] = str(error)
                 log.info("secondary condition not scored", reason=str(error))
             payload["secondary"] = section
+        # R30a(4): a section that scored nothing is the run's state, not a footnote in one
+        # of its blocks. It decides the health record, the end event, the first line of the
+        # markdown and the exit status together, because the 2026-09-05 run had an honest
+        # ``error`` field and a clean everything-else, and the everything-else is what a
+        # reader sees first.
+        health = _run_health(payload)
+        payload["health"] = health
         markdown = render_markdown(payload)
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / "patch.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -2438,4 +2627,20 @@ def main() -> None:
                     str(args.output / "patch.md"),
                 ],
             },
+        )
+        # Closed here rather than left to the context manager, which has only the exception
+        # to go on and would call this run ``ok``.
+        log.close(
+            status=health["status"],
+            verdict=health["verdict"],
+            unscored_sections=health["unscored_sections"],
+        )
+    if health["unscored_sections"]:
+        raise SystemExit(
+            "P6 run incomplete: "
+            + "; ".join(
+                f"{name} section not scored: {health['section_errors'][name]}"
+                for name in health["unscored_sections"]
+            )
+            + f"; see {args.output / 'patch.json'}"
         )
