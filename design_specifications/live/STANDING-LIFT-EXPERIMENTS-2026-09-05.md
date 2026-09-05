@@ -57,3 +57,11 @@ Status of this clause: the lock-file mechanism is issue 83, a standalone slice a
 ## Channel note
 
 This note records the Director's words as heard by the Chief in chat. Under `live/HOLD-2026-09-05.md`, a lift reaches the Deputy and the Head only from the Director directly or through the Proxy; the Chief's relay of it does not by itself lift anything for them. The Deputy's confirmation request to the Director is pending at the time of writing.
+
+
+## Director's rulings, 2026-09-05 21:36-21:50 (R47, R48)
+
+- The machine is the Director's laptop: a run projected above 0.6 of the working set, or any capacity measurement at the edge of memory, runs only in a window he declares; training runs are exempt but announced with their duration (R47).
+- The context-length benchmark's data stands as collected; no re-run (R48a).
+- Efficiency probes run up to 64k context and no further; engineering-implication probes are allowed, maximum-context curiosity is not (R48b).
+- Standing order: research that optimises training and inference efficiency, training first (R48c). First probe: training-row feasibility at 32k (R48d).

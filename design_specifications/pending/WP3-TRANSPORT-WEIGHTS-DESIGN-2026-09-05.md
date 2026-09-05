@@ -284,6 +284,42 @@ pooled average hides exactly that.
   WP5's job, not this one.
 - Nothing about the 9B, whose band is a placeholder under R40b.
 
+## 6a. Run-time requirements (R46, R47; re-added 2026-09-05 late after this section was lost)
+
+- **Progress (R46).** One line per unit of work carrying elapsed time, tokens done, and peak memory
+  as a share of the 17.76 GiB working set, so a long run cannot be mistaken for a hang. The unit is
+  the **(context, block) pair**, not the probe point: the scan is fast and the forward pass is not,
+  so a per-context line alone would go silent for minutes and read exactly like the hang the rule
+  exists to rule out. General form of the rule: the unit is the finest one whose duration is
+  bounded.
+- **Peak projection (R47).** Projected before launch, as the ruling requires. Weights at 4-bit
+  about 2.3 GiB, MLX buffer cache capped at 2.0, one linear block's captures 0.05, one attention
+  block's probabilities 0.14, working activations about 0.5: **about 5.0 GiB streamed one block at
+  a time**, and 7.1 GiB in the worst case where every block's captures are held. Both sit under
+  R47's threshold of 0.6 of the working set, 10.66 GiB, so WP3 needs no declared window at the
+  sweep corpus's length. Recorded here so a later change to the plan is checked against the
+  projection rather than assumed to inherit it. R47's other two clauses apply as recorded in
+  `live/STANDING-LIFT-EXPERIMENTS-2026-09-05.md` and not as relayed to me in abbreviated form: a
+  capacity measurement at the edge of memory also needs a declared window, and training runs are
+  exempt but announced with their duration.
+- **The term that scales dangerously.** Attention probabilities are `T x T` per query head: 147 MB
+  per block at 1550 tokens but **441 MB per block at 2688**, so holding all eight blocks at the
+  full window is 3.45 GiB from that term alone. It is the only quadratic term in the run. Stream
+  the captures one block at a time and materialise probabilities only for the four in-band
+  attention blocks. A version that retains everything at 2688 tokens is the one that would need a
+  declared window and must be re-projected rather than run on this projection.
+- **Memory guard, if one is fitted.** The trigger is `kern.memorystatus_vm_pressure_level` at
+  critical on two consecutive samples, not free swap. The hosted-lens run reached 17 GB resident
+  and swapped because MLX's buffer cache retained the peak of the long-context forwards; capping
+  the cache is the first move and the guard is the backstop.
+- **The lock.** The run loads through `evaluate.load_policy`, which takes `outputs/.model-run.lock`
+  for the life of the process. A script outside the package does not take it and is covered only by
+  the library-mapping check, so this measurement belongs in the package rather than in a scratch
+  script. A refusal names the holder's pid and command; a stale lock is reported, never deleted.
+- **R48.** WP3 is research, not an efficiency probe, so the 64k ceiling does not bind it. Its
+  longest bin is 2688 tokens, well inside that, and the bins are capped by the operating window
+  rather than by curiosity.
+
 ## 7. Cost and dependencies
 
 No lens, no Jacobian, no training. One forward per context plus the scans: minutes on the 42
