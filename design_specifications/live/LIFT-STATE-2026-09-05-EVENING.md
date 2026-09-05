@@ -39,9 +39,18 @@ was overtaken rather than quietly dropped.
 
 **What still binds, and why each is not a lift question.**
 
-- **Concurrency.** One model-loading run at a time on this machine, checked immediately before
-  launch with `pgrep` on the probe and training entry points, refusing if one is alive. This is
-  now the operative constraint rather than one rule among several.
+- **Concurrency.** One model-loading run at a time on this machine. This is now the operative
+  constraint rather than one rule among several, which is why the mechanism matters more than it
+  did while a per-run lift was also standing between every run and the machine.
+  **A `pgrep` check is not sufficient and this note should not be read as saying it is.** The
+  authority on the rule is `live/STANDING-LIFT-EXPERIMENTS-2026-09-05.md`: no model-loading run
+  starts before the issue 83 lock lands, and the process check is a bridge on top of the lock, not
+  the mechanism. Two reasons, both from tonight. A name grep has a window between the check and
+  the load, which is the race an exclusive-create lock closes. And it matches its own launcher
+  under `uv run`, `python -m` or a wrapping shell, which is not hypothetical: it cost the Chief
+  eight minutes on the hosted-lens conversion. Until 83 lands, `pgrep` immediately before launch
+  is the best available and is known to be leaky; after it lands, the lock is the rule and the
+  grep is the bridge for runs started before it existed.
 - **Training lifts.** Not covered by any of this and keeping their own gate.
 - **Pre-registered readings and WO-STAT-001 power.** These are the programme's own scientific
   standard, not an authorisation step: they are what makes a result interpretable, not what makes
