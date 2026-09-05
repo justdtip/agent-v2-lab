@@ -170,3 +170,43 @@ objection that the interesting heads were filtered out.
 
 The sentence marking "the query does not move" as not to be repeated stays, at the Head's request,
 since the wrong version was put in front of the Director and would otherwise return.
+
+**The candidates are below chance's best, which is itself a signal (the Head, 01:40).** All three
+bests, 1.77, 1.83 and 2.07, sit below the 5th percentile of chance's own best-of-96, 2.16; three
+heads each in the bottom twentieth is about one in eight thousand under independence, which is
+untested across blocks 1, 6 and 15. The mechanism the ledger run named as the alternative predicts
+exactly this: a head with a fixed positional habit reads the same far places in every context, so
+it showed above-null overlap of stable sources in the ledger run and systematically misses an
+answer span that sits somewhere different in every item here. On that reading the three declared
+themselves as what the competing explanation said they were. Caveats: three heads; their median
+ratios (0.92, 1.11, 1.25) are near one, so the signal is the missing upper tail, not a depressed
+centre; and this run did not save the top-source positions that would test the habit directly.
+That test follows below.
+
+**The direct test of the habit, 01:55 (`habit_probe.as-run.py.txt`, `out-habit/habit.json`, `run-habit.log`).**
+For the six value heads under the three candidate key heads, on all 48 retrieval items, the ten far
+sources each head reads most strongly at the read position, in absolute position and as a fraction
+of the eligible range, with the same for 50 random unit queries on the same head.
+
+| head | cross-context overlap of top-10, absolute (real / null) | in relative-position bins (real / null) | same-context overlap | share of top sources in the first 5 percent of the range |
+| --- | --- | --- | --- | --- |
+| block 1, key head 7, value heads 14 and 15 | 1.64 / 1.35, 1.09 / 1.10 | 1.65 / 1.72, 1.75 / 1.80 | 8.4, 8.5 of 10 | 0.59, 0.51 |
+| block 6, key head 0, value heads 0 and 1 | 0.58 / 0.44, 0.60 / 0.41 | 1.98 / 1.61, 1.80 / 1.50 | 7.8, 7.9 | 0.21, 0.22 |
+| block 15, key head 3, value heads 6 and 7 | 0.98 / 1.12, 0.94 / 1.06 | 1.91 / 1.52, 1.72 / 1.45 | 6.7, 6.5 | 0.46, 0.48 |
+
+Reading. (1) Across different contexts the heads' top far sources overlap no more than random
+queries' do on the same heads, in absolute position (ratios 0.9 to 1.5) and in relative position
+(1.0 to 1.3); the top-10 mass share is at the null (0.09 to 0.11 against 0.08 to 0.10). There is no
+query-borne positional habit beyond the null. (2) The habit is in the store: the median top
+positions are the first tokens of the context (positions 0, 1, 2, 6, 8, and so on), half or more of
+the top sources sit in the first five percent of the range for the block 1 and block 15 heads and a
+fifth for block 6, and random queries land there too. In a long-memory head the earliest tokens are
+written strongly and never decay, so every read, real or random, is dominated by them: a
+start-of-context sink in the recurrent state. (3) Same-context overlap of 6.5 to 8.5 of 10 across
+different questions says the read is fixed by the context, not by the question, which is the read
+operation finding again. (4) The below-chance maxima therefore need no selection story: a read
+pinned to the start has a compressed span-share distribution with no upper tail, so its best of 96
+falls below a random head's best. The Head's reading was right in kind, positional and not content,
+and the position is the beginning of the context; the one-in-eight-thousand figure is explained by
+the low variance rather than by independent selection. The three candidates close as
+start-of-context readers, and the ledger run's "stable far sources" were those first tokens.

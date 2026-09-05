@@ -1,0 +1,80 @@
+"""Positional-habit check on the ledger run's three key-head candidates (block 1 kh7, block 6 kh0,
+block 15 kh3; value heads 2*kh and 2*kh+1). For every item, the top-10 far sources by |alpha| at the
+read position, recorded as absolute positions and as fractions of the context, plus the same for the
+query-randomised null. A positional habit shows as top-10 sets that overlap across different contexts
+far above the null; a content read shows overlap at the null. Six value heads, 72 forwards."""
+from __future__ import annotations
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+REPO = Path("/Users/daniel.tipton/Desktop/An app"); sys.path.insert(0, str(REPO / "src"))
+os.environ.setdefault("MODEL_RUN_SESSION", "CRO habit probe")
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out-habit"; OUT.mkdir(exist_ok=True)
+GAP, K, NDRAW = 257, 10, 50
+CANDS = [(1, 7), (6, 0), (15, 3)]
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_5 as q35
+from mlx_lm.models import gated_delta as gd
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+caps = []
+_orig = q35.gated_delta_update
+def hooked(q, k, v, a, b, A_log, dt_bias, state=None, mask=None, use_kernel=True):
+    out, st = _orig(q, k, v, a, b, A_log, dt_bias, state, mask, use_kernel); mx.eval(out)
+    caps.append({"q": q, "k": k, "a": a, "b": b, "A_log": A_log, "dt_bias": dt_bias}); return out, st
+q35.gated_delta_update = hooked
+def alpha_batch(Q, kk, g, beta, t):
+    W = Q.copy(); out = np.zeros((t + 1, Q.shape[0]))
+    for r in range(t, -1, -1):
+        kr = kk[r]; d = W @ kr; out[r] = beta[r] * d; W = g[r] * (W - beta[r] * d[:, None] * kr[None, :])
+    return out
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None); model.eval()
+corpus = json.load(open(HERE / "corpus.json")); rng = np.random.default_rng(0)
+rows = []
+for ctx in corpus:
+    for qi, qry in enumerate(ctx["queries"]):
+        if qry.get("control"): continue
+        ids = encode(tokenizer, ctx["text"] + qry["query"]); t = len(ids) - 1; n_elig = t - GAP + 1
+        caps.clear(); out = model(mx.array(ids)[None]); mx.eval(out)
+        for (b, kh) in CANDS:
+            cap = caps[b]; q = np.array(cap["q"].astype(mx.float32))[0]; k = np.array(cap["k"].astype(mx.float32))[0]
+            beta = np.array(mx.sigmoid(cap["b"]).astype(mx.float32))[0]; g = np.array(gd.compute_g(cap["A_log"], cap["a"], cap["dt_bias"]).astype(mx.float32))[0]
+            rep = g.shape[1] // q.shape[1]
+            for h in (kh * rep, kh * rep + 1):
+                kk = k[:, kh]; qq = q[t, kh]
+                A = np.abs(alpha_batch(qq[None, :], kk, g[:, h], beta[:, h], t))[:n_elig, 0]
+                top = np.argsort(A)[-K:]
+                Qr = rng.standard_normal((NDRAW, kk.shape[1])); Qr *= np.linalg.norm(qq) / np.linalg.norm(Qr, axis=1, keepdims=True)
+                An = np.abs(alpha_batch(Qr, kk, g[:, h], beta[:, h], t))[:n_elig]
+                null_tops = [np.argsort(An[:, d])[-K:].tolist() for d in range(NDRAW)]
+                rows.append({"kind": ctx["kind"], "context": ctx["index"], "query": qi, "block": b, "key_head": kh, "head": h, "T": t + 1, "n_elig": int(n_elig),
+                             "top_abs": top.tolist(), "top_frac": (top / n_elig).tolist(), "top_mass_share": float(A[top].sum() / (A.sum() + 1e-30)),
+                             "null_tops_abs": null_tops, "null_top_mass_share": float(np.mean([An[nt, d].sum() / (An[:, d].sum() + 1e-30) for d, nt in enumerate(null_tops)]))})
+        print(json.dumps({"event": "progress", "elapsed_s": round(time.time() - T0, 1), "kind": ctx["kind"], "context": ctx["index"], "query": qi}), flush=True)
+# overlap across DIFFERENT contexts, per head, in absolute positions (habit at fixed offsets from the start) and in bins of context fraction (habit at relative positions)
+def overlap(a, b): return len(set(a) & set(b))
+summary = {}
+for (b, kh) in CANDS:
+    for h in (kh * 2, kh * 2 + 1):
+        rs = [r for r in rows if r["block"] == b and r["head"] == h]
+        real_abs, null_abs, real_frac, null_frac, same_ctx = [], [], [], [], []
+        for i in range(len(rs)):
+            for j in range(i + 1, len(rs)):
+                x, y = rs[i], rs[j]
+                if (x["kind"], x["context"]) == (y["kind"], y["context"]):
+                    same_ctx.append(overlap(x["top_abs"], y["top_abs"])); continue
+                real_abs.append(overlap(x["top_abs"], y["top_abs"]))
+                null_abs.append(np.mean([overlap(x["null_tops_abs"][d], y["null_tops_abs"][d]) for d in range(NDRAW)]))
+                fx = [int(f * 20) for f in x["top_frac"]]; fy = [int(f * 20) for f in y["top_frac"]]
+                real_frac.append(len(set(fx) & set(fy)))
+                nx = [[int(p / x["n_elig"] * 20) for p in x["null_tops_abs"][d]] for d in range(NDRAW)]; ny = [[int(p / y["n_elig"] * 20) for p in y["null_tops_abs"][d]] for d in range(NDRAW)]
+                null_frac.append(np.mean([len(set(nx[d]) & set(ny[d])) for d in range(NDRAW)]))
+        summary[f"block{b}_kh{kh}_h{h}"] = {"items": len(rs), "cross_context_overlap_abs": float(np.mean(real_abs)), "null_abs": float(np.mean(null_abs)),
+                                             "cross_context_overlap_fracbins": float(np.mean(real_frac)), "null_fracbins": float(np.mean(null_frac)),
+                                             "same_context_overlap_abs": float(np.mean(same_ctx)) if same_ctx else None,
+                                             "top10_mass_share_median": float(np.median([r["top_mass_share"] for r in rs])), "null_top10_mass_share_median": float(np.median([r["null_top_mass_share"] for r in rs])),
+                                             "median_top_positions_abs": [int(v) for v in np.median([sorted(r["top_abs"]) for r in rs], axis=0)]}
+json.dump({"rows": rows, "summary": summary, "parameters": {"GAP": GAP, "K": K, "NDRAW": NDRAW, "candidates": CANDS}}, open(OUT / "habit.json", "w"))
+print(json.dumps(summary, indent=1), flush=True)

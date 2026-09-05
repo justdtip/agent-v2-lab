@@ -119,3 +119,7 @@ The plan at `pending/03-REVISED-PLAN-2026-09-05.md` supersedes the queue in the 
 ## 7. Constraints restated
 
 No implementing subagents. The Deputy commits; the Chief never commits or pushes. Every commit gated on a read of every hunk. Per-run lifts for agent deployment until D4 says otherwise. Pre-registered readings and WO-STAT-001 power before any run. R38 and R39 discipline on every record. The Director's direct instruction governs over any relay.
+
+## F9 (2026-09-06, 01:30): where attention reads is an inverted U on layers 20 to 24, converging with the lens fan-out
+
+On retrieval-heavy text (RETRIEVAL-CHANNELS-2026-09-06, 72 items, both channels under one span statistic), attention's concentration on the answer's known span by layer is 1.8, 2.6, 2.6, 3.5 at layers 4 to 16, then 15.2 at 20, 19.5 at 24, 9.1 at 28 and 6.3 at 32 (medians, as multiples of the random-query null). The peak coincides with the hosted-lens fan-out region at layers 18 to 25 and sits on the attention members of R41e's pairs 19/20 and 23/24. Two instruments with no shared machinery land on the same place. The recurrent heads that could physically have retrieved at that range read the span at the uniform share on every kind (F8 confirmed where its author said it had not been tested); the mechanism is the read operation, softmax competition against a linear sum over a superposed store, not query mobility. Bears on WP5: the distance curve reads at exactly those pairs and should be most sensitive there.
