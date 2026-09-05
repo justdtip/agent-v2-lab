@@ -182,3 +182,17 @@ direct measurements, and the first ten steps settle it. Both arms train the same
 on the same data and so see the same fraction of it, which is what makes the comparison between
 them mean what it says; a run that sees just over half its data once is a different object from
 one trained to convergence, and the table is read with that in view.
+
+**The base-model evaluation, 12:05 (the Deputy; committed 64d916a).** Qwen3.5-4B, 4-bit, no
+adapter, test split: 123 of 180 (0.683), clean rate identical; valid actions 0.997, schema
+validity 1.0, executable calls 0.840; loops 20 and exhausted 32, so 52 of 57 failures are the two
+mechanisms the SPEC-003 addendum was accepted to attack; 74,025 generated tokens, no think tokens;
+wall time 1:19:22, 26.5 seconds a task, which settles the evaluation half of the projection at about
+80 minutes a split. And the field `recovered_errors` reads exactly 0 against 273 tool errors: the
+empirical form of the 10:12 ruling. That field is the error count on success and zero otherwise,
+so on a run where no successful trajectory errored it reports nothing, and had the tool-error cause
+been defined by that name it would have fired at the first error of every failed trajectory and
+nowhere else, taking the whole cumulative incidence with it under competing risks. The per-error
+rule is not a tidier definition of the same thing; it is the only one of the two that measures
+anything, and the next reader who sees a field in the codebase that looks like it already does the
+job should read this line first.
