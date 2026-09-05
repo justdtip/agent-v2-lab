@@ -48,13 +48,11 @@ if hasattr(model.language_model.model.embed_tokens, "scales"): embed = mx.dequan
 V = embed.shape[0]
 def clean(t):
     s = tokenizer.decode([int(t)]); return s.startswith(" ") and s[1:].isalpha() and len(s) >= 5 and s[1:].islower()
-cands = [int(t) for t in rng.permutation(V) if clean(t)][:NCONCEPT]
-concepts = cands; assert len(concepts) == NCONCEPT
-dirs = {c: None for c in concepts}
+cands = [int(t) for t in rng.permutation(V) if clean(t)][:4 * NCONCEPT]
+concepts = None; events = None                                                   # chosen after the pre-pass: absent from every injection site's top 25 (the Head, 10:55)
 # Direction (fourth form, the contrast, pre-registered 10:50): J^T (u_c - mean of the unembedding rows of the 25 tokens the unablated
 # lens already reads at the injection position), built for the concept's margin over its competitors rather than for gain.
 Jinj = np.array(J[L_INJ]).astype(np.float64)
-U = np.array(embed[mx.array(concepts)].astype(mx.float32)).astype(np.float64)
 Enp = None
 def unembed_rows(ids):
     global Enp
@@ -62,7 +60,7 @@ def unembed_rows(ids):
     return np.array(Enp[mx.array(ids)].astype(mx.float32)).astype(np.float64)
 CONTRAST = {}   # (doc index, position) -> unit direction for that event's concept
 LAMBDAS = [0.0]
-events = [(di, p, concepts[(di * EVENTS_PER_DOC + i) % NCONCEPT]) for di in range(DOCS) for i, p in enumerate(positions)]
+
 DOC_INDEX = {"i": 0}
 def forward(d, inj, alpha):
     """residuals at READ with the per-event contrast directions added at layer L_INJ at the given positions; inj: list of (pos, concept) or None."""
@@ -80,7 +78,8 @@ def forward(d, inj, alpha):
 def top25(h, L, pos): return np.array(mx.argsort(view.unembed(view.final_norm(h[0][mx.array(pos)].astype(mx.float32) @ J[L].T)), axis=-1)[:, -25:])
 def measure(ablate, alpha, inject=True):
     ABLATE.clear(); ABLATE.update(ablate)
-    same = {L: [] for L in READ}; later = {(L, o): [] for L in (16, 20, 24, 28) for o in OFFSETS}; norms = []   # per-event vectors, event order = events
+    LATER = [L for L in (16, 20, 24, 28) if L in READ]                                  # later-position readouts must lie downstream of the injection (24 and 28 for injection at 20)
+    same = {L: [] for L in READ}; later = {(L, o): [] for L in LATER for o in OFFSETS}; norms = []   # per-event vectors, event order = events
     for di, d in enumerate(docs):
         DOC_INDEX["i"] = di; inj = [(p, c) for (dd, p, c) in events if dd == di] if inject else None
         cap = forward(d, inj, alpha); norms.append(cap["norm"])
@@ -88,22 +87,29 @@ def measure(ablate, alpha, inject=True):
         for L in READ:
             t = top25(cap[L], L, [p for p, c in ev])
             for i, (p, c) in enumerate(ev): same[L].append(int(c in t[i]))
-        for L in (16, 20, 24, 28):
+        for L in LATER:
             for o in OFFSETS:
                 t = top25(cap[L], L, [p + o for p, c in ev])
                 for i, (p, c) in enumerate(ev): later[(L, o)].append(int(c in t[i]))
     return {"same": {L: v for L, v in same.items()}, "later": {f"{L}+{o}": v for (L, o), v in later.items()}, "median_norm_L12": float(np.median(norms))}
 
 ABLATE.clear()
-cosd = []; gaind = []
+TOP = {}; HINJ = {}
 for di, d in enumerate(docs):
-    DOC_INDEX["i"] = di; cap = forward(d, None, 0.0); hL = cap["h_inj"]; ev = [(p, c) for (dd, p, c) in events if dd == di]
-    top = np.array(mx.argsort(view.unembed(view.final_norm(hL[0][mx.array([p for p, c in ev])].astype(mx.float32) @ J[L_INJ].T)), axis=-1)[:, -25:])
-    for i, (p, c) in enumerate(ev):
-        comp = unembed_rows([int(t) for t in top[i] if int(t) != c]); uc = unembed_rows([c])[0]
-        contrast = uc - comp.mean(axis=0); v = contrast @ Jinj                    # row form of J^T (u_c - mean competitors)
-        v = v / (np.linalg.norm(v) + 1e-12); CONTRAST[(di, p)] = v.astype(np.float32)
-        img = Jinj @ v; cosd.append(float(np.dot(img, uc) / (np.linalg.norm(img) * np.linalg.norm(uc) + 1e-12))); gaind.append(float(np.linalg.norm(img)))
+    DOC_INDEX["i"] = di; cap = forward(d, None, 0.0); hL = cap["h_inj"]
+    top = np.array(mx.argsort(view.unembed(view.final_norm(hL[0][mx.array(positions)].astype(mx.float32) @ J[L_INJ].T)), axis=-1)[:, -25:])
+    for i, p in enumerate(positions): TOP[(di, p)] = [int(t) for t in top[i]]
+present = set(t for v in TOP.values() for t in v)
+kept = [c for c in cands if c not in present]; dropped = [c for c in cands if c in present]
+concepts = kept[:NCONCEPT]; assert len(concepts) == NCONCEPT, (len(kept), len(dropped))
+events = [(di, p, concepts[(di * EVENTS_PER_DOC + i) % NCONCEPT]) for di in range(DOCS) for i, p in enumerate(positions)]
+print(json.dumps({"event": "concepts", "candidates": len(cands), "dropped_present_at_some_site": len(dropped), "chosen": [tokenizer.decode([c]) for c in concepts]}), flush=True)
+cosd = []; gaind = []
+for (di, p, c) in events:
+    comp = unembed_rows(TOP[(di, p)]); uc = unembed_rows([c])[0]
+    contrast = uc - comp.mean(axis=0); v = contrast @ Jinj                        # row form of J^T (u_c - mean competitors)
+    v = v / (np.linalg.norm(v) + 1e-12); CONTRAST[(di, p)] = v.astype(np.float32)
+    img = Jinj @ v; cosd.append(float(np.dot(img, uc) / (np.linalg.norm(img) * np.linalg.norm(uc) + 1e-12))); gaind.append(float(np.linalg.norm(img)))
 print(json.dumps({"event": "direction_check", "form": "contrast: J^T (u_c - mean of the 25 competitors the lens reads at the position)", "median_cos(J v, u_c)": round(float(np.median(cosd)), 3), "median_||J v||_per_unit_norm": round(float(np.median(gaind)), 4), "events": len(CONTRAST)}), flush=True)
 DIRSET = {0.0: None}
 base0 = measure({}, 0.0, inject=False); print(json.dumps({"event": "no_injection_baseline", "same": {L: float(np.mean(v)) for L, v in base0["same"].items()}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
@@ -155,19 +161,19 @@ def perm_p(relay_vec, ctl_vecs, draws=10000, seed=0):
     return float(obs), float((sims <= obs + 1e-12).mean()), float(sims.mean()), float(sims.std())
 unab = cal[(LAM, ALPHA)]
 results = {"alpha": ALPHA, "lambda_rel": LAM, "L_INJ": L_INJ, "no_injection_means": {"same": {L: float(np.mean(v)) for L, v in base0["same"].items()}}, "unablated_means": {"same": {L: float(np.mean(v)) for L, v in unab["same"].items()}, "later": {k: float(np.mean(v)) for k, v in unab["later"].items()}}, "arms": []}
-ks = [k for k in K_LIST if k < len(ordered)] + [len(ordered)]
-for k in ks:
-    top = ordered[:k]; rel = measure(by_block(top), ALPHA); ctl = []
-    nseed = int(os.environ.get("NSEED_PRIMARY", "19")) if k == len(ordered) else NSEED      # the primary comparison's resolution is the number of random arms (the Head, 09:25): nineteen give one in twenty
-    for s in range(nseed):
-        rs = random_set(top, s); ctl.append({"seed": s, "heads": rs, "overlap": len(set(rs) & selset), **measure(by_block(rs), ALPHA)})
+ordered23 = [(b, h) for b, h in ordered if b == 23]
+ARMS = [("block23_for_layer24", ordered23, 24), ("all_for_layer28", ordered, 28)]
+for name, top, primary_read in ARMS:
+    rel = measure(by_block(top), ALPHA); ctl = []
+    for sd in range(int(os.environ.get("NSEED_PRIMARY", "19"))):
+        rs = random_set(top, sd); ctl.append({"seed": sd, "heads": rs, "overlap": len(set(rs) & selset), **measure(by_block(rs), ALPHA)})
     tests = {}
-    for key, get in (("same_28", lambda m: m["same"][28]), ("later_28+4", lambda m: m["later"]["28+4"]), ("same_24", lambda m: m["same"][24]), ("same_20", lambda m: m["same"][20])):
+    for key, get in (("same_24", lambda m: m["same"][24]), ("same_28", lambda m: m["same"][28]), ("later_24+4", lambda m: m["later"]["24+4"]), ("later_28+4", lambda m: m["later"]["28+4"])):
         obs = float(np.mean(get(rel))); cms = [float(np.mean(get(c))) for c in ctl]
-        rank = 1 + sum(1 for x in cms if x < obs) + 0.5 * sum(1 for x in cms if x == obs)        # rank of the relay arm among the arms, 1 = lowest recall; ties split
-        tests[key] = {"relays": obs, "control_means": cms, "n_arms": len(cms) + 1, "relay_rank_low_first": rank, "p_rank": rank / (len(cms) + 1)}
-    arm = {"k": k, "heads": top, "relays": rel, "controls": ctl, "tests": tests, "primary": (k == len(ordered))}
+        ties = sum(1 for x in cms if abs(x - obs) < 1e-12); rank = 1 + sum(1 for x in cms if x < obs) + 0.5 * ties
+        tests[key] = {"relays": obs, "control_means": cms, "n_arms": len(cms) + 1, "relay_rank_low_first": rank, "p_rank": rank / (len(cms) + 1), "ties_with_relays": ties, "control_spread_events": int(round(64 * (max(cms) - min(cms)))), "uninformative": bool(max(cms) - min(cms) < 1.5 / 64)}
+    arm = {"name": name, "k": len(top), "heads": top, "primary_readout": primary_read, "relays": rel, "controls": ctl, "tests": tests}
     results["arms"].append(arm); json.dump(results, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1)
-    print(json.dumps({"event": "k", "k": k, "primary": k == len(ordered), **{key: {"relays": round(t["relays"], 3), "controls": [round(x, 3) for x in t["control_means"]], "rank": t["relay_rank_low_first"], "of": t["n_arms"], "p_rank": round(t["p_rank"], 3)} for key, t in tests.items()}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
-results["parameters"] = {"L_INJ": L_INJ, "READ": READ, "OFFSETS": OFFSETS, "concepts": concepts, "concept_strings": [tokenizer.decode([c]) for c in concepts], "events": len(events), "positions": positions, "DOWN_BLOCKS": DOWN_BLOCKS, "ordered": ordered, "K_LIST": ks, "NSEED": NSEED, "primary": f"k = all {len(ordered)} downstream relays under the floor, same position, layer {PRIMARY_READ}; the relay arm's rank among twenty arms (nineteen random head sets), survival at rank 1; a primary with nineteen ties is reported as uninformative (pre-registered 10:50)", "elapsed_s": round(time.time() - T0, 1)}
-json.dump(results, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1); print(json.dumps({"event": "done", "primary_24": next(a["tests"]["same_24"] for a in results["arms"] if a["primary"]), "primary_28": next(a["tests"]["same_28"] for a in results["arms"] if a["primary"])}), flush=True)
+    print(json.dumps({"event": "arm", "name": name, "k": len(top), "primary_readout": primary_read, **{key: {"relays": round(t["relays"], 3), "controls_min_max": [round(min(t["control_means"]), 3), round(max(t["control_means"]), 3)], "rank": t["relay_rank_low_first"], "of": t["n_arms"], "uninformative": t["uninformative"]} for key, t in tests.items()}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+results["parameters"] = {"L_INJ": L_INJ, "READ": READ, "OFFSETS": OFFSETS, "concepts": concepts, "concept_strings": [tokenizer.decode([c]) for c in concepts], "events": len(events), "positions": positions, "DOWN_BLOCKS": DOWN_BLOCKS, "ordered": ordered, "K_LIST": ks, "NSEED": NSEED, "primary": "layer 24 on the block-23 relays against nineteen random block-23 sets; layer 28 on all thirteen against nineteen random sets; rank among twenty; a readout whose nineteen random arms span less than 1.5 events of 64 is uninformative and not ranked (pre-registered 10:50, amended 10:58)", "alpha_previous_run_at_layer12": 2.0, "alpha_this_run": ALPHA, "elapsed_s": round(time.time() - T0, 1)}
+json.dump(results, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1); print(json.dumps({"event": "done", "alpha": ALPHA, "primary_24_block23": results["arms"][0]["tests"]["same_24"], "primary_28_all": results["arms"][1]["tests"]["same_28"]}), flush=True)

@@ -1145,3 +1145,55 @@ first arm tonight with no forced overlap and no deterministic control.
 both defects stated per row. Recorded in the wiring map; carried into WP7 and WP9 as the Head's
 section 0b. The real-token reachability at all five layers (0.42, 0.56, 0.82, 0.87, 0.88) replaces
 the proxy wherever the proxy was quoted.
+
+## The contrast injection at layer 20, 12:15: the same-position readout cannot test broadcast, and the set-level leg stays open with its test identified
+
+Run as pre-registered (`contrast.as-run.py.txt`, `run-contrast.log`, `out/contrast_L20.json`; the
+script's final parameters dump failed on a removed variable after both arms were saved, and the
+block was written by hand from the log). Direction: J^T (u_c minus the mean of the 25 competitors
+the unablated lens reads at the position), median cosine with u_c 0.14 and size 5.3 per unit norm;
+none of the 64 candidate concepts was present at any site, so the same sixteen were used.
+**Magnitude: the contrast direction registers at once the residual norm** (same-position recall
+0.938 at layers 23, 24 and 27, 0.922 at 28; 0.875 at 24 already at half the norm), against twice
+the norm for the regularised pre-image at layer 12, so the injection is half as foreign and the
+shrinkage prediction had room. Set: 13 relays downstream of layer 20 under the floor (6 at block
+23, 7 at block 27), the exclude control exact at both blocks, nineteen random arms per comparison.
+
+| comparison | readout | relays (events of 64) | unablated | nineteen random arms (events) | spread | rank of 20 | reading |
+|---|---|---|---|---|---|---|---|
+| six block-23 relays, primary | 24 | 60 | 60 | 60 to 60 | 0 | 19 ties | uninformative by the pre-registered rule |
+| six block-23 relays | 28 | 60 | 59 | 58 to 60 | 2 | 17, six ties | descriptive |
+| all thirteen, primary | 28 | 60 | 59 | 58 to 60 | 2 | 15.5, nine ties | at the top of a two-event range |
+| all thirteen | 24 | 60 | 60 | 60 to 60 | 0 | 19 ties | uninformative |
+
+Later positions: the injected concept is never read at +1, +2, +4, +8 or +16 positions at 24 or
+28 on any arm, unablated included (one event of 64 at 24+1, none elsewhere).
+
+**Under the three pre-registered outcomes.** (a) Broadcast, the relays lowest at 24: did not
+appear; nothing removed the injected content at 24, relay or random. (b) The reversal shrinking
+toward the null under the less foreign injection: observed in form, from four events over the
+unablated value at rank 19 of 20 to one event at ranks 15.5 and 17, but the random arms' range
+shrank with it, from nine events to two, so the shrinkage cannot be separated from the injection
+simply being more robust; recorded as consistent with the suppression hypothesis and not as its
+confirmation. (c) Unchanged: no.
+
+**Why the same-position readout cannot test broadcast, which two instruments at two layers now
+show.** Same-position transport across layers is the residual stream's skip connection: content
+added to the residual at layer 20 reaches the layer-24 readout whether or not any attention head
+is ablated, so ablating heads can add to it or overwrite it, which is the reversal direction, and
+can never remove it, which is why no set of any kind moved the primary readout in either run. The
+test of broadcast is the cross-position readout, and there the injected concept is never read at
+any later position even with every head intact, so there is no broadcast signal for any ablation
+to remove. The lens-injection, lens-readout paradigm as built cannot test the broadcast hypothesis
+on this model. The paper's instrument for it, the injected-thought report rate, reads the model's
+own generation at later positions and is cross-position by construction; that protocol, or a lens
+readout at later positions on content the model demonstrably propagates, is the discriminating
+experiment for the set-level leg, and it is filed, not run.
+
+**WP12 at the end of the night.** Established: a real, reproducible relay population by weight
+arithmetic, with no member individually special (the within-layer single-head null). Open: the
+set-level question, the set damaging more than random and redundantly, with its discriminating
+experiment identified above. Generated and not tested: the suppression hypothesis, with a
+consistent second observation. Instrument findings F10, F11, F12 and the rules R53 and R54 stand.
+The model goes to the Director's training order ("Continue all work. Resume training goal.",
+12:10).
