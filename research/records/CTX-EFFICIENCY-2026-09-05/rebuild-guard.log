@@ -1,0 +1,3 @@
+guard: alive t+0s pressure=1 swap_free=1109M
+guard: pressure critical on one sample, holding for a second; swap free 678M
+guard: target pid 26405 exited on its own

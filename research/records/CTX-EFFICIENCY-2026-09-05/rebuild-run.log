@@ -1,0 +1,16 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 3935.73it/s]
+{"event": "loaded", "working_set_gib": 17.76}
+{"event": "prefill", "done": 512, "of": 262144, "elapsed_s": 0.9, "peak_gib": 3.32, "ws_share": 0.187, "crossed_working_set": false}
+{"event": "prefill", "done": 8704, "of": 262144, "elapsed_s": 15.6, "peak_gib": 3.56, "ws_share": 0.2, "crossed_working_set": false}
+{"event": "prefill", "done": 16896, "of": 262144, "elapsed_s": 32.5, "peak_gib": 4.1, "ws_share": 0.231, "crossed_working_set": false}
+{"event": "prefill", "done": 25088, "of": 262144, "elapsed_s": 51.1, "peak_gib": 4.63, "ws_share": 0.261, "crossed_working_set": false}
+{"event": "prefill", "done": 33280, "of": 262144, "elapsed_s": 71.6, "peak_gib": 5.17, "ws_share": 0.291, "crossed_working_set": false}
+{"event": "prefill", "done": 41472, "of": 262144, "elapsed_s": 94.3, "peak_gib": 5.45, "ws_share": 0.307, "crossed_working_set": false}
+{"event": "prefill", "done": 49664, "of": 262144, "elapsed_s": 118.7, "peak_gib": 5.99, "ws_share": 0.337, "crossed_working_set": false}
+{"event": "prefill", "done": 57856, "of": 262144, "elapsed_s": 145.0, "peak_gib": 6.52, "ws_share": 0.367, "crossed_working_set": false}
+{"event": "prefill", "done": 66048, "of": 262144, "elapsed_s": 176.9, "peak_gib": 7.07, "ws_share": 0.398, "crossed_working_set": false}
+{"event": "prefill", "done": 74240, "of": 262144, "elapsed_s": 213.0, "peak_gib": 7.6, "ws_share": 0.428, "crossed_working_set": false}
+{"event": "prefill", "done": 82432, "of": 262144, "elapsed_s": 256.2, "peak_gib": 8.14, "ws_share": 0.459, "crossed_working_set": false}
+{"event": "prefill", "done": 90624, "of": 262144, "elapsed_s": 298.8, "peak_gib": 8.68, "ws_share": 0.489, "crossed_working_set": false}
+{"event": "prefill", "done": 98816, "of": 262144, "elapsed_s": 342.9, "peak_gib": 9.22, "ws_share": 0.519, "crossed_working_set": false}
+{"event": "exit", "pid": 26405, "status": 143, "signalled": true}

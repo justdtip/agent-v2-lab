@@ -1,0 +1,5 @@
+launch: box clear by libmlx test, starting run
+launch: run pid 26405
+launch.sh: line 26: 26405 Terminated: 15          "$PY" ctxmax2.py >> "$LOG" 2>&1
+{"event": "exit", "pid": 26405, "status": 143, "signalled": true}
+launch: done, exit status 143
