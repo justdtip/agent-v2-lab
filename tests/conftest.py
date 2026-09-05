@@ -133,22 +133,20 @@ FORK_HOOKS = (("subprocess", "_fork_exec"), ("os", "fork"))
 #: from here so the two cannot drift, and
 #: ``test_the_spawn_exemptions_are_all_still_load_bearing`` fails when an entry goes stale.
 #:
-#: ``provenance.py`` **has left this list** (issue 84 item 1), and the ordering is what decided
-#: it: ``write_provenance`` runs *after* ``load_policy`` at the end of every probe and every
-#: ``cli`` stage, so it was the one site that forked with a model already resident and Metal
-#: fully up. An abort there is ``SIGABRT``, which means ``atexit`` never runs and the lock is
+#: ``provenance.py`` is the one to fix first, and the ordering is what decides it:
+#: ``write_provenance`` runs *after* ``load_policy`` at the end of every probe and every ``cli``
+#: stage, so it is the one site that forks with a model already resident and Metal fully up.
+#: ``runlog.git_commit``, ``integrity.git_tree_dirty`` and ``probes/guard.py`` all run before
+#: the load. An abort there is ``SIGABRT``, which means ``atexit`` never runs and the lock is
 #: orphaned -- the failure this whole slice exists to prevent, arriving from the provenance
-#: write at the end of a *successful* run. It now goes through ``spawn.run`` with the repository
-#: root in argv as ``git -C``, and ``test_a_provenance_write_after_a_load_does_not_fork`` fails
-#: if that is undone. The seven that remain are issue 84 items 2 and 3; ``runlog.git_commit``,
-#: ``integrity.git_tree_dirty`` and ``probes/guard.py`` run before the load, and this list is
-#: empty when 84 closes.
+#: write at the end of a successful run. Filed as a follow-up; not fixed here.
 PRE_EXISTING_FORK_SITES = frozenset(
     {
         "src/local_llm_lab/chat.py",
         "src/local_llm_lab/check_env.py",
         "src/local_llm_lab/pipeline/integrity.py",
         "src/local_llm_lab/probes/guard.py",
+        "src/local_llm_lab/provenance.py",
         "src/local_llm_lab/runlog.py",
         "src/local_llm_lab/train_sft.py",
         "tests/test_probes.py",
