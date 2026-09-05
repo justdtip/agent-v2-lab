@@ -1,4 +1,16 @@
-# STATUS 2026-09-05 late evening: PARTLY SETTLED THROUGH THE PROXY. READ BEFORE ACTING.
+# STATUS 2026-09-05 late evening, FINAL: SETTLED THROUGH THE PROXY. READ BEFORE ACTING.
+
+The Proxy relayed the Director's clarification, verbatim: "pursue research freely. The concurrency rule (never load the model multiple times / no two model-loading runs at once) is the actual constraint -- that's always been the intent behind it, not gatekeeping test or research runs generally. Confirmed as in-scope: a performance/hardware benchmark that loads the model but tests no hypothesis about model behavior still counts as a test run under the lift."
+
+Operating rule from tonight, for every session:
+- Research and test runs proceed without a per-run lift. Ready means what it meant in this note's first version: the spec ratified, the reading pre-registered, power set by the WO-STAT-001 method, the instrument's fixture green. That is the Chief's gate on the design, not a lift on the run.
+- The one constraint is concurrency: never two model-loading processes at once, checked immediately before launch. Its mechanism is the lock of issue 83; until that lands the process-list check is the rule and every launch logs that it ran it. The first runs under this rule wait for issue 83, since it is the constraint the Director named.
+- Training lifts are not covered by this note and keep their own gate.
+- The Chief reports every result to the Director; visualisations are a deliverable.
+
+The two readings of "test run" recorded below are superseded: the distinction between a run that verifies a known answer and one that produces a new number does not gate anything under the Director's stated intent. The banners below are kept as the record of how the evening's holds were handled.
+
+# STATUS 2026-09-05 late evening: SUPERSEDED BANNER: PARTLY SETTLED THROUGH THE PROXY. READ BEFORE ACTING.
 
 The Proxy relayed the Director's word, verbatim: "a standing lift now applies to all test runs -- those can proceed without a per-run lift from Daniel or me. This is specifically about test runs; anything beyond that (full experiment ratification/lifts) still follows the existing standing-order rules." Under the Proxy standing order that relay carries the Director's authority for every session.
 
