@@ -40,6 +40,7 @@ from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.integrity import git_tree_dirty
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+from local_llm_lab.runlock import hold_model_run_lock
 from local_llm_lab.runlog import RunLog, git_commit
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
@@ -310,6 +311,11 @@ def _run_prefer(
 
     mx.random.seed(seed)
     started = time.monotonic()
+    # Issue 83: the DPO path is the one door that cannot go through `runlock.load_weights` --
+    # `FastLanguageModel.from_pretrained` calls `mlx_lm.load` itself, inside mlx-tune. So the
+    # lock is taken explicitly, immediately before the load and held until this process exits,
+    # which is the same contract `load_weights` gives every other stage.
+    hold_model_run_lock()
     print(f"Loading {model_name} (pre-quantized; mlx_lm.load, no re-quantization)")
     log.info("loading base", model=model_name, max_seq_length=max_seq_length)
     # `load_in_4bit` is accepted for API parity but unused by mlx-tune 0.6.0; the repo is

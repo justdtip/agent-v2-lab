@@ -23,6 +23,7 @@ from local_llm_lab.pipeline.tasks import (
 )
 from local_llm_lab.pipeline.transcript import Transcript, summary_table
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+from local_llm_lab.runlock import load_weights
 from local_llm_lab.runlog import RunLog, git_commit
 
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-3B-Instruct-4bit"
@@ -86,11 +87,14 @@ def load_policy(
     Resolution happens here so that no caller rebuilds an ``ArchitectureView`` or repeats
     ``ModelSpec.resolve``; every stage then records the same resolved declaration. ``lazy``
     loads parameters on demand for structural inspection only (the preflight stage).
+
+    Weights come through ``runlock.load_weights``, never ``mlx_lm.load``: this function is the
+    shared loader for every v2 stage and probe, so it is where the model-run lock belongs
+    (issue 83). It is taken before the load and held until the process exits, because that is
+    how long the weights stay resident.
     """
     configure_local_cache()
-    from mlx_lm import load
-
-    model, tokenizer = load(
+    model, tokenizer = load_weights(
         spec.hf_id,
         adapter_path=None if adapter is None else str(adapter.resolve()),
         lazy=lazy,

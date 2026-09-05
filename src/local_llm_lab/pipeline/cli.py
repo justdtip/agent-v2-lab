@@ -35,6 +35,7 @@ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.pipeline.transcript import Transcript
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
 from local_llm_lab.provenance import write_provenance
+from local_llm_lab.runlock import load_weights
 from local_llm_lab.runlog import (
     HealthThresholds,
     RunLog,
@@ -200,11 +201,14 @@ def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
 
 
 def _load_training_base(hf_id: str) -> tuple[Any, Any]:
-    """Lazily load the registry's base model only while resolving training targets."""
-    configure_local_cache()
-    from mlx_lm import load
+    """Lazily load the registry's base model only while resolving training targets.
 
-    return load(hf_id)
+    The second of the two doors on the v2 surface (``evaluate.load_policy`` is the other), and
+    the one the training stage goes through, so the model-run lock is taken here too: the
+    trainer holds these weights for the whole 70-minute run (issue 83).
+    """
+    configure_local_cache()
+    return load_weights(hf_id)
 
 
 def _import_pinned_mlx_lm() -> Any:

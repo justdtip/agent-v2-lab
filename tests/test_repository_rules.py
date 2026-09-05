@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from conftest import PRE_EXISTING_FORK_SITES, SPAWN_SANCTIONED_PATHS
 
 _PROJECTION_NAMES = frozenset(
     {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"}
@@ -600,4 +601,381 @@ def test_probe_layer_default_scanner_ignores_nonliteral_and_unrelated_defaults(t
     assert _hard_coded_probe_layer_defaults({source}) == [
         "example.py:1:--layers=2,4,6",
         "example.py:2:--readout-layers=0.5,1.0",
+    ]
+
+
+# ------------------------------------------------------------- the model-run lock (issue 83)
+#
+# The Director's one constraint on a research run is that two model loads never happen at once
+# on this 24 GiB machine, and `runlock` is the whole mechanism. Wiring every entry point by hand
+# is a guard the next entry point forgets, so the rule is structural instead: on the v2 surface
+# there is exactly one door to `mlx_lm`'s loader, and it is the one that takes the lock first.
+
+#: The v2 surface. Legacy top-level scripts are excluded on purpose, and the exclusion is not a
+#: convenience: briefing §3 keeps `compare_agent.py`, `evaluate_agent.py`, `chat_replay.py`,
+#: `compare_chat.py`, `depth_expansion.py`, `evaluate_complex_agent.py` and `train_grpo.py` "for
+#: reference and not on the v2 path", the runs the concurrency clause names are all v2 entry
+#: points (`agent-pipeline`, `agent-v2-*`), and rewriting modules the briefing says not to
+#: refactor would put an untested change next to the mechanism that gates every run. They are
+#: reported in the issue-83 hand-off as observed-not-wired rather than silently swept in.
+_RUN_LOCK_SURFACE = ("src/local_llm_lab/pipeline", "src/local_llm_lab/probes")
+
+#: The module that owns the lock, and the wrapper the surface must call instead.
+_RUN_LOCK_MODULE = "src/local_llm_lab/runlock.py"
+_RUN_LOCK_WRAPPER = "load_weights"
+
+#: Weight loaders that are not `mlx_lm.load`. `FastLanguageModel.from_pretrained` reaches
+#: `mlx_lm.load` from inside mlx-tune, where no wrapper of ours can sit, so a module that calls
+#: one of these must at least name the lock module itself.
+_INDIRECT_WEIGHT_LOADERS = frozenset({"FastLanguageModel.from_pretrained"})
+
+
+def _discover_run_lock_surface(root: Path) -> set[Path]:
+    """Every Python file on the v2 surface the single-door rule covers."""
+    found: set[Path] = set()
+    for relative in _RUN_LOCK_SURFACE:
+        found.update((root / relative).rglob("*.py"))
+    return found
+
+
+def _direct_weight_loader_uses(paths: set[Path]) -> list[str]:
+    """Report code that reaches `mlx_lm`'s loader without the run lock.
+
+    Two forms, because both have appeared in this tree: `from mlx_lm import load` (the import
+    every call site used before the lock existed) and a dotted `mlx_lm.load(...)`. Other
+    `mlx_lm` imports are untouched — `stream_generate`, `sample_utils.make_sampler` and the
+    version check in `cli.py` load no weights, and banning the package outright would make the
+    rule noisy enough to be waived.
+    """
+    findings: list[str] = []
+    for path in sorted(paths):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        # `ast.walk` is breadth-first, so a file's findings are sorted by line here: a report
+        # that jumps around the file is read as two separate defects rather than one.
+        in_file: list[tuple[int, str]] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module in {"mlx_lm", "mlx_lm.utils"}:
+                for alias in node.names:
+                    if alias.name == "load":
+                        in_file.append((node.lineno, f"from {node.module} import load"))
+            if isinstance(node, ast.Attribute) and (chain := _attribute_chain(node)) in {
+                "mlx_lm.load",
+                "mlx_lm.utils.load",
+            }:
+                in_file.append((node.lineno, chain))
+        findings.extend(f"{path.name}:{line}:{what}" for line, what in sorted(in_file))
+    return findings
+
+
+def _unlocked_indirect_loaders(paths: set[Path]) -> list[str]:
+    """Report a module that loads weights through a library wrapper without naming the lock."""
+    findings: list[str] = []
+    for path in sorted(paths):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        calls = [
+            (node.lineno, chain)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and (chain := _attribute_chain(node.func)) in _INDIRECT_WEIGHT_LOADERS
+        ]
+        if not calls:
+            continue
+        imports_lock = any(
+            isinstance(node, ast.ImportFrom) and node.module == "local_llm_lab.runlock"
+            for node in ast.walk(tree)
+        )
+        if imports_lock:
+            continue
+        findings.extend(f"{path.name}:{line}:{chain}" for line, chain in calls)
+    return findings
+
+
+def test_the_v2_surface_reaches_model_weights_only_through_the_run_lock() -> None:
+    """Issue 83: one door to `mlx_lm.load`, and it takes the model-run lock before it opens.
+
+    This is the rule that makes the lock a mechanism rather than a helper callers remember.
+    `runlock.load_weights` acquires before the import, so a refusal costs no weights; every
+    stage and probe reaches weights through `evaluate.load_policy` or `cli._load_training_base`,
+    and both of those now go through the wrapper.
+
+    Legacy top-level scripts are out of scope — see `_RUN_LOCK_SURFACE` for why that exclusion
+    is deliberate and not a convenience.
+    """
+    root = Path(__file__).resolve().parents[1]
+
+    assert _direct_weight_loader_uses(_discover_run_lock_surface(root)) == []
+
+
+def test_the_run_lock_surface_covers_every_stage_and_probe() -> None:
+    """Catches a new pipeline or probe module joining the tree outside the rule's sweep."""
+    root = Path(__file__).resolve().parents[1]
+    paths = _discover_run_lock_surface(root)
+
+    assert root / "src/local_llm_lab/pipeline/evaluate.py" in paths
+    assert root / "src/local_llm_lab/pipeline/cli.py" in paths
+    assert root / "src/local_llm_lab/pipeline/prefer.py" in paths
+    assert root / "src/local_llm_lab/probes/patch.py" in paths
+    assert root / "src/local_llm_lab/probes/state_probe.py" in paths
+    # The wrapper's own module is not on the surface: it is the door, so it holds the import.
+    assert root / _RUN_LOCK_MODULE not in paths
+
+
+def test_the_run_lock_wrapper_is_the_module_that_holds_the_import() -> None:
+    """The single door exists, imports the loader, and takes the lock before it does."""
+    root = Path(__file__).resolve().parents[1]
+    source = (root / _RUN_LOCK_MODULE).read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=_RUN_LOCK_MODULE)
+
+    wrapper = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == _RUN_LOCK_WRAPPER
+    )
+    body = list(ast.walk(wrapper))
+    acquires = [
+        node.lineno
+        for node in body
+        if isinstance(node, ast.Call) and _attribute_chain(node.func) == "hold_model_run_lock"
+    ]
+    imports = [
+        node.lineno
+        for node in body
+        if isinstance(node, ast.ImportFrom) and node.module == "mlx_lm"
+    ]
+
+    assert acquires and imports, "the wrapper must both acquire and import the loader"
+    # Order matters: a refusal must cost no weights and no download.
+    assert min(acquires) < min(imports)
+
+
+def test_indirect_weight_loaders_on_the_surface_name_the_lock() -> None:
+    """`prefer.py` reaches `mlx_lm.load` from inside mlx-tune; the AST rule cannot see it."""
+    root = Path(__file__).resolve().parents[1]
+
+    assert _unlocked_indirect_loaders(_discover_run_lock_surface(root)) == []
+
+
+def test_direct_loader_scanner_reports_both_forms_and_ignores_the_rest(tmp_path) -> None:
+    """Catches the rule widening to every `mlx_lm` import, or narrowing to only the `from` form."""
+    source = tmp_path / "example.py"
+    source.write_text(
+        "\n".join(
+            (
+                "from mlx_lm import load",
+                "from mlx_lm import stream_generate",
+                "from mlx_lm.sample_utils import make_sampler",
+                "import mlx_lm",
+                "model, tokenizer = mlx_lm.load(hf_id)",
+                "from mlx_lm import generate, load",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert _direct_weight_loader_uses({source}) == [
+        "example.py:1:from mlx_lm import load",
+        "example.py:5:mlx_lm.load",
+        "example.py:6:from mlx_lm import load",
+    ]
+
+
+def test_indirect_loader_scanner_fires_only_without_the_lock_import(tmp_path) -> None:
+    """Catches the indirect rule passing a module that dropped its lock import."""
+    unlocked = tmp_path / "unlocked.py"
+    unlocked.write_text(
+        "model, tokenizer = FastLanguageModel.from_pretrained(name)\n", encoding="utf-8"
+    )
+    locked = tmp_path / "locked.py"
+    locked.write_text(
+        "\n".join(
+            (
+                "from local_llm_lab.runlock import hold_model_run_lock",
+                "hold_model_run_lock()",
+                "model, tokenizer = FastLanguageModel.from_pretrained(name)",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert _unlocked_indirect_loaders({unlocked, locked}) == [
+        "unlocked.py:1:FastLanguageModel.from_pretrained"
+    ]
+
+
+# ---------------------------------------------------------- starting processes (issue 83)
+#
+# Forking is not dangerous in itself. Forking is dangerous *in this repository's interpreters*,
+# where MLX has been imported and Metal is up: the parent's fork handler can meet a lock the
+# Metal driver's memory-pool-decay thread holds, and libplatform aborts the process rather than
+# raising. It killed a full suite run on 2026-09-05 (macOS crash report
+# `Python-2026-09-05-202845.ips`), from a `subprocess.Popen` in a lock fixture.
+#
+# `local_llm_lab.spawn` is therefore the only sanctioned way to start a child: it resolves the
+# program to an absolute path, sets `close_fds=False`, and refuses `cwd`, `preexec_fn`,
+# `start_new_session` and the rest — which together are exactly CPython's conditions for taking
+# `posix_spawn` instead of `fork`. See that module's docstring for the mechanism.
+
+#: Dotted call chains that start a process.
+_PROCESS_STARTERS = frozenset(
+    {
+        "subprocess.run",
+        "subprocess.Popen",
+        "subprocess.call",
+        "subprocess.check_call",
+        "subprocess.check_output",
+        "subprocess.getoutput",
+        "subprocess.getstatusoutput",
+        "os.system",
+        "os.fork",
+        "os.forkpty",
+        "os.popen",
+        "os.posix_spawn",
+        "os.posix_spawnp",
+        "multiprocessing.Process",
+        "multiprocessing.Pool",
+    }
+)
+#: Prefixes covering the `os.spawn*` and `os.exec*` families without listing eighteen names.
+_PROCESS_STARTER_PREFIXES = ("os.spawn", "os.exec")
+
+# The two exemption sets live in `conftest.py` and are imported here, because the runtime fork
+# guard there and this static rule must never disagree about which files may fork. One list,
+# two enforcers: a site that leaves the list is covered by both at once.
+#
+# `PRE_EXISTING_FORK_SITES` predates the helper and every entry still forks today. They are
+# **reported, not fixed** in the issue-83 slice: each needs its own argument change (`chat.py`,
+# `train_sft.py`, `provenance.py` and `tests/test_probes.py` pass `cwd`; `check_env.py`,
+# `guard.py` and the two git helpers name a bare program), each has its own callers and
+# fixtures, and putting seven untested edits next to the mechanism that gates every
+# model-loading run is the wrong trade.
+
+
+def _discover_spawn_surface(root: Path) -> set[Path]:
+    """Every Python file the single-spawn-helper rule covers."""
+    found = set((root / "src/local_llm_lab").rglob("*.py"))
+    found.update((root / "tests").rglob("*.py"))
+    excluded = SPAWN_SANCTIONED_PATHS | PRE_EXISTING_FORK_SITES
+    return {path for path in found if path.relative_to(root).as_posix() not in excluded}
+
+
+def _is_process_starter(chain: str) -> bool:
+    return chain in _PROCESS_STARTERS or chain.startswith(_PROCESS_STARTER_PREFIXES)
+
+
+def _direct_process_starts(paths: set[Path], root: Path) -> list[str]:
+    """Report a process started without going through `local_llm_lab.spawn`.
+
+    Two call shapes, because a rule that only knows one is a rule with a documented way
+    around it: the dotted `subprocess.run(...)`, and a bare `run(...)` after
+    `from subprocess import run`. The bare form is resolved through the file's own imports, so
+    `spawn.run` and any unrelated `run` method stay quiet -- only a name actually bound to one
+    of the starter functions counts.
+    """
+    findings: list[str] = []
+    for path in sorted(paths):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        bound: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.module is None:
+                continue
+            if node.module.split(".")[0] not in {"subprocess", "os", "multiprocessing"}:
+                continue
+            for alias in node.names:
+                chain = f"{node.module}.{alias.name}"
+                if _is_process_starter(chain):
+                    bound[alias.asname or alias.name] = chain
+        in_file: list[tuple[int, str]] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name):
+                if (chain := bound.get(node.func.id)) is not None:
+                    in_file.append((node.lineno, chain))
+                continue
+            chain = _attribute_chain(node.func)
+            if chain is not None and _is_process_starter(chain):
+                in_file.append((node.lineno, chain))
+        relative = path.relative_to(root).as_posix()
+        findings.extend(f"{relative}:{line}:{chain}" for line, chain in sorted(in_file))
+    return findings
+
+
+def test_processes_are_started_only_through_the_spawn_helper() -> None:
+    """Issue 83: a fork in an interpreter with Metal up aborts, so nothing here may fork.
+
+    The rule is structural for the same reason the run-lock rule is: remembering to pass four
+    keyword arguments correctly at every call site is a discipline the next call site skips,
+    and the failure it causes is a kill in the middle of an unrelated test rather than an
+    error at the offending line.
+    """
+    root = Path(__file__).resolve().parents[1]
+
+    assert _direct_process_starts(_discover_spawn_surface(root), root) == []
+
+
+def test_the_spawn_exemptions_are_all_still_load_bearing() -> None:
+    """A stale exemption is a hole: a fixed site must leave this list, not sit in it.
+
+    Every exempted path must still exist and still start a process directly. When one of the
+    pre-existing sites is migrated to the helper, this test fails until its entry is removed.
+    """
+    root = Path(__file__).resolve().parents[1]
+
+    for relative in sorted(PRE_EXISTING_FORK_SITES | SPAWN_SANCTIONED_PATHS):
+        path = root / relative
+        assert path.is_file(), f"{relative} is exempted but does not exist"
+        assert _direct_process_starts({path}, root), (
+            f"{relative} no longer starts a process directly; drop its exemption"
+        )
+
+
+def test_the_spawn_surface_covers_the_lock_and_its_fixtures() -> None:
+    """Catches the sweep missing the files this slice actually added."""
+    root = Path(__file__).resolve().parents[1]
+    paths = _discover_spawn_surface(root)
+
+    assert root / "src/local_llm_lab/runlock.py" in paths
+    assert root / "tests/test_runlock.py" in paths
+    assert root / "tests/conftest.py" in paths
+    assert root / "src/local_llm_lab/spawn.py" not in paths
+
+
+def test_the_process_start_scanner_reports_the_families_and_ignores_lookalikes(tmp_path) -> None:
+    """Catches the rule narrowing to `subprocess.run`, or widening to any `.run(` call."""
+    source = tmp_path / "example.py"
+    source.write_text(
+        "\n".join(
+            (
+                "subprocess.run(argv)",
+                "subprocess.Popen(argv)",
+                "os.execvp(program, argv)",
+                "os.spawnv(mode, program, argv)",
+                "os.fork()",
+                "multiprocessing.Process(target=work)",
+                "from subprocess import Popen as launch",
+                "launch(argv)",
+                "from subprocess import run",
+                "run(argv)",
+                "from local_llm_lab.spawn import run as safe_run",
+                "safe_run(argv)",
+                "spawn.run(argv)",
+                "runner.run(argv)",
+                "trainer.Popen(argv)",
+                "os.path.join(a, b)",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert _direct_process_starts({source}, tmp_path) == [
+        "example.py:1:subprocess.run",
+        "example.py:2:subprocess.Popen",
+        "example.py:3:os.execvp",
+        "example.py:4:os.spawnv",
+        "example.py:5:os.fork",
+        "example.py:6:multiprocessing.Process",
+        # The bare forms: `from subprocess import run` then `run(argv)` passed the dotted-only
+        # scanner, which made the rule opt-out by import style.
+        "example.py:8:subprocess.Popen",
+        "example.py:10:subprocess.run",
     ]
