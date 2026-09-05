@@ -153,6 +153,63 @@ values, and on that measure every one of the fifteen tasks carries an ambiguous 
 alone could therefore leave too few cases to read, which is why the locator changes and exclusion
 becomes the fallback for the residue.
 
+### 5b. R25(c): consecutive dropped values, and why the secondary cannot test generalisation
+on this family as run C stands (Head of Interpretability, 2026-09-05)
+
+**Ruled: option (b).** Score the single-drop cases; name the rest as a limitation. **Not** the
+pooled slot. And, separately, **do not spend a lift on the resulting five-case run.**
+
+**What the ten cases actually are.** I classified all fifteen from run C's own notes against the
+generator's values, with no model:
+
+| failure mode under policy C | count |
+| --- | --- |
+| single dropped value | **5** |
+| the **last two** values never recorded (premature closure) | **8** |
+| adjacent pair mid-list (`0035`, indices 3–4) | 1 |
+| two **non-adjacent** drops (`0143`, indices 3 and 5) | 1 |
+
+Run C does not drop a value from a list it keeps writing. On this family it adopts the **wrong
+split** and closes both halves early: `first half: 18, 14 (full)` where the split is after three,
+then `second half complete: 75 + 72` with metrics 5 and 6 never recorded. In `ledger_reconcile`
+the note continues past its omission, so the value has a slot with list structure on both sides.
+Here the list has **ended**. "The slot where the value should have been" is not the same object.
+
+**Why not the pooled slot.** Three reasons, in order of weight.
+
+1. **It would measure premature closure, not value representation.** The mean of two value rows
+   is not the representation of either value, so a note that afterwards writes one of them has
+   most likely recomputed it from the visible observations. That is exactly the
+   position-specific, content-nonspecific effect the first P6 attempt found, which strict scoring
+   was introduced to kill. A flip criterion of "either value, or both" relaxes strictness back
+   toward the failure mode that produced the original false positive.
+2. **The content swap cannot be defined for it.** Swapping one pooled mean for another yields no
+   prediction about which number should appear, and the content swap is the control that made the
+   primary's result content-specific rather than positional. A treatment whose decisive control
+   has no meaning is not a treatment.
+3. **It would produce a number that looks like the primary's flip rate while measuring something
+   else.** By R35's own logic that is an unnamed difference dressed as a comparison.
+
+**Consequence, stated rather than buried.** Option (b) scores five, which is the refusal floor.
+Five cases in a second family tests generalisation no better than five in the first, so the
+secondary **as designed cannot answer the question on this family while run C fails this way**. I
+do not recommend a lift for it. What is owed is a failing run that fails by *omission* on a family
+whose notes keep their list structure past the omission; none exists today.
+
+**What the ten are worth on their own, which is more than a five-case rate.** That C's failure on
+`aggregate_report` is early closure from a wrong split, in 8 of 15 cases identically the last two
+values, is a result about the note format and the policy rather than about representation. It
+belongs in the decision memo as such.
+
+**One case the adjacency account does not cover.** `0143` drops indices 3 and 5, two apart, so it
+cannot be failing for the "already claimed" reason the other nine share. Whoever implements this
+should look at it separately rather than assume one cause for all ten.
+
+**Denominators, reconciled as far as I can.** My 41 of 195 counts notes carrying a
+`values so far:` list, over the fifteen selected tasks, from `make_tasks("test", 180)`. The
+124 of 350 figure has a different denominator that I cannot reconstruct; whoever quotes it should
+name its population under R38 so the two can be compared rather than set side by side.
+
 ## 6. Deferred
 
 P3 (sense of being on track) and P4 (concept injection) wait for a policy from SPEC-003 and for

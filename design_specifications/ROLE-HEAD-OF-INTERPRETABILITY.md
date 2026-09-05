@@ -34,7 +34,7 @@ chain implements; the Director lifts executions.
 | J-space paired sweep | `research/jspace_sweep.py` | matched-vs-mismatched sign test over 42 ledger probe points (does the model hold the hidden filename?) | hard-coded to the 3B + adapter A | needs `--model/--policy`, RunLog, JSON output (EXP-001) | minutes |
 | P2 state probe | `agent-v2-probe-state --model --policy --p2 --strip --stub-observations --layers --output`; `reanalyse`; `compare`; `refit-bf16` | linear decodability of note state at the pre-note token and the note mean, with position, surface and shuffled controls, bootstrap intervals, Holm | expert replay on `p2-d0/1/2` (SFT-disjoint) | complete (B1a/b/c, C7) | ~65 min per (policy, condition) on the 3B |
 | P5 adapter delta | `agent-v2-probe-delta --adapters … --model`; `--ablate --blocks N --screen` | ‖ΔW‖/‖W‖, effective rank, cross-run subspace agreement, J-lens readout of update directions; block ablation on the screen | adapters | complete; ablation never run | static: instant; ablation ~30 min/screen |
-| P6 causal patching | `agent-v2-probe-patch --passing-eval --failing-eval --policy --model --data-seed --generator-version [--secondary-condition]` | strict flip rate per (layer, position group) with three controls; every generated note recorded | a passing and a failing evaluation of the same tasks | complete (R27/R30); ledger primary done; aggregate secondary pending | ~1.3 h per condition |
+| P6 causal patching | `agent-v2-probe-patch --passing-eval --failing-eval --policy --model --data-seed --generator-version [--secondary-condition]` | strict flip rate per (layer, position group) with three controls; every generated note recorded | a passing and a failing evaluation of the same tasks | complete (R27/R30/R25(c)); ledger primary done and reproduced byte-identically on 2026-09-05; the `aggregate_report` secondary is **closed without a rate**, see §4 | ~1.3 h per condition |
 | P1 assistant axis | `agent-v2-probe-axis build / project / close` | persona axis (default minus roles), PC1 and split-half checks, per-turn projection | chat prompts, roles | measurement half complete; closed on the 3B coder base; reopenable on a general base | ~20 min build |
 | Capture primitives | `capture.capture_residuals(dtype=)`, `response_mean_activations`, `note_token_span`, `InjectionHook(replace=)`, `lora_block_mask` | residuals per layer (native or float32), pooled spans, replacement/addition patching, adapter masking | any model through `ArchitectureView` | complete | — |
 | Note integrity | `agent-v2-integrity --eval …` | six note-quality checks from generator ground truth; retroactive over saved evaluations | evaluation JSON | complete | seconds |
@@ -64,6 +64,20 @@ chain implements; the Director lifts executions.
   C at layers 6–18 restores the dropped value 4/5; all three controls zero; the content swap
   writes the swapped number. The failure is the early-layer representation of the note's
   list; downstream computation intact. (`under_review/P6-RESULT-REVIEW-round2-2026-09-05.md`)
+- **P6 secondary, `aggregate_report` (2026-09-05): closed without a flip rate, and the reason is
+  the finding.** Run C does not omit a value from a list it keeps writing on this family; it
+  adopts the **wrong split** and closes both halves early. Classified over all fifteen cases from
+  C's own notes against the generator: 5 single drops, **8 where the last two values are never
+  recorded**, 1 adjacent mid-list pair, 1 non-adjacent pair. So the object the treatment patches,
+  a slot with list structure on both sides, does not exist in ten of them, and the pooled-slot
+  alternative would have measured premature closure rather than value representation. Scoring the
+  remaining five would hit the refusal floor and test generalisation no better than the primary's
+  five. **Generalisation is still owed** and needs a failing run that fails by *omission* on a
+  family whose list structure survives the omission; none exists today. This is a result about
+  note format and policy, not about representation.
+  (`outputs/probes/patch-C-secondary-2026-09-05/`; reading
+  `under_review/P6-SECONDARY-RESULT-READ-2026-09-05.md`; ruling `SPEC-004 §5b` = R25(c);
+  issues #26 and #76.)
 - **P1 (3B coder base):** closed; no usable persona space (best role 3/8, 21/24 silent).
   (`outputs/probes/axis-corrected/CLOSED.md` and `closed.json`; commit `3867cc6`, issue #42.)
 - **Verdict:** regimen-bound, from both the read side and the write side. **Unsourced by
@@ -107,6 +121,5 @@ documents as the Head of Interpretability so provenance is right; the first work
 Ready on the Qwen3.5-4B base without an adapter: the J-space probe (EXP-001, first), the
 baseline behavioural evaluation with integrity, P2 in native dtype, the P1 build. After the
 D4 adapter exists: P5 static and block ablation, P6 on 4B pass/fail pairs. Open: the
-`aggregate_report` P6 secondary condition (fifteen cases under R30's HEAD-alone basis; the
-"ten" this line carried until 2026-09-05 predates that ruling), the P2 runs on the redesigned splits,
+the P2 runs on the redesigned splits,
 the SPEC-001 closure slice (#33: preflight gate and provenance on the probe CLIs).

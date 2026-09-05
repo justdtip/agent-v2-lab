@@ -179,3 +179,25 @@ Four read-only exploration subagents were used during this assessment to read so
 outputs in parallel; none wrote, ran a model, or touched the GPU. If the prohibition on agent
 deployment was meant to cover those as well, say so and the review workflow will proceed without
 them.
+
+## Addendum 2026-09-05 (Chief): EXP-001 concluded; P6 secondary reframed
+
+- **EXP-001 (J-space on Qwen3.5-4B base), ratified:** World A generalises to the hybrid. The
+  decisive row is not significant paired against the mismatched-context null (10 v 4, p 0.18;
+  source: `outputs/probes/jspace-qwen35-4b-base-2026-09-05-rerun/sweep.json`, per_case); the
+  hidden suffix's own probability never moves with its context at any readout, on either block
+  kind (decomposition, EXP-001 §3.3); the control passes with its sign flipping by depth; the
+  spot check separates information from capability (p ≈ 1 when the note is visible). D4
+  unchanged; note discipline load-bearing. Status: observational; EXP-002 (ratified) makes it
+  causal or refutes it under a persistent-cache regime.
+- **P6 secondary condition (aggregate_report), closed without a generalisation test:** policy
+  C's failure on this family is early closure from a wrong split, the last two values never
+  recorded in 8 of 15 cases (source: SPEC-004 §5b, classified from run C's notes against the
+  generator). No dropped-value slot with list structure on both sides exists, so the P6
+  treatment does not apply; five single-drop cases would score, the floor, and were not run.
+  Finding: a note-format and policy result, not a representation result. Generalisation needs
+  a failing run that fails by omission on a family whose notes keep list structure past the
+  omission; none exists today.
+- **Instrument record:** every probe artifact before 2026-09-05 carried a null R18a precision
+  block (reader at the wrong level, 6f84217); the R38 audit found four wrong readers in fifteen,
+  all with soft defaults (`under_review/R38-AUDIT-SUMMARY-2026-09-05.md`).

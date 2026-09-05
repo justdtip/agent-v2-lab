@@ -536,3 +536,36 @@ small items to land in the same commit, and the commit held for the Metal run.**
   the real writer still hid a defect, found only by moving the key.
 
 **Landed:** slice four as `ba6435b` (nine files, declared scope; `SUPPORTED_VERSIONS = (1,)` check in `ExpansionSpec`; full suite on Metal 1362 passed). #70 and #75 closed. Audit summary ratified; R38 amended twice (soft defaults; confirm-or-refute binds the officers).
+
+## Gate: P6 scorer fix (SPEC-004 §5a; issue #76), 2026-09-05 afternoon
+
+Worktree `wt-p6-scorer`; two files. Read in full; `tests/test_patch.py` 98 passed on my run.
+**Approved to commit, with one addition landing in the same commit.**
+- §5a(1): `_field_value_slots` measures each list-field value's span on the note itself, in
+  order; `_note_values` is defined from the same slots so the two cannot drift; the locator
+  walks values and slots in step and falls back to the unique-match search only for values
+  outside any field. Fixture: the generator's real repeating note (task 0011), and moving a
+  value between fields moves the span it is located at.
+- §5a(2): a case the locator cannot place is skipped into the primary's `excluded_cases`
+  shape with `note_values_unlocatable`; the implementer extended this to alignment refusals
+  (`alignment_unplaceable`), which is ratified: without it the rerun would abort at the third
+  case, the failure the ruling exists to end. Counts and reasons in the payload and above the
+  rates in the markdown; the section refuses below `MINIMUM_SCORED_CASES = 5`.
+- §5a(4): `health` block with `unscored_section`; the run log ends `status=error` and the
+  CLI exits non-zero naming the section; the markdown says it first.
+- **Addition before commit:** `_value_pattern`'s lookahead `(?![0-9.])` rejects a value that
+  ends a clause before a full stop ("75 + 72."), fifteen of the seventy value-level failures.
+  Change it to `(?![0-9])(?!\.[0-9])` with a test from a real generator note; that removes the
+  split-wide residue (420 of 5,226 v1 notes, 167 of 5,226 v4) rather than skipping it.
+- **The measurement that changes the lift decision** (Deputy, verified against the real
+  policy-C evaluation after a first reconstruction from expert notes was wrong): under the
+  current locator 0 of 15 selected cases were placeable; under the fixed locator 15 of 15; but
+  10 of 15 then fail at `align_groups`, because R25(b) places every dropped value at the slot
+  after its preceding shared value and two consecutive drops resolve to one slot. Policy C
+  stops early on aggregate_report notes, dropping two adjacent values in ten cases. A rerun
+  would score 5 of 15, the refusal floor exactly.
+- **Ruling:** no lift is requested for a five-case rerun. The Head of Interpretability rules
+  on consecutive drops under R25 (an R25(c): a pooled slot for adjacent dropped values, or the
+  secondary restricted to single-drop cases with the restriction named as a limitation of the
+  family) before the rerun is scheduled. The 41/195 versus 124/350 note counts differ by
+  denominator and are not load-bearing; §5a states both with their denominators.

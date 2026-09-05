@@ -1355,3 +1355,38 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   assumption wrong and the figure a bound in neither direction. Corrected on #76 against myself;
   the operative count is now an explicit deliverable of the scorer fix, measured at each task's own
   decision step, because it is the number that says whether a rerun clears the floor of five.
+
+- 2026-09-05 ~12:10 (Chief): P6 scorer fix gated (SPEC-004 §5a; 98 tests; lookahead fix added before commit). Measurement: 0/15 placeable under the old locator, 15/15 under the new, 10/15 then collide at R25(b) (consecutive dropped values share one slot; policy C stops early on aggregate_report). A rerun would score exactly the floor of five: NO lift requested. Head rules R25(c) (pooled slot or single-drop cases with the limitation named) before the rerun. EXP-002 S1 dispatch follows the scorer commit.
+
+## 2026-09-05 midday — the P6 secondary is answered without a rerun
+
+- **The scorer fix landed (`b080e41`) and the rerun it was written for is cancelled.** The Head's
+  §5b, ratified: policy C's failure on `aggregate_report` is **early closure from a wrong split**
+  — 8 of 15 never record the last two values — so no dropped-value slot exists to patch, and a
+  five-case run would not have been a generalisation test. The finding goes in the decision memo
+  as a note-format and policy result rather than as a patching result. **No lift requested, none
+  needed.**
+- The fix stands on its own and landed anyway: a case that cannot be placed is now skipped with a
+  recorded reason instead of abandoning its section, an unscored section no longer reports
+  `status=ok`, and the value locator works by field occurrence rather than by uniqueness over the
+  whole note.
+- **Two measurements, both naming their populations**, per R38's third amendment. Across the whole
+  test split, counting notes that carry at least one value: generator v1, 1,200 notes, 600 refused
+  before the change and **2** after; generator v4, 1,560 notes, 493 before and **300** after. The
+  v4 residue is repetition outside any list field, which is exactly the class the skip path exists
+  for. The implementer's separate 124-of-350 figure counts all notes of the fifteen selected
+  transcripts, a different population, and is carried with that denominator rather than compared
+  to these.
+- **A pattern defect fixed on the way**: `_value_pattern`'s trailing lookahead rejected a full stop
+  of any kind, so a value ending a clause matched *nowhere* and its note was refused for too **few**
+  occurrences rather than too many. Fifteen of the seventy value-level failures behind the unscored
+  secondary were this rather than repetition. Split into two lookaheads: `72` still cannot match
+  inside `72.5`, which is what the exclusion was for.
+- **A fixture re-measured rather than patched.** Widening the lookahead removed the entire class the
+  skip-path fixture belonged to, so its note stopped refusing and three tests failed. The fixture
+  moved to a `conditional_update` note whose value repeats under two non-list labels — a residue
+  that survives the change — rather than being adjusted to keep passing. That failure was the suite
+  doing its job.
+- **#77 raised and then overtaken**: R25(b) gives two adjacent dropped values one slot, which would
+  have refused ten of fifteen cases. It stops being the blocker once the population itself is the
+  finding, but the constraint is real and stays on the record.
