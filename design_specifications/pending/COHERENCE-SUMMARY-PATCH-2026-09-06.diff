@@ -1,0 +1,697 @@
+diff --git a/src/local_llm_lab/pipeline/coherence.py b/src/local_llm_lab/pipeline/coherence.py
+new file mode 100644
+index 0000000..402bced
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/coherence.py
+@@ -0,0 +1,264 @@
++"""Coherence to completion: the unified run's capability standard (UNIFIED-RUN-2026-09-06,
++section 2 revised at 10:05 and the rulings of 10:12).
++
++One task is one evaluation point. A trajectory's *incoherence events* are the first step at
++which each of four causes fires, kept apart as competing risks and never pooled into a length:
++
++* ``integrity``: the note-integrity checker's first violation (``integrity.first_violation``,
++  which carries its step).
++* ``loop``: the first step at which ``detect_loop`` closes a repetition window, recomputed here
++  over the stored steps because the runner records only the flag; the function is pure in the
++  steps, so the recomputation is exact.
++* ``invalid_action``: a parse error (the runner appends a step carrying ``parse_error``) or a
++  call the validator refused for a reason other than an unknown tool (``ERROR: invalid call:``,
++  a missing or unexpected argument or a wrong type).
++* ``tool_error``: an ``ERROR`` observation from the simulator (a transient fault, a wrong or
++  stale path, a failed edit) or an unknown tool, that is **not recovered within the window**:
++  recovery is a later successful call, within the next ``window`` *executed* steps, **with the
++  same tool, whatever its arguments** (the 10:12 ruling as corrected by the Research Division's
++  review at 13:30: the ruling's "same primary argument" clause recognised only the retry of an
++  identical call, which is recovery from a transient and nothing else; every other error
++  recovers by correction, and a correction changes the argument because the argument was what
++  was wrong. Against the base evaluation the primary-argument rule recovered 0 of 273 errors,
++  the same pathology as the field it replaced; the same-tool rule recovers 46, and the
++  generator's own ``wrong_path`` and ``stale_path`` experts recover by re-calling the failed
++  tool with the corrected argument, which is the test below). An unknown tool has no later call
++  with the same tool by construction, so it is recovered by any later successful call within
++  the window (the ``unknown_tool`` clause; the data's ``unknown_tool`` variant teaches exactly
++  that correction). ``primary_arguments`` is kept in the summary for the record, not for the
++  rule. The field ``recovered_errors`` in the verdict is **not** used: it is the error count on
++  success and zero otherwise (``env.py``), which on the base evaluation read 0 against 273
++  errors. An error inside the last ``window`` executed steps of a trajectory is censored for
++  this cause whatever the outcome, since recovery cannot be observed there; the censoring is
++  symmetric so that a late error scores the same in a success and in a failure.
++
++The headline is the fraction of trajectories **coherent to completion**: success with no event,
++with Wilson intervals, overall and per family, variant and difficulty. Beside it: the
++cause-specific hazard per step (events of a cause at step s over trajectories still at risk at s)
++and the cumulative incidence by cause, which is what an adapter that halves loops while
++worsening tool errors shows as. No median coherence length is a statistic; the Kaplan-Meier
++median is reported as a descriptive with ``"not reached"`` when fewer than half fail, and the
++informative-censoring caveat (completion is correlated with capability) travels with it.
++Comparisons across families or difficulties are made only on scale-free quantities, the per-step
++hazard or the first event's step as a fraction of the task's own horizon; raw step counts are
++not comparable across cells and the summary says so.
++"""
++from __future__ import annotations
++
++import math
++from typing import Any
++
++from local_llm_lab.agent_protocol import TOOL_SPECS
++
++CAUSES = ("integrity", "loop", "invalid_action", "tool_error")
++DEFAULT_WINDOW = 3
++INVALID_CALL = "ERROR: invalid call:"
++UNKNOWN_TOOL = "ERROR: invalid call: unknown tool"
++
++
++def primary_arguments(tools: list[dict[str, Any]] = TOOL_SPECS) -> dict[str, str | None]:
++    """The primary argument of each tool: its first required schema parameter, else its first
++    property, else None for a tool that takes no arguments (``finish``)."""
++    out: dict[str, str | None] = {}
++    for spec in tools:
++        function = spec["function"]
++        parameters = function.get("parameters", {}) or {}
++        properties = list((parameters.get("properties") or {}).keys())
++        required = [name for name in parameters.get("required", []) if name in properties]
++        out[function["name"]] = required[0] if required else (properties[0] if properties else None)
++    return out
++
++
++def _executed(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
++    return [step for step in steps if "action" in step]
++
++
++def _observation_kind(step: dict[str, Any]) -> str | None:
++    """None for a clean observation; otherwise ``unknown_tool``, ``invalid_action`` or
++    ``tool_error``."""
++    observation = str(step.get("observation", ""))
++    if not observation.startswith("ERROR"):
++        return None
++    if observation.startswith(UNKNOWN_TOOL):
++        return "unknown_tool"
++    if observation.startswith(INVALID_CALL):
++        return "invalid_action"
++    return "tool_error"
++
++
++def _recovered(failed: dict[str, Any], later: list[dict[str, Any]], *, kind: str, window: int) -> bool:
++    """Is the failed call recovered by a later successful call within the next ``window`` executed
++    steps? Same tool, any arguments; for an unknown tool, any successful call."""
++    candidates = later[:window]
++    if kind == "unknown_tool":
++        return any(_observation_kind(step) is None for step in candidates)
++    name = failed["action"]["name"]
++    return any(_observation_kind(step) is None and step["action"]["name"] == name for step in candidates)
++
++
++def loop_step(steps: list[dict[str, Any]]) -> int | None:
++    """The index of the step at which ``detect_loop`` first closes, or None."""
++    from local_llm_lab.pipeline.runner import detect_loop  # local import: runner imports env
++
++    for count in range(1, len(steps) + 1):
++        if detect_loop(steps[:count]):
++            return int(steps[count - 1]["index"])
++    return None
++
++
++def trajectory_events(
++    trajectory: Any,
++    *,
++    window: int = DEFAULT_WINDOW,
++    tools: list[dict[str, Any]] = TOOL_SPECS,
++) -> dict[str, Any]:
++    """Per-trajectory coherence record: the first step of each cause (None if it never fires),
++    the first event overall, whether the trajectory was coherent to completion, and the
++    tool-error censoring."""
++    steps = list(getattr(trajectory, "steps", []) or [])
++    events: dict[str, int | None] = {cause: None for cause in CAUSES}
++    last_index = max((int(step["index"]) for step in steps), default=0)
++    # integrity: the checker's first violation carries its step
++    integrity = getattr(trajectory, "integrity", {}) or {}
++    first = integrity.get("first_violation") if isinstance(integrity, dict) else None
++    if isinstance(first, dict) and first.get("step") is not None:
++        events["integrity"] = int(first["step"])
++    # invalid action: a parse-error step, or a refused call other than an unknown tool
++    for step in steps:
++        if "parse_error" in step:
++            events["invalid_action"] = int(step["index"])
++            break
++        if "action" in step and _observation_kind(step) == "invalid_action":
++            events["invalid_action"] = int(step["index"])
++            break
++    # loop: recomputed over the stored steps
++    events["loop"] = loop_step(steps)
++    # tool error: the first error not recovered within the next `window` executed steps; an
++    # error with fewer than `window` executed steps after it is censored, whatever the outcome
++    executed = _executed(steps)
++    censored_tail = False
++    for position, step in enumerate(executed):
++        kind = _observation_kind(step)
++        if kind not in ("tool_error", "unknown_tool"):
++            continue
++        later = executed[position + 1 :]
++        if _recovered(step, later, kind=kind, window=window):
++            continue
++        if len(later) < window:
++            censored_tail = True  # recovery cannot be observed inside the last `window` steps
++            continue
++        events["tool_error"] = int(step["index"])
++        break
++    fired = {cause: step for cause, step in events.items() if step is not None}
++    first_cause = min(fired, key=lambda cause: (fired[cause], CAUSES.index(cause))) if fired else None
++    success = bool(getattr(trajectory, "success", False))
++    horizon = int(getattr(trajectory, "horizon", -1) or -1)
++    first_step = fired[first_cause] if first_cause else None
++    return {
++        "events": events,
++        "first_cause": first_cause,
++        "first_step": first_step,
++        "coherent_to_completion": success and first_cause is None,
++        "success": success,
++        "steps": last_index,
++        "horizon": horizon,
++        "first_step_over_horizon": (
++            round(first_step / horizon, 4) if first_step is not None and horizon > 0 else None
++        ),
++        "tool_error_censored_tail": censored_tail,
++        "window": window,
++    }
++
++
++def wilson(successes: int, total: int, z: float = 1.959964) -> dict[str, float]:
++    if total <= 0:
++        return {"low": 0.0, "high": 0.0, "point": 0.0}
++    p = successes / total
++    denominator = 1 + z * z / total
++    centre = (p + z * z / (2 * total)) / denominator
++    half = z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / denominator
++    return {"low": round(max(0.0, centre - half), 4), "high": round(min(1.0, centre + half), 4), "point": round(p, 4)}
++
++
++def _cell(records: list[dict[str, Any]], max_steps: int) -> dict[str, Any]:
++    n = len(records)
++    coherent = sum(1 for r in records if r["coherent_to_completion"])
++    incidence = {cause: sum(1 for r in records if r["first_cause"] == cause) for cause in CAUSES}
++    # cause-specific hazard per step: events of the cause at step s over trajectories at risk at s
++    # (no event before s, and still running at s)
++    hazard: dict[str, list[float | None]] = {cause: [] for cause in CAUSES}
++    at_risk_by_step: list[int] = []
++    for s in range(1, max_steps + 1):
++        at_risk = [r for r in records if (r["first_step"] is None or r["first_step"] >= s) and r["steps"] >= s]
++        at_risk_by_step.append(len(at_risk))
++        for cause in CAUSES:
++            events = sum(1 for r in at_risk if r["first_cause"] == cause and r["first_step"] == s)
++            hazard[cause].append(round(events / len(at_risk), 4) if at_risk else None)
++    # Kaplan-Meier survival of coherence, censoring at the last step for trajectories without an
++    # event (completion or exhaustion); a descriptive only, with its caveat
++    survival = 1.0
++    km_median: float | str = "not reached"
++    for s in range(1, max_steps + 1):
++        at_risk = at_risk_by_step[s - 1]
++        events = sum(1 for r in records if r["first_step"] == s)
++        if at_risk:
++            survival *= 1 - events / at_risk
++        if km_median == "not reached" and survival <= 0.5:
++            km_median = s
++    fractions = [r["first_step_over_horizon"] for r in records if r["first_step_over_horizon"] is not None]
++    fractions.sort()
++    return {
++        "tasks": n,
++        "coherent_to_completion": coherent,
++        "coherent_to_completion_rate": round(coherent / n, 4) if n else 0.0,
++        "wilson_95": {"coherent_to_completion": wilson(coherent, n)},
++        "successes": sum(1 for r in records if r["success"]),
++        "cumulative_incidence_by_cause": {cause: round(count / n, 4) if n else 0.0 for cause, count in incidence.items()},
++        "events_by_cause": incidence,
++        "no_event": n - sum(incidence.values()),
++        "hazard_by_cause_per_step": hazard,
++        "at_risk_per_step": at_risk_by_step,
++        "km_median_step_descriptive": km_median,
++        "first_event_step_over_horizon_median": (fractions[len(fractions) // 2] if fractions else None),
++        "tool_error_censored_tails": sum(1 for r in records if r["tool_error_censored_tail"]),
++    }
++
++
++def coherence_summary(
++    trajectories: list[Any],
++    *,
++    max_steps: int = 24,
++    window: int = DEFAULT_WINDOW,
++    tools: list[dict[str, Any]] = TOOL_SPECS,
++) -> dict[str, Any]:
++    """The coherence section of an evaluation summary."""
++    records = [trajectory_events(t, window=window, tools=tools) for t in trajectories]
++    for record, trajectory in zip(records, trajectories):
++        record["task_id"] = getattr(trajectory, "task_id", None)
++        record["family"] = getattr(trajectory, "family", None)
++        record["variant"] = getattr(trajectory, "variant", None)
++        record["difficulty"] = getattr(trajectory, "difficulty", None)
++
++    def grouped(key: str) -> dict[str, dict[str, Any]]:
++        table: dict[str, list[dict[str, Any]]] = {}
++        for record in records:
++            table.setdefault(str(record[key]), []).append(record)
++        return {name: _cell(rows, max_steps) for name, rows in sorted(table.items())}
++
++    return {
++        "standard": "coherent to completion: success with no incoherence event; four causes as competing risks (UNIFIED-RUN-2026-09-06 section 2 revised, rulings of 10:12)",
++        "window": window,
++        "primary_arguments": primary_arguments(tools),
++        "overall": _cell(records, max_steps),
++        "by_family": grouped("family"),
++        "by_variant": grouped("variant"),
++        "by_difficulty": grouped("difficulty"),
++        "per_trajectory": records,
++        "comparable_across_cells": ["hazard_by_cause_per_step", "first_event_step_over_horizon_median", "cumulative_incidence_by_cause", "coherent_to_completion_rate"],
++        "not_comparable_across_cells": ["km_median_step_descriptive", "steps"],
++        "caveats": [
++            "the Kaplan-Meier median is a descriptive: censoring at completion is informative because completion is correlated with capability",
++            "verdict.recovered_errors is not a recovery rule (env.py: the error count on success, else zero) and is not used",
++            "raw step counts are not comparable across families or difficulties, whose horizons increase by construction",
++        ],
++    }
+diff --git a/src/local_llm_lab/pipeline/evaluate.py b/src/local_llm_lab/pipeline/evaluate.py
+index e877624..8860d15 100644
+--- a/src/local_llm_lab/pipeline/evaluate.py
++++ b/src/local_llm_lab/pipeline/evaluate.py
+@@ -14,6 +14,7 @@ from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
+ from local_llm_lab.pipeline.env import Fault
+ from local_llm_lab.pipeline.integrity import check_trajectory, git_tree_dirty
+ from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
++from local_llm_lab.pipeline.coherence import coherence_summary, trajectory_events
+ from local_llm_lab.pipeline.runner import Trajectory, run_task
+ from local_llm_lab.pipeline.tasks import (
+     GENERATOR_VERSION,
+@@ -154,6 +155,7 @@ def evaluate_tasks(
+             use_cache=use_cache,
+         )
+         trajectory.difficulty = task.difficulty
++        trajectory.horizon = task.horizon  # for the scale-free first-event fraction (coherence.py)
+         trajectory.integrity = check_trajectory(
+             task, trajectory.steps, keep_last=keep_last
+         ).as_dict()
+@@ -206,6 +208,11 @@ def failure_reason(trajectory: Trajectory) -> str:
+     return (trajectory.verdict.get("reasons") or ["unknown"])[0].split(":")[0]
+ 
+ 
++def coherence_first_cause(trajectory: Trajectory) -> str | None:
++    """The first incoherence cause of a trajectory, or None (pipeline/coherence.py)."""
++    return trajectory_events(trajectory)["first_cause"]
++
++
+ def _ratio(numerator: int | float, denominator: int | float, digits: int = 4) -> float:
+     return round(numerator / denominator, digits) if denominator else 0.0
+ 
+@@ -321,9 +328,17 @@ def _integrity_summary(
+ def _group(trajectories: list[Trajectory], key: str) -> dict[str, dict[str, Any]]:
+     table: dict[str, dict[str, Any]] = {}
+     for trajectory in trajectories:
+-        bucket = table.setdefault(str(getattr(trajectory, key)), {"successes": 0, "tasks": 0})
++        bucket = table.setdefault(
++            str(getattr(trajectory, key)),
++            {"successes": 0, "tasks": 0, "loop_failures": 0, "exhausted": 0},
++        )
+         bucket["tasks"] += 1
+         bucket["successes"] += int(trajectory.success)
++        # UNIFIED-RUN-2026-09-06 (10:12, item d): loops and exhaustion per cell, the
++        # pre-registered measurement of the note-form hypothesis; the totals already existed
++        # only globally (the Research Division, 12:35).
++        bucket["loop_failures"] += int(trajectory.loop_detected and not trajectory.success)
++        bucket["exhausted"] += int(trajectory.exhausted and not trajectory.success)
+     for bucket in table.values():
+         bucket["success_rate"] = _ratio(bucket["successes"], bucket["tasks"])
+         bucket["rate_counts"] = {
+@@ -333,7 +348,7 @@ def _group(trajectories: list[Trajectory], key: str) -> dict[str, dict[str, Any]
+     return dict(sorted(table.items()))
+ 
+ 
+-def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
++def summarize(trajectories: list[Trajectory], *, max_steps: int = 24) -> dict[str, Any]:
+     totals = _trajectory_totals(trajectories)
+     count = len(trajectories)
+     successes = totals["successes"]
+@@ -382,6 +397,12 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
+         "by_difficulty": _group(trajectories, "difficulty"),
+         "failure_reasons": _failure_reasons(trajectories),
+         "integrity": integrity,
++        # The capability standard (UNIFIED-RUN-2026-09-06 section 2 revised): coherence to
++        # completion with the four causes as competing risks; see pipeline/coherence.py.
++        "coherence": coherence_summary(trajectories, max_steps=max_steps),
++        "coherent_to_completion_rate": _ratio(
++            sum(1 for t in trajectories if t.success and coherence_first_cause(t) is None), count
++        ),
+         "rate_counts": rate_counts,
+         "wilson_95": {
+             key: wilson(counts["numerator"], counts["denominator"])
+@@ -538,7 +559,7 @@ def run_evaluation(
+             use_cache=use_cache,
+             log=log,
+         )
+-        summary = summarize(trajectories)
++        summary = summarize(trajectories, max_steps=max_steps)
+         summary.update(
+             evaluation_metadata(
+                 label=label,
+diff --git a/src/local_llm_lab/pipeline/report.py b/src/local_llm_lab/pipeline/report.py
+index 0f20492..6aed366 100644
+--- a/src/local_llm_lab/pipeline/report.py
++++ b/src/local_llm_lab/pipeline/report.py
+@@ -116,12 +116,38 @@ def _paired_rows(summaries: list[dict[str, Any]]) -> list[str]:
+     return rows
+ 
+ 
++def _coherence_cells(coherence: object) -> list[str]:
++    """The coherent-to-completion cell and the incidence-by-cause cell, or dashes."""
++    if not isinstance(coherence, dict) or not isinstance(coherence.get("overall"), dict):
++        return ["-", "-"]
++    overall = coherence["overall"]
++    interval = overall.get("wilson_95", {}).get("coherent_to_completion", {})
++    low, high = interval.get("low"), interval.get("high")
++    bounds = f" [{low:.0%}-{high:.0%}]" if low is not None and high is not None else ""
++    incidence = overall.get("cumulative_incidence_by_cause", {})
++    causes = "/".join(
++        f"{incidence.get(cause, 0.0):.0%}" for cause in ("integrity", "loop", "invalid_action", "tool_error")
++    )
++    return [
++        f"{overall.get('coherent_to_completion', 0)}/{overall.get('tasks', 0)} "
++        f"({overall.get('coherent_to_completion_rate', 0.0):.0%}){bounds}",
++        causes,
++    ]
++
++
+ def render(summaries: list[dict[str, Any]]) -> str:
+     if not summaries:
+         return "No evaluation summaries found."
+     families = sorted({family for s in summaries for family in s.get("by_family", {})})
+     has_integrity = any(isinstance(summary.get("integrity"), dict) for summary in summaries)
+-    head = ["run", "split", "success", "clean", "valid", "schema", "exec", "errors", "steps"]
++    # The capability standard (UNIFIED-RUN-2026-09-06 section 2 revised): the fraction coherent
++    # to completion with its interval, and the cumulative incidence by cause, shown whenever a
++    # summary carries the coherence section; older summaries show "-".
++    has_coherence = any(isinstance(summary.get("coherence"), dict) for summary in summaries)
++    head = ["run", "split", "success"]
++    if has_coherence:
++        head.extend(["coherent", "int/loop/inv/tool"])
++    head.extend(["clean", "valid", "schema", "exec", "errors", "steps"])
+     if has_integrity:
+         head.append("integrity-clean")
+     head.extend(family[:10] for family in families)
+@@ -133,6 +159,10 @@ def render(summaries: list[dict[str, Any]]) -> str:
+             label,
+             split,
+             f"{s['successes']}/{s['tasks']} ({s['success_rate']:.0%}){_interval(s, 'success')}",
++        ]
++        if has_coherence:
++            row.extend(_coherence_cells(s.get("coherence")))
++        row += [
+             f"{s['clean_rate']:.0%}{_interval(s, 'clean')}",
+             f"{s['valid_action_rate']:.0%}{_interval(s, 'valid_actions')}",
+             f"{_rate(s, 'schema_validity_rate')}{_interval(s, 'schema_validity')}",
+diff --git a/src/local_llm_lab/pipeline/rollout.py b/src/local_llm_lab/pipeline/rollout.py
+index 9c84f33..bbbfe1c 100644
+--- a/src/local_llm_lab/pipeline/rollout.py
++++ b/src/local_llm_lab/pipeline/rollout.py
+@@ -114,7 +114,7 @@ def collect_rollouts(
+             # R26(g): one event per outer unit of work, so no run is silent for longer
+             # than a single task.
+             progress(number, len(tasks), task.task_id, passed=len(candidates), kept=kept)
+-    summary = summarize(all_trajectories)
++    summary = summarize(all_trajectories, max_steps=max_steps)
+     summary.update(
+         {
+             "label": label,
+diff --git a/src/local_llm_lab/pipeline/runner.py b/src/local_llm_lab/pipeline/runner.py
+index 3651fb4..63317b6 100644
+--- a/src/local_llm_lab/pipeline/runner.py
++++ b/src/local_llm_lab/pipeline/runner.py
+@@ -54,6 +54,7 @@ class Trajectory:
+     integrity: dict[str, Any] = field(default_factory=dict)
+     think_tokens: int = 0
+     model: dict[str, Any] = field(default_factory=dict)
++    horizon: int = -1  # the task's expert step count, set by the evaluator; -1 when unknown (older artifacts)
+ 
+     @property
+     def success(self) -> bool:
+diff --git a/tests/test_coherence.py b/tests/test_coherence.py
+new file mode 100644
+index 0000000..eff711f
+--- /dev/null
++++ b/tests/test_coherence.py
+@@ -0,0 +1,212 @@
++"""The coherence standard (UNIFIED-RUN-2026-09-06 section 2 revised; rulings of 10:12).
++
++These tests assert the recorded rulings rather than derive a rule (R38(f)): the four causes as
++competing risks, per-error recovery within a three-step window by the same tool with any
++argument (the 10:12 ruling as corrected at 13:30: the generator's experts recover by re-calling
++the failed tool with the corrected argument, and a rule that does not recognise the expert
++demonstration is wrong by construction), the unknown_tool clause, symmetric tail censoring for
++the tool-error cause, no pooled length as a statistic, and the Kaplan-Meier median as a
++descriptive marked "not reached". The generator-based test runs the expert step sequences of the
++recovery variants through the simulator and asserts no tool-error event.
++"""
++from __future__ import annotations
++
++from local_llm_lab.pipeline.coherence import (
++    CAUSES,
++    coherence_summary,
++    primary_arguments,
++    trajectory_events,
++)
++from local_llm_lab.pipeline.runner import Trajectory
++
++
++def _step(index: int, name: str, arguments: dict, observation: str) -> dict:
++    return {"index": index, "action": {"name": name, "arguments": arguments}, "observation": observation}
++
++
++def _trajectory(steps: list[dict], *, success: bool, integrity: dict | None = None, horizon: int = 6, **extra) -> Trajectory:
++    trajectory = Trajectory(task_id="t", family="read", variant="clean", label="x", prompt="p", steps=steps)
++    trajectory.verdict = {"success": success}
++    trajectory.integrity = integrity or {"first_violation": None, "counts": {}, "clean": True}
++    trajectory.horizon = horizon
++    for key, value in extra.items():
++        setattr(trajectory, key, value)
++    return trajectory
++
++
++def test_primary_arguments_come_from_the_schema() -> None:
++    primaries = primary_arguments()
++    assert primaries["read_file"] == "path"
++    assert primaries["replace_text"] == "path"  # first required parameter, named in the docstring
++    assert primaries["finish"] == "answer"
++
++
++def test_a_clean_success_is_coherent_to_completion_with_no_events() -> None:
++    steps = [_step(1, "read_file", {"path": "a"}, "contents"), _step(2, "finish", {"answer": "x"}, "done")]
++    record = trajectory_events(_trajectory(steps, success=True))
++    assert record["coherent_to_completion"] is True
++    assert record["first_cause"] is None
++    assert all(record["events"][cause] is None for cause in CAUSES)
++
++
++def test_the_integrity_violation_carries_its_step() -> None:
++    steps = [_step(i, "read_file", {"path": f"f{i}"}, "contents") for i in range(1, 5)]
++    integrity = {"first_violation": {"step": 3, "kind": "verbatim_copy", "detail": ""}, "counts": {"verbatim_copy": 1}, "clean": False}
++    record = trajectory_events(_trajectory(steps, success=True, integrity=integrity))
++    assert record["events"]["integrity"] == 3
++    assert record["first_cause"] == "integrity"
++    assert record["coherent_to_completion"] is False  # success with an event is not coherent to completion
++
++
++def test_a_tool_error_recovered_within_the_window_by_the_same_tool_is_not_an_event() -> None:
++    steps = [
++        _step(1, "read_file", {"path": "a"}, "ERROR: no such file: a"),
++        _step(2, "read_file", {"path": "b"}, "contents"),  # a correction: same tool, different path
++        _step(3, "read_file", {"path": "c"}, "contents"),
++        _step(4, "read_file", {"path": "d"}, "contents"),
++        _step(5, "read_file", {"path": "e"}, "contents"),
++        _step(6, "finish", {"answer": "x"}, "done"),
++    ]
++    assert trajectory_events(_trajectory(steps, success=True))["events"]["tool_error"] is None
++
++
++def test_a_tool_error_answered_only_by_other_tools_is_an_event_at_its_own_step() -> None:
++    steps = [
++        _step(1, "read_file", {"path": "a"}, "ERROR: no such file: a"),
++        _step(2, "search_files", {"query": "b"}, "hits"),
++        _step(3, "list_files", {"directory": "c"}, "files"),
++        _step(4, "calculate", {"expression": "1+1"}, "2"),
++        _step(5, "read_file", {"path": "e"}, "contents"),  # the same tool, but beyond the window
++        _step(6, "read_file", {"path": "f"}, "contents"),
++        _step(7, "read_file", {"path": "g"}, "contents"),
++    ]
++    record = trajectory_events(_trajectory(steps, success=False))
++    assert record["events"]["tool_error"] == 1
++    assert record["first_cause"] == "tool_error"
++
++
++def test_the_window_counts_executed_steps_not_indices() -> None:
++    steps = [
++        _step(1, "read_file", {"path": "a"}, "ERROR: no such file: a"),
++        {"index": 2, "parse_error": "no fenced block"},  # not executed: does not consume the window
++        _step(3, "search_files", {"query": "q"}, "hits"),
++        _step(4, "list_files", {"directory": "d"}, "files"),
++        _step(5, "read_file", {"path": "b"}, "contents"),  # the third executed step after the error
++        _step(6, "read_file", {"path": "c"}, "contents"),
++        _step(7, "read_file", {"path": "d"}, "contents"),
++        _step(8, "read_file", {"path": "e"}, "contents"),
++    ]
++    assert trajectory_events(_trajectory(steps, success=False))["events"]["tool_error"] is None
++
++
++def test_the_tail_is_censored_for_the_tool_error_cause_whatever_the_outcome() -> None:
++    steps = [
++        _step(1, "read_file", {"path": "a"}, "contents"),
++        _step(2, "read_file", {"path": "b"}, "contents"),
++        _step(3, "read_file", {"path": "c"}, "ERROR: no such file: c"),  # fewer than three executed steps follow
++        _step(4, "finish", {"answer": "x"}, "done"),
++    ]
++    for success in (False, True):
++        record = trajectory_events(_trajectory(steps, success=success))
++        assert record["events"]["tool_error"] is None
++        assert record["tool_error_censored_tail"] is True
++        assert record["coherent_to_completion"] is success
++
++
++def test_an_unknown_tool_is_recovered_by_any_later_successful_call_within_the_window() -> None:
++    steps = [
++        _step(1, "open_file", {"file": "a"}, "ERROR: invalid call: unknown tool: open_file; available tools are read_file"),
++        _step(2, "read_file", {"path": "a"}, "contents"),
++        _step(3, "finish", {"answer": "x"}, "done"),
++    ]
++    assert trajectory_events(_trajectory(steps, success=True))["events"]["tool_error"] is None
++    steps = [
++        _step(1, "open_file", {"file": "a"}, "ERROR: invalid call: unknown tool: open_file; available tools are read_file"),
++        _step(2, "open_file", {"file": "a"}, "ERROR: invalid call: unknown tool: open_file; available tools are read_file"),
++        _step(3, "open_file", {"file": "a"}, "ERROR: invalid call: unknown tool: open_file; available tools are read_file"),
++        _step(4, "open_file", {"file": "a"}, "ERROR: invalid call: unknown tool: open_file; available tools are read_file"),
++        _step(5, "read_file", {"path": "a"}, "contents"),
++        _step(6, "read_file", {"path": "b"}, "contents"),
++        _step(7, "read_file", {"path": "c"}, "contents"),
++        _step(8, "read_file", {"path": "d"}, "contents"),
++    ]
++    record = trajectory_events(_trajectory(steps, success=False))
++    assert record["events"]["tool_error"] == 1  # never recovered within three executed steps: an event at its own step
++
++
++def test_the_generator_experts_of_the_recovery_variants_carry_no_tool_error_event() -> None:
++    """The expert demonstration is the definition of recovery in this programme (the Research
++    Division, 13:30): a rule that scores the expert's own correction as an unrecovered error is
++    wrong by construction. The expert actions are executed through the simulator so the
++    observations are the real ones."""
++    from local_llm_lab.pipeline.env import Simulator
++    from local_llm_lab.pipeline.tasks import make_tasks
++
++    tasks = make_tasks("train", 120, 20260902, perturb=True, difficulty=0)
++    seen: dict[str, int] = {}
++    for task in tasks:
++        if task.variant not in ("wrong_path", "stale_path", "transient", "unknown_tool", "failed_edit"):
++            continue
++        if seen.get(task.variant, 0) >= 2:
++            continue
++        seen[task.variant] = seen.get(task.variant, 0) + 1
++        simulator = Simulator.for_task(task)
++        steps = [
++            {"index": i, "action": {"name": step.action.name, "arguments": dict(step.action.arguments)}, "observation": simulator.execute(step.action)}
++            for i, step in enumerate(task.steps, 1)
++        ]
++        assert any(str(step["observation"]).startswith("ERROR") for step in steps), (task.variant, task.task_id)
++        record = trajectory_events(_trajectory(steps, success=True, horizon=task.horizon))
++        assert record["events"]["tool_error"] is None, (task.variant, task.task_id, steps)
++        assert record["events"]["invalid_action"] is None, (task.variant, task.task_id)
++    assert set(seen) == {"wrong_path", "stale_path", "transient", "unknown_tool", "failed_edit"}, seen
++
++
++def test_a_refused_call_other_than_an_unknown_tool_is_an_invalid_action() -> None:
++    steps = [
++        _step(1, "read_file", {}, "ERROR: invalid call: missing required argument(s): path; expected: path"),
++        _step(2, "finish", {"answer": "x"}, "done"),
++    ]
++    record = trajectory_events(_trajectory(steps, success=True))
++    assert record["events"]["invalid_action"] == 1
++    assert record["events"]["tool_error"] is None
++
++
++def test_a_parse_error_step_is_an_invalid_action() -> None:
++    steps = [_step(1, "read_file", {"path": "a"}, "contents"), {"index": 2, "parse_error": "no fenced block"}]
++    assert trajectory_events(_trajectory(steps, success=False))["events"]["invalid_action"] == 2
++
++
++def test_the_loop_step_is_recomputed_from_the_stored_steps() -> None:
++    steps = [_step(i, "read_file", {"path": "same"}, "contents") for i in range(1, 6)]  # three identical calls close at step 3
++    record = trajectory_events(_trajectory(steps, success=False))
++    assert record["events"]["loop"] == 3
++    assert record["first_cause"] == "loop"
++
++
++def test_the_summary_reports_causes_apart_and_no_pooled_length_statistic() -> None:
++    clean = _trajectory([_step(1, "read_file", {"path": "a"}, "contents"), _step(2, "finish", {"answer": "x"}, "done")], success=True)
++    looped = _trajectory([_step(i, "read_file", {"path": "same"}, "contents") for i in range(1, 5)], success=False, family="search")
++    errored = _trajectory([_step(1, "read_file", {"path": "a"}, "ERROR: no such file: a")] + [_step(i, "search_files", {"query": f"q{i}"}, "hits") for i in range(2, 8)], success=False, family="search")  # never re-calls the failed tool
++    summary = coherence_summary([clean, looped, errored], max_steps=8)
++    overall = summary["overall"]
++    assert overall["tasks"] == 3 and overall["coherent_to_completion"] == 1
++    assert overall["events_by_cause"] == {"integrity": 0, "loop": 1, "invalid_action": 0, "tool_error": 1}
++    assert abs(sum(overall["cumulative_incidence_by_cause"].values()) - 2 / 3) < 1e-3  # incidences are rounded to four places
++    assert "wilson_95" in overall and "coherent_to_completion" in overall["wilson_95"]
++    assert "median_coherence_length" not in overall  # no pooled length as a statistic
++    assert overall["km_median_step_descriptive"] in ("not reached", 1, 2, 3, 4, 5, 6, 7, 8)
++    # at step 3 only the looped run is still at risk: the clean run finished at step 2 and the
++    # errored run's first event was at step 1, so the loop hazard there is 1 of 1
++    assert overall["at_risk_per_step"][2] == 1
++    assert overall["hazard_by_cause_per_step"]["loop"][2] == 1.0
++    assert overall["hazard_by_cause_per_step"]["tool_error"][0] == round(1 / 3, 4)  # step 1: one of three at risk
++    assert set(summary["by_family"]) == {"read", "search"}
++    assert "km_median_step_descriptive" in summary["not_comparable_across_cells"]
++    assert "hazard_by_cause_per_step" in summary["comparable_across_cells"]
++
++
++def test_the_first_event_is_scaled_by_the_task_horizon() -> None:
++    steps = [_step(i, "read_file", {"path": "same"}, "contents") for i in range(1, 5)]
++    record = trajectory_events(_trajectory(steps, success=False, horizon=6))
++    assert record["first_step"] == 3 and record["first_step_over_horizon"] == 0.5
+diff --git a/tests/test_report.py b/tests/test_report.py
+index 637f3f5..17fac80 100644
+--- a/tests/test_report.py
++++ b/tests/test_report.py
+@@ -156,10 +156,16 @@ def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
+ 
+     assert "x" in table and "read" in table and "1/1 (100%) [21%-100%]" in table
+     header = _cells(table.splitlines()[0])
+-    assert header[:9] == [
++    # UNIFIED-RUN-2026-09-06 section 2 revised: summaries built by summarize() carry the
++    # coherence section, so the table shows the coherent-to-completion column and the
++    # incidence-by-cause column right after success; older summaries without it keep the old
++    # layout (covered by test_report_table_without_coherence_keeps_the_old_columns).
++    assert header[:11] == [
+         "run",
+         "split",
+         "success",
++        "coherent",
++        "int/loop/inv/tool",
+         "clean",
+         "valid",
+         "schema",
+@@ -169,8 +175,10 @@ def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
+     ]
+     cells = _cells(table.splitlines()[2])
+     assert cells[2] == "1/1 (100%) [21%-100%]"
+-    assert cells[5] == "100% [21%-100%]"
+-    assert cells[6] == "100% [21%-100%]"
++    assert cells[3] == "1/1 (100%) [21%-100%]"  # coherent to completion
++    assert cells[4] == "0%/0%/0%/0%"  # incidence by cause
++    assert cells[7] == "100% [21%-100%]"  # schema, two columns to the right of where it was
++    assert cells[8] == "100% [21%-100%]"  # exec
+ 
+ 
+ def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluations(
+@@ -542,3 +550,11 @@ def test_load_summaries_keeps_a_summary_whose_success_rate_the_writer_produced(
+     assert capsys.readouterr().err.strip() == (
+         "report: skipped kept.json: summary records no success_rate"
+     )
++
++
++def test_report_table_without_coherence_keeps_the_old_columns(tmp_path: Path) -> None:
++    summary = _summary("old", outcomes={"a": True})
++    summary.pop("coherence", None)
++    _write_eval(tmp_path / "old.json", summary, {"a": True})
++    header = _cells(render(load_summaries(tmp_path)).splitlines()[0])
++    assert header[:5] == ["run", "split", "success", "clean", "valid"]

@@ -156,10 +156,16 @@ def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
 
     assert "x" in table and "read" in table and "1/1 (100%) [21%-100%]" in table
     header = _cells(table.splitlines()[0])
-    assert header[:9] == [
+    # UNIFIED-RUN-2026-09-06 section 2 revised: summaries built by summarize() carry the
+    # coherence section, so the table shows the coherent-to-completion column and the
+    # incidence-by-cause column right after success; older summaries without it keep the old
+    # layout (covered by test_report_table_without_coherence_keeps_the_old_columns).
+    assert header[:11] == [
         "run",
         "split",
         "success",
+        "coherent",
+        "int/loop/inv/tool",
         "clean",
         "valid",
         "schema",
@@ -169,8 +175,10 @@ def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
     ]
     cells = _cells(table.splitlines()[2])
     assert cells[2] == "1/1 (100%) [21%-100%]"
-    assert cells[5] == "100% [21%-100%]"
-    assert cells[6] == "100% [21%-100%]"
+    assert cells[3] == "1/1 (100%) [21%-100%]"  # coherent to completion
+    assert cells[4] == "0%/0%/0%/0%"  # incidence by cause
+    assert cells[7] == "100% [21%-100%]"  # schema, two columns to the right of where it was
+    assert cells[8] == "100% [21%-100%]"  # exec
 
 
 def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluations(
@@ -542,3 +550,11 @@ def test_load_summaries_keeps_a_summary_whose_success_rate_the_writer_produced(
     assert capsys.readouterr().err.strip() == (
         "report: skipped kept.json: summary records no success_rate"
     )
+
+
+def test_report_table_without_coherence_keeps_the_old_columns(tmp_path: Path) -> None:
+    summary = _summary("old", outcomes={"a": True})
+    summary.pop("coherence", None)
+    _write_eval(tmp_path / "old.json", summary, {"a": True})
+    header = _cells(render(load_summaries(tmp_path)).splitlines()[0])
+    assert header[:5] == ["run", "split", "success", "clean", "valid"]

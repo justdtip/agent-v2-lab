@@ -196,3 +196,25 @@ nowhere else, taking the whole cumulative incidence with it under competing risk
 rule is not a tidier definition of the same thing; it is the only one of the two that measures
 anything, and the next reader who sees a field in the codebase that looks like it already does the
 job should read this line first.
+
+**Pre-registered for arm A's evaluation, 13:45 (the Research Division, from the base
+evaluation under the coherence standard).** On the base model, integrity is the dominant first
+cause by a wide margin (37 of 180, more than loops and tool errors combined and by more than
+double); fourteen trajectories carry both an integrity violation and a loop, and integrity fired
+first in all fourteen (median lead 2 steps, range 2 to 11), never the reverse; 27 of the 32
+exhausted trajectories carry an integrity violation; and 6 of the 20 loop trajectories have clean
+notes throughout, so the ordering is not definitional. Hypothesis, stated before arm A's
+evaluation is read: under this standard the note goes wrong before the behaviour does, with a
+short and consistent lead, so incoherence begins in the note and the loop or the exhaustion is
+the downstream symptom. The tests on arm A's evaluation: whether integrity precedes the loop in
+every trajectory carrying both (the base sample is fourteen of fourteen, suggestive not settled),
+and whether the first integrity violation would be a better trigger for the doomed-trajectory
+stop than three consecutive repeated actions (it fires a median of two steps earlier and is
+causally upstream). The flag itself does not change while training runs.
+
+**The coherence patch landed, 13:45.** Reviewed and passed by the Research Division, who
+reimplemented the rule from scratch against base-test.json and reproduced every figure exactly;
+applied to the shared tree from the two reviewed diffs (kept under pending as the record of the
+review) and committed by name. Against the base evaluation: 115 of 180 coherent to completion
+(0.639) beside 123 successes; incidence integrity 0.206, loop 0.044, invalid action 0.017, tool
+error 0.056; 14 trajectories with an unrecovered tool-error event, 4 censored tails.

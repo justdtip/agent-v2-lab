@@ -54,6 +54,7 @@ class Trajectory:
     integrity: dict[str, Any] = field(default_factory=dict)
     think_tokens: int = 0
     model: dict[str, Any] = field(default_factory=dict)
+    horizon: int = -1  # the task's expert step count, set by the evaluator; -1 when unknown (older artifacts)
 
     @property
     def success(self) -> bool:

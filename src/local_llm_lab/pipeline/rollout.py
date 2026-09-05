@@ -114,7 +114,7 @@ def collect_rollouts(
             # R26(g): one event per outer unit of work, so no run is silent for longer
             # than a single task.
             progress(number, len(tasks), task.task_id, passed=len(candidates), kept=kept)
-    summary = summarize(all_trajectories)
+    summary = summarize(all_trajectories, max_steps=max_steps)
     summary.update(
         {
             "label": label,

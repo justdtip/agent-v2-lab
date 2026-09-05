@@ -116,12 +116,38 @@ def _paired_rows(summaries: list[dict[str, Any]]) -> list[str]:
     return rows
 
 
+def _coherence_cells(coherence: object) -> list[str]:
+    """The coherent-to-completion cell and the incidence-by-cause cell, or dashes."""
+    if not isinstance(coherence, dict) or not isinstance(coherence.get("overall"), dict):
+        return ["-", "-"]
+    overall = coherence["overall"]
+    interval = overall.get("wilson_95", {}).get("coherent_to_completion", {})
+    low, high = interval.get("low"), interval.get("high")
+    bounds = f" [{low:.0%}-{high:.0%}]" if low is not None and high is not None else ""
+    incidence = overall.get("cumulative_incidence_by_cause", {})
+    causes = "/".join(
+        f"{incidence.get(cause, 0.0):.0%}" for cause in ("integrity", "loop", "invalid_action", "tool_error")
+    )
+    return [
+        f"{overall.get('coherent_to_completion', 0)}/{overall.get('tasks', 0)} "
+        f"({overall.get('coherent_to_completion_rate', 0.0):.0%}){bounds}",
+        causes,
+    ]
+
+
 def render(summaries: list[dict[str, Any]]) -> str:
     if not summaries:
         return "No evaluation summaries found."
     families = sorted({family for s in summaries for family in s.get("by_family", {})})
     has_integrity = any(isinstance(summary.get("integrity"), dict) for summary in summaries)
-    head = ["run", "split", "success", "clean", "valid", "schema", "exec", "errors", "steps"]
+    # The capability standard (UNIFIED-RUN-2026-09-06 section 2 revised): the fraction coherent
+    # to completion with its interval, and the cumulative incidence by cause, shown whenever a
+    # summary carries the coherence section; older summaries show "-".
+    has_coherence = any(isinstance(summary.get("coherence"), dict) for summary in summaries)
+    head = ["run", "split", "success"]
+    if has_coherence:
+        head.extend(["coherent", "int/loop/inv/tool"])
+    head.extend(["clean", "valid", "schema", "exec", "errors", "steps"])
     if has_integrity:
         head.append("integrity-clean")
     head.extend(family[:10] for family in families)
@@ -133,6 +159,10 @@ def render(summaries: list[dict[str, Any]]) -> str:
             label,
             split,
             f"{s['successes']}/{s['tasks']} ({s['success_rate']:.0%}){_interval(s, 'success')}",
+        ]
+        if has_coherence:
+            row.extend(_coherence_cells(s.get("coherence")))
+        row += [
             f"{s['clean_rate']:.0%}{_interval(s, 'clean')}",
             f"{s['valid_action_rate']:.0%}{_interval(s, 'valid_actions')}",
             f"{_rate(s, 'schema_validity_rate')}{_interval(s, 'schema_validity')}",

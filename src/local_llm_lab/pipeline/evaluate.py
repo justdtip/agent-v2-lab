@@ -14,6 +14,7 @@ from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.pipeline.env import Fault
 from local_llm_lab.pipeline.integrity import check_trajectory, git_tree_dirty
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
+from local_llm_lab.pipeline.coherence import coherence_summary, trajectory_events
 from local_llm_lab.pipeline.runner import Trajectory, run_task
 from local_llm_lab.pipeline.tasks import (
     GENERATOR_VERSION,
@@ -154,6 +155,7 @@ def evaluate_tasks(
             use_cache=use_cache,
         )
         trajectory.difficulty = task.difficulty
+        trajectory.horizon = task.horizon  # for the scale-free first-event fraction (coherence.py)
         trajectory.integrity = check_trajectory(
             task, trajectory.steps, keep_last=keep_last
         ).as_dict()
@@ -204,6 +206,11 @@ def failure_reason(trajectory: Trajectory) -> str:
     if trajectory.exhausted:
         return "step budget exhausted"
     return (trajectory.verdict.get("reasons") or ["unknown"])[0].split(":")[0]
+
+
+def coherence_first_cause(trajectory: Trajectory) -> str | None:
+    """The first incoherence cause of a trajectory, or None (pipeline/coherence.py)."""
+    return trajectory_events(trajectory)["first_cause"]
 
 
 def _ratio(numerator: int | float, denominator: int | float, digits: int = 4) -> float:
@@ -321,9 +328,17 @@ def _integrity_summary(
 def _group(trajectories: list[Trajectory], key: str) -> dict[str, dict[str, Any]]:
     table: dict[str, dict[str, Any]] = {}
     for trajectory in trajectories:
-        bucket = table.setdefault(str(getattr(trajectory, key)), {"successes": 0, "tasks": 0})
+        bucket = table.setdefault(
+            str(getattr(trajectory, key)),
+            {"successes": 0, "tasks": 0, "loop_failures": 0, "exhausted": 0},
+        )
         bucket["tasks"] += 1
         bucket["successes"] += int(trajectory.success)
+        # UNIFIED-RUN-2026-09-06 (10:12, item d): loops and exhaustion per cell, the
+        # pre-registered measurement of the note-form hypothesis; the totals already existed
+        # only globally (the Research Division, 12:35).
+        bucket["loop_failures"] += int(trajectory.loop_detected and not trajectory.success)
+        bucket["exhausted"] += int(trajectory.exhausted and not trajectory.success)
     for bucket in table.values():
         bucket["success_rate"] = _ratio(bucket["successes"], bucket["tasks"])
         bucket["rate_counts"] = {
@@ -333,7 +348,7 @@ def _group(trajectories: list[Trajectory], key: str) -> dict[str, dict[str, Any]
     return dict(sorted(table.items()))
 
 
-def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
+def summarize(trajectories: list[Trajectory], *, max_steps: int = 24) -> dict[str, Any]:
     totals = _trajectory_totals(trajectories)
     count = len(trajectories)
     successes = totals["successes"]
@@ -382,6 +397,12 @@ def summarize(trajectories: list[Trajectory]) -> dict[str, Any]:
         "by_difficulty": _group(trajectories, "difficulty"),
         "failure_reasons": _failure_reasons(trajectories),
         "integrity": integrity,
+        # The capability standard (UNIFIED-RUN-2026-09-06 section 2 revised): coherence to
+        # completion with the four causes as competing risks; see pipeline/coherence.py.
+        "coherence": coherence_summary(trajectories, max_steps=max_steps),
+        "coherent_to_completion_rate": _ratio(
+            sum(1 for t in trajectories if t.success and coherence_first_cause(t) is None), count
+        ),
         "rate_counts": rate_counts,
         "wilson_95": {
             key: wilson(counts["numerator"], counts["denominator"])
@@ -538,7 +559,7 @@ def run_evaluation(
             use_cache=use_cache,
             log=log,
         )
-        summary = summarize(trajectories)
+        summary = summarize(trajectories, max_steps=max_steps)
         summary.update(
             evaluation_metadata(
                 label=label,

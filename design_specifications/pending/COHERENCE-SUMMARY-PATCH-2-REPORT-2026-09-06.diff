@@ -1,0 +1,102 @@
+diff --git a/src/local_llm_lab/pipeline/report.py b/src/local_llm_lab/pipeline/report.py
+index 0f20492..6aed366 100644
+--- a/src/local_llm_lab/pipeline/report.py
++++ b/src/local_llm_lab/pipeline/report.py
+@@ -116,12 +116,38 @@ def _paired_rows(summaries: list[dict[str, Any]]) -> list[str]:
+     return rows
+ 
+ 
++def _coherence_cells(coherence: object) -> list[str]:
++    """The coherent-to-completion cell and the incidence-by-cause cell, or dashes."""
++    if not isinstance(coherence, dict) or not isinstance(coherence.get("overall"), dict):
++        return ["-", "-"]
++    overall = coherence["overall"]
++    interval = overall.get("wilson_95", {}).get("coherent_to_completion", {})
++    low, high = interval.get("low"), interval.get("high")
++    bounds = f" [{low:.0%}-{high:.0%}]" if low is not None and high is not None else ""
++    incidence = overall.get("cumulative_incidence_by_cause", {})
++    causes = "/".join(
++        f"{incidence.get(cause, 0.0):.0%}" for cause in ("integrity", "loop", "invalid_action", "tool_error")
++    )
++    return [
++        f"{overall.get('coherent_to_completion', 0)}/{overall.get('tasks', 0)} "
++        f"({overall.get('coherent_to_completion_rate', 0.0):.0%}){bounds}",
++        causes,
++    ]
++
++
+ def render(summaries: list[dict[str, Any]]) -> str:
+     if not summaries:
+         return "No evaluation summaries found."
+     families = sorted({family for s in summaries for family in s.get("by_family", {})})
+     has_integrity = any(isinstance(summary.get("integrity"), dict) for summary in summaries)
+-    head = ["run", "split", "success", "clean", "valid", "schema", "exec", "errors", "steps"]
++    # The capability standard (UNIFIED-RUN-2026-09-06 section 2 revised): the fraction coherent
++    # to completion with its interval, and the cumulative incidence by cause, shown whenever a
++    # summary carries the coherence section; older summaries show "-".
++    has_coherence = any(isinstance(summary.get("coherence"), dict) for summary in summaries)
++    head = ["run", "split", "success"]
++    if has_coherence:
++        head.extend(["coherent", "int/loop/inv/tool"])
++    head.extend(["clean", "valid", "schema", "exec", "errors", "steps"])
+     if has_integrity:
+         head.append("integrity-clean")
+     head.extend(family[:10] for family in families)
+@@ -133,6 +159,10 @@ def render(summaries: list[dict[str, Any]]) -> str:
+             label,
+             split,
+             f"{s['successes']}/{s['tasks']} ({s['success_rate']:.0%}){_interval(s, 'success')}",
++        ]
++        if has_coherence:
++            row.extend(_coherence_cells(s.get("coherence")))
++        row += [
+             f"{s['clean_rate']:.0%}{_interval(s, 'clean')}",
+             f"{s['valid_action_rate']:.0%}{_interval(s, 'valid_actions')}",
+             f"{_rate(s, 'schema_validity_rate')}{_interval(s, 'schema_validity')}",
+diff --git a/tests/test_report.py b/tests/test_report.py
+index 637f3f5..17fac80 100644
+--- a/tests/test_report.py
++++ b/tests/test_report.py
+@@ -156,10 +156,16 @@ def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
+ 
+     assert "x" in table and "read" in table and "1/1 (100%) [21%-100%]" in table
+     header = _cells(table.splitlines()[0])
+-    assert header[:9] == [
++    # UNIFIED-RUN-2026-09-06 section 2 revised: summaries built by summarize() carry the
++    # coherence section, so the table shows the coherent-to-completion column and the
++    # incidence-by-cause column right after success; older summaries without it keep the old
++    # layout (covered by test_report_table_without_coherence_keeps_the_old_columns).
++    assert header[:11] == [
+         "run",
+         "split",
+         "success",
++        "coherent",
++        "int/loop/inv/tool",
+         "clean",
+         "valid",
+         "schema",
+@@ -169,8 +175,10 @@ def test_report_table_lists_runs_and_families(tmp_path: Path) -> None:
+     ]
+     cells = _cells(table.splitlines()[2])
+     assert cells[2] == "1/1 (100%) [21%-100%]"
+-    assert cells[5] == "100% [21%-100%]"
+-    assert cells[6] == "100% [21%-100%]"
++    assert cells[3] == "1/1 (100%) [21%-100%]"  # coherent to completion
++    assert cells[4] == "0%/0%/0%/0%"  # incidence by cause
++    assert cells[7] == "100% [21%-100%]"  # schema, two columns to the right of where it was
++    assert cells[8] == "100% [21%-100%]"  # exec
+ 
+ 
+ def test_render_shows_intervals_and_exact_paired_mcnemar_for_matching_evaluations(
+@@ -542,3 +550,11 @@ def test_load_summaries_keeps_a_summary_whose_success_rate_the_writer_produced(
+     assert capsys.readouterr().err.strip() == (
+         "report: skipped kept.json: summary records no success_rate"
+     )
++
++
++def test_report_table_without_coherence_keeps_the_old_columns(tmp_path: Path) -> None:
++    summary = _summary("old", outcomes={"a": True})
++    summary.pop("coherence", None)
++    _write_eval(tmp_path / "old.json", summary, {"a": True})
++    header = _cells(render(load_summaries(tmp_path)).splitlines()[0])
++    assert header[:5] == ["run", "split", "success", "clean", "valid"]
