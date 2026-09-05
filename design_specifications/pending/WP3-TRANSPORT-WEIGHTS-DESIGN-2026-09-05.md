@@ -242,6 +242,31 @@ attention blocks 15, 19, 23, 27 writing layers 16, 20, 24, 28):
   0.48, all at or below the null. The four largest overlap ratios, 5.9 to 6.8, all carry cosines
   of 0.88 to 0.93, which is the inverse of what retrieval predicts: the heads with the most stable
   far-source sets are the ones whose queries move least.
+- **R3f.** *Added 2026-09-05 late: the pre-registered reading for the source-position inspection,
+  so that run is an experiment with a reading rather than a look.* Subject: the three units that
+  replicate across both contexts at overlap ratio above 1.5 with query cosine below 0.6, namely
+  block 1 key head 7, block 6 key head 0 and block 15 key head 3, against three matched control
+  units drawn from the static population at similar ratio and high cosine.
+  **Measure:** at each of the seven spread read positions, the token content at the top-ten far
+  sources, classified as content-bearing (a ledger value, an invoice stem, a filename, a task
+  noun) or structural (punctuation, template markers, whitespace, role tags).
+  **Controls:** position-matched random sources drawn from the same eligible window, and the three
+  static control units measured identically.
+  **Pre-registered reading.** Content addressing is supported if the candidate units' top sources
+  are content-bearing at a rate exceeding both the position-matched random rate and the static
+  controls' rate, in both contexts, for at least two of the three units. It is refuted if their
+  sources are distributed like the random draw, which makes the replicating overlap a positional
+  regularity rather than retrieval. A third outcome is named in advance because it is likely and
+  would otherwise be read as support: sources concentrating on **structural** tokens indicate a
+  syntactic or positional filter, not content addressing, and are reported as such.
+  **Scope.** Three units against three controls over two contexts is a description of six units,
+  not a population estimate; no rate from it generalises to the 85, and it cannot be Holm-corrected
+  into a claim about the model. It licenses "these three do or do not read content", nothing wider.
+  **Cost and gate.** The raw `q`, `k`, `v`, `g` and `beta` tensors were not saved by the
+  calibration runs; the outputs directory holds derived JSON only, the largest 3.5 MB. So this
+  requires a fresh hooked forward pass over both contexts and is a model-loading run producing a
+  result nobody has, which makes it a full experiment under the standing order and not a
+  calibration. With this reading written it is ready for a lift through the Proxy.
 - **R4.** Secondary, reported but not decisive: mass shares on both channels against their
   uniform nulls, and `E[log g]`, `tau_head` and the interference constant per head on real text.
   These are the bound; `alpha` is the measurement, and where they disagree the measurement wins.
