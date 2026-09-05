@@ -97,3 +97,16 @@ test, so any WP5 or WP7 result at layer 16, the attention member of the 16/17 pa
 checkpoint-dependence caveat that the other four pairs do not; it is stated in artifacts, not
 remembered. The Head's assumption A4 (that the readings are not quantisation artefacts) is
 discharged for every WP7 and WP9 reading except at layer 16; the band placement needs no caveat.
+
+**Under the correction the programme applies (the Head, 23:55; R40a's Holm family is the nine hosted
+readouts).** On 4-bit, L20 at 0.004 passes the first Holm threshold (0.00556) and L27 at 0.008 fails
+the second (0.00625), so L20 is the single surviving readout; on bfloat16, L27 at 0.001 passes and L20
+at 0.022 fails, so L27 survives. The identity of the surviving readout swaps between checkpoints. The
+uncorrected results are unchanged by this; what changes is what may be written: the ordering effect is
+present at both L20 and L27 on both checkpoints, and which one survives Holm depends on the
+checkpoint, so neither is named as the layer where the effect lives. This is the second time tonight
+the ordering test has proved the fragile leg; the decomposition, within-checkpoint, is the one that
+carries World A. Two exceptions to A4's discharge are therefore recorded: layer 16, and the Holm
+identity of the surviving readout. Layer 16's discordant structure inverts rather than degrades ([3, 2]
+to [0, 4]), so WP5 reports layer 16 separately rather than pooled into the band, because a rank
+statistic pooled across five pairs inherits the least stable one without showing it (R43c).
