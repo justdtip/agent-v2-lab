@@ -272,3 +272,40 @@ component removed), so they too relay content and not identity.
 **Reading.** The out-of-band relays are lens-content relays at layer 4 whose coupling to the band,
 if any, is not visible in weight composition. The Director's hypothesis stands as a causal question
 for a patching run; it is not supported as a weight-space fact.
+
+## Selection on the orthogonalised population, 06:10: layer 28's nine survive; prediction 1 refuted a third time, now robust to the cosine ramp
+
+The same forty-draw nulls and the same rule on the lens directions with each token's identity
+component removed, at every layer (`broadcast_heads_orth.as-run.py.txt`, `out/selection_orth.json`).
+**29 of 112 attention heads; 24 of 64 in band; by layer 4: 3, 8: 0, 12: 2, 16: 2, 20: 7, 24: 6, 28: 9.**
+The set differs from the lens-population set by one head (block 19 head 15 leaves at a margin of 0.88,
+block 23 head 0 enters); the nine at block 27, layer 28, are the same nine heads (4, 5, 6, 8, 11,
+12, 13, 14, 15). Median preservation by layer barely moves under orthogonalisation (layer 28: 0.098
+to 0.105; layer 20: 0.445 to 0.402), so the layer-28 relays preserve the part of the lens direction
+that is not the unembedding and were not an artefact of the ramp. **Prediction 1 scored a third
+time: refuted**, first half of the band 9 against second half 15; the three scorings in the record
+are confirmed on the gain-contaminated set, refuted on the lens-population set, refuted on the
+orthogonalised set. The paper's first-half concentration does not reproduce on this model, on a
+population from which the output direction has been removed.
+
+**The cosine ramp in full (F10), by the block's input layer:** 0.09 at layer 1, 0.10 at 3, 0.17 at
+8, 0.23 at 12, 0.29 at 16, 0.48 at 20, 0.63 at 24, 0.69 at 27, 0.71 at 28, 0.75 at 31: a smooth
+ramp with no cliff, already 0.48 in the middle of the band.
+
+**Layer 28 is saturated, and that is a finding to explain rather than a set to ablate (the Head).**
+Nine of sixteen heads at one layer passing a selectivity rule that survives orthogonalisation is not
+a small special set; it says a majority of the attention heads writing layer 28 relay workspace
+content selectively. The retrieval heads under the orthogonalised rule: block 19 head 12 (rank 7,
+0.39) and block 23 head 9 (rank 10, 0.67) selective relays; block 19 head 15 below the double at a
+margin of 0.88; block 19 head 2 a copy map (0.989 against draws at the same level); block 27 head 1
+and block 3 head 15 not relays.
+
+**The recurrent channel on the orthogonalised population, with one block excluded.** Block 0's
+input layer is the embedding itself, so the lens population there is the identity population and
+orthogonalising it against the same identity directions leaves a degenerate population that scores
+0.53 on every map, real or rotated, at a margin of zero; its 32 paths are excluded from the recurrent
+summary and none was selected. With block 0 out: the median J preservation on the orthogonalised
+population remains below the median MLP-row control, the strongest recurrent path remains below the
+attention median, and the count at or above the attention median is as recorded in
+`out/selection_orth.json` under `recurrent_excluding_block0`. The recurrent conclusion is unchanged
+by orthogonalisation.

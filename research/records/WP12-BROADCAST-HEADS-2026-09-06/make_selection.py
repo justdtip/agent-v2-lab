@@ -1,8 +1,8 @@
 """Post-process the null-distribution stage-1 run into out/selection_nulldist.json and re-score the predictions."""
-import json, numpy as np
+import json, os, numpy as np
 from pathlib import Path
-HERE = Path(__file__).resolve().parent; OUT = HERE / "out"
-d = json.load(open(OUT / "broadcast_heads_nulldist.json")); rows = d["rows"]
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; SUFFIX = os.environ.get("SUFFIX", "_nulldist")
+d = json.load(open(OUT / f"broadcast_heads{SUFFIX}.json")); rows = d["rows"]
 att = [r for r in rows if r["channel"] == "attention" and r["layer_written"] != 32]; rec = [r for r in rows if r["channel"] == "recurrent"]
 sel = sorted([r for r in att if r["broadcasts_J"]], key=lambda r: -r["mrr_margin"])
 by_layer = {L: sum(1 for r in sel if r["layer_written"] == L) for L in sorted({r["layer_written"] for r in att})}
@@ -21,6 +21,7 @@ out = {"rule": "J label preservation beyond every one of 20 rotated-J draws and 
        "retrieval_heads": status, "recurrent": {"selected": len(rec_sel), "of": len(rec), "median_J_mrr": float(np.median([r["J_mrr"] for r in rec])), "median_MLP_control": float(np.median([r["MLP_rows_mrr"] for r in rec])), "strongest_J_mrr": float(max(r["J_mrr"] for r in rec)), "attention_median_J_mrr": float(np.median([r["J_mrr"] for r in att])), "recurrent_at_or_above_attention_median": int(sum(r["J_mrr"] >= np.median([x["J_mrr"] for x in att]) for r in rec))},
        "gain_among_selected": {"median_J": float(np.median([r["J_gain"] for r in sel])) if sel else None, "fraction_above_both_controls": float(np.mean([r["gain_margin"] > 0 for r in sel])) if sel else None},
        "copy_maps": {L: float(np.median([r["J_rot_mrr"] for r in att if r["layer_written"] == L])) for L in sorted({r["layer_written"] for r in att})}}
-json.dump(out, open(OUT / "selection_nulldist.json", "w"), indent=1)
+out["lens_identity_cos_by_input_layer"] = d["summary"].get("lens_identity_cos_by_input_layer")
+json.dump(out, open(OUT / f"selection{SUFFIX}.json", "w"), indent=1)
 print(json.dumps({k: v for k, v in out.items() if k != "selected_attention"}, indent=1))
 print("selected:", [(r["layer_written"], r["block"], r["head"], round(r["J_mrr"], 3), round(max(r["J_rot_mrr_max"], r["MLP_rows_mrr_max"]), 3)) for r in sel])
