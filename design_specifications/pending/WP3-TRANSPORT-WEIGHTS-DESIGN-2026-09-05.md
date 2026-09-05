@@ -415,3 +415,25 @@ Overlap and query cosine measured on the same seven read positions at 25, 35, 50
 | the eighteen entries flagged on the sixty-position cosine, on this measure | ratio median 1.37, cosine median 0.43; one reaches ratio 2 |
 
 Readings. The 3.24 of sections 10b to 10e was inflated by the clustering of back-half read positions: on positions spanning the context the population's overlap is 1.78 against a null of 1.30. The Deputy's objection was right and the matched measure on spread positions is the one F8 is written on. On it the recurrent channel shows at most weak, inconsistent retrieval-like behaviour: one head, block 6 head 1, exceeds one and a half times the query null with a query cosine below 0.5 in both contexts, at ratios of 1.8 to 2.0; no head exceeds twice the null with cosine below 0.5 in both contexts; and the low-cosine heads as a group sit near the null. Block 6 head 1 is named for WP3 proper's inspection of its source positions. F8 is released from hold and rewritten in the plan with the measure named.
+
+
+## 10i. Three wording corrections to 10h (Chief, 2026-09-05 late evening, on the Deputy's reproduction, recorded as 9f6b9f8)
+
+- **Positive fit, not only a failed retrieval claim.** The query-randomised null keeps the real write strengths and keys and randomises the query, so it is the write-strength-weighted running summary written down as a model. The population at 1.78 against 1.30 (median ratio 1.32; 201 of 230 above their own null) sits within about a third of that model: the heads behave close to it, and F8's mechanism sentence is stated as that fit.
+- **"Static filter" retires with the 3.24.** It was calibrated on 3.24 against 1.68, where the calibration curve put the queries near frozen; at 1.78 against 1.30 the far-source sets are only mildly more stable than write strength alone predicts, which is the running summary, not a filter. The wording is corrected in F8, in 10d's reading, and on the atlas.
+- **Appearing in both contexts is not consistency.** With ten flagged entries scattered over 115 heads and two contexts, the expected number of heads flagged in both is about 0.2 (115 times 10/230 times 9/229), so one such head is a one-in-five coincidence. Block 6 head 1 is named for inspection on its ratio and cosine, not on the repetition; R44 applied to a count rather than a threshold.
+
+## 10j. The cross on key-head units: three candidates at the loose threshold, none at the strict (Chief, 2026-09-05 late evening, on the Head's collapse; verified from `overlap_spread.json`)
+
+The query cosine belongs to the key head, so the unit of the cross is the (block, key head) pair, each carrying two value heads; a unit's ratio is the larger of its two value heads'. There are 85 units behind the 230 entries.
+
+| threshold | context 0 | context 1 | in both | chance if independent | units in both |
+| --- | --- | --- | --- | --- | --- |
+| ratio > 1.5, cosine < 0.6 | 7 | 7 | 3 | 0.58 | block 1 key head 7; block 6 key head 0; block 15 key head 3 |
+| ratio > 1.5, cosine < 0.5 | 3 | 6 | 1 | 0.21 | block 6 key head 0 |
+| ratio > 1.8, cosine < 0.35 | 2 | 0 | 0 | 0.00 | none |
+| ratio > 2.0, cosine < 0.5 | 1 | 0 | 0 | 0.00 | none |
+
+Block 6 key head 0 is the strongest: ratio 2.00 at cosine 0.348 in context 0 and 1.76 at 0.248 in context 1 ("2.00 and 1.76", not "1.8 to 2.0"). Block 15 value heads 6 and 7 are one unit, key head 3, with one cosine (0.55 and 0.47 across contexts), not two candidates. At the strict threshold nothing replicates and the expectation is 0.01, so that absence is meaningful rather than a small-sample artefact; both statements hold at once, which is why every threshold is stated with its count and its chance expectation. F8's practical conclusion is unaffected: three weak candidates cannot carry goal retention across an episode any more than one, and addressable memory remains attention's. The follow-up gains from it: the source-position inspection looks at three units, and if all three draw from the same kind of position that is a stronger result than one head would give.
+
+Structural limit for WP3 proper: at the longest gap bin the read positions that admit far sources are confined to the last third of a 1,550-token context by construction, so overlap there cannot be measured on well-separated positions at that length; that bin's overlap is reported as position-clustered and discounted, or measured on longer contexts. The 257 bin at seven positions from 25 percent is sound.
