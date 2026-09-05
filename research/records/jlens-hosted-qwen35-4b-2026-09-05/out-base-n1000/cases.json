@@ -1,0 +1,7481 @@
+{
+ "table": {
+  "hosted_L5": {
+   "matched_wins": 13,
+   "matched_n": 42,
+   "matched_p": 0.019520472782460274,
+   "mismatched_wins": 15,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    0,
+    2
+   ],
+   "paired_p": 0.5,
+   "P_true_moves": {
+    "wins": 20,
+    "losses": 22,
+    "p": 0.8776143287523155
+   },
+   "P_false_moves": {
+    "wins": 25,
+    "losses": 17,
+    "p": 0.27995623852893914
+   },
+   "mean_log_ratio_true_over_false_matched": -0.2139415962897429
+  },
+  "logit_lens_L5": {
+   "matched_wins": 18,
+   "matched_n": 42,
+   "matched_p": 0.44079906734259566,
+   "mismatched_wins": 18,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    0,
+    0
+   ],
+   "paired_p": 1.0,
+   "P_true_moves": {
+    "wins": 25,
+    "losses": 17,
+    "p": 0.27995623852893914
+   },
+   "P_false_moves": {
+    "wins": 27,
+    "losses": 15,
+    "p": 0.08842954698775429
+   },
+   "mean_log_ratio_true_over_false_matched": -0.5024085504222734
+  },
+  "hosted_L11": {
+   "matched_wins": 18,
+   "matched_n": 42,
+   "matched_p": 0.44079906734259566,
+   "mismatched_wins": 19,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    0,
+    1
+   ],
+   "paired_p": 1.0,
+   "P_true_moves": {
+    "wins": 18,
+    "losses": 24,
+    "p": 0.44079906734259566
+   },
+   "P_false_moves": {
+    "wins": 24,
+    "losses": 18,
+    "p": 0.44079906734259566
+   },
+   "mean_log_ratio_true_over_false_matched": -0.23626592183683223
+  },
+  "logit_lens_L11": {
+   "matched_wins": 15,
+   "matched_n": 42,
+   "matched_p": 0.08842954698775429,
+   "mismatched_wins": 15,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    1,
+    1
+   ],
+   "paired_p": 1.0,
+   "P_true_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "P_false_moves": {
+    "wins": 20,
+    "losses": 22,
+    "p": 0.8776143287523155
+   },
+   "mean_log_ratio_true_over_false_matched": -0.14857530467837587
+  },
+  "hosted_L12": {
+   "matched_wins": 18,
+   "matched_n": 42,
+   "matched_p": 0.44079906734259566,
+   "mismatched_wins": 19,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    0,
+    1
+   ],
+   "paired_p": 1.0,
+   "P_true_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "P_false_moves": {
+    "wins": 21,
+    "losses": 21,
+    "p": 1.0
+   },
+   "mean_log_ratio_true_over_false_matched": -0.22265347332361682
+  },
+  "logit_lens_L12": {
+   "matched_wins": 19,
+   "matched_n": 42,
+   "matched_p": 0.6439689563703723,
+   "mismatched_wins": 21,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    0,
+    2
+   ],
+   "paired_p": 0.5,
+   "P_true_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "P_false_moves": {
+    "wins": 20,
+    "losses": 22,
+    "p": 0.8776143287523155
+   },
+   "mean_log_ratio_true_over_false_matched": -0.12692924569119798
+  },
+  "hosted_L16": {
+   "matched_wins": 12,
+   "matched_n": 42,
+   "matched_p": 0.007915897334896727,
+   "mismatched_wins": 16,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    0,
+    4
+   ],
+   "paired_p": 0.125,
+   "P_true_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "P_false_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "mean_log_ratio_true_over_false_matched": -0.23484839512224714
+  },
+  "logit_lens_L16": {
+   "matched_wins": 18,
+   "matched_n": 42,
+   "matched_p": 0.44079906734259566,
+   "mismatched_wins": 19,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    5,
+    6
+   ],
+   "paired_p": 1.0,
+   "P_true_moves": {
+    "wins": 19,
+    "losses": 23,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "mean_log_ratio_true_over_false_matched": -0.12012960002477678
+  },
+  "hosted_L20": {
+   "matched_wins": 8,
+   "matched_n": 42,
+   "matched_p": 6.877111491121468e-05,
+   "mismatched_wins": 21,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    2,
+    15
+   ],
+   "paired_p": 0.002349853515625,
+   "P_true_moves": {
+    "wins": 23,
+    "losses": 19,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 32,
+    "losses": 10,
+    "p": 0.0009406740282429382
+   },
+   "mean_log_ratio_true_over_false_matched": -1.0391607854680671
+  },
+  "logit_lens_L20": {
+   "matched_wins": 6,
+   "matched_n": 42,
+   "matched_p": 2.8288777684792876e-06,
+   "mismatched_wins": 21,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    2,
+    17
+   ],
+   "paired_p": 0.000728607177734375,
+   "P_true_moves": {
+    "wins": 23,
+    "losses": 19,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 32,
+    "losses": 10,
+    "p": 0.0009406740282429382
+   },
+   "mean_log_ratio_true_over_false_matched": -1.4774870480878397
+  },
+  "hosted_L21": {
+   "matched_wins": 11,
+   "matched_n": 42,
+   "matched_p": 0.002887247974285856,
+   "mismatched_wins": 21,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    3,
+    13
+   ],
+   "paired_p": 0.021270751953125,
+   "P_true_moves": {
+    "wins": 22,
+    "losses": 20,
+    "p": 0.8776143287523155
+   },
+   "P_false_moves": {
+    "wins": 32,
+    "losses": 10,
+    "p": 0.0009406740282429382
+   },
+   "mean_log_ratio_true_over_false_matched": -0.8028866591864382
+  },
+  "logit_lens_L21": {
+   "matched_wins": 10,
+   "matched_n": 42,
+   "matched_p": 0.0009406740282429382,
+   "mismatched_wins": 23,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    2,
+    15
+   ],
+   "paired_p": 0.002349853515625,
+   "P_true_moves": {
+    "wins": 23,
+    "losses": 19,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 30,
+    "losses": 12,
+    "p": 0.007915897334896727
+   },
+   "mean_log_ratio_true_over_false_matched": -1.1548688122544242
+  },
+  "hosted_L27": {
+   "matched_wins": 26,
+   "matched_n": 42,
+   "matched_p": 0.16414940178310644,
+   "mismatched_wins": 24,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    6,
+    4
+   ],
+   "paired_p": 0.75390625,
+   "P_true_moves": {
+    "wins": 21,
+    "losses": 21,
+    "p": 1.0
+   },
+   "P_false_moves": {
+    "wins": 14,
+    "losses": 28,
+    "p": 0.04355852192384191
+   },
+   "mean_log_ratio_true_over_false_matched": 1.336007379070416
+  },
+  "logit_lens_L27": {
+   "matched_wins": 28,
+   "matched_n": 42,
+   "matched_p": 0.04355852192384191,
+   "mismatched_wins": 21,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    11,
+    4
+   ],
+   "paired_p": 0.11846923828125,
+   "P_true_moves": {
+    "wins": 24,
+    "losses": 18,
+    "p": 0.44079906734259566
+   },
+   "P_false_moves": {
+    "wins": 15,
+    "losses": 27,
+    "p": 0.08842954698775429
+   },
+   "mean_log_ratio_true_over_false_matched": 1.465753235467446
+  },
+  "hosted_L28": {
+   "matched_wins": 24,
+   "matched_n": 42,
+   "matched_p": 0.44079906734259566,
+   "mismatched_wins": 22,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    5,
+    3
+   ],
+   "paired_p": 0.7265625,
+   "P_true_moves": {
+    "wins": 18,
+    "losses": 24,
+    "p": 0.44079906734259566
+   },
+   "P_false_moves": {
+    "wins": 19,
+    "losses": 23,
+    "p": 0.6439689563703723
+   },
+   "mean_log_ratio_true_over_false_matched": 0.6832566862959547
+  },
+  "logit_lens_L28": {
+   "matched_wins": 24,
+   "matched_n": 42,
+   "matched_p": 0.44079906734259566,
+   "mismatched_wins": 23,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    7,
+    6
+   ],
+   "paired_p": 1.0,
+   "P_true_moves": {
+    "wins": 23,
+    "losses": 19,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 20,
+    "losses": 22,
+    "p": 0.8776143287523155
+   },
+   "mean_log_ratio_true_over_false_matched": 0.7394369430176904
+  },
+  "hosted_L32": {
+   "matched_wins": 25,
+   "matched_n": 42,
+   "matched_p": 0.27995623852893914,
+   "mismatched_wins": 20,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    9,
+    4
+   ],
+   "paired_p": 0.266845703125,
+   "P_true_moves": {
+    "wins": 19,
+    "losses": 23,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 15,
+    "losses": 27,
+    "p": 0.08842954698775429
+   },
+   "mean_log_ratio_true_over_false_matched": 0.14620717014070328
+  },
+  "logit_lens_L32": {
+   "matched_wins": 25,
+   "matched_n": 42,
+   "matched_p": 0.27995623852893914,
+   "mismatched_wins": 20,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    9,
+    4
+   ],
+   "paired_p": 0.266845703125,
+   "P_true_moves": {
+    "wins": 19,
+    "losses": 23,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 15,
+    "losses": 27,
+    "p": 0.08842954698775429
+   },
+   "mean_log_ratio_true_over_false_matched": 0.14620717014070328
+  },
+  "model_output": {
+   "matched_wins": 25,
+   "matched_n": 42,
+   "matched_p": 0.27995623852893914,
+   "mismatched_wins": 20,
+   "mismatched_n": 42,
+   "paired_discordant": [
+    9,
+    4
+   ],
+   "paired_p": 0.266845703125,
+   "P_true_moves": {
+    "wins": 19,
+    "losses": 23,
+    "p": 0.6439689563703723
+   },
+   "P_false_moves": {
+    "wins": 15,
+    "losses": 27,
+    "p": 0.08842954698775429
+   },
+   "mean_log_ratio_true_over_false_matched": 0.14620717014070328
+  }
+ },
+ "artifact_rows": {
+  "jlens_L5_all": {
+   "matched_wins": 18,
+   "mismatched_wins": 21,
+   "matched_p": 0.44079906734259566
+  },
+  "jlens_L5_self": {
+   "matched_wins": 17,
+   "mismatched_wins": 16,
+   "matched_p": 0.27995623852893914
+  },
+  "jlens_L5_future": {
+   "matched_wins": 22,
+   "mismatched_wins": 22,
+   "matched_p": 0.8776143287523155
+  },
+  "logit_lens_L5": {
+   "matched_wins": 17,
+   "mismatched_wins": 17,
+   "matched_p": 0.27995623852893914
+  },
+  "jlens_L11_all": {
+   "matched_wins": 19,
+   "mismatched_wins": 21,
+   "matched_p": 0.6439689563703723
+  },
+  "jlens_L11_self": {
+   "matched_wins": 20,
+   "mismatched_wins": 22,
+   "matched_p": 0.8776143287523155
+  },
+  "jlens_L11_future": {
+   "matched_wins": 20,
+   "mismatched_wins": 24,
+   "matched_p": 0.8776143287523155
+  },
+  "logit_lens_L11": {
+   "matched_wins": 18,
+   "mismatched_wins": 20,
+   "matched_p": 0.44079906734259566
+  },
+  "jlens_L12_all": {
+   "matched_wins": 20,
+   "mismatched_wins": 23,
+   "matched_p": 0.8776143287523155
+  },
+  "jlens_L12_self": {
+   "matched_wins": 23,
+   "mismatched_wins": 23,
+   "matched_p": 0.6439689563703723
+  },
+  "jlens_L12_future": {
+   "matched_wins": 19,
+   "mismatched_wins": 20,
+   "matched_p": 0.6439689563703723
+  },
+  "logit_lens_L12": {
+   "matched_wins": 22,
+   "mismatched_wins": 22,
+   "matched_p": 0.8776143287523155
+  },
+  "jlens_L16_all": {
+   "matched_wins": 23,
+   "mismatched_wins": 25,
+   "matched_p": 0.6439689563703723
+  },
+  "jlens_L16_self": {
+   "matched_wins": 22,
+   "mismatched_wins": 23,
+   "matched_p": 0.8776143287523155
+  },
+  "jlens_L16_future": {
+   "matched_wins": 21,
+   "mismatched_wins": 24,
+   "matched_p": 1.0
+  },
+  "logit_lens_L16": {
+   "matched_wins": 22,
+   "mismatched_wins": 20,
+   "matched_p": 0.8776143287523155
+  },
+  "jlens_L20_all": {
+   "matched_wins": 21,
+   "mismatched_wins": 24,
+   "matched_p": 1.0
+  },
+  "jlens_L20_self": {
+   "matched_wins": 19,
+   "mismatched_wins": 25,
+   "matched_p": 0.6439689563703723
+  },
+  "jlens_L20_future": {
+   "matched_wins": 23,
+   "mismatched_wins": 23,
+   "matched_p": 0.6439689563703723
+  },
+  "logit_lens_L20": {
+   "matched_wins": 11,
+   "mismatched_wins": 21,
+   "matched_p": 0.002887247974285856
+  },
+  "jlens_L21_all": {
+   "matched_wins": 21,
+   "mismatched_wins": 22,
+   "matched_p": 1.0
+  },
+  "jlens_L21_self": {
+   "matched_wins": 20,
+   "mismatched_wins": 22,
+   "matched_p": 0.8776143287523155
+  },
+  "jlens_L21_future": {
+   "matched_wins": 22,
+   "mismatched_wins": 24,
+   "matched_p": 0.8776143287523155
+  },
+  "logit_lens_L21": {
+   "matched_wins": 14,
+   "mismatched_wins": 21,
+   "matched_p": 0.04355852192384191
+  },
+  "jlens_L27_all": {
+   "matched_wins": 29,
+   "mismatched_wins": 26,
+   "matched_p": 0.019520472782460274
+  },
+  "jlens_L27_self": {
+   "matched_wins": 29,
+   "mismatched_wins": 26,
+   "matched_p": 0.019520472782460274
+  },
+  "jlens_L27_future": {
+   "matched_wins": 29,
+   "mismatched_wins": 21,
+   "matched_p": 0.019520472782460274
+  },
+  "logit_lens_L27": {
+   "matched_wins": 35,
+   "mismatched_wins": 23,
+   "matched_p": 1.5097200957825407e-05
+  },
+  "jlens_L28_all": {
+   "matched_wins": 28,
+   "mismatched_wins": 23,
+   "matched_p": 0.04355852192384191
+  },
+  "jlens_L28_self": {
+   "matched_wins": 28,
+   "mismatched_wins": 24,
+   "matched_p": 0.04355852192384191
+  },
+  "jlens_L28_future": {
+   "matched_wins": 27,
+   "mismatched_wins": 22,
+   "matched_p": 0.08842954698775429
+  },
+  "logit_lens_L28": {
+   "matched_wins": 28,
+   "mismatched_wins": 22,
+   "matched_p": 0.04355852192384191
+  },
+  "jlens_L32_self": {
+   "matched_wins": 29,
+   "mismatched_wins": 21,
+   "matched_p": 0.019520472782460274
+  },
+  "logit_lens_L32": {
+   "matched_wins": 30,
+   "mismatched_wins": 24,
+   "matched_p": 0.007915897334896727
+  },
+  "model_output": {
+   "matched_wins": 30,
+   "mismatched_wins": 24,
+   "matched_p": 0.007915897334896727
+  }
+ },
+ "per_case": [
+  {
+   "task_id": "jsweep-ledger_reconcile-0007-clean",
+   "true": "751",
+   "false": "366",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0019-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00018644136434886605,
+     "false": 0.0002447535516694188
+    },
+    "logit_lens_L5": {
+     "true": 2.34279264077486e-06,
+     "false": 5.077588866697624e-05
+    },
+    "hosted_L11": {
+     "true": 0.027590755373239517,
+     "false": 0.07639718800783157
+    },
+    "logit_lens_L11": {
+     "true": 1.7110405678977259e-06,
+     "false": 4.664578682422871e-06
+    },
+    "hosted_L12": {
+     "true": 0.048419542610645294,
+     "false": 0.12289689481258392
+    },
+    "logit_lens_L12": {
+     "true": 1.0541529263718985e-05,
+     "false": 3.3576099667698145e-05
+    },
+    "hosted_L16": {
+     "true": 0.05361606553196907,
+     "false": 0.08979275077581406
+    },
+    "logit_lens_L16": {
+     "true": 4.067073678015731e-05,
+     "false": 1.6776517441030592e-05
+    },
+    "hosted_L20": {
+     "true": 0.07761231064796448,
+     "false": 0.0792284831404686
+    },
+    "logit_lens_L20": {
+     "true": 0.0008387647685594857,
+     "false": 0.0009320243843831122
+    },
+    "hosted_L21": {
+     "true": 0.10752467066049576,
+     "false": 0.06350924074649811
+    },
+    "logit_lens_L21": {
+     "true": 0.00784060824662447,
+     "false": 0.0037040207535028458
+    },
+    "hosted_L27": {
+     "true": 0.05075297877192497,
+     "false": 0.000521387264598161
+    },
+    "logit_lens_L27": {
+     "true": 0.0015678672352805734,
+     "false": 2.9122817068127915e-05
+    },
+    "hosted_L28": {
+     "true": 0.0787711814045906,
+     "false": 6.293312617344782e-05
+    },
+    "logit_lens_L28": {
+     "true": 0.004024564754217863,
+     "false": 2.6028831143776188e-06
+    },
+    "hosted_L32": {
+     "true": 0.09086122363805771,
+     "false": 0.09027440845966339
+    },
+    "logit_lens_L32": {
+     "true": 0.09086122363805771,
+     "false": 0.09027440845966339
+    },
+    "model_output": {
+     "true": 0.09086122363805771,
+     "false": 0.09027440845966339
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00012536239228211343,
+     "false": 0.0001571916218381375
+    },
+    "logit_lens_L5": {
+     "true": 2.0704237613244914e-06,
+     "false": 4.8939851694740355e-05
+    },
+    "hosted_L11": {
+     "true": 0.02443329617381096,
+     "false": 0.06712659448385239
+    },
+    "logit_lens_L11": {
+     "true": 1.0466781077411724e-06,
+     "false": 2.765182443908998e-06
+    },
+    "hosted_L12": {
+     "true": 0.04221508279442787,
+     "false": 0.11446688324213028
+    },
+    "logit_lens_L12": {
+     "true": 1.2796596820408013e-05,
+     "false": 5.220528328209184e-05
+    },
+    "hosted_L16": {
+     "true": 0.0497523695230484,
+     "false": 0.12127164751291275
+    },
+    "logit_lens_L16": {
+     "true": 5.224457709118724e-05,
+     "false": 2.557413790782448e-05
+    },
+    "hosted_L20": {
+     "true": 0.010037674568593502,
+     "false": 0.06530919671058655
+    },
+    "logit_lens_L20": {
+     "true": 0.00023961655097082257,
+     "false": 0.0019364419858902693
+    },
+    "hosted_L21": {
+     "true": 0.018972406163811684,
+     "false": 0.04819827899336815
+    },
+    "logit_lens_L21": {
+     "true": 0.0006476351409219205,
+     "false": 0.0016463987994939089
+    },
+    "hosted_L27": {
+     "true": 0.004067131318151951,
+     "false": 0.005252493545413017
+    },
+    "logit_lens_L27": {
+     "true": 0.00010378586011938751,
+     "false": 0.0010088436538353562
+    },
+    "hosted_L28": {
+     "true": 0.015418097376823425,
+     "false": 0.26398447155952454
+    },
+    "logit_lens_L28": {
+     "true": 1.2193612747068983e-05,
+     "false": 0.000584268243983388
+    },
+    "hosted_L32": {
+     "true": 0.060743097215890884,
+     "false": 0.1484089493751526
+    },
+    "logit_lens_L32": {
+     "true": 0.060743097215890884,
+     "false": 0.1484089493751526
+    },
+    "model_output": {
+     "true": 0.060743097215890884,
+     "false": 0.1484089493751526
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0019-clean",
+   "true": "511",
+   "false": "294",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0031-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00010043281508842483,
+     "false": 0.00035150928306393325
+    },
+    "logit_lens_L5": {
+     "true": 1.6573159882682376e-05,
+     "false": 2.4923983801272698e-05
+    },
+    "hosted_L11": {
+     "true": 0.025209663435816765,
+     "false": 0.09574428200721741
+    },
+    "logit_lens_L11": {
+     "true": 1.716758220027259e-06,
+     "false": 8.2938834111701e-07
+    },
+    "hosted_L12": {
+     "true": 0.052153684198856354,
+     "false": 0.1484977751970291
+    },
+    "logit_lens_L12": {
+     "true": 9.3528360594064e-06,
+     "false": 3.305250857010833e-06
+    },
+    "hosted_L16": {
+     "true": 0.07913030683994293,
+     "false": 0.20265917479991913
+    },
+    "logit_lens_L16": {
+     "true": 1.404604972776724e-05,
+     "false": 2.6362877179053612e-05
+    },
+    "hosted_L20": {
+     "true": 0.00982336513698101,
+     "false": 0.03505397215485573
+    },
+    "logit_lens_L20": {
+     "true": 0.00010379482409916818,
+     "false": 0.0005867400905117393
+    },
+    "hosted_L21": {
+     "true": 0.009984406642615795,
+     "false": 0.02528012916445732
+    },
+    "logit_lens_L21": {
+     "true": 8.351096767000854e-05,
+     "false": 0.0006253215833567083
+    },
+    "hosted_L27": {
+     "true": 0.0020238892175257206,
+     "false": 2.5788682251004502e-05
+    },
+    "logit_lens_L27": {
+     "true": 3.920156086678617e-05,
+     "false": 1.7634638425079174e-06
+    },
+    "hosted_L28": {
+     "true": 0.011335681192576885,
+     "false": 0.0080563360825181
+    },
+    "logit_lens_L28": {
+     "true": 4.520871698332485e-06,
+     "false": 1.553823494759854e-05
+    },
+    "hosted_L32": {
+     "true": 0.10937459021806717,
+     "false": 0.16303357481956482
+    },
+    "logit_lens_L32": {
+     "true": 0.10937459021806717,
+     "false": 0.16303357481956482
+    },
+    "model_output": {
+     "true": 0.10937459021806717,
+     "false": 0.16303357481956482
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00015353987691923976,
+     "false": 0.00038544897688552737
+    },
+    "logit_lens_L5": {
+     "true": 1.5607691238983534e-05,
+     "false": 2.10626567422878e-05
+    },
+    "hosted_L11": {
+     "true": 0.02591775730252266,
+     "false": 0.08048829436302185
+    },
+    "logit_lens_L11": {
+     "true": 2.682950707821874e-06,
+     "false": 1.424768015567679e-06
+    },
+    "hosted_L12": {
+     "true": 0.04900532215833664,
+     "false": 0.12875549495220184
+    },
+    "logit_lens_L12": {
+     "true": 1.4027381439518649e-05,
+     "false": 4.921147137793014e-06
+    },
+    "hosted_L16": {
+     "true": 0.0752740427851677,
+     "false": 0.14397938549518585
+    },
+    "logit_lens_L16": {
+     "true": 2.6692874598666094e-05,
+     "false": 2.168656646972522e-05
+    },
+    "hosted_L20": {
+     "true": 0.03997096046805382,
+     "false": 0.011137411929666996
+    },
+    "logit_lens_L20": {
+     "true": 0.0007563619292341173,
+     "false": 0.00021206062228884548
+    },
+    "hosted_L21": {
+     "true": 0.0450434572994709,
+     "false": 0.010214768350124359
+    },
+    "logit_lens_L21": {
+     "true": 0.0019008672097697854,
+     "false": 0.0008046509465202689
+    },
+    "hosted_L27": {
+     "true": 0.009634719230234623,
+     "false": 4.981224628863856e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.0008580533321946859,
+     "false": 2.074198164336849e-05
+    },
+    "hosted_L28": {
+     "true": 0.011690068058669567,
+     "false": 6.860549183329567e-05
+    },
+    "logit_lens_L28": {
+     "true": 0.00043823744636029005,
+     "false": 6.046465387044009e-06
+    },
+    "hosted_L32": {
+     "true": 0.12388939410448074,
+     "false": 0.13284040987491608
+    },
+    "logit_lens_L32": {
+     "true": 0.12388939410448074,
+     "false": 0.13284040987491608
+    },
+    "model_output": {
+     "true": 0.12388939410448074,
+     "false": 0.13284040987491608
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0031-clean",
+   "true": "105",
+   "false": "627",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0067-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0004596591752488166,
+     "false": 0.0002001300163101405
+    },
+    "logit_lens_L5": {
+     "true": 3.88902444683481e-05,
+     "false": 6.358823611662956e-06
+    },
+    "hosted_L11": {
+     "true": 0.07556100189685822,
+     "false": 0.023963699117302895
+    },
+    "logit_lens_L11": {
+     "true": 3.45312378158269e-06,
+     "false": 2.7788837542175315e-06
+    },
+    "hosted_L12": {
+     "true": 0.1570100635290146,
+     "false": 0.03639815002679825
+    },
+    "logit_lens_L12": {
+     "true": 1.9730028725462034e-05,
+     "false": 2.0292882254580036e-05
+    },
+    "hosted_L16": {
+     "true": 0.1139521524310112,
+     "false": 0.07932361960411072
+    },
+    "logit_lens_L16": {
+     "true": 3.002892481163144e-05,
+     "false": 8.192699169740081e-05
+    },
+    "hosted_L20": {
+     "true": 0.002542962320148945,
+     "false": 0.08351568132638931
+    },
+    "logit_lens_L20": {
+     "true": 8.444649574812502e-05,
+     "false": 0.0020611356012523174
+    },
+    "hosted_L21": {
+     "true": 0.005501159932464361,
+     "false": 0.1063445433974266
+    },
+    "logit_lens_L21": {
+     "true": 0.0009324795682914555,
+     "false": 0.011141521856188774
+    },
+    "hosted_L27": {
+     "true": 4.650915798265487e-05,
+     "false": 0.0027033830992877483
+    },
+    "logit_lens_L27": {
+     "true": 4.944192187394947e-05,
+     "false": 0.00012092677206965163
+    },
+    "hosted_L28": {
+     "true": 2.8100201234337874e-05,
+     "false": 0.01755380630493164
+    },
+    "logit_lens_L28": {
+     "true": 6.6454217630962376e-06,
+     "false": 0.0003582987410482019
+    },
+    "hosted_L32": {
+     "true": 0.1434151828289032,
+     "false": 0.07341925799846649
+    },
+    "logit_lens_L32": {
+     "true": 0.1434151828289032,
+     "false": 0.07341925799846649
+    },
+    "model_output": {
+     "true": 0.1434151828289032,
+     "false": 0.07341925799846649
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0005714281578548253,
+     "false": 0.00018728189752437174
+    },
+    "logit_lens_L5": {
+     "true": 4.2351042793598026e-05,
+     "false": 5.955511824140558e-06
+    },
+    "hosted_L11": {
+     "true": 0.09185197949409485,
+     "false": 0.02526308037340641
+    },
+    "logit_lens_L11": {
+     "true": 3.440826503720018e-06,
+     "false": 1.727751850921777e-06
+    },
+    "hosted_L12": {
+     "true": 0.23465293645858765,
+     "false": 0.04340030252933502
+    },
+    "logit_lens_L12": {
+     "true": 1.0149266927328426e-05,
+     "false": 7.152138095989358e-06
+    },
+    "hosted_L16": {
+     "true": 0.1441795974969864,
+     "false": 0.06667792052030563
+    },
+    "logit_lens_L16": {
+     "true": 1.4490072317130398e-05,
+     "false": 2.9737037039012648e-05
+    },
+    "hosted_L20": {
+     "true": 0.007249931804835796,
+     "false": 0.03975210338830948
+    },
+    "logit_lens_L20": {
+     "true": 0.00010527417907724157,
+     "false": 0.00016316432447638363
+    },
+    "hosted_L21": {
+     "true": 0.010134529322385788,
+     "false": 0.05337962508201599
+    },
+    "logit_lens_L21": {
+     "true": 0.0011657184222713113,
+     "false": 0.001429844181984663
+    },
+    "hosted_L27": {
+     "true": 0.00019924584194086492,
+     "false": 0.057524681091308594
+    },
+    "logit_lens_L27": {
+     "true": 9.04741245904006e-05,
+     "false": 0.0015103962505236268
+    },
+    "hosted_L28": {
+     "true": 5.2278119255788624e-05,
+     "false": 0.100990891456604
+    },
+    "logit_lens_L28": {
+     "true": 1.899070593935903e-05,
+     "false": 0.003527301363646984
+    },
+    "hosted_L32": {
+     "true": 0.1320977658033371,
+     "false": 0.09495916962623596
+    },
+    "logit_lens_L32": {
+     "true": 0.1320977658033371,
+     "false": 0.09495916962623596
+    },
+    "model_output": {
+     "true": 0.1320977658033371,
+     "false": 0.09495916962623596
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0067-clean",
+   "true": "529",
+   "false": "402",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0115-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00016802415484562516,
+     "false": 0.00019164782133884728
+    },
+    "logit_lens_L5": {
+     "true": 1.624556171009317e-05,
+     "false": 3.858803665934829e-06
+    },
+    "hosted_L11": {
+     "true": 0.026538752019405365,
+     "false": 0.027930816635489464
+    },
+    "logit_lens_L11": {
+     "true": 1.263953549823782e-06,
+     "false": 1.255922256859776e-06
+    },
+    "hosted_L12": {
+     "true": 0.05634625256061554,
+     "false": 0.047714121639728546
+    },
+    "logit_lens_L12": {
+     "true": 3.818046025116928e-06,
+     "false": 5.388974386733025e-06
+    },
+    "hosted_L16": {
+     "true": 0.07449577003717422,
+     "false": 0.07631410658359528
+    },
+    "logit_lens_L16": {
+     "true": 9.0051826191484e-06,
+     "false": 2.8298507004365092e-06
+    },
+    "hosted_L20": {
+     "true": 0.057128336280584335,
+     "false": 0.04367555305361748
+    },
+    "logit_lens_L20": {
+     "true": 0.0005394383915700018,
+     "false": 0.00017713855777401477
+    },
+    "hosted_L21": {
+     "true": 0.06119507923722267,
+     "false": 0.053501278162002563
+    },
+    "logit_lens_L21": {
+     "true": 0.0013864533975720406,
+     "false": 0.0012621008791029453
+    },
+    "hosted_L27": {
+     "true": 0.02863355539739132,
+     "false": 0.0032440642826259136
+    },
+    "logit_lens_L27": {
+     "true": 0.0012013597879558802,
+     "false": 5.9639805840561166e-05
+    },
+    "hosted_L28": {
+     "true": 0.024791495874524117,
+     "false": 0.000160315990797244
+    },
+    "logit_lens_L28": {
+     "true": 0.001981853973120451,
+     "false": 2.0078707620996283e-06
+    },
+    "hosted_L32": {
+     "true": 0.12860797345638275,
+     "false": 0.06653540581464767
+    },
+    "logit_lens_L32": {
+     "true": 0.12860797345638275,
+     "false": 0.06653540581464767
+    },
+    "model_output": {
+     "true": 0.12860797345638275,
+     "false": 0.06653540581464767
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00013781360758002847,
+     "false": 0.00015602305938955396
+    },
+    "logit_lens_L5": {
+     "true": 1.3556745216192212e-05,
+     "false": 3.1809793199499836e-06
+    },
+    "hosted_L11": {
+     "true": 0.024556735530495644,
+     "false": 0.024407025426626205
+    },
+    "logit_lens_L11": {
+     "true": 1.354547634946357e-06,
+     "false": 7.35598234768986e-07
+    },
+    "hosted_L12": {
+     "true": 0.05118880793452263,
+     "false": 0.037609729915857315
+    },
+    "logit_lens_L12": {
+     "true": 3.7182328469498316e-06,
+     "false": 3.17777903546812e-06
+    },
+    "hosted_L16": {
+     "true": 0.0710790753364563,
+     "false": 0.07256453484296799
+    },
+    "logit_lens_L16": {
+     "true": 1.3380772543314379e-05,
+     "false": 3.746438324014889e-06
+    },
+    "hosted_L20": {
+     "true": 0.05877422168850899,
+     "false": 0.03601551055908203
+    },
+    "logit_lens_L20": {
+     "true": 0.0007382849580608308,
+     "false": 0.0001999248197535053
+    },
+    "hosted_L21": {
+     "true": 0.056151967495679855,
+     "false": 0.045475978404283524
+    },
+    "logit_lens_L21": {
+     "true": 0.0010538848582655191,
+     "false": 0.000878955121152103
+    },
+    "hosted_L27": {
+     "true": 0.0063121928833425045,
+     "false": 0.0015050546498969197
+    },
+    "logit_lens_L27": {
+     "true": 0.0001306846970692277,
+     "false": 1.7095071598305367e-05
+    },
+    "hosted_L28": {
+     "true": 0.011626377701759338,
+     "false": 0.0003915031848009676
+    },
+    "logit_lens_L28": {
+     "true": 0.00017816155741456896,
+     "false": 2.169792423956096e-06
+    },
+    "hosted_L32": {
+     "true": 0.11795075237751007,
+     "false": 0.05853359401226044
+    },
+    "logit_lens_L32": {
+     "true": 0.11795075237751007,
+     "false": 0.05853359401226044
+    },
+    "model_output": {
+     "true": 0.11795075237751007,
+     "false": 0.05853359401226044
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0115-clean",
+   "true": "387",
+   "false": "492",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0127-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00020544427388813347,
+     "false": 0.00015602305938955396
+    },
+    "logit_lens_L5": {
+     "true": 3.5983597626909614e-05,
+     "false": 3.1809793199499836e-06
+    },
+    "hosted_L11": {
+     "true": 0.05256340280175209,
+     "false": 0.024407025426626205
+    },
+    "logit_lens_L11": {
+     "true": 1.976163730432745e-06,
+     "false": 7.35598234768986e-07
+    },
+    "hosted_L12": {
+     "true": 0.09806019067764282,
+     "false": 0.037609729915857315
+    },
+    "logit_lens_L12": {
+     "true": 1.5579158571199514e-05,
+     "false": 3.17777903546812e-06
+    },
+    "hosted_L16": {
+     "true": 0.10053080320358276,
+     "false": 0.07256453484296799
+    },
+    "logit_lens_L16": {
+     "true": 1.799950041458942e-05,
+     "false": 3.746438324014889e-06
+    },
+    "hosted_L20": {
+     "true": 0.031865157186985016,
+     "false": 0.03601551055908203
+    },
+    "logit_lens_L20": {
+     "true": 0.0009195996099151671,
+     "false": 0.0001999248197535053
+    },
+    "hosted_L21": {
+     "true": 0.027261022478342056,
+     "false": 0.045475978404283524
+    },
+    "logit_lens_L21": {
+     "true": 0.001715927617624402,
+     "false": 0.000878955121152103
+    },
+    "hosted_L27": {
+     "true": 0.0029140878468751907,
+     "false": 0.0015050546498969197
+    },
+    "logit_lens_L27": {
+     "true": 0.00033690829877741635,
+     "false": 1.7095071598305367e-05
+    },
+    "hosted_L28": {
+     "true": 0.0028829658403992653,
+     "false": 0.0003915031848009676
+    },
+    "logit_lens_L28": {
+     "true": 0.0001345026830676943,
+     "false": 2.169792423956096e-06
+    },
+    "hosted_L32": {
+     "true": 0.11088228225708008,
+     "false": 0.05853359401226044
+    },
+    "logit_lens_L32": {
+     "true": 0.11088228225708008,
+     "false": 0.05853359401226044
+    },
+    "model_output": {
+     "true": 0.11088228225708008,
+     "false": 0.05853359401226044
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00018813091446645558,
+     "false": 0.00014366715913638473
+    },
+    "logit_lens_L5": {
+     "true": 3.87171094189398e-05,
+     "false": 3.2200532587012276e-06
+    },
+    "hosted_L11": {
+     "true": 0.0648864135146141,
+     "false": 0.026144223287701607
+    },
+    "logit_lens_L11": {
+     "true": 3.0312185117509216e-06,
+     "false": 1.2014342019028845e-06
+    },
+    "hosted_L12": {
+     "true": 0.10394616425037384,
+     "false": 0.040062665939331055
+    },
+    "logit_lens_L12": {
+     "true": 9.005337778944522e-05,
+     "false": 1.8642027498572133e-05
+    },
+    "hosted_L16": {
+     "true": 0.12397533655166626,
+     "false": 0.07362176477909088
+    },
+    "logit_lens_L16": {
+     "true": 3.827273758361116e-05,
+     "false": 6.881040462758392e-06
+    },
+    "hosted_L20": {
+     "true": 0.030339913442730904,
+     "false": 0.017776785418391228
+    },
+    "logit_lens_L20": {
+     "true": 0.00024966284399852157,
+     "false": 1.8703416571952403e-05
+    },
+    "hosted_L21": {
+     "true": 0.033506061881780624,
+     "false": 0.01852467469871044
+    },
+    "logit_lens_L21": {
+     "true": 0.0005198342842049897,
+     "false": 5.0849241233663633e-05
+    },
+    "hosted_L27": {
+     "true": 0.0002509268233552575,
+     "false": 0.002398784039542079
+    },
+    "logit_lens_L27": {
+     "true": 5.135477113071829e-05,
+     "false": 0.0001486154505982995
+    },
+    "hosted_L28": {
+     "true": 0.0008822731324471533,
+     "false": 0.004398446995764971
+    },
+    "logit_lens_L28": {
+     "true": 2.998670970555395e-05,
+     "false": 7.160851237131283e-05
+    },
+    "hosted_L32": {
+     "true": 0.1322268843650818,
+     "false": 0.09151998907327652
+    },
+    "logit_lens_L32": {
+     "true": 0.1322268843650818,
+     "false": 0.09151998907327652
+    },
+    "model_output": {
+     "true": 0.1322268843650818,
+     "false": 0.09151998907327652
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0127-clean",
+   "true": "757",
+   "false": "847",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0139-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00016796556883491576,
+     "false": 0.00016898379544727504
+    },
+    "logit_lens_L5": {
+     "true": 2.1890075458941283e-06,
+     "false": 4.478621576708974e-06
+    },
+    "hosted_L11": {
+     "true": 0.0250423401594162,
+     "false": 0.022623693570494652
+    },
+    "logit_lens_L11": {
+     "true": 1.0910957826126833e-06,
+     "false": 1.5771851167301065e-06
+    },
+    "hosted_L12": {
+     "true": 0.04256441071629524,
+     "false": 0.03705858811736107
+    },
+    "logit_lens_L12": {
+     "true": 2.136558759957552e-05,
+     "false": 7.55855080569745e-06
+    },
+    "hosted_L16": {
+     "true": 0.06082621589303017,
+     "false": 0.07601471245288849
+    },
+    "logit_lens_L16": {
+     "true": 8.205851190723479e-05,
+     "false": 0.00011241883476031944
+    },
+    "hosted_L20": {
+     "true": 0.08140431344509125,
+     "false": 0.12107052654027939
+    },
+    "logit_lens_L20": {
+     "true": 0.0006060391315259039,
+     "false": 0.0005854013725183904
+    },
+    "hosted_L21": {
+     "true": 0.06138225272297859,
+     "false": 0.09731065481901169
+    },
+    "logit_lens_L21": {
+     "true": 0.0009084990597330034,
+     "false": 0.000564050511457026
+    },
+    "hosted_L27": {
+     "true": 0.0111921401694417,
+     "false": 0.0029189481865614653
+    },
+    "logit_lens_L27": {
+     "true": 0.0006197997718118131,
+     "false": 7.58850437705405e-05
+    },
+    "hosted_L28": {
+     "true": 0.033258311450481415,
+     "false": 0.018343714997172356
+    },
+    "logit_lens_L28": {
+     "true": 0.0006295099738053977,
+     "false": 0.00013899625628255308
+    },
+    "hosted_L32": {
+     "true": 0.07156162708997726,
+     "false": 0.03469575569033623
+    },
+    "logit_lens_L32": {
+     "true": 0.07156162708997726,
+     "false": 0.03469575569033623
+    },
+    "model_output": {
+     "true": 0.07156162708997726,
+     "false": 0.03469575569033623
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0002133335656253621,
+     "false": 0.0002181099116569385
+    },
+    "logit_lens_L5": {
+     "true": 2.200175686084549e-06,
+     "false": 4.3310169530741405e-06
+    },
+    "hosted_L11": {
+     "true": 0.019826533272862434,
+     "false": 0.0159427709877491
+    },
+    "logit_lens_L11": {
+     "true": 1.0446038913869415e-06,
+     "false": 1.7959065417016973e-06
+    },
+    "hosted_L12": {
+     "true": 0.03736446797847748,
+     "false": 0.032509781420230865
+    },
+    "logit_lens_L12": {
+     "true": 7.078615453792736e-06,
+     "false": 4.643216470867628e-06
+    },
+    "hosted_L16": {
+     "true": 0.04049404710531235,
+     "false": 0.048161581158638
+    },
+    "logit_lens_L16": {
+     "true": 2.9224731406429783e-05,
+     "false": 4.7885117965051904e-05
+    },
+    "hosted_L20": {
+     "true": 0.033446263521909714,
+     "false": 0.13708782196044922
+    },
+    "logit_lens_L20": {
+     "true": 0.0002086425229208544,
+     "false": 0.00028560482314787805
+    },
+    "hosted_L21": {
+     "true": 0.04321587458252907,
+     "false": 0.1296735256910324
+    },
+    "logit_lens_L21": {
+     "true": 0.0004459514457266778,
+     "false": 0.00035752300755120814
+    },
+    "hosted_L27": {
+     "true": 0.02227412909269333,
+     "false": 0.1136409118771553
+    },
+    "logit_lens_L27": {
+     "true": 0.009457373060286045,
+     "false": 0.06127123907208443
+    },
+    "hosted_L28": {
+     "true": 0.011846807785332203,
+     "false": 0.48573043942451477
+    },
+    "logit_lens_L28": {
+     "true": 0.004995526280254126,
+     "false": 0.7108481526374817
+    },
+    "hosted_L32": {
+     "true": 0.11373281478881836,
+     "false": 0.18704752624034882
+    },
+    "logit_lens_L32": {
+     "true": 0.11373281478881836,
+     "false": 0.18704752624034882
+    },
+    "model_output": {
+     "true": 0.11373281478881836,
+     "false": 0.18704752624034882
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0139-clean",
+   "true": "163",
+   "false": "850",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0151-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0005021738470532,
+     "false": 0.0002181099116569385
+    },
+    "logit_lens_L5": {
+     "true": 3.671735248644836e-05,
+     "false": 4.3310169530741405e-06
+    },
+    "hosted_L11": {
+     "true": 0.068552166223526,
+     "false": 0.0159427709877491
+    },
+    "logit_lens_L11": {
+     "true": 3.536148824423435e-06,
+     "false": 1.7959065417016973e-06
+    },
+    "hosted_L12": {
+     "true": 0.19562312960624695,
+     "false": 0.032509781420230865
+    },
+    "logit_lens_L12": {
+     "true": 1.3855574252374936e-05,
+     "false": 4.643216470867628e-06
+    },
+    "hosted_L16": {
+     "true": 0.2059970647096634,
+     "false": 0.048161581158638
+    },
+    "logit_lens_L16": {
+     "true": 7.0403897552751e-05,
+     "false": 4.7885117965051904e-05
+    },
+    "hosted_L20": {
+     "true": 0.006052060984075069,
+     "false": 0.13708782196044922
+    },
+    "logit_lens_L20": {
+     "true": 1.3432620107778348e-05,
+     "false": 0.00028560482314787805
+    },
+    "hosted_L21": {
+     "true": 0.009938950650393963,
+     "false": 0.1296735256910324
+    },
+    "logit_lens_L21": {
+     "true": 5.594750473392196e-05,
+     "false": 0.00035752300755120814
+    },
+    "hosted_L27": {
+     "true": 0.00013171917817089707,
+     "false": 0.1136409118771553
+    },
+    "logit_lens_L27": {
+     "true": 0.000536703912075609,
+     "false": 0.06127123907208443
+    },
+    "hosted_L28": {
+     "true": 6.455484708567383e-06,
+     "false": 0.48573043942451477
+    },
+    "logit_lens_L28": {
+     "true": 7.657898095203564e-06,
+     "false": 0.7108481526374817
+    },
+    "hosted_L32": {
+     "true": 0.09965294599533081,
+     "false": 0.18704752624034882
+    },
+    "logit_lens_L32": {
+     "true": 0.09965294599533081,
+     "false": 0.18704752624034882
+    },
+    "model_output": {
+     "true": 0.09965294599533081,
+     "false": 0.18704752624034882
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0005323767545633018,
+     "false": 0.0001750955416355282
+    },
+    "logit_lens_L5": {
+     "true": 3.740730244317092e-05,
+     "false": 3.526646651152987e-06
+    },
+    "hosted_L11": {
+     "true": 0.0782017707824707,
+     "false": 0.015256279148161411
+    },
+    "logit_lens_L11": {
+     "true": 5.437539584818296e-06,
+     "false": 1.9214048734284006e-06
+    },
+    "hosted_L12": {
+     "true": 0.1927293837070465,
+     "false": 0.029638824984431267
+    },
+    "logit_lens_L12": {
+     "true": 1.1418437679822091e-05,
+     "false": 3.9796300370653626e-06
+    },
+    "hosted_L16": {
+     "true": 0.16270793974399567,
+     "false": 0.06602809578180313
+    },
+    "logit_lens_L16": {
+     "true": 4.1099436202785e-05,
+     "false": 6.20219943812117e-05
+    },
+    "hosted_L20": {
+     "true": 0.0025747709441930056,
+     "false": 0.02911742962896824
+    },
+    "logit_lens_L20": {
+     "true": 0.00015318184159696102,
+     "false": 0.00031942949863150716
+    },
+    "hosted_L21": {
+     "true": 0.006489757914096117,
+     "false": 0.049224626272916794
+    },
+    "logit_lens_L21": {
+     "true": 0.0007826896035112441,
+     "false": 0.0007292964728549123
+    },
+    "hosted_L27": {
+     "true": 1.0055773600470275e-05,
+     "false": 0.022338896989822388
+    },
+    "logit_lens_L27": {
+     "true": 1.4983389519329648e-05,
+     "false": 0.0021249237470328808
+    },
+    "hosted_L28": {
+     "true": 9.775400940270629e-06,
+     "false": 0.3713795244693756
+    },
+    "logit_lens_L28": {
+     "true": 3.914563421858475e-06,
+     "false": 0.04037443548440933
+    },
+    "hosted_L32": {
+     "true": 0.13709184527397156,
+     "false": 0.07527073472738266
+    },
+    "logit_lens_L32": {
+     "true": 0.13709184527397156,
+     "false": 0.07527073472738266
+    },
+    "model_output": {
+     "true": 0.13709184527397156,
+     "false": 0.07527073472738266
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0151-clean",
+   "true": "790",
+   "false": "509",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0163-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00019328849157318473,
+     "false": 0.0001678162079770118
+    },
+    "logit_lens_L5": {
+     "true": 1.945209305631579e-06,
+     "false": 1.381211586704012e-05
+    },
+    "hosted_L11": {
+     "true": 0.01996886357665062,
+     "false": 0.023585528135299683
+    },
+    "logit_lens_L11": {
+     "true": 1.5315160908357939e-06,
+     "false": 2.353990112169413e-06
+    },
+    "hosted_L12": {
+     "true": 0.03694913163781166,
+     "false": 0.04661836475133896
+    },
+    "logit_lens_L12": {
+     "true": 8.870051715348382e-06,
+     "false": 5.677655735780718e-06
+    },
+    "hosted_L16": {
+     "true": 0.05731327086687088,
+     "false": 0.07485388964414597
+    },
+    "logit_lens_L16": {
+     "true": 4.433251888258383e-05,
+     "false": 1.7188282072311267e-05
+    },
+    "hosted_L20": {
+     "true": 0.049566563218832016,
+     "false": 0.084577776491642
+    },
+    "logit_lens_L20": {
+     "true": 0.0015752828912809491,
+     "false": 0.002550381002947688
+    },
+    "hosted_L21": {
+     "true": 0.07558649033308029,
+     "false": 0.09768874943256378
+    },
+    "logit_lens_L21": {
+     "true": 0.006778120994567871,
+     "false": 0.0028372048400342464
+    },
+    "hosted_L27": {
+     "true": 0.015453292988240719,
+     "false": 0.0020451650489121675
+    },
+    "logit_lens_L27": {
+     "true": 0.0016812992980703712,
+     "false": 0.00028278809622861445
+    },
+    "hosted_L28": {
+     "true": 0.05867309123277664,
+     "false": 0.002457516733556986
+    },
+    "logit_lens_L28": {
+     "true": 0.005910807754844427,
+     "false": 0.00016032098210416734
+    },
+    "hosted_L32": {
+     "true": 0.09540662914514542,
+     "false": 0.11142299324274063
+    },
+    "logit_lens_L32": {
+     "true": 0.09540662914514542,
+     "false": 0.11142299324274063
+    },
+    "model_output": {
+     "true": 0.09540662914514542,
+     "false": 0.11142299324274063
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00011642470781225711,
+     "false": 9.335755021311343e-05
+    },
+    "logit_lens_L5": {
+     "true": 1.95017560145061e-06,
+     "false": 1.4480736354016699e-05
+    },
+    "hosted_L11": {
+     "true": 0.02145632728934288,
+     "false": 0.023482564836740494
+    },
+    "logit_lens_L11": {
+     "true": 1.1739342653527274e-06,
+     "false": 1.6887954643607372e-06
+    },
+    "hosted_L12": {
+     "true": 0.03675597161054611,
+     "false": 0.046913065016269684
+    },
+    "logit_lens_L12": {
+     "true": 1.031156898534391e-05,
+     "false": 7.327268576773349e-06
+    },
+    "hosted_L16": {
+     "true": 0.053313348442316055,
+     "false": 0.08537667989730835
+    },
+    "logit_lens_L16": {
+     "true": 2.950810630863998e-05,
+     "false": 9.46275940805208e-06
+    },
+    "hosted_L20": {
+     "true": 0.03687693178653717,
+     "false": 0.046674326062202454
+    },
+    "logit_lens_L20": {
+     "true": 0.0003520080936141312,
+     "false": 0.0003303074336145073
+    },
+    "hosted_L21": {
+     "true": 0.05921303108334541,
+     "false": 0.05337084084749222
+    },
+    "logit_lens_L21": {
+     "true": 0.001583262113854289,
+     "false": 0.0005279357428662479
+    },
+    "hosted_L27": {
+     "true": 0.020416146144270897,
+     "false": 0.01573026552796364
+    },
+    "logit_lens_L27": {
+     "true": 0.0001557843788759783,
+     "false": 0.00017242837930098176
+    },
+    "hosted_L28": {
+     "true": 0.07179263979196548,
+     "false": 0.029056385159492493
+    },
+    "logit_lens_L28": {
+     "true": 8.259776222985238e-05,
+     "false": 2.322093496331945e-05
+    },
+    "hosted_L32": {
+     "true": 0.09255390614271164,
+     "false": 0.13182920217514038
+    },
+    "logit_lens_L32": {
+     "true": 0.09255390614271164,
+     "false": 0.13182920217514038
+    },
+    "model_output": {
+     "true": 0.09255390614271164,
+     "false": 0.13182920217514038
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0163-clean",
+   "true": "918",
+   "false": "267",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0175-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00013221240078564733,
+     "false": 0.00031370119540952146
+    },
+    "logit_lens_L5": {
+     "true": 1.955626203198335e-06,
+     "false": 2.387500171607826e-05
+    },
+    "hosted_L11": {
+     "true": 0.02605448104441166,
+     "false": 0.08223137259483337
+    },
+    "logit_lens_L11": {
+     "true": 2.9997702313266927e-06,
+     "false": 9.752990308697917e-07
+    },
+    "hosted_L12": {
+     "true": 0.04479850456118584,
+     "false": 0.12275299429893494
+    },
+    "logit_lens_L12": {
+     "true": 3.5958532862423453e-06,
+     "false": 2.3472152861359064e-06
+    },
+    "hosted_L16": {
+     "true": 0.07217437773942947,
+     "false": 0.2036372721195221
+    },
+    "logit_lens_L16": {
+     "true": 7.333268058573594e-06,
+     "false": 1.3619761375593953e-05
+    },
+    "hosted_L20": {
+     "true": 0.030146650969982147,
+     "false": 0.06053802743554115
+    },
+    "logit_lens_L20": {
+     "true": 0.00014766310050617903,
+     "false": 0.0009013901581056416
+    },
+    "hosted_L21": {
+     "true": 0.05741285905241966,
+     "false": 0.04266919195652008
+    },
+    "logit_lens_L21": {
+     "true": 0.0002634329430293292,
+     "false": 0.0011505263391882181
+    },
+    "hosted_L27": {
+     "true": 0.03061586618423462,
+     "false": 9.495015547145158e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00011796581384260207,
+     "false": 2.5771585114853224e-06
+    },
+    "hosted_L28": {
+     "true": 0.30859336256980896,
+     "false": 0.00035230416688136756
+    },
+    "logit_lens_L28": {
+     "true": 0.0001500242797192186,
+     "false": 3.597527324927796e-07
+    },
+    "hosted_L32": {
+     "true": 0.1148383766412735,
+     "false": 0.10245642811059952
+    },
+    "logit_lens_L32": {
+     "true": 0.1148383766412735,
+     "false": 0.10245642811059952
+    },
+    "model_output": {
+     "true": 0.1148383766412735,
+     "false": 0.10245642811059952
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00028339363052509725,
+     "false": 0.000567147450055927
+    },
+    "logit_lens_L5": {
+     "true": 1.4955235201341566e-06,
+     "false": 2.1186191588640213e-05
+    },
+    "hosted_L11": {
+     "true": 0.020488882437348366,
+     "false": 0.07089582085609436
+    },
+    "logit_lens_L11": {
+     "true": 2.0361246697575552e-06,
+     "false": 1.265384867110697e-06
+    },
+    "hosted_L12": {
+     "true": 0.04356293007731438,
+     "false": 0.13912512362003326
+    },
+    "logit_lens_L12": {
+     "true": 2.555787204983062e-06,
+     "false": 2.1178466340643354e-06
+    },
+    "hosted_L16": {
+     "true": 0.07104606181383133,
+     "false": 0.181114062666893
+    },
+    "logit_lens_L16": {
+     "true": 9.404026059200987e-06,
+     "false": 1.2946007700520568e-05
+    },
+    "hosted_L20": {
+     "true": 0.03746449202299118,
+     "false": 0.010823887772858143
+    },
+    "logit_lens_L20": {
+     "true": 0.0004624017747119069,
+     "false": 0.00023637895355932415
+    },
+    "hosted_L21": {
+     "true": 0.06224832311272621,
+     "false": 0.010975105687975883
+    },
+    "logit_lens_L21": {
+     "true": 0.0008146239561028779,
+     "false": 0.0007177235092967749
+    },
+    "hosted_L27": {
+     "true": 0.009216945618391037,
+     "false": 7.128188735805452e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00026011388399638236,
+     "false": 1.5141212315938901e-05
+    },
+    "hosted_L28": {
+     "true": 0.33905673027038574,
+     "false": 0.00012484335456974804
+    },
+    "logit_lens_L28": {
+     "true": 0.015893157571554184,
+     "false": 1.547053579997737e-05
+    },
+    "hosted_L32": {
+     "true": 0.10782743990421295,
+     "false": 0.12837862968444824
+    },
+    "logit_lens_L32": {
+     "true": 0.10782743990421295,
+     "false": 0.12837862968444824
+    },
+    "model_output": {
+     "true": 0.10782743990421295,
+     "false": 0.12837862968444824
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0175-clean",
+   "true": "545",
+   "false": "675",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0187-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00022850069217383862,
+     "false": 0.0002769094717223197
+    },
+    "logit_lens_L5": {
+     "true": 1.6117675841087475e-05,
+     "false": 6.398419372999342e-06
+    },
+    "hosted_L11": {
+     "true": 0.01807921938598156,
+     "false": 0.017048051580786705
+    },
+    "logit_lens_L11": {
+     "true": 1.5717314454377629e-06,
+     "false": 1.4569352515536593e-06
+    },
+    "hosted_L12": {
+     "true": 0.0392770916223526,
+     "false": 0.03281257301568985
+    },
+    "logit_lens_L12": {
+     "true": 3.81772906621336e-06,
+     "false": 8.39525273477193e-06
+    },
+    "hosted_L16": {
+     "true": 0.06481526046991348,
+     "false": 0.06428296118974686
+    },
+    "logit_lens_L16": {
+     "true": 6.829979611211456e-06,
+     "false": 3.29010836139787e-05
+    },
+    "hosted_L20": {
+     "true": 0.03710048273205757,
+     "false": 0.05422782897949219
+    },
+    "logit_lens_L20": {
+     "true": 0.0007773587130941451,
+     "false": 0.0009701024391688406
+    },
+    "hosted_L21": {
+     "true": 0.041311439126729965,
+     "false": 0.07403375208377838
+    },
+    "logit_lens_L21": {
+     "true": 0.0013874300057068467,
+     "false": 0.004500639159232378
+    },
+    "hosted_L27": {
+     "true": 0.0038386094383895397,
+     "false": 0.003923920448869467
+    },
+    "logit_lens_L27": {
+     "true": 0.00022926728706806898,
+     "false": 0.00015762959083076566
+    },
+    "hosted_L28": {
+     "true": 0.008156012743711472,
+     "false": 0.026370445266366005
+    },
+    "logit_lens_L28": {
+     "true": 0.0005535492673516273,
+     "false": 0.0012902595335617661
+    },
+    "hosted_L32": {
+     "true": 0.12089858949184418,
+     "false": 0.08256983757019043
+    },
+    "logit_lens_L32": {
+     "true": 0.12089858949184418,
+     "false": 0.08256983757019043
+    },
+    "model_output": {
+     "true": 0.12089858949184418,
+     "false": 0.08256983757019043
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00010831096733454615,
+     "false": 0.00011387068661861122
+    },
+    "logit_lens_L5": {
+     "true": 1.3732776096730959e-05,
+     "false": 4.859902674070327e-06
+    },
+    "hosted_L11": {
+     "true": 0.027852149680256844,
+     "false": 0.022496258839964867
+    },
+    "logit_lens_L11": {
+     "true": 1.5538585103058722e-06,
+     "false": 1.1022175385733135e-06
+    },
+    "hosted_L12": {
+     "true": 0.03830312192440033,
+     "false": 0.0241570845246315
+    },
+    "logit_lens_L12": {
+     "true": 4.598570285452297e-06,
+     "false": 7.658755748707335e-06
+    },
+    "hosted_L16": {
+     "true": 0.07558559626340866,
+     "false": 0.0597308874130249
+    },
+    "logit_lens_L16": {
+     "true": 1.1033584087272175e-05,
+     "false": 2.318128645129036e-05
+    },
+    "hosted_L20": {
+     "true": 0.04213819280266762,
+     "false": 0.03641526401042938
+    },
+    "logit_lens_L20": {
+     "true": 0.0001264769962290302,
+     "false": 6.334778299788013e-05
+    },
+    "hosted_L21": {
+     "true": 0.03072788007557392,
+     "false": 0.03351617604494095
+    },
+    "logit_lens_L21": {
+     "true": 0.0001170691175502725,
+     "false": 0.00017782922077458352
+    },
+    "hosted_L27": {
+     "true": 0.002464277669787407,
+     "false": 0.0009953868575394154
+    },
+    "logit_lens_L27": {
+     "true": 1.6255404261755757e-05,
+     "false": 1.8368464225204661e-06
+    },
+    "hosted_L28": {
+     "true": 0.01797926425933838,
+     "false": 0.007752131670713425
+    },
+    "logit_lens_L28": {
+     "true": 5.331663032848155e-06,
+     "false": 5.73866543618351e-07
+    },
+    "hosted_L32": {
+     "true": 0.09981081634759903,
+     "false": 0.049212802201509476
+    },
+    "logit_lens_L32": {
+     "true": 0.09981081634759903,
+     "false": 0.049212802201509476
+    },
+    "model_output": {
+     "true": 0.09981081634759903,
+     "false": 0.049212802201509476
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0187-clean",
+   "true": "630",
+   "false": "163",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0223-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00011387068661861122,
+     "false": 0.0005440125823952258
+    },
+    "logit_lens_L5": {
+     "true": 4.859902674070327e-06,
+     "false": 4.4538217480294406e-05
+    },
+    "hosted_L11": {
+     "true": 0.022496258839964867,
+     "false": 0.11677045375108719
+    },
+    "logit_lens_L11": {
+     "true": 1.1022175385733135e-06,
+     "false": 2.640483444338315e-06
+    },
+    "hosted_L12": {
+     "true": 0.0241570845246315,
+     "false": 0.16511504352092743
+    },
+    "logit_lens_L12": {
+     "true": 7.658755748707335e-06,
+     "false": 9.331512046628632e-06
+    },
+    "hosted_L16": {
+     "true": 0.0597308874130249,
+     "false": 0.23678608238697052
+    },
+    "logit_lens_L16": {
+     "true": 2.318128645129036e-05,
+     "false": 3.313535125926137e-05
+    },
+    "hosted_L20": {
+     "true": 0.03641526401042938,
+     "false": 0.01968073472380638
+    },
+    "logit_lens_L20": {
+     "true": 6.334778299788013e-05,
+     "false": 0.0006092546973377466
+    },
+    "hosted_L21": {
+     "true": 0.03351617604494095,
+     "false": 0.02192477509379387
+    },
+    "logit_lens_L21": {
+     "true": 0.00017782922077458352,
+     "false": 0.0015926496125757694
+    },
+    "hosted_L27": {
+     "true": 0.0009953868575394154,
+     "false": 7.86884265835397e-06
+    },
+    "logit_lens_L27": {
+     "true": 1.8368464225204661e-06,
+     "false": 4.097344969977712e-07
+    },
+    "hosted_L28": {
+     "true": 0.007752131670713425,
+     "false": 9.905720071401447e-05
+    },
+    "logit_lens_L28": {
+     "true": 5.73866543618351e-07,
+     "false": 8.182273347756563e-08
+    },
+    "hosted_L32": {
+     "true": 0.049212802201509476,
+     "false": 0.09368546307086945
+    },
+    "logit_lens_L32": {
+     "true": 0.049212802201509476,
+     "false": 0.09368546307086945
+    },
+    "model_output": {
+     "true": 0.049212802201509476,
+     "false": 0.09368546307086945
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00016383464389946312,
+     "false": 0.0006969711976125836
+    },
+    "logit_lens_L5": {
+     "true": 6.507045327452943e-06,
+     "false": 6.285388371907175e-05
+    },
+    "hosted_L11": {
+     "true": 0.02451731264591217,
+     "false": 0.12070351839065552
+    },
+    "logit_lens_L11": {
+     "true": 1.4101182159720338e-06,
+     "false": 3.6149028801446548e-06
+    },
+    "hosted_L12": {
+     "true": 0.0338171124458313,
+     "false": 0.2177218496799469
+    },
+    "logit_lens_L12": {
+     "true": 7.213567187136505e-06,
+     "false": 1.0500412827241234e-05
+    },
+    "hosted_L16": {
+     "true": 0.06455066800117493,
+     "false": 0.19047443568706512
+    },
+    "logit_lens_L16": {
+     "true": 1.9590543161029927e-05,
+     "false": 1.7611066141398624e-05
+    },
+    "hosted_L20": {
+     "true": 0.03806505724787712,
+     "false": 0.03198809176683426
+    },
+    "logit_lens_L20": {
+     "true": 2.3347713067778386e-05,
+     "false": 0.0001947581913555041
+    },
+    "hosted_L21": {
+     "true": 0.04793350771069527,
+     "false": 0.0319540873169899
+    },
+    "logit_lens_L21": {
+     "true": 0.0002109021443175152,
+     "false": 0.001200005761347711
+    },
+    "hosted_L27": {
+     "true": 0.0307164303958416,
+     "false": 0.00013452122220769525
+    },
+    "logit_lens_L27": {
+     "true": 0.00010383137123426422,
+     "false": 3.5034290704061277e-06
+    },
+    "hosted_L28": {
+     "true": 0.11188711225986481,
+     "false": 0.00045791344018653035
+    },
+    "logit_lens_L28": {
+     "true": 5.8732104662340134e-05,
+     "false": 9.278427910430764e-07
+    },
+    "hosted_L32": {
+     "true": 0.08462470769882202,
+     "false": 0.1415794938802719
+    },
+    "logit_lens_L32": {
+     "true": 0.08462470769882202,
+     "false": 0.1415794938802719
+    },
+    "model_output": {
+     "true": 0.08462470769882202,
+     "false": 0.1415794938802719
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0223-clean",
+   "true": "604",
+   "false": "188",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0259-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00016383464389946312,
+     "false": 0.0006969711976125836
+    },
+    "logit_lens_L5": {
+     "true": 6.507045327452943e-06,
+     "false": 6.285388371907175e-05
+    },
+    "hosted_L11": {
+     "true": 0.02451731264591217,
+     "false": 0.12070351839065552
+    },
+    "logit_lens_L11": {
+     "true": 1.4101182159720338e-06,
+     "false": 3.6149028801446548e-06
+    },
+    "hosted_L12": {
+     "true": 0.0338171124458313,
+     "false": 0.2177218496799469
+    },
+    "logit_lens_L12": {
+     "true": 7.213567187136505e-06,
+     "false": 1.0500412827241234e-05
+    },
+    "hosted_L16": {
+     "true": 0.06455066800117493,
+     "false": 0.19047443568706512
+    },
+    "logit_lens_L16": {
+     "true": 1.9590543161029927e-05,
+     "false": 1.7611066141398624e-05
+    },
+    "hosted_L20": {
+     "true": 0.03806505724787712,
+     "false": 0.03198809176683426
+    },
+    "logit_lens_L20": {
+     "true": 2.3347713067778386e-05,
+     "false": 0.0001947581913555041
+    },
+    "hosted_L21": {
+     "true": 0.04793350771069527,
+     "false": 0.0319540873169899
+    },
+    "logit_lens_L21": {
+     "true": 0.0002109021443175152,
+     "false": 0.001200005761347711
+    },
+    "hosted_L27": {
+     "true": 0.0307164303958416,
+     "false": 0.00013452122220769525
+    },
+    "logit_lens_L27": {
+     "true": 0.00010383137123426422,
+     "false": 3.5034290704061277e-06
+    },
+    "hosted_L28": {
+     "true": 0.11188711225986481,
+     "false": 0.00045791344018653035
+    },
+    "logit_lens_L28": {
+     "true": 5.8732104662340134e-05,
+     "false": 9.278427910430764e-07
+    },
+    "hosted_L32": {
+     "true": 0.08462470769882202,
+     "false": 0.1415794938802719
+    },
+    "logit_lens_L32": {
+     "true": 0.08462470769882202,
+     "false": 0.1415794938802719
+    },
+    "model_output": {
+     "true": 0.08462470769882202,
+     "false": 0.1415794938802719
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0001332035317318514,
+     "false": 0.0005503123393282294
+    },
+    "logit_lens_L5": {
+     "true": 5.140882421983406e-06,
+     "false": 4.583800910040736e-05
+    },
+    "hosted_L11": {
+     "true": 0.02091800980269909,
+     "false": 0.11151681840419769
+    },
+    "logit_lens_L11": {
+     "true": 8.0390492485094e-07,
+     "false": 2.1627979549521115e-06
+    },
+    "hosted_L12": {
+     "true": 0.030910208821296692,
+     "false": 0.22377170622348785
+    },
+    "logit_lens_L12": {
+     "true": 5.328657152858796e-06,
+     "false": 1.1634205293375999e-05
+    },
+    "hosted_L16": {
+     "true": 0.06433049589395523,
+     "false": 0.17898645997047424
+    },
+    "logit_lens_L16": {
+     "true": 3.5033688618568704e-05,
+     "false": 4.798969894181937e-05
+    },
+    "hosted_L20": {
+     "true": 0.021943651139736176,
+     "false": 0.01529601402580738
+    },
+    "logit_lens_L20": {
+     "true": 1.7552401914144866e-05,
+     "false": 7.24987403373234e-05
+    },
+    "hosted_L21": {
+     "true": 0.025197912007570267,
+     "false": 0.015876641497015953
+    },
+    "logit_lens_L21": {
+     "true": 5.8267167332815006e-05,
+     "false": 0.00015291567251551896
+    },
+    "hosted_L27": {
+     "true": 0.009928521700203419,
+     "false": 8.346347749466076e-05
+    },
+    "logit_lens_L27": {
+     "true": 3.014329558936879e-05,
+     "false": 1.6668539046804653e-06
+    },
+    "hosted_L28": {
+     "true": 0.10121145099401474,
+     "false": 0.0004965600674040616
+    },
+    "logit_lens_L28": {
+     "true": 1.3307798326422926e-05,
+     "false": 1.2093146040115244e-07
+    },
+    "hosted_L32": {
+     "true": 0.08680632710456848,
+     "false": 0.15437696874141693
+    },
+    "logit_lens_L32": {
+     "true": 0.08680632710456848,
+     "false": 0.15437696874141693
+    },
+    "model_output": {
+     "true": 0.08680632710456848,
+     "false": 0.15437696874141693
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0259-clean",
+   "true": "451",
+   "false": "314",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0271-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00013749435311183333,
+     "false": 0.00021772310719825327
+    },
+    "logit_lens_L5": {
+     "true": 3.1806746392248897e-06,
+     "false": 4.333736069384031e-05
+    },
+    "hosted_L11": {
+     "true": 0.025365890935063362,
+     "false": 0.06649447977542877
+    },
+    "logit_lens_L11": {
+     "true": 4.849791821470717e-07,
+     "false": 1.8463914557287353e-06
+    },
+    "hosted_L12": {
+     "true": 0.037548813968896866,
+     "false": 0.10863783955574036
+    },
+    "logit_lens_L12": {
+     "true": 3.42023599841923e-06,
+     "false": 2.7119871447212063e-05
+    },
+    "hosted_L16": {
+     "true": 0.07309168577194214,
+     "false": 0.09718210995197296
+    },
+    "logit_lens_L16": {
+     "true": 2.793568910419708e-06,
+     "false": 2.5463959900662303e-05
+    },
+    "hosted_L20": {
+     "true": 0.03917758911848068,
+     "false": 0.2595222294330597
+    },
+    "logit_lens_L20": {
+     "true": 5.046934529673308e-05,
+     "false": 0.002108209067955613
+    },
+    "hosted_L21": {
+     "true": 0.03310118988156319,
+     "false": 0.17322292923927307
+    },
+    "logit_lens_L21": {
+     "true": 7.819394522812217e-05,
+     "false": 0.0020392362494021654
+    },
+    "hosted_L27": {
+     "true": 0.003599601797759533,
+     "false": 0.00028822076274082065
+    },
+    "logit_lens_L27": {
+     "true": 1.1323048056510743e-05,
+     "false": 1.5180918353507877e-06
+    },
+    "hosted_L28": {
+     "true": 0.00980195589363575,
+     "false": 0.0038196328096091747
+    },
+    "logit_lens_L28": {
+     "true": 1.0561411727394443e-06,
+     "false": 1.1161217798871803e-06
+    },
+    "hosted_L32": {
+     "true": 0.09476647526025772,
+     "false": 0.07338044047355652
+    },
+    "logit_lens_L32": {
+     "true": 0.09476647526025772,
+     "false": 0.07338044047355652
+    },
+    "model_output": {
+     "true": 0.09476647526025772,
+     "false": 0.07338044047355652
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00011130353959742934,
+     "false": 0.0001397921732859686
+    },
+    "logit_lens_L5": {
+     "true": 2.953630428237375e-06,
+     "false": 3.207447662134655e-05
+    },
+    "hosted_L11": {
+     "true": 0.02714008465409279,
+     "false": 0.06403198093175888
+    },
+    "logit_lens_L11": {
+     "true": 1.6106129123727442e-06,
+     "false": 3.8365683394658845e-06
+    },
+    "hosted_L12": {
+     "true": 0.04352414608001709,
+     "false": 0.11779401451349258
+    },
+    "logit_lens_L12": {
+     "true": 1.030177554639522e-05,
+     "false": 4.81957322335802e-05
+    },
+    "hosted_L16": {
+     "true": 0.08048933744430542,
+     "false": 0.10660663992166519
+    },
+    "logit_lens_L16": {
+     "true": 5.350886567612179e-06,
+     "false": 2.1157891751499847e-05
+    },
+    "hosted_L20": {
+     "true": 0.02664521336555481,
+     "false": 0.014863654971122742
+    },
+    "logit_lens_L20": {
+     "true": 0.00011312746210023761,
+     "false": 0.0005704269278794527
+    },
+    "hosted_L21": {
+     "true": 0.02446814253926277,
+     "false": 0.012164597399532795
+    },
+    "logit_lens_L21": {
+     "true": 0.00020917975052725524,
+     "false": 0.0004816644941456616
+    },
+    "hosted_L27": {
+     "true": 0.001082489499822259,
+     "false": 0.00016213461640290916
+    },
+    "logit_lens_L27": {
+     "true": 8.128040644805878e-05,
+     "false": 2.6485507987672463e-05
+    },
+    "hosted_L28": {
+     "true": 0.0011188501957803965,
+     "false": 0.00017560641572345048
+    },
+    "logit_lens_L28": {
+     "true": 5.812617746414617e-05,
+     "false": 1.4682899745821487e-05
+    },
+    "hosted_L32": {
+     "true": 0.08657924085855484,
+     "false": 0.10306808352470398
+    },
+    "logit_lens_L32": {
+     "true": 0.08657924085855484,
+     "false": 0.10306808352470398
+    },
+    "model_output": {
+     "true": 0.08657924085855484,
+     "false": 0.10306808352470398
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0271-clean",
+   "true": "715",
+   "false": "615",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0283-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001157093865913339,
+     "false": 0.00012549090024549514
+    },
+    "logit_lens_L5": {
+     "true": 1.9478986814647214e-06,
+     "false": 5.678084107785253e-06
+    },
+    "hosted_L11": {
+     "true": 0.02520717680454254,
+     "false": 0.025049660354852676
+    },
+    "logit_lens_L11": {
+     "true": 1.7023219243128551e-06,
+     "false": 2.6386644549347693e-06
+    },
+    "hosted_L12": {
+     "true": 0.04137341305613518,
+     "false": 0.03762948513031006
+    },
+    "logit_lens_L12": {
+     "true": 1.079534922610037e-05,
+     "false": 1.2958268598595168e-05
+    },
+    "hosted_L16": {
+     "true": 0.05264874920248985,
+     "false": 0.07086271792650223
+    },
+    "logit_lens_L16": {
+     "true": 4.608578819897957e-05,
+     "false": 5.1381448429310694e-05
+    },
+    "hosted_L20": {
+     "true": 0.06137274578213692,
+     "false": 0.17630290985107422
+    },
+    "logit_lens_L20": {
+     "true": 0.0011236878344789147,
+     "false": 0.0033515591640025377
+    },
+    "hosted_L21": {
+     "true": 0.07387584447860718,
+     "false": 0.13637593388557434
+    },
+    "logit_lens_L21": {
+     "true": 0.003581589786335826,
+     "false": 0.005480179563164711
+    },
+    "hosted_L27": {
+     "true": 0.007464498747140169,
+     "false": 0.019122952595353127
+    },
+    "logit_lens_L27": {
+     "true": 0.0007292311638593674,
+     "false": 0.002469940809533
+    },
+    "hosted_L28": {
+     "true": 0.05240181088447571,
+     "false": 0.38810306787490845
+    },
+    "logit_lens_L28": {
+     "true": 0.005018102936446667,
+     "false": 0.11728735268115997
+    },
+    "hosted_L32": {
+     "true": 0.09565278142690659,
+     "false": 0.10315284878015518
+    },
+    "logit_lens_L32": {
+     "true": 0.09565278142690659,
+     "false": 0.10315284878015518
+    },
+    "model_output": {
+     "true": 0.09565278142690659,
+     "false": 0.10315284878015518
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00020075609791092575,
+     "false": 0.00018893198284786195
+    },
+    "logit_lens_L5": {
+     "true": 1.858699761214666e-06,
+     "false": 5.721913112211041e-06
+    },
+    "hosted_L11": {
+     "true": 0.026467004790902138,
+     "false": 0.02620074898004532
+    },
+    "logit_lens_L11": {
+     "true": 8.845053685035964e-07,
+     "false": 1.5049176909087691e-06
+    },
+    "hosted_L12": {
+     "true": 0.04787081480026245,
+     "false": 0.04136178642511368
+    },
+    "logit_lens_L12": {
+     "true": 9.82485926215304e-06,
+     "false": 1.0151135029445868e-05
+    },
+    "hosted_L16": {
+     "true": 0.06225193291902542,
+     "false": 0.07400916516780853
+    },
+    "logit_lens_L16": {
+     "true": 5.039989991928451e-05,
+     "false": 3.643427771748975e-05
+    },
+    "hosted_L20": {
+     "true": 0.06916790455579758,
+     "false": 0.03954331949353218
+    },
+    "logit_lens_L20": {
+     "true": 0.004018052015453577,
+     "false": 0.0008168460917659104
+    },
+    "hosted_L21": {
+     "true": 0.09554902464151382,
+     "false": 0.05066784843802452
+    },
+    "logit_lens_L21": {
+     "true": 0.024632317945361137,
+     "false": 0.0036270010750740767
+    },
+    "hosted_L27": {
+     "true": 0.003564525628462434,
+     "false": 0.01813809759914875
+    },
+    "logit_lens_L27": {
+     "true": 0.00032183362054638565,
+     "false": 0.0020394122693687677
+    },
+    "hosted_L28": {
+     "true": 0.07270796597003937,
+     "false": 0.08603207021951675
+    },
+    "logit_lens_L28": {
+     "true": 0.011724993586540222,
+     "false": 0.007102831732481718
+    },
+    "hosted_L32": {
+     "true": 0.0894169881939888,
+     "false": 0.09550521522760391
+    },
+    "logit_lens_L32": {
+     "true": 0.0894169881939888,
+     "false": 0.09550521522760391
+    },
+    "model_output": {
+     "true": 0.0894169881939888,
+     "false": 0.09550521522760391
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0283-clean",
+   "true": "929",
+   "false": "449",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0295-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00021880166605114937,
+     "false": 0.00018539071606937796
+    },
+    "logit_lens_L5": {
+     "true": 1.6108022009575507e-06,
+     "false": 3.4147365113312844e-06
+    },
+    "hosted_L11": {
+     "true": 0.031336069107055664,
+     "false": 0.026271585375070572
+    },
+    "logit_lens_L11": {
+     "true": 1.4227454130377737e-06,
+     "false": 8.675324352225289e-07
+    },
+    "hosted_L12": {
+     "true": 0.05098233371973038,
+     "false": 0.04197757691144943
+    },
+    "logit_lens_L12": {
+     "true": 2.3280183540919097e-06,
+     "false": 7.729312528681476e-06
+    },
+    "hosted_L16": {
+     "true": 0.06379058212041855,
+     "false": 0.07337938994169235
+    },
+    "logit_lens_L16": {
+     "true": 1.1276779332547449e-05,
+     "false": 4.249706762493588e-06
+    },
+    "hosted_L20": {
+     "true": 0.03472535312175751,
+     "false": 0.03809294104576111
+    },
+    "logit_lens_L20": {
+     "true": 0.00044799994793720543,
+     "false": 0.0007045697420835495
+    },
+    "hosted_L21": {
+     "true": 0.062182411551475525,
+     "false": 0.04117342457175255
+    },
+    "logit_lens_L21": {
+     "true": 0.0011441418901085854,
+     "false": 0.0021720051299780607
+    },
+    "hosted_L27": {
+     "true": 0.008237229660153389,
+     "false": 0.0009253635653294623
+    },
+    "logit_lens_L27": {
+     "true": 0.00026884221006184816,
+     "false": 5.981835784041323e-05
+    },
+    "hosted_L28": {
+     "true": 0.3971285820007324,
+     "false": 0.00028836316778324544
+    },
+    "logit_lens_L28": {
+     "true": 0.018552066758275032,
+     "false": 8.299486580654047e-06
+    },
+    "hosted_L32": {
+     "true": 0.1060650572180748,
+     "false": 0.07759678363800049
+    },
+    "logit_lens_L32": {
+     "true": 0.1060650572180748,
+     "false": 0.07759678363800049
+    },
+    "model_output": {
+     "true": 0.1060650572180748,
+     "false": 0.07759678363800049
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00022989502758719027,
+     "false": 0.0001981100649572909
+    },
+    "logit_lens_L5": {
+     "true": 1.959315113708726e-06,
+     "false": 3.881257271132199e-06
+    },
+    "hosted_L11": {
+     "true": 0.027739429846405983,
+     "false": 0.02462492138147354
+    },
+    "logit_lens_L11": {
+     "true": 1.4639099390478805e-06,
+     "false": 8.051585496104963e-07
+    },
+    "hosted_L12": {
+     "true": 0.0480756014585495,
+     "false": 0.04538329690694809
+    },
+    "logit_lens_L12": {
+     "true": 1.754535560394288e-06,
+     "false": 5.393502760853153e-06
+    },
+    "hosted_L16": {
+     "true": 0.05392094701528549,
+     "false": 0.07352828234434128
+    },
+    "logit_lens_L16": {
+     "true": 2.5214951620000647e-06,
+     "false": 2.6532175070315134e-06
+    },
+    "hosted_L20": {
+     "true": 0.04625094681978226,
+     "false": 0.09078220278024673
+    },
+    "logit_lens_L20": {
+     "true": 0.000366908498108387,
+     "false": 0.00041371057159267366
+    },
+    "hosted_L21": {
+     "true": 0.09414491057395935,
+     "false": 0.1401858925819397
+    },
+    "logit_lens_L21": {
+     "true": 0.0010643280111253262,
+     "false": 0.0028752959333360195
+    },
+    "hosted_L27": {
+     "true": 0.03389187157154083,
+     "false": 0.014801687560975552
+    },
+    "logit_lens_L27": {
+     "true": 0.00024352352193091065,
+     "false": 0.0004400245379656553
+    },
+    "hosted_L28": {
+     "true": 0.12453295290470123,
+     "false": 0.002017049817368388
+    },
+    "logit_lens_L28": {
+     "true": 0.0003245632105972618,
+     "false": 7.967292731336784e-06
+    },
+    "hosted_L32": {
+     "true": 0.0961984246969223,
+     "false": 0.07710324227809906
+    },
+    "logit_lens_L32": {
+     "true": 0.0961984246969223,
+     "false": 0.07710324227809906
+    },
+    "model_output": {
+     "true": 0.0961984246969223,
+     "false": 0.07710324227809906
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0295-clean",
+   "true": "536",
+   "false": "306",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0331-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00017225007468368858,
+     "false": 0.0002883167180698365
+    },
+    "logit_lens_L5": {
+     "true": 1.7838536223280244e-05,
+     "false": 5.366170807974413e-05
+    },
+    "hosted_L11": {
+     "true": 0.024240650236606598,
+     "false": 0.0619732029736042
+    },
+    "logit_lens_L11": {
+     "true": 1.086816837414517e-06,
+     "false": 2.259976554341847e-06
+    },
+    "hosted_L12": {
+     "true": 0.05206418037414551,
+     "false": 0.11987848579883575
+    },
+    "logit_lens_L12": {
+     "true": 4.1281396079284605e-06,
+     "false": 2.551984835008625e-05
+    },
+    "hosted_L16": {
+     "true": 0.07116791605949402,
+     "false": 0.0836859717965126
+    },
+    "logit_lens_L16": {
+     "true": 5.496061476151226e-06,
+     "false": 6.394035153789446e-06
+    },
+    "hosted_L20": {
+     "true": 0.06901624798774719,
+     "false": 0.1833670735359192
+    },
+    "logit_lens_L20": {
+     "true": 0.0005807647830806673,
+     "false": 0.00391962006688118
+    },
+    "hosted_L21": {
+     "true": 0.08637582510709763,
+     "false": 0.18815042078495026
+    },
+    "logit_lens_L21": {
+     "true": 0.0015261584194377065,
+     "false": 0.011529896408319473
+    },
+    "hosted_L27": {
+     "true": 0.06036447733640671,
+     "false": 0.0019544889219105244
+    },
+    "logit_lens_L27": {
+     "true": 0.0029107597656548023,
+     "false": 0.00011343631922500208
+    },
+    "hosted_L28": {
+     "true": 0.07072555273771286,
+     "false": 0.0031612797174602747
+    },
+    "logit_lens_L28": {
+     "true": 0.0009818660328164697,
+     "false": 5.713957943953574e-05
+    },
+    "hosted_L32": {
+     "true": 0.14796361327171326,
+     "false": 0.07448810338973999
+    },
+    "logit_lens_L32": {
+     "true": 0.14796361327171326,
+     "false": 0.07448810338973999
+    },
+    "model_output": {
+     "true": 0.14796361327171326,
+     "false": 0.07448810338973999
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00013966034748591483,
+     "false": 0.0001975347549887374
+    },
+    "logit_lens_L5": {
+     "true": 1.3775649676972535e-05,
+     "false": 3.387470496818423e-05
+    },
+    "hosted_L11": {
+     "true": 0.016954531893134117,
+     "false": 0.0394073911011219
+    },
+    "logit_lens_L11": {
+     "true": 2.0057859728694893e-06,
+     "false": 3.3605499538680306e-06
+    },
+    "hosted_L12": {
+     "true": 0.0454818420112133,
+     "false": 0.08650310337543488
+    },
+    "logit_lens_L12": {
+     "true": 7.0666610554326326e-06,
+     "false": 2.866002978407778e-05
+    },
+    "hosted_L16": {
+     "true": 0.08231561630964279,
+     "false": 0.09238133579492569
+    },
+    "logit_lens_L16": {
+     "true": 1.7140278941951692e-05,
+     "false": 1.2525568308774382e-05
+    },
+    "hosted_L20": {
+     "true": 0.01949874497950077,
+     "false": 0.016634175553917885
+    },
+    "logit_lens_L20": {
+     "true": 0.0002703058416955173,
+     "false": 0.000432986969826743
+    },
+    "hosted_L21": {
+     "true": 0.022033104673027992,
+     "false": 0.01665080338716507
+    },
+    "logit_lens_L21": {
+     "true": 0.0004881949571426958,
+     "false": 0.000914860749617219
+    },
+    "hosted_L27": {
+     "true": 0.013051600195467472,
+     "false": 0.0005316970637068152
+    },
+    "logit_lens_L27": {
+     "true": 0.0005477815284393728,
+     "false": 4.066659676027484e-05
+    },
+    "hosted_L28": {
+     "true": 0.005774236749857664,
+     "false": 0.00012078509462298825
+    },
+    "logit_lens_L28": {
+     "true": 0.0005325758247636259,
+     "false": 1.5108270417840686e-05
+    },
+    "hosted_L32": {
+     "true": 0.13320884108543396,
+     "false": 0.10496664047241211
+    },
+    "logit_lens_L32": {
+     "true": 0.13320884108543396,
+     "false": 0.10496664047241211
+    },
+    "model_output": {
+     "true": 0.13320884108543396,
+     "false": 0.10496664047241211
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0331-clean",
+   "true": "115",
+   "false": "886",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0343-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0004607470764312893,
+     "false": 0.00017175066750496626
+    },
+    "logit_lens_L5": {
+     "true": 3.8172827771632e-05,
+     "false": 3.906648089468945e-06
+    },
+    "hosted_L11": {
+     "true": 0.05087823420763016,
+     "false": 0.012619225308299065
+    },
+    "logit_lens_L11": {
+     "true": 2.460683390381746e-06,
+     "false": 1.2295660098970984e-06
+    },
+    "hosted_L12": {
+     "true": 0.1720329374074936,
+     "false": 0.030632423236966133
+    },
+    "logit_lens_L12": {
+     "true": 1.0524563549552113e-05,
+     "false": 3.0337664611579385e-06
+    },
+    "hosted_L16": {
+     "true": 0.13806690275669098,
+     "false": 0.07056974619626999
+    },
+    "logit_lens_L16": {
+     "true": 1.8774810087052174e-05,
+     "false": 5.017258445150219e-05
+    },
+    "hosted_L20": {
+     "true": 0.004719992633908987,
+     "false": 0.09789658337831497
+    },
+    "logit_lens_L20": {
+     "true": 0.0001365409989375621,
+     "false": 0.0021765290293842554
+    },
+    "hosted_L21": {
+     "true": 0.011822973378002644,
+     "false": 0.13778728246688843
+    },
+    "logit_lens_L21": {
+     "true": 0.0014104769797995687,
+     "false": 0.004984734579920769
+    },
+    "hosted_L27": {
+     "true": 0.0001424012880306691,
+     "false": 0.023902997374534607
+    },
+    "logit_lens_L27": {
+     "true": 5.502938438439742e-05,
+     "false": 0.000460800772998482
+    },
+    "hosted_L28": {
+     "true": 1.7714022760628723e-05,
+     "false": 0.11272426694631577
+    },
+    "logit_lens_L28": {
+     "true": 6.481437139882473e-06,
+     "false": 0.008671206422150135
+    },
+    "hosted_L32": {
+     "true": 0.13954415917396545,
+     "false": 0.06665420532226562
+    },
+    "logit_lens_L32": {
+     "true": 0.13954415917396545,
+     "false": 0.06665420532226562
+    },
+    "model_output": {
+     "true": 0.13954415917396545,
+     "false": 0.06665420532226562
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0004058315244037658,
+     "false": 0.00014197231212165207
+    },
+    "logit_lens_L5": {
+     "true": 2.639737431309186e-05,
+     "false": 3.206796691301861e-06
+    },
+    "hosted_L11": {
+     "true": 0.08530115336179733,
+     "false": 0.01745959185063839
+    },
+    "logit_lens_L11": {
+     "true": 2.2769474981032545e-06,
+     "false": 1.3859986438546912e-06
+    },
+    "hosted_L12": {
+     "true": 0.2134009301662445,
+     "false": 0.03324485197663307
+    },
+    "logit_lens_L12": {
+     "true": 8.60255204315763e-06,
+     "false": 3.5148764254699927e-06
+    },
+    "hosted_L16": {
+     "true": 0.1506364643573761,
+     "false": 0.07376250624656677
+    },
+    "logit_lens_L16": {
+     "true": 2.4799019229249097e-05,
+     "false": 9.326769941253588e-05
+    },
+    "hosted_L20": {
+     "true": 0.005361322779208422,
+     "false": 0.06329318135976791
+    },
+    "logit_lens_L20": {
+     "true": 0.00032826748793013394,
+     "false": 0.0016582224052399397
+    },
+    "hosted_L21": {
+     "true": 0.010291519574820995,
+     "false": 0.08453289419412613
+    },
+    "logit_lens_L21": {
+     "true": 0.0034749642945826054,
+     "false": 0.0032536727376282215
+    },
+    "hosted_L27": {
+     "true": 1.9348419300513342e-05,
+     "false": 0.05578546226024628
+    },
+    "logit_lens_L27": {
+     "true": 1.7665352061158046e-05,
+     "false": 0.005215557757765055
+    },
+    "hosted_L28": {
+     "true": 1.114056613005232e-05,
+     "false": 0.4441371262073517
+    },
+    "logit_lens_L28": {
+     "true": 2.4876931092876475e-06,
+     "false": 0.048427220433950424
+    },
+    "hosted_L32": {
+     "true": 0.1413663774728775,
+     "false": 0.07130073755979538
+    },
+    "logit_lens_L32": {
+     "true": 0.1413663774728775,
+     "false": 0.07130073755979538
+    },
+    "model_output": {
+     "true": 0.1413663774728775,
+     "false": 0.07130073755979538
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0343-clean",
+   "true": "990",
+   "false": "611",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0355-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00017005999688990414,
+     "false": 0.0001578344526933506
+    },
+    "logit_lens_L5": {
+     "true": 1.3695994312001858e-06,
+     "false": 4.929596343572484e-06
+    },
+    "hosted_L11": {
+     "true": 0.02629597671329975,
+     "false": 0.022471901029348373
+    },
+    "logit_lens_L11": {
+     "true": 1.5860781559240422e-06,
+     "false": 1.7202100934810005e-06
+    },
+    "hosted_L12": {
+     "true": 0.04527883604168892,
+     "false": 0.03588709980249405
+    },
+    "logit_lens_L12": {
+     "true": 2.177559963456588e-06,
+     "false": 7.3744781730056275e-06
+    },
+    "hosted_L16": {
+     "true": 0.07327263802289963,
+     "false": 0.08093952387571335
+    },
+    "logit_lens_L16": {
+     "true": 1.2706670531770214e-05,
+     "false": 6.814847438363358e-05
+    },
+    "hosted_L20": {
+     "true": 0.07744133472442627,
+     "false": 0.06787427514791489
+    },
+    "logit_lens_L20": {
+     "true": 0.0012483445461839437,
+     "false": 0.001491011120378971
+    },
+    "hosted_L21": {
+     "true": 0.1210796982049942,
+     "false": 0.10105334222316742
+    },
+    "logit_lens_L21": {
+     "true": 0.0024290005676448345,
+     "false": 0.0087491599842906
+    },
+    "hosted_L27": {
+     "true": 0.0053390576504170895,
+     "false": 0.009383448399603367
+    },
+    "logit_lens_L27": {
+     "true": 0.0002028367598541081,
+     "false": 0.0006864520837552845
+    },
+    "hosted_L28": {
+     "true": 0.30657637119293213,
+     "false": 0.028565991669893265
+    },
+    "logit_lens_L28": {
+     "true": 0.01789240725338459,
+     "false": 0.0015930220251902938
+    },
+    "hosted_L32": {
+     "true": 0.10663488507270813,
+     "false": 0.08263982087373734
+    },
+    "logit_lens_L32": {
+     "true": 0.10663488507270813,
+     "false": 0.08263982087373734
+    },
+    "model_output": {
+     "true": 0.10663488507270813,
+     "false": 0.08263982087373734
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00019441917538642883,
+     "false": 0.00014798666234128177
+    },
+    "logit_lens_L5": {
+     "true": 2.2824206098448485e-06,
+     "false": 7.368174465227639e-06
+    },
+    "hosted_L11": {
+     "true": 0.019714366644620895,
+     "false": 0.015214364975690842
+    },
+    "logit_lens_L11": {
+     "true": 2.0382613001856953e-06,
+     "false": 1.5116336271603359e-06
+    },
+    "hosted_L12": {
+     "true": 0.029340902343392372,
+     "false": 0.020530637353658676
+    },
+    "logit_lens_L12": {
+     "true": 2.8969145660084905e-06,
+     "false": 1.2246581718500238e-05
+    },
+    "hosted_L16": {
+     "true": 0.07319676131010056,
+     "false": 0.063172347843647
+    },
+    "logit_lens_L16": {
+     "true": 9.868999768514186e-06,
+     "false": 5.046245860285126e-05
+    },
+    "hosted_L20": {
+     "true": 0.033288177102804184,
+     "false": 0.016460904851555824
+    },
+    "logit_lens_L20": {
+     "true": 0.00021579382882919163,
+     "false": 8.261458424385637e-05
+    },
+    "hosted_L21": {
+     "true": 0.07250356674194336,
+     "false": 0.0275348462164402
+    },
+    "logit_lens_L21": {
+     "true": 0.0003333979402668774,
+     "false": 0.0002833697071764618
+    },
+    "hosted_L27": {
+     "true": 0.01675376482307911,
+     "false": 0.013604136183857918
+    },
+    "logit_lens_L27": {
+     "true": 0.0002708752581384033,
+     "false": 0.0002563531743362546
+    },
+    "hosted_L28": {
+     "true": 0.7287274599075317,
+     "false": 0.016468804329633713
+    },
+    "logit_lens_L28": {
+     "true": 0.08204850554466248,
+     "false": 0.0009545526700094342
+    },
+    "hosted_L32": {
+     "true": 0.1040647029876709,
+     "false": 0.08826753497123718
+    },
+    "logit_lens_L32": {
+     "true": 0.1040647029876709,
+     "false": 0.08826753497123718
+    },
+    "model_output": {
+     "true": 0.1040647029876709,
+     "false": 0.08826753497123718
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0355-clean",
+   "true": "507",
+   "false": "959",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0367-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00012976887228433043,
+     "false": 0.00019441917538642883
+    },
+    "logit_lens_L5": {
+     "true": 1.9339468053658493e-05,
+     "false": 2.2824206098448485e-06
+    },
+    "hosted_L11": {
+     "true": 0.01773747429251671,
+     "false": 0.019714366644620895
+    },
+    "logit_lens_L11": {
+     "true": 1.5349663726738072e-06,
+     "false": 2.0382613001856953e-06
+    },
+    "hosted_L12": {
+     "true": 0.029791276901960373,
+     "false": 0.029340902343392372
+    },
+    "logit_lens_L12": {
+     "true": 6.198147730174242e-06,
+     "false": 2.8969145660084905e-06
+    },
+    "hosted_L16": {
+     "true": 0.06523946672677994,
+     "false": 0.07319676131010056
+    },
+    "logit_lens_L16": {
+     "true": 8.041305591177661e-06,
+     "false": 9.868999768514186e-06
+    },
+    "hosted_L20": {
+     "true": 0.016695747151970863,
+     "false": 0.033288177102804184
+    },
+    "logit_lens_L20": {
+     "true": 8.510920451954007e-05,
+     "false": 0.00021579382882919163
+    },
+    "hosted_L21": {
+     "true": 0.023899199441075325,
+     "false": 0.07250356674194336
+    },
+    "logit_lens_L21": {
+     "true": 0.00012376515951473266,
+     "false": 0.0003333979402668774
+    },
+    "hosted_L27": {
+     "true": 0.004562885966151953,
+     "false": 0.01675376482307911
+    },
+    "logit_lens_L27": {
+     "true": 0.0001487746339989826,
+     "false": 0.0002708752581384033
+    },
+    "hosted_L28": {
+     "true": 0.002338413381949067,
+     "false": 0.7287274599075317
+    },
+    "logit_lens_L28": {
+     "true": 0.0002098450786434114,
+     "false": 0.08204850554466248
+    },
+    "hosted_L32": {
+     "true": 0.12491455674171448,
+     "false": 0.1040647029876709
+    },
+    "logit_lens_L32": {
+     "true": 0.12491455674171448,
+     "false": 0.1040647029876709
+    },
+    "model_output": {
+     "true": 0.12491455674171448,
+     "false": 0.1040647029876709
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 9.953750850399956e-05,
+     "false": 0.0001321583695244044
+    },
+    "logit_lens_L5": {
+     "true": 1.2858426998718642e-05,
+     "false": 1.5100390555744525e-06
+    },
+    "hosted_L11": {
+     "true": 0.014413983561098576,
+     "false": 0.01604471355676651
+    },
+    "logit_lens_L11": {
+     "true": 1.0856567769224057e-06,
+     "false": 1.3485654335454456e-06
+    },
+    "hosted_L12": {
+     "true": 0.03221926465630531,
+     "false": 0.02856881357729435
+    },
+    "logit_lens_L12": {
+     "true": 3.798233365159831e-06,
+     "false": 1.6095355022116564e-06
+    },
+    "hosted_L16": {
+     "true": 0.05953681096434593,
+     "false": 0.054433614015579224
+    },
+    "logit_lens_L16": {
+     "true": 3.6621240724343807e-06,
+     "false": 4.7311923481174745e-06
+    },
+    "hosted_L20": {
+     "true": 0.032330628484487534,
+     "false": 0.04939521476626396
+    },
+    "logit_lens_L20": {
+     "true": 8.94621480256319e-05,
+     "false": 0.00013786760973744094
+    },
+    "hosted_L21": {
+     "true": 0.0501653254032135,
+     "false": 0.08349169790744781
+    },
+    "logit_lens_L21": {
+     "true": 0.0004904801025986671,
+     "false": 0.00043217401253059506
+    },
+    "hosted_L27": {
+     "true": 0.05594261735677719,
+     "false": 0.053168799728155136
+    },
+    "logit_lens_L27": {
+     "true": 0.000563761277589947,
+     "false": 0.00017536868108436465
+    },
+    "hosted_L28": {
+     "true": 0.032571643590927124,
+     "false": 0.3984784781932831
+    },
+    "logit_lens_L28": {
+     "true": 0.00032896181801334023,
+     "false": 0.0022041115444153547
+    },
+    "hosted_L32": {
+     "true": 0.14874526858329773,
+     "false": 0.11492301523685455
+    },
+    "logit_lens_L32": {
+     "true": 0.14874526858329773,
+     "false": 0.11492301523685455
+    },
+    "model_output": {
+     "true": 0.14874526858329773,
+     "false": 0.11492301523685455
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0367-clean",
+   "true": "601",
+   "false": "201",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0379-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00011438988440204412,
+     "false": 0.00032493987237103283
+    },
+    "logit_lens_L5": {
+     "true": 4.298748081055237e-06,
+     "false": 2.3037933715386316e-05
+    },
+    "hosted_L11": {
+     "true": 0.014323079958558083,
+     "false": 0.06369508057832718
+    },
+    "logit_lens_L11": {
+     "true": 9.165613619188662e-07,
+     "false": 1.004095906864677e-06
+    },
+    "hosted_L12": {
+     "true": 0.024146396666765213,
+     "false": 0.13896457850933075
+    },
+    "logit_lens_L12": {
+     "true": 5.198202870815294e-06,
+     "false": 2.0948164092260413e-06
+    },
+    "hosted_L16": {
+     "true": 0.05450233444571495,
+     "false": 0.1737750619649887
+    },
+    "logit_lens_L16": {
+     "true": 1.955408697540406e-05,
+     "false": 1.620736475160811e-05
+    },
+    "hosted_L20": {
+     "true": 0.03436136618256569,
+     "false": 0.18028172850608826
+    },
+    "logit_lens_L20": {
+     "true": 3.63862382073421e-05,
+     "false": 0.0005938656395301223
+    },
+    "hosted_L21": {
+     "true": 0.059544794261455536,
+     "false": 0.1029752716422081
+    },
+    "logit_lens_L21": {
+     "true": 0.0005041853873990476,
+     "false": 0.0022407397627830505
+    },
+    "hosted_L27": {
+     "true": 0.042812347412109375,
+     "false": 0.0002451629552524537
+    },
+    "logit_lens_L27": {
+     "true": 0.00017641657905187458,
+     "false": 5.63111825613305e-06
+    },
+    "hosted_L28": {
+     "true": 0.07194792479276657,
+     "false": 5.5982272897381335e-05
+    },
+    "logit_lens_L28": {
+     "true": 0.0003039732691831887,
+     "false": 6.699766004203411e-07
+    },
+    "hosted_L32": {
+     "true": 0.09284906089305878,
+     "false": 0.11396259069442749
+    },
+    "logit_lens_L32": {
+     "true": 0.09284906089305878,
+     "false": 0.11396259069442749
+    },
+    "model_output": {
+     "true": 0.09284906089305878,
+     "false": 0.11396259069442749
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00017004388791974634,
+     "false": 0.0005207349895499647
+    },
+    "logit_lens_L5": {
+     "true": 7.543679657828761e-06,
+     "false": 2.9253633329062723e-05
+    },
+    "hosted_L11": {
+     "true": 0.019133523106575012,
+     "false": 0.08376017957925797
+    },
+    "logit_lens_L11": {
+     "true": 1.5369853372249054e-06,
+     "false": 1.782037998054875e-06
+    },
+    "hosted_L12": {
+     "true": 0.03509534150362015,
+     "false": 0.1645294427871704
+    },
+    "logit_lens_L12": {
+     "true": 8.63038712850539e-06,
+     "false": 3.3263354453083593e-06
+    },
+    "hosted_L16": {
+     "true": 0.052667103707790375,
+     "false": 0.18604421615600586
+    },
+    "logit_lens_L16": {
+     "true": 1.4824954632786103e-05,
+     "false": 1.6135993064381182e-05
+    },
+    "hosted_L20": {
+     "true": 0.02046922780573368,
+     "false": 0.05696001648902893
+    },
+    "logit_lens_L20": {
+     "true": 4.060796982230386e-06,
+     "false": 9.999850590247661e-05
+    },
+    "hosted_L21": {
+     "true": 0.02132956124842167,
+     "false": 0.02243635058403015
+    },
+    "logit_lens_L21": {
+     "true": 5.647897978633409e-06,
+     "false": 1.3934564776718616e-05
+    },
+    "hosted_L27": {
+     "true": 0.03610958158969879,
+     "false": 0.0010764787439256907
+    },
+    "logit_lens_L27": {
+     "true": 0.0002358460333198309,
+     "false": 4.410828114487231e-05
+    },
+    "hosted_L28": {
+     "true": 0.12873826920986176,
+     "false": 0.005511861760169268
+    },
+    "logit_lens_L28": {
+     "true": 8.537730172974989e-05,
+     "false": 8.148039341904223e-06
+    },
+    "hosted_L32": {
+     "true": 0.06923265755176544,
+     "false": 0.10901178419589996
+    },
+    "logit_lens_L32": {
+     "true": 0.06923265755176544,
+     "false": 0.10901178419589996
+    },
+    "model_output": {
+     "true": 0.06923265755176544,
+     "false": 0.10901178419589996
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0379-clean",
+   "true": "519",
+   "false": "300",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0391-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00016208660963457078,
+     "false": 0.00028470615507103503
+    },
+    "logit_lens_L5": {
+     "true": 2.0252422473276965e-05,
+     "false": 6.9555921072606e-05
+    },
+    "hosted_L11": {
+     "true": 0.022654978558421135,
+     "false": 0.05253719165921211
+    },
+    "logit_lens_L11": {
+     "true": 2.413405127299484e-06,
+     "false": 2.964829036500305e-06
+    },
+    "hosted_L12": {
+     "true": 0.053713828325271606,
+     "false": 0.11475451290607452
+    },
+    "logit_lens_L12": {
+     "true": 8.715223884792067e-06,
+     "false": 3.158583422191441e-05
+    },
+    "hosted_L16": {
+     "true": 0.10071732848882675,
+     "false": 0.1251906305551529
+    },
+    "logit_lens_L16": {
+     "true": 3.727900320882327e-06,
+     "false": 1.074872307071928e-05
+    },
+    "hosted_L20": {
+     "true": 0.07245968282222748,
+     "false": 0.30569687485694885
+    },
+    "logit_lens_L20": {
+     "true": 6.534943531733006e-05,
+     "false": 0.0010197071824222803
+    },
+    "hosted_L21": {
+     "true": 0.09496883302927017,
+     "false": 0.2652202546596527
+    },
+    "logit_lens_L21": {
+     "true": 4.435231676325202e-05,
+     "false": 0.00036511046346277
+    },
+    "hosted_L27": {
+     "true": 0.2787192165851593,
+     "false": 0.0006943882326595485
+    },
+    "logit_lens_L27": {
+     "true": 0.008272730745375156,
+     "false": 1.216705913975602e-05
+    },
+    "hosted_L28": {
+     "true": 0.5250620245933533,
+     "false": 0.002532531274482608
+    },
+    "logit_lens_L28": {
+     "true": 0.0007359854062087834,
+     "false": 2.480557213857537e-06
+    },
+    "hosted_L32": {
+     "true": 0.22605976462364197,
+     "false": 0.039718467742204666
+    },
+    "logit_lens_L32": {
+     "true": 0.22605976462364197,
+     "false": 0.039718467742204666
+    },
+    "model_output": {
+     "true": 0.22605976462364197,
+     "false": 0.039718467742204666
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00013045163359493017,
+     "false": 0.00019332708325237036
+    },
+    "logit_lens_L5": {
+     "true": 1.653566687309649e-05,
+     "false": 4.255296153132804e-05
+    },
+    "hosted_L11": {
+     "true": 0.02020789310336113,
+     "false": 0.05517488718032837
+    },
+    "logit_lens_L11": {
+     "true": 1.1036938758479664e-06,
+     "false": 2.07081802727771e-06
+    },
+    "hosted_L12": {
+     "true": 0.03996718302369118,
+     "false": 0.0904691144824028
+    },
+    "logit_lens_L12": {
+     "true": 3.389656285435194e-06,
+     "false": 1.7807906260713935e-05
+    },
+    "hosted_L16": {
+     "true": 0.06804319471120834,
+     "false": 0.08905662596225739
+    },
+    "logit_lens_L16": {
+     "true": 7.930133506306447e-06,
+     "false": 2.1823643692187034e-05
+    },
+    "hosted_L20": {
+     "true": 0.014029243029654026,
+     "false": 0.01533849909901619
+    },
+    "logit_lens_L20": {
+     "true": 5.826259439345449e-05,
+     "false": 9.348216553917155e-05
+    },
+    "hosted_L21": {
+     "true": 0.013713949359953403,
+     "false": 0.012844763696193695
+    },
+    "logit_lens_L21": {
+     "true": 0.0001596613001311198,
+     "false": 0.0003244922845624387
+    },
+    "hosted_L27": {
+     "true": 0.004464348778128624,
+     "false": 8.898508531274274e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.0003702201647683978,
+     "false": 7.533231382694794e-06
+    },
+    "hosted_L28": {
+     "true": 0.005151036661118269,
+     "false": 0.00021527489298023283
+    },
+    "logit_lens_L28": {
+     "true": 0.0002097303222399205,
+     "false": 1.6417332517448813e-05
+    },
+    "hosted_L32": {
+     "true": 0.12359751015901566,
+     "false": 0.10189566761255264
+    },
+    "logit_lens_L32": {
+     "true": 0.12359751015901566,
+     "false": 0.10189566761255264
+    },
+    "model_output": {
+     "true": 0.12359751015901566,
+     "false": 0.10189566761255264
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0391-clean",
+   "true": "732",
+   "false": "949",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0403-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00016077616601251066,
+     "false": 0.00018826965242624283
+    },
+    "logit_lens_L5": {
+     "true": 2.225011030532187e-06,
+     "false": 2.0818033590330742e-06
+    },
+    "hosted_L11": {
+     "true": 0.019305210560560226,
+     "false": 0.02323424443602562
+    },
+    "logit_lens_L11": {
+     "true": 8.79856088431552e-07,
+     "false": 1.283754272662918e-06
+    },
+    "hosted_L12": {
+     "true": 0.03697410970926285,
+     "false": 0.04411829635500908
+    },
+    "logit_lens_L12": {
+     "true": 6.526402103190776e-06,
+     "false": 2.324001343367854e-06
+    },
+    "hosted_L16": {
+     "true": 0.05321360379457474,
+     "false": 0.0806848555803299
+    },
+    "logit_lens_L16": {
+     "true": 5.848510772921145e-05,
+     "false": 1.5649055058020167e-05
+    },
+    "hosted_L20": {
+     "true": 0.022795652970671654,
+     "false": 0.04789179936051369
+    },
+    "logit_lens_L20": {
+     "true": 0.00017037494399119169,
+     "false": 0.00026643299497663975
+    },
+    "hosted_L21": {
+     "true": 0.028760714456439018,
+     "false": 0.06866791099309921
+    },
+    "logit_lens_L21": {
+     "true": 0.00119775568600744,
+     "false": 0.0007753107929602265
+    },
+    "hosted_L27": {
+     "true": 0.008815636858344078,
+     "false": 0.008920079097151756
+    },
+    "logit_lens_L27": {
+     "true": 0.0006474447436630726,
+     "false": 0.00027722676168195903
+    },
+    "hosted_L28": {
+     "true": 0.02336038462817669,
+     "false": 0.6335725784301758
+    },
+    "logit_lens_L28": {
+     "true": 0.0009289893787354231,
+     "false": 0.0210392028093338
+    },
+    "hosted_L32": {
+     "true": 0.08810870349407196,
+     "false": 0.09708387404680252
+    },
+    "logit_lens_L32": {
+     "true": 0.08810870349407196,
+     "false": 0.09708387404680252
+    },
+    "model_output": {
+     "true": 0.08810870349407196,
+     "false": 0.09708387404680252
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0001999496016651392,
+     "false": 0.00021876281243748963
+    },
+    "logit_lens_L5": {
+     "true": 2.019279008891317e-06,
+     "false": 1.7013593378578662e-06
+    },
+    "hosted_L11": {
+     "true": 0.0270369965583086,
+     "false": 0.032677069306373596
+    },
+    "logit_lens_L11": {
+     "true": 1.764519311109325e-06,
+     "false": 3.5283644592709607e-06
+    },
+    "hosted_L12": {
+     "true": 0.037592560052871704,
+     "false": 0.045149125158786774
+    },
+    "logit_lens_L12": {
+     "true": 1.6243948266492225e-05,
+     "false": 6.0075471992604434e-06
+    },
+    "hosted_L16": {
+     "true": 0.0526333749294281,
+     "false": 0.09436117857694626
+    },
+    "logit_lens_L16": {
+     "true": 0.00010501544602448121,
+     "false": 3.5785928048426285e-05
+    },
+    "hosted_L20": {
+     "true": 0.07648508250713348,
+     "false": 0.06496164947748184
+    },
+    "logit_lens_L20": {
+     "true": 0.0018795356154441833,
+     "false": 0.0007284110179170966
+    },
+    "hosted_L21": {
+     "true": 0.09793765097856522,
+     "false": 0.11001285910606384
+    },
+    "logit_lens_L21": {
+     "true": 0.006960492115467787,
+     "false": 0.0011825722176581621
+    },
+    "hosted_L27": {
+     "true": 0.0199213195592165,
+     "false": 0.04116400331258774
+    },
+    "logit_lens_L27": {
+     "true": 0.0007791257812641561,
+     "false": 0.0011807711562141776
+    },
+    "hosted_L28": {
+     "true": 0.02377268299460411,
+     "false": 0.6030381321907043
+    },
+    "logit_lens_L28": {
+     "true": 0.0028631039895117283,
+     "false": 0.06561928242444992
+    },
+    "hosted_L32": {
+     "true": 0.09141560643911362,
+     "false": 0.12184788286685944
+    },
+    "logit_lens_L32": {
+     "true": 0.09141560643911362,
+     "false": 0.12184788286685944
+    },
+    "model_output": {
+     "true": 0.09141560643911362,
+     "false": 0.12184788286685944
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0403-clean",
+   "true": "425",
+   "false": "651",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0415-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00018232688307762146,
+     "false": 0.00021828121680300683
+    },
+    "logit_lens_L5": {
+     "true": 3.3076985346269794e-06,
+     "false": 5.981351478112629e-06
+    },
+    "hosted_L11": {
+     "true": 0.029359299689531326,
+     "false": 0.028019091114401817
+    },
+    "logit_lens_L11": {
+     "true": 1.4574677607015474e-06,
+     "false": 2.5602105324651347e-06
+    },
+    "hosted_L12": {
+     "true": 0.030827661976218224,
+     "false": 0.03171283006668091
+    },
+    "logit_lens_L12": {
+     "true": 8.505035111738835e-06,
+     "false": 1.7025222405209206e-05
+    },
+    "hosted_L16": {
+     "true": 0.07005048543214798,
+     "false": 0.06947917491197586
+    },
+    "logit_lens_L16": {
+     "true": 6.218715043360135e-06,
+     "false": 0.00010726073378464207
+    },
+    "hosted_L20": {
+     "true": 0.022385984659194946,
+     "false": 0.09085444360971451
+    },
+    "logit_lens_L20": {
+     "true": 0.00013001562911085784,
+     "false": 0.0009687563288025558
+    },
+    "hosted_L21": {
+     "true": 0.03203750029206276,
+     "false": 0.11906598508358002
+    },
+    "logit_lens_L21": {
+     "true": 0.0004899245104752481,
+     "false": 0.003615264780819416
+    },
+    "hosted_L27": {
+     "true": 0.005150570068508387,
+     "false": 0.0026636943221092224
+    },
+    "logit_lens_L27": {
+     "true": 0.00024156708968803287,
+     "false": 4.789507147506811e-05
+    },
+    "hosted_L28": {
+     "true": 0.0012523079058155417,
+     "false": 0.011385297402739525
+    },
+    "logit_lens_L28": {
+     "true": 0.00014028471196070313,
+     "false": 0.0008120955317281187
+    },
+    "hosted_L32": {
+     "true": 0.08729728311300278,
+     "false": 0.07367563992738724
+    },
+    "logit_lens_L32": {
+     "true": 0.08729728311300278,
+     "false": 0.07367563992738724
+    },
+    "model_output": {
+     "true": 0.08729728311300278,
+     "false": 0.07367563992738724
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00021750471205450594,
+     "false": 0.0002536088868509978
+    },
+    "logit_lens_L5": {
+     "true": 3.525395868564374e-06,
+     "false": 6.734779162798077e-06
+    },
+    "hosted_L11": {
+     "true": 0.030709950253367424,
+     "false": 0.028575779870152473
+    },
+    "logit_lens_L11": {
+     "true": 8.274307674582815e-07,
+     "false": 1.4464501418842701e-06
+    },
+    "hosted_L12": {
+     "true": 0.04511938989162445,
+     "false": 0.04427469149231911
+    },
+    "logit_lens_L12": {
+     "true": 7.774400728521869e-06,
+     "false": 1.1521566193550825e-05
+    },
+    "hosted_L16": {
+     "true": 0.07930327951908112,
+     "false": 0.07460439950227737
+    },
+    "logit_lens_L16": {
+     "true": 6.6995999077335e-06,
+     "false": 5.803813837701455e-05
+    },
+    "hosted_L20": {
+     "true": 0.015530000440776348,
+     "false": 0.04940604045987129
+    },
+    "logit_lens_L20": {
+     "true": 2.3822218281566165e-05,
+     "false": 0.0002249592507723719
+    },
+    "hosted_L21": {
+     "true": 0.019911181181669235,
+     "false": 0.041213978081941605
+    },
+    "logit_lens_L21": {
+     "true": 8.442012767773122e-05,
+     "false": 0.0003091276448685676
+    },
+    "hosted_L27": {
+     "true": 0.0034912230912595987,
+     "false": 0.01674184948205948
+    },
+    "logit_lens_L27": {
+     "true": 7.56206427467987e-05,
+     "false": 0.00031198354554362595
+    },
+    "hosted_L28": {
+     "true": 0.006099372636526823,
+     "false": 0.09739414602518082
+    },
+    "logit_lens_L28": {
+     "true": 2.481800584064331e-05,
+     "false": 0.00029030715813860297
+    },
+    "hosted_L32": {
+     "true": 0.07464069128036499,
+     "false": 0.08590681105852127
+    },
+    "logit_lens_L32": {
+     "true": 0.07464069128036499,
+     "false": 0.08590681105852127
+    },
+    "model_output": {
+     "true": 0.07464069128036499,
+     "false": 0.08590681105852127
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0415-clean",
+   "true": "142",
+   "false": "842",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0427-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0006709932931698859,
+     "false": 0.0002525069867260754
+    },
+    "logit_lens_L5": {
+     "true": 4.091740629519336e-05,
+     "false": 4.261721642251359e-06
+    },
+    "hosted_L11": {
+     "true": 0.10380316525697708,
+     "false": 0.02295859344303608
+    },
+    "logit_lens_L11": {
+     "true": 1.9757940208364744e-06,
+     "false": 1.0883790082516498e-06
+    },
+    "hosted_L12": {
+     "true": 0.20719340443611145,
+     "false": 0.041070666164159775
+    },
+    "logit_lens_L12": {
+     "true": 1.2365943803160917e-05,
+     "false": 3.3038475066859974e-06
+    },
+    "hosted_L16": {
+     "true": 0.1571093201637268,
+     "false": 0.0789974257349968
+    },
+    "logit_lens_L16": {
+     "true": 3.732752884388901e-05,
+     "false": 0.00010322671005269513
+    },
+    "hosted_L20": {
+     "true": 0.002431481843814254,
+     "false": 0.11600785702466965
+    },
+    "logit_lens_L20": {
+     "true": 1.4225152881408576e-05,
+     "false": 0.0006446777260862291
+    },
+    "hosted_L21": {
+     "true": 0.003917388152331114,
+     "false": 0.09983047842979431
+    },
+    "logit_lens_L21": {
+     "true": 9.504082117928192e-05,
+     "false": 0.0005574017413891852
+    },
+    "hosted_L27": {
+     "true": 0.0001367082877550274,
+     "false": 0.0009543337509967387
+    },
+    "logit_lens_L27": {
+     "true": 5.7024175475817174e-05,
+     "false": 7.453517810063204e-06
+    },
+    "hosted_L28": {
+     "true": 0.0002926624147221446,
+     "false": 0.021839169785380363
+    },
+    "logit_lens_L28": {
+     "true": 1.4762914361199364e-05,
+     "false": 7.062208896968514e-05
+    },
+    "hosted_L32": {
+     "true": 0.14144469797611237,
+     "false": 0.035108987241983414
+    },
+    "logit_lens_L32": {
+     "true": 0.14144469797611237,
+     "false": 0.035108987241983414
+    },
+    "model_output": {
+     "true": 0.14144469797611237,
+     "false": 0.035108987241983414
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00071453966666013,
+     "false": 0.000265188398770988
+    },
+    "logit_lens_L5": {
+     "true": 3.63043109246064e-05,
+     "false": 4.755591817229288e-06
+    },
+    "hosted_L11": {
+     "true": 0.0972229465842247,
+     "false": 0.023768454790115356
+    },
+    "logit_lens_L11": {
+     "true": 2.3196810161607573e-06,
+     "false": 1.6383959291488281e-06
+    },
+    "hosted_L12": {
+     "true": 0.16507160663604736,
+     "false": 0.0351577065885067
+    },
+    "logit_lens_L12": {
+     "true": 1.2396816600812599e-05,
+     "false": 5.330846761353314e-06
+    },
+    "hosted_L16": {
+     "true": 0.15914179384708405,
+     "false": 0.08290418237447739
+    },
+    "logit_lens_L16": {
+     "true": 6.117933662608266e-05,
+     "false": 0.00013145265984348953
+    },
+    "hosted_L20": {
+     "true": 0.003389403223991394,
+     "false": 0.11864475160837173
+    },
+    "logit_lens_L20": {
+     "true": 2.160876647394616e-05,
+     "false": 0.0008521430427208543
+    },
+    "hosted_L21": {
+     "true": 0.005174589809030294,
+     "false": 0.10860159993171692
+    },
+    "logit_lens_L21": {
+     "true": 0.00012377202801872045,
+     "false": 0.0009533052798360586
+    },
+    "hosted_L27": {
+     "true": 5.17241278430447e-05,
+     "false": 0.0067378743551671505
+    },
+    "logit_lens_L27": {
+     "true": 3.0618844903074205e-05,
+     "false": 0.00016956942272372544
+    },
+    "hosted_L28": {
+     "true": 4.5057131501380354e-05,
+     "false": 0.07884689420461655
+    },
+    "logit_lens_L28": {
+     "true": 3.0295707347249845e-06,
+     "false": 0.0009744999115355313
+    },
+    "hosted_L32": {
+     "true": 0.14275358617305756,
+     "false": 0.05253645032644272
+    },
+    "logit_lens_L32": {
+     "true": 0.14275358617305756,
+     "false": 0.05253645032644272
+    },
+    "model_output": {
+     "true": 0.14275358617305756,
+     "false": 0.05253645032644272
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0427-clean",
+   "true": "706",
+   "false": "841",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0451-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0002637199650052935,
+     "false": 0.000265188398770988
+    },
+    "logit_lens_L5": {
+     "true": 2.153339210053673e-06,
+     "false": 4.755591817229288e-06
+    },
+    "hosted_L11": {
+     "true": 0.02567789889872074,
+     "false": 0.023768454790115356
+    },
+    "logit_lens_L11": {
+     "true": 9.343431202069041e-07,
+     "false": 1.6383959291488281e-06
+    },
+    "hosted_L12": {
+     "true": 0.03819092735648155,
+     "false": 0.0351577065885067
+    },
+    "logit_lens_L12": {
+     "true": 1.086777774617076e-05,
+     "false": 5.330846761353314e-06
+    },
+    "hosted_L16": {
+     "true": 0.058544885367155075,
+     "false": 0.08290418237447739
+    },
+    "logit_lens_L16": {
+     "true": 6.92315588821657e-05,
+     "false": 0.00013145265984348953
+    },
+    "hosted_L20": {
+     "true": 0.06561677902936935,
+     "false": 0.11864475160837173
+    },
+    "logit_lens_L20": {
+     "true": 0.000804723531473428,
+     "false": 0.0008521430427208543
+    },
+    "hosted_L21": {
+     "true": 0.061474237591028214,
+     "false": 0.10860159993171692
+    },
+    "logit_lens_L21": {
+     "true": 0.001974674640223384,
+     "false": 0.0009533052798360586
+    },
+    "hosted_L27": {
+     "true": 0.01495577022433281,
+     "false": 0.0067378743551671505
+    },
+    "logit_lens_L27": {
+     "true": 0.0009380855481140316,
+     "false": 0.00016956942272372544
+    },
+    "hosted_L28": {
+     "true": 0.050005458295345306,
+     "false": 0.07884689420461655
+    },
+    "logit_lens_L28": {
+     "true": 0.001095847226679325,
+     "false": 0.0009744999115355313
+    },
+    "hosted_L32": {
+     "true": 0.08270599693059921,
+     "false": 0.05253645032644272
+    },
+    "logit_lens_L32": {
+     "true": 0.08270599693059921,
+     "false": 0.05253645032644272
+    },
+    "model_output": {
+     "true": 0.08270599693059921,
+     "false": 0.05253645032644272
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00011300756159471348,
+     "false": 0.0001068370693246834
+    },
+    "logit_lens_L5": {
+     "true": 2.075309794236091e-06,
+     "false": 4.20030664827209e-06
+    },
+    "hosted_L11": {
+     "true": 0.02709190919995308,
+     "false": 0.023638548329472542
+    },
+    "logit_lens_L11": {
+     "true": 1.6005245697670034e-06,
+     "false": 2.6706929929787293e-06
+    },
+    "hosted_L12": {
+     "true": 0.04222625121474266,
+     "false": 0.03980765491724014
+    },
+    "logit_lens_L12": {
+     "true": 1.427345796400914e-05,
+     "false": 7.2802649810910225e-06
+    },
+    "hosted_L16": {
+     "true": 0.053848154842853546,
+     "false": 0.06937754154205322
+    },
+    "logit_lens_L16": {
+     "true": 2.7469624910736457e-05,
+     "false": 4.3453161197248846e-05
+    },
+    "hosted_L20": {
+     "true": 0.04124033823609352,
+     "false": 0.024433929473161697
+    },
+    "logit_lens_L20": {
+     "true": 0.00022805837215855718,
+     "false": 0.00011873609037138522
+    },
+    "hosted_L21": {
+     "true": 0.06467340886592865,
+     "false": 0.04652634635567665
+    },
+    "logit_lens_L21": {
+     "true": 0.0011498569510877132,
+     "false": 0.0002584685862530023
+    },
+    "hosted_L27": {
+     "true": 0.016108037903904915,
+     "false": 0.009652641601860523
+    },
+    "logit_lens_L27": {
+     "true": 0.00014055448991712183,
+     "false": 4.4219850678928196e-05
+    },
+    "hosted_L28": {
+     "true": 0.13319453597068787,
+     "false": 0.2057400941848755
+    },
+    "logit_lens_L28": {
+     "true": 8.441954560112208e-05,
+     "false": 7.196113438112661e-05
+    },
+    "hosted_L32": {
+     "true": 0.10060092806816101,
+     "false": 0.0804438367486
+    },
+    "logit_lens_L32": {
+     "true": 0.10060092806816101,
+     "false": 0.0804438367486
+    },
+    "model_output": {
+     "true": 0.10060092806816101,
+     "false": 0.0804438367486
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0451-clean",
+   "true": "353",
+   "false": "268",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0499-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00014727113011758775,
+     "false": 0.00030852886266075075
+    },
+    "logit_lens_L5": {
+     "true": 5.283353311824612e-05,
+     "false": 2.606395719340071e-05
+    },
+    "hosted_L11": {
+     "true": 0.07665393501520157,
+     "false": 0.10486045479774475
+    },
+    "logit_lens_L11": {
+     "true": 4.29904184784391e-06,
+     "false": 1.3017495348321972e-06
+    },
+    "hosted_L12": {
+     "true": 0.110134057700634,
+     "false": 0.1520358771085739
+    },
+    "logit_lens_L12": {
+     "true": 4.661278217099607e-05,
+     "false": 2.88707269646693e-06
+    },
+    "hosted_L16": {
+     "true": 0.10421299934387207,
+     "false": 0.21282128989696503
+    },
+    "logit_lens_L16": {
+     "true": 1.5229563359753229e-05,
+     "false": 1.4711467883898877e-05
+    },
+    "hosted_L20": {
+     "true": 0.18947267532348633,
+     "false": 0.05638585612177849
+    },
+    "logit_lens_L20": {
+     "true": 0.005039629526436329,
+     "false": 0.00040918655577115715
+    },
+    "hosted_L21": {
+     "true": 0.17881762981414795,
+     "false": 0.04275360330939293
+    },
+    "logit_lens_L21": {
+     "true": 0.006273744627833366,
+     "false": 0.0007379954331554472
+    },
+    "hosted_L27": {
+     "true": 0.0009545276989229023,
+     "false": 3.9016267692204565e-05
+    },
+    "logit_lens_L27": {
+     "true": 2.340865285077598e-05,
+     "false": 1.4366937648446765e-06
+    },
+    "hosted_L28": {
+     "true": 0.014532867819070816,
+     "false": 0.0004248071927577257
+    },
+    "logit_lens_L28": {
+     "true": 1.4017285138834268e-05,
+     "false": 2.541254104926338e-07
+    },
+    "hosted_L32": {
+     "true": 0.09239975363016129,
+     "false": 0.09736248105764389
+    },
+    "logit_lens_L32": {
+     "true": 0.09239975363016129,
+     "false": 0.09736248105764389
+    },
+    "model_output": {
+     "true": 0.09239975363016129,
+     "false": 0.09736248105764389
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00014254650159273297,
+     "false": 0.00033545729820616543
+    },
+    "logit_lens_L5": {
+     "true": 4.611583790392615e-05,
+     "false": 2.445917561999522e-05
+    },
+    "hosted_L11": {
+     "true": 0.056856587529182434,
+     "false": 0.08706264942884445
+    },
+    "logit_lens_L11": {
+     "true": 2.436700015095994e-06,
+     "false": 8.191970550797123e-07
+    },
+    "hosted_L12": {
+     "true": 0.08652961254119873,
+     "false": 0.14243672788143158
+    },
+    "logit_lens_L12": {
+     "true": 2.5478402676526457e-05,
+     "false": 2.034064891631715e-06
+    },
+    "hosted_L16": {
+     "true": 0.09149196743965149,
+     "false": 0.18726906180381775
+    },
+    "logit_lens_L16": {
+     "true": 1.2322667316766456e-05,
+     "false": 1.2957370017829817e-05
+    },
+    "hosted_L20": {
+     "true": 0.04286814481019974,
+     "false": 0.048933856189250946
+    },
+    "logit_lens_L20": {
+     "true": 0.00037139933556318283,
+     "false": 0.00025952461874112487
+    },
+    "hosted_L21": {
+     "true": 0.040225543081760406,
+     "false": 0.03652249276638031
+    },
+    "logit_lens_L21": {
+     "true": 0.0015000463463366032,
+     "false": 0.0013587505090981722
+    },
+    "hosted_L27": {
+     "true": 0.002432537265121937,
+     "false": 0.00029732336406596005
+    },
+    "logit_lens_L27": {
+     "true": 6.531090912176296e-05,
+     "false": 1.2862728908658028e-05
+    },
+    "hosted_L28": {
+     "true": 0.0013008040841668844,
+     "false": 0.00011811429430963472
+    },
+    "logit_lens_L28": {
+     "true": 2.7301841328153387e-05,
+     "false": 1.8034313598036533e-06
+    },
+    "hosted_L32": {
+     "true": 0.1002768725156784,
+     "false": 0.12803755700588226
+    },
+    "logit_lens_L32": {
+     "true": 0.1002768725156784,
+     "false": 0.12803755700588226
+    },
+    "model_output": {
+     "true": 0.1002768725156784,
+     "false": 0.12803755700588226
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0499-clean",
+   "true": "846",
+   "false": "197",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0511-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001054789318004623,
+     "false": 0.0004477276816032827
+    },
+    "logit_lens_L5": {
+     "true": 3.75958939002885e-06,
+     "false": 4.7141031245701015e-05
+    },
+    "hosted_L11": {
+     "true": 0.019894003868103027,
+     "false": 0.09955448657274246
+    },
+    "logit_lens_L11": {
+     "true": 1.744159021654923e-06,
+     "false": 2.629113396324101e-06
+    },
+    "hosted_L12": {
+     "true": 0.03383101150393486,
+     "false": 0.20344285666942596
+    },
+    "logit_lens_L12": {
+     "true": 3.7356528537202394e-06,
+     "false": 1.0961647603835445e-05
+    },
+    "hosted_L16": {
+     "true": 0.06636723130941391,
+     "false": 0.1741887629032135
+    },
+    "logit_lens_L16": {
+     "true": 3.8526715798070654e-05,
+     "false": 1.90558912436245e-05
+    },
+    "hosted_L20": {
+     "true": 0.053424909710884094,
+     "false": 0.013091525994241238
+    },
+    "logit_lens_L20": {
+     "true": 0.0002240720350528136,
+     "false": 0.00024760374799370766
+    },
+    "hosted_L21": {
+     "true": 0.08292199671268463,
+     "false": 0.018281295895576477
+    },
+    "logit_lens_L21": {
+     "true": 0.0009465068578720093,
+     "false": 0.0021556185092777014
+    },
+    "hosted_L27": {
+     "true": 0.017308155074715614,
+     "false": 4.0330713090952486e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00011960571282543242,
+     "false": 3.061537427129224e-06
+    },
+    "hosted_L28": {
+     "true": 0.16541926562786102,
+     "false": 6.205496902111918e-05
+    },
+    "logit_lens_L28": {
+     "true": 0.00172026501968503,
+     "false": 2.009361423915834e-06
+    },
+    "hosted_L32": {
+     "true": 0.06761070340871811,
+     "false": 0.1293969303369522
+    },
+    "logit_lens_L32": {
+     "true": 0.06761070340871811,
+     "false": 0.1293969303369522
+    },
+    "model_output": {
+     "true": 0.06761070340871811,
+     "false": 0.1293969303369522
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0001102485039154999,
+     "false": 0.0004196935915388167
+    },
+    "logit_lens_L5": {
+     "true": 4.408554559631739e-06,
+     "false": 5.239001620793715e-05
+    },
+    "hosted_L11": {
+     "true": 0.02421724610030651,
+     "false": 0.12030284106731415
+    },
+    "logit_lens_L11": {
+     "true": 1.858399627963081e-06,
+     "false": 3.6424494282982778e-06
+    },
+    "hosted_L12": {
+     "true": 0.03675583004951477,
+     "false": 0.18319539725780487
+    },
+    "logit_lens_L12": {
+     "true": 4.796207576873712e-06,
+     "false": 1.5258936400641687e-05
+    },
+    "hosted_L16": {
+     "true": 0.07456130534410477,
+     "false": 0.18477100133895874
+    },
+    "logit_lens_L16": {
+     "true": 6.485891935881227e-05,
+     "false": 4.101061858818866e-05
+    },
+    "hosted_L20": {
+     "true": 0.0072504435665905476,
+     "false": 0.002748404163867235
+    },
+    "logit_lens_L20": {
+     "true": 6.132748967502266e-05,
+     "false": 5.712533675250597e-05
+    },
+    "hosted_L21": {
+     "true": 0.012508471496403217,
+     "false": 0.002888346090912819
+    },
+    "logit_lens_L21": {
+     "true": 4.0534774598199874e-05,
+     "false": 3.1313993531512097e-05
+    },
+    "hosted_L27": {
+     "true": 0.015472440980374813,
+     "false": 0.00011014293704647571
+    },
+    "logit_lens_L27": {
+     "true": 8.467840234516189e-05,
+     "false": 9.884311111818533e-06
+    },
+    "hosted_L28": {
+     "true": 0.12846380472183228,
+     "false": 0.0003410873468965292
+    },
+    "logit_lens_L28": {
+     "true": 5.4686664952896535e-05,
+     "false": 6.213717824721243e-07
+    },
+    "hosted_L32": {
+     "true": 0.06749460846185684,
+     "false": 0.09880002588033676
+    },
+    "logit_lens_L32": {
+     "true": 0.06749460846185684,
+     "false": 0.09880002588033676
+    },
+    "model_output": {
+     "true": 0.06749460846185684,
+     "false": 0.09880002588033676
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0511-clean",
+   "true": "405",
+   "false": "269",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0523-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00010256942186970264,
+     "false": 0.00033804739359766245
+    },
+    "logit_lens_L5": {
+     "true": 2.843804395524785e-06,
+     "false": 2.791637416521553e-05
+    },
+    "hosted_L11": {
+     "true": 0.030145376920700073,
+     "false": 0.11239559948444366
+    },
+    "logit_lens_L11": {
+     "true": 1.1928127605642658e-06,
+     "false": 1.1131422752441722e-06
+    },
+    "hosted_L12": {
+     "true": 0.03511911630630493,
+     "false": 0.12070245295763016
+    },
+    "logit_lens_L12": {
+     "true": 7.968082172737923e-06,
+     "false": 2.389175051575876e-06
+    },
+    "hosted_L16": {
+     "true": 0.07109487801790237,
+     "false": 0.18225453794002533
+    },
+    "logit_lens_L16": {
+     "true": 3.1492902508034604e-06,
+     "false": 1.6173964468180202e-05
+    },
+    "hosted_L20": {
+     "true": 0.012738864868879318,
+     "false": 0.04354196414351463
+    },
+    "logit_lens_L20": {
+     "true": 3.056551213376224e-05,
+     "false": 0.0007463655201718211
+    },
+    "hosted_L21": {
+     "true": 0.013401035219430923,
+     "false": 0.026364170014858246
+    },
+    "logit_lens_L21": {
+     "true": 2.758852315309923e-05,
+     "false": 0.00027770697488449514
+    },
+    "hosted_L27": {
+     "true": 0.016847392544150352,
+     "false": 1.5229813470796216e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00032146790181286633,
+     "false": 4.652328016163665e-07
+    },
+    "hosted_L28": {
+     "true": 0.17142504453659058,
+     "false": 0.0002674425777513534
+    },
+    "logit_lens_L28": {
+     "true": 0.0001313063985435292,
+     "false": 1.9267859840965684e-07
+    },
+    "hosted_L32": {
+     "true": 0.15060780942440033,
+     "false": 0.06056181341409683
+    },
+    "logit_lens_L32": {
+     "true": 0.15060780942440033,
+     "false": 0.06056181341409683
+    },
+    "model_output": {
+     "true": 0.15060780942440033,
+     "false": 0.06056181341409683
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00019379860896151513,
+     "false": 0.00045685641816817224
+    },
+    "logit_lens_L5": {
+     "true": 3.3893968520715134e-06,
+     "false": 2.1404157450888306e-05
+    },
+    "hosted_L11": {
+     "true": 0.026753190904855728,
+     "false": 0.08878999948501587
+    },
+    "logit_lens_L11": {
+     "true": 1.2276015013412689e-06,
+     "false": 1.3173497563911951e-06
+    },
+    "hosted_L12": {
+     "true": 0.04213489219546318,
+     "false": 0.1400439590215683
+    },
+    "logit_lens_L12": {
+     "true": 8.354115379916038e-06,
+     "false": 2.63961646851385e-06
+    },
+    "hosted_L16": {
+     "true": 0.07447938621044159,
+     "false": 0.1562715321779251
+    },
+    "logit_lens_L16": {
+     "true": 5.4677061598340515e-06,
+     "false": 2.8932545319548808e-05
+    },
+    "hosted_L20": {
+     "true": 0.0412934385240078,
+     "false": 0.009135972708463669
+    },
+    "logit_lens_L20": {
+     "true": 0.0005257370066829026,
+     "false": 0.0002959486737381667
+    },
+    "hosted_L21": {
+     "true": 0.04295748844742775,
+     "false": 0.007905851118266582
+    },
+    "logit_lens_L21": {
+     "true": 0.0016655782237648964,
+     "false": 0.0008631834643892944
+    },
+    "hosted_L27": {
+     "true": 0.00046453787945210934,
+     "false": 6.677562487311661e-05
+    },
+    "logit_lens_L27": {
+     "true": 2.962098915304523e-05,
+     "false": 5.532796785701066e-05
+    },
+    "hosted_L28": {
+     "true": 0.00013521607615984976,
+     "false": 8.053245983319357e-05
+    },
+    "logit_lens_L28": {
+     "true": 2.8103511340304976e-06,
+     "false": 2.05237101909006e-05
+    },
+    "hosted_L32": {
+     "true": 0.06947741657495499,
+     "false": 0.1292600780725479
+    },
+    "logit_lens_L32": {
+     "true": 0.06947741657495499,
+     "false": 0.1292600780725479
+    },
+    "model_output": {
+     "true": 0.06947741657495499,
+     "false": 0.1292600780725479
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0523-clean",
+   "true": "128",
+   "false": "459",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0535-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0005445845308713615,
+     "false": 0.00019379860896151513
+    },
+    "logit_lens_L5": {
+     "true": 4.327857095631771e-05,
+     "false": 3.3893968520715134e-06
+    },
+    "hosted_L11": {
+     "true": 0.08339664340019226,
+     "false": 0.026753190904855728
+    },
+    "logit_lens_L11": {
+     "true": 3.453884119153372e-06,
+     "false": 1.2276015013412689e-06
+    },
+    "hosted_L12": {
+     "true": 0.17749740183353424,
+     "false": 0.04213489219546318
+    },
+    "logit_lens_L12": {
+     "true": 9.597471944289282e-06,
+     "false": 8.354115379916038e-06
+    },
+    "hosted_L16": {
+     "true": 0.13194796442985535,
+     "false": 0.07447938621044159
+    },
+    "logit_lens_L16": {
+     "true": 3.479969018371776e-05,
+     "false": 5.4677061598340515e-06
+    },
+    "hosted_L20": {
+     "true": 0.002204280346632004,
+     "false": 0.0412934385240078
+    },
+    "logit_lens_L20": {
+     "true": 9.976539149647579e-05,
+     "false": 0.0005257370066829026
+    },
+    "hosted_L21": {
+     "true": 0.003768770955502987,
+     "false": 0.04295748844742775
+    },
+    "logit_lens_L21": {
+     "true": 0.0006351276533678174,
+     "false": 0.0016655782237648964
+    },
+    "hosted_L27": {
+     "true": 1.3852286429028027e-05,
+     "false": 0.00046453787945210934
+    },
+    "logit_lens_L27": {
+     "true": 2.7304118702886626e-05,
+     "false": 2.962098915304523e-05
+    },
+    "hosted_L28": {
+     "true": 1.2660138963838108e-05,
+     "false": 0.00013521607615984976
+    },
+    "logit_lens_L28": {
+     "true": 5.097411758470116e-06,
+     "false": 2.8103511340304976e-06
+    },
+    "hosted_L32": {
+     "true": 0.13570080697536469,
+     "false": 0.06947741657495499
+    },
+    "logit_lens_L32": {
+     "true": 0.13570080697536469,
+     "false": 0.06947741657495499
+    },
+    "model_output": {
+     "true": 0.13570080697536469,
+     "false": 0.06947741657495499
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0005758338375017047,
+     "false": 0.0001731739321257919
+    },
+    "logit_lens_L5": {
+     "true": 4.292701851227321e-05,
+     "false": 3.6640603866544552e-06
+    },
+    "hosted_L11": {
+     "true": 0.08663413673639297,
+     "false": 0.023810897022485733
+    },
+    "logit_lens_L11": {
+     "true": 4.2763722376548685e-06,
+     "false": 1.263652961824846e-06
+    },
+    "hosted_L12": {
+     "true": 0.2151879519224167,
+     "false": 0.04294460639357567
+    },
+    "logit_lens_L12": {
+     "true": 2.084115294564981e-05,
+     "false": 1.3116557056491729e-05
+    },
+    "hosted_L16": {
+     "true": 0.13482768833637238,
+     "false": 0.07586799561977386
+    },
+    "logit_lens_L16": {
+     "true": 4.301567605580203e-05,
+     "false": 7.526888111897279e-06
+    },
+    "hosted_L20": {
+     "true": 0.003336078952997923,
+     "false": 0.010136826895177364
+    },
+    "logit_lens_L20": {
+     "true": 7.421708869514987e-05,
+     "false": 4.639371400116943e-05
+    },
+    "hosted_L21": {
+     "true": 0.006456227507442236,
+     "false": 0.014986404217779636
+    },
+    "logit_lens_L21": {
+     "true": 0.0006687623681500554,
+     "false": 0.00023798605252522975
+    },
+    "hosted_L27": {
+     "true": 2.0791047063539736e-05,
+     "false": 0.0007268175831995904
+    },
+    "logit_lens_L27": {
+     "true": 1.948733006429393e-05,
+     "false": 4.7390349209308624e-05
+    },
+    "hosted_L28": {
+     "true": 3.048230428248644e-05,
+     "false": 0.0012712853495031595
+    },
+    "logit_lens_L28": {
+     "true": 2.413973106740741e-06,
+     "false": 2.1359328457037918e-05
+    },
+    "hosted_L32": {
+     "true": 0.14496728777885437,
+     "false": 0.08591386675834656
+    },
+    "logit_lens_L32": {
+     "true": 0.14496728777885437,
+     "false": 0.08591386675834656
+    },
+    "model_output": {
+     "true": 0.14496728777885437,
+     "false": 0.08591386675834656
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0535-clean",
+   "true": "435",
+   "false": "953",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0547-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001731739321257919,
+     "false": 0.00024288866552524269
+    },
+    "logit_lens_L5": {
+     "true": 3.6640603866544552e-06,
+     "false": 2.0349557416921016e-06
+    },
+    "hosted_L11": {
+     "true": 0.023810897022485733,
+     "false": 0.025925181806087494
+    },
+    "logit_lens_L11": {
+     "true": 1.263652961824846e-06,
+     "false": 2.9626542072946904e-06
+    },
+    "hosted_L12": {
+     "true": 0.04294460639357567,
+     "false": 0.047958359122276306
+    },
+    "logit_lens_L12": {
+     "true": 1.3116557056491729e-05,
+     "false": 4.774824446940329e-06
+    },
+    "hosted_L16": {
+     "true": 0.07586799561977386,
+     "false": 0.07929210364818573
+    },
+    "logit_lens_L16": {
+     "true": 7.526888111897279e-06,
+     "false": 2.089155350404326e-05
+    },
+    "hosted_L20": {
+     "true": 0.010136826895177364,
+     "false": 0.0744909718632698
+    },
+    "logit_lens_L20": {
+     "true": 4.639371400116943e-05,
+     "false": 0.0010889782570302486
+    },
+    "hosted_L21": {
+     "true": 0.014986404217779636,
+     "false": 0.11936911195516586
+    },
+    "logit_lens_L21": {
+     "true": 0.00023798605252522975,
+     "false": 0.001994612393900752
+    },
+    "hosted_L27": {
+     "true": 0.0007268175831995904,
+     "false": 0.004178173840045929
+    },
+    "logit_lens_L27": {
+     "true": 4.7390349209308624e-05,
+     "false": 0.00017771367856767029
+    },
+    "hosted_L28": {
+     "true": 0.0012712853495031595,
+     "false": 0.2580484449863434
+    },
+    "logit_lens_L28": {
+     "true": 2.1359328457037918e-05,
+     "false": 0.003931332845240831
+    },
+    "hosted_L32": {
+     "true": 0.08591386675834656,
+     "false": 0.09535680711269379
+    },
+    "logit_lens_L32": {
+     "true": 0.08591386675834656,
+     "false": 0.09535680711269379
+    },
+    "model_output": {
+     "true": 0.08591386675834656,
+     "false": 0.09535680711269379
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00018762970285024494,
+     "false": 0.00024171812401618809
+    },
+    "logit_lens_L5": {
+     "true": 2.817351060002693e-06,
+     "false": 1.6864588587850449e-06
+    },
+    "hosted_L11": {
+     "true": 0.025423815473914146,
+     "false": 0.02761387638747692
+    },
+    "logit_lens_L11": {
+     "true": 9.65688059295644e-07,
+     "false": 1.9876415535691194e-06
+    },
+    "hosted_L12": {
+     "true": 0.04375361278653145,
+     "false": 0.049292221665382385
+    },
+    "logit_lens_L12": {
+     "true": 4.940062808600487e-06,
+     "false": 2.1080516034999164e-06
+    },
+    "hosted_L16": {
+     "true": 0.07525674998760223,
+     "false": 0.08142543584108353
+    },
+    "logit_lens_L16": {
+     "true": 4.364491815067595e-06,
+     "false": 1.2589502148330212e-05
+    },
+    "hosted_L20": {
+     "true": 0.00819518230855465,
+     "false": 0.11321301758289337
+    },
+    "logit_lens_L20": {
+     "true": 6.232678424566984e-05,
+     "false": 0.003727748291566968
+    },
+    "hosted_L21": {
+     "true": 0.009322604164481163,
+     "false": 0.16892966628074646
+    },
+    "logit_lens_L21": {
+     "true": 0.00018701251246966422,
+     "false": 0.00643123546615243
+    },
+    "hosted_L27": {
+     "true": 0.0050980024971067905,
+     "false": 0.0015761562390252948
+    },
+    "logit_lens_L27": {
+     "true": 0.00014299516624305397,
+     "false": 1.3505534298019484e-05
+    },
+    "hosted_L28": {
+     "true": 0.009411424398422241,
+     "false": 0.09084895253181458
+    },
+    "logit_lens_L28": {
+     "true": 6.133459828561172e-05,
+     "false": 0.0002470211184117943
+    },
+    "hosted_L32": {
+     "true": 0.1048818975687027,
+     "false": 0.07671363651752472
+    },
+    "logit_lens_L32": {
+     "true": 0.1048818975687027,
+     "false": 0.07671363651752472
+    },
+    "model_output": {
+     "true": 0.1048818975687027,
+     "false": 0.07671363651752472
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0547-clean",
+   "true": "778",
+   "false": "891",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0559-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00021756425849162042,
+     "false": 0.00021387363085523248
+    },
+    "logit_lens_L5": {
+     "true": 2.021298087129253e-06,
+     "false": 3.861231107293861e-06
+    },
+    "hosted_L11": {
+     "true": 0.023539213463664055,
+     "false": 0.018926847726106644
+    },
+    "logit_lens_L11": {
+     "true": 1.288776616092946e-06,
+     "false": 1.468704112994601e-06
+    },
+    "hosted_L12": {
+     "true": 0.045461688190698624,
+     "false": 0.03589695319533348
+    },
+    "logit_lens_L12": {
+     "true": 8.866405551088974e-06,
+     "false": 3.195389354004874e-06
+    },
+    "hosted_L16": {
+     "true": 0.07252771407365799,
+     "false": 0.07967913895845413
+    },
+    "logit_lens_L16": {
+     "true": 5.02709808642976e-05,
+     "false": 6.588105316041037e-05
+    },
+    "hosted_L20": {
+     "true": 0.06968768686056137,
+     "false": 0.07836489379405975
+    },
+    "logit_lens_L20": {
+     "true": 0.005698657128959894,
+     "false": 0.0015534128760918975
+    },
+    "hosted_L21": {
+     "true": 0.07971800118684769,
+     "false": 0.0923268124461174
+    },
+    "logit_lens_L21": {
+     "true": 0.014787757769227028,
+     "false": 0.0028495953883975744
+    },
+    "hosted_L27": {
+     "true": 0.06002410501241684,
+     "false": 0.006909164134413004
+    },
+    "logit_lens_L27": {
+     "true": 0.0023874358739703894,
+     "false": 8.50323704071343e-05
+    },
+    "hosted_L28": {
+     "true": 0.24024011194705963,
+     "false": 0.08029197156429291
+    },
+    "logit_lens_L28": {
+     "true": 0.002487047342583537,
+     "false": 0.0003096785512752831
+    },
+    "hosted_L32": {
+     "true": 0.10003472864627838,
+     "false": 0.053407348692417145
+    },
+    "logit_lens_L32": {
+     "true": 0.10003472864627838,
+     "false": 0.053407348692417145
+    },
+    "model_output": {
+     "true": 0.10003472864627838,
+     "false": 0.053407348692417145
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0002151019434677437,
+     "false": 0.00020366962417028844
+    },
+    "logit_lens_L5": {
+     "true": 2.082209448417416e-06,
+     "false": 3.887229922838742e-06
+    },
+    "hosted_L11": {
+     "true": 0.020710228011012077,
+     "false": 0.016758065670728683
+    },
+    "logit_lens_L11": {
+     "true": 9.958824875866412e-07,
+     "false": 1.5856891195653589e-06
+    },
+    "hosted_L12": {
+     "true": 0.047772325575351715,
+     "false": 0.037342194467782974
+    },
+    "logit_lens_L12": {
+     "true": 7.628277671756223e-06,
+     "false": 3.1138119993556757e-06
+    },
+    "hosted_L16": {
+     "true": 0.04978291690349579,
+     "false": 0.05786673352122307
+    },
+    "logit_lens_L16": {
+     "true": 3.445668698986992e-05,
+     "false": 4.4079177314415574e-05
+    },
+    "hosted_L20": {
+     "true": 0.011747024022042751,
+     "false": 0.014099144376814365
+    },
+    "logit_lens_L20": {
+     "true": 0.00012781500117853284,
+     "false": 4.62283642264083e-05
+    },
+    "hosted_L21": {
+     "true": 0.019990971311926842,
+     "false": 0.02209477685391903
+    },
+    "logit_lens_L21": {
+     "true": 0.000507540360558778,
+     "false": 0.00010377165017416701
+    },
+    "hosted_L27": {
+     "true": 0.011340351775288582,
+     "false": 0.019780810922384262
+    },
+    "logit_lens_L27": {
+     "true": 0.0001794415438780561,
+     "false": 0.00019759217684622854
+    },
+    "hosted_L28": {
+     "true": 0.05685850977897644,
+     "false": 0.17624537646770477
+    },
+    "logit_lens_L28": {
+     "true": 0.00046660404768772423,
+     "false": 0.0008733008289709687
+    },
+    "hosted_L32": {
+     "true": 0.08756537735462189,
+     "false": 0.06752796471118927
+    },
+    "logit_lens_L32": {
+     "true": 0.08756537735462189,
+     "false": 0.06752796471118927
+    },
+    "model_output": {
+     "true": 0.08756537735462189,
+     "false": 0.06752796471118927
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0559-clean",
+   "true": "623",
+   "false": "457",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0571-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001931581209646538,
+     "false": 0.00020545089500956237
+    },
+    "logit_lens_L5": {
+     "true": 6.241338724066736e-06,
+     "false": 4.023802830488421e-06
+    },
+    "hosted_L11": {
+     "true": 0.019210029393434525,
+     "false": 0.02308758534491062
+    },
+    "logit_lens_L11": {
+     "true": 1.7695045926302555e-06,
+     "false": 1.194884021060716e-06
+    },
+    "hosted_L12": {
+     "true": 0.04105103760957718,
+     "false": 0.04992698132991791
+    },
+    "logit_lens_L12": {
+     "true": 1.1039356650144327e-05,
+     "false": 8.293246537505183e-06
+    },
+    "hosted_L16": {
+     "true": 0.06951693445444107,
+     "false": 0.07043438404798508
+    },
+    "logit_lens_L16": {
+     "true": 5.6194225180661306e-05,
+     "false": 3.922601990780095e-06
+    },
+    "hosted_L20": {
+     "true": 0.01841120980679989,
+     "false": 0.07785273343324661
+    },
+    "logit_lens_L20": {
+     "true": 6.039021900505759e-05,
+     "false": 0.00029265478951856494
+    },
+    "hosted_L21": {
+     "true": 0.01832461915910244,
+     "false": 0.0864243134856224
+    },
+    "logit_lens_L21": {
+     "true": 0.00013182760449126363,
+     "false": 0.0006285728886723518
+    },
+    "hosted_L27": {
+     "true": 0.01917828992009163,
+     "false": 0.0035916646011173725
+    },
+    "logit_lens_L27": {
+     "true": 0.0002486075973138213,
+     "false": 5.3887113608652726e-05
+    },
+    "hosted_L28": {
+     "true": 0.11201823502779007,
+     "false": 0.00970035046339035
+    },
+    "logit_lens_L28": {
+     "true": 0.0004170647880528122,
+     "false": 6.890187796670943e-05
+    },
+    "hosted_L32": {
+     "true": 0.09081301838159561,
+     "false": 0.09167850017547607
+    },
+    "logit_lens_L32": {
+     "true": 0.09081301838159561,
+     "false": 0.09167850017547607
+    },
+    "model_output": {
+     "true": 0.09081301838159561,
+     "false": 0.09167850017547607
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0001310443039983511,
+     "false": 0.00013728920021094382
+    },
+    "logit_lens_L5": {
+     "true": 5.565708761423593e-06,
+     "false": 3.790798018599162e-06
+    },
+    "hosted_L11": {
+     "true": 0.019320650026202202,
+     "false": 0.020963149145245552
+    },
+    "logit_lens_L11": {
+     "true": 2.0900904473819537e-06,
+     "false": 1.5450599448740832e-06
+    },
+    "hosted_L12": {
+     "true": 0.03510593995451927,
+     "false": 0.042564112693071365
+    },
+    "logit_lens_L12": {
+     "true": 6.906653652549721e-06,
+     "false": 6.883752121211728e-06
+    },
+    "hosted_L16": {
+     "true": 0.06630507856607437,
+     "false": 0.06596966087818146
+    },
+    "logit_lens_L16": {
+     "true": 5.573288581217639e-05,
+     "false": 4.0578543121227995e-06
+    },
+    "hosted_L20": {
+     "true": 0.007008333690464497,
+     "false": 0.03852812200784683
+    },
+    "logit_lens_L20": {
+     "true": 1.4665869457530789e-05,
+     "false": 8.569744386477396e-05
+    },
+    "hosted_L21": {
+     "true": 0.0062252371571958065,
+     "false": 0.031134916469454765
+    },
+    "logit_lens_L21": {
+     "true": 2.3292905098060146e-05,
+     "false": 0.00011344431550242007
+    },
+    "hosted_L27": {
+     "true": 0.0007009832188487053,
+     "false": 0.0161506999284029
+    },
+    "logit_lens_L27": {
+     "true": 6.770738400518894e-05,
+     "false": 0.01261051744222641
+    },
+    "hosted_L28": {
+     "true": 0.0017673413967713714,
+     "false": 0.7628992199897766
+    },
+    "logit_lens_L28": {
+     "true": 1.950813748408109e-05,
+     "false": 0.772047758102417
+    },
+    "hosted_L32": {
+     "true": 0.04603728652000427,
+     "false": 0.337726354598999
+    },
+    "logit_lens_L32": {
+     "true": 0.04603728652000427,
+     "false": 0.337726354598999
+    },
+    "model_output": {
+     "true": 0.04603728652000427,
+     "false": 0.337726354598999
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0571-clean",
+   "true": "267",
+   "false": "424",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0583-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0003514566633384675,
+     "false": 0.00013728920021094382
+    },
+    "logit_lens_L5": {
+     "true": 2.4129287339746952e-05,
+     "false": 3.790798018599162e-06
+    },
+    "hosted_L11": {
+     "true": 0.08485477417707443,
+     "false": 0.020963149145245552
+    },
+    "logit_lens_L11": {
+     "true": 1.909270849864697e-06,
+     "false": 1.5450599448740832e-06
+    },
+    "hosted_L12": {
+     "true": 0.16971856355667114,
+     "false": 0.042564112693071365
+    },
+    "logit_lens_L12": {
+     "true": 3.016332357219653e-06,
+     "false": 6.883752121211728e-06
+    },
+    "hosted_L16": {
+     "true": 0.2393459975719452,
+     "false": 0.06596966087818146
+    },
+    "logit_lens_L16": {
+     "true": 4.9048590881284326e-05,
+     "false": 4.0578543121227995e-06
+    },
+    "hosted_L20": {
+     "true": 0.009995203465223312,
+     "false": 0.03852812200784683
+    },
+    "logit_lens_L20": {
+     "true": 5.5465563491452485e-05,
+     "false": 8.569744386477396e-05
+    },
+    "hosted_L21": {
+     "true": 0.01005571335554123,
+     "false": 0.031134916469454765
+    },
+    "logit_lens_L21": {
+     "true": 6.480346928583458e-05,
+     "false": 0.00011344431550242007
+    },
+    "hosted_L27": {
+     "true": 3.2251158700091764e-05,
+     "false": 0.0161506999284029
+    },
+    "logit_lens_L27": {
+     "true": 2.5323730369564146e-05,
+     "false": 0.01261051744222641
+    },
+    "hosted_L28": {
+     "true": 6.000068606226705e-05,
+     "false": 0.7628992199897766
+    },
+    "logit_lens_L28": {
+     "true": 4.006335529993521e-06,
+     "false": 0.772047758102417
+    },
+    "hosted_L32": {
+     "true": 0.11693102866411209,
+     "false": 0.337726354598999
+    },
+    "logit_lens_L32": {
+     "true": 0.11693102866411209,
+     "false": 0.337726354598999
+    },
+    "model_output": {
+     "true": 0.11693102866411209,
+     "false": 0.337726354598999
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.000441758573288098,
+     "false": 0.0001620317780179903
+    },
+    "logit_lens_L5": {
+     "true": 2.344978383916896e-05,
+     "false": 3.745044978131773e-06
+    },
+    "hosted_L11": {
+     "true": 0.09937841445207596,
+     "false": 0.02510342001914978
+    },
+    "logit_lens_L11": {
+     "true": 1.5672098925278988e-06,
+     "false": 1.0276756938765175e-06
+    },
+    "hosted_L12": {
+     "true": 0.14668454229831696,
+     "false": 0.035971835255622864
+    },
+    "logit_lens_L12": {
+     "true": 2.9255800200189697e-06,
+     "false": 5.01821295983973e-06
+    },
+    "hosted_L16": {
+     "true": 0.19511882960796356,
+     "false": 0.07692752778530121
+    },
+    "logit_lens_L16": {
+     "true": 4.449431799002923e-05,
+     "false": 5.7218435358663555e-06
+    },
+    "hosted_L20": {
+     "true": 0.08376400917768478,
+     "false": 0.04051459580659866
+    },
+    "logit_lens_L20": {
+     "true": 0.001760403043590486,
+     "false": 0.00037313817301765084
+    },
+    "hosted_L21": {
+     "true": 0.05357132852077484,
+     "false": 0.053881313651800156
+    },
+    "logit_lens_L21": {
+     "true": 0.0016086609102785587,
+     "false": 0.0007326363702304661
+    },
+    "hosted_L27": {
+     "true": 0.00018036001711152494,
+     "false": 0.001033259555697441
+    },
+    "logit_lens_L27": {
+     "true": 1.3016192497161683e-05,
+     "false": 1.5826593880774453e-05
+    },
+    "hosted_L28": {
+     "true": 0.0039011340122669935,
+     "false": 0.0049608079716563225
+    },
+    "logit_lens_L28": {
+     "true": 3.440245336605585e-06,
+     "false": 1.2373434401524719e-06
+    },
+    "hosted_L32": {
+     "true": 0.1501697599887848,
+     "false": 0.09769795089960098
+    },
+    "logit_lens_L32": {
+     "true": 0.1501697599887848,
+     "false": 0.09769795089960098
+    },
+    "model_output": {
+     "true": 0.1501697599887848,
+     "false": 0.09769795089960098
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0583-clean",
+   "true": "879",
+   "false": "301",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0595-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00015572844131384045,
+     "false": 0.0002504017611499876
+    },
+    "logit_lens_L5": {
+     "true": 4.525933945842553e-06,
+     "false": 5.718421016354114e-05
+    },
+    "hosted_L11": {
+     "true": 0.018706997856497765,
+     "false": 0.07170052081346512
+    },
+    "logit_lens_L11": {
+     "true": 1.7489248875790508e-06,
+     "false": 4.298043222661363e-06
+    },
+    "hosted_L12": {
+     "true": 0.03089996427297592,
+     "false": 0.10562792420387268
+    },
+    "logit_lens_L12": {
+     "true": 3.826860847766511e-06,
+     "false": 3.7502013583434746e-05
+    },
+    "hosted_L16": {
+     "true": 0.0662287026643753,
+     "false": 0.115291066467762
+    },
+    "logit_lens_L16": {
+     "true": 7.082341471686959e-05,
+     "false": 3.846745312330313e-05
+    },
+    "hosted_L20": {
+     "true": 0.01383458636701107,
+     "false": 0.33714011311531067
+    },
+    "logit_lens_L20": {
+     "true": 8.18897970020771e-05,
+     "false": 0.01345412340015173
+    },
+    "hosted_L21": {
+     "true": 0.038990143686532974,
+     "false": 0.31032970547676086
+    },
+    "logit_lens_L21": {
+     "true": 0.0003097822773270309,
+     "false": 0.014541199430823326
+    },
+    "hosted_L27": {
+     "true": 0.0007737000123597682,
+     "false": 0.0004774420813191682
+    },
+    "logit_lens_L27": {
+     "true": 4.268074007995892e-06,
+     "false": 2.3933533157105558e-05
+    },
+    "hosted_L28": {
+     "true": 0.010496951639652252,
+     "false": 0.11183366179466248
+    },
+    "logit_lens_L28": {
+     "true": 2.1064777229184983e-06,
+     "false": 0.0002973346272483468
+    },
+    "hosted_L32": {
+     "true": 0.056620292365550995,
+     "false": 0.11744657158851624
+    },
+    "logit_lens_L32": {
+     "true": 0.056620292365550995,
+     "false": 0.11744657158851624
+    },
+    "model_output": {
+     "true": 0.056620292365550995,
+     "false": 0.11744657158851624
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00013763477909378707,
+     "false": 0.00015610690752509981
+    },
+    "logit_lens_L5": {
+     "true": 4.1474131649010815e-06,
+     "false": 3.7268957385094836e-05
+    },
+    "hosted_L11": {
+     "true": 0.019758455455303192,
+     "false": 0.06024555116891861
+    },
+    "logit_lens_L11": {
+     "true": 1.640048708395625e-06,
+     "false": 2.907168891397305e-06
+    },
+    "hosted_L12": {
+     "true": 0.03500228747725487,
+     "false": 0.08727049082517624
+    },
+    "logit_lens_L12": {
+     "true": 5.886841336177895e-06,
+     "false": 3.9976683183340356e-05
+    },
+    "hosted_L16": {
+     "true": 0.08644402772188187,
+     "false": 0.1214049831032753
+    },
+    "logit_lens_L16": {
+     "true": 0.0001300613075727597,
+     "false": 4.810471000382677e-05
+    },
+    "hosted_L20": {
+     "true": 0.06467407941818237,
+     "false": 0.03752906620502472
+    },
+    "logit_lens_L20": {
+     "true": 0.0003739202511496842,
+     "false": 0.0003695269115269184
+    },
+    "hosted_L21": {
+     "true": 0.06949035078287125,
+     "false": 0.03813698887825012
+    },
+    "logit_lens_L21": {
+     "true": 0.0005512021598406136,
+     "false": 0.0009109472157433629
+    },
+    "hosted_L27": {
+     "true": 0.03340248391032219,
+     "false": 0.0010813800618052483
+    },
+    "logit_lens_L27": {
+     "true": 0.00041644347948022187,
+     "false": 8.003362017916515e-05
+    },
+    "hosted_L28": {
+     "true": 0.3390510678291321,
+     "false": 0.0011261978652328253
+    },
+    "logit_lens_L28": {
+     "true": 0.003423002315685153,
+     "false": 2.1640604245476425e-05
+    },
+    "hosted_L32": {
+     "true": 0.07829509675502777,
+     "false": 0.11135493218898773
+    },
+    "logit_lens_L32": {
+     "true": 0.07829509675502777,
+     "false": 0.11135493218898773
+    },
+    "model_output": {
+     "true": 0.07829509675502777,
+     "false": 0.11135493218898773
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0595-clean",
+   "true": "482",
+   "false": "742",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0619-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001188675087178126,
+     "false": 0.00014634328545071185
+    },
+    "logit_lens_L5": {
+     "true": 2.7953619792242534e-06,
+     "false": 2.217016572103603e-06
+    },
+    "hosted_L11": {
+     "true": 0.023716071620583534,
+     "false": 0.022656120359897614
+    },
+    "logit_lens_L11": {
+     "true": 9.955047062248923e-07,
+     "false": 1.2097348189854529e-06
+    },
+    "hosted_L12": {
+     "true": 0.03444080054759979,
+     "false": 0.038144346326589584
+    },
+    "logit_lens_L12": {
+     "true": 8.342644832737278e-06,
+     "false": 1.5213754522847012e-05
+    },
+    "hosted_L16": {
+     "true": 0.07760203629732132,
+     "false": 0.0615188404917717
+    },
+    "logit_lens_L16": {
+     "true": 4.412245289131533e-06,
+     "false": 7.567660941276699e-05
+    },
+    "hosted_L20": {
+     "true": 0.02216401696205139,
+     "false": 0.10836035013198853
+    },
+    "logit_lens_L20": {
+     "true": 4.532390448730439e-05,
+     "false": 0.0009814000222831964
+    },
+    "hosted_L21": {
+     "true": 0.02553045004606247,
+     "false": 0.11561303585767746
+    },
+    "logit_lens_L21": {
+     "true": 0.00014286702207755297,
+     "false": 0.003998725209385157
+    },
+    "hosted_L27": {
+     "true": 0.0030672182328999043,
+     "false": 0.004446781240403652
+    },
+    "logit_lens_L27": {
+     "true": 4.611794065567665e-05,
+     "false": 6.392193608917296e-05
+    },
+    "hosted_L28": {
+     "true": 0.00238978024572134,
+     "false": 0.009979941882193089
+    },
+    "logit_lens_L28": {
+     "true": 1.3910646885051392e-05,
+     "false": 6.627998664043844e-05
+    },
+    "hosted_L32": {
+     "true": 0.08958309888839722,
+     "false": 0.07599338889122009
+    },
+    "logit_lens_L32": {
+     "true": 0.08958309888839722,
+     "false": 0.07599338889122009
+    },
+    "model_output": {
+     "true": 0.08958309888839722,
+     "false": 0.07599338889122009
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0001007794271572493,
+     "false": 0.00011398990318411961
+    },
+    "logit_lens_L5": {
+     "true": 3.0224975944292964e-06,
+     "false": 1.8295386325917207e-06
+    },
+    "hosted_L11": {
+     "true": 0.027401531115174294,
+     "false": 0.023293109610676765
+    },
+    "logit_lens_L11": {
+     "true": 5.770875191046798e-07,
+     "false": 6.579622890967585e-07
+    },
+    "hosted_L12": {
+     "true": 0.028777388855814934,
+     "false": 0.03368741646409035
+    },
+    "logit_lens_L12": {
+     "true": 1.7852447626864887e-06,
+     "false": 3.628797912824666e-06
+    },
+    "hosted_L16": {
+     "true": 0.06809129565954208,
+     "false": 0.03531711548566818
+    },
+    "logit_lens_L16": {
+     "true": 4.347890353528783e-06,
+     "false": 1.1255330718995538e-05
+    },
+    "hosted_L20": {
+     "true": 0.018322426825761795,
+     "false": 0.038163915276527405
+    },
+    "logit_lens_L20": {
+     "true": 8.837495443003718e-06,
+     "false": 9.825355664361268e-05
+    },
+    "hosted_L21": {
+     "true": 0.013073666021227837,
+     "false": 0.03124229609966278
+    },
+    "logit_lens_L21": {
+     "true": 3.328011734993197e-05,
+     "false": 0.00033843659912236035
+    },
+    "hosted_L27": {
+     "true": 0.019879190251231194,
+     "false": 0.03850621357560158
+    },
+    "logit_lens_L27": {
+     "true": 0.0001674515224294737,
+     "false": 0.00030253935256041586
+    },
+    "hosted_L28": {
+     "true": 0.08229456841945648,
+     "false": 0.075332872569561
+    },
+    "logit_lens_L28": {
+     "true": 0.00019836834690067917,
+     "false": 0.0002622931788209826
+    },
+    "hosted_L32": {
+     "true": 0.08973195403814316,
+     "false": 0.05591193586587906
+    },
+    "logit_lens_L32": {
+     "true": 0.08973195403814316,
+     "false": 0.05591193586587906
+    },
+    "model_output": {
+     "true": 0.08973195403814316,
+     "false": 0.05591193586587906
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0619-clean",
+   "true": "762",
+   "false": "161",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0643-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00011398990318411961,
+     "false": 0.00043758307583630085
+    },
+    "logit_lens_L5": {
+     "true": 1.8295386325917207e-06,
+     "false": 4.687160981120542e-05
+    },
+    "hosted_L11": {
+     "true": 0.023293109610676765,
+     "false": 0.12515392899513245
+    },
+    "logit_lens_L11": {
+     "true": 6.579622890967585e-07,
+     "false": 2.2697358872392215e-06
+    },
+    "hosted_L12": {
+     "true": 0.03368741646409035,
+     "false": 0.22664131224155426
+    },
+    "logit_lens_L12": {
+     "true": 3.628797912824666e-06,
+     "false": 6.643482720392058e-06
+    },
+    "hosted_L16": {
+     "true": 0.03531711548566818,
+     "false": 0.24789555370807648
+    },
+    "logit_lens_L16": {
+     "true": 1.1255330718995538e-05,
+     "false": 2.3726841391180642e-05
+    },
+    "hosted_L20": {
+     "true": 0.038163915276527405,
+     "false": 0.06720010191202164
+    },
+    "logit_lens_L20": {
+     "true": 9.825355664361268e-05,
+     "false": 0.000602291664108634
+    },
+    "hosted_L21": {
+     "true": 0.03124229609966278,
+     "false": 0.0564473494887352
+    },
+    "logit_lens_L21": {
+     "true": 0.00033843659912236035,
+     "false": 0.002225350821390748
+    },
+    "hosted_L27": {
+     "true": 0.03850621357560158,
+     "false": 7.978895155247301e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00030253935256041586,
+     "false": 2.4458904590574093e-06
+    },
+    "hosted_L28": {
+     "true": 0.075332872569561,
+     "false": 0.0006918564322404563
+    },
+    "logit_lens_L28": {
+     "true": 0.0002622931788209826,
+     "false": 3.2412488053523703e-06
+    },
+    "hosted_L32": {
+     "true": 0.05591193586587906,
+     "false": 0.14759714901447296
+    },
+    "logit_lens_L32": {
+     "true": 0.05591193586587906,
+     "false": 0.14759714901447296
+    },
+    "model_output": {
+     "true": 0.05591193586587906,
+     "false": 0.14759714901447296
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00010874798317672685,
+     "false": 0.00034176604822278023
+    },
+    "logit_lens_L5": {
+     "true": 1.498334199823148e-06,
+     "false": 3.128232492599636e-05
+    },
+    "hosted_L11": {
+     "true": 0.021924983710050583,
+     "false": 0.09397772699594498
+    },
+    "logit_lens_L11": {
+     "true": 7.749366091047705e-07,
+     "false": 2.8696420031337766e-06
+    },
+    "hosted_L12": {
+     "true": 0.03165891021490097,
+     "false": 0.15402717888355255
+    },
+    "logit_lens_L12": {
+     "true": 1.7772274077287875e-05,
+     "false": 2.1006415408919565e-05
+    },
+    "hosted_L16": {
+     "true": 0.05387646704912186,
+     "false": 0.17651771008968353
+    },
+    "logit_lens_L16": {
+     "true": 4.2215797293465585e-05,
+     "false": 3.0055472961976193e-05
+    },
+    "hosted_L20": {
+     "true": 0.03449256345629692,
+     "false": 0.004579554311931133
+    },
+    "logit_lens_L20": {
+     "true": 0.00032276101410388947,
+     "false": 4.501036164583638e-05
+    },
+    "hosted_L21": {
+     "true": 0.05405930429697037,
+     "false": 0.009519693441689014
+    },
+    "logit_lens_L21": {
+     "true": 0.0010403234045952559,
+     "false": 0.00020822400983888656
+    },
+    "hosted_L27": {
+     "true": 0.08865278959274292,
+     "false": 0.00017211984959430993
+    },
+    "logit_lens_L27": {
+     "true": 0.002690862165763974,
+     "false": 5.848294313182123e-05
+    },
+    "hosted_L28": {
+     "true": 0.07393637299537659,
+     "false": 2.4722316084080376e-05
+    },
+    "logit_lens_L28": {
+     "true": 0.005897701717913151,
+     "false": 7.039421689114533e-06
+    },
+    "hosted_L32": {
+     "true": 0.12372968345880508,
+     "false": 0.14050956070423126
+    },
+    "logit_lens_L32": {
+     "true": 0.12372968345880508,
+     "false": 0.14050956070423126
+    },
+    "model_output": {
+     "true": 0.12372968345880508,
+     "false": 0.14050956070423126
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0643-clean",
+   "true": "201",
+   "false": "523",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0655-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0002634904521983117,
+     "false": 9.367176244268194e-05
+    },
+    "logit_lens_L5": {
+     "true": 1.6092522855615243e-05,
+     "false": 1.3095464964862913e-05
+    },
+    "hosted_L11": {
+     "true": 0.08537955582141876,
+     "false": 0.027021175250411034
+    },
+    "logit_lens_L11": {
+     "true": 1.0485788379810401e-06,
+     "false": 1.8933685623778729e-06
+    },
+    "hosted_L12": {
+     "true": 0.091880202293396,
+     "false": 0.045459114015102386
+    },
+    "logit_lens_L12": {
+     "true": 3.0875187349010957e-06,
+     "false": 1.4250227650336456e-05
+    },
+    "hosted_L16": {
+     "true": 0.15209074318408966,
+     "false": 0.0856449231505394
+    },
+    "logit_lens_L16": {
+     "true": 1.5512157915509306e-05,
+     "false": 1.6472480638185516e-05
+    },
+    "hosted_L20": {
+     "true": 0.05471980944275856,
+     "false": 0.0493401363492012
+    },
+    "logit_lens_L20": {
+     "true": 0.0007888449472375214,
+     "false": 0.00022022290795575827
+    },
+    "hosted_L21": {
+     "true": 0.038908950984478,
+     "false": 0.05282626301050186
+    },
+    "logit_lens_L21": {
+     "true": 0.000772860599681735,
+     "false": 0.0002039474929915741
+    },
+    "hosted_L27": {
+     "true": 1.688048905634787e-05,
+     "false": 0.0003076943103224039
+    },
+    "logit_lens_L27": {
+     "true": 2.0667735043389257e-06,
+     "false": 2.739637693593977e-06
+    },
+    "hosted_L28": {
+     "true": 7.206961981864879e-06,
+     "false": 0.00012629317643586546
+    },
+    "logit_lens_L28": {
+     "true": 5.385301733440429e-07,
+     "false": 1.8460443698131712e-06
+    },
+    "hosted_L32": {
+     "true": 0.09745369851589203,
+     "false": 0.07530121505260468
+    },
+    "logit_lens_L32": {
+     "true": 0.09745369851589203,
+     "false": 0.07530121505260468
+    },
+    "model_output": {
+     "true": 0.09745369851589203,
+     "false": 0.07530121505260468
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0005029513267800212,
+     "false": 0.00016489322297275066
+    },
+    "logit_lens_L5": {
+     "true": 2.5856070351437666e-05,
+     "false": 1.885902565845754e-05
+    },
+    "hosted_L11": {
+     "true": 0.07615653425455093,
+     "false": 0.02002785913646221
+    },
+    "logit_lens_L11": {
+     "true": 8.039353929234494e-07,
+     "false": 1.136481728281069e-06
+    },
+    "hosted_L12": {
+     "true": 0.18966184556484222,
+     "false": 0.05446271225810051
+    },
+    "logit_lens_L12": {
+     "true": 2.1194825876591494e-06,
+     "false": 3.8102919006632874e-06
+    },
+    "hosted_L16": {
+     "true": 0.17704026401042938,
+     "false": 0.0631764829158783
+    },
+    "logit_lens_L16": {
+     "true": 1.4256433132686652e-05,
+     "false": 6.927761205588467e-06
+    },
+    "hosted_L20": {
+     "true": 0.010663306340575218,
+     "false": 0.040262553840875626
+    },
+    "logit_lens_L20": {
+     "true": 0.00020874608890153468,
+     "false": 0.0004163254634477198
+    },
+    "hosted_L21": {
+     "true": 0.006583194248378277,
+     "false": 0.03651755303144455
+    },
+    "logit_lens_L21": {
+     "true": 0.0003919926821254194,
+     "false": 0.0009643136872909963
+    },
+    "hosted_L27": {
+     "true": 5.20402318215929e-05,
+     "false": 0.005164800677448511
+    },
+    "logit_lens_L27": {
+     "true": 2.054432661680039e-05,
+     "false": 0.00046936003491282463
+    },
+    "hosted_L28": {
+     "true": 4.782272662851028e-05,
+     "false": 0.006592678837478161
+    },
+    "logit_lens_L28": {
+     "true": 3.3537160106789088e-06,
+     "false": 0.00020737502200063318
+    },
+    "hosted_L32": {
+     "true": 0.1229705736041069,
+     "false": 0.12416267395019531
+    },
+    "logit_lens_L32": {
+     "true": 0.1229705736041069,
+     "false": 0.12416267395019531
+    },
+    "model_output": {
+     "true": 0.1229705736041069,
+     "false": 0.12416267395019531
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0655-clean",
+   "true": "827",
+   "false": "358",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0667-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001832818379625678,
+     "false": 0.0002774506574496627
+    },
+    "logit_lens_L5": {
+     "true": 4.7840385377639905e-06,
+     "false": 5.756225800723769e-05
+    },
+    "hosted_L11": {
+     "true": 0.015969792380928993,
+     "false": 0.04986010491847992
+    },
+    "logit_lens_L11": {
+     "true": 1.4164069170874427e-06,
+     "false": 1.7782909935704083e-06
+    },
+    "hosted_L12": {
+     "true": 0.038541730493307114,
+     "false": 0.1131000742316246
+    },
+    "logit_lens_L12": {
+     "true": 2.5190861379087437e-06,
+     "false": 1.6791776943136938e-05
+    },
+    "hosted_L16": {
+     "true": 0.05617735907435417,
+     "false": 0.0998428612947464
+    },
+    "logit_lens_L16": {
+     "true": 3.4588629205245525e-05,
+     "false": 1.2622985195775982e-05
+    },
+    "hosted_L20": {
+     "true": 0.028574801981449127,
+     "false": 0.0462031289935112
+    },
+    "logit_lens_L20": {
+     "true": 0.00018006403115577996,
+     "false": 0.0018080834997817874
+    },
+    "hosted_L21": {
+     "true": 0.04724573716521263,
+     "false": 0.03404751792550087
+    },
+    "logit_lens_L21": {
+     "true": 0.0008794456371106207,
+     "false": 0.003556497162207961
+    },
+    "hosted_L27": {
+     "true": 0.02830931544303894,
+     "false": 0.0003084553172811866
+    },
+    "logit_lens_L27": {
+     "true": 0.0014996618265286088,
+     "false": 4.850159530178644e-05
+    },
+    "hosted_L28": {
+     "true": 0.4868401288986206,
+     "false": 0.00015755882486701012
+    },
+    "logit_lens_L28": {
+     "true": 0.023520730435848236,
+     "false": 8.128224180836696e-06
+    },
+    "hosted_L32": {
+     "true": 0.07949624955654144,
+     "false": 0.09194555878639221
+    },
+    "logit_lens_L32": {
+     "true": 0.07949624955654144,
+     "false": 0.09194555878639221
+    },
+    "model_output": {
+     "true": 0.07949624955654144,
+     "false": 0.09194555878639221
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00012862481526099145,
+     "false": 0.00018833881767932326
+    },
+    "logit_lens_L5": {
+     "true": 4.339064162195427e-06,
+     "false": 5.529687041416764e-05
+    },
+    "hosted_L11": {
+     "true": 0.018914347514510155,
+     "false": 0.0639786645770073
+    },
+    "logit_lens_L11": {
+     "true": 8.531948765266861e-07,
+     "false": 1.6770920865383232e-06
+    },
+    "hosted_L12": {
+     "true": 0.0314265713095665,
+     "false": 0.09752032905817032
+    },
+    "logit_lens_L12": {
+     "true": 3.9717156141705345e-06,
+     "false": 3.926652789232321e-05
+    },
+    "hosted_L16": {
+     "true": 0.06096141040325165,
+     "false": 0.1467495858669281
+    },
+    "logit_lens_L16": {
+     "true": 3.721476241480559e-05,
+     "false": 1.1804547284555156e-05
+    },
+    "hosted_L20": {
+     "true": 0.018868843093514442,
+     "false": 0.14788173139095306
+    },
+    "logit_lens_L20": {
+     "true": 8.669859380461276e-05,
+     "false": 0.0023512705229222775
+    },
+    "hosted_L21": {
+     "true": 0.034806281328201294,
+     "false": 0.11558690667152405
+    },
+    "logit_lens_L21": {
+     "true": 0.00013305657193996012,
+     "false": 0.0020387242548167706
+    },
+    "hosted_L27": {
+     "true": 0.032930850982666016,
+     "false": 9.809993935050443e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00011129274207632989,
+     "false": 9.6981682418118e-07
+    },
+    "hosted_L28": {
+     "true": 0.1485544592142105,
+     "false": 0.00014311134873423725
+    },
+    "logit_lens_L28": {
+     "true": 7.516077312175184e-05,
+     "false": 1.1071490035874376e-07
+    },
+    "hosted_L32": {
+     "true": 0.06885586678981781,
+     "false": 0.029719902202486992
+    },
+    "logit_lens_L32": {
+     "true": 0.06885586678981781,
+     "false": 0.029719902202486992
+    },
+    "model_output": {
+     "true": 0.06885586678981781,
+     "false": 0.029719902202486992
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0667-clean",
+   "true": "892",
+   "false": "342",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0691-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00012862481526099145,
+     "false": 0.00018833881767932326
+    },
+    "logit_lens_L5": {
+     "true": 4.339064162195427e-06,
+     "false": 5.529687041416764e-05
+    },
+    "hosted_L11": {
+     "true": 0.018914347514510155,
+     "false": 0.0639786645770073
+    },
+    "logit_lens_L11": {
+     "true": 8.531948765266861e-07,
+     "false": 1.6770920865383232e-06
+    },
+    "hosted_L12": {
+     "true": 0.0314265713095665,
+     "false": 0.09752032905817032
+    },
+    "logit_lens_L12": {
+     "true": 3.9717156141705345e-06,
+     "false": 3.926652789232321e-05
+    },
+    "hosted_L16": {
+     "true": 0.06096141040325165,
+     "false": 0.1467495858669281
+    },
+    "logit_lens_L16": {
+     "true": 3.721476241480559e-05,
+     "false": 1.1804547284555156e-05
+    },
+    "hosted_L20": {
+     "true": 0.018868843093514442,
+     "false": 0.14788173139095306
+    },
+    "logit_lens_L20": {
+     "true": 8.669859380461276e-05,
+     "false": 0.0023512705229222775
+    },
+    "hosted_L21": {
+     "true": 0.034806281328201294,
+     "false": 0.11558690667152405
+    },
+    "logit_lens_L21": {
+     "true": 0.00013305657193996012,
+     "false": 0.0020387242548167706
+    },
+    "hosted_L27": {
+     "true": 0.032930850982666016,
+     "false": 9.809993935050443e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.00011129274207632989,
+     "false": 9.6981682418118e-07
+    },
+    "hosted_L28": {
+     "true": 0.1485544592142105,
+     "false": 0.00014311134873423725
+    },
+    "logit_lens_L28": {
+     "true": 7.516077312175184e-05,
+     "false": 1.1071490035874376e-07
+    },
+    "hosted_L32": {
+     "true": 0.06885586678981781,
+     "false": 0.029719902202486992
+    },
+    "logit_lens_L32": {
+     "true": 0.06885586678981781,
+     "false": 0.029719902202486992
+    },
+    "model_output": {
+     "true": 0.06885586678981781,
+     "false": 0.029719902202486992
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0001524957624496892,
+     "false": 0.00019637777586467564
+    },
+    "logit_lens_L5": {
+     "true": 3.4264137411810225e-06,
+     "false": 3.362002462381497e-05
+    },
+    "hosted_L11": {
+     "true": 0.024569008499383926,
+     "false": 0.07356850057840347
+    },
+    "logit_lens_L11": {
+     "true": 1.873996552603785e-06,
+     "false": 2.70915734290611e-06
+    },
+    "hosted_L12": {
+     "true": 0.038241446018218994,
+     "false": 0.109293133020401
+    },
+    "logit_lens_L12": {
+     "true": 3.5846157970809145e-06,
+     "false": 2.108663466060534e-05
+    },
+    "hosted_L16": {
+     "true": 0.062254514545202255,
+     "false": 0.08712427318096161
+    },
+    "logit_lens_L16": {
+     "true": 3.522041151882149e-05,
+     "false": 1.2045486073475331e-05
+    },
+    "hosted_L20": {
+     "true": 0.05485505238175392,
+     "false": 0.020755406469106674
+    },
+    "logit_lens_L20": {
+     "true": 0.000572238874156028,
+     "false": 0.000414652400650084
+    },
+    "hosted_L21": {
+     "true": 0.07414531707763672,
+     "false": 0.017107537016272545
+    },
+    "logit_lens_L21": {
+     "true": 0.0021230257116258144,
+     "false": 0.0012705506524071097
+    },
+    "hosted_L27": {
+     "true": 0.07920171320438385,
+     "false": 0.0006337732193060219
+    },
+    "logit_lens_L27": {
+     "true": 0.006138388533145189,
+     "false": 0.00017942822887562215
+    },
+    "hosted_L28": {
+     "true": 0.44945698976516724,
+     "false": 0.0002643729676492512
+    },
+    "logit_lens_L28": {
+     "true": 0.12679332494735718,
+     "false": 0.00011464840645203367
+    },
+    "hosted_L32": {
+     "true": 0.07565783709287643,
+     "false": 0.10422306507825851
+    },
+    "logit_lens_L32": {
+     "true": 0.07565783709287643,
+     "false": 0.10422306507825851
+    },
+    "model_output": {
+     "true": 0.07565783709287643,
+     "false": 0.10422306507825851
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0691-clean",
+   "true": "299",
+   "false": "540",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0703-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00037594095920212567,
+     "false": 0.00014377378101926297
+    },
+    "logit_lens_L5": {
+     "true": 1.6653713828418404e-05,
+     "false": 1.3067687177681364e-05
+    },
+    "hosted_L11": {
+     "true": 0.10390228033065796,
+     "false": 0.031843751668930054
+    },
+    "logit_lens_L11": {
+     "true": 1.1170372999913525e-06,
+     "false": 1.1417206451369566e-06
+    },
+    "hosted_L12": {
+     "true": 0.1705338954925537,
+     "false": 0.05543821305036545
+    },
+    "logit_lens_L12": {
+     "true": 1.907757450680947e-06,
+     "false": 3.748279823412304e-06
+    },
+    "hosted_L16": {
+     "true": 0.17704108357429504,
+     "false": 0.06865037232637405
+    },
+    "logit_lens_L16": {
+     "true": 1.5170269762165844e-05,
+     "false": 7.459122116415529e-06
+    },
+    "hosted_L20": {
+     "true": 0.013568983413279057,
+     "false": 0.06974552571773529
+    },
+    "logit_lens_L20": {
+     "true": 0.00015727138088550419,
+     "false": 0.001083583920262754
+    },
+    "hosted_L21": {
+     "true": 0.01058140303939581,
+     "false": 0.06253398954868317
+    },
+    "logit_lens_L21": {
+     "true": 0.0005756297614425421,
+     "false": 0.0022123774979263544
+    },
+    "hosted_L27": {
+     "true": 8.290255209431052e-05,
+     "false": 0.005560303572565317
+    },
+    "logit_lens_L27": {
+     "true": 2.9676286430913024e-05,
+     "false": 0.0004997123614884913
+    },
+    "hosted_L28": {
+     "true": 3.4863878681790084e-05,
+     "false": 0.004335084930062294
+    },
+    "logit_lens_L28": {
+     "true": 1.0921469765889924e-05,
+     "false": 0.0006697519565932453
+    },
+    "hosted_L32": {
+     "true": 0.1307988166809082,
+     "false": 0.11706005036830902
+    },
+    "logit_lens_L32": {
+     "true": 0.1307988166809082,
+     "false": 0.11706005036830902
+    },
+    "model_output": {
+     "true": 0.1307988166809082,
+     "false": 0.11706005036830902
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.0004276358231436461,
+     "false": 0.00014699390158057213
+    },
+    "logit_lens_L5": {
+     "true": 2.0242880054865964e-05,
+     "false": 1.3657831914315466e-05
+    },
+    "hosted_L11": {
+     "true": 0.09928817301988602,
+     "false": 0.029634414240717888
+    },
+    "logit_lens_L11": {
+     "true": 1.082376115846273e-06,
+     "false": 1.9810515823337482e-06
+    },
+    "hosted_L12": {
+     "true": 0.1685449779033661,
+     "false": 0.0605248287320137
+    },
+    "logit_lens_L12": {
+     "true": 2.8952433694939828e-06,
+     "false": 7.845303116482683e-06
+    },
+    "hosted_L16": {
+     "true": 0.18835146725177765,
+     "false": 0.07914461940526962
+    },
+    "logit_lens_L16": {
+     "true": 5.450841490528546e-05,
+     "false": 2.0109837350901216e-05
+    },
+    "hosted_L20": {
+     "true": 0.022282088175415993,
+     "false": 0.01868591643869877
+    },
+    "logit_lens_L20": {
+     "true": 0.00016199334640987217,
+     "false": 7.277999247889966e-05
+    },
+    "hosted_L21": {
+     "true": 0.010889513418078423,
+     "false": 0.009463292546570301
+    },
+    "logit_lens_L21": {
+     "true": 0.00015552755212411284,
+     "false": 7.464885857189074e-05
+    },
+    "hosted_L27": {
+     "true": 3.5003471566597e-05,
+     "false": 0.002007624600082636
+    },
+    "logit_lens_L27": {
+     "true": 7.5123293754586484e-06,
+     "false": 0.00010717372788349167
+    },
+    "hosted_L28": {
+     "true": 0.0005592424422502518,
+     "false": 0.04660188406705856
+    },
+    "logit_lens_L28": {
+     "true": 9.82557685347274e-06,
+     "false": 0.0005972138606011868
+    },
+    "hosted_L32": {
+     "true": 0.15154556930065155,
+     "false": 0.12352687120437622
+    },
+    "logit_lens_L32": {
+     "true": 0.15154556930065155,
+     "false": 0.12352687120437622
+    },
+    "model_output": {
+     "true": 0.15154556930065155,
+     "false": 0.12352687120437622
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0703-clean",
+   "true": "406",
+   "false": "964",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0715-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.00015514189726673067,
+     "false": 0.000207670615054667
+    },
+    "logit_lens_L5": {
+     "true": 2.926129582192516e-06,
+     "false": 1.6880072735148133e-06
+    },
+    "hosted_L11": {
+     "true": 0.0262067299336195,
+     "false": 0.03421266749501228
+    },
+    "logit_lens_L11": {
+     "true": 9.137180541074486e-07,
+     "false": 1.9372541828488465e-06
+    },
+    "hosted_L12": {
+     "true": 0.04963579401373863,
+     "false": 0.0626184418797493
+    },
+    "logit_lens_L12": {
+     "true": 1.1790584721893538e-05,
+     "false": 2.9090733733028173e-06
+    },
+    "hosted_L16": {
+     "true": 0.08575195074081421,
+     "false": 0.09149879962205887
+    },
+    "logit_lens_L16": {
+     "true": 1.5591818737448193e-05,
+     "false": 3.627998739830218e-05
+    },
+    "hosted_L20": {
+     "true": 0.01101941429078579,
+     "false": 0.07593511790037155
+    },
+    "logit_lens_L20": {
+     "true": 1.832791713241022e-05,
+     "false": 0.0007146605639718473
+    },
+    "hosted_L21": {
+     "true": 0.00502913910895586,
+     "false": 0.03729112446308136
+    },
+    "logit_lens_L21": {
+     "true": 2.1389825633377768e-05,
+     "false": 0.00030658041941933334
+    },
+    "hosted_L27": {
+     "true": 0.0007304565515369177,
+     "false": 0.0019212031038478017
+    },
+    "logit_lens_L27": {
+     "true": 2.0222867533448152e-05,
+     "false": 4.1776878788368776e-05
+    },
+    "hosted_L28": {
+     "true": 0.002924430649727583,
+     "false": 0.1084640771150589
+    },
+    "logit_lens_L28": {
+     "true": 8.349546078534331e-06,
+     "false": 0.0005080252885818481
+    },
+    "hosted_L32": {
+     "true": 0.08056788146495819,
+     "false": 0.07705486565828323
+    },
+    "logit_lens_L32": {
+     "true": 0.08056788146495819,
+     "false": 0.07705486565828323
+    },
+    "model_output": {
+     "true": 0.08056788146495819,
+     "false": 0.07705486565828323
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00010368208313593641,
+     "false": 0.0001497176563134417
+    },
+    "logit_lens_L5": {
+     "true": 2.822619535436388e-06,
+     "false": 1.4552731499861693e-06
+    },
+    "hosted_L11": {
+     "true": 0.014865979552268982,
+     "false": 0.018310876563191414
+    },
+    "logit_lens_L11": {
+     "true": 5.572779286922014e-07,
+     "false": 1.6136900740093552e-06
+    },
+    "hosted_L12": {
+     "true": 0.021321529522538185,
+     "false": 0.02948722615838051
+    },
+    "logit_lens_L12": {
+     "true": 1.8059031390293967e-06,
+     "false": 1.2396109241308295e-06
+    },
+    "hosted_L16": {
+     "true": 0.04229439049959183,
+     "false": 0.0410487987101078
+    },
+    "logit_lens_L16": {
+     "true": 3.0185321975295665e-06,
+     "false": 6.022312390996376e-06
+    },
+    "hosted_L20": {
+     "true": 0.034898947924375534,
+     "false": 0.08020127564668655
+    },
+    "logit_lens_L20": {
+     "true": 0.00017478996596764773,
+     "false": 0.0014363680966198444
+    },
+    "hosted_L21": {
+     "true": 0.026413416489958763,
+     "false": 0.09889556467533112
+    },
+    "logit_lens_L21": {
+     "true": 0.00034730613697320223,
+     "false": 0.0017952832859009504
+    },
+    "hosted_L27": {
+     "true": 0.02407889813184738,
+     "false": 0.29719194769859314
+    },
+    "logit_lens_L27": {
+     "true": 0.0001263212616322562,
+     "false": 0.0011597740231081843
+    },
+    "hosted_L28": {
+     "true": 0.053549665957689285,
+     "false": 0.34161245822906494
+    },
+    "logit_lens_L28": {
+     "true": 3.464093606453389e-05,
+     "false": 0.00026716524735093117
+    },
+    "hosted_L32": {
+     "true": 0.10041726380586624,
+     "false": 0.10485969483852386
+    },
+    "logit_lens_L32": {
+     "true": 0.10041726380586624,
+     "false": 0.10485969483852386
+    },
+    "model_output": {
+     "true": 0.10041726380586624,
+     "false": 0.10485969483852386
+    }
+   }
+  },
+  {
+   "task_id": "jsweep-ledger_reconcile-0715-clean",
+   "true": "963",
+   "false": "152",
+   "mismatched_task_id": "jsweep-ledger_reconcile-0007-clean",
+   "matched": {
+    "hosted_L5": {
+     "true": 0.0001497176563134417,
+     "false": 0.0005085337907075882
+    },
+    "logit_lens_L5": {
+     "true": 1.4552731499861693e-06,
+     "false": 4.4165888539282605e-05
+    },
+    "hosted_L11": {
+     "true": 0.018310876563191414,
+     "false": 0.0679815337061882
+    },
+    "logit_lens_L11": {
+     "true": 1.6136900740093552e-06,
+     "false": 2.562695044616703e-06
+    },
+    "hosted_L12": {
+     "true": 0.02948722615838051,
+     "false": 0.2072744369506836
+    },
+    "logit_lens_L12": {
+     "true": 1.2396109241308295e-06,
+     "false": 6.355637651722645e-06
+    },
+    "hosted_L16": {
+     "true": 0.0410487987101078,
+     "false": 0.18307343125343323
+    },
+    "logit_lens_L16": {
+     "true": 6.022312390996376e-06,
+     "false": 1.6055833839345723e-05
+    },
+    "hosted_L20": {
+     "true": 0.08020127564668655,
+     "false": 0.052184633910655975
+    },
+    "logit_lens_L20": {
+     "true": 0.0014363680966198444,
+     "false": 0.0025692316703498363
+    },
+    "hosted_L21": {
+     "true": 0.09889556467533112,
+     "false": 0.056955017149448395
+    },
+    "logit_lens_L21": {
+     "true": 0.0017952832859009504,
+     "false": 0.012256653048098087
+    },
+    "hosted_L27": {
+     "true": 0.29719194769859314,
+     "false": 0.00013265482266433537
+    },
+    "logit_lens_L27": {
+     "true": 0.0011597740231081843,
+     "false": 2.803208417390124e-06
+    },
+    "hosted_L28": {
+     "true": 0.34161245822906494,
+     "false": 0.004251605831086636
+    },
+    "logit_lens_L28": {
+     "true": 0.00026716524735093117,
+     "false": 7.555249339930015e-06
+    },
+    "hosted_L32": {
+     "true": 0.10485969483852386,
+     "false": 0.16025404632091522
+    },
+    "logit_lens_L32": {
+     "true": 0.10485969483852386,
+     "false": 0.16025404632091522
+    },
+    "model_output": {
+     "true": 0.10485969483852386,
+     "false": 0.16025404632091522
+    }
+   },
+   "mismatched": {
+    "hosted_L5": {
+     "true": 0.00020692964608315378,
+     "false": 0.000525478390045464
+    },
+    "logit_lens_L5": {
+     "true": 1.7191257484228117e-06,
+     "false": 4.873072248301469e-05
+    },
+    "hosted_L11": {
+     "true": 0.03445126861333847,
+     "false": 0.09426921606063843
+    },
+    "logit_lens_L11": {
+     "true": 3.228559307899559e-06,
+     "false": 4.0483855627826415e-06
+    },
+    "hosted_L12": {
+     "true": 0.05423559248447418,
+     "false": 0.1965295672416687
+    },
+    "logit_lens_L12": {
+     "true": 2.7153171231475426e-06,
+     "false": 8.074745892372448e-06
+    },
+    "hosted_L16": {
+     "true": 0.06549197435379028,
+     "false": 0.1270671784877777
+    },
+    "logit_lens_L16": {
+     "true": 6.670621587545611e-06,
+     "false": 1.6901811250136234e-05
+    },
+    "hosted_L20": {
+     "true": 0.06089762598276138,
+     "false": 0.005370208993554115
+    },
+    "logit_lens_L20": {
+     "true": 0.00014083291171118617,
+     "false": 5.878756201127544e-05
+    },
+    "hosted_L21": {
+     "true": 0.1015528216958046,
+     "false": 0.007530865725129843
+    },
+    "logit_lens_L21": {
+     "true": 0.0005552733782678843,
+     "false": 0.0005452500772662461
+    },
+    "hosted_L27": {
+     "true": 0.054113566875457764,
+     "false": 4.101287413504906e-05
+    },
+    "logit_lens_L27": {
+     "true": 0.0006330935866571963,
+     "false": 1.2137374142184854e-05
+    },
+    "hosted_L28": {
+     "true": 0.7437523603439331,
+     "false": 7.3304754550918005e-06
+    },
+    "logit_lens_L28": {
+     "true": 0.016915423795580864,
+     "false": 8.153076578309992e-07
+    },
+    "hosted_L32": {
+     "true": 0.11620727181434631,
+     "false": 0.13616256415843964
+    },
+    "logit_lens_L32": {
+     "true": 0.11620727181434631,
+     "false": 0.13616256415843964
+    },
+    "model_output": {
+     "true": 0.11620727181434631,
+     "false": 0.13616256415843964
+    }
+   }
+  }
+ ],
+ "tokens_per_case": {
+  "jsweep-ledger_reconcile-0007-clean": 1550,
+  "jsweep-ledger_reconcile-0019-clean": 1543,
+  "jsweep-ledger_reconcile-0031-clean": 1548,
+  "jsweep-ledger_reconcile-0067-clean": 1548,
+  "jsweep-ledger_reconcile-0115-clean": 1548,
+  "jsweep-ledger_reconcile-0127-clean": 1543,
+  "jsweep-ledger_reconcile-0139-clean": 1545,
+  "jsweep-ledger_reconcile-0151-clean": 1550,
+  "jsweep-ledger_reconcile-0163-clean": 1547,
+  "jsweep-ledger_reconcile-0175-clean": 1546,
+  "jsweep-ledger_reconcile-0187-clean": 1545,
+  "jsweep-ledger_reconcile-0223-clean": 1545,
+  "jsweep-ledger_reconcile-0259-clean": 1548,
+  "jsweep-ledger_reconcile-0271-clean": 1547,
+  "jsweep-ledger_reconcile-0283-clean": 1543,
+  "jsweep-ledger_reconcile-0295-clean": 1543,
+  "jsweep-ledger_reconcile-0331-clean": 1547,
+  "jsweep-ledger_reconcile-0343-clean": 1545,
+  "jsweep-ledger_reconcile-0355-clean": 1547,
+  "jsweep-ledger_reconcile-0367-clean": 1548,
+  "jsweep-ledger_reconcile-0379-clean": 1546,
+  "jsweep-ledger_reconcile-0391-clean": 1546,
+  "jsweep-ledger_reconcile-0403-clean": 1550,
+  "jsweep-ledger_reconcile-0415-clean": 1545,
+  "jsweep-ledger_reconcile-0427-clean": 1543,
+  "jsweep-ledger_reconcile-0451-clean": 1550,
+  "jsweep-ledger_reconcile-0499-clean": 1545,
+  "jsweep-ledger_reconcile-0511-clean": 1547,
+  "jsweep-ledger_reconcile-0523-clean": 1550,
+  "jsweep-ledger_reconcile-0535-clean": 1548,
+  "jsweep-ledger_reconcile-0547-clean": 1550,
+  "jsweep-ledger_reconcile-0559-clean": 1548,
+  "jsweep-ledger_reconcile-0571-clean": 1548,
+  "jsweep-ledger_reconcile-0583-clean": 1548,
+  "jsweep-ledger_reconcile-0595-clean": 1550,
+  "jsweep-ledger_reconcile-0619-clean": 1547,
+  "jsweep-ledger_reconcile-0643-clean": 1545,
+  "jsweep-ledger_reconcile-0655-clean": 1545,
+  "jsweep-ledger_reconcile-0667-clean": 1543,
+  "jsweep-ledger_reconcile-0691-clean": 1545,
+  "jsweep-ledger_reconcile-0703-clean": 1545,
+  "jsweep-ledger_reconcile-0715-clean": 1550
+ },
+ "layers": [
+  5,
+  11,
+  12,
+  16,
+  20,
+  21,
+  27,
+  28,
+  32
+ ],
+ "regenerated_cases": 42,
+ "matching_pairs": 42
+}

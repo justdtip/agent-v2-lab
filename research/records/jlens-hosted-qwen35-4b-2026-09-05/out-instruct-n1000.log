@@ -1,0 +1,32 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2576.04it/s]
+model loaded {"name": "qwen35-4b", "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit", "layers": 32, "hidden": 2560, "vocab": 248320, "seconds": 3.9}
+lens loaded {"layers": "1..31", "count": 31}
+cases regenerated {"n": 42, "seconds": 0.2}
+artifact agreement {"artifact_cases": 42, "regenerated": 42, "matching_pairs": 42}
+residuals captured {"cases": 42, "median_tokens": 1547.0, "seconds": 121.5}
+readouts scored {"seconds": 32.1}
+stage done {"stage": "cases", "seconds": 154.1}
+corpus context done {"index": 0, "tokens": 138, "seconds": 18.3}
+corpus context done {"index": 1, "tokens": 136, "seconds": 23.9}
+corpus context done {"index": 2, "tokens": 139, "seconds": 29.6}
+corpus context done {"index": 3, "tokens": 150, "seconds": 35.7}
+corpus context done {"index": 4, "tokens": 132, "seconds": 41.2}
+corpus context done {"index": 5, "tokens": 132, "seconds": 46.6}
+corpus context done {"index": 6, "tokens": 129, "seconds": 52.2}
+corpus context done {"index": 7, "tokens": 133, "seconds": 58.3}
+corpus context done {"index": 8, "tokens": 135, "seconds": 65.2}
+corpus context done {"index": 9, "tokens": 137, "seconds": 72.9}
+corpus context done {"index": 10, "tokens": 141, "seconds": 78.8}
+corpus context done {"index": 11, "tokens": 129, "seconds": 84.4}
+corpus context done {"index": 12, "tokens": 128, "seconds": 89.7}
+corpus context done {"index": 13, "tokens": 134, "seconds": 95.6}
+corpus context done {"index": 14, "tokens": 164, "seconds": 102.8}
+corpus context done {"index": 15, "tokens": 150, "seconds": 108.9}
+spectrum and CKA done {"seconds": 42.3}
+stage done {"stage": "corpus", "seconds": 151.7}
+sanity prompt done {"name": "arith"}
+sanity prompt done {"name": "spider"}
+sanity prompt done {"name": "rhyme"}
+sanity prompt done {"name": "france"}
+stage done {"stage": "sanity", "seconds": 2.3}
+all done {"total_seconds": 312.2}

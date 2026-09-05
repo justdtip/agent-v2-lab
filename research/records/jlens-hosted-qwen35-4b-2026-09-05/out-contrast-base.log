@@ -1,0 +1,42 @@
+lens loaded {"layers": "1..31", "count": 31}
+loaded {"model": "qwen35-4b-base-pt", "band": "11..29", "seconds": 2.1}
+prompt done {"suite": "bereavement", "tokens": 30, "best": 4, "frac_top10": 0.067}
+prompt done {"suite": "bereavement", "tokens": 22, "best": 1, "frac_top10": 0.227}
+prompt done {"suite": "bereavement", "tokens": 20, "best": 3, "frac_top10": 0.2}
+prompt done {"suite": "bereavement", "tokens": 27, "best": 1, "frac_top10": 0.185}
+prompt done {"suite": "bereavement", "tokens": 24, "best": 6, "frac_top10": 0.125}
+prompt done {"suite": "bereavement", "tokens": 24, "best": 2, "frac_top10": 0.208}
+prompt done {"suite": "bereavement", "tokens": 23, "best": 29, "frac_top10": 0.0}
+prompt done {"suite": "bereavement", "tokens": 22, "best": 1, "frac_top10": 0.318}
+prompt done {"suite": "bereavement", "tokens": 21, "best": 1, "frac_top10": 0.143}
+prompt done {"suite": "danger", "tokens": 29, "best": 7, "frac_top10": 0.069}
+prompt done {"suite": "danger", "tokens": 34, "best": 8, "frac_top10": 0.029}
+prompt done {"suite": "danger", "tokens": 29, "best": 1, "frac_top10": 0.069}
+prompt done {"suite": "danger", "tokens": 25, "best": 4, "frac_top10": 0.12}
+prompt done {"suite": "danger", "tokens": 28, "best": 4, "frac_top10": 0.071}
+prompt done {"suite": "danger", "tokens": 30, "best": 4, "frac_top10": 0.133}
+prompt done {"suite": "danger", "tokens": 28, "best": 5, "frac_top10": 0.036}
+prompt done {"suite": "danger", "tokens": 33, "best": 4, "frac_top10": 0.061}
+prompt done {"suite": "danger", "tokens": 28, "best": 1, "frac_top10": 0.107}
+prompt done {"suite": "danger", "tokens": 34, "best": 3, "frac_top10": 0.029}
+prompt done {"suite": "danger_control", "tokens": 29, "best": 9, "frac_top10": 0.034}
+prompt done {"suite": "danger_control", "tokens": 36, "best": 2, "frac_top10": 0.028}
+prompt done {"suite": "danger_control", "tokens": 25, "best": 1, "frac_top10": 0.04}
+prompt done {"suite": "danger_control", "tokens": 20, "best": 22, "frac_top10": 0.0}
+prompt done {"suite": "danger_control", "tokens": 27, "best": 38, "frac_top10": 0.0}
+prompt done {"suite": "danger_control", "tokens": 30, "best": 4, "frac_top10": 0.1}
+prompt done {"suite": "danger_control", "tokens": 24, "best": 105, "frac_top10": 0.0}
+prompt done {"suite": "danger_control", "tokens": 25, "best": 8, "frac_top10": 0.04}
+prompt done {"suite": "danger_control", "tokens": 22, "best": 81, "frac_top10": 0.0}
+prompt done {"suite": "danger_control", "tokens": 20, "best": 88, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 10, "best": 12, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 13, "best": 174, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 15, "best": 59, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 10, "best": 543, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 13, "best": 9, "frac_top10": 0.077}
+prompt done {"suite": "help", "tokens": 14, "best": 9, "frac_top10": 0.071}
+prompt done {"suite": "help", "tokens": 15, "best": 11, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 13, "best": 16, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 14, "best": 86, "frac_top10": 0.0}
+prompt done {"suite": "help", "tokens": 11, "best": 71, "frac_top10": 0.0}
+done {"output": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/deb40d2b-8582-408f-9668-d04785f882e8/scratchpad/jlens_hosted/out-contrast/base.json", "seconds": 50.4}

@@ -1,6 +1,6 @@
 # Hosted Jacobian lens applied to Qwen3.5-4B and Qwen3.5-4B-Base: results (2026-09-05)
 
-Author: Chief AI Research Scientist. Authorised directly by the Director on 2026-09-05 ("pull the hosted J-lens and the Base model in parallel; apply the lens to our cached Qwen3.5-4B; contrast the Base with the hosted lens; if practicable, default to the hosted lens"). No one else was messaged; nothing was dispatched. Artifact: `outputs/probes/jlens-hosted-qwen35-4b-2026-09-05/` (scripts, raw outputs, logs, `provenance.json` with the lens files' SHA-256s and the fitting config). Companion reading: `CHIEF-JSPACE-PAPER-READING-2026-09-05.md`.
+Author: Chief AI Research Scientist. Authorised directly by the Director on 2026-09-05 ("pull the hosted J-lens and the Base model in parallel; apply the lens to our cached Qwen3.5-4B; contrast the Base with the hosted lens; if practicable, default to the hosted lens"). No one else was messaged; nothing was dispatched. Artifact: `outputs/probes/jlens-hosted-qwen35-4b-2026-09-05/` (scripts, raw outputs, logs, `provenance.json` with the lens files' SHA-256s and the fitting config). Tracked copy (records commit of 2026-09-05, the Deputy's, under the ordinary gate): `research/records/jlens-hosted-qwen35-4b-2026-09-05/`, scripts guarded against running, lens files by SHA-256 in the HF cache; `outputs/` is gitignored, so the tracked copy is the citable one. Companion reading: `CHIEF-JSPACE-PAPER-READING-2026-09-05.md`.
 
 ## 1. What was pulled and how it was loaded
 

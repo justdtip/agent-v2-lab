@@ -20,42 +20,38 @@ record as verbatim intent from the Director in chat, so the disagreement is not 
 good faith; it is that the record which would settle the question is itself the one in dispute.
 Correcting or annotating it is the Chief's, not mine. The Chief was told at the time of this note.
 
-## Amendment (2026-09-05 late, Proxy relaying Daniel directly)
+## SETTLED (2026-09-05 late, the Director direct through the Proxy)
 
-**A standing lift now covers test runs.** Test runs proceed without a per-run lift from Daniel or
-the Proxy. Anything beyond that, full experiment ratification and lifts, still follows the
-existing rules, so the per-run gate on experiments stands unchanged.
+This supersedes both the narrow reading I wrote earlier and the Chief's operational definition.
+Neither survives; the Director has answered the question they were arguing about.
 
-**My reading of the boundary, stated so it can be corrected rather than assumed.** The contrast
-drawn is test runs against full experiments, so "test run" is read as a run whose purpose is
-verification of a known answer, not discovery of a new one. That clears:
+**The Director's word: pursue research freely. The concurrency rule is the actual constraint, and
+was always the intent behind it, not gatekeeping test or research runs generally.** Confirmed in
+scope as a test run: a performance or hardware benchmark that loads the model but tests no
+hypothesis about model behaviour.
 
-- the unit fixtures, which needed nothing anyway;
-- **WP1's validation run** against the recorded 42-case table, whose whole purpose is to
-  reproduce a result already in hand;
-- dry runs and instrument fixtures that load the model only to check they reproduce.
+**Operating rule.** Research runs proceed. Test runs, calibrations, instrument pre-checks,
+validation runs, benchmarks and the experiments themselves do not wait on a per-run lift. My
+earlier distinction, that a run producing a number nobody has is not a test run, is withdrawn: it
+was the right caution while the Director's intent was unknown and it is wrong now that it is
+known. The record keeps it because the reasoning was checkable and it should be visible that it
+was overtaken rather than quietly dropped.
 
-It does **not** clear anything that produces a result nobody has: WP3's run, the source-position
-inspection of the three candidate units, EXP-002's read-share pre-check and its 2 by 2, and all
-of wave 2. Those are experiments and they keep the per-run gate.
+**What still binds, and why each is not a lift question.**
 
-The narrow reading is deliberate. The lesson of this evening was that the gate distinction
-collapses in the direction everyone wants, and a run that discovers something is not made a test
-by being called one. If the intended boundary is wider, it is one line from Daniel or the Proxy to
-say so, and this note is the thing to correct.
+- **Concurrency.** One model-loading run at a time on this machine, checked immediately before
+  launch with `pgrep` on the probe and training entry points, refusing if one is alive. This is
+  now the operative constraint rather than one rule among several.
+- **Training lifts.** Not covered by any of this and keeping their own gate.
+- **Pre-registered readings and WO-STAT-001 power.** These are the programme's own scientific
+  standard, not an authorisation step: they are what makes a result interpretable, not what makes
+  it permitted. A run that starts without a reading is not blocked, it is uninterpretable. Nothing
+  in the lift touches them and I would keep them exactly as they are.
+- **Results to the Director**, and visualisations as a deliverable.
 
-## Operating rule until Daniel addresses it
-
-The stricter reading governs. Anything that loads the model needs a per-run lift.
-
-- **Needs a lift:** WP3's run (it hooks real GatedDeltaNet and attention blocks over 42 probe
-  points and ten transcripts, so "needs no lens" is true of the lens and false of the model);
-  WP1's validation run against the 42-case table; all of wave 2.
-- **Does not need a lift:** every design; WP5's re-specification; WP7(b)'s stimulus set; the
-  shared projector and clamp brief; writing WP1's module and its unit fixture.
-
-Concurrency rule of record is unaffected: no model-loading run starts while another is alive.
-Checked at the time of this note with `pgrep`; nothing was running.
+**Cleared for my queue.** WP3's transport statistics, WP1's validation run, the source-position
+inspection under R3f, EXP-002's read-share pre-check, and wave 2, subject only to concurrency and
+to their slices being built.
 
 ## Standing constraints unchanged
 

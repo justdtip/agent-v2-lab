@@ -1,0 +1,87 @@
+long-gate heads: 115 ; entries flagged on cos60 (ratio>2, cos60<0.5): 18
+context 0 done: T=1550, positions=[387, 541, 774, 1007, 1239, 1394, 1549], 34s
+context 1 done: T=1546, positions=[385, 540, 772, 1004, 1236, 1390, 1545], 66s
+{
+ "entries": 230,
+ "read_positions_fractions": [
+  0.25,
+  0.35,
+  0.5,
+  0.65,
+  0.8,
+  0.9,
+  1.0
+ ],
+ "K": 10,
+ "GAP": 257,
+ "NDRAW": 200,
+ "mean_overlap": 1.7838509316770184,
+ "mean_query_null": 1.3032049689440992,
+ "median_ratio": 1.317587066484987,
+ "query_cosine_same_positions_percentiles": {
+  "10": 0.40594589710235596,
+  "25": 0.5075861215591431,
+  "50": 0.6626355946063995,
+  "75": 0.8492443710565567,
+  "90": 0.9767937064170837
+ },
+ "spearman_overlap_vs_cosine": 0.20162980210373843,
+ "cross": {
+  "ratio>1.5 & cos<0.6": {
+   "retrieval-like": 16,
+   "static": 62,
+   "null_lowcos": 70,
+   "null_highcos": 82
+  },
+  "ratio>1.5 & cos<0.5": {
+   "retrieval-like": 10,
+   "static": 68,
+   "null_lowcos": 44,
+   "null_highcos": 108
+  },
+  "ratio>2.0 & cos<0.5": {
+   "retrieval-like": 1,
+   "static": 25,
+   "null_lowcos": 53,
+   "null_highcos": 151
+  },
+  "ratio>1.5 & cos<0.3": {
+   "retrieval-like": 2,
+   "static": 76,
+   "null_lowcos": 7,
+   "null_highcos": 145
+  },
+  "ratio>2.0 & cos<0.3": {
+   "retrieval-like": 0,
+   "static": 26,
+   "null_lowcos": 9,
+   "null_highcos": 195
+  }
+ },
+ "flagged_eighteen_summary": {
+  "n": 18,
+  "ratio_median": 1.37450251013304,
+  "query_cosine_median": 0.4332224279642105,
+  "retrieval_like_at_ratio2_cos0.5": 1
+ }
+}
+flagged eighteen on the spread measure:
+   {'context': 0, 'block': 1, 'head': 9, 'key_head': 4, 'pairs': 21, 'overlap': 0.952, 'query_null': 0.85, 'ratio': 1.12, 'query_cosine_same_positions': 0.43, 'key_cosine_same_positions': 0.071, 'flagged_on_cos60': True}
+   {'context': 0, 'block': 6, 'head': 1, 'key_head': 0, 'pairs': 21, 'overlap': 1.19, 'query_null': 0.596, 'ratio': 1.998, 'query_cosine_same_positions': 0.348, 'key_cosine_same_positions': 0.296, 'flagged_on_cos60': True}
+   {'context': 0, 'block': 8, 'head': 24, 'key_head': 12, 'pairs': 21, 'overlap': 2.238, 'query_null': 1.639, 'ratio': 1.365, 'query_cosine_same_positions': 0.443, 'key_cosine_same_positions': 0.29, 'flagged_on_cos60': True}
+   {'context': 0, 'block': 9, 'head': 13, 'key_head': 6, 'pairs': 21, 'overlap': 1.095, 'query_null': 0.591, 'ratio': 1.853, 'query_cosine_same_positions': 0.438, 'key_cosine_same_positions': 0.368, 'flagged_on_cos60': True}
+   {'context': 0, 'block': 11, 'head': 28, 'key_head': 14, 'pairs': 21, 'overlap': 1.619, 'query_null': 1.491, 'ratio': 1.086, 'query_cosine_same_positions': 0.375, 'key_cosine_same_positions': 0.242, 'flagged_on_cos60': True}
+   {'context': 0, 'block': 12, 'head': 8, 'key_head': 4, 'pairs': 21, 'overlap': 1.429, 'query_null': 1.148, 'ratio': 1.244, 'query_cosine_same_positions': 0.152, 'key_cosine_same_positions': 0.211, 'flagged_on_cos60': True}
+   {'context': 0, 'block': 16, 'head': 5, 'key_head': 2, 'pairs': 21, 'overlap': 1.429, 'query_null': 0.678, 'ratio': 2.108, 'query_cosine_same_positions': 0.303, 'key_cosine_same_positions': 0.405, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 1, 'head': 9, 'key_head': 4, 'pairs': 21, 'overlap': 1.095, 'query_null': 0.907, 'ratio': 1.207, 'query_cosine_same_positions': 0.466, 'key_cosine_same_positions': -0.049, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 6, 'head': 1, 'key_head': 0, 'pairs': 21, 'overlap': 1.095, 'query_null': 0.624, 'ratio': 1.755, 'query_cosine_same_positions': 0.248, 'key_cosine_same_positions': 0.446, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 8, 'head': 0, 'key_head': 0, 'pairs': 21, 'overlap': 1.476, 'query_null': 0.933, 'ratio': 1.582, 'query_cosine_same_positions': 0.442, 'key_cosine_same_positions': 0.343, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 8, 'head': 1, 'key_head': 0, 'pairs': 21, 'overlap': 1.095, 'query_null': 0.859, 'ratio': 1.275, 'query_cosine_same_positions': 0.442, 'key_cosine_same_positions': 0.343, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 8, 'head': 24, 'key_head': 12, 'pairs': 21, 'overlap': 2.762, 'query_null': 1.66, 'ratio': 1.664, 'query_cosine_same_positions': 0.483, 'key_cosine_same_positions': 0.252, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 9, 'head': 13, 'key_head': 6, 'pairs': 21, 'overlap': 0.619, 'query_null': 0.542, 'ratio': 1.142, 'query_cosine_same_positions': 0.436, 'key_cosine_same_positions': 0.351, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 12, 'head': 8, 'key_head': 4, 'pairs': 21, 'overlap': 1.619, 'query_null': 1.17, 'ratio': 1.384, 'query_cosine_same_positions': 0.267, 'key_cosine_same_positions': -0.031, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 12, 'head': 9, 'key_head': 4, 'pairs': 21, 'overlap': 1.571, 'query_null': 1.025, 'ratio': 1.533, 'query_cosine_same_positions': 0.267, 'key_cosine_same_positions': -0.031, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 15, 'head': 26, 'key_head': 13, 'pairs': 21, 'overlap': 1.143, 'query_null': 0.871, 'ratio': 1.312, 'query_cosine_same_positions': 0.45, 'key_cosine_same_positions': 0.552, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 15, 'head': 27, 'key_head': 13, 'pairs': 21, 'overlap': 1.286, 'query_null': 1.134, 'ratio': 1.134, 'query_cosine_same_positions': 0.45, 'key_cosine_same_positions': 0.552, 'flagged_on_cos60': True}
+   {'context': 1, 'block': 16, 'head': 5, 'key_head': 2, 'pairs': 21, 'overlap': 1.0, 'query_null': 0.679, 'ratio': 1.473, 'query_cosine_same_positions': 0.38, 'key_cosine_same_positions': 0.302, 'flagged_on_cos60': True}
+elapsed 66.3 s

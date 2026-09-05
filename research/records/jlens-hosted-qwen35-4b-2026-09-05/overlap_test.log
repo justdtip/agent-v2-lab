@@ -1,0 +1,26 @@
+candidate long-gate heads (both contexts > 1000): 115
+context 0 done, heads 115, elapsed 26s
+context 1 done, heads 115, elapsed 51s
+{
+ "heads_tested": 230,
+ "K": 10,
+ "gap_min": 257,
+ "mean_real_overlap": 3.2376811594202897,
+ "mean_hypergeometric": 0.09672964340710735,
+ "mean_query_null": 1.6771135265700483,
+ "heads_real_above_query_null": 219,
+ "heads_real_above_2x_query_null": 113,
+ "heads_real_at_or_below_query_null": 11,
+ "real_overlap_percentiles": {
+  "10": 1.8333333333333333,
+  "50": 3.1666666666666665,
+  "90": 4.833333333333333
+ },
+ "query_null_percentiles": {
+  "10": 0.9027777777777778,
+  "50": 1.6041666666666665,
+  "90": 2.5291666666666663
+ },
+ "ratio_real_to_query_null_median": 1.976087760384568
+}
+elapsed 51.2 s

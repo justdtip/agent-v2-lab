@@ -1,0 +1,58 @@
+{
+ "source_file": "/Users/daniel.tipton/.cache/huggingface/hub/models--neuronpedia--jacobian-lens/snapshots/0731326edff4ae730ffc5356fe1a4728c748b3a6/qwen3.5-4b/jlens/Salesforce-wikitext/Qwen3.5-4B_jacobian_lens_n1000.pt",
+ "n_prompts": 1000,
+ "source_layers": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+ ],
+ "d_model": 2560,
+ "dtype_on_disk": "torch.float16",
+ "layer_convention": "file index l = output of decoder block l (0-based); repo layer L = l + 1",
+ "stats_J0": {
+  "fro_norm": 102.40656280517578,
+  "identity_distance": 2.1759402367814387,
+  "diag_mean": 0.18089953064918518,
+  "max_abs": 7.296875
+ },
+ "stats_J15": {
+  "fro_norm": 59.036521911621094,
+  "identity_distance": 1.2599519360965499,
+  "diag_mean": 0.3869832456111908,
+  "max_abs": 2.150390625
+ },
+ "stats_J30": {
+  "fro_norm": 56.588218688964844,
+  "identity_distance": 0.5130839054823974,
+  "diag_mean": 0.9938070178031921,
+  "max_abs": 1.19140625
+ }
+}

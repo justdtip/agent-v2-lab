@@ -1,0 +1,17 @@
+converting at $(date)
+        tree_cache_folder=tree_cache_folder,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        api_call_error=api_call_error,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/huggingface_hub/_snapshot_download.py", line 576, in _raise_if_incomplete_snapshot
+    raise IncompleteSnapshotError(
+    ...<4 lines>...
+    ) from api_call_error
+huggingface_hub.errors.IncompleteSnapshotError: The cached snapshot for 'Qwen/Qwen3.5-4B-Base' (revision 'main', commit 1001bb4d826a52d1f399e183466143f4da7b741b) is incomplete: 1 file(s) are missing (.gitattributes). Outgoing traffic is disabled ('local_files_only=True'). Re-run the download with network access to complete the snapshot.
+[INFO] Using dtype: bfloat16
+[INFO] Quantizing
+[INFO] Quantized model with 4.503 bits per weight.
+ls: /Users/daniel.tipton/.cache/mlx-local/Qwen3.5-4B-Base-MLX-4bit: No such file or directory
