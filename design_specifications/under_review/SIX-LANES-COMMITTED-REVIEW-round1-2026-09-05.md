@@ -406,3 +406,131 @@ Main tree, two files (`tests/test_arch.py`, `tests/test_probes.py`), read in ful
 - Noted, not a defect: `lora_b` initialises to zero, so wrapped and bare are numerically
   identical and the exact residual equality holds; the variants test structure, not
   arithmetic. R38 in shape before R38 was written. Deputy's run: 126 passed on the CPU device.
+
+## Gate: R38 sweep, slice one (#70), 2026-09-05 morning
+
+Worktree `wt-r38-slice1` at `9ec46d9`; five files. Read in full; my run of the three suites
+passed (104 passed, 1 skipped), ruff clean. **Approved to commit; no freeze in force.**
+- Three fixtures rebuilt through real writers: `write_provenance` and mlx-lm's own
+  `save_config` (through `lora_config` and `_effective_lora_args`) for the adapter tests;
+  `write_report` plus `summarize` plus the new `evaluation_metadata` seam for the integrity and
+  report tests; real `ResolvedSpec` over a real registry declaration. Each key is then moved
+  and the test confirmed red, or the silent disappearance asserted where the reader skips.
+- **One reader wrong:** `adapter_base_identity` read `model.spec.hf_id` only; `write_provenance`
+  writes a flat `asdict(spec)` block when a stage holds no `ResolvedSpec`, and four such stages
+  overwrite the run directory the reader consults. Fixed, nested first and flat as fallback.
+  The precision-block defect again, one reader over.
+- Refuted lead corrected: no provenance under `outputs/` carries a non-null
+  `snapshot_revision` (`models._snapshot_revision` finds none on MLX objects), so a `None`
+  revision is diagnostic of nothing.
+- Two assertions changed, both hand-fixture artifacts: the Wilson interval for one of two is
+  9 to 91 percent (verified), and the mixed-integrity layout is rendered for the first time.
+- `evaluation_metadata` extracted as a writer seam: accepted; pure, no behaviour change.
+
+**Rulings on the three open items.** (1) `generator_version` is written by nobody:
+write it, in `evaluation_metadata`, and in the patch artifact; readers prefer the recorded
+value, refuse a conflicting flag, and keep failing closed when it is absent (legacy files still
+need the flag). (2) `data_seed`'s silent fallback in `_analyse_evaluation`: never silent; the
+analysis record carries `seed_source` naming the caller's seed and the missing field, and the
+run log warns. Likewise `report.load_summaries` reports what it skipped and why rather than
+dropping rows silently. (3) The seam stands. Items 1 and 2 are slice two of #70.
+
+## Gate: R38 sweep, slice two (#70), 2026-09-05 morning
+
+Worktree `wt-r38-slice2` at `990b43c`; ten files. Read in full; my run of the six touched suites
+green; ruff unchanged from baseline. **Approved to commit.**
+- A1 landed: `evaluation_metadata` writes `generator_version`; the integrity and patch readers
+  prefer the recorded value, refuse a conflicting flag naming both values and the artifact,
+  and fail closed when absent. The patch artifact now carries
+  `evaluation_generator_version` and its source in the eligibility block of both sections,
+  unconditionally; the pre-existing `recomputed_generator_version` fired only against legacy
+  files. A2 landed: `seed_source` in the analysis record and the report, a run-log warning
+  when the caller's seed was used; `report.load_summaries` names every skipped file and why
+  on stderr instead of dropping rows.
+- **One reader wrong, worse than slice one's:** `probes/patch.py` read `data_seed` at the
+  payload's top level while the writer puts it in the summary, so every real artifact took the
+  field-absent branch, the flag's value was used with source "flag", and the R22a conflict
+  check never ran. Fixed, summary first and top level second. Latent for the queued P6
+  secondary (both inputs record no seed at either level), live for the next evaluation the
+  writer produces.
+- Site `data.py:413`: the Deputy's premise (that it feeds the R21 guard) was wrong and the
+  implementer corrected it; the guard fires on the output manifest's presence first. A real
+  write-ordering hazard next door is #73, ruled below.
+- Site `assistant_axis.py:1023`: the seam is well shaped (the reader touches trajectories
+  only, so it needs the runner seam, not `evaluation_metadata`); both hand fixtures replaced by
+  `write_report` output, and a renamed writer key now fails twelve tests where it failed none.
+  Two soft keys pinned rather than tightened: a missing action key silently truncates a
+  trajectory at that turn. Ruled below.
+- Cumulative: six readers audited, two wrong.
+
+**Rulings.** (#73) The manifest is the commit point: data files first, the manifest last and
+atomic. A directory without a manifest is unprotected by design and re-runnable, which is the
+right property for a crashed render. What must not happen is a reader consuming it: every
+consumer of a dataset directory (`render`, the training data loader, the probes' data paths)
+requires the manifest and refuses without it. Slice three. (Truncation) A step whose action key
+is missing in an artifact our own writer produced is a malformed record and raises; the only
+tolerated layout is the legacy `<tool_call>` form the parser already accepts by name. Slice
+three, with the pinning test inverted.
+
+## Gate: R38 sweep, slice three (#70, #73), 2026-09-05 late morning
+
+Worktree `wt-r38-slice3` at `efcfb78`; thirteen files. Read in full; my run of the seven touched
+suites green. **Approved to commit.**
+- #73 landed on the read side: `require_dataset_manifest` refuses a dataset directory without
+  a manifest, naming it, and is called by `render_dataset` (source), `_role_chat_rows` (chat
+  and extra dirs), `load_rendered_splits` (the seam where a dataset becomes weights),
+  `build_expanded_data`, `train_expanded` and the assistant-axis prompt loader. The write
+  guard still leaves such a directory re-runnable. Verified: all eleven pipeline dataset
+  directories on disk carry manifests; `data/sft` and `data/rewards` do not and are read only
+  by the legacy `train_sft`/`train_grpo` scripts and `configs/lora.yaml`, outside the guarded
+  readers; if ever fed to one they refuse by design. The Deputy's premise that the manifests
+  were not already atomic was refuted (they are); the non-atomic sites named in `data.py`'s
+  own DEBT block are #74, health.json first, agreed.
+- Part B landed as refined: a step with `parse_error` ends the trajectory; an executed step
+  missing `action`, `thought` or `observation` raises naming file, trajectory and index.
+  Verified by the Deputy over 6,503 step records on disk: exactly two key shapes. The legacy
+  `tool_call` clause was correctly refuted (a parse question inside a valid step).
+- `selection.json` now written atomically; provenance records what was persisted, and the
+  read-back is load-bearing (Wilson tuples normalise to JSON lists).
+- Reported, ruled below: `_selection_components` scores `family_macro_success` at zero when
+  `by_family` is absent, so the first ranking key falls silently through to micro success
+  while the criterion string still says macro-first; and a dead legacy fallback names counts
+  no writer has emitted.
+- Seven fixtures gained a hand-made empty `manifest.json`; the guard reads presence only.
+  Accepted, with the presence-only contract stated in the guard's docstring.
+- Cumulative: nine readers audited, two wrong.
+
+**Rulings (slice four).** `summarize` always writes `by_family`, so a summary without it is
+malformed: `_selection_components` raises rather than scoring zero, and the criterion string
+can never disagree with the comparison made. The dead legacy fallback is removed. Slice four
+also takes the remaining five of the fourteen sites.
+
+## Gate: R38 sweep, slice four (#70), 2026-09-05 late morning
+
+Worktree `wt-r38-slice4` at `8420542`; nine files. Read in full; my run of the four non-MLX
+touched suites green (the MLX one rides the Deputy's Metal run in the gap). **Approved, with two
+small items to land in the same commit, and the commit held for the Metal run.**
+- The enumeration was short by one: fifteen readers, not fourteen (`cli._validation_losses`
+  reading `metrics.jsonl`). The Deputy found and stated it; the table needed auditing too.
+- Two more readers wrong, both of the second form (a fallback for a legacy shape that never
+  existed, whose default is the value the field actually holds): `baseline_reanalysis_parameters`
+  fell back to fit constants for baselines "written before the fit block", but the writer
+  (`f90578b`, 2026-09-03) precedes the reader (`eca116b`, 2026-09-04) and the only baseline on
+  disk carries the block; and `ExpansionSpec.load` read `initialization` and `version` with
+  dataclass defaults that are the only values ever written. Both now require the keys.
+  `generator_version` stays soft in the baseline reader, correctly: the ratified baseline
+  records none.
+- `_selection_components` raises without `by_family` (ruling A1) and refuses `valid_actions`
+  without `rate_counts` rather than naming a dead legacy pair; the two flat fallbacks real
+  artifacts resolve against are kept and pinned. `_validation_losses` pinned to the training
+  writer's record shape. `require_dataset_manifest` states its presence-only contract.
+- **Ratified:** the fit-constants tightening, made by the implementer on A2's reasoning outside
+  the ruling's named site; same evidence, same rule.
+- **Add before commit:** `ExpansionSpec.load` validates `version` against the versions this
+  code applies (currently 1) and refuses others by name; a field whose job is to say "not this
+  recipe" must be checked, not only present. One line and one test.
+- **The closing summary** across the four slices is the sweep's deliverable and must be a file
+  the record keeps (`under_review/R38-AUDIT-SUMMARY-2026-09-05.md` or the closing #70 comment
+  carried by the records commit), not only a commit message.
+- Totals on the Deputy's count: fifteen readers, four wrong; two fixtures already built from
+  the real writer still hid a defect, found only by moving the key.

@@ -103,6 +103,45 @@ design document §9: flips from the note-value positions at early or middle laye
 is in reading and representing the list; flips only from late layers at the final token point at
 the computation itself.
 
+### 5a. R30 amendment: locating note values in a family whose values repeat (2026-09-05)
+
+**Occasioned by:** the `aggregate_report` secondary condition ran for 1:21:17 and scored nothing
+(`outputs/probes/patch-C-secondary-2026-09-05/`). Its `secondary` block carries an `error` where
+the scores belong: *note_value token span is missing or ambiguous in the substituted note*. The
+primary reproduction in the same run is byte-identical to the recorded artifact, so the
+instrument is sound and only this path is affected.
+
+**Cause.** `patch.py:695-702` locates each note value by searching the **whole** last-previous-note
+region for a unique match, and raises when the count is not one. That rule is right for
+`ledger_reconcile`, where a value occurs once, and wrong for `aggregate_report`, where repetition
+*is* the data: a note carries a running list (`values so far: 18, 14, 75, 72, 18`) and then names
+the same numbers again in its subtotal arithmetic (`computing 72 + 18 + 79`). Measured offline
+with no model: the Chief finds 202 of 720 notes over the test split refused as ambiguous; over the
+fifteen tasks this run selected I find 41 of 195 notes (21%) ambiguous, and **all fifteen tasks
+carry at least one**. `run_patch_probe` raises on the first such case and the CLI catches it at
+section level (`patch.py:2416`), so one unlocatable case abandons the whole section.
+
+**Ruled (Chief, 2026-09-05; written here because the scorer is the Head of Interpretability's
+domain).**
+
+1. **Locate by field occurrence, not by uniqueness over the region.** Each note value is matched
+   within its own field's span (the `_VALUE_FIELD` match) in list order, so the k-th number under
+   a label has one position by construction. Subtotal arithmetic outside a list field is never a
+   match candidate. R25's `value_spans` keeps its meaning.
+2. **Skip, never abandon.** A case whose note still cannot be located is skipped with its reason
+   recorded per case, and the section scores the rest, reporting scored and skipped counts. The
+   section refuses only if fewer than the minimum remain.
+3. **An unscored section is not a clean run.** A run whose secondary section is unscored does not
+   end `status=ok`: the `end` event and the health block carry the unscored section, and the
+   markdown says so at the top.
+
+**Why (1) rather than (2) alone, corrected against my own first reading.** I initially reported
+that thirteen of fifteen cases would score under exclusion alone, having measured duplicates only
+*within* the values-so-far list. The locator searches the whole note, where the arithmetic repeats
+values, and on that measure every one of the fifteen tasks carries an ambiguous note. Exclusion
+alone could therefore leave too few cases to read, which is why the locator changes and exclusion
+becomes the fallback for the residue.
+
 ## 6. Deferred
 
 P3 (sense of being on track) and P4 (concept injection) wait for a policy from SPEC-003 and for

@@ -134,7 +134,7 @@ slice in `cli.py`/`tuner_data.py`/`runlog.py`) plus B5's refit in `state_probe.p
   every control zero; B's note-region residuals at layers 6/12/18 make C write the dropped value
   back (4/5); the content swap writes the foreign number into the slot (5/5 at layer 6); nothing
   moves from layer 24. SPEC-004's "reading and representing" branch; memo verdict supported from
-  both sides (Chief, round 2). Next: the `aggregate_report` secondary (ten cases). Run 1 was
+  both sides (Chief, round 2). Next: the `aggregate_report` secondary (**fifteen** cases under R30's HEAD-alone eligibility, not the ten this line carried; the ten predates that basis and survived in four documents — corrected 2026-09-05, traced by the Head of Interpretability). Run 1 was
   uninterpretable (Chief's review; R27). Strict scorer
   implemented, R19-reviewed, two blocking findings fixed; work order **#46**: ledger primary
   READY; the `aggregate_report` secondary blocked on the #41 ruling (extractor for run C's

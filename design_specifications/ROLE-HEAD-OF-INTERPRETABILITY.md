@@ -90,5 +90,6 @@ documents as the Head of Interpretability so provenance is right; the first work
 Ready on the Qwen3.5-4B base without an adapter: the J-space probe (EXP-001, first), the
 baseline behavioural evaluation with integrity, P2 in native dtype, the P1 build. After the
 D4 adapter exists: P5 static and block ablation, P6 on 4B pass/fail pairs. Open: the
-`aggregate_report` P6 secondary condition (ten cases), the P2 runs on the redesigned splits,
+`aggregate_report` P6 secondary condition (fifteen cases under R30's HEAD-alone basis; the
+"ten" this line carried until 2026-09-05 predates that ruling), the P2 runs on the redesigned splits,
 the SPEC-001 closure slice (#33: preflight gate and provenance on the probe CLIs).

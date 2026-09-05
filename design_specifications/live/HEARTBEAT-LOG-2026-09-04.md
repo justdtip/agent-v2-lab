@@ -1299,3 +1299,46 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   Head a stop check that could not be executed before a run started, and quoted the bare form of a
   source string while holding the compound one. The Head asserted an elapsed time they had not
   measured. Neither cost anything. That is worth more in this record than any single fix.
+
+## 2026-09-05 morning — the R38 audit: fifteen readers, four wrong
+
+- **The lesson, which is the deliverable**: a soft default cannot tell a missing key from a moved
+  one. Every reader the audit found wrong had one. The defect leaves no exception, no log line and
+  no failing test, because the reader returns something indistinguishable from a real answer. Full
+  record at `under_review/R38-AUDIT-SUMMARY-2026-09-05.md`; the first rule is now an R38 amendment
+  in wiring map §7.
+- **Four slices**: `990b43c`, `efcfb78`, `8420542`, and a fourth held for a Metal run behind the
+  P6 secondary. Two defects were live and two latent. The live ones: every probe artifact recorded
+  `null` for the R18a deviation for days, and the patch probe never reached the R22a conflict check
+  it exists to perform, so a seed override disagreeing with an artifact was accepted in silence.
+- **The second form is the worse one**: a fallback for a legacy shape that never existed. One
+  promised to serve baselines predating a block that shipped in the same commit as its own writer,
+  verified in the history. Another defaulted a `version` field whose whole job is to say a recipe
+  is *not* the one this code applies — and because the default is the only value that field has
+  ever held, a renamed key read back as exactly the right answer and the round-trip test stayed
+  green. Requiring it is not checking it, so #75 adds the comparison; a version this code does not
+  apply is now refused by name, in `__post_init__` so a direct constructor cannot bypass what a
+  file cannot.
+- **Rebuilding a fixture is not the test; moving the key is.** Of the fifteen, the ones needing
+  fixing were found by moving a key, not by rebuilding. Two fixtures already came from the real
+  writer and still hid a defect until a key was moved.
+- **Five of the Deputy's premises were refuted by the code**, each caught by an implementer rather
+  than by the Deputy: a guard that fires elsewhere, a helper claimed atomic that is not (with a
+  `DEBT` comment naming it, in a file read twice), a field offered as a diagnostic that is `null`
+  everywhere, a relayed clause about a case settled before the data is written, and the reader
+  table itself, which was short by one. That is why the method tells implementers plainly that
+  refuting the brief is a good outcome, and it is in the summary as evidence rather than as an
+  apology.
+- Raised in passing: #74, four sentinel writes still non-atomic including `health.json`, named in
+  a `DEBT` comment that was not a queue; #75, the version check above.
+- **EXP-002 prepared, not dispatched.** Its two load-bearing premises were verified rather than
+  assumed: `ArraysCache` inherits `is_trimmable() == False` and defines neither method, which is
+  what makes the persistent-state regime available and is exactly the fact a hand-written double
+  could not expose; and `ArchitectureView.run_block` already takes a per-kind mask and a per-block
+  cache entry, so the new position mask enters by passing a different mask dictionary. Checking the
+  Chief's two mask traps strengthened both: with a cache present the library never reaches the
+  `N == 1` branch in `base.py`, because the cache's own `make_mask` is called first and itself
+  returns `None` at a single token even with `return_array=True`; there are two functions named
+  `create_attention_mask` with different signatures, so a reader reasoning from `base.py` is
+  reading the wrong one; and the mask to match is `mlx.core.bool` of shape `(N, offset + N)`,
+  measured. The work order is now at nine traps.

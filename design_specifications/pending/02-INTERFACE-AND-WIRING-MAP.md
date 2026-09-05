@@ -737,6 +737,24 @@ forget. Each has an integration check in §6.
   (#64). At a gate the reviewer checks the fixture's provenance, not only the assertion.
   Where a structural read and a configuration walk both exist, the structural read is
   primary and the configuration is the cross-check.
+  Corollary (Head of Interpretability, 2026-09-05 morning): a verification is a statement
+  about a specific tree and expires when the tree moves, whoever made it; a pre-run check is
+  redone against the commit the run will cite.
+- **R38 amended (2026-09-05, from the #70 audit summary): a soft default cannot tell a missing
+  key from a moved one.** A reader of an artifact this repository writes indexes the keys it
+  depends on and raises on absence; a default is permitted only where a named artifact on disk
+  requires it, and the docstring names that artifact. A fixture built through the real writer
+  is hygiene; the test is moving each depended-on key and confirming red. A brief's claim about
+  the code is a hypothesis the implementer confirms or refutes, and a refutation is a good
+  outcome. Record: `under_review/R38-AUDIT-SUMMARY-2026-09-05.md` (fifteen readers, four
+  wrong, all four with a soft default).
+- **R38 amended (2026-09-05, from the EXP-002 order): confirm-or-refute binds the officers.**
+  A claim about the code in a ruling, a brief or a review is a hypothesis until re-measured,
+  whoever made it. Three instances in one hour, all reasonable readings of source (two
+  functions with one name in different modules; an inherited property absent from the
+  subclass; a default that changes a return type), two the Deputy's, one the Head's, one the
+  Chief's ("a cached run never reaches the sentinel": `KVCache.make_mask` returns `'causal'` by
+  default). Each was caught by someone re-measuring rather than accepting.
 
 ## 8. Implementer amendments (append-only, dated)
 
