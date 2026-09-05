@@ -1,0 +1,173 @@
+"""Per-event rerun of the injection test for the pre-registered primary comparison (09:12): the same machinery as inject.py
+(the injection test (the Head, 08:55: necessary to close, because strong redundancy is the signature of a redundantly encoded
+quantity and the single-head null is what that signature predicts). Inject a lens direction for a concept token into the residual
+stream at layer 12 (after block 11, so that the in-band relays at blocks 15, 19, 23, 27 are downstream) at spaced positions, and
+read the lens downstream: recall@25 of the injected concept at the same position at every deeper band layer, and at later positions
+(+1, +2, +4, +8, +16) at layers 16, 20, 24, 28, the broadcast across tokens. Arms: unablated; the downstream relays zeroed k at a
+time by absolute preservation (k = 4, 8, 16, all 24); layer-matched random sets from the unselected heads at the same blocks, five
+seeds. Magnitude: alpha times the median residual norm at layer 12, alpha chosen on the unablated arm as the smaller of 0.5 and
+1.0 giving same-position recall at layer 16 of at least 0.9, before any ablation arm is read. Pre-registered reading: the broadcast
+hypothesis survives redundancy if, at k = 8 or 16, the relays' recall of the injected concept at layer 28 (same position, or +4)
+falls below the minimum of the five random sets; it closes negative if the relays sit within the random range at both.
+This variant keeps the per-event recall outcomes (64 events per arm) so the relay arm can be tested against the five random sets
+by the per-event permutation statistic. Alpha is taken from out/inject.json (chosen there before any ablation arm was read).
+Writes out/inject_events.json."""
+import json, os, sys, time
+from pathlib import Path
+import numpy as np
+HERE = Path(__file__).resolve().parent; OUT = HERE / "out"; LENS = Path(sys.argv[1])
+DOCS, DOC_TOKENS, NCONCEPT, EVENTS_PER_DOC, SPACING, START = 8, 512, 16, 8, 56, 40
+OFFSETS = (1, 2, 4, 8, 16); NSEED = int(os.environ.get("NSEED", "5")); K_LIST = [int(k) for k in os.environ.get("K_LIST", "4,8,16").split(",")]
+BAND_PAIRS = ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28)); BAND = tuple(sorted(L for pr in BAND_PAIRS for L in pr)); L_INJ = int(os.environ.get("L_INJ", "20"))
+import mlx.core as mx
+mx.set_cache_limit(2 * 1024 ** 3)
+from mlx_lm.models import qwen3_next as q3n
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.pipeline.jlens import encode
+T0 = time.time(); spec = load_model_spec("qwen35-4b"); model, tokenizer, view, resolved = load_policy(spec, None); model.eval()
+att_blocks = [b for b, l in enumerate(model.language_model.model.layers) if not l.is_linear]
+BAND_ATT = tuple(L for L in BAND if (L - 1) in att_blocks); assert len(BAND_ATT) == 5, BAND_ATT
+DOWN_BLOCKS = tuple(L - 1 for L in BAND_ATT if L > L_INJ)                       # 15, 19, 23, 27
+lens = np.load(LENS); J = {L: mx.array(lens[f"J{L - 1}"].astype(np.float32)) for L in BAND}
+READ = tuple(L for L in BAND if L > L_INJ)                                        # 13, 16, 17, 19, 20, 23, 24, 27, 28
+ABLATE = {}; _orig = q3n.scaled_dot_product_attention; _ctr = {"i": 0}
+def hooked(queries, keys, values, cache, scale, mask, *a, **kw):
+    out = _orig(queries, keys, values, cache, scale, mask, *a, **kw)
+    b = att_blocks[_ctr["i"] % len(att_blocks)]; _ctr["i"] += 1; hs = ABLATE.get(b)
+    if hs:
+        m = np.ones((1, out.shape[1], 1, 1), dtype=np.float32); m[0, list(hs)] = 0.0; out = out * mx.array(m).astype(out.dtype)
+    return out
+q3n.scaled_dot_product_attention = hooked
+corpus = json.load(open(HERE.parent / "retrieval" / "corpus.json")); docs = [encode(tokenizer, c["text"])[:DOC_TOKENS] for c in corpus[:DOCS]]
+assert all(len(d) >= START + (EVENTS_PER_DOC - 1) * SPACING + max(OFFSETS) + 1 for d in docs), [len(d) for d in docs]
+positions = [START + i * SPACING for i in range(EVENTS_PER_DOC)]
+rng = np.random.default_rng(20260906)
+embed = model.language_model.model.embed_tokens.weight
+if hasattr(model.language_model.model.embed_tokens, "scales"): embed = mx.dequantize(embed, model.language_model.model.embed_tokens.scales, model.language_model.model.embed_tokens.biases, model.language_model.model.embed_tokens.group_size, model.language_model.model.embed_tokens.bits)
+V = embed.shape[0]
+def clean(t):
+    s = tokenizer.decode([int(t)]); return s.startswith(" ") and s[1:].isalpha() and len(s) >= 5 and s[1:].islower()
+cands = [int(t) for t in rng.permutation(V) if clean(t)][:NCONCEPT]
+concepts = cands; assert len(concepts) == NCONCEPT
+dirs = {c: None for c in concepts}
+# Direction (fourth form, the contrast, pre-registered 10:50): J^T (u_c - mean of the unembedding rows of the 25 tokens the unablated
+# lens already reads at the injection position), built for the concept's margin over its competitors rather than for gain.
+Jinj = np.array(J[L_INJ]).astype(np.float64)
+U = np.array(embed[mx.array(concepts)].astype(mx.float32)).astype(np.float64)
+Enp = None
+def unembed_rows(ids):
+    global Enp
+    if Enp is None: Enp = embed
+    return np.array(Enp[mx.array(ids)].astype(mx.float32)).astype(np.float64)
+CONTRAST = {}   # (doc index, position) -> unit direction for that event's concept
+LAMBDAS = [0.0]
+events = [(di, p, concepts[(di * EVENTS_PER_DOC + i) % NCONCEPT]) for di in range(DOCS) for i, p in enumerate(positions)]
+DOC_INDEX = {"i": 0}
+def forward(d, inj, alpha):
+    """residuals at READ with the per-event contrast directions added at layer L_INJ at the given positions; inj: list of (pos, concept) or None."""
+    ids = mx.array(d)[None]; h = view.embed(ids); masks = view.masks(h, None); captured = {}; _ctr["i"] = 0
+    for index in range(max(READ)):
+        h = view.run_block(index, h, masks, None)
+        if index + 1 == L_INJ:
+            captured["norm"] = float(mx.median(mx.linalg.norm(h[0].astype(mx.float32), axis=-1)).item()); captured["h_inj"] = h
+            if inj:
+                A = np.zeros((h.shape[1], h.shape[2]), dtype=np.float32)
+                for p, c in inj: A[p] = CONTRAST[(DOC_INDEX["i"], p)] * alpha * captured["norm"]
+                h = h + mx.array(A)[None].astype(h.dtype)
+        if index + 1 in READ: captured[index + 1] = h
+    mx.eval(*[v for k, v in captured.items() if k != "norm"]); return captured
+def top25(h, L, pos): return np.array(mx.argsort(view.unembed(view.final_norm(h[0][mx.array(pos)].astype(mx.float32) @ J[L].T)), axis=-1)[:, -25:])
+def measure(ablate, alpha, inject=True):
+    ABLATE.clear(); ABLATE.update(ablate)
+    same = {L: [] for L in READ}; later = {(L, o): [] for L in (16, 20, 24, 28) for o in OFFSETS}; norms = []   # per-event vectors, event order = events
+    for di, d in enumerate(docs):
+        DOC_INDEX["i"] = di; inj = [(p, c) for (dd, p, c) in events if dd == di] if inject else None
+        cap = forward(d, inj, alpha); norms.append(cap["norm"])
+        ev = [(p, c) for (dd, p, c) in events if dd == di]
+        for L in READ:
+            t = top25(cap[L], L, [p for p, c in ev])
+            for i, (p, c) in enumerate(ev): same[L].append(int(c in t[i]))
+        for L in (16, 20, 24, 28):
+            for o in OFFSETS:
+                t = top25(cap[L], L, [p + o for p, c in ev])
+                for i, (p, c) in enumerate(ev): later[(L, o)].append(int(c in t[i]))
+    return {"same": {L: v for L, v in same.items()}, "later": {f"{L}+{o}": v for (L, o), v in later.items()}, "median_norm_L12": float(np.median(norms))}
+
+ABLATE.clear()
+cosd = []; gaind = []
+for di, d in enumerate(docs):
+    DOC_INDEX["i"] = di; cap = forward(d, None, 0.0); hL = cap["h_inj"]; ev = [(p, c) for (dd, p, c) in events if dd == di]
+    top = np.array(mx.argsort(view.unembed(view.final_norm(hL[0][mx.array([p for p, c in ev])].astype(mx.float32) @ J[L_INJ].T)), axis=-1)[:, -25:])
+    for i, (p, c) in enumerate(ev):
+        comp = unembed_rows([int(t) for t in top[i] if int(t) != c]); uc = unembed_rows([c])[0]
+        contrast = uc - comp.mean(axis=0); v = contrast @ Jinj                    # row form of J^T (u_c - mean competitors)
+        v = v / (np.linalg.norm(v) + 1e-12); CONTRAST[(di, p)] = v.astype(np.float32)
+        img = Jinj @ v; cosd.append(float(np.dot(img, uc) / (np.linalg.norm(img) * np.linalg.norm(uc) + 1e-12))); gaind.append(float(np.linalg.norm(img)))
+print(json.dumps({"event": "direction_check", "form": "contrast: J^T (u_c - mean of the 25 competitors the lens reads at the position)", "median_cos(J v, u_c)": round(float(np.median(cosd)), 3), "median_||J v||_per_unit_norm": round(float(np.median(gaind)), 4), "events": len(CONTRAST)}), flush=True)
+DIRSET = {0.0: None}
+base0 = measure({}, 0.0, inject=False); print(json.dumps({"event": "no_injection_baseline", "same": {L: float(np.mean(v)) for L, v in base0["same"].items()}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+FIRST_ATT_READ = min(L for L in READ if (L - 1) in att_blocks)                      # the first readout with an attention block between it and the injection: 16 for injection at 12, 20 for 16
+ALPHAS = [float(x) for x in os.environ.get("ALPHAS", "0.5,1,2").split(",")]
+cal = {}
+for lam in LAMBDAS:
+    for alpha in ALPHAS:
+        cal[(lam, alpha)] = measure({}, alpha); print(json.dumps({"event": "calibration", "lambda_rel": lam, "alpha": alpha, "same": {L: float(np.mean(v)) for L, v in cal[(lam, alpha)]["same"].items()}, "later_28": {k: float(np.mean(v)) for k, v in cal[(lam, alpha)]["later"].items() if k.startswith("28")}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+ok = [(lam, a) for (lam, a) in cal if float(np.mean(cal[(lam, a)]["same"][FIRST_ATT_READ])) >= 0.9]
+if not ok:
+    best = max(cal, key=lambda k: float(np.mean(cal[k]["same"][FIRST_ATT_READ])))
+    print(json.dumps({"event": "instrument_failed", "rule": f"no grid point reaches 0.9 same-position recall at layer {FIRST_ATT_READ}; the concept is not writable at layer {L_INJ} by this instrument; arms not run", "best": {"lambda_rel": best[0], "alpha": best[1], "ceiling": float(np.mean(cal[best]["same"][FIRST_ATT_READ]))}}), flush=True)
+    json.dump({"instrument_failed": True, "L_INJ": L_INJ, "calibration": {f"{lam},{a}": {"same": {L: float(np.mean(v)) for L, v in m["same"].items()}} for (lam, a), m in cal.items()}}, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1); raise SystemExit("instrument failed")
+LAM, ALPHA = min(ok, key=lambda k: (k[1], -float(np.mean(cal[k]["same"][FIRST_ATT_READ]))))       # smallest alpha
+PRIMARY_READ = 24 if L_INJ < 24 else 28; ROOM = 0.5
+room = float(np.mean(cal[(LAM, ALPHA)]["same"][PRIMARY_READ]))
+if room < ROOM:                                                                                # the Head, 09:45: the primary readout needs room too; the grid moves up before the arms run
+    cands = [k for k in ok if float(np.mean(cal[k]["same"][PRIMARY_READ])) >= ROOM]
+    if cands: LAM, ALPHA = min(cands, key=lambda k: (k[1], -float(np.mean(cal[k]["same"][PRIMARY_READ])))); room = float(np.mean(cal[(LAM, ALPHA)]["same"][PRIMARY_READ]))
+    else:
+        best = max(ok, key=lambda k: float(np.mean(cal[k]["same"][PRIMARY_READ])))
+        print(json.dumps({"event": "no_room_at_primary", "finding": f"the injected content does not survive to layer {PRIMARY_READ} with every relay intact at any grid point that registers at layer {FIRST_ATT_READ}: best unablated recall {float(np.mean(cal[best]['same'][PRIMARY_READ])):.3f} at lambda {best[0]}, alpha {best[1]}; arms not run", "unablated_same_by_layer_at_best": {L: float(np.mean(v)) for L, v in cal[best]["same"].items()}}), flush=True)
+        json.dump({"no_room_at_primary": True, "L_INJ": L_INJ, "PRIMARY_READ": PRIMARY_READ, "calibration": {f"{lam},{a}": {"same": {L: float(np.mean(v)) for L, v in m["same"].items()}, "later": {kk: float(np.mean(v)) for kk, v in m["later"].items()}} for (lam, a), m in cal.items()}}, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1); raise SystemExit("no room at the primary readout")
+print(json.dumps({"event": "unablated_at_primary", "layer": PRIMARY_READ, "recall": room, "at_28": float(np.mean(cal[(LAM, ALPHA)]["same"][28])), "rule": f"unablated recall at layer {PRIMARY_READ} >= {ROOM} before any arm is read"}), flush=True)
+print(json.dumps({"event": "alpha_chosen", "lambda_rel": LAM, "alpha": ALPHA, "rule": f"smallest alpha with same-position recall at layer {FIRST_ATT_READ} >= 0.9, then the lambda reading best there; chosen before any ablation arm is read", "ceiling": float(np.mean(cal[(LAM, ALPHA)]["same"][FIRST_ATT_READ]))}), flush=True)
+sel = json.load(open(OUT / "selection_orth.json"))["selected_attention"]
+FLOOR = float(os.environ.get("FLOOR", "0.1"))
+ordered = [(r["block"], r["head"]) for r in sorted([r for r in sel if r["block"] in DOWN_BLOCKS and r["J_mrr"] >= FLOOR], key=lambda r: -r["J_mrr"])]
+print(json.dumps({"event": "set", "L_INJ": L_INJ, "DOWN_BLOCKS": DOWN_BLOCKS, "floor": FLOOR, "n": len(ordered), "by_block": {str(b): sum(1 for bb, h in ordered if bb == b) for b in DOWN_BLOCKS}}), flush=True)
+selset = set(ordered)
+def by_block(heads):
+    d = {}
+    for b, h in heads: d.setdefault(b, set()).add(h)
+    return d
+def random_set(heads, seed):
+    r = np.random.default_rng(seed); out = []
+    for b, hs in by_block(heads).items():
+        pool = [h for h in range(16) if (b, h) not in selset]; n = len(hs)
+        take = [int(h) for h in r.choice(pool, min(n, len(pool)), replace=False)]
+        if n > len(pool): take += [int(h) for h in r.choice(sorted(hs), n - len(pool), replace=False)]
+        out += [(b, h) for h in take]
+    return out
+def perm_p(relay_vec, ctl_vecs, draws=10000, seed=0):
+    """one-sided: P(relabelled relay-arm mean <= observed relay mean) when, per event, one of the six arms is the relay arm."""
+    M = np.array([relay_vec] + ctl_vecs, dtype=np.float64)          # (6, events)
+    obs = M[0].mean(); r = np.random.default_rng(seed); n = M.shape[1]
+    idx = r.integers(0, M.shape[0], size=(draws, n)); sims = M[idx, np.arange(n)].mean(axis=1)
+    return float(obs), float((sims <= obs + 1e-12).mean()), float(sims.mean()), float(sims.std())
+unab = cal[(LAM, ALPHA)]
+results = {"alpha": ALPHA, "lambda_rel": LAM, "L_INJ": L_INJ, "no_injection_means": {"same": {L: float(np.mean(v)) for L, v in base0["same"].items()}}, "unablated_means": {"same": {L: float(np.mean(v)) for L, v in unab["same"].items()}, "later": {k: float(np.mean(v)) for k, v in unab["later"].items()}}, "arms": []}
+ks = [k for k in K_LIST if k < len(ordered)] + [len(ordered)]
+for k in ks:
+    top = ordered[:k]; rel = measure(by_block(top), ALPHA); ctl = []
+    nseed = int(os.environ.get("NSEED_PRIMARY", "19")) if k == len(ordered) else NSEED      # the primary comparison's resolution is the number of random arms (the Head, 09:25): nineteen give one in twenty
+    for s in range(nseed):
+        rs = random_set(top, s); ctl.append({"seed": s, "heads": rs, "overlap": len(set(rs) & selset), **measure(by_block(rs), ALPHA)})
+    tests = {}
+    for key, get in (("same_28", lambda m: m["same"][28]), ("later_28+4", lambda m: m["later"]["28+4"]), ("same_24", lambda m: m["same"][24]), ("same_20", lambda m: m["same"][20])):
+        obs = float(np.mean(get(rel))); cms = [float(np.mean(get(c))) for c in ctl]
+        rank = 1 + sum(1 for x in cms if x < obs) + 0.5 * sum(1 for x in cms if x == obs)        # rank of the relay arm among the arms, 1 = lowest recall; ties split
+        tests[key] = {"relays": obs, "control_means": cms, "n_arms": len(cms) + 1, "relay_rank_low_first": rank, "p_rank": rank / (len(cms) + 1)}
+    arm = {"k": k, "heads": top, "relays": rel, "controls": ctl, "tests": tests, "primary": (k == len(ordered))}
+    results["arms"].append(arm); json.dump(results, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1)
+    print(json.dumps({"event": "k", "k": k, "primary": k == len(ordered), **{key: {"relays": round(t["relays"], 3), "controls": [round(x, 3) for x in t["control_means"]], "rank": t["relay_rank_low_first"], "of": t["n_arms"], "p_rank": round(t["p_rank"], 3)} for key, t in tests.items()}, "elapsed_s": round(time.time() - T0, 1)}), flush=True)
+results["parameters"] = {"L_INJ": L_INJ, "READ": READ, "OFFSETS": OFFSETS, "concepts": concepts, "concept_strings": [tokenizer.decode([c]) for c in concepts], "events": len(events), "positions": positions, "DOWN_BLOCKS": DOWN_BLOCKS, "ordered": ordered, "K_LIST": ks, "NSEED": NSEED, "primary": f"k = all {len(ordered)} downstream relays under the floor, same position, layer {PRIMARY_READ}; the relay arm's rank among twenty arms (nineteen random head sets), survival at rank 1; a primary with nineteen ties is reported as uninformative (pre-registered 10:50)", "elapsed_s": round(time.time() - T0, 1)}
+json.dump(results, open(OUT / f"contrast_L{L_INJ}.json", "w"), indent=1); print(json.dumps({"event": "done", "primary_24": next(a["tests"]["same_24"] for a in results["arms"] if a["primary"]), "primary_28": next(a["tests"]["same_28"] for a in results["arms"] if a["primary"])}), flush=True)

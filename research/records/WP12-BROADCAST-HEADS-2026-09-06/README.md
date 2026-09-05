@@ -1071,3 +1071,51 @@ redundancy (non-specific), and by the injection test's secondary (the unpredicte
 and a better paper, as the Deputy put it; the same shape as the tiny-denominator ratio and the
 head that appeared in both contexts by chance: a well-defined quantity answering a different
 question from the one asked of it.
+
+**The closure, stated plainly, 10:40 (the Head, agreeing with the Deputy's correction and
+adding two things).** Four results, of which three are results and one is an instrument failure,
+and the difference matters for whoever picks this up: (1) stage 1 finds a real and reproducible
+population by weight arithmetic; (2) single-head ablation shows no member of it is individually
+special; (3) set-level ablation shows the set damages more than random and does so redundantly;
+(4) the injection arm, the one experiment that could have shown the set carries workspace content
+specifically, did not achieve sensitivity at its pre-registered readout, and therefore neither
+supports nor refutes. The layer-28 result is real, secondary, and p = 0.10 one-sided (rank 19 of
+20: two arms of twenty at or above the relays); it is a hypothesis this run generated rather than
+one it tested, being a secondary readout read after the primary failed, which is the drift flagged
+when the criterion allowed four comparisons, arriving by another route; the contrast-direction
+injection at layer 20 is its test, and the suppression reading has not been established tonight.
+F11 gains the fact rather than the correction: the lens fit does not preferentially align its
+image with unembedding rows, real token rows sitting further outside the reachable subspace than
+random directions at every layer, so the writable layer's reachability is 0.82 and not 0.94, which
+the contrast run's expectations carry.
+
+**The closure restated with the weight of each leg, 10:45 (the Head; the Chief agrees).** One
+solid leg and two weak ones, and saying so is more useful than three of equal weight. Established:
+no member of the relay population is individually special (the within-layer single-head null, a
+proper null). Open: at set level the set-versus-random effect is real and its interpretation is
+open between specific carried content and general influence; redundancy is consistent with both,
+heads that damage overlapping content being heads that carry the same content, which is what
+broadcast looks like from outside, and the instrument built to resolve it did not achieve
+sensitivity. Generated, not tested: the layer-28 reversal at p = 0.10. WP12 therefore does not
+close tonight at set level; the contrast-direction injection at layer 20 (`contrast.py`,
+pre-registered below) is the experiment that closes it, ten minutes of model time, scheduled after
+the Deputy's base-model evaluation and before the unified run's training. The parallel with the
+tiny-denominator ratio is kept: the fourth instance tonight of a well-defined quantity answering a
+different question from the one asked of it, and the one that cost the most, because it was the
+last experiment and it looked like an answer.
+
+**Pre-registered, 10:50: the contrast injection at layer 20.** Injection at layer 20 (after
+block 19; reachability 0.82 for real tokens), direction J_20^T (u_c minus the mean of the
+unembedding rows of the 25 tokens the unablated lens reads at that position at layer 20), built
+for the margin over the concept's competitors rather than for gain, unit-normalised, magnitude
+grid 0.5, 1, 2 times the residual norm with the calibration and room rule at layer 24, the first
+attention-written readout downstream and the primary. Set: the relays downstream of 20 at blocks 23
+and 27 under the floor of 0.1 (6 and 7 heads, 13 in all), so the exclude control is exact at both
+blocks; primary comparison k = 13, same position, layer 24, the relay arm's rank among twenty
+(nineteen random sets), survival at rank 1; layer 28 beside; k = 4 and 8 descriptive with five
+seeds; later positions +1, +2, +4, +8, +16 at 24 and 28. Reading as before: rank 1 at 24 means the
+downstream set carries injected workspace content specifically and the hypothesis survives
+redundancy; inside the range means the set-level leg closes as general influence; rank 20 means
+the suppression hypothesis has its first test in its favour, at 24 rather than at the
+output-aligned readout; a primary with no dynamic range (nineteen ties) is reported as
+uninformative and not ranked.
