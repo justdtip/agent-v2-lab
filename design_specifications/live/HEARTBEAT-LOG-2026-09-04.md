@@ -1684,3 +1684,21 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   This is the third silent-success of the night, after `git apply --check && echo ... || echo ...` reporting a pass for a failed check, and the copy chained behind a build that failed while a trailing `ls` counted the wrong directory. **Rule, with R49(f): a check reports what it found *and* that it ran.** Never suppress stderr on a diagnostic. Never read a diagnostic's output without its exit status.
 
   The Head's own framing: "I have spent tonight telling other people that a test which cannot fail is not a test, and I ran a check that could not report, then stated its silence as a finding."
+
+- 2026-09-06 06:15 (**the orthogonalised selection: block 27's nine survive, prediction 1 refuted a third time, the set differs by one head; the cosine ramp written in full; a block-0 artefact excluded**): 29 of 112 on the lens population with the identity component removed at every layer, by layer 4: 3, 12: 2, 16: 2, 20: 7, 24: 6, 28: 9, first half 9 against second half 15; the same nine heads at layer 28. The ramp by input layer 0.09 at 1, 0.29 at 16, 0.48 at 20, 0.63 at 24, 0.75 at 31. Block 0's rows under orthogonalisation are degenerate (the embedding orthogonalised against itself) and are excluded; the recurrent conclusion stands. The set and control decision for the ablation goes to the Head with layer 28's saturation stated as a finding.
+
+- 2026-09-06 (**R52: an instrument reports on itself before it reports on its subject**). The Head's third term, verified here: a pipe discards the missing command's status. Measured on this machine — bare `timeout 5 git fsck` exits **127**; the same command piped into `head` exits **0**; the same pipeline under `set -o pipefail` exits **127** again.
+
+  So the failure needs **three** terms, not two: stderr suppressed, a check that reads output rather than status, **and a pipe that discards the status even if you were reading it**. Only the third has a one-line fix. **`set -o pipefail` would have failed the Head's command loudly with stderr still suppressed**, because the status alone would have carried it. "Do not suppress stderr" is a discipline; `pipefail` is a setting, and settings survive tiredness.
+
+  **The generalisation, which is what tonight actually produced.** Five failures share one property, and it is not carelessness:
+
+  - a threshold that could not fail (the uniform null, section 10);
+  - a fixture that could not see the defect it was written for (the contention test proving a refusal, which check-then-write also produces);
+  - an apply-check chained behind an `echo`, reporting a pass for a failed check;
+  - a copy chained behind a build that failed, with a trailing `ls` counting the wrong directory;
+  - a diagnostic that never ran, read as a finding.
+
+  **In every case the instrument reported on its subject and not on itself.** The reconstruction gates now required on every measurement are the same fix in another domain: make the thing prove it ran before reading what it says. R52 states it once so the five instances stop being five separate lessons.
+
+  Neither session was careless. The difference between the Deputy's caught trap and the Head's published false finding was one redirection on the same missing command within the same hour. That makes it a property of the machine, and it is why this is in the history rather than quietly corrected.
