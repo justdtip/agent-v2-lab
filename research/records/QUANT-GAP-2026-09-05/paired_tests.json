@@ -1,0 +1,667 @@
+[
+  {
+    "readout": "hosted_L5",
+    "paired_discordant_4bit": [
+      0,
+      1
+    ],
+    "paired_p_4bit": 1.0,
+    "paired_discordant_bf16": [
+      0,
+      3
+    ],
+    "paired_p_bf16": 0.25,
+    "P_true_moves_4bit": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_true_moves_bf16": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 27,
+      "losses": 15,
+      "p": 0.08842954698775429
+    },
+    "P_false_moves_bf16": {
+      "wins": 27,
+      "losses": 15,
+      "p": 0.08842954698775429
+    },
+    "mean_log_ratio_matched_4bit": -0.22758444258242508,
+    "mean_log_ratio_matched_bf16": -0.27608800976333014
+  },
+  {
+    "readout": "logit_lens_L5",
+    "paired_discordant_4bit": [
+      0,
+      0
+    ],
+    "paired_p_4bit": 1.0,
+    "paired_discordant_bf16": [
+      0,
+      0
+    ],
+    "paired_p_bf16": 1.0,
+    "P_true_moves_4bit": {
+      "wins": 25,
+      "losses": 17,
+      "p": 0.27995623852893914
+    },
+    "P_true_moves_bf16": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_false_moves_4bit": {
+      "wins": 26,
+      "losses": 16,
+      "p": 0.16414940178310644
+    },
+    "P_false_moves_bf16": {
+      "wins": 26,
+      "losses": 16,
+      "p": 0.16414940178310644
+    },
+    "mean_log_ratio_matched_4bit": -0.5913100277704757,
+    "mean_log_ratio_matched_bf16": -0.5609577331618714
+  },
+  {
+    "readout": "hosted_L11",
+    "paired_discordant_4bit": [
+      0,
+      1
+    ],
+    "paired_p_4bit": 1.0,
+    "paired_discordant_bf16": [
+      0,
+      1
+    ],
+    "paired_p_bf16": 1.0,
+    "P_true_moves_4bit": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_true_moves_bf16": {
+      "wins": 18,
+      "losses": 24,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 20,
+      "losses": 22,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_bf16": {
+      "wins": 27,
+      "losses": 15,
+      "p": 0.08842954698775429
+    },
+    "mean_log_ratio_matched_4bit": -0.22825128185084534,
+    "mean_log_ratio_matched_bf16": -0.22143874145025094
+  },
+  {
+    "readout": "logit_lens_L11",
+    "paired_discordant_4bit": [
+      2,
+      4
+    ],
+    "paired_p_4bit": 0.6875,
+    "paired_discordant_bf16": [
+      1,
+      2
+    ],
+    "paired_p_bf16": 1.0,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 20,
+      "losses": 22,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_4bit": {
+      "wins": 16,
+      "losses": 26,
+      "p": 0.16414940178310644
+    },
+    "P_false_moves_bf16": {
+      "wins": 22,
+      "losses": 20,
+      "p": 0.8776143287523155
+    },
+    "mean_log_ratio_matched_4bit": -0.07981718294282245,
+    "mean_log_ratio_matched_bf16": -0.13990886551621656
+  },
+  {
+    "readout": "hosted_L12",
+    "paired_discordant_4bit": [
+      0,
+      2
+    ],
+    "paired_p_4bit": 0.5,
+    "paired_discordant_bf16": [
+      0,
+      2
+    ],
+    "paired_p_bf16": 0.5,
+    "P_true_moves_4bit": {
+      "wins": 20,
+      "losses": 22,
+      "p": 0.8776143287523155
+    },
+    "P_true_moves_bf16": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_false_moves_4bit": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_false_moves_bf16": {
+      "wins": 22,
+      "losses": 20,
+      "p": 0.8776143287523155
+    },
+    "mean_log_ratio_matched_4bit": -0.2280050348894942,
+    "mean_log_ratio_matched_bf16": -0.2207203436697302
+  },
+  {
+    "readout": "logit_lens_L12",
+    "paired_discordant_4bit": [
+      0,
+      0
+    ],
+    "paired_p_4bit": 1.0,
+    "paired_discordant_bf16": [
+      2,
+      5
+    ],
+    "paired_p_bf16": 0.453125,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 20,
+      "losses": 22,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_4bit": {
+      "wins": 17,
+      "losses": 25,
+      "p": 0.27995623852893914
+    },
+    "P_false_moves_bf16": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "mean_log_ratio_matched_4bit": 0.05951625764073513,
+    "mean_log_ratio_matched_bf16": -0.1515858800250473
+  },
+  {
+    "readout": "hosted_L16",
+    "paired_discordant_4bit": [
+      3,
+      2
+    ],
+    "paired_p_4bit": 1.0,
+    "paired_discordant_bf16": [
+      0,
+      4
+    ],
+    "paired_p_bf16": 0.125,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 20,
+      "losses": 22,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_4bit": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_bf16": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "mean_log_ratio_matched_4bit": -0.1926892644828244,
+    "mean_log_ratio_matched_bf16": -0.18474745717510174
+  },
+  {
+    "readout": "logit_lens_L16",
+    "paired_discordant_4bit": [
+      3,
+      1
+    ],
+    "paired_p_4bit": 0.625,
+    "paired_discordant_bf16": [
+      2,
+      4
+    ],
+    "paired_p_bf16": 0.6875,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_false_moves_4bit": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_false_moves_bf16": {
+      "wins": 23,
+      "losses": 19,
+      "p": 0.6439689563703723
+    },
+    "mean_log_ratio_matched_4bit": -0.11634374273328994,
+    "mean_log_ratio_matched_bf16": -0.2120486945944026
+  },
+  {
+    "readout": "hosted_L20",
+    "paired_discordant_4bit": [
+      0,
+      9
+    ],
+    "paired_p_4bit": 0.00390625,
+    "paired_discordant_bf16": [
+      2,
+      11
+    ],
+    "paired_p_bf16": 0.0224609375,
+    "P_true_moves_4bit": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "P_true_moves_bf16": {
+      "wins": 26,
+      "losses": 16,
+      "p": 0.16414940178310644
+    },
+    "P_false_moves_4bit": {
+      "wins": 31,
+      "losses": 11,
+      "p": 0.002887247974285856
+    },
+    "P_false_moves_bf16": {
+      "wins": 36,
+      "losses": 6,
+      "p": 2.8288777684792876e-06
+    },
+    "mean_log_ratio_matched_4bit": -0.9094802779792479,
+    "mean_log_ratio_matched_bf16": -0.9860312503499715
+  },
+  {
+    "readout": "logit_lens_L20",
+    "paired_discordant_4bit": [
+      1,
+      11
+    ],
+    "paired_p_4bit": 0.00634765625,
+    "paired_discordant_bf16": [
+      3,
+      12
+    ],
+    "paired_p_bf16": 0.03515625,
+    "P_true_moves_4bit": {
+      "wins": 23,
+      "losses": 19,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 31,
+      "losses": 11,
+      "p": 0.002887247974285856
+    },
+    "P_false_moves_bf16": {
+      "wins": 35,
+      "losses": 7,
+      "p": 1.5097200957825407e-05
+    },
+    "mean_log_ratio_matched_4bit": -1.1523047009924363,
+    "mean_log_ratio_matched_bf16": -1.347268810295105
+  },
+  {
+    "readout": "hosted_L21",
+    "paired_discordant_4bit": [
+      2,
+      9
+    ],
+    "paired_p_4bit": 0.0654296875,
+    "paired_discordant_bf16": [
+      2,
+      11
+    ],
+    "paired_p_bf16": 0.0224609375,
+    "P_true_moves_4bit": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_true_moves_bf16": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 33,
+      "losses": 9,
+      "p": 0.00027153923429068527
+    },
+    "P_false_moves_bf16": {
+      "wins": 35,
+      "losses": 7,
+      "p": 1.5097200957825407e-05
+    },
+    "mean_log_ratio_matched_4bit": -0.5786557643201437,
+    "mean_log_ratio_matched_bf16": -0.7283579088715121
+  },
+  {
+    "readout": "logit_lens_L21",
+    "paired_discordant_4bit": [
+      1,
+      8
+    ],
+    "paired_p_4bit": 0.0390625,
+    "paired_discordant_bf16": [
+      2,
+      10
+    ],
+    "paired_p_bf16": 0.03857421875,
+    "P_true_moves_4bit": {
+      "wins": 22,
+      "losses": 20,
+      "p": 0.8776143287523155
+    },
+    "P_true_moves_bf16": {
+      "wins": 22,
+      "losses": 20,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_4bit": {
+      "wins": 27,
+      "losses": 15,
+      "p": 0.08842954698775429
+    },
+    "P_false_moves_bf16": {
+      "wins": 33,
+      "losses": 9,
+      "p": 0.00027153923429068527
+    },
+    "mean_log_ratio_matched_4bit": -0.7887630927633622,
+    "mean_log_ratio_matched_bf16": -1.0796307719038776
+  },
+  {
+    "readout": "hosted_L27",
+    "paired_discordant_4bit": [
+      8,
+      0
+    ],
+    "paired_p_4bit": 0.0078125,
+    "paired_discordant_bf16": [
+      11,
+      0
+    ],
+    "paired_p_bf16": 0.0009765625,
+    "P_true_moves_4bit": {
+      "wins": 21,
+      "losses": 21,
+      "p": 1.0
+    },
+    "P_true_moves_bf16": {
+      "wins": 22,
+      "losses": 20,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_4bit": {
+      "wins": 11,
+      "losses": 31,
+      "p": 0.002887247974285856
+    },
+    "P_false_moves_bf16": {
+      "wins": 10,
+      "losses": 32,
+      "p": 0.0009406740282429382
+    },
+    "mean_log_ratio_matched_4bit": 1.4900031928230288,
+    "mean_log_ratio_matched_bf16": 1.4746758307536858
+  },
+  {
+    "readout": "logit_lens_L27",
+    "paired_discordant_4bit": [
+      12,
+      0
+    ],
+    "paired_p_4bit": 0.00048828125,
+    "paired_discordant_bf16": [
+      14,
+      1
+    ],
+    "paired_p_bf16": 0.0009765625,
+    "P_true_moves_4bit": {
+      "wins": 23,
+      "losses": 19,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 23,
+      "losses": 19,
+      "p": 0.6439689563703723
+    },
+    "P_false_moves_4bit": {
+      "wins": 11,
+      "losses": 31,
+      "p": 0.002887247974285856
+    },
+    "P_false_moves_bf16": {
+      "wins": 14,
+      "losses": 28,
+      "p": 0.04355852192384191
+    },
+    "mean_log_ratio_matched_4bit": 1.7513188498126024,
+    "mean_log_ratio_matched_bf16": 1.624399260744275
+  },
+  {
+    "readout": "hosted_L28",
+    "paired_discordant_4bit": [
+      7,
+      1
+    ],
+    "paired_p_4bit": 0.0703125,
+    "paired_discordant_bf16": [
+      8,
+      2
+    ],
+    "paired_p_bf16": 0.109375,
+    "P_true_moves_4bit": {
+      "wins": 20,
+      "losses": 22,
+      "p": 0.8776143287523155
+    },
+    "P_true_moves_bf16": {
+      "wins": 18,
+      "losses": 24,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 12,
+      "losses": 30,
+      "p": 0.007915897334896727
+    },
+    "P_false_moves_bf16": {
+      "wins": 12,
+      "losses": 30,
+      "p": 0.007915897334896727
+    },
+    "mean_log_ratio_matched_4bit": 1.3486041814451597,
+    "mean_log_ratio_matched_bf16": 1.4075554543744881
+  },
+  {
+    "readout": "logit_lens_L28",
+    "paired_discordant_4bit": [
+      7,
+      1
+    ],
+    "paired_p_4bit": 0.0703125,
+    "paired_discordant_bf16": [
+      10,
+      2
+    ],
+    "paired_p_bf16": 0.03857421875,
+    "P_true_moves_4bit": {
+      "wins": 24,
+      "losses": 18,
+      "p": 0.44079906734259566
+    },
+    "P_true_moves_bf16": {
+      "wins": 22,
+      "losses": 20,
+      "p": 0.8776143287523155
+    },
+    "P_false_moves_4bit": {
+      "wins": 17,
+      "losses": 25,
+      "p": 0.27995623852893914
+    },
+    "P_false_moves_bf16": {
+      "wins": 15,
+      "losses": 27,
+      "p": 0.08842954698775429
+    },
+    "mean_log_ratio_matched_4bit": 1.6941583355086922,
+    "mean_log_ratio_matched_bf16": 1.6268039090957125
+  },
+  {
+    "readout": "hosted_L32",
+    "paired_discordant_4bit": [
+      10,
+      4
+    ],
+    "paired_p_4bit": 0.1795654296875,
+    "paired_discordant_bf16": [
+      9,
+      3
+    ],
+    "paired_p_bf16": 0.14599609375,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 18,
+      "losses": 24,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 10,
+      "losses": 32,
+      "p": 0.0009406740282429382
+    },
+    "P_false_moves_bf16": {
+      "wins": 11,
+      "losses": 31,
+      "p": 0.002887247974285856
+    },
+    "mean_log_ratio_matched_4bit": 0.296558450826534,
+    "mean_log_ratio_matched_bf16": 0.1299744995969228
+  },
+  {
+    "readout": "logit_lens_L32",
+    "paired_discordant_4bit": [
+      10,
+      4
+    ],
+    "paired_p_4bit": 0.1795654296875,
+    "paired_discordant_bf16": [
+      9,
+      3
+    ],
+    "paired_p_bf16": 0.14599609375,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 18,
+      "losses": 24,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 10,
+      "losses": 32,
+      "p": 0.0009406740282429382
+    },
+    "P_false_moves_bf16": {
+      "wins": 11,
+      "losses": 31,
+      "p": 0.002887247974285856
+    },
+    "mean_log_ratio_matched_4bit": 0.296558450826534,
+    "mean_log_ratio_matched_bf16": 0.1299744995969228
+  },
+  {
+    "readout": "model_output",
+    "paired_discordant_4bit": [
+      10,
+      4
+    ],
+    "paired_p_4bit": 0.1795654296875,
+    "paired_discordant_bf16": [
+      9,
+      3
+    ],
+    "paired_p_bf16": 0.14599609375,
+    "P_true_moves_4bit": {
+      "wins": 19,
+      "losses": 23,
+      "p": 0.6439689563703723
+    },
+    "P_true_moves_bf16": {
+      "wins": 18,
+      "losses": 24,
+      "p": 0.44079906734259566
+    },
+    "P_false_moves_4bit": {
+      "wins": 10,
+      "losses": 32,
+      "p": 0.0009406740282429382
+    },
+    "P_false_moves_bf16": {
+      "wins": 11,
+      "losses": 31,
+      "p": 0.002887247974285856
+    },
+    "mean_log_ratio_matched_4bit": 0.296558450826534,
+    "mean_log_ratio_matched_bf16": 0.1299744995969228
+  }
+]

@@ -64,3 +64,36 @@ time in the step. Row ceiling on bfloat16 at the working set: about 3,900 tokens
 0.82 of the working set, feasible for an announced training run under R47(c) but above the
 usability cap during the Director's hours. Recorded as the second use of the pull; the trade is
 about 10 percent throughput for about 5.6 GiB of headroom, and the choice belongs to the recipe.
+
+## Paired tests on both checkpoints (the statistic EXP-001 rests on), 23:45
+
+The Head's correction: EXP-001's conclusion rests on the paired sign test over discordant cases and
+the decomposition of which candidate's probability moves with context, not on the marginal win
+count reported above, and at these sample sizes a three-case movement can erase or create a paired
+result. Both runs computed both statistics; `paired_tests.json` holds every readout. Discordant
+pairs are `[first, second]` with the two-sided sign-test p; "moves" are wins/losses over the 42
+cases that a candidate's own probability rises in its matched context, with p.
+
+| readout | discordant, 4-bit | p | discordant, bfloat16 | p | P(false) moves, 4-bit | bfloat16 | P(true) moves, 4-bit | bfloat16 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hosted L16 | [3, 2] | 1.000 | [0, 4] | 0.125 | 24/18, 0.44 | 24/18, 0.44 | 19/23, 0.64 | 20/22, 0.88 |
+| hosted L20 | [0, 9] | 0.004 | [2, 11] | 0.022 | 31/11, 0.003 | 36/6, <0.001 | 24/18, 0.44 | 26/16, 0.16 |
+| hosted L21 | [2, 9] | 0.065 | [2, 11] | 0.022 | 33/9, <0.001 | 35/7, <0.001 | 21/21, 1.00 | 24/18, 0.44 |
+| hosted L27 | [8, 0] | 0.008 | [11, 0] | 0.001 | 11/31, 0.003 | 10/32, 0.001 | 21/21, 1.00 | 22/20, 0.88 |
+| hosted L28 | [7, 1] | 0.070 | [8, 2] | 0.109 | 12/30, 0.008 | 12/30, 0.008 | 20/22, 0.88 | 18/24, 0.44 |
+| model output | [10, 4] | 0.180 | [9, 3] | 0.146 | 10/32, 0.001 | 11/31, 0.003 | 19/23, 0.64 | 18/24, 0.44 |
+
+**Reading.** Every paired result that was significant on 4-bit is significant on bfloat16 in the
+same direction (L20, L27; L21 becomes significant; L28 stays at the edge on both), and the
+majority direction of the discordant pairs is preserved at every readout. The decomposition
+reproduces exactly: P(false) moves with context at L20, L21, L27, L28 and the output on both
+checkpoints with the same signs and comparable p; P(true) moves at no readout on either. So
+EXP-001 stands on quantisation with no caveat, and the World A conclusion, which rests on the
+decomposition, is structurally immune to the factor-of-two differences in absolute probability
+noted above, since it compares each candidate with itself across contexts within one checkpoint.
+The exception is layer 16: its discordant pairs change character between checkpoints ([3, 2]
+against [0, 4]), its case ranking is half preserved (Spearman 0.53), and WP5's statistic is a rank
+test, so any WP5 or WP7 result at layer 16, the attention member of the 16/17 pair, carries a
+checkpoint-dependence caveat that the other four pairs do not; it is stated in artifacts, not
+remembered. The Head's assumption A4 (that the readings are not quantisation artefacts) is
+discharged for every WP7 and WP9 reading except at layer 16; the band placement needs no caveat.
