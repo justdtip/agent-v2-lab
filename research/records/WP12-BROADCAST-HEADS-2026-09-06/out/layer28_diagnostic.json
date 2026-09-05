@@ -1,0 +1,323 @@
+{
+ "question": "the Head, 06:40: are layer 28's nulls correspondingly low, so that the margin rule is easier there, or is the saturation a property of the heads?",
+ "per_layer_orthogonalised_population": {
+  "4": {
+   "real_median": 0.1061,
+   "rotated_null_median": 0.0251,
+   "mlp_null_median": 0.0922,
+   "ratio_real_over_best_null_median": 0.836,
+   "pass": 3,
+   "pass_with_floor_0.1": 2
+  },
+  "8": {
+   "real_median": 0.6012,
+   "rotated_null_median": 0.2545,
+   "mlp_null_median": 0.4457,
+   "ratio_real_over_best_null_median": 0.939,
+   "pass": 0,
+   "pass_with_floor_0.1": 0
+  },
+  "12": {
+   "real_median": 0.6048,
+   "rotated_null_median": 0.1818,
+   "mlp_null_median": 0.4034,
+   "ratio_real_over_best_null_median": 0.997,
+   "pass": 2,
+   "pass_with_floor_0.1": 2
+  },
+  "16": {
+   "real_median": 0.29,
+   "rotated_null_median": 0.034,
+   "mlp_null_median": 0.1479,
+   "ratio_real_over_best_null_median": 0.987,
+   "pass": 2,
+   "pass_with_floor_0.1": 2
+  },
+  "20": {
+   "real_median": 0.4023,
+   "rotated_null_median": 0.0062,
+   "mlp_null_median": 0.0415,
+   "ratio_real_over_best_null_median": 1.865,
+   "pass": 7,
+   "pass_with_floor_0.1": 6
+  },
+  "24": {
+   "real_median": 0.2436,
+   "rotated_null_median": 0.012,
+   "mlp_null_median": 0.0933,
+   "ratio_real_over_best_null_median": 1.821,
+   "pass": 6,
+   "pass_with_floor_0.1": 6
+  },
+  "28": {
+   "real_median": 0.1051,
+   "rotated_null_median": 0.0123,
+   "mlp_null_median": 0.0357,
+   "ratio_real_over_best_null_median": 2.701,
+   "pass": 9,
+   "pass_with_floor_0.1": 7
+  }
+ },
+ "answer": "layer 28's nulls are not lower than layer 20's (rotated 0.0123 vs 0.0062; MLP 0.0357 vs 0.0415); its median real/best-null ratio is the highest in the model (2.70 vs 1.86 at layer 20 and 1.82 at 24, at or below 1.0 outside the band); the saturation is a property of the heads, but the margin rule admits tiny-number passes there (head 13 at 0.002 over a null of 0.001) and two more below 0.1",
+ "layer_8_note": "layer 8 has the highest real median (0.601) and zero passes because its nulls are also high (rotated 0.25, MLP rows 0.45): a population whose labels most maps preserve, the block-0 degeneracy in weaker form; the rule handles it",
+ "absolute_floor_scorings_of_prediction_1": {
+  "0.05": {
+   "set": 27,
+   "in_band": 22,
+   "first_half": 8,
+   "second_half": 14,
+   "prediction_1": "refuted",
+   "dropped": [
+    [
+     20,
+     19,
+     4,
+     0.048
+    ],
+    [
+     28,
+     27,
+     13,
+     0.002
+    ]
+   ],
+   "by_layer": {
+    "4": 3,
+    "12": 2,
+    "16": 2,
+    "20": 6,
+    "24": 6,
+    "28": 8
+   }
+  },
+  "0.1": {
+   "set": 25,
+   "in_band": 21,
+   "first_half": 8,
+   "second_half": 13,
+   "prediction_1": "refuted",
+   "dropped": [
+    [
+     28,
+     27,
+     15,
+     0.09
+    ],
+    [
+     4,
+     3,
+     4,
+     0.099
+    ],
+    [
+     20,
+     19,
+     4,
+     0.048
+    ],
+    [
+     28,
+     27,
+     13,
+     0.002
+    ]
+   ],
+   "by_layer": {
+    "4": 2,
+    "12": 2,
+    "16": 2,
+    "20": 6,
+    "24": 6,
+    "28": 7
+   }
+  },
+  "0.2": {
+   "set": 21,
+   "in_band": 19,
+   "first_half": 8,
+   "second_half": 11,
+   "prediction_1": "refuted",
+   "dropped": [
+    [
+     28,
+     27,
+     14,
+     0.12
+    ],
+    [
+     28,
+     27,
+     15,
+     0.09
+    ],
+    [
+     4,
+     3,
+     4,
+     0.099
+    ],
+    [
+     20,
+     19,
+     4,
+     0.048
+    ],
+    [
+     4,
+     3,
+     10,
+     0.112
+    ],
+    [
+     28,
+     27,
+     13,
+     0.002
+    ],
+    [
+     24,
+     23,
+     4,
+     0.186
+    ],
+    [
+     4,
+     3,
+     12,
+     0.155
+    ]
+   ],
+   "by_layer": {
+    "12": 2,
+    "16": 2,
+    "20": 6,
+    "24": 5,
+    "28": 6
+   }
+  }
+ },
+ "ordering": {
+  "by_margin_first_layer28_at_k": 1,
+  "by_absolute_preservation_first_layer28_at_k": 4,
+  "top8_by_absolute": [
+   [
+    24,
+    23,
+    0,
+    0.905
+   ],
+   [
+    12,
+    11,
+    10,
+    0.903
+   ],
+   [
+    24,
+    23,
+    1,
+    0.726
+   ],
+   [
+    28,
+    27,
+    6,
+    0.698
+   ],
+   [
+    24,
+    23,
+    9,
+    0.669
+   ],
+   [
+    20,
+    19,
+    0,
+    0.663
+   ],
+   [
+    16,
+    15,
+    6,
+    0.654
+   ],
+   [
+    28,
+    27,
+    4,
+    0.65
+   ]
+  ]
+ },
+ "block27_nine_vs_seven": {
+  "nine": [
+   4,
+   5,
+   6,
+   8,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "seven": [
+   0,
+   1,
+   2,
+   3,
+   7,
+   9,
+   10
+  ],
+  "kv_head_of_nine": [
+   1,
+   1,
+   1,
+   2,
+   2,
+   3,
+   3,
+   3,
+   3
+  ],
+  "kv_head_of_seven": [
+   0,
+   0,
+   0,
+   0,
+   1,
+   2,
+   2
+  ],
+  "lens_mrr_median": [
+   0.369,
+   0.005
+  ],
+  "gain_median": {
+   "lens_population (nulldist file)": [
+    0.847,
+    0.845
+   ],
+   "orthogonalised_population": [
+    0.962,
+    0.99
+   ],
+   "note": "no difference between the nine and the seven on either population; both below the rotated null (about 1.0), which is the recorded failure of the gain criterion on this model"
+  },
+  "retrieval_ratio_median_from_run": [
+   7.3,
+   7.0
+  ],
+  "hit_at_10_median_from_run": [
+   0.69,
+   0.6
+  ],
+  "sink_first5pct_median_from_run": [
+   0.277,
+   0.338
+  ]
+ },
+ "proposed_run": "SET=inband SEL_FILE=selection_orth.json FLOOR=0.1 ORDER=abs CONTROL=exclude K_LIST=2,4,8,16 NSEED=5 -> ks 2,4,8,16,21; per layer 16:2, 20:6, 24:6, 28:7; the exclude control draws from 14, 10, 10, 9 unselected heads: exact at every layer, no forced overlap; the first layer-28 head enters at k=4 (block 27 head 6, 0.698)"
+}

@@ -309,3 +309,78 @@ population remains below the median MLP-row control, the strongest recurrent pat
 attention median, and the count at or above the attention median is as recorded in
 `out/selection_orth.json` under `recurrent_excluding_block0`. The recurrent conclusion is unchanged
 by orthogonalisation.
+
+## Addendum, 2026-09-06 06:50: the band against the rest, layer 28's nulls, and an absolute floor
+
+**The band is favoured over the rest of the model even though the shallow half is not favoured
+within it (the Deputy's point).** On the orthogonalised rule, 24 of the 64 heads writing the band
+pass (37.5%) against 5 of the 48 writing outside it (10.4%; layer 32 excluded from both), a ratio of
+3.6. Prediction 1's refutation is about where inside the band the relays sit; the band itself is
+where they sit.
+
+**The Head's hypothesis that layer 28's nine were the layer-32 degeneracy in weaker form is
+refuted**, as plainly as the prediction refutations: the same nine heads pass on the population with
+the output direction removed, and their median preservation moves from 0.098 to 0.105. They relay
+the part of the lens direction that is not the unembedding.
+
+**Layer 28's nulls do not collapse (the Head's diagnostic, `out/layer28_diagnostic.json`).**
+Medians over the sixteen heads writing each layer, on the orthogonalised population: real
+preservation, rotated-null preservation, MLP-row-null preservation, and the per-head ratio of the
+real to the better null:
+
+| layer written | real | rotated null | MLP null | ratio | pass | pass, floor 0.1 |
+|---|---|---|---|---|---|---|
+| 4 | 0.106 | 0.025 | 0.092 | 0.84 | 3 | 2 |
+| 8 | 0.601 | 0.254 | 0.446 | 0.94 | 0 | 0 |
+| 12 | 0.605 | 0.182 | 0.403 | 1.00 | 2 | 2 |
+| 16 | 0.290 | 0.034 | 0.148 | 0.99 | 2 | 2 |
+| 20 | 0.402 | 0.006 | 0.042 | 1.86 | 7 | 6 |
+| 24 | 0.244 | 0.012 | 0.093 | 1.82 | 6 | 6 |
+| 28 | 0.105 | 0.012 | 0.036 | 2.70 | 9 | 7 |
+
+Layer 28's nulls are not lower than layer 20's, so the margin rule is not easier there; its median
+ratio is the highest in the model, and the ratio rises through the band while the absolute
+preservation falls. The saturation is a property of the heads: a majority of the heads writing the
+last in-band attention block relay workspace content weakly but selectively. Layer 8 is the mirror
+case: the highest real median in the model and zero passes, because random MLP rows preserve that
+population's labels almost as well (0.45), which is block 0's degeneracy in weaker form and is what
+the null-distribution rule is for.
+
+**The margin rule admits tiny-number passes, and an absolute floor is the fix.** Block 27 head 13
+passes at a preservation of 0.002 over a null of 0.001; block 27 head 15 at 0.090, block 3 head 4 at
+0.099, block 19 head 4 at 0.048. This is the recurrent channel's tiny-number problem in attention.
+With a floor of 0.1 on absolute preservation, in addition to the null-distribution and double-median
+clauses, the set is 25 of 112 (layer 4: 2, 12: 2, 16: 2, 20: 6, 24: 6, 28: 7). **Prediction 1
+scored a fourth time under the floor: refuted**, first half 8 against second half 13; at floors of
+0.05 and 0.2 it is 8 against 14 and 8 against 11, refuted at every floor. Layer 28 stays saturated
+at 7 of 16.
+
+**The ordering for the graded ablation must be by absolute preservation, not by margin.** Ordered
+by margin, the first layer-28 head enters at k = 1 (block 27 head 14, preservation 0.12 over a null
+of 0.006); ordered by absolute preservation it enters at k = 4 (block 27 head 6, 0.698), behind
+block 23 head 0 (0.905), block 23 head 1 (0.726) and block 11 head 10 (0.903, out of band). The
+small-k arms, which carry the paper's claim, then hold the strongest relays rather than the smallest
+nulls. `ablation.py` takes `FLOOR` and `ORDER=abs` for this. With the floor the in-band set is 21
+(16: 2, 20: 6, 24: 6, 28: 7) and the exclude control draws from 14, 10, 10 and 9 unselected heads
+per layer: exact at every layer, no forced overlap. The proposed run is
+`SET=inband SEL_FILE=selection_orth.json FLOOR=0.1 ORDER=abs CONTROL=exclude K_LIST=2,4,8,16 NSEED=5`,
+which ablates k = 2, 4, 8, 16, 21. It waits on the Head.
+
+**What layer 28's nine share that its seven do not.** The nine relays (heads 4, 5, 6, 8, 11, 12,
+13, 14, 15) and the seven non-relays (0, 1, 2, 3, 7, 9, 10) have identical gain (medians 0.847
+against 0.845), similar retrieval behaviour on the retrieval-channels run (answer-span ratio medians
+7.3 against 7.0, hit@10 0.69 against 0.60; head 3, a non-relay, is the layer's strongest retriever at
+a ratio of 40 and hit@10 1.0), and the seven sink slightly more (first-5% mass 0.338 against 0.277).
+They differ in lens preservation (0.317 against 0.010, the selection) and in key-value group: with
+sixteen query heads over four key-value heads, the nine belong to groups 1, 1, 1, 2, 2, 3, 3, 3, 3
+and the seven to 0, 0, 0, 0, 1, 2, 2. All four query heads of key-value group 0 are non-relays and
+all four of group 3 are relays. Since the OV map is the product of the head's output slice and its
+group's value projection, the clustering is structural: group 3's value projection carries the lens
+directions and group 0's does not. The Head's reading, that block 27 is the last attention block
+inside the band and the last chance to write into the workspace before the motor layers, is
+consistent with the ratio gradient and is untested.
+
+The gain medians above (0.847 against 0.845) are on the lens population; on the orthogonalised
+population they are 0.962 against 0.990. On neither do the nine differ from the seven, and on both
+they sit below the rotated null near 1.0, which is the recorded failure of the gain criterion on this
+model.
