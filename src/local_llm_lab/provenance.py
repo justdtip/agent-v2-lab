@@ -12,6 +12,7 @@ from typing import Any
 from local_llm_lab.models import ModelSpec, ResolvedSpec
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.spawn import run as spawn_run
 
 _PACKAGES = ("mlx", "mlx-lm", "numpy", "transformers")
 
@@ -41,10 +42,28 @@ def source_tree_hashes(root: Path) -> dict[str, str]:
 
 
 def _git_metadata(root: Path) -> dict[str, str]:
-    """Read the revision, branch, and complete working-tree patch from one repository root."""
+    """Read the revision, branch, and complete working-tree patch from one repository root.
+
+    ``root`` is passed as ``git -C <root>`` **in argv, never as ``cwd``**, and ``git`` is
+    resolved to an absolute path by ``spawn.run``. Both spellings matter and both are load-
+    bearing: CPython takes ``posix_spawn`` only when ``cwd`` is ``None`` *and* the program has a
+    directory component, so either shortcut on its own returns this call to the ``fork`` path
+    (R45; ``local_llm_lab.spawn`` carries the mechanism and the crash report).
+
+    Why that is fatal here rather than merely untidy: ``write_provenance`` runs at the *end* of
+    every probe and ``cli`` stage, after ``load_policy``, so Metal is up and the model-run lock
+    is held. A fork in that interpreter aborts in libplatform -- ``SIGABRT``, which means
+    ``atexit`` never runs, which means the lock is orphaned, correctly reported stale, and
+    correctly never deleted, so one aborted probe leaves the machine locked until a person
+    clears it. ``cwd=root`` is the shorter spelling and reads like a simplification; the stack
+    trace it buys names ``AGX::PooledAllocator::shrink`` and does not mention this file.
+    """
 
     def command(*args: str) -> bytes:
-        return subprocess.check_output(["git", *args], cwd=root)
+        # `stdout=PIPE, check=True` is `subprocess.check_output`'s exact contract, kept so the
+        # migration changes the spawn path and nothing else: stderr still reaches the run log.
+        argv = ["git", "-C", str(root), *args]
+        return spawn_run(argv, stdout=subprocess.PIPE, check=True).stdout
 
     return {
         "branch": command("branch", "--show-current").decode().strip(),

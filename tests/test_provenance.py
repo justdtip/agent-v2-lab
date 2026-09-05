@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
+import types
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 
+# `tests/` is not a package, so pytest puts it on `sys.path` and the suite's own conftest
+# imports as a top-level module.
+from conftest import PRE_EXISTING_FORK_SITES
+
 import local_llm_lab.provenance as provenance
+from local_llm_lab import runlock
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.provenance import source_tree_hashes, write_provenance
 
@@ -99,28 +107,81 @@ def test_package_versions_use_none_only_for_absent_packages(monkeypatch) -> None
     assert provenance._package_versions() == {"mlx": None, **versions}
 
 
-def test_git_metadata_uses_exact_commands_root_and_binary_diff_bytes(
+def test_git_metadata_names_its_root_in_argv_and_keeps_binary_diff_bytes(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Git provenance preserves exact binary patch bytes at its supplied root."""
+    """The exact commands, the root carried as ``-C`` rather than ``cwd``, and raw patch bytes.
+
+    The `cwd` half is the point of the assertion, not incidental tidiness: `cwd` is one of
+    CPython's disqualifiers for `posix_spawn`, and `write_provenance` runs after the model load,
+    so a call that passes it forks with Metal up and aborts the interpreter. Pinned on the argv
+    here so that a revert to `cwd=root` fails on a line that says why, as well as tripping the
+    fork guard in `test_a_provenance_write_after_a_load_does_not_fork`.
+    """
     root = tmp_path / "project"
     raw_diff = b"diff --git a/a b/a\n\x00binary\xffpatch\n"
-    calls = []
+    calls: list[tuple[list[str], dict[str, object]]] = []
     responses = [b"topic\n", b"a" * 40 + b"\n", raw_diff]
 
-    def fake_check_output(command, *, cwd):
-        calls.append((command, cwd))
-        return responses.pop(0)
+    def fake_run(argv, **kwargs):
+        calls.append(([str(part) for part in argv], kwargs))
+        return subprocess.CompletedProcess(argv, 0, stdout=responses.pop(0))
 
-    monkeypatch.setattr(provenance.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(provenance, "spawn_run", fake_run)
 
     assert provenance._git_metadata(root) == {
         "branch": "topic",
         "commit": "a" * 40,
         "dirty_patch_sha256": hashlib.sha256(raw_diff).hexdigest(),
     }
-    assert calls == [
-        (["git", "branch", "--show-current"], root),
-        (["git", "rev-parse", "HEAD"], root),
-        (["git", "diff", "--binary", "HEAD", "--"], root),
+    assert [argv for argv, _ in calls] == [
+        ["git", "-C", str(root), "branch", "--show-current"],
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        ["git", "-C", str(root), "diff", "--binary", "HEAD", "--"],
     ]
+    # `check_output`'s contract, unchanged by the migration: raise on a non-zero status, and
+    # leave stderr alone so a git error still reaches the run log.
+    assert [kwargs for _, kwargs in calls] == [{"stdout": subprocess.PIPE, "check": True}] * 3
+
+
+def test_a_provenance_write_after_a_load_does_not_fork(monkeypatch, tmp_path: Path) -> None:
+    """Issue 84 item 1: the real git calls, in the production ordering, under the fork guard.
+
+    Ordering is the whole hazard. `write_provenance` is the last thing every probe and `cli`
+    stage does, so it runs with the model resident, Metal up, and the model-run lock held; a
+    fork there is `SIGABRT`, `atexit` never runs, and the lock is orphaned -- then correctly
+    reported stale and correctly never deleted, so one aborted probe locks the machine until a
+    person clears it.
+
+    So the test reproduces that ordering rather than calling `_git_metadata` on its own. The
+    load goes through `runlock.load_weights`, the repository's only door to `mlx_lm.load`, with
+    the loader itself faked -- no checkpoint is read and no weights exist -- because what has to
+    be real here is the lock being held and the git calls being the genuine ones. Metal needs no
+    help: pytest imports MLX at collection, so this interpreter is already the dangerous one,
+    which is why the conftest guard is the right mechanism and a second one would be worse.
+
+    The guard turns a fork in `provenance.py` into `ForkInThisInterpreter` on the line that
+    caused it, so this test fails outright if the migration is reverted -- it does not need to
+    assert on the exception. It asserts instead on what a reader can check: git really ran (a
+    40-character commit that was not stubbed), and the lock survived the write.
+    """
+    assert "src/local_llm_lab/provenance.py" not in PRE_EXISTING_FORK_SITES, (
+        "with the exemption back the guard lets provenance fork and this test proves nothing"
+    )
+    loader = types.ModuleType("mlx_lm")
+    loader.load = lambda hf_id, **kwargs: (f"model:{hf_id}", "tokenizer")
+    monkeypatch.setitem(sys.modules, "mlx_lm", loader)
+
+    model, _tokenizer = runlock.load_weights("fake/checkpoint")
+    lock = runlock.default_lock_path()
+    assert model == "model:fake/checkpoint"
+    assert lock.is_file(), "the faked load must still take the lock, or the ordering is not real"
+
+    target = write_provenance(
+        tmp_path / "run", resolved=None, spec=_Spec("fallback"), extra={"stage": "after-load"}
+    )
+
+    git = json.loads(target.read_text(encoding="utf-8"))["git"]
+    assert len(git["commit"]) == 40 and set(git["commit"]) <= set("0123456789abcdef")
+    assert len(git["dirty_patch_sha256"]) == 64
+    assert lock.is_file(), "the write orphaned or dropped the lock the load was holding"
