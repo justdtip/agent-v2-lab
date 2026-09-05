@@ -64,17 +64,41 @@ question and needle, is harsher still: models advertising 128K hold 85 percent o
 to 8K, 4K, or in some cases 1K. HELMET adds that needle-in-a-haystack scores do not predict
 downstream performance, so any single-needle result should be discounted.
 
-**(c) An mlx-lm prefill ceiling that may bite before any of this.** A 35B MoE was reported to
+**(c) An mlx-lm prefill ceiling, now measured rather than feared.** A 35B MoE was reported to
 run out of memory at about 176K during prefill on a 128 GB machine, from transient Metal command
 buffers rather than from the cache, while llama.cpp completed 262K on the same box. If that
-generalises, the native window is unreachable in this stack at any memory size. It is a report
-about a much larger model and it needs our own test before we believe it.
+generalises, the native window is unreachable in this stack at any memory size. Tested here: 131072 completed on this 24 GB machine at 16.69 GiB peak, so the ceiling is not
+where the report puts it, and section 3(d) gives the mechanism and the tuning knob.
 
-**(d) Time, quadratic in the eight attention layers.** Decode throughput on a larger machine
-falls from 31 tokens per second at 1K to 8.5 at 128K, with the knee at 16K to 32K; scale down
-about threefold for this machine's memory bandwidth. Prefill is superlinear, roughly a fivefold
-time cost for a fourfold token increase between 8K and 32K. No M4 Pro long-context curve exists
-publicly, so ours would be the measurement.
+**(d) Time, and it is decode rather than prefill.** Measured here, one model load, chunked
+prefill at 2048, decode over 32 steps. The 4096 decode figure was re-measured after the sweep
+because the first length in any sweep pays kernel compilation; the original read 54.7, an
+under-reading of nineteen percent, and the corrected curve is monotone where the original was not.
+
+| tokens | prefill tok/s | prefill time | decode tok/s | peak GiB |
+|---|---|---|---|---|
+| 4096 | 571.0 | 7 s | 67.6 | 4.79 |
+| 8192 | 553.9 | 15 s | 65.4 | 5.19 |
+| 16384 | 518.0 | 32 s | 34.5 | 5.87 |
+| 32768 | 439.5 | 75 s | 25.3 | 7.38 |
+| 65536 | 294.2 | 223 s | 9.7 | 10.44 |
+| 131072 | 196.3 | 668 s | 5.0 | 16.69 |
+
+**Prefill holds and decode collapses, which is the opposite of what I predicted from the
+literature.** Prefill falls only threefold across a thirty-twofold increase in context. Decode is
+flat to 8192, halves in the single step to 16384, and is down thirteenfold by 131072. The knee is
+between 8K and 16K, which is earlier and sharper than the published curves for larger Macs, where
+the same doubling costs about fifteen percent.
+
+**Peak memory is set by the prefill chunk, not by the context.** Subtracting weights and cache
+from peak leaves a transient growing at 64 KiB per token of context, which is exactly sixteen
+attention heads times the 2048-token chunk times two bytes: the per-chunk attention score matrix.
+It is twice what the cache itself costs per token. Predicted 16.44 GiB at 131072 before measuring,
+measured 16.69, an error of one and a half percent. The reported ceiling near 176K on a much
+larger machine is very likely this term rather than anything about command buffers, and it is
+tunable: the mechanism predicts the full native window fits at a 512-token chunk, where the same
+arithmetic gives about 14.8 GiB. **That test is running as this is written and is the one claim
+here still open.**
 
 ## 4. Levers, with the two that matter separated from the rest
 
