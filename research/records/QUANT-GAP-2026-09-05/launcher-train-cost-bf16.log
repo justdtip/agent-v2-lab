@@ -1,0 +1,23 @@
+23:30:49 start variants=['A'] lengths=[256, 512, 768, 1024] share_cap=0.6
+23:30:49 A 256: launching (projection n/a)
+23:30:54   [A 256] {"event": "progress", "stage": "loaded", "elapsed_s": 4.6, "peak_gib": 7.834, "ws_share": 0.441}
+23:30:56   [A 256] {"event": "progress", "stage": "step1", "tokens": 256, "elapsed_s": 6.8, "step_s": 1.83, "peak_gib": 8.785, "ws_share": 0.495}
+23:30:58   [A 256] {"event": "progress", "stage": "step2", "tokens": 256, "elapsed_s": 8.4, "step_s": 1.59, "peak_gib": 9.013, "ws_share": 0.507}
+23:30:58   [A 256] {"event": "row", "variant": "A", "tokens": 256, "ok": true, "peak_gib": 9.01283835619688, "step_s": 1.5885037909611128, "error": null}
+23:30:58 A 256: ok peak 9.01 GiB (0.51 ws) step 1.6s (161 tok/s)
+23:30:58 A 512: launching (projection n/a)
+23:31:02   [A 512] {"event": "progress", "stage": "loaded", "elapsed_s": 4.0, "peak_gib": 7.834, "ws_share": 0.441}
+23:31:05   [A 512] {"event": "progress", "stage": "step1", "tokens": 512, "elapsed_s": 7.7, "step_s": 3.31, "peak_gib": 9.287, "ws_share": 0.523}
+23:31:08 guard pid=50310 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3946.56M  free = 1173.44M  (encrypted)]
+23:31:09   [A 512] {"event": "progress", "stage": "step2", "tokens": 512, "elapsed_s": 10.8, "step_s": 3.08, "peak_gib": 9.633, "ws_share": 0.542}
+23:31:09   [A 512] {"event": "row", "variant": "A", "tokens": 512, "ok": true, "peak_gib": 9.633143156766891, "step_s": 3.0832729999674484, "error": null}
+23:31:09 A 512: ok peak 9.63 GiB (0.54 ws) step 3.1s (166 tok/s)
+23:31:09 A 768: launching (projection 10.25 GiB)
+23:31:13   [A 768] {"event": "progress", "stage": "loaded", "elapsed_s": 3.9, "peak_gib": 7.834, "ws_share": 0.441}
+23:31:18   [A 768] {"event": "progress", "stage": "step1", "tokens": 768, "elapsed_s": 9.1, "step_s": 4.93, "peak_gib": 9.824, "ws_share": 0.553}
+23:31:19 guard pid=50488 pressure=1 critical_run=0 swap=[total = 5120.00M  used = 3938.56M  free = 1181.44M  (encrypted)]
+23:31:23   [A 768] {"event": "progress", "stage": "step2", "tokens": 768, "elapsed_s": 13.7, "step_s": 4.61, "peak_gib": 10.226, "ws_share": 0.576}
+23:31:23   [A 768] {"event": "row", "variant": "A", "tokens": 768, "ok": true, "peak_gib": 10.22637327387929, "step_s": 4.614111499977298, "error": null}
+23:31:23 A 768: ok peak 10.23 GiB (0.58 ws) step 4.6s (166 tok/s)
+23:31:23 A 1024: projected peak 10.82 GiB = 0.61 of the working set, above cap; variant stops here
+23:31:23 done

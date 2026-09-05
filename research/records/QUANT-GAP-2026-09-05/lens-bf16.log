@@ -1,0 +1,31 @@
+model loaded {"name": "Qwen3.5-4B-bf16", "hf_id": "/Users/daniel.tipton/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-bf16/snapshots/475632ded9a95863da4e4b235ab9ccbc5d3cc6bf", "layers": 32, "hidden": 2560, "vocab": 248320, "seconds": 3.4}
+lens loaded {"layers": "1..31", "count": 31}
+cases regenerated {"n": 42, "seconds": 0.2}
+artifact agreement {"artifact_cases": 42, "regenerated": 42, "matching_pairs": 42}
+residuals captured {"cases": 42, "median_tokens": 1547.0, "seconds": 116.2}
+readouts scored {"seconds": 157.8}
+stage done {"stage": "cases", "seconds": 274.4}
+corpus context done {"index": 0, "tokens": 138, "seconds": 27.2}
+corpus context done {"index": 1, "tokens": 136, "seconds": 39.4}
+corpus context done {"index": 2, "tokens": 139, "seconds": 52.8}
+corpus context done {"index": 3, "tokens": 150, "seconds": 67.2}
+corpus context done {"index": 4, "tokens": 132, "seconds": 78.9}
+corpus context done {"index": 5, "tokens": 132, "seconds": 90.8}
+corpus context done {"index": 6, "tokens": 129, "seconds": 102.7}
+corpus context done {"index": 7, "tokens": 133, "seconds": 114.0}
+corpus context done {"index": 8, "tokens": 135, "seconds": 124.9}
+corpus context done {"index": 9, "tokens": 137, "seconds": 136.5}
+corpus context done {"index": 10, "tokens": 141, "seconds": 149.4}
+corpus context done {"index": 11, "tokens": 129, "seconds": 160.6}
+corpus context done {"index": 12, "tokens": 128, "seconds": 170.3}
+corpus context done {"index": 13, "tokens": 134, "seconds": 181.6}
+corpus context done {"index": 14, "tokens": 164, "seconds": 195.9}
+corpus context done {"index": 15, "tokens": 150, "seconds": 208.3}
+spectrum and CKA done {"seconds": 37.8}
+stage done {"stage": "corpus", "seconds": 246.6}
+sanity prompt done {"name": "arith"}
+sanity prompt done {"name": "spider"}
+sanity prompt done {"name": "rhyme"}
+sanity prompt done {"name": "france"}
+stage done {"stage": "sanity", "seconds": 32.3}
+all done {"total_seconds": 556.9}
