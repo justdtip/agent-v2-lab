@@ -384,3 +384,41 @@ The gain medians above (0.847 against 0.845) are on the lens population; on the 
 population they are 0.962 against 0.990. On neither do the nine differ from the seven, and on both
 they sit below the rotated null near 1.0, which is the recorded failure of the gain criterion on this
 model.
+
+**Correction, 06:58 (the Deputy): the band's attention members are five layers, not four.** Under
+R41e the band is the pairs 12/13, 16/17, 19/20, 23/24, 27/28, whose attention members are layers
+12, 16, 20, 24 and 28, written by blocks 11, 15, 19, 23 and 27: eighty in-band query heads. The
+06:50 addendum computed "in band" on four layers and put layer 12 outside, the fourth time tonight a
+list built by extending the obvious rule dropped pair 12/13. Recomputed on the recorded band: 26 of
+80 in-band heads pass (32.5%) against 3 of 32 outside (9.4%), a ratio of 3.5; the conclusion does
+not move. The ablation script carried the same four-layer list into its in-band set and its readout
+layers, and was corrected before the run: it now asserts the R41e pairs as the recorded ruling
+(R38(f)), derives the attention members from the model's layer kinds, ablates from all five blocks,
+and reads recall@25 at all ten band layers.
+
+**Prediction 1 scored a fifth time, on the five-layer band, as rates per head** because the halves
+are uneven (three attention layers against two): first half, layers 12, 16 and 20, 48 heads; second
+half, 24 and 28, 32 heads. Passing heads first against second, as counts and as rates: no floor 11
+of 48 (0.23) against 15 of 32 (0.47); floor 0.05, 10 (0.21) against 14 (0.44); floor 0.1, 10 (0.21)
+against 13 (0.41); floor 0.2, 10 (0.21) against 11 (0.34). Refuted at every floor by rate; at floor
+0.2 the raw counts nearly tie, which is the uneven halves and not the heads. With the middle layer
+20 left out of both halves, 12 and 16 against 24 and 28 give 4 of 32 against 11 to 15 of 32 at
+every floor.
+
+**The floor is post-hoc, and the exact control follows from it (the Head, 06:55).** The floor of
+0.1 was chosen after seeing the data, and the set it produces is one where the exclude control needs
+no forced overlap; a convenience criterion and a defensible one arrive at the same place. The
+sensitivity across floors is therefore the primary result. On the five-layer band the in-band set is
+21, 23, 24 and 26 heads at floors 0.2, 0.1, 0.05 and none; the exclude control is exact at floors 0.2
+and 0.1, exact but deterministic at 0.05 (layer 28 has eight selected and eight unselected, so every
+seed draws the same eight), and forced at no floor (layer 28 has nine selected and seven unselected,
+overlap two). Because the floor only trims the tail of an ordering by absolute preservation, the
+arms k = 2, 4, 8 and 16 are the same at every floor and the four floor sets are the arms k = 21, 23,
+24 and 26 of one run; that run is `SET=inband SEL_FILE=selection_orth.json FLOOR=0 ORDER=abs
+CONTROL=exclude K_LIST=2,4,8,16,21,23,24 NSEED=5`, launched at 07:00 under the standing lift, one
+model load. The first layer-28 head enters at k = 4 (block 27 head 6, 0.698), behind block 23 head
+0 (0.905), block 11 head 10 (0.903) and block 23 head 1 (0.726). The reading will say which claim the
+curve answers: the gate (margin rule and floor) identifies the relays, the ordering by absolute
+preservation puts the heads carrying the most lens content first, so the small-k arms test whether
+the heads that carry the most lens content carry the effect, which is a different claim from whether
+every head the rule identified carries it; the k = 21 to 26 arms answer the second.
