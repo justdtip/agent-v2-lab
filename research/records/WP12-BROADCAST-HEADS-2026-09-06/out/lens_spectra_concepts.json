@@ -1,0 +1,48 @@
+{
+ "concepts": [
+  239755,
+  226942,
+  210803,
+  219279,
+  192160,
+  190678,
+  91833,
+  232978,
+  179820,
+  16136,
+  176233,
+  236321,
+  87273,
+  66640,
+  92983,
+  6999
+ ],
+ "by_layer": {
+  "12": {
+   "concepts_median": 0.417,
+   "concepts_min": 0.23,
+   "random_median": 0.446
+  },
+  "16": {
+   "concepts_median": 0.556,
+   "concepts_min": 0.288,
+   "random_median": 0.609
+  },
+  "20": {
+   "concepts_median": 0.819,
+   "concepts_min": 0.427,
+   "random_median": 0.936
+  },
+  "24": {
+   "concepts_median": 0.873,
+   "concepts_min": 0.52,
+   "random_median": 0.984
+  },
+  "28": {
+   "concepts_median": 0.883,
+   "concepts_min": 0.545,
+   "random_median": 0.992
+  }
+ },
+ "note": "share of each injected concept's unembedding row (bf16 checkpoint) inside the subspace of singular values at or above 1% of the largest, beside 200 random unit directions"
+}

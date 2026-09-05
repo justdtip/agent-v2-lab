@@ -125,3 +125,26 @@ The four signals and the precondition on step indices stand. The Deputy's readin
 and must return the index of the last step of the first window in which the repetition closed, None
 for no loop, with the flag derived from it; "unrecovered" is defined through the existing
 recovered_errors rule, cited by line in the docstring.
+
+**Corrections and rulings, 10:12.** (a) The memo pointed at `recovered_errors` by name as the
+recovery rule; the Deputy read it: `env.py:281` sets recovered_errors to the error count on success
+and zero otherwise, so it is not a recovery rule and would make the tool-error term a function of
+success, reintroducing the outcome the standard is meant to be separate from. Ruling: recovery is
+per error, a later successful call within the three-step window with the same tool and the same
+primary argument, the primary argument extracted per tool from the tool schema and named in the
+docstring. An `unknown_tool` error has no later call with the same tool by construction; ruling: it
+is recovered by a later successful call with any valid tool carrying the same primary argument
+within the window, which is what the data's `unknown_tool` recovery variant teaches, and otherwise
+it is an event at its own step. (b) The Research Division's addendum
+(`SPEC-003-ADDENDUM-SCOPE-2026-09-06.md`) is accepted for this run: two families,
+`multi_file_plan` (horizon 10 + level) and `cross_tool_reconcile` (11 + level), whose notes carry a
+monotonically shrinking outstanding set rather than an accumulating prefix, with the
+note-consistency test (the outstanding set equals the sources not yet read at every step of a clean
+row and shrinks by exactly one per read) and the structural-variant assertion at level 0 required
+before rows are written. (c) The screens are resized so the new families can be screened: `valid`
+and `valid2` become 28 rows each, two per family over fourteen families, family-balanced as before;
+the selection rule is unchanged in form. This is a change to SPEC-003 section 3 proper and is made
+here by the Chief under the standing order; test and test3 remain byte-identical. (d) The report
+gains a per-family and per-variant breakdown of loop and exhaustion counts, pre-registered as the
+measurement that could refute the addendum's mechanism (that the current note form narrates rather
+than tracks); without it the next run changes the data and nobody can attribute the result.

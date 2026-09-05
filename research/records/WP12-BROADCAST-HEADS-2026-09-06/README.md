@@ -971,3 +971,103 @@ every competitor, which the gradient does not at any magnitude that keeps the re
 calibration grid is the only test of that, and the spectra say where it can pass: at layer 12 the
 concept's own readout direction is mostly outside the reachable subspace, and at 20 it is almost
 entirely inside.
+
+**Pre-registered before the primary arm lands, 10:18 (the Head): the third outcome, and the
+magnitude caveat.** The descriptive arms at k = 4 and 8 are not at the null but at the opposite
+extreme: the relays remove less of the injected content than every random set at layer 24 (0.938
+against five controls at 0.922, rank six of six). The criterion covers survival (rank one of
+twenty) and closure (inside the range) and says nothing about a rank of twenty of twenty, which is
+a third outcome. Ruling now, so that it is not constructed after the number: a reversal at k = 16,
+the relays highest of the twenty at layer 24, is reported as a mechanism and not as
+uninterpretable: if removing the relays preserves injected content better than removing random
+heads, the relays are the heads that would otherwise remove or overwrite it, suppression of
+off-manifold material by the heads most engaged with the workspace. It is stated as a hypothesis
+with the caveat below, it is not the broadcast hypothesis appearing, and the contrast-direction
+instrument (injection along J^T of the concept's row minus the mean of the rows the lens already
+reads at that position, built for the margin rather than the gain) becomes the test of whether the
+suppression reading survives a better-constructed injection, run as the next use of the instrument.
+The caveat: the calibration passed only at the top of the grid, twice the residual norm, so the
+injected vector is larger than the entire residual at its position and the state read is nothing
+like a natural activation; every conclusion from this instrument inherits that. It bears hardest on
+the zero-broadcast result, which is stated in these words and no wider: an injected lens direction
+of twice the residual norm at layer 12 does not appear in the lens's top 25 at any later position
+at layers 16 to 28, on any arm; that is not the claim that the workspace does not broadcast. That
+the calibration passed only at the top of the grid is the third independent sign of the geometry
+F11 describes: the layer-12 lens is barely writable even after regularisation.
+
+## The injection test, 10:25: the broadcast hypothesis does not survive redundancy, and the thread closes
+
+Third instrument (`inject_events.as-run.py.txt`, `run-inject-events.log`,
+`out/inject_events_L12.json`; the two failed instruments in `run-inject-failed-gradient.log`,
+`out/inject_failed_gradient.json` and `run-inject-failed-preimage.log`): regularised pre-image,
+lambda 0.01 of the largest singular value squared, magnitude twice the residual norm, the only grid
+point passing both the calibration and the room rule (unablated same-position recall 0.953 at 13,
+0.984 at 16, 0.953 at 20, 0.922 at 24, 0.828 at 28; no injection gives zero everywhere). Sixteen
+concept tokens, multilingual word pieces from the vocabulary filter, 64 events.
+
+**Primary, pre-registered: k = 16, same position, layer 24, the relay arm's rank among twenty.**
+Relays 0.938; all nineteen random sets 0.922, which is the unablated value to the event. Rank 20 of
+20. The hypothesis required rank 1; **it does not survive.** The comparison has no dynamic range:
+no sixteen-head set of any kind, relay or random, removed a single event of the injected content at
+layer 24, and the relays' rank rests on one event of 64 in the other direction. Descriptive arms
+at 24: k = 4 and 8, relays 0.938 against five controls at 0.922 (rank 6 of 6); k = 24 the same
+pattern. At layer 28, where there is range (controls 0.766 to 0.906 around the unablated 0.828),
+the relays' ablation raised recall to 0.891, rank 19 of 20; at k = 4 and 8, 0.828 and 0.859, ranks
+4.5 of 6. At layer 20 (upstream of blocks 23 and 27, downstream of 15 and 19) nothing moves. At
+every later position, on every arm, zero.
+
+**Reading, under the pre-registrations of 09:12 to 10:18.** (1) The broadcast hypothesis closes
+negative for the 24 downstream relays: their removal as a set does not remove injected workspace
+content where random sets of the same size at the same layers do not. Combined with the sweep
+(relays level with the rest at every layer alone) and the ablation curve's redundancy (now read as
+non-specific), the paper's claim that the heads picked out by lens preservation carry workspace
+content is not supported on this model at single-head, set-level or injection resolution. What
+stage 1 finds is real and is not that. (2) The pre-registered third outcome appears at layer 28
+and not at 24: removing the relays makes the injected concept more readable at the output-aligned
+readout, which is recorded as the suppression hypothesis, the relays being heads that would
+otherwise act on an off-manifold perturbation in the workspace, stated as a hypothesis under the
+magnitude caveat (the injected vector is twice the residual at its position), with the
+contrast-direction instrument as its test. That the effect appears at 28 and not at 24 is, by the
+pre-registered trade-off, either block 27 doing it or output influence, and cannot be separated
+here. (3) The zero-broadcast result is stated no wider than the instrument: an injected lens
+direction of twice the residual norm at layer 12 does not appear in the lens's top 25 at any later
+position at layers 16 to 28. (4) The instrument's limits are the instrument's, not the model's:
+the layer-12 lens is barely writable (F11; calibration passed only at the top of the grid), and a
+test at layer 20, where reachability is high, with the fifteen relays downstream and the contrast
+direction, is the next use of it.
+
+**F11 corrected with the injected concepts' own rows (`out/lens_spectra_concepts.json`).** The
+random-direction proxy was optimistic, not pessimistic: the sixteen concepts' unembedding rows lie
+less inside the reachable subspace than random directions at every layer (medians 0.42 against
+0.45 at 12; 0.56 against 0.61 at 16; 0.82 against 0.94 at 20; 0.87 against 0.98 at 24; 0.88 against
+0.99 at 28; the least reachable concept at 0.23, 0.29, 0.43, 0.52, 0.55). The lens's image is not
+trained toward unembedding rows more than toward arbitrary directions on this fit; if anything the
+opposite. The Head's expectation on this point is refuted by the sixteen rows, and the layer-20
+reachability of 0.82 for real tokens still makes 20 the writable layer.
+
+**WP12 closes.** Stage 1 stands (selective relays, band-favoured, group-structured, surviving
+orthogonalisation; prediction 1 refuted five times; the Director's coupling hypothesis unsupported
+by weights and by intervention; the Head's layer-32 hypothesis refuted; F10 and F11 on the
+instrument; R53 on copy maps). Stage 2's causal claim does not reproduce. Filed for the next use of
+the model on this thread: the contrast-direction injection at layer 20; the paper's own injected-
+thought report protocol as the behavioural version; the lens-specific recall of the model's own
+final token under ablation as the paper's other metric. The model goes to the Director's overnight
+order.
+
+**Correction, 10:35 (the Deputy): the primary comparison was uninformative, not negative.** On 64
+events, 0.938 is 60 and 0.922 is 59: the relays scored 60 and all nineteen random sets scored 59,
+so the rank of twenty among nineteen tied values separated by one event measures the tie-breaking
+and not an effect. "The broadcast hypothesis does not survive redundancy" in the section above
+reads as a tested refutation and is withdrawn. The honest statement: the pre-registered primary
+comparison had no dynamic range, nothing moved the metric, so it cannot distinguish the hypothesis
+from its negation; the hypothesis is untested at layer 24 by this instrument, and the one-event
+difference is reported and not interpreted. The finding the test does carry is the secondary at
+layer 28, where there is range: four events of 64 in the direction opposite to the hypothesis,
+random sets scattering around the unablated value, the pre-registered third outcome. Reading (1)
+of the closure is restated accordingly: the paper's causal claim is not supported on this model,
+by the single-head sweep (relays level with the rest within every layer), by the set-level
+redundancy (non-specific), and by the injection test's secondary (the unpredicted direction at
+28); it is not refuted by the injection test's primary, which was uninformative. A worse headline
+and a better paper, as the Deputy put it; the same shape as the tiny-denominator ratio and the
+head that appeared in both contexts by chance: a well-defined quantity answering a different
+question from the one asked of it.
