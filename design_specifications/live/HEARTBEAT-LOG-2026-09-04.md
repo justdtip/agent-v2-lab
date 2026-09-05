@@ -1435,3 +1435,50 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   a path the Head's framing memo already occupied, both untracked, so a patch apply would have
   replaced one with the other. Both kept; renamed as the Chief ruled — framing memo to
   `POWER-ANALYSIS-FRAMING-REVIEW-2026-09-05.md`, tables to the cited path.
+
+- 2026-09-05 ~15:20 (Chief): Head's framing memo (POWER-ANALYSIS-FRAMING-REVIEW) read and ratified; tables report holds the order's path. World B bound: 0/42 above P(true)=0.5, Wilson [0, 0.084]. Recommendation to the Director revised: no EXP-001 extension (EXP-002 instead); P6 extension at twenty ledger cases (B2) is the only lift requested; B1 stays costed. Memo P6 contrast now names both tail conventions (0.024 one-sided, 0.048 two-sided).
+
+- 2026-09-05 ~15:45 (Chief): EXP-002 S3 through the Deputy's code review, with the Head for domain review, then my gate. Trap 7 refuted by the implementer (mask must ride every forward from the hidden span; 0.232 logits on an eight-block fixture, 0.0 on the four-block one). Rulings now: ties asymmetric as implemented; arm C through the same chunked path with a fresh cache so the 7.87e-6 chunking deviation cancels. R38 note added (a real fixture can still be the wrong real thing). Standing ask to the Director: the P6 extension lift only.
+
+- 2026-09-05 ~16:30 (Chief): EXP-002 S3 read in full ahead of the delta (27 tests). Head's domain review: ready on (a) arm C in both forms and (b) chunk boundaries recorded. Chief added (d) reject points whose true suffix occurs outside the hidden span in the persistent prompt, (e) identity gate on three points, (f) optional --exp001-artifact reproduction check. Tie counts already present. Gate on the delta; then one lift for the run.
+
+- 2026-09-05 ~17:30 (Chief): EXP-002 S3 delta gated and approved (70 tests): arm C both forms, forward schedule recorded, gate on three points, suffix rule, --exp001-artifact, chunking deviation measured in candidate probabilities (residual ~1e-8). EXP-002 ready to run; lift requested from the Director alongside the P6 extension. Recommended order: EXP-002 first.
+
+## 2026-09-05 late afternoon — EXP-002's instrument is complete
+
+- **S3 landed (`526f295`)**: the state-swap CLI, four arms, the identity gate and the artifact.
+  EXP-002 is ready to run on a Director lift — prefills only, no Jacobians, well under an hour on
+  the 4B.
+- **Arm A has four ways to be quietly wrong and all four look like a result.** Mask too little and
+  attention leaks the answer. Let the suffix stand readable outside the masked span and it leaks by
+  another route. Mask only at the decision and the answer arrives one attention hop away. Mask the
+  observation *while it is arriving* and the recurrent state never acquires what arm A tests for,
+  so the arm reports a null it could not have avoided. The implementer found two, the Chief a
+  third, the Deputy asked for the fourth to be protected against a future edit. All four are now
+  guarded where the code makes the choice, with a test that fails if a later simplification merges
+  the timing cases.
+- **Trap 7 refuted, and the refutation is the slice's most valuable output.** The order offers two
+  forms for the scored step as alternatives; they are alternatives about the mask's *shape* and say
+  nothing about which forwards carry it. Measured: the two constructions differ by **exactly 0.0**
+  on the four-block fixture S1 and S2 were accepted against — its only attention block is the last,
+  so nothing can propagate — and by **0.232** in logit space on eight blocks with two attention
+  blocks. **A fixture can be real and still be the wrong real thing.** Second time in two days that
+  a correctly built fixture failed to expose a defect for a structural reason; into the R38 record.
+- **A figure of the implementer's, relayed by the Deputy without challenge, was wrong.** The
+  chunking deviation was reported as 7.87e-06 — a maximum over the whole vocabulary in *logit*
+  space, where every statistic reported is a probability of one of two candidate tokens. In that
+  quantity it is 2.16e-07, and it is depth-dependent (7.87e-06 at four blocks, 1.48e-05 at eight),
+  so it was never a single number. **"A maximum over what" is the question to ask of every figure,
+  ours included**; the Deputy asked it of everyone else's all day and not of this one.
+- The change it prompted earns its keep, measured across three chunkings: persistent arm deviates
+  2.2–2.6e-08, arm C 1.5–1.9e-08, residual on the paired difference **4.7e-09 to 1.1e-08** — below
+  either arm's own deviation, about ninety times below the identity gate's tolerance. Recomputed
+  every run rather than quoted.
+- **The suffix rule is redundant and says so.** On the real cohort of 42 points it rejects zero, as
+  would a naive any-occurrence rule, because the two prompts differ only inside the hidden spans
+  and EXP-001's leakage guard already forces the outside count to zero. It refutes the implementer's
+  own earlier reasoning about incidental six-digit hits, which produce none. Kept because it fails
+  closed if the window, probe step or generator moves; the artifact states its redundancy rather
+  than implying it catches something.
+- **The identity gate runs on three points and gates on the maximum**, because one point can pass
+  by luck; a fake that round-trips once and forgets afterwards now fails.

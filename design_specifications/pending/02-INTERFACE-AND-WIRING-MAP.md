@@ -763,6 +763,12 @@ forget. Each has an integration check in §6.
   quoted in a checklist, a role document, a pre-registration or a reading names the artifact,
   ruling or computation it came from, so the next reader can recompute it instead of trusting
   it; a figure with no named source is an estimate and is labelled as one.
+- **R38 note (2026-09-05, EXP-002 S3): a fixture can be real and still be the wrong real
+  thing.** S1 and S2 were accepted against a four-block hybrid whose only attention block was
+  last, so a mask applied only at the decision step and a mask carried on every forward gave
+  identical logits (0.0) there and differed by 0.232 on an eight-block fixture with two
+  attention blocks. The seam test's fixture must be able to exhibit the failure the test is for:
+  where the mechanism is propagation, the fixture needs somewhere for it to propagate through.
 
 - **R34 amended (2026-09-05; proposed by the Head of Interpretability, ratified by the Chief):
   context-constant lens rows enter no Holm family (#78).** Holm families in the J-space sweep

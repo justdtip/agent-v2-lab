@@ -122,7 +122,12 @@ power to say so. Either way the memo's entries get a power statement beside each
 - **§4's "median probability difference of about 0.001"** does not reproduce from `per_case`
   under any reading; the closest is about 0.0025. The qualitative claim (the effect A3 cannot
   exclude is orders of magnitude below the pre-registered World B threshold of P > 0.5, observed
-  maximum 0.227) survives; the figure is restated as about 0.0025.
+  maximum 0.227) survives under every defensible statistic; each must be named (R38):
+  difference of medians 0.00107 (the Head's "about 0.001"); median of per-case differences
+  0.00384; median absolute per-case difference 0.01747; and the report's 0.00255, the median
+  after shifting the distribution so the win rate reaches the Wilson upper bound (25/42). All
+  four sit two to three orders of magnitude below the pre-registered threshold of 0.5, so the
+  argument does not depend on the choice, and the report says so.
 - **§4's "p 0.0007 at n = 10"** is two-sided; A1 specifies one-sided, which is 0.00036. Both
   reported with the tail named.
 - **A3's threshold** is 0.713 (power 0.8000 at n = 42), not 0.70 (power 0.743). The sentence:
@@ -134,3 +139,27 @@ power to say so. Either way the memo's entries get a power statement beside each
   observed effect needs **135 points** (stable crossing; 0.8014). Discrete tests are not
   monotone in n (Fisher at 3/3 vs 0/3 rejects at p = 0.05, power 0.512; at n = 4 the next
   attainable table is 0.0714, power 0.410), so every "n for 80%" is a stable crossing.
+
+## 6. The Head of Interpretability's framing memo, and the revised recommendation (ratified)
+
+Source: `under_review/POWER-ANALYSIS-FRAMING-REVIEW-2026-09-05.md` (renamed from the order's
+path, which the tables report now holds).
+
+- **EXP-001 is bounded, not merely unrejected.** Zero of 42 cases reach P(true) > 0.5, the
+  World B criterion; Wilson on 0/42 is [0, 0.084], so at 95% confidence at most 8.4% of cases
+  could carry the World B signature, against an observed maximum of 0.227. The same paired test
+  on the same 42 cases detected the already-read effect at p 0.0009, so the design discriminates.
+  The paired 10 v 4 is not the load-bearing statistic and the report's "absence of evidence" is
+  a statement about that row, not about the verdict.
+- **Revised recommendation to the Director: do not extend EXP-001.** The 135-new-point request
+  (about 5 h) would tighten a bound on a 60/40 tilt the pre-registration does not care about;
+  EXP-002 (causal, about 1 h, ratified, in implementation) answers the residual doubt in a way
+  more observation cannot. B1 stays costed in the order for the case where the Director wants
+  the bound anyway.
+- **P6: the extension stands as B2.** The Head's "no eligible cases exist" refers to a second
+  family; more ledger_reconcile cases are the right shape (the notes keep list structure past the
+  omission), and a ledger-heavy evaluation of C and B harvests them. Twenty cases, reporting the
+  contrast as the finding with the interval beside it; twenty-six only if the rate is the claim.
+- Minor differences between the memo and the tables report (n for 80% at r 0.70: 49 first
+  crossing vs 54 stable crossing; "about 0.001" vs about 0.0025): the tables report is the ruled
+  deliverable and its stable-crossing rule governs; the memo's qualitative claims survive.

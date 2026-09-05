@@ -623,3 +623,53 @@ figure recomputed independently by the Chief (paired power 0.2709 at n = 42; 135
 - Corrections to the work order recorded in its §5: family sizes 5/5/6 and 8/8/9; A3's
   threshold 0.713; §4's p at n = 10 one-sided 0.00036; the "0.001" figure not reproduced (about
   0.0025); Fisher power is not monotone in n, so every n-for-80% is a stable crossing.
+
+## Pre-gate read: EXP-002 S3 (worktree `wt-s3` at `9f00be2`), 2026-09-05 afternoon
+
+Read in full ahead of the delta; `tests/test_state_swap.py` 27 passed on my run. Head's domain
+review: ready subject to (a) arm C in both forms (chunked comparator with a fresh cache; single
+forward retained as the EXP-001 reproduction check) and (b) prefill chunk boundaries recorded.
+Design verified: hidden indices taken from `window_messages` itself; message spans located by
+nested prefix renders with both character and token nesting checked; `_spans_behind` masks a
+span only once wholly behind the chunk (the model reads the observation as it arrives, which is
+how the recurrent state holds it); the mask rides every later chunk; arm B forced onto the
+empty explicit-array route so A and B differ by the mask alone; the control on the next point's
+cache with that point's spans, refusing to degenerate; the identity gate through the runner's
+own `_copy_cache_state`, recording its observed maximum either way and writing the artifact
+before stopping; aggregation as ruled (ties recorded in both families); markdown at four
+significant figures so absolute probabilities never print as zero. Trap 7 refuted by
+measurement (0.232 logits on an eight-block fixture; 0.0 on the four-block one whose only
+attention block was last), now an R38 note.
+Added to the delta: (d) reject points whose true suffix occurs outside the hidden span in the
+persistent prompt, tallied (the leakage guard's persistent-arm analogue; arm A's attention
+could otherwise read it); (e) identity gate on the first three points, gated on the maximum;
+(f) optional `--exp001-artifact` comparison of arm C's single-forward per-point probabilities
+against EXP-001's `per_case`, recording the maximum absolute difference. Gate on the delta.
+
+## Gate: EXP-002 S3 delta (all eight changes), 2026-09-05 evening
+
+Worktree `wt-s3`; five files. Delta read in full; 70 passed on my run (`test_state_swap.py`,
+`test_arch.py`); ruff clean. **Approved to commit; EXP-002 is ready to run on a Director lift.**
+- Head's (a): arm C runs twice, a fresh cache over its own windowed text chunked like the
+  persistent arms as the comparator every paired statistic uses, and EXP-001's single uncached
+  forward kept beside it as the reproduction check, in no family; the per-point difference
+  between the two is recorded. (b): `forward_schedule` records every forward each arm ran with
+  the spans it carried, so the per-chunk masking is auditable from the artifact; the chunk that
+  contains the hidden observation carrying nothing is the visible signature of the rule.
+- (c) ties: every row carries wins, losses, ties, points and n with its n-rule, both families.
+- (d) the standalone suffix rule rejects a point whose true suffix is readable outside the
+  hidden span; measured on the real cohort it rejects 0 of 42, and the naive rule would too,
+  for the structural reason that the persistent and windowed prompts differ only inside the
+  hidden spans, so EXP-001's leakage guard already forces the count to zero. Kept because it
+  fails closed if the window, the probe step or the generator moves; the artifact says it is
+  redundant here and why. The hyphen boundary of `_value_pattern` is stated as B6's business.
+- (e) `identity_gate_family`: three points, gated on the maximum, each recorded.
+- (f) `--exp001-artifact`: arm C's single forward against EXP-001's `per_case` by task id,
+  maximum absolute difference recorded; a missing artifact costs the run nothing.
+- The chunking deviation is measured in candidate probabilities, not vocabulary-wide logits
+  (the Deputy's 7.87e-6 was the latter; 2.16e-7 on the same fixture, depth-dependent), and
+  recomputed per run: persistent 2.2 to 2.6e-8, arm C 1.5 to 1.9e-8, residual on the paired
+  difference 4.7e-9 to 1.1e-8, below either arm's own deviation and ninety times below the
+  gate's tolerance. The cancellation is real and partial, as it can only be.
+- The module docstring names arm A's four ways to be quietly wrong, each guarded where the
+  choice is made, with a test that fails if the two timing branches are merged.
