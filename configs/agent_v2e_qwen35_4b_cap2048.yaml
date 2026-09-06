@@ -1,4 +1,4 @@
-# Ten-step diagnostic of the unified run's trainer peak (heartbeat 13:55): the same recipe with the validation pass cut to two batches and no mid-run validation, to separate the cache left by validation from the step's own peak. Not a training arm; its output directory is discarded.
+# Arm A variant if the 2,048-token diagnostic passes and accumulation does not: the recipe unchanged except the row cap at 2,048 with the 250 training rows whose prompts reach it removed (data/agent_v2e-qwen35-4b-cap2048, 3.7 percent of the rows; heartbeat 14:25).
 # The unified run, arm A (UNIFIED-RUN-2026-09-06 sections 3 and 4): the agent_v2e source rows
 # re-rendered for Qwen3.5-4B (R21 pattern, byte-identical task content), trained on the full
 # adapter set (R50(a)) at batch 1 with accumulation 4 (R32), gated-delta chunk 64, gradient
@@ -6,8 +6,8 @@
 # Projection basis (memo, 11:45): rows average about 1,100 tokens, four rows a step, 126 tokens
 # per second measured on 2,688-token rows and 102 on 4,096-token rows, so 400 steps is 4 to 5 hours.
 model: qwen35-4b
-output: "outputs/agent-v2e-qwen35-4b-diag"
-data: "data/agent_v2e-qwen35-4b-cap2688"
+output: "outputs/agent-v2e-qwen35-4b"
+data: "data/agent_v2e-qwen35-4b-cap2048"
 source_rows: "data/agent_v2e"
 seed: 20260902
 keep_last: 2
@@ -34,21 +34,21 @@ train:
   rank: 16
   scale: 32.0
   dropout: 0.0
-  iters: 10
+  iters: 400
   batch_size: 1
   grad_accumulation_steps: 4
   learning_rate: 3.0e-5
-  max_seq_length: 2688
+  max_seq_length: 2048
   gated_delta_chunk: 64
   # R32 stage 2: the chunkwise recurrence, the form the training-cost probe measured (2.4 MiB per token, fitting at
   # 4,096). The stage's default is the checkpointed per-token loop, whose backward memory is superlinear in the row
   # (issue 90), and every launch on 2026-09-06 that died of a Metal out-of-memory ran that default (heartbeat 14:45).
   gated_delta_mode: chunkwise
   grad_checkpoint: true
-  val_batches: 2
+  val_batches: 24
   steps_per_report: 10
-  steps_per_eval: 1000
-  save_every: 1000
+  steps_per_eval: 100
+  save_every: 100
 
 select:
   screen:

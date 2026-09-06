@@ -1,4 +1,4 @@
-# Ten-step diagnostic of the unified run's trainer peak (heartbeat 13:55): the same recipe with the validation pass cut to two batches and no mid-run validation, to separate the cache left by validation from the step's own peak. Not a training arm; its output directory is discarded.
+# Arm A variant if the accumulation diagnostic passes: the same effective data exposure as batch 1 x accumulation 4 x 400 steps, taken as batch 1 x 1 x 1,600 steps (four times the optimizer steps at a quarter of the batch), because mlx-lm holds the accumulated gradient across the window and the pipeline's step at 2,688 tokens exceeds the Metal working set under accumulation 4 (heartbeat 14:25). Checkpoints and screens every 400 steps so the selection stage sees four checkpoints as before.
 # The unified run, arm A (UNIFIED-RUN-2026-09-06 sections 3 and 4): the agent_v2e source rows
 # re-rendered for Qwen3.5-4B (R21 pattern, byte-identical task content), trained on the full
 # adapter set (R50(a)) at batch 1 with accumulation 4 (R32), gated-delta chunk 64, gradient
@@ -6,7 +6,7 @@
 # Projection basis (memo, 11:45): rows average about 1,100 tokens, four rows a step, 126 tokens
 # per second measured on 2,688-token rows and 102 on 4,096-token rows, so 400 steps is 4 to 5 hours.
 model: qwen35-4b
-output: "outputs/agent-v2e-qwen35-4b-diag"
+output: "outputs/agent-v2e-qwen35-4b"
 data: "data/agent_v2e-qwen35-4b-cap2688"
 source_rows: "data/agent_v2e"
 seed: 20260902
@@ -34,9 +34,9 @@ train:
   rank: 16
   scale: 32.0
   dropout: 0.0
-  iters: 10
+  iters: 1600
   batch_size: 1
-  grad_accumulation_steps: 4
+  grad_accumulation_steps: 1
   learning_rate: 3.0e-5
   max_seq_length: 2688
   gated_delta_chunk: 64
@@ -45,10 +45,10 @@ train:
   # (issue 90), and every launch on 2026-09-06 that died of a Metal out-of-memory ran that default (heartbeat 14:45).
   gated_delta_mode: chunkwise
   grad_checkpoint: true
-  val_batches: 2
+  val_batches: 24
   steps_per_report: 10
-  steps_per_eval: 1000
-  save_every: 1000
+  steps_per_eval: 400
+  save_every: 400
 
 select:
   screen:

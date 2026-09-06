@@ -39,6 +39,10 @@ train:
   learning_rate: 3.0e-5
   max_seq_length: 2688
   gated_delta_chunk: 64
+  # R32 stage 2: the chunkwise recurrence, the form the training-cost probe measured (2.4 MiB per token, fitting at
+  # 4,096). The stage's default is the checkpointed per-token loop, whose backward memory is superlinear in the row
+  # (issue 90), and every launch on 2026-09-06 that died of a Metal out-of-memory ran that default (heartbeat 14:45).
+  gated_delta_mode: chunkwise
   grad_checkpoint: true
   val_batches: 24
   steps_per_report: 10
