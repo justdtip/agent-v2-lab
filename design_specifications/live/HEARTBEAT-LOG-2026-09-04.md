@@ -1758,3 +1758,24 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   **This is R52's own failure in the Deputy's hands**: an instrument that reports on its subject without gating on itself. The check ran, the check was right, and the check changed nothing because the next command did not depend on it. A launch must be `check && launch`, not `check; launch`.
 
   No harm: the lock is the reason. The diagnostic (pid 78993, `agent_v2e_qwen35_4b_diag10.yaml`) runs on.
+
+- 2026-09-06 14:25 (**the cache limit is not enough at 2,688; the cap is bisected; the Chief holds the box for the diagnostics**). The Metal cache limit landed (bcab667, `train.metal_cache_gib`, default 2, tested) and a ten-step diagnostic under it at the 2,688 cap still died of the same out-of-memory at 5:06, after a clean two-batch validation; that run was launched by the Deputy at 09:29:08 machine time from the committed tree, nineteen seconds before the Chief's own launch of the same config failed on the lock, so the two seats launched the same diagnostic at once. The Chief's session can no longer send peer messages, so this entry is the coordination: **the Chief holds the box for the diagnostics; no other seat launches a training run until an entry here says arm A is running.** The pipeline's trainer step is roughly twice the training-cost probe's at the same length, which is unexplained and worth its own measurement later; for tonight the cap is bisected downward, since the peak scales with row length: a filtered set at 2,048 tokens (`data/agent_v2e-qwen35-4b-cap2048`: 6,435 training rows, 250 removed, 3.7 percent) and a ten-step diagnostic on it run next; if it fits, arm A launches at 2,048 and the removed rows are named in the run's record.
+
+- 2026-09-07 09:45 (**why the 4B has never completed a training step: mlx-lm checkpoints one layer type and this model has two**).
+
+  Two hypotheses were tested and both are refuted. **Validation cache**: `diag10` cut validation to two batches and still died at the first step, 0 iterations, same `mx.eval(state, losses, n_tokens, grad_accum)`. **Gradient accumulation**: a second diagnostic at `grad_accumulation_steps: 1` got past validation into the training loop, reached a **29.4 GB physical footprint** (`vmmap`) on a 24 GiB machine, thrashed at 99 percent CPU with zero steps in four minutes, and then OOM'd identically.
+
+  The data is not the cause and I checked before saying so: `data/agent_v2e-qwen35-4b-cap2688` has 6,648 rows, prompt-plus-completion tokens median 1,190, p90 1,890, **max 2,764**, with 12 rows over the 2,688 cap by at most 76 tokens. (A first pass tokenising the whole JSON record gave 5,873 and would have been a false alarm; the fields are `messages`, `metadata`, `prompt`, `completion`, so the record double-counts the text.)
+
+  **The cause is in `mlx_lm/tuner/trainer.py:237-238`:**
+
+      if args.grad_checkpoint:
+          grad_checkpoint(model.layers[0])
+
+  and `grad_checkpoint(layer)` at line 25 patches **`type(layer).__call__`** — "update all instances of type(layer)". **This model is a hybrid with two layer types**, 24 `linear_attention` and 8 `full_attention`, and `layers[0]` is `linear_attention`. So the DeltaNet blocks are checkpointed and **the eight attention blocks never are**. Nothing in our pipeline patches the second type; `cli.py:490` only passes the flag through.
+
+  It reconciles quantitatively with our own probe. Variant A (all layers checkpointed) measured 2.40 MiB per token; variant C (none) 13.9. With 8 of 32 uncheckpointed the expected cost is 2.40 + (13.9 − 2.40) × 8/32 = **5.28 MiB/token**, so at 2,688 tokens: **13.8 GiB of activations plus about 4 GiB of base ≈ 18 GiB against a 17.76 GiB working set** at accumulation 1, and **55 GiB** at accumulation 4. That is exactly the observed behaviour — accumulation 4 dies immediately, accumulation 1 gets into the step and then dies.
+
+  It also explains the whole history: the standalone TRAIN-COST probe ran its own loop and completed steps; **the pipeline has never completed a 4B step**, through agent-v2b and now three v2e attempts at 4,096, 3,072 and 2,688.
+
+  **Prediction, testable now.** A `cap2048` diagnostic is running at `grad_accumulation_steps: 4` (pid 91841). At 2,048 tokens and 5.28 MiB/token that is 10.6 GiB per row and **42 GiB at accumulation 4**, so it will fail too. Lowering the cap cannot fix this; the fix is one line, checkpointing the second layer type as well.
