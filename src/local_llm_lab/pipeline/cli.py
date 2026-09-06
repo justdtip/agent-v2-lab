@@ -236,6 +236,30 @@ def _clear_model_cache() -> None:
     mx.clear_cache()
 
 
+DEFAULT_METAL_CACHE_GIB = 2.0
+
+
+def _limit_metal_cache(train_config: dict[str, Any]) -> int:
+    """Cap the Metal allocator's cache before training and return the limit in bytes.
+
+    Without a cap the allocator keeps every freed temporary, so a step's transient peaks (the
+    full-vocabulary logits above all) accumulate in the cache and the working set climbs
+    until Metal refuses a command buffer with "Insufficient Memory". The training-cost probe
+    of 2026-09-05 ran this trainer's own step at 4,096 tokens under a 2 GiB cache limit and
+    fitted; the pipeline set no limit and died at the first optimizer step three times on
+    2026-09-06 at caps of 4,096, 3,072 and 2,688 tokens (heartbeat 13:20 to 14:05). The
+    limit is ``train.metal_cache_gib`` in the config, default 2; recorded in the run log.
+    """
+    import mlx.core as mx
+
+    gib = float(train_config.get("metal_cache_gib", DEFAULT_METAL_CACHE_GIB))
+    if gib <= 0:
+        raise ValueError("train.metal_cache_gib must be positive")
+    limit = int(gib * 2**30)
+    mx.set_cache_limit(limit)
+    return limit
+
+
 def _effective_training_spec(config: dict[str, Any]) -> ModelSpec:
     spec = load_model_spec(config["model"])
     train = config["train"]
@@ -719,6 +743,8 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
         identity=_training_identity(config, effective),
     ) as runlog:
         try:
+            cache_limit = _limit_metal_cache(config["train"])
+            runlog.info("metal cache limit", bytes=cache_limit, gib=round(cache_limit / 2**30, 2))
             runlog.info("loading base", model=effective.hf_id)
             model, tokenizer = _load_training_base(effective.hf_id)
             resolved = effective.resolve(model, tokenizer)
