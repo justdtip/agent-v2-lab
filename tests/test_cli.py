@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import contextlib
 import hashlib
 import importlib
@@ -1855,3 +1856,126 @@ def test_stage_train_ignores_a_stale_checkpoint_from_an_earlier_run(monkeypatch,
     assert health["verdict"] == "incomplete"
     assert health["final_checkpoint"] is False
     assert "incomplete_run" in {flag["flag"] for flag in health["flags"]}
+
+
+# ------------------------------------------- the last two non-atomic sentinels (issue 74)
+#
+# `_interrupt_the_manifest_writer` is imported rather than copied. It truncates *both* writers
+# -- `runlog`'s `os.fdopen` and `Path.write_text` -- so the assertion rests on the outcome
+# rather than on which writer is in use, which is what makes it fail if a site is reverted to
+# a plain stamp. Two copies of that helper could drift, and a copy that stopped patching
+# `Path.write_text` would keep passing while proving nothing.
+from test_branch import _interrupt_the_manifest_writer  # noqa: E402
+
+
+def test_a_stage_manifest_is_whole_or_absent_when_the_write_is_interrupted(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The last stamp in this module that was not atomic (issue 74).
+
+    `manifest.json` is the R21 guard's own sentinel: `guard_dataset_write` decides whether a
+    later write is permitted by whether this file is there. A truncated one does not merely
+    lose provenance, it waves a later write straight over data that is in fact complete.
+    `branch.py` and `rollout.py` already stamped through `write_text_atomic`; this one did not,
+    and it is the helper the rollout and branch stage outputs go through.
+    """
+    target = tmp_path / "rollouts"
+    target.mkdir()
+    original = '{"stage": "rollout", "kept": true}\n'
+    (target / "manifest.json").write_text(original, encoding="utf-8")
+
+    _interrupt_the_manifest_writer(monkeypatch, 12)
+    with pytest.raises(OSError, match="no space left on device"):
+        cli._write_stage_manifest(target, {"stage": "rollout", "split": "train"})
+    monkeypatch.undo()
+
+    assert (target / "manifest.json").read_text(encoding="utf-8") == original
+    leftovers = sorted(path.name for path in target.iterdir() if path.name.startswith("."))
+    assert leftovers == [], "no partial temporary file may survive at the destination"
+
+
+def test_a_health_record_is_whole_or_absent_when_the_write_is_interrupted(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """`health.json` is the one of the four where the record itself is the loss (issue 74).
+
+    The sentinels' failure mode is a later write over complete data, which is bad and already
+    reasoned about. This file is the R26 training-health record -- what a reader opens to decide
+    whether a run is usable -- written from the stage's `finally` at the end of a run that took
+    seventy minutes. A truncated one is a health verdict that will not parse, produced at the
+    moment the information is least reproducible.
+
+    Driven through `stage_train` rather than through a direct call, because the write happens on
+    the way out of a `finally` block and the question is what survives that path.
+    """
+    config = _training_config(tmp_path)
+    output = config["output"]
+    _patch_stage_train(monkeypatch, _short_trainer)
+
+    _interrupt_the_manifest_writer(monkeypatch, 10)
+    with pytest.raises(OSError, match="no space left on device"):
+        cli.stage_train(config, iters=2)
+    monkeypatch.undo()
+
+    assert not (output / "health.json").exists(), (
+        "a health record that cannot be parsed is worse than none: the reader cannot tell an "
+        "unhealthy run from an interrupted write"
+    )
+    leftovers = sorted(path.name for path in output.iterdir() if path.name.startswith("."))
+    assert leftovers == [], "no partial temporary file may survive at the destination"
+
+
+def test_the_r21_debt_comment_is_gone_because_the_debt_is() -> None:
+    """A comment that outlives its work sends the next reader looking for work that is done.
+
+    The block in `pipeline/data.py` named two writes in `cli.py` and a fourth site it called a
+    duplicate of the helper. All three are addressed here: the two writes go through
+    `runlog.write_text_atomic`, and `probes/state_probe.py`'s `_atomic_text` is deleted and its
+    eight callers rerouted. That function was a functional twin of `write_text_atomic` --
+    same-directory temporary with the dotted name and `.tmp` suffix, write, flush, fsync,
+    replace, unlink on failure -- with no reference outside its own module.
+
+    The first delivery of this test asserted that `"manifest.json"` was absent from
+    `state_probe.py`, and called the fourth site imaginary on that basis. **That was the wrong
+    question.** The comment said the file duplicated *the helper*, not the manifest write, so
+    searching for the manifest proved nothing about the claim it was checking. The assertion
+    below asks what the comment actually said.
+    """
+    # From this file, not from `cli.__file__`: the package may be installed rather than
+    # imported from the tree, and then its parents point into site-packages.
+    root = Path(__file__).resolve().parents[1]
+    data_source = (root / "src/local_llm_lab/pipeline/data.py").read_text(encoding="utf-8")
+    assert "DEBT(R21)" not in data_source
+
+    for module in ("pipeline/cli.py",):
+        source = (root / "src/local_llm_lab" / module).read_text(encoding="utf-8")
+        assert '"manifest.json").write_text(' not in source
+        assert '"health.json").write_text(' not in source
+
+    probe = (root / "src/local_llm_lab/probes/state_probe.py").read_text(encoding="utf-8")
+    tree = ast.parse(probe)
+
+    def _calls(node: ast.AST, attribute: str) -> bool:
+        return any(
+            isinstance(call.func, ast.Attribute) and call.func.attr == attribute
+            for call in ast.walk(node)
+            if isinstance(call, ast.Call)
+        )
+
+    # A text twin, not a binary one. The two `np.savez_compressed` writers in this module use
+    # the same temporary-and-replace shape and must stay: `runlog` has no bytes variant, and
+    # giving it one is a different issue. `mode="w"` is what separates them.
+    twins = [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and _calls(node, "NamedTemporaryFile")
+        and _calls(node, "replace")
+        and 'mode="w"' in (ast.get_source_segment(probe, node) or "")
+    ]
+    assert twins == [], (
+        f"state_probe.py defines its own atomic text writer again: {twins}. There is one, in "
+        "runlog, and this module imports it. Two implementations of one contract is how they "
+        "drift."
+    )
+    assert "write_text_atomic" in probe, "its callers must reach runlog's writer by name"

@@ -195,9 +195,15 @@ def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
 
     The R21 guard fires only on this file, so without it the rollout/branch guard calls
     would be inert; the stamp also gives those outputs the provenance they were missing.
+
+    Atomic (issue 74), for the reason ``runlog.write_text_atomic`` states: the manifest is the
+    guard's own sentinel, so a truncated one is worse than none. It does not merely lose
+    provenance -- it can wave a later write straight over rollout data that is in fact
+    complete. ``branch.py`` and ``rollout.py`` stamp through the same call, and this was the
+    last stamp that did not.
     """
     target.mkdir(parents=True, exist_ok=True)
-    (target / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(target / "manifest.json", json.dumps(payload, indent=2) + "\n")
 
 
 def _load_training_base(hf_id: str) -> tuple[Any, Any]:
@@ -880,8 +886,14 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                     status=status,
                     fallbacks=_recorded_fallbacks(backbone),
                 )
-            (output / "health.json").write_text(
-                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            # Atomic (issue 74). This is the R26 training-health record: the file a reader
+            # opens to decide whether a run is usable, written at the end of a run that took
+            # seventy minutes and cannot be repeated cheaply. A truncated one is a health
+            # verdict that will not parse, produced at the moment the information is least
+            # reproducible. Unlike the sentinels, nothing downstream is waved past by it --
+            # the cost is the record itself, which is worse.
+            write_text_atomic(
+                output / "health.json", json.dumps(summary, indent=2, sort_keys=True) + "\n"
             )
             runlog.close(status=status, verdict=health.verdict, flags=len(health.flags))
             del callback, train_set, valid_set, test_set, model, tokenizer
@@ -1106,8 +1118,8 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
     # Atomic because this file is a stage sentinel like the dataset manifests: `best-adapter/`
     # has already been copied by the time it is written, so a truncated selection.json is the
     # one artifact saying WHICH checkpoint that copy is, left unparseable next to a directory
-    # that looks finished. Whole or absent, never half. This module's own _write_stage_manifest
-    # and health.json writes are still plain write_text; see DEBT(R21) in pipeline/data.py.
+    # that looks finished. Whole or absent, never half. Every sentinel this module writes goes
+    # through the same call now (issue 74).
     write_text_atomic(selection_path, json.dumps(selection, indent=2) + "\n")
     write_provenance(
         output,
