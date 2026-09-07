@@ -1024,6 +1024,7 @@ _TESTS_THAT_LOAD_MLX = (
     "test_history_cache.py",
     "test_jlens.py",
     "test_jspace_sweep.py",
+    "test_lens_native_integration.py",
     "test_lens_regression.py",
     "test_live_lens_native.py",
     "test_patch.py",

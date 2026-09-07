@@ -1,0 +1,2 @@
+primary_lock None mapped_MLX [MappedProcess(pid=49850, command='/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/18df6241-b6a2-4c3c-8b24-22cad2612a51/scratchpad/wt-94/.venv/bin/pytest -q -p no:warnings', library='/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/18df6241-b6a2-4c3c-8b24-22cad2612a51/scratchpad/wt-94/.venv/lib/python3.13/site-packages/mlx/lib/libmlx.dylib')]
+Refused before pytest import: model slot became occupied

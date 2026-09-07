@@ -182,15 +182,23 @@ def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt)
                     row[corrupt] = "changed"
                 self.emit(row)
 
-            yield captured
-            self.emit(rows()[-1] | {"turn": self.turn})
+            completed = False
+            try:
+                yield captured
+                completed = True
+            finally:
+                # §3.4: match the public session's abort emission during unwinding.
+                self.emit(
+                    rows()[-1]
+                    | {"turn": self.turn, "status": "complete" if completed else "aborted"}
+                )
 
         def emitted(self, token):
             calls.append(("emitted", token))
             self.emit(rows()[6] | {"turn": self.turn})
 
     if corrupt:
-        with pytest.raises(ValueError, match="native replay"):
+        with pytest.raises(ValueError, match=rf"native replay forward\.{corrupt} differs"):
             module.replay_record(
                 view,
                 tok,
@@ -201,6 +209,8 @@ def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt)
                 array_api=np,
                 session_factory=Session,
             )
+        assert written[-1]["kind"] == "end_turn"
+        assert written[-1]["status"] == "aborted"
         return
     result = module.replay_record(
         view,

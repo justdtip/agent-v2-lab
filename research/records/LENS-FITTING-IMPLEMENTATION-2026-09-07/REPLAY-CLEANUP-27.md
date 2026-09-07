@@ -1,0 +1,9 @@
+# Replay abort cleanup — 7 September 2026
+
+Parent review strengthened the pure session fixture to reproduce CaptureSession.generation's finally block: it emits an aborted end-turn while unwinding an exception. With the unmodified replay reader, each of five deliberately corrupted forward fields lost its original diagnostic to `native replay end_turn.kind differs at control1`; five tests failed and the unchanged case passed. The prior fake omitted this cleanup path, so it missed the defect.
+
+The reader now writes the aborted row without consuming the expected control. The original exception survives and CaptureSession can finish cleanup. An unexplained abort still cannot satisfy completion because the cursor remains behind. The normal successful control checks are unchanged. Independent GPT-6 Astra source review found no actionable defect.
+
+Fresh replay/runtime/repository-guard run:92 passed in15.41s, zero MLX imports. Ruff passed on all four parent-owned code/test paths. Three new native integration cases use the existing tiny installed Qwen3.5 constructor, two turns, split prefills and generator lookahead. They check exact controls and readings under an unchanged lens, exact controls with changed readings under a negated lens, and hash-error diagnostics plus wrapper restoration. The file is pinned in the repository MLX import list. Native execution is pending.
+
+At11:11UTC, after the Deputy's end line and a clear inventory, the parent announced a bounded window in the primary heartbeat. The fresh launch check then found foreign pytest PID49850 mapping libmlx in wt-94 and refused before importing pytest. No tiny model or checkpoint was loaded by this task. The foreign process and lock were untouched. The window remains open while its owner finishes; no regression retry has started.

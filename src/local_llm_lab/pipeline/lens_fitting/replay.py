@@ -413,6 +413,12 @@ def replay_record(
 
     def checked_emit(row):
         nonlocal cursor, tokens
+        if row["kind"] == "end_turn" and row["status"] == "aborted":
+            # CaptureSession emits this while unwinding a failed forward. Preserve
+            # that first exception and let the session finish restoring its state.
+            # Do not advance the cursor: an unexplained abort cannot pass completion.
+            emit(row)
+            return
         if row["kind"] in {"begin_turn", "forward", "emitted", "end_turn", "source", "head"}:
             expected = controls[cursor]
             keys = {
