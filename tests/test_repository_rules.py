@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sysconfig
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -1011,7 +1012,22 @@ _TESTS_THAT_LOAD_MLX = (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_IMPORT_ROOTS = (_REPO_ROOT / "src", _REPO_ROOT / ".venv" / "lib" / "python3.13" / "site-packages")
+
+
+def _import_roots(repo_root: Path) -> tuple[Path, ...]:
+    """Where a dotted module name may resolve: this repository's sources, then the
+    **running interpreter's** site-packages.
+
+    Not ``repo_root / ".venv" / ...``. A worktree without its own ``.venv`` has no such
+    directory, so a hard-coded path silently resolves nothing there, every third-party name
+    becomes unreachable, and the closure tests fail for a reason that has nothing to do with
+    imports -- which is what the reviewer hit in a scratch worktree. The interpreter running the
+    suite always has a site-packages, wherever the checkout is.
+    """
+    return (repo_root / "src", Path(sysconfig.get_paths()["purelib"]))
+
+
+_IMPORT_ROOTS = _import_roots(_REPO_ROOT)
 
 
 def _module_path(dotted: str, roots: tuple[Path, ...]) -> Path | None:
@@ -1232,3 +1248,28 @@ def test_the_walker_follows_a_submodule_imported_from_its_package(tmp_path) -> N
     roots = (tmp_path,)
     assert _loads_mlx(tmp_path / "uses_sub.py", roots) == "pkg.sub"
     assert _loads_mlx(tmp_path / "uses_attr.py", roots) is None
+
+
+def test_import_roots_come_from_the_interpreter_not_a_venv_under_the_repo(tmp_path) -> None:
+    """A worktree with no ``.venv`` must still resolve third-party modules.
+
+    The first version hard-coded ``repo_root/.venv/lib/python3.13/site-packages``. In a checkout
+    without one, every third-party name resolves to nothing, so the closure stops at the first
+    such import and reports files clean that are not — a **false negative**, which is the
+    direction that clears a file to run beside a live model. The reviewer hit it in a scratch
+    worktree and the symptom was two failing tests, not a wrong answer, but the mechanism is the
+    same one.
+
+    ``tmp_path`` stands in for that checkout: it has no ``.venv`` at all, and resolution must
+    still work, because it comes from the interpreter running the suite.
+    """
+    assert not (tmp_path / ".venv").exists()
+    roots = _import_roots(tmp_path)
+
+    # The property, stated directly: site-packages is not derived from the root passed in.
+    assert Path(sysconfig.get_paths()["purelib"]) in roots
+    assert tmp_path not in roots[1].parents
+
+    # And the behaviour: a third-party name still resolves under those roots.
+    (tmp_path / "entry.py").write_text("from mlx_lm.tuner import trainer\n")
+    assert _loads_mlx(tmp_path / "entry.py", roots) == "mlx_lm.tuner.trainer"
