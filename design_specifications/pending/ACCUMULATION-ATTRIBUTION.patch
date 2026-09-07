@@ -1,0 +1,94 @@
+# ACCUMULATION-ATTRIBUTION: the residual is allocator growth, and a measurement says so
+
+A comment-only amendment on top of `14f5fca`. The arm A calibration point's comment said 0.2210
+GiB "belongs to running long and is unattributed". It is attributed now, and the point's comment
+should say what it is.
+
+## The model-free half, which settles the total
+
+`iterate_batches` truncates every sequence to `max_seq_length` and pads to `1 + 32·ceil(len/32)`
+capped at the same, so **2,688 tokens is the widest batch the trainer can build.** The dataset
+attains it: tokenised with the model's own tokenizer, the 6,648 training rows run 80 to 2,764
+tokens with a median of 1,193, **14 of them at or over the cap**, across 77 distinct padded widths.
+
+The accumulation arm measured that worst case directly — 9.5050 GiB at 2,688 tokens, accumulation
+4, same recipe. Arm A reached 9.7267.
+
+**Measurement against measurement, no model in between: arm A exceeds the widest row the trainer
+can build, at the same accumulation, by 0.2217 GiB. No row length can supply that.**
+
+## The inversion, which attributes the individual steps
+
+The trainer's own stdout reports `Peak mem` every ten iterations. Arm A's running peak rose in
+**four discrete steps and nowhere else** across 780 iterations, with nothing at the validation pass
+at 400. Inverting each through the calibrated shape in the row width, anchored on the arm's own
+point so accumulation and every fixed overhead cancel:
+
+| iteration | peak | implied padded width | buildable under the cap |
+| ---: | ---: | ---: | --- |
+| 10 | 8.1630 GiB | 2,157 | yes |
+| 40 | 9.3281 GiB | 2,619 | yes |
+| 110 | 9.5274 GiB | 2,697 | **no** |
+| 310 | 9.6047 GiB | 2,727 | **no** |
+| 730 | 9.7267 GiB | 2,774 | **no** |
+
+The first two steps are new longest rows. The last three cannot be. This half depends on the shape
+being right; the comparison above does not, and the two agree on the total.
+
+## So the hypothesis is confirmed, and sharper than it was
+
+Not "long runs use more". The peak grows in **rare discrete steps long after the widest row has
+been seen**, on a workload whose batch widths take 77 distinct values — a pool acquiring block
+sizes it cannot reuse. Two things it is not: the validation pass, which left no step at 400; and
+the gradient tree, which the final step's 0.1220 GiB resembles, but so does a two-bucket width
+change at 2.114 MiB per token, so that coincidence is recorded as noticed and discarded.
+
+## The test that was asked for cannot be run, and that is worth knowing
+
+Reading the row lengths at iterations 40, 110, 310 and 730 would have settled it directly. It is
+not available: `iterate_batches` sorts by length, chunks into batches, then permutes the batch
+order with `np.random.permutation`, and the trainer's main loop calls it **without a seed**
+(`trainer.py:273`). The permutation therefore depends on numpy's global state at that moment rather
+than on the run's declared seed, so **the data order is not deterministic from the config**. The
+peaks are attributed by their size instead.
+
+That is also a small finding about reproducibility in its own right, and it is not this patch's to
+fix.
+
+## Verification
+
+```
+full suite:                     exit 0
+tests/test_preflight.py:        exit 0 (comment-only; no assertion changes)
+ruff:                           clean
+git apply --check against HEAD: 0
+box: R45(b) inventory, 0 holders, checked before the suite
+record: research/records/ACCUMULATION-2026-09-08 carries the same analysis, appended (c82f4cf)
+```
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/preflight.py b/src/local_llm_lab/pipeline/preflight.py
+index 674fdb8..c03df85 100644
+--- a/src/local_llm_lab/pipeline/preflight.py
++++ b/src/local_llm_lab/pipeline/preflight.py
+@@ -224,9 +224,16 @@ _CALIBRATION_POINTS: tuple[_CalibrationPoint, ...] = (
+         note="one optimiser step per row, ten steps; the procedure's own condition",
+     ),
+     # The run the gate exists for, and it departs from the procedure twice over. Of the 0.3438
+-    # GiB above the point before it, accumulation carries a measured 0.1228 and 0.2210 belongs
+-    # to running long and is unattributed. It is in the table because an upper envelope that a
+-    # real run exceeds is not an envelope, and it lifts the chunkwise offset by 0.089.
++    # GiB above the point before it, accumulation carries a measured 0.1228 and the remaining
++    # 0.2217 is **allocator growth, not row length**. `iterate_batches` truncates and pads to at
++    # most `max_seq_length`, so 2,688 tokens is the widest batch the trainer can build; the
++    # dataset attains it (14 of 6,648 rows reach the cap, 77 distinct padded widths); and the
++    # arm above measured that worst case at 9.5050 GiB at the same accumulation, which arm A
++    # exceeds. Its running peak rose in four steps and nowhere else, and the last three imply
++    # widths of 2,697, 2,727 and 2,774 -- none of them buildable. So this point is here because
++    # an upper envelope a real run exceeds is not an envelope, and because the excess is a
++    # property of running long across many batch widths rather than of any row the gate sizes
++    # for. It lifts the chunkwise offset by 0.089. See ACCUMULATION-2026-09-08.
+     _CalibrationPoint(
+         "chunkwise", 2688, 256, 9.7260, _OK,
+         note=(
+```
