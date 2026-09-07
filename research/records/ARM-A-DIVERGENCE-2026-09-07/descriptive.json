@@ -1,0 +1,409 @@
+{
+ "n_tasks": 19,
+ "adapter_passes": 5,
+ "base_passes": 15,
+ "pairs_base_pass_adapter_fail": 11,
+ "adapter_failures_locked_in": 12,
+ "adapter_failures": 14,
+ "by_family": {
+  "read": {
+   "n": 2,
+   "adapter": 1,
+   "base": 2
+  },
+  "search": {
+   "n": 2,
+   "adapter": 1,
+   "base": 2
+  },
+  "calculate": {
+   "n": 2,
+   "adapter": 1,
+   "base": 1
+  },
+  "synthesis": {
+   "n": 2,
+   "adapter": 0,
+   "base": 2
+  },
+  "update": {
+   "n": 2,
+   "adapter": 0,
+   "base": 2
+  },
+  "list": {
+   "n": 2,
+   "adapter": 0,
+   "base": 2
+  },
+  "pointer_chain": {
+   "n": 2,
+   "adapter": 2,
+   "base": 2
+  },
+  "ledger_reconcile": {
+   "n": 1,
+   "adapter": 0,
+   "base": 0
+  },
+  "cross_reference": {
+   "n": 1,
+   "adapter": 0,
+   "base": 1
+  },
+  "conditional_update": {
+   "n": 1,
+   "adapter": 0,
+   "base": 0
+  },
+  "batch_update": {
+   "n": 1,
+   "adapter": 0,
+   "base": 0
+  },
+  "aggregate_report": {
+   "n": 1,
+   "adapter": 0,
+   "base": 1
+  }
+ },
+ "defects": {
+  "malformed argument": 3,
+  "re-issued call after success": 5,
+  "path abbreviation": 3,
+  "wrong hop": 1,
+  "state-note comparison error": 1,
+  "wrong file": 1
+ },
+ "tasks": [
+  {
+   "task_id": "test-read-0000-clean",
+   "family": "read",
+   "difficulty": null,
+   "adapter_success": true,
+   "adapter_turns": 2,
+   "adapter_reasons": [],
+   "base_success": true,
+   "base_turns": 2,
+   "first_divergence_step": null,
+   "lock_in_step": null,
+   "defect": null,
+   "defect_note": null
+  },
+  {
+   "task_id": "test-search-0001-clean",
+   "family": "search",
+   "difficulty": null,
+   "adapter_success": true,
+   "adapter_turns": 3,
+   "adapter_reasons": [],
+   "base_success": true,
+   "base_turns": 3,
+   "first_divergence_step": null,
+   "lock_in_step": null,
+   "defect": null,
+   "defect_note": null
+  },
+  {
+   "task_id": "test-calculate-0002-clean",
+   "family": "calculate",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "required tools unused: calculate"
+   ],
+   "base_success": true,
+   "base_turns": 2,
+   "first_divergence_step": 0,
+   "lock_in_step": 1,
+   "defect": "malformed argument",
+   "defect_note": "unbalanced parenthesis copied into the expression; then identical retry after the syntax error"
+  },
+  {
+   "task_id": "test-synthesis-0003-clean",
+   "family": "synthesis",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "required tools unused: calculate"
+   ],
+   "base_success": true,
+   "base_turns": 4,
+   "first_divergence_step": 2,
+   "lock_in_step": 3,
+   "defect": "malformed argument",
+   "defect_note": "expression is the tool's own name; transient-failure template applied to a syntax error; identical retry"
+  },
+  {
+   "task_id": "test-update-0004-clean",
+   "family": "update",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "file state wrong: config.ini",
+    "required tools unused: replace_text"
+   ],
+   "base_success": true,
+   "base_turns": 4,
+   "first_divergence_step": 1,
+   "lock_in_step": 1,
+   "defect": "re-issued call after success",
+   "defect_note": "correct plan written, note ends 'Reading.', reads the file again; verbatim lock-in"
+  },
+  {
+   "task_id": "test-list-0005-clean",
+   "family": "list",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "required tools unused: read_file"
+   ],
+   "base_success": true,
+   "base_turns": 3,
+   "first_divergence_step": 0,
+   "lock_in_step": 2,
+   "defect": "path abbreviation",
+   "defect_note": "relative directory 'notes' \u2192 empty listing \u2192 fabricated 'notes.md' \u2192 identical retry"
+  },
+  {
+   "task_id": "test-pointer_chain-0006-clean",
+   "family": "pointer_chain",
+   "difficulty": null,
+   "adapter_success": true,
+   "adapter_turns": 8,
+   "adapter_reasons": [],
+   "base_success": true,
+   "base_turns": 8,
+   "first_divergence_step": null,
+   "lock_in_step": null,
+   "defect": null,
+   "defect_note": null
+  },
+  {
+   "task_id": "test-ledger_reconcile-0007-clean",
+   "family": "ledger_reconcile",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "file state wrong: summary.txt",
+    "required tools unused: calculate, replace_text"
+   ],
+   "base_success": false,
+   "base_turns": 24,
+   "first_divergence_step": 1,
+   "lock_in_step": 1,
+   "defect": "re-issued call after success",
+   "defect_note": "list_files repeated at step 1; lock-in from step 7 (base also failed)"
+  },
+  {
+   "task_id": "test-cross_reference-0008-clean",
+   "family": "cross_reference",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call"
+   ],
+   "base_success": true,
+   "base_turns": 11,
+   "first_divergence_step": 7,
+   "lock_in_step": null,
+   "defect": "wrong hop",
+   "defect_note": "re-reads an already-read record at hop 4 and cycles between records; no identical repeat (base passed at 11 turns)"
+  },
+  {
+   "task_id": "test-conditional_update-0009-clean",
+   "family": "conditional_update",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 9,
+   "adapter_reasons": [
+    "wrong answer",
+    "file state wrong: service-2.ini",
+    "unexpected file change: service-3.ini"
+   ],
+   "base_success": false,
+   "base_turns": 24,
+   "first_divergence_step": 6,
+   "lock_in_step": null,
+   "defect": "state-note comparison error",
+   "defect_note": "'highest so far' overwritten by the most recent load (87 over 88); wrong service throttled (base also failed)"
+  },
+  {
+   "task_id": "test-batch_update-0010-clean",
+   "family": "batch_update",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call"
+   ],
+   "base_success": false,
+   "base_turns": 14,
+   "first_divergence_step": 6,
+   "lock_in_step": 9,
+   "defect": "re-issued call after success",
+   "defect_note": "lock-in at step 23 after 9 distinct steps (base also failed)"
+  },
+  {
+   "task_id": "test-aggregate_report-0011-clean",
+   "family": "aggregate_report",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "file state wrong: report.txt",
+    "required tools unused: calculate, replace_text"
+   ],
+   "base_success": true,
+   "base_turns": 14,
+   "first_divergence_step": 5,
+   "lock_in_step": 8,
+   "defect": "wrong file",
+   "defect_note": "skips metric-4 for metric-5 at step 5; later an ERROR and identical retries from step 8"
+  },
+  {
+   "task_id": "test-read-0012-clean",
+   "family": "read",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "required tools unused: read_file"
+   ],
+   "base_success": true,
+   "base_turns": 2,
+   "first_divergence_step": 0,
+   "lock_in_step": 2,
+   "defect": "path abbreviation",
+   "defect_note": "list_files on the file name 'project.md' \u2192 empty \u2192 read 'project.md' relative \u2192 identical retry"
+  },
+  {
+   "task_id": "test-search-0013-clean",
+   "family": "search",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call"
+   ],
+   "base_success": true,
+   "base_turns": 3,
+   "first_divergence_step": 2,
+   "lock_in_step": 2,
+   "defect": "re-issued call after success",
+   "defect_note": "re-reads the matched file with the note verbatim from step 2"
+  },
+  {
+   "task_id": "test-calculate-0014-clean",
+   "family": "calculate",
+   "difficulty": null,
+   "adapter_success": true,
+   "adapter_turns": 2,
+   "adapter_reasons": [],
+   "base_success": false,
+   "base_turns": 0,
+   "first_divergence_step": null,
+   "lock_in_step": null,
+   "defect": null,
+   "defect_note": null
+  },
+  {
+   "task_id": "test-synthesis-0015-clean",
+   "family": "synthesis",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "required tools unused: calculate"
+   ],
+   "base_success": true,
+   "base_turns": 4,
+   "first_divergence_step": 2,
+   "lock_in_step": 3,
+   "defect": "malformed argument",
+   "defect_note": "expression is the tool's own name; transient-failure template; identical retry"
+  },
+  {
+   "task_id": "test-update-0016-clean",
+   "family": "update",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "file state wrong: config.ini",
+    "required tools unused: replace_text"
+   ],
+   "base_success": true,
+   "base_turns": 4,
+   "first_divergence_step": 1,
+   "lock_in_step": 1,
+   "defect": "re-issued call after success",
+   "defect_note": "correct plan written, note ends 'Reading.', reads again; lock-in from step 2"
+  },
+  {
+   "task_id": "test-list-0017-clean",
+   "family": "list",
+   "difficulty": null,
+   "adapter_success": false,
+   "adapter_turns": 24,
+   "adapter_reasons": [
+    "no finish call",
+    "required tools unused: read_file"
+   ],
+   "base_success": true,
+   "base_turns": 3,
+   "first_divergence_step": 0,
+   "lock_in_step": 2,
+   "defect": "path abbreviation",
+   "defect_note": "relative directory 'notes' \u2192 empty listing \u2192 fabricated 'notes.md' \u2192 identical retry"
+  },
+  {
+   "task_id": "test-pointer_chain-0018-clean",
+   "family": "pointer_chain",
+   "difficulty": null,
+   "adapter_success": true,
+   "adapter_turns": 8,
+   "adapter_reasons": [],
+   "base_success": true,
+   "base_turns": 8,
+   "first_divergence_step": null,
+   "lock_in_step": null,
+   "defect": null,
+   "defect_note": null
+  }
+ ],
+ "training_rows": {
+  "rows": 6648,
+  "target_repeat_after_error": 488,
+  "target_repeat_after_ok": 0,
+  "history_retry_after_hidden": 376,
+  "changed_call_after_error": 1354,
+  "list_files_calls_in_list_rows": 313,
+  "list_files_relative": 0,
+  "calculate_calls": 2039,
+  "calculate_literal_expression": 0,
+  "update_read_then_replace": 269,
+  "update_read_then_read": 25
+ },
+ "checkpoint": {
+  "rows_seen": 800,
+  "optimizer_updates": 200,
+  "val_loss": 0.092,
+  "adapter": "outputs/agent-v2e-qwen35-4b/best-adapter (resumed run's 400-iteration checkpoint)"
+ }
+}

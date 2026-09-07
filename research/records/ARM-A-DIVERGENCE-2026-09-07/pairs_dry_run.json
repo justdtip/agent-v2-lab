@@ -1,0 +1,443 @@
+{
+ "candidate_first_tokens": {
+  "list_files": {
+   "id": 1551,
+   "text": "list"
+  },
+  "read_file": {
+   "id": 851,
+   "text": "read"
+  },
+  "search_files": {
+   "id": 1773,
+   "text": "search"
+  },
+  "calculate": {
+   "id": 34420,
+   "text": "calculate"
+  },
+  "replace_text": {
+   "id": 7899,
+   "text": "replace"
+  },
+  "finish": {
+   "id": 29166,
+   "text": "finish"
+  }
+ },
+ "pairs": [
+  {
+   "task_id": "test-calculate-0002-clean",
+   "family": "calculate",
+   "prompt": "Compute (47 + 7) * 7 - 5 with the calculator and reply with just the number.",
+   "t": 0,
+   "kind": "first_step",
+   "lock_in_step": 1,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "Plan: evaluate (47 + 7) * 7 - 5 with the calculator, then report the number.\n```json\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"((47 + 7) * 7 - 5\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "calculate",
+    "arguments": {
+     "expression": "((47 + 7) * 7 - 5"
+    }
+   },
+   "adapter_turn_t_minus_1_action": null,
+   "base_turn_t_raw": "```json\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"(47 + 7) * 7 - 5\"}}\n```",
+   "base_action_at_t": {
+    "name": "calculate",
+    "arguments": {
+     "expression": "(47 + 7) * 7 - 5"
+    }
+   },
+   "base_turns": 2,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 417,
+   "n_total_tokens": 475,
+   "slot_first_name_token": 450,
+   "slot_first_argument_token": 459,
+   "adapter_tool": "calculate",
+   "base_turn_tokens": 31,
+   "base_slot_first_name_token": 424,
+   "base_slot_first_argument_token": 432
+  },
+  {
+   "task_id": "test-synthesis-0003-clean",
+   "family": "synthesis",
+   "prompt": "Multiply the hourly_rate in workspace/test/0003/billing/rate.txt by the hours in workspace/test/0003/billing/hours.txt using the calculator; reply with only the number.",
+   "t": 2,
+   "kind": "after_ok",
+   "lock_in_step": 3,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "hourly_rate=71, hours=8. Computing 71 * 8.\n```json\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"calculate\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "calculate",
+    "arguments": {
+     "expression": "calculate"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0003/billing/hours.txt"
+    }
+   },
+   "base_turn_t_raw": "```json\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"71 * 8\"}}\n```",
+   "base_action_at_t": {
+    "name": "calculate",
+    "arguments": {
+     "expression": "71 * 8"
+    }
+   },
+   "base_turns": 4,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 662,
+   "n_total_tokens": 702,
+   "slot_first_name_token": 689,
+   "slot_first_argument_token": 698,
+   "adapter_tool": "calculate",
+   "base_turn_tokens": 24,
+   "base_slot_first_name_token": 669,
+   "base_slot_first_argument_token": 678
+  },
+  {
+   "task_id": "test-update-0004-clean",
+   "family": "update",
+   "prompt": "Update workspace/test/0004/config.ini after inspecting it: set its mode to audit, then verify the saved setting and report it as mode=<target>.",
+   "t": 1,
+   "kind": "after_ok",
+   "lock_in_step": 1,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "The file's current text confirms the exact replacement. Plan: inspect config.ini, replace mode=audit with mode=audit, re-read to verify, report. Reading.\n```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"workspace/test/0004/config.ini\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0004/config.ini"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0004/config.ini"
+    }
+   },
+   "base_turn_t_raw": "The file shows mode=safe. I need to update it to mode=audit.\n```json\n{\"name\": \"replace_text\", \"arguments\": {\"path\": \"workspace/test/0004/config.ini\", \"old\": \"mode=safe\", \"new\": \"mode=audit\"}}\n```",
+   "base_action_at_t": {
+    "name": "replace_text",
+    "arguments": {
+     "path": "workspace/test/0004/config.ini",
+     "old": "mode=safe",
+     "new": "mode=audit"
+    }
+   },
+   "base_turns": 4,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 573,
+   "n_total_tokens": 637,
+   "slot_first_name_token": 615,
+   "slot_first_argument_token": 625,
+   "adapter_tool": "read_file",
+   "base_turn_tokens": 63,
+   "base_slot_first_name_token": 598,
+   "base_slot_first_argument_token": 608
+  },
+  {
+   "task_id": "test-list-0005-clean",
+   "family": "list",
+   "prompt": "Look inside workspace/test/0005/notes, open the .md summary file, and reply with exactly its first line.",
+   "t": 0,
+   "kind": "first_step",
+   "lock_in_step": 2,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "Plan: list notes, read the .md summary, report its first line. Listing.\n```json\n{\"name\": \"list_files\", \"arguments\": {\"directory\": \"notes\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "list_files",
+    "arguments": {
+     "directory": "notes"
+    }
+   },
+   "adapter_turn_t_minus_1_action": null,
+   "base_turn_t_raw": "I need to find and read the .md summary file in the workspace/test/0005/notes directory.\n\n```json\n{\"name\": \"list_files\", \"arguments\": {\"directory\": \"workspace/test/0005/notes\"}}\n```",
+   "base_action_at_t": {
+    "name": "list_files",
+    "arguments": {
+     "directory": "workspace/test/0005/notes"
+    }
+   },
+   "base_turns": 3,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 420,
+   "n_total_tokens": 460,
+   "slot_first_name_token": 446,
+   "slot_first_argument_token": 456,
+   "adapter_tool": "list_files",
+   "base_turn_tokens": 54,
+   "base_slot_first_name_token": 452,
+   "base_slot_first_argument_token": 462
+  },
+  {
+   "task_id": "test-cross_reference-0008-clean",
+   "family": "cross_reference",
+   "prompt": "Starting from key REF-TEST-0008-4593-0, search the workspace for each key, open the matching record, and follow every Next-Key the same way until a record contains Resolution. Reply with exactly that Resolution.",
+   "t": 7,
+   "kind": "after_ok",
+   "lock_in_step": null,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "Hop 4: current key REF-TEST-0008-7763-3. Search matched 2 files; record-701-3.txt is already read, so reading the new one: record-206-2.txt.\n```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"lab/test/0008/records/record-206-2.txt\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "lab/test/0008/records/record-206-2.txt"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "search_files",
+    "arguments": {
+     "query": "REF-TEST-0008-7763-3"
+    }
+   },
+   "base_turn_t_raw": "```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"lab/test/0008/records/record-701-3.txt\"}}\n```",
+   "base_action_at_t": {
+    "name": "read_file",
+    "arguments": {
+     "path": "lab/test/0008/records/record-701-3.txt"
+    }
+   },
+   "base_turns": 11,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 1711,
+   "n_total_tokens": 1805,
+   "slot_first_name_token": 1774,
+   "slot_first_argument_token": 1784,
+   "adapter_tool": "read_file",
+   "base_turn_tokens": 38,
+   "base_slot_first_name_token": 1718,
+   "base_slot_first_argument_token": 1728
+  },
+  {
+   "task_id": "test-aggregate_report-0011-clean",
+   "family": "aggregate_report",
+   "prompt": "In lab/test/0011/metrics there are 6 metric-*.txt files and a report.txt. List the directory, read every metric value, compute the first-half subtotal, the second-half subtotal, and their sum with the calculator, then replace PENDING in report.txt with the grand total, re-read it, and report the full grand_total line.",
+   "t": 5,
+   "kind": "after_ok",
+   "lock_in_step": 8,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "values so far: 18, 14, 75, 72; split after 6. Reading metric 5 of 6.\n```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"lab/test/0011/metrics/metric-5.txt\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "lab/test/0011/metrics/metric-5.txt"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "lab/test/0011/metrics/metric-3.txt"
+    }
+   },
+   "base_turn_t_raw": "metric-3.txt has value=72. Continuing to read the remaining metric files.\n```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"lab/test/0011/metrics/metric-4.txt\"}}\n```",
+   "base_action_at_t": {
+    "name": "read_file",
+    "arguments": {
+     "path": "lab/test/0011/metrics/metric-4.txt"
+    }
+   },
+   "base_turns": 14,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 1859,
+   "n_total_tokens": 1927,
+   "slot_first_name_token": 1900,
+   "slot_first_argument_token": 1910,
+   "adapter_tool": "read_file",
+   "base_turn_tokens": 53,
+   "base_slot_first_name_token": 1885,
+   "base_slot_first_argument_token": 1895
+  },
+  {
+   "task_id": "test-read-0012-clean",
+   "family": "read",
+   "prompt": "Open workspace/test/0012/project.md. What is the Owner field? Reply with only that value.",
+   "t": 0,
+   "kind": "first_step",
+   "lock_in_step": 2,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "Plan: list owners, read the owner field, report its value. Listing.\n```json\n{\"name\": \"list_files\", \"arguments\": {\"directory\": \"project.md\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "list_files",
+    "arguments": {
+     "directory": "project.md"
+    }
+   },
+   "adapter_turn_t_minus_1_action": null,
+   "base_turn_t_raw": "```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"workspace/test/0012/project.md\"}}\n```",
+   "base_action_at_t": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0012/project.md"
+    }
+   },
+   "base_turns": 2,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 416,
+   "n_total_tokens": 455,
+   "slot_first_name_token": 440,
+   "slot_first_argument_token": 450,
+   "adapter_tool": "list_files",
+   "base_turn_tokens": 29,
+   "base_slot_first_name_token": 423,
+   "base_slot_first_argument_token": 433
+  },
+  {
+   "task_id": "test-search-0013-clean",
+   "family": "search",
+   "prompt": "Search the workspace for KEY-TEST-0013-473; report the Status field of the matching file.",
+   "t": 2,
+   "kind": "after_ok",
+   "lock_in_step": 2,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "Search matched workspace/test/0013/archive/report-84.txt. Reading it.\n```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"workspace/test/0013/archive/report-84.txt\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0013/archive/report-84.txt"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0013/archive/report-84.txt"
+    }
+   },
+   "base_turn_t_raw": "```json\n{\"name\": \"finish\", \"arguments\": {\"answer\": \"complete\"}}\n```",
+   "base_action_at_t": {
+    "name": "finish",
+    "arguments": {
+     "answer": "complete"
+    }
+   },
+   "base_turns": 3,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 683,
+   "n_total_tokens": 736,
+   "slot_first_name_token": 710,
+   "slot_first_argument_token": 720,
+   "adapter_tool": "read_file",
+   "base_turn_tokens": 20,
+   "base_slot_first_name_token": 690,
+   "base_slot_first_argument_token": 699
+  },
+  {
+   "task_id": "test-synthesis-0015-clean",
+   "family": "synthesis",
+   "prompt": "Multiply the hourly_rate in workspace/test/0015/billing/rate.txt by the hours in workspace/test/0015/billing/hours.txt using the calculator; reply with only the number.",
+   "t": 2,
+   "kind": "after_ok",
+   "lock_in_step": 3,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "hourly_rate=77, hours=13. Computing 77 * 13.\n```json\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"calculate\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "calculate",
+    "arguments": {
+     "expression": "calculate"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0015/billing/hours.txt"
+    }
+   },
+   "base_turn_t_raw": "```json\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"77 * 13\"}}\n```",
+   "base_action_at_t": {
+    "name": "calculate",
+    "arguments": {
+     "expression": "77 * 13"
+    }
+   },
+   "base_turns": 4,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 663,
+   "n_total_tokens": 705,
+   "slot_first_name_token": 692,
+   "slot_first_argument_token": 701,
+   "adapter_tool": "calculate",
+   "base_turn_tokens": 25,
+   "base_slot_first_name_token": 670,
+   "base_slot_first_argument_token": 679
+  },
+  {
+   "task_id": "test-update-0016-clean",
+   "family": "update",
+   "prompt": "Update workspace/test/0016/config.ini after inspecting it: set its mode to safe, then verify the saved setting and report it as mode=<target>.",
+   "t": 1,
+   "kind": "after_ok",
+   "lock_in_step": 1,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "The file's current text confirms the exact string to replace. Plan: inspect config.ini, replace mode=strict with mode=safe, re-read to verify, report. Reading.\n```json\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"workspace/test/0016/config.ini\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0016/config.ini"
+    }
+   },
+   "adapter_turn_t_minus_1_action": {
+    "name": "read_file",
+    "arguments": {
+     "path": "workspace/test/0016/config.ini"
+    }
+   },
+   "base_turn_t_raw": "The file shows mode=fast. I need to update it to mode=safe.\n```json\n{\"name\": \"replace_text\", \"arguments\": {\"path\": \"workspace/test/0016/config.ini\", \"old\": \"mode=fast\", \"new\": \"mode=safe\"}}\n```",
+   "base_action_at_t": {
+    "name": "replace_text",
+    "arguments": {
+     "path": "workspace/test/0016/config.ini",
+     "old": "mode=fast",
+     "new": "mode=safe"
+    }
+   },
+   "base_turns": 4,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 574,
+   "n_total_tokens": 640,
+   "slot_first_name_token": 618,
+   "slot_first_argument_token": 628,
+   "adapter_tool": "read_file",
+   "base_turn_tokens": 63,
+   "base_slot_first_name_token": 599,
+   "base_slot_first_argument_token": 609
+  },
+  {
+   "task_id": "test-list-0017-clean",
+   "family": "list",
+   "prompt": "Look inside workspace/test/0017/notes, open the .md summary file, and reply with exactly its first line.",
+   "t": 0,
+   "kind": "first_step",
+   "lock_in_step": 2,
+   "histories_coincide_to_t_minus_1": true,
+   "adapter_turn_t_raw": "Plan: list notes, read the .md summary, report its first line. Listing.\n```json\n{\"name\": \"list_files\", \"arguments\": {\"directory\": \"notes\"}}\n```",
+   "adapter_turn_t_action": {
+    "name": "list_files",
+    "arguments": {
+     "directory": "notes"
+    }
+   },
+   "adapter_turn_t_minus_1_action": null,
+   "base_turn_t_raw": "I need to find and read the .md summary file in the workspace/test/0017/notes directory.\n\n```json\n{\"name\": \"list_files\", \"arguments\": {\"directory\": \"workspace/test/0017/notes\"}}\n```",
+   "base_action_at_t": {
+    "name": "list_files",
+    "arguments": {
+     "directory": "workspace/test/0017/notes"
+    }
+   },
+   "base_turns": 3,
+   "adapter_turns": 24,
+   "n_prompt_tokens": 420,
+   "n_total_tokens": 460,
+   "slot_first_name_token": 446,
+   "slot_first_argument_token": 456,
+   "adapter_tool": "list_files",
+   "base_turn_tokens": 54,
+   "base_slot_first_name_token": 452,
+   "base_slot_first_argument_token": 462
+  }
+ ]
+}
