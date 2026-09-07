@@ -113,3 +113,8 @@ Send the patch as a file under `design_specifications/pending/` with a record di
 - **Q1 — prose corpus:** download authorised. Use the wikitext-103-raw-v1 **validation** split from the Hugging Face hub (`Salesforce/wikitext`, config `wikitext-103-raw-v1`, the split the hosted lens was *not* fitted on), chunked to 1,024 tokens; record the dataset revision and the SHA-256 of the chunk manifest. The download happens once, through the corpus builder, and the files stay under `data/` (ignored by git) with their hashes in the manifest.
 - **Q2 — basis:** the full standard basis, 2,560 directions. No subspace estimate.
 - **Q3 — chat domain:** no. Chat was an example in the Director's message, not a requirement. Two domains: `agentic` and `prose`.
+
+## 11. Two cautions from the 7 September crash (added 17:30)
+
+- **Keep the worktree on a persistent path and commit to your branch as you go.** The laptop crashed at 17:03 and `/private/tmp` was cleared on reboot; the history-cache worktree and its uncommitted patch were lost there and had to be reconstructed from the reviewer's transcript. Put the worktree under your home directory (for example `~/worktrees/lens-fitting`), commit to the branch after every piece in §3, and push the branch to the shared repository's refs; the patch file under `design_specifications/pending/` is the delivery, the branch is the backup.
+- **Base on the shared HEAD after the history-cache patch lands.** Pieces 3.1 and 3.2 touch nothing that patch touches and can start now. Piece 3.4 (the replay reader) drives `CaptureSession`, whose internals that patch changes (a forward ledger replaces the session's own offset accounting); base 3.4 on the tree after the landing, which the Chief will announce in the heartbeat.
