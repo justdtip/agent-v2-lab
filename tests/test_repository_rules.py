@@ -979,3 +979,256 @@ def test_the_process_start_scanner_reports_the_families_and_ignores_lookalikes(t
         "example.py:8:subprocess.Popen",
         "example.py:10:subprocess.run",
     ]
+
+
+# --- The MLX import closure (heartbeat 2026-09-07 18:05 and 18:20) -------------------------
+#
+# Two sessions ran pytest beside a held model-run lock on the same afternoon, each having
+# checked something that did not answer the question. The rule that followed -- grep the named
+# test files for an mlx import and run only the empty ones -- is not sufficient, because pytest
+# imports each file's whole closure. `test_preflight.py` imports no mlx and loads it through
+# `local_llm_lab.training.gated_delta_chunked`; `test_tuner_data.py` imports `mlx_lm`, whose
+# package `__init__` imports `mlx.core` through `mlx_lm.utils`. A grep clears both.
+#
+# So the set is pinned here and computed by walking the closure, and the walk crosses into
+# third-party packages: stopping at them is what misses `test_tuner_data.py`, and a false
+# negative here is the dangerous direction -- it clears a file to run beside a live model.
+_TESTS_THAT_LOAD_MLX = (
+    "test_arch.py",
+    "test_capture.py",
+    "test_gated_delta_chunked.py",
+    "test_gated_delta_chunkwise.py",
+    "test_history_cache.py",
+    "test_jlens.py",
+    "test_jspace_sweep.py",
+    "test_live_lens_native.py",
+    "test_patch.py",
+    "test_pipeline.py",
+    "test_preflight.py",
+    "test_probes.py",
+    "test_state_swap.py",
+    "test_tuner_data.py",
+)
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_IMPORT_ROOTS = (_REPO_ROOT / "src", _REPO_ROOT / ".venv" / "lib" / "python3.13" / "site-packages")
+
+
+def _module_path(dotted: str, roots: tuple[Path, ...]) -> Path | None:
+    """The file a dotted module name resolves to, or None for a name we cannot see."""
+    for root in roots:
+        module = root / (dotted.replace(".", "/") + ".py")
+        if module.exists():
+            return module
+        package = root / dotted.replace(".", "/") / "__init__.py"
+        if package.exists():
+            return package
+    return None
+
+
+def _imports_that_execute(path: Path) -> list[str]:
+    """Every module imported when this file is imported.
+
+    Module scope only: an import inside a function or a class body does not run at import
+    time, and `pipeline/coherence.py` deliberately imports the runner that way. `try:`, `if:`,
+    `with:` and loop bodies at module scope *do* run and are followed. A `TYPE_CHECKING` block
+    never runs, so its body is skipped and its `else:` is not.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except (SyntaxError, ValueError):
+        return []
+    found: list[str] = []
+
+    def walk(body: list[ast.stmt]) -> None:
+        for node in body:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                # Not descended into: a function-local import does not run at import time, and
+                # `pipeline/coherence.py` relies on that. Making this branch descend is the
+                # mutation `test_the_walker_ignores_an_import_that_does_not_run_at_import_time`
+                # exists to catch; it does, on three tests.
+                continue
+            if isinstance(node, ast.If):
+                test = node.test
+                type_checking = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+                )
+                walk(node.orelse)
+                if not type_checking:
+                    walk(node.body)
+                continue
+            if isinstance(node, ast.Try):
+                walk(node.body)
+                walk(node.orelse)
+                walk(node.finalbody)
+                for handler in node.handlers:
+                    walk(handler.body)
+                continue
+            if isinstance(node, ast.With | ast.AsyncWith):
+                walk(node.body)
+                continue
+            if isinstance(node, ast.For | ast.AsyncFor | ast.While):
+                walk(node.body)
+                walk(node.orelse)
+                continue
+            if isinstance(node, ast.Import):
+                found.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                found.append(node.module)
+                # ``from pkg import name`` also imports ``pkg.name`` when that is a submodule,
+                # even if ``pkg/__init__.py`` never mentions it; the resolver below drops the
+                # names that are plain attributes. Reviewer's addition at landing: a submodule
+                # reached only this way would otherwise be a false negative, the dangerous
+                # direction.
+                found.extend(f"{node.module}.{alias.name}" for alias in node.names)
+
+    walk(tree.body)
+    return found
+
+
+def _loads_mlx(entry: Path, roots: tuple[Path, ...]) -> str | None:
+    """The first module on a path from ``entry`` to ``mlx``, or None if it never reaches it."""
+    seen: set[str] = set()
+    stack: list[tuple[str | None, Path]] = [(None, entry)]
+    while stack:
+        via, path = stack.pop()
+        for name in _imports_that_execute(path):
+            if name.split(".")[0] == "mlx":
+                return via or "<the file itself>"
+            if name in seen:
+                continue
+            seen.add(name)
+            resolved = _module_path(name, roots)
+            if resolved is not None:
+                stack.append((via or name, resolved))
+    return None
+
+
+def test_the_tests_that_load_mlx_are_the_pinned_set() -> None:
+    """Pinned so a new import cannot quietly put a test file beside a live model.
+
+    The rule this enforces is operational: before running pytest while a model-run lock is
+    held, run only files outside this set. It is pinned rather than merely computed so that a
+    new direct or transitive mlx import has to be added here deliberately, and so that a file
+    that stops loading mlx has to be removed -- a stale name is as wrong as a missing one,
+    because it keeps a runnable file off the list forever.
+    """
+    computed = tuple(
+        path.name
+        for path in sorted(Path(__file__).parent.glob("*.py"))
+        if _loads_mlx(path, _IMPORT_ROOTS) is not None
+    )
+    assert computed == _TESTS_THAT_LOAD_MLX
+
+
+def test_the_grep_that_this_rule_replaces_is_wrong_in_both_directions() -> None:
+    """Why the closure exists, pinned against the rule it replaces.
+
+    ``grep -l "import mlx"`` over the named files, the rule proposed after the two crossings of
+    2026-09-07, disagrees with the closure on six of the fifty-one files here. One disagreement
+    is dangerous and five are merely wasteful, and the test asserts both so that neither can
+    quietly change.
+
+    ``test_tuner_data.py`` is the dangerous one: it says ``from mlx_lm.tuner...``, which does not
+    contain the substring ``import mlx``, and ``mlx_lm``'s package ``__init__`` loads ``mlx.core``
+    through ``mlx_lm.utils``. The grep clears it and pytest loads mlx.
+
+    The five wasteful ones carry an ``import mlx`` inside a function, so the grep holds them and
+    importing them costs nothing. ``test_preflight.py`` is deliberately *not* among either group:
+    it has such a lazy import at line 1996 **and** loads mlx transitively through
+    ``local_llm_lab.training.gated_delta_chunked``, so the grep happens to hold it for a reason
+    unrelated to why it must be held. It was cited as the counter-example when this was first
+    written; it is not one, and the correction is the point of naming it here.
+    """
+    tests = Path(__file__).parent
+    cleared_but_loads, held_but_clean = [], []
+    for path in sorted(tests.glob("*.py")):
+        grep_hit = "import mlx" in path.read_text(encoding="utf-8", errors="replace")
+        closure_hit = _loads_mlx(path, _IMPORT_ROOTS) is not None
+        if closure_hit and not grep_hit:
+            cleared_but_loads.append(path.name)
+        elif grep_hit and not closure_hit:
+            held_but_clean.append(path.name)
+
+    assert cleared_but_loads == ["test_tuner_data.py"]
+    assert _loads_mlx(tests / "test_tuner_data.py", _IMPORT_ROOTS) == "mlx_lm.tuner.trainer"
+    assert held_but_clean == [
+        "test_cache_equivalence.py",
+        "test_metal_cache_limit.py",
+        "test_repository_rules.py",
+        "test_runner.py",
+        "test_state_probe.py",
+    ]
+    assert _loads_mlx(tests / "test_preflight.py", _IMPORT_ROOTS) == (
+        "local_llm_lab.training.gated_delta_chunked"
+    )
+
+
+def test_the_walker_ignores_an_import_that_does_not_run_at_import_time(tmp_path) -> None:
+    """A function-local or TYPE_CHECKING import must not count, or the set over-reports.
+
+    This is not hypothetical: ``pipeline/coherence.py`` imports the runner inside ``loop_step``
+    precisely so importing it costs nothing, and an earlier hand-rolled walk of mine counted
+    that and wrongly called two clean files dirty. A fixture with only module-scope imports
+    could not show the difference.
+    """
+    (tmp_path / "lazy.py").write_text("def go():\n    import mlx.core as mx\n    return mx\n")
+    (tmp_path / "guarded.py").write_text(
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import mlx.core as mx\n"
+    )
+    (tmp_path / "eager.py").write_text("import mlx.core as mx\n")
+    roots = (tmp_path,)
+    assert _loads_mlx(tmp_path / "lazy.py", roots) is None
+    assert _loads_mlx(tmp_path / "guarded.py", roots) is None
+    assert _loads_mlx(tmp_path / "eager.py", roots) == "<the file itself>"
+
+
+def test_the_walker_follows_transitively_and_across_third_party(tmp_path) -> None:
+    """The two failures a file-local grep has, in one fixture.
+
+    ``leaf`` imports mlx; ``middle`` imports ``leaf``; ``entry`` imports ``middle`` and nothing
+    else. And ``via_vendor`` imports a package that is not ours, which must still be followed:
+    stopping at third-party names is exactly what would miss ``test_tuner_data.py``.
+    """
+    (tmp_path / "leaf.py").write_text("import mlx.core\n")
+    (tmp_path / "middle.py").write_text("import leaf\n")
+    (tmp_path / "entry.py").write_text("import middle\n")
+    vendor = tmp_path / "vendor"
+    vendor.mkdir()
+    (vendor / "__init__.py").write_text("from vendor.inner import thing\n")
+    (vendor / "inner.py").write_text("import mlx.core\nthing = 1\n")
+    (tmp_path / "via_vendor.py").write_text("import vendor\n")
+    roots = (tmp_path,)
+    assert _loads_mlx(tmp_path / "entry.py", roots) == "middle"
+    assert _loads_mlx(tmp_path / "via_vendor.py", roots) == "vendor"
+
+
+def test_the_walker_does_not_confuse_mlx_lm_with_mlx_by_prefix(tmp_path) -> None:
+    """``mlx_lm`` is a hit because it *loads* mlx, never because its name starts with ``mlx``.
+
+    A prefix match gets the right answer on ``mlx_lm`` for the wrong reason and would also
+    claim ``mlx_audio`` and ``mlx_embeddings``, which are installed here and which nothing
+    imports. The fixture pins the distinction with a package that is mlx-prefixed and clean.
+    """
+    (tmp_path / "mlx_clean.py").write_text("value = 1\n")
+    (tmp_path / "user.py").write_text("import mlx_clean\n")
+    roots = (tmp_path,)
+    assert _loads_mlx(tmp_path / "user.py", roots) is None
+
+
+def test_the_walker_follows_a_submodule_imported_from_its_package(tmp_path) -> None:
+    """``from pkg import sub`` imports ``pkg.sub`` whether or not ``pkg/__init__.py`` does.
+
+    A package whose init is clean and whose submodule loads mlx, reached only through this form,
+    must count; recording only the package half of the statement would clear it. Reviewer's
+    fixture at landing."""
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "sub.py").write_text("import mlx.core\n")
+    (pkg / "attr.py").write_text("value = 1\n")
+    (tmp_path / "uses_sub.py").write_text("from pkg import sub\n")
+    (tmp_path / "uses_attr.py").write_text("from pkg.attr import value\n")
+    roots = (tmp_path,)
+    assert _loads_mlx(tmp_path / "uses_sub.py", roots) == "pkg.sub"
+    assert _loads_mlx(tmp_path / "uses_attr.py", roots) is None
