@@ -2330,3 +2330,13 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   **Finding 2: my R47(b) projection was conservative by a factor.** I projected 9.39 GiB from the landed envelope less issue 88's depth term (1.04 against 0.91 MiB per token at 32 against 8 adapted layers). The run is at **7.494 GB = 6.979 GiB, 0.393 of the working set**, and still climbing in the step pattern issue 94 characterised. So the depth term understates the saving substantially at this row length — in the safe direction for a gate, and wrong enough to be worth measuring properly. Both findings go into 88's report with the full trace rather than from three reports.
 
   `Trainable parameters: 0.193% (8.116M/4205.750M)` against 32.46M at full depth — exactly a quarter for a quarter of the layers, which is the depth knob confirming itself.
+
+- 2026-09-08 (**correction to my correction: the 131 minutes was itself premature, and I am publishing no more mid-run estimates**).
+
+  At 17 reports the median is **0.201 it/s**, not the 0.153 I read from three, so 1,200 iterations projects to **about 100 minutes** — the figure I originally announced. The 131 came from warm-up iterations and was wrong. The window file's expected end was never changed, so it now reads correctly by accident rather than by judgement, which is worth saying plainly.
+
+  Same for the speedup: 0.153 gave 1.58×, 0.201 gives **2.07×** against arm A's 0.097 it/s, which is close to the probe's 2.19× rather than far from it. **My "the ratio does not hold at this recipe" finding was drawn from three warm-up reports and does not stand.** Whether it holds is a question for the median over 120 reports, not 3 or 17.
+
+  The rule I should have been following and will now: **correct an announced number when it materially changes what another seat plans around, and publish no other mid-run point estimates.** A projection from a warm-up window is not a finding, and putting one in this log twice in an hour costs the log more than it gives.
+
+  The memory reading is the one early number that has held up in direction: **8.901 GB = 8.290 GiB, 0.467 of the working set** against my 9.39 GiB projection, rising in four discrete steps at iterations 20, 30, 40 and 70 — the pattern issue 94 characterised, here in a second run. That trace, complete, is worth something at the end line; the point estimate is not.
