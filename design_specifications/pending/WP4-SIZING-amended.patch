@@ -1,0 +1,744 @@
+# WP4-SIZING-amended: the four items, and one of them was a real defect
+
+Supersedes `WP4-SIZING.patch`. Apply this one; it is the whole module and its tests, not a delta.
+
+## 1. The maximum over heads was the wrong effect to size against
+
+This is the item that was a defect rather than a discipline. `read_share_by_layer` reported only
+the maximum, and `size_two_by_two` took it as the licensed share in the second branch. A quiet
+head — total norm a thousandth of its neighbours' — with a span share of 0.9 would have licensed a
+2 by 2 sized to detect an effect **nothing in the experiment can produce**, because the head
+producing that 0.9 contributes almost nothing to the layer.
+
+`ReadShare` already carried both norms, so the fix is to report both figures:
+
+| figure | what it answers |
+| --- | --- |
+| `max_share`, the maximum over heads | **negligibility** — one head carrying the read is the case the rule exists to catch, and a mean would hide it |
+| `layer_share`, magnitude-weighted | **how large an effect to size against** — `sqrt(Σ span²) / sqrt(Σ total²)`, the norm share of the concatenated per-head reads |
+
+The test that separates them: one loud head at a share of 0.001 beside one quiet head at 0.9 gives
+a maximum of 0.900 and a layer share of 0.00135.
+
+`size_two_by_two` now takes a required `share_statistic` of `"max_head"` or `"layer"`, recorded in
+the verdict and its inputs. The docstring states the intended use — negligibility on the maximum
+at every layer, the licensed effect on the layer share — and says both are **pending the Head's
+review**, since issue 82 puts admissibility with the Head. The function records the label rather
+than enforcing a pairing, because which statistic licenses which branch is the Head's call and not
+a fact about arithmetic.
+
+## 2, 3, 4
+
+**`matched_share_source` is required and recorded**, by the same argument that made
+`matched_share_for` required: the verdict now says not only what the mapping produced but where it
+came from. The tests' stand-in says "test stand-in" there.
+
+**An all-undefined pre-check is refused**, not sized as negligible. That was my own zero rule
+failing one level up: with every layer undefined the licensed share fell to 0.05 and the function
+handed back a plannable n, turning "no read to attribute" into "the span contributes almost none
+of the read" — the two findings the cell-level rule is careful to keep apart.
+
+**`NOT_WORTH_RUNNING` fires on both branches**, and the comment now says so. A negligible
+pre-check that cannot reach 0.05, and an observed share too small to detect, are the same answer
+for different reasons; `every_layer_negligible` on the verdict tells them apart, and a test asserts
+both fire and are distinguishable.
+
+`ruff format` run over both files.
+
+## Not done, and why
+
+`read_share` stays pure-Python loops. It will be slow on real rows — 2,688 positions by 128 by 32
+heads per layer — and vectorising it now would mean guessing the array type the adapter hands over.
+When #81's adapter lands it accepts arrays and vectorises, same arithmetic.
+
+## The lane constraint, as ruled
+
+Issue 82's constraints say Codex implements and the Deputy commits. This is instrument arithmetic
+with no model and no experiment, the Chief accepted it as mine, and the deviation is stated in the
+issue comment with its reason rather than left implicit.
+
+## Verification
+
+```
+tests/test_read_share.py:  exit 0, 18 tests (13 before the amendment)
+ruff check and ruff format: both clean on both files
+git apply --check against HEAD: 0
+```
+
+**The full suite is not re-run here, deliberately.** Codex's calibration probe holds the box
+under the practice recorded at 2026-09-08: an announced window holds the slot until its end
+line, and no seat starts a pytest run over a file in `_TESTS_THAT_LOAD_MLX` while one is open.
+My own pytest in `wt-92` is what refused Codex's previous launch, so this patch was verified
+with `tests/test_read_share.py` alone, which loads no MLX and is outside the pinned set. The
+full suite runs against this diff once Codex's end line appears, and the result goes on the
+issue before it lands.
+
+```diff
+diff --git a/src/local_llm_lab/probes/read_share.py b/src/local_llm_lab/probes/read_share.py
+new file mode 100644
+index 0000000..9902f92
+--- /dev/null
++++ b/src/local_llm_lab/probes/read_share.py
+@@ -0,0 +1,289 @@
++"""WP4's read-share pre-check and the sizing it licenses (issue 82, parts b and c).
++
++Two things live here, and they are separate on purpose.
++
++**The share.** WP3's hooks give, per head, the exact read weight ``alpha[t, s]`` of position ``s``
++on the state read at ``t``, with ``y_t = sum_s alpha[t, s] * v_s`` reconstructing the block's own
++output to within 1e-5 absolute in float32 (the gate calibrated in the WP3 design, worst observed
++9.4e-7). :func:`read_share` turns that into the number WP4 asks for: what fraction of the read at
++the decision comes from the span the observation window hides.
++
++**The size.** :func:`size_two_by_two` applies the plan's rule -- if the share is below 0.02 at
++every layer, the 2 by 2 runs at the minimum size that can detect a share of 0.05, or is recorded
++as not worth running -- through WO-STAT-001's method: the exact paired test, at the Holm level for
++the arm family, with every "n for 80 percent" a stable crossing rather than the first n to touch
++the target, because discrete tests are not monotone in n.
++
++Nothing here loads a model. The share is a pure function of an alpha row and the value vectors it
++weights, so it is testable today against a stub source, and the only thing WP3's landing adds is
++the adapter that yields those two arrays for a real point.
++"""
++
++from __future__ import annotations
++
++import math
++from collections.abc import Callable, Mapping, Sequence
++from dataclasses import dataclass, field
++from typing import Any
++
++from local_llm_lab.probes.power import (
++    DEFAULT_ALPHA,
++    DEFAULT_POWER_TARGET,
++    holm_alpha,
++    mcnemar_power,
++    smallest_n_for_mcnemar_power,
++)
++
++__all__ = [
++    "NOT_WORTH_RUNNING",
++    "ReadShare",
++    "SizingVerdict",
++    "read_share",
++    "read_share_by_layer",
++    "size_two_by_two",
++]
++
++#: The plan's two thresholds, in the units the plan states them in (§3 WP4, ratified).
++NEGLIGIBLE_SHARE = 0.02
++LICENSED_SHARE = 0.05
++
++#: The outcome when no n within ``max_points`` reaches the power target. It fires on **both**
++#: branches, not only the plan's second half: a pre-check negligible everywhere that cannot reach
++#: 0.05, and an observed share too small to detect, are the same answer for different reasons.
++#: ``every_layer_negligible`` on the verdict tells them apart.
++NOT_WORTH_RUNNING = "not worth running"
++
++
++@dataclass(frozen=True)
++class ReadShare:
++    """One cell's share, with the two norms it came from and whether it is defined.
++
++    Both norms are kept rather than the ratio alone, for the reason the WP3 design gives about
++    the retention ratio: a ratio whose denominator is small carries no information about the
++    numerator's size, and a reader who has only the ratio cannot tell a real contribution from a
++    quiet read.
++    """
++
++    span_norm: float
++    total_norm: float
++    defined: bool
++
++    @property
++    def share(self) -> float:
++        """The span's contribution as a fraction of the whole read. Undefined cells give NaN."""
++        return self.span_norm / self.total_norm if self.defined else math.nan
++
++
++def read_share(
++    alpha_row: Sequence[float],
++    values: Sequence[Sequence[float]],
++    span: Sequence[int] | range,
++) -> ReadShare:
++    """The hidden span's contribution to one read, as a norm share, exact.
++
++    ``alpha_row[s]`` weights ``values[s]``; ``span`` names the source positions the observation
++    window hides. The share is ``|| sum_{s in span} alpha[s] v_s || / || sum_s alpha[s] v_s ||``.
++
++    **It is a norm of a sum, not a sum of norms, and it is not bounded by one.** The span's
++    partial sum can point against the remainder, and then removing the span would move the read
++    further than the span's own length -- so a share above 1 is a real reading about
++    cancellation, not an error, and nothing here clips it. Summing per-position magnitudes
++    instead would bound it at 1 and would answer a different question: how much weight the span
++    carries, rather than how much of the read it accounts for.
++
++    **The zero rule follows the WP3 design's**: a read whose total norm is exactly zero has an
++    undefined share; it is marked undefined and counted rather than silently scored, because a
++    zero denominator and a zero numerator are not the same finding.
++    """
++    if len(alpha_row) != len(values):
++        raise ValueError(
++            f"alpha row has {len(alpha_row)} weights for {len(values)} value vectors; "
++            "they index the same source positions"
++        )
++    positions = set(span)
++    unknown = {index for index in positions if not 0 <= index < len(alpha_row)}
++    if unknown:
++        raise ValueError(f"span names positions outside the row: {sorted(unknown)}")
++
++    width = len(values[0]) if values else 0
++    total = [0.0] * width
++    partial = [0.0] * width
++    for index, (weight, vector) in enumerate(zip(alpha_row, values, strict=True)):
++        in_span = index in positions
++        for axis, component in enumerate(vector):
++            term = weight * component
++            total[axis] += term
++            if in_span:
++                partial[axis] += term
++
++    total_norm = math.sqrt(sum(component * component for component in total))
++    span_norm = math.sqrt(sum(component * component for component in partial))
++    return ReadShare(span_norm=span_norm, total_norm=total_norm, defined=total_norm != 0.0)
++
++
++def read_share_by_layer(
++    cells: Mapping[int, Sequence[ReadShare]],
++) -> dict[int, dict[str, Any]]:
++    """Two figures per layer, because one of them answers each of the two questions.
++
++    ``max_share`` is the maximum over heads. It answers **negligibility**: the plan's rule asks
++    whether the share is below a threshold at every layer, and one head carrying the read is
++    exactly the case the rule exists to catch, which a mean over 32 heads would hide.
++
++    ``layer_share`` is magnitude-weighted --
++    ``sqrt(sum_h span_norm^2) / sqrt(sum_h total_norm^2)``, which is the norm share of the
++    concatenated per-head reads. It answers **how large an effect to size against**, and the
++    maximum is wrong for that: a quiet head whose total norm is a thousandth of its neighbours'
++    can carry a span share of 0.9 while contributing almost nothing to the layer, and sizing
++    against its 0.9 would license a 2 by 2 that can only detect an effect nothing will produce.
++
++    Undefined cells are counted, not dropped silently, and they contribute nothing to either.
++    """
++    summary: dict[int, dict[str, Any]] = {}
++    for layer in sorted(cells):
++        defined = [cell for cell in cells[layer] if cell.defined]
++        span_energy = math.fsum(cell.span_norm * cell.span_norm for cell in defined)
++        total_energy = math.fsum(cell.total_norm * cell.total_norm for cell in defined)
++        summary[layer] = {
++            "cells": len(cells[layer]),
++            "undefined": len(cells[layer]) - len(defined),
++            "max_share": max((cell.share for cell in defined), default=None),
++            "layer_share": (
++                math.sqrt(span_energy) / math.sqrt(total_energy) if total_energy > 0.0 else None
++            ),
++            "median_total_norm": _median([cell.total_norm for cell in defined]),
++        }
++    return summary
++
++
++def _median(values: Sequence[float]) -> float | None:
++    if not values:
++        return None
++    ordered = sorted(values)
++    middle = len(ordered) // 2
++    if len(ordered) % 2:
++        return ordered[middle]
++    return (ordered[middle - 1] + ordered[middle]) / 2.0
++
++
++@dataclass(frozen=True)
++class SizingVerdict:
++    """What the pre-check licenses, with every input that produced it named (R38)."""
++
++    points: int | None
++    outcome: str
++    licensed_share: float
++    observed_max_share: float | None
++    matched_share: float
++    matched_share_source: str
++    share_statistic: str
++    discordance: float
++    arms: int
++    alpha: float
++    holm_alpha: float
++    power_target: float
++    power_at_points: float | None
++    inputs: dict[str, Any] = field(default_factory=dict)
++
++
++def size_two_by_two(
++    shares_by_layer: Mapping[int, float | None],
++    *,
++    share_statistic: str,
++    matched_share_for: Callable[[float], float],
++    matched_share_source: str,
++    discordance: float,
++    arms: int = 4,
++    target: float = DEFAULT_POWER_TARGET,
++    alpha: float = DEFAULT_ALPHA,
++    max_points: int = 1000,
++) -> SizingVerdict:
++    """Size the 2 by 2, or record that it is not worth running (plan §3 WP4).
++
++    ``matched_share_for`` maps a read share to the matched-only share the paired test would see,
++    and it is **required with no default**. There is no measured mapping from a norm share to a
++    win rate, and inventing one inside a sizing function is how an assumption becomes a number
++    nobody can find later. The Head of Interpretability owns that mapping; this function records
++    it as an input and computes from it.
++
++    The rule, in the plan's own units: if the observed share is below 0.02 at every layer, the
++    design is sized against 0.05 instead -- the smallest share worth going to the box for -- and
++    if even that cannot be reached within ``max_points``, the outcome is ``NOT_WORTH_RUNNING``.
++    The second half is a real outcome and this function returns it as one.
++
++    ``arms`` is the Holm family: the 2 by 2's four cells each read against arm C. Power is
++    computed at ``alpha / arms``, which is exact for the row that would carry the family and
++    conservative for the rest.
++
++    ``share_statistic`` names which of :func:`read_share_by_layer`'s two figures was passed, and
++    it is required for the same reason ``matched_share_for`` is: a function that accepts either
++    silently will be fed the wrong one. **The intended use is negligibility on ``max_head`` at
++    every layer and the licensed effect on ``layer``**, both pending the Head of
++    Interpretability's review, since issue 82 puts admissibility with the Head. This function
++    records the label rather than enforcing a choice, because which statistic licenses which
++    branch is the Head's call and not a fact about arithmetic.
++
++    ``matched_share_source`` names the mapping, so the verdict records not just the value it
++    produced but where it came from -- a stand-in in a test says so, and the Head's mapping says
++    its date.
++    """
++    if share_statistic not in {"max_head", "layer"}:
++        raise ValueError(
++            f"unknown share statistic {share_statistic!r}; read_share_by_layer reports "
++            "'max_head' and 'layer', and which one licences which branch is the Head's call"
++        )
++    if not shares_by_layer:
++        raise ValueError("the pre-check reports at least one layer")
++    observed = [value for value in shares_by_layer.values() if value is not None]
++    if not observed:
++        # The zero rule again, one level up. A pre-check whose every layer came back undefined
++        # has measured nothing, and sizing it as negligible would turn "no read to attribute"
++        # into "the span contributes almost none of the read" -- the two findings the cell-level
++        # rule is careful to keep apart.
++        raise ValueError(
++            "every layer's share is undefined; a pre-check that measured nothing cannot licence "
++            "a size, and 'undefined' is not 'negligible'"
++        )
++    observed_max = max(observed)
++
++    negligible = observed_max < NEGLIGIBLE_SHARE
++    licensed = LICENSED_SHARE if negligible else observed_max
++    corrected = holm_alpha(alpha, arms)
++    matched = matched_share_for(licensed)
++
++    points = smallest_n_for_mcnemar_power(discordance, matched, target, corrected, max_n=max_points)
++    if points is None:
++        outcome = NOT_WORTH_RUNNING
++        power = None
++    else:
++        outcome = "sized"
++        power = mcnemar_power(points, discordance, matched, corrected)
++
++    return SizingVerdict(
++        points=points,
++        outcome=outcome,
++        licensed_share=licensed,
++        observed_max_share=observed_max,
++        matched_share=matched,
++        matched_share_source=matched_share_source,
++        share_statistic=share_statistic,
++        discordance=discordance,
++        arms=arms,
++        alpha=alpha,
++        holm_alpha=corrected,
++        power_target=target,
++        power_at_points=power,
++        inputs={
++            "shares_by_layer": dict(shares_by_layer),
++            "share_statistic": share_statistic,
++            "matched_share_source": matched_share_source,
++            "negligible_threshold": NEGLIGIBLE_SHARE,
++            "licensed_threshold": LICENSED_SHARE,
++            "rule": (
++                "below 0.02 at every layer -> size against 0.05, or record not worth running "
++                "(plan section 3, WP4)"
++            ),
++            "every_layer_negligible": negligible,
++            "max_points": max_points,
++        },
++    )
+diff --git a/tests/test_read_share.py b/tests/test_read_share.py
+new file mode 100644
+index 0000000..43268fd
+--- /dev/null
++++ b/tests/test_read_share.py
+@@ -0,0 +1,366 @@
++"""WP4's pre-check arithmetic and the sizing it licenses (issue 82, parts b and c).
++
++No model. The share is a pure function of an alpha row and the vectors it weights, so every case
++below is exact and the fixtures stand in for WP3's hooks at the interface the ratified design
++declares: ``y_t = sum_s alpha[t, s] * v_s``.
++"""
++
++from __future__ import annotations
++
++import math
++
++import pytest
++
++from local_llm_lab.probes.power import holm_alpha, mcnemar_power
++from local_llm_lab.probes.read_share import (
++    LICENSED_SHARE,
++    NOT_WORTH_RUNNING,
++    ReadShare,
++    read_share,
++    read_share_by_layer,
++    size_two_by_two,
++)
++
++
++def _stand_in_rate(share: float) -> float:
++    """A stand-in mapping from read share to matched-only share, for these tests only.
++
++    Deliberately not a default of the module and deliberately not defensible as science. It
++    exists so the sizing can be exercised, it is passed explicitly at every call site here, and
++    the real mapping is the Head of Interpretability's to set. Chosen only so the licensed 0.05
++    lands somewhere the paired test can reach at a plannable n: 0.05 maps to 0.70, which needs
++    217 points at the Holm level for four arms.
++    """
++    return min(0.95, 0.5 + 4.0 * share)
++
++
++# ------------------------------------------------------------------- the share itself
++
++
++def test_the_share_is_a_norm_of_a_sum_not_a_sum_of_norms() -> None:
++    """The distinction the pre-check turns on, in the smallest case that shows it.
++
++    Two sources of equal weight pointing in opposite directions cancel to nothing. Summed as
++    magnitudes the hidden span would look like half the read; as a norm of a sum, the read it
++    contributes to is zero, and the share is undefined rather than 0.5.
++    """
++    row = [1.0, 1.0]
++    values = [[1.0, 0.0], [-1.0, 0.0]]
++
++    cancelling = read_share(row, values, span=[0])
++    assert cancelling.total_norm == 0.0
++    assert cancelling.defined is False
++    assert math.isnan(cancelling.share)
++
++    # Same weights, same span, sources no longer opposed: now the read exists and the span is
++    # half of it.
++    aligned = read_share(row, [[1.0, 0.0], [1.0, 0.0]], span=[0])
++    assert aligned.share == pytest.approx(0.5)
++
++
++def test_a_share_above_one_is_a_reading_and_is_not_clipped() -> None:
++    """Cancellation makes shares above 1 real, and clipping them would hide the finding.
++
++    The span carries 2.0 along an axis, the rest carries -1.5 along the same axis, so the read
++    is 0.5 and the span accounts for four times it. Removing the span would move the read
++    further than the read's own size, which is exactly what a reader needs to know and exactly
++    what a clip to 1.0 would erase.
++    """
++    result = read_share([2.0, -1.5], [[1.0], [1.0]], span=[0])
++    assert result.share == pytest.approx(4.0)
++
++
++def test_the_span_is_checked_against_the_row_rather_than_silently_ignored() -> None:
++    """A span index outside the row means the caller located the wrong thing, not an empty span.
++
++    EXP-002 locates the masked spans from message boundaries in the rendered token sequence, and
++    an off-by-one there would otherwise score a share of zero and read as "the hidden text
++    contributes nothing" -- the exact false negative the experiment exists to avoid.
++    """
++    with pytest.raises(ValueError, match="outside the row"):
++        read_share([1.0, 1.0], [[1.0], [1.0]], span=[0, 7])
++
++    with pytest.raises(ValueError, match="index the same source positions"):
++        read_share([1.0, 1.0, 1.0], [[1.0], [1.0]], span=[0])
++
++
++def test_an_empty_span_contributes_nothing_and_a_full_span_contributes_everything() -> None:
++    """The two ends, so the middle has something to be between."""
++    row = [0.25, 0.75]
++    values = [[1.0, 2.0], [3.0, -1.0]]
++
++    assert read_share(row, values, span=[]).share == pytest.approx(0.0)
++    assert read_share(row, values, span=[0, 1]).share == pytest.approx(1.0)
++
++
++# ---------------------------------------------------------- aggregating to one figure a layer
++
++
++def test_a_layer_reports_its_maximum_head_because_one_head_is_the_case_to_catch() -> None:
++    """The rule asks whether the share is below a threshold at every layer.
++
++    A mean over 32 heads would put a single head carrying the whole read below the threshold,
++    which is the reading the pre-check exists to prevent. Undefined cells are counted, not
++    dropped silently.
++    """
++    cells = {
++        13: [
++            ReadShare(span_norm=0.01, total_norm=1.0, defined=True),
++            ReadShare(span_norm=0.90, total_norm=1.0, defined=True),
++            ReadShare(span_norm=0.00, total_norm=0.0, defined=False),
++        ],
++        29: [ReadShare(span_norm=0.005, total_norm=1.0, defined=True)],
++    }
++    summary = read_share_by_layer(cells)
++
++    assert summary[13]["max_share"] == pytest.approx(0.90)
++    assert summary[13]["undefined"] == 1
++    assert summary[13]["cells"] == 3
++    assert summary[29]["max_share"] == pytest.approx(0.005)
++
++
++def test_a_layer_whose_cells_are_all_undefined_reports_no_share_rather_than_zero() -> None:
++    """ "No read to attribute" and "the span contributes none of the read" are different."""
++    summary = read_share_by_layer({7: [ReadShare(0.0, 0.0, False)]})
++    assert summary[7]["max_share"] is None
++    assert summary[7]["undefined"] == 1
++
++
++# ------------------------------------------------------------------------- the sizing
++
++
++def test_a_negligible_share_everywhere_sizes_against_the_licensed_005_not_the_observed() -> None:
++    """The plan's rule, first half: below 0.02 at every layer, size against 0.05 instead.
++
++    Sizing against the observed share would ask the 2 by 2 to detect a thing the pre-check has
++    already said is not there, which produces an n nobody will run rather than a decision.
++    """
++    verdict = size_two_by_two(
++        {13: 0.004, 16: 0.011, 19: 0.002, 23: 0.008, 27: 0.001},
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++    )
++    assert verdict.inputs["every_layer_negligible"] is True
++    assert verdict.licensed_share == LICENSED_SHARE
++    assert verdict.observed_max_share == pytest.approx(0.011)
++    assert verdict.outcome == "sized"
++
++
++def test_a_share_above_the_threshold_at_one_layer_sizes_against_what_was_observed() -> None:
++    """One layer above 0.02 is enough: the rule says *every* layer, and this is the other branch."""
++    verdict = size_two_by_two(
++        {13: 0.004, 16: 0.140, 19: 0.002},
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++    )
++    assert verdict.inputs["every_layer_negligible"] is False
++    assert verdict.licensed_share == pytest.approx(0.140)
++    # A larger effect needs fewer points, which is the direction that says the sizing is live.
++    smaller = size_two_by_two(
++        {13: 0.004},
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++    )
++    assert verdict.points < smaller.points
++
++
++def test_not_worth_running_is_returned_as_an_outcome_rather_than_raised() -> None:
++    """The rule's second half is a real result, and the plan says to record it plainly.
++
++    A mapping that turns even the licensed share into a coin flip cannot be detected at any n,
++    and the honest answer is the sentence, not an exception and not a very large number.
++    """
++    verdict = size_two_by_two(
++        {13: 0.001},
++        share_statistic="layer",
++        matched_share_for=lambda _share: 0.5,
++        matched_share_source="test stand-in: a coin flip",
++        discordance=14 / 42,
++        max_points=200,
++    )
++    assert verdict.outcome == NOT_WORTH_RUNNING
++    assert verdict.points is None
++    assert verdict.power_at_points is None
++
++
++def test_the_size_is_computed_at_the_holm_level_for_the_arm_family() -> None:
++    """Four cells read against arm C is a family of four, and power is computed at alpha / 4.
++
++    Sizing at the uncorrected alpha would name an n that cannot carry the family it belongs to.
++    """
++    verdict = size_two_by_two(
++        {13: 0.06},
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++        arms=4,
++    )
++    assert verdict.holm_alpha == pytest.approx(holm_alpha(0.05, 4))
++    assert verdict.power_at_points == pytest.approx(
++        mcnemar_power(verdict.points, 14 / 42, verdict.matched_share, verdict.holm_alpha)
++    )
++    assert verdict.power_at_points >= verdict.power_target
++
++    uncorrected = size_two_by_two(
++        {13: 0.06},
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++        arms=1,
++    )
++    assert uncorrected.points < verdict.points, "the correction must cost points, not be free"
++
++
++def test_the_reported_n_is_a_stable_crossing_and_not_the_first_touch() -> None:
++    """Discrete tests are not monotone in n, so 'the n for 80 percent' has to mean the crossing.
++
++    WO-STAT-001's correction records the shape: Fisher at 3 of 3 against 0 of 3 rejects with
++    power 0.512, and the next attainable table at n = 4 has power 0.410. A sizing that returned
++    the first n to touch the target would name a point the test drops below again.
++    """
++    verdict = size_two_by_two(
++        {13: 0.06},
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++    )
++    assert all(
++        mcnemar_power(n, verdict.discordance, verdict.matched_share, verdict.holm_alpha)
++        >= verdict.power_target
++        for n in range(verdict.points, verdict.points + 12)
++    )
++
++
++def test_every_input_is_carried_on_the_verdict_so_a_number_names_its_source() -> None:
++    """R38: a figure names its source, and a sizing is a figure with several."""
++    shares = {13: 0.004, 27: 0.001}
++    verdict = size_two_by_two(
++        shares,
++        share_statistic="layer",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in",
++        discordance=14 / 42,
++        arms=4,
++    )
++    assert verdict.inputs["shares_by_layer"] == shares
++    assert verdict.inputs["negligible_threshold"] == 0.02
++    assert verdict.inputs["licensed_threshold"] == 0.05
++    assert "plan section 3, WP4" in verdict.inputs["rule"]
++    assert verdict.discordance == pytest.approx(14 / 42)
++    assert verdict.arms == 4
++
++
++def test_a_pre_check_with_no_layers_is_refused_rather_than_sized() -> None:
++    """An empty pre-check is a failed pre-check, and sizing off it would invent a licence."""
++    with pytest.raises(ValueError, match="at least one layer"):
++        size_two_by_two(
++            {},
++            share_statistic="layer",
++            matched_share_for=_stand_in_rate,
++            matched_share_source="test stand-in",
++            discordance=14 / 42,
++        )
++
++
++def test_the_layer_share_is_magnitude_weighted_and_the_max_head_is_not() -> None:
++    """The two figures answer different questions, and a quiet head is where they part.
++
++    One head reads loudly and takes almost none of its read from the span; another is a thousand
++    times quieter and takes nearly all of its read from it. The maximum over heads is 0.9, which
++    is the right answer to "is this layer negligible" and the wrong effect to size a 2 by 2
++    against: nothing the experiment measures will produce it, because the head producing it
++    contributes almost nothing to the layer.
++
++    The magnitude-weighted figure is the norm share of the concatenated per-head reads, and it
++    lands near the loud head's own share.
++    """
++    loud = ReadShare(span_norm=0.001, total_norm=1.0, defined=True)
++    quiet = ReadShare(span_norm=0.0009, total_norm=0.001, defined=True)
++    summary = read_share_by_layer({13: [loud, quiet]})
++
++    assert summary[13]["max_share"] == pytest.approx(0.9)
++    assert summary[13]["layer_share"] == pytest.approx(0.00134, abs=1e-5)
++    assert summary[13]["layer_share"] < summary[13]["max_share"] / 100
++
++
++def test_a_layer_with_no_defined_cells_reports_no_layer_share_either() -> None:
++    """Both figures are absent together; neither may read as zero."""
++    summary = read_share_by_layer({7: [ReadShare(0.0, 0.0, False)]})
++    assert summary[7]["max_share"] is None
++    assert summary[7]["layer_share"] is None
++
++
++def test_a_pre_check_whose_every_layer_is_undefined_is_refused() -> None:
++    """The zero rule one level up: "measured nothing" is not "measured nearly nothing".
++
++    Sized as negligible, an all-undefined pre-check would fall through to the licensed 0.05 and
++    hand back a plannable n, which reads as a licence the pre-check never gave.
++    """
++    with pytest.raises(ValueError, match="undefined"):
++        size_two_by_two(
++            {13: None, 16: None},
++            share_statistic="layer",
++            matched_share_for=_stand_in_rate,
++            matched_share_source="test stand-in",
++            discordance=14 / 42,
++        )
++
++
++def test_the_share_statistic_and_the_mapping_are_both_named_on_the_verdict() -> None:
++    """A sizing that can be fed either statistic silently is what the required labels prevent.
++
++    Same argument as `matched_share_for` having no default: the failure is not a wrong number,
++    it is a number nobody can trace back to the choice that produced it.
++    """
++    verdict = size_two_by_two(
++        {13: 0.004},
++        share_statistic="max_head",
++        matched_share_for=_stand_in_rate,
++        matched_share_source="test stand-in, 2026-09-08",
++        discordance=14 / 42,
++    )
++    assert verdict.share_statistic == "max_head"
++    assert verdict.matched_share_source == "test stand-in, 2026-09-08"
++    assert verdict.inputs["share_statistic"] == "max_head"
++    assert verdict.inputs["matched_share_source"] == "test stand-in, 2026-09-08"
++
++    with pytest.raises(ValueError, match="unknown share statistic"):
++        size_two_by_two(
++            {13: 0.004},
++            share_statistic="mean",
++            matched_share_for=_stand_in_rate,
++            matched_share_source="test stand-in",
++            discordance=14 / 42,
++        )
++
++
++def test_not_worth_running_fires_on_both_branches_and_they_are_distinguishable() -> None:
++    """The sentinel is not the negligible branch's alone, and the verdict says which fired."""
++    negligible = size_two_by_two(
++        {13: 0.001},
++        share_statistic="layer",
++        matched_share_for=lambda _share: 0.5,
++        matched_share_source="test stand-in: a coin flip",
++        discordance=14 / 42,
++        max_points=200,
++    )
++    observed = size_two_by_two(
++        {13: 0.9},
++        share_statistic="layer",
++        matched_share_for=lambda _share: 0.5,
++        matched_share_source="test stand-in: a coin flip",
++        discordance=14 / 42,
++        max_points=200,
++    )
++    assert negligible.outcome == observed.outcome == NOT_WORTH_RUNNING
++    assert negligible.inputs["every_layer_negligible"] is True
++    assert observed.inputs["every_layer_negligible"] is False
+```
