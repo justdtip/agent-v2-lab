@@ -28,11 +28,12 @@ def from_transcripts(directory: Path) -> dict[str, list[tuple[str, str]]]:
             continue
         steps: list[tuple[str, str]] = []
         for block in text.split("**Step ")[1:]:
-            call = next((m for m in (CALL.match(line.strip()) for line in block.splitlines()) if m), None)
+            matches = (CALL.match(line.strip()) for line in block.splitlines())
+            call = next((match for match in matches if match), None)
             fence = re.search(r"```\n(.*?)\n```", block, re.S)
             if call:
-                steps.append((f"{call.group(1)} {json.dumps(json.loads(call.group(2)), sort_keys=True)}",
-                              fence.group(1) if fence else ""))
+                arguments = json.dumps(json.loads(call.group(2)), sort_keys=True)
+            steps.append((f"{call.group(1)} {arguments}", fence.group(1) if fence else ""))
         runs[title.group(1)] = steps
     return runs
 
@@ -77,17 +78,22 @@ def defect(steps: list[tuple[str, str]], meta: dict | None = None) -> tuple[str,
             if isinstance(value, str) and value and not value.startswith(ROOTED):
                 return "path abbreviation", f"step {index}: {key}={value!r} is not rooted"
         expression = arguments.get("expression")
-        if name == "calculate" and isinstance(expression, str):
-            if not re.fullmatch(r"[\d\s+\-*/().]+", expression) or expression.count("(") != expression.count(")"):
-                return "malformed argument", f"step {index}: expression={expression!r}"
-        if observation.startswith("ERROR") and ("syntax" in observation.lower() or "invalid" in observation.lower()):
+        if name == "calculate" and isinstance(expression, str) and (
+            not re.fullmatch(r"[\d\s+\-*/().]+", expression)
+            or expression.count("(") != expression.count(")")
+        ):
+            return "malformed argument", f"step {index}: expression={expression!r}"
+        complaint = observation.lower()
+        if observation.startswith("ERROR") and ("syntax" in complaint or "invalid" in complaint):
             return "malformed argument", f"step {index}: {observation[:60]}"
         if index and call == steps[index - 1][0] and not steps[index - 1][1].startswith("ERROR"):
-            return "re-issued call after success", f"step {index} repeats step {index - 1} after a good result"
+            return ("re-issued call after success",
+                    f"step {index} repeats step {index - 1} after a good result")
     # Two classes arm A never showed, so they are named rather than folded into its six.
     meta = meta or {}
     if meta.get("parse_error") or any(call.startswith("? ") for call, _ in steps):
-        return "truncated tool call", f"step {len(steps) - 1}: {meta.get('parse_error') or 'no action emitted'}"
+        why = meta.get("parse_error") or "no action emitted"
+        return "truncated tool call", f"step {len(steps) - 1}: {why}"
     unused = [r for r in meta.get("reasons", []) if r.startswith("required tools unused")]
     if unused:
         return "required tool unused", f"{unused[0]} after {len(steps)} steps"
@@ -126,10 +132,14 @@ def main() -> int:
     summaries = []
     arm_a = from_transcripts(ROOT / "outputs/agent-v2e-qwen35-4b/transcripts/best-adapter-test")
     arm_a = {task: steps for task, steps in arm_a.items() if task in set(order)}
-    record = json.loads((ROOT / "research/records/ARM-A-DIVERGENCE-2026-09-07/descriptive.json").read_text())
+    divergence = ROOT / "research/records/ARM-A-DIVERGENCE-2026-09-07/descriptive.json"
+    record = json.loads(divergence.read_text())
     arm_a_success = {t["task_id"]: t["adapter_success"] for t in record["tasks"]}
-    summaries.append(report("arm A @ 800 rows (the divergence record, re-read)", arm_a, arm_a_success, base))
-    print(f"    record says: {record['adapter_passes']} pass, {record['pairs_base_pass_adapter_fail']} pairs, "
+    summaries.append(
+        report("arm A @ 800 rows (the divergence record, re-read)", arm_a, arm_a_success, base)
+    )
+    print(f"    record says: {record['adapter_passes']} pass, "
+          f"{record['pairs_base_pass_adapter_fail']} pairs, "
           f"{record['adapter_failures_locked_in']} locked in, defects {record['defects']}")
 
     for step in ("0000800", "0001200", "0000400"):
