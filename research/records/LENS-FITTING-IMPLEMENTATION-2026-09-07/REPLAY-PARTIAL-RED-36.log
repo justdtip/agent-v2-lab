@@ -1,0 +1,172 @@
+FFFF.                                                                    [100%]
+=================================== FAILURES ===================================
+__ test_explicit_incomplete_capture_manifest_refuses_before_snapshot[partial] __
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-266/test_explicit_incomplete_captu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b6908a0>
+status = 'partial'
+
+    @pytest.mark.parametrize("status", ["partial", "aborted", "failed", None])
+    def test_explicit_incomplete_capture_manifest_refuses_before_snapshot(tmp_path, monkeypatch, status):
+        """§14: unfinished prose windows cannot be promoted to a completed replay set."""
+        module = api()
+        prepared = prepared_fixture(tmp_path, monkeypatch)
+        path = prepared.source / "manifest.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["status"] = status
+        path.write_text(json.dumps(manifest))
+    
+        def unexpected_snapshot(*args, **kwargs):
+            raise AssertionError("incomplete capture reached snapshot resolution")
+    
+        monkeypatch.setattr(module, "resolve_snapshot", unexpected_snapshot)
+        with pytest.raises(ValueError, match="source capture manifest is not complete"):
+>           module.prepare_replay(
+                prepared.source, prepared.spec, prepared.output, prepared.lens_path,
+                lens_sha256=prepared.lens_sha256, domain="prose", kind="jacobian",
+            )
+
+tests/test_lens_replay.py:602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/local_llm_lab/pipeline/lens_fitting/replay.py:332: in prepare_replay
+    snapshot = resolve_snapshot(spec, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (ModelSpec(name='qwen35-4b', hf_id='example/tiny', family='qwen3_5', chat=ChatSpec(thinking='off', template_kwargs={'e...667, 0.833, 1.0), memory_budget_gib=22.0, policies={}, cache_equivalence_verified=None, probe_capture_dtype='native'),)
+kwargs = {'revision': 'main'}
+
+    def unexpected_snapshot(*args, **kwargs):
+>       raise AssertionError("incomplete capture reached snapshot resolution")
+E       AssertionError: incomplete capture reached snapshot resolution
+
+tests/test_lens_replay.py:598: AssertionError
+__ test_explicit_incomplete_capture_manifest_refuses_before_snapshot[aborted] __
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-266/test_explicit_incomplete_captu1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b69fad0>
+status = 'aborted'
+
+    @pytest.mark.parametrize("status", ["partial", "aborted", "failed", None])
+    def test_explicit_incomplete_capture_manifest_refuses_before_snapshot(tmp_path, monkeypatch, status):
+        """§14: unfinished prose windows cannot be promoted to a completed replay set."""
+        module = api()
+        prepared = prepared_fixture(tmp_path, monkeypatch)
+        path = prepared.source / "manifest.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["status"] = status
+        path.write_text(json.dumps(manifest))
+    
+        def unexpected_snapshot(*args, **kwargs):
+            raise AssertionError("incomplete capture reached snapshot resolution")
+    
+        monkeypatch.setattr(module, "resolve_snapshot", unexpected_snapshot)
+        with pytest.raises(ValueError, match="source capture manifest is not complete"):
+>           module.prepare_replay(
+                prepared.source, prepared.spec, prepared.output, prepared.lens_path,
+                lens_sha256=prepared.lens_sha256, domain="prose", kind="jacobian",
+            )
+
+tests/test_lens_replay.py:602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/local_llm_lab/pipeline/lens_fitting/replay.py:332: in prepare_replay
+    snapshot = resolve_snapshot(spec, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (ModelSpec(name='qwen35-4b', hf_id='example/tiny', family='qwen3_5', chat=ChatSpec(thinking='off', template_kwargs={'e...667, 0.833, 1.0), memory_budget_gib=22.0, policies={}, cache_equivalence_verified=None, probe_capture_dtype='native'),)
+kwargs = {'revision': 'main'}
+
+    def unexpected_snapshot(*args, **kwargs):
+>       raise AssertionError("incomplete capture reached snapshot resolution")
+E       AssertionError: incomplete capture reached snapshot resolution
+
+tests/test_lens_replay.py:598: AssertionError
+__ test_explicit_incomplete_capture_manifest_refuses_before_snapshot[failed] ___
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-266/test_explicit_incomplete_captu2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b6a5f20>
+status = 'failed'
+
+    @pytest.mark.parametrize("status", ["partial", "aborted", "failed", None])
+    def test_explicit_incomplete_capture_manifest_refuses_before_snapshot(tmp_path, monkeypatch, status):
+        """§14: unfinished prose windows cannot be promoted to a completed replay set."""
+        module = api()
+        prepared = prepared_fixture(tmp_path, monkeypatch)
+        path = prepared.source / "manifest.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["status"] = status
+        path.write_text(json.dumps(manifest))
+    
+        def unexpected_snapshot(*args, **kwargs):
+            raise AssertionError("incomplete capture reached snapshot resolution")
+    
+        monkeypatch.setattr(module, "resolve_snapshot", unexpected_snapshot)
+        with pytest.raises(ValueError, match="source capture manifest is not complete"):
+>           module.prepare_replay(
+                prepared.source, prepared.spec, prepared.output, prepared.lens_path,
+                lens_sha256=prepared.lens_sha256, domain="prose", kind="jacobian",
+            )
+
+tests/test_lens_replay.py:602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/local_llm_lab/pipeline/lens_fitting/replay.py:332: in prepare_replay
+    snapshot = resolve_snapshot(spec, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (ModelSpec(name='qwen35-4b', hf_id='example/tiny', family='qwen3_5', chat=ChatSpec(thinking='off', template_kwargs={'e...667, 0.833, 1.0), memory_budget_gib=22.0, policies={}, cache_equivalence_verified=None, probe_capture_dtype='native'),)
+kwargs = {'revision': 'main'}
+
+    def unexpected_snapshot(*args, **kwargs):
+>       raise AssertionError("incomplete capture reached snapshot resolution")
+E       AssertionError: incomplete capture reached snapshot resolution
+
+tests/test_lens_replay.py:598: AssertionError
+___ test_explicit_incomplete_capture_manifest_refuses_before_snapshot[None] ____
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-266/test_explicit_incomplete_captu3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b6a6690>
+status = None
+
+    @pytest.mark.parametrize("status", ["partial", "aborted", "failed", None])
+    def test_explicit_incomplete_capture_manifest_refuses_before_snapshot(tmp_path, monkeypatch, status):
+        """§14: unfinished prose windows cannot be promoted to a completed replay set."""
+        module = api()
+        prepared = prepared_fixture(tmp_path, monkeypatch)
+        path = prepared.source / "manifest.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["status"] = status
+        path.write_text(json.dumps(manifest))
+    
+        def unexpected_snapshot(*args, **kwargs):
+            raise AssertionError("incomplete capture reached snapshot resolution")
+    
+        monkeypatch.setattr(module, "resolve_snapshot", unexpected_snapshot)
+        with pytest.raises(ValueError, match="source capture manifest is not complete"):
+>           module.prepare_replay(
+                prepared.source, prepared.spec, prepared.output, prepared.lens_path,
+                lens_sha256=prepared.lens_sha256, domain="prose", kind="jacobian",
+            )
+
+tests/test_lens_replay.py:602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/local_llm_lab/pipeline/lens_fitting/replay.py:332: in prepare_replay
+    snapshot = resolve_snapshot(spec, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (ModelSpec(name='qwen35-4b', hf_id='example/tiny', family='qwen3_5', chat=ChatSpec(thinking='off', template_kwargs={'e...667, 0.833, 1.0), memory_budget_gib=22.0, policies={}, cache_equivalence_verified=None, probe_capture_dtype='native'),)
+kwargs = {'revision': 'main'}
+
+    def unexpected_snapshot(*args, **kwargs):
+>       raise AssertionError("incomplete capture reached snapshot resolution")
+E       AssertionError: incomplete capture reached snapshot resolution
+
+tests/test_lens_replay.py:598: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_lens_replay.py::test_explicit_incomplete_capture_manifest_refuses_before_snapshot[partial]
+FAILED tests/test_lens_replay.py::test_explicit_incomplete_capture_manifest_refuses_before_snapshot[aborted]
+FAILED tests/test_lens_replay.py::test_explicit_incomplete_capture_manifest_refuses_before_snapshot[failed]
+FAILED tests/test_lens_replay.py::test_explicit_incomplete_capture_manifest_refuses_before_snapshot[None]
+4 failed, 1 passed, 32 deselected in 0.16s

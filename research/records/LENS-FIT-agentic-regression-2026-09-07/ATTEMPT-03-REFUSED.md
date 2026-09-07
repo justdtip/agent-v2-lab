@@ -1,0 +1,3 @@
+# Calibration attempt03 — refused before preflight invocation
+
+The launch followed3 passing tiny-model replay tests in an announced primary-heartbeat window. Its own fresh `runlock.running_model_processes()` found foreign pytest PID55135 mapping the primary MLX library. The launch exited before runpy invoked the preflight or source metadata was written. Only resource-preflight-03.log exists. No03 JSONL, source-launch JSON, checkpoint load, forward, resource measurement, scientific output or lens artifact. No process was killed or lock cleared. The window was closed in the primary heartbeat. Next attempt uses exclusive04 paths after a handoff including native pytest.

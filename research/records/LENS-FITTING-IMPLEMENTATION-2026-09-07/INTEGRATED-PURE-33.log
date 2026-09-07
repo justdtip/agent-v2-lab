@@ -1,0 +1,364 @@
+................F...FF.................................................. [ 42%]
+............................................F.........F................. [ 85%]
+........................                                                 [100%]
+=================================== FAILURES ===================================
+________ test_actual_legacy_summarizer_identity_and_statistics_mutation ________
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-264/test_actual_legacy_summarizer_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1080900f0>
+
+    def test_actual_legacy_summarizer_identity_and_statistics_mutation(tmp_path, monkeypatch):
+        """Invoke actual atlas main; altering historical seconds must turn identity red."""
+        import huggingface_hub
+>       import transformers
+
+tests/test_lens_replay.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/__init__.py:30: in <module>
+    from . import dependency_versions_check
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/dependency_versions_check.py:16: in <module>
+    from .utils.versions import require_version, require_version_core
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/__init__.py:22: in <module>
+    from .auto_docstring import (
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/auto_docstring.py:33: in <module>
+    from .generic import ModelOutput
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/generic.py:90: in <module>
+    if is_mlx_available():
+       ^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:1602: in is_mlx_available
+    return _is_package_available("mlx")[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:52: in _is_package_available
+    spec = importlib.util.find_spec(pkg_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <__main__.NoNativeMLX object at 0x105ead400>, fullname = 'mlx'
+path = None, target = None
+
+>   ???
+E   RuntimeError: Native MLX import refused during shared queue: mlx
+
+<stdin>:6: RuntimeError
+_________ test_output_records_verified_and_manifest_is_separate[False] _________
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-264/test_output_records_verified_a0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x108ea0ec0>
+summary_failure = False
+
+    @pytest.mark.parametrize("summary_failure", [False, True])
+    def test_output_records_verified_and_manifest_is_separate(tmp_path, monkeypatch, summary_failure):
+        from types import SimpleNamespace
+    
+        module = api()
+        prepared = prepared_fixture(tmp_path, monkeypatch)
+        loaded = SimpleNamespace(
+            view=SimpleNamespace(hidden_size=2, num_layers=2),
+            tokenizer=None,
+            snapshot=prepared.snapshot,
+            spec=prepared.spec,
+            resolved=SimpleNamespace(cache_strategy="none"),
+            lock_path=tmp_path / "lock",
+        )
+    
+        def replay(view, tokenizer, lens, events, emit, **kwargs):
+            for event in events[1:-1]:
+                emit(event)
+            return {"forwards": 2, "tokens": 3}
+    
+        monkeypatch.setattr(module, "replay_record", replay)
+>       import transformers
+
+tests/test_lens_replay.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/__init__.py:30: in <module>
+    from . import dependency_versions_check
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/dependency_versions_check.py:16: in <module>
+    from .utils.versions import require_version, require_version_core
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/__init__.py:22: in <module>
+    from .auto_docstring import (
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/auto_docstring.py:33: in <module>
+    from .generic import ModelOutput
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/generic.py:90: in <module>
+    if is_mlx_available():
+       ^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:1602: in is_mlx_available
+    return _is_package_available("mlx")[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:52: in _is_package_available
+    spec = importlib.util.find_spec(pkg_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <__main__.NoNativeMLX object at 0x105ead400>, fullname = 'mlx'
+path = None, target = None
+
+>   ???
+E   RuntimeError: Native MLX import refused during shared queue: mlx
+
+<stdin>:6: RuntimeError
+_________ test_output_records_verified_and_manifest_is_separate[True] __________
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-264/test_output_records_verified_a1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x108a53d20>
+summary_failure = True
+
+    @pytest.mark.parametrize("summary_failure", [False, True])
+    def test_output_records_verified_and_manifest_is_separate(tmp_path, monkeypatch, summary_failure):
+        from types import SimpleNamespace
+    
+        module = api()
+        prepared = prepared_fixture(tmp_path, monkeypatch)
+        loaded = SimpleNamespace(
+            view=SimpleNamespace(hidden_size=2, num_layers=2),
+            tokenizer=None,
+            snapshot=prepared.snapshot,
+            spec=prepared.spec,
+            resolved=SimpleNamespace(cache_strategy="none"),
+            lock_path=tmp_path / "lock",
+        )
+    
+        def replay(view, tokenizer, lens, events, emit, **kwargs):
+            for event in events[1:-1]:
+                emit(event)
+            return {"forwards": 2, "tokens": 3}
+    
+        monkeypatch.setattr(module, "replay_record", replay)
+>       import transformers
+
+tests/test_lens_replay.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/__init__.py:30: in <module>
+    from . import dependency_versions_check
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/dependency_versions_check.py:16: in <module>
+    from .utils.versions import require_version, require_version_core
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/__init__.py:22: in <module>
+    from .auto_docstring import (
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/auto_docstring.py:33: in <module>
+    from .generic import ModelOutput
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/generic.py:90: in <module>
+    if is_mlx_available():
+       ^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:1602: in is_mlx_available
+    return _is_package_available("mlx")[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:52: in _is_package_available
+    spec = importlib.util.find_spec(pkg_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <__main__.NoNativeMLX object at 0x105ead400>, fullname = 'mlx'
+path = None, target = None
+
+>   ???
+E   RuntimeError: Native MLX import refused during shared queue: mlx
+
+<stdin>:6: RuntimeError
+__________________ test_actual_original_pilot_atlas_unchanged __________________
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-264/test_actual_original_pilot_atl0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x108cfa4a0>
+
+    def test_actual_original_pilot_atlas_unchanged(tmp_path, monkeypatch):
+        """Legacy compatibility: actual 13 pilot records, cached tokenizer and real atlas main."""
+        import json
+        import runpy
+        import sys
+    
+        import huggingface_hub
+    
+        module = api()
+        import gzip
+    
+        control = tmp_path / "pilot-control"
+        control.mkdir()
+        for name in ("manifest.json", "atlas.json"):
+            (control / name).write_bytes((module.PILOT / name).read_bytes())
+        manifest = json.loads((control / "manifest.json").read_text())
+        for episode in manifest["episodes"]:
+            source = module.PILOT / episode["record"]
+            if not source.exists():
+                source = source.with_suffix(".jsonl.gz")
+            raw = source.read_bytes()
+            if source.suffix == ".gz":
+                raw = gzip.decompress(raw)
+            (control / (episode["label"] + ".jsonl")).write_bytes(raw)
+        from huggingface_hub.errors import LocalEntryNotFoundError
+    
+        from local_llm_lab.pipeline.lens_fitting.runtime import primary_worktree
+    
+        try:
+            snapshot = huggingface_hub.snapshot_download(
+                manifest["model"],
+                cache_dir=primary_worktree() / ".cache/huggingface/hub",
+                local_files_only=True,
+                allow_patterns=["tokenizer*", "*.json"],
+            )
+        except LocalEntryNotFoundError:
+            pytest.skip("offline pilot tokenizer is not cached on this host")
+        before = {path.name: module.file_sha256(path) for path in control.iterdir()}
+    
+        def offline(*a, **kwargs):
+            assert kwargs.get("local_files_only") is True
+            return str(snapshot)
+    
+        monkeypatch.setattr(huggingface_hub, "snapshot_download", offline)
+        out = tmp_path / "new-atlas.json"
+        monkeypatch.setattr(
+            sys, "argv", [str(module.ATLAS_SCRIPT), "--records", str(control), "--out", str(out)]
+        )
+>       runpy.run_path(str(module.ATLAS_SCRIPT), run_name="__main__")
+
+tests/test_lens_profiles.py:619: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen runpy>:287: in run_path
+    ???
+<frozen runpy>:98: in _run_module_code
+    ???
+<frozen runpy>:88: in _run_code
+    ???
+scripts/live_lens_atlas.py:146: in <module>
+    main()
+scripts/live_lens_atlas.py:74: in main
+    from transformers import AutoTokenizer
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/__init__.py:30: in <module>
+    from . import dependency_versions_check
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/dependency_versions_check.py:16: in <module>
+    from .utils.versions import require_version, require_version_core
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/__init__.py:22: in <module>
+    from .auto_docstring import (
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/auto_docstring.py:33: in <module>
+    from .generic import ModelOutput
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/generic.py:90: in <module>
+    if is_mlx_available():
+       ^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:1602: in is_mlx_available
+    return _is_package_available("mlx")[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:52: in _is_package_available
+    spec = importlib.util.find_spec(pkg_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <__main__.NoNativeMLX object at 0x105ead400>, fullname = 'mlx'
+path = None, target = None
+
+>   ???
+E   RuntimeError: Native MLX import refused during shared queue: mlx
+
+<stdin>:6: RuntimeError
+_________ test_profile_output_is_exclusive_with_explicit_missing_cells _________
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-264/test_profile_output_is_exclusi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x108cfa350>
+
+    def test_profile_output_is_exclusive_with_explicit_missing_cells(tmp_path, monkeypatch):
+        """§3.5: fixture-only output seam writes named JSON and a completion hash set."""
+        import json
+    
+        module = api()
+        item = {
+            "model": "qwen35-4b",
+            "domain": "agentic",
+            "kind": "regression",
+            "instrument": {},
+            "identity": "synthetic-fixture",
+            "lens": "synthetic-fixture",
+            "records": [],
+        }
+        config = tmp_path / "config.json"
+        config.write_text(json.dumps({"sets": [item]}))
+        from local_llm_lab.models import load_model_spec
+    
+        snapshot = {"hf_id": load_model_spec(item["model"]).hf_id, "snapshot_path": str(tmp_path)}
+        monkeypatch.setattr(module, "verify_instrument", lambda *a: ({"layers": [1, 2]}, snapshot))
+        monkeypatch.setattr(module, "verify_identity", lambda *a: {"synthetic_fixture_only": True})
+        monkeypatch.setattr(module, "lens_metadata", lambda *a: ({"synthetic_fixture_only": True}, {}))
+>       from transformers import AutoTokenizer
+
+tests/test_lens_profiles.py:830: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/__init__.py:30: in <module>
+    from . import dependency_versions_check
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/dependency_versions_check.py:16: in <module>
+    from .utils.versions import require_version, require_version_core
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/__init__.py:22: in <module>
+    from .auto_docstring import (
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/auto_docstring.py:33: in <module>
+    from .generic import ModelOutput
+tests/test_lens_profiles.py:398: in guarded
+    return original(name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/generic.py:90: in <module>
+    if is_mlx_available():
+       ^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:1602: in is_mlx_available
+    return _is_package_available("mlx")[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/transformers/utils/import_utils.py:52: in _is_package_available
+    spec = importlib.util.find_spec(pkg_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <__main__.NoNativeMLX object at 0x105ead400>, fullname = 'mlx'
+path = None, target = None
+
+>   ???
+E   RuntimeError: Native MLX import refused during shared queue: mlx
+
+<stdin>:6: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/test_lens_replay.py::test_actual_legacy_summarizer_identity_and_statistics_mutation
+FAILED tests/test_lens_replay.py::test_output_records_verified_and_manifest_is_separate[False]
+FAILED tests/test_lens_replay.py::test_output_records_verified_and_manifest_is_separate[True]
+FAILED tests/test_lens_profiles.py::test_actual_original_pilot_atlas_unchanged
+FAILED tests/test_lens_profiles.py::test_profile_output_is_exclusive_with_explicit_missing_cells
+5 failed, 163 passed in 25.03s
+MLX_MODULES_AFTER []

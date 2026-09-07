@@ -1,0 +1,2 @@
+primary_lock None mapped_MLX [MappedProcess(pid=55135, command='/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m pytest -p no:cacheprovider', library='/Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/mlx/lib/libmlx.dylib')] owned_pid 56037
+Refused before preflight: model slot occupied

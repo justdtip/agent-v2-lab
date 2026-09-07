@@ -275,6 +275,8 @@ def prepare_replay(
     manifest_path = source / "manifest.json"
     raw = manifest_path.read_bytes()
     manifest = json.loads(raw)
+    if "status" in manifest and manifest["status"] != "complete":
+        raise ValueError("source capture manifest is not complete")
     if manifest["model"] != spec.hf_id:
         raise ValueError("source model differs from requested model")
     if identity_atlas is not None:

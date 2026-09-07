@@ -582,3 +582,51 @@ def test_cli_explicit_layers_reach_preparation(tmp_path, monkeypatch):
         )
     assert error.value.code == 2
     assert observed == [(1, 2)]
+
+
+@pytest.mark.parametrize("status", ["partial", "aborted", "failed", None])
+def test_explicit_incomplete_capture_manifest_refuses_before_snapshot(
+    tmp_path, monkeypatch, status
+):
+    """§14: unfinished prose windows cannot be promoted to a completed replay set."""
+    module = api()
+    prepared = prepared_fixture(tmp_path, monkeypatch)
+    path = prepared.source / "manifest.json"
+    manifest = json.loads(path.read_bytes())
+    manifest["status"] = status
+    path.write_text(json.dumps(manifest))
+
+    def unexpected_snapshot(*args, **kwargs):
+        raise AssertionError("incomplete capture reached snapshot resolution")
+
+    monkeypatch.setattr(module, "resolve_snapshot", unexpected_snapshot)
+    with pytest.raises(ValueError, match="source capture manifest is not complete"):
+        module.prepare_replay(
+            prepared.source,
+            prepared.spec,
+            prepared.output,
+            prepared.lens_path,
+            lens_sha256=prepared.lens_sha256,
+            domain="prose",
+            kind="jacobian",
+        )
+
+
+def test_explicit_complete_capture_manifest_is_accepted(tmp_path, monkeypatch):
+    """§14: completed prose captures and legacy manifests remain valid replay inputs."""
+    module = api()
+    prepared = prepared_fixture(tmp_path, monkeypatch)
+    path = prepared.source / "manifest.json"
+    manifest = json.loads(path.read_bytes())
+    manifest["status"] = "complete"
+    path.write_text(json.dumps(manifest))
+    actual = module.prepare_replay(
+        prepared.source,
+        prepared.spec,
+        prepared.output,
+        prepared.lens_path,
+        lens_sha256=prepared.lens_sha256,
+        domain="prose",
+        kind="jacobian",
+    )
+    assert actual.layers == prepared.layers
