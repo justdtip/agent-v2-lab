@@ -40,3 +40,30 @@ as the session records them.
 Thirteen episodes; one model; no adapter; greedy only; head capture off; prompts under 4,096 tokens;
 foreknowledge horizons cross no turn boundary. Per-episode cost is expected at minutes, dominated by the
 full-vocabulary lens ranking at every prompt position (benchmark: 13.6× native on a short prefix).
+
+## Amendment, 17:00 (Director): fit at every layer, not at layer 20
+
+The Director's instruction: the lens we fit must read every layer of the J-space, because the choice of
+layer 20 as primary came from the instrument (F10, F11, R54: the most readable layer that is still
+independent of the output), not from evidence about where agentic computation lives. Written before any
+fit is run:
+
+1. **Regression lens, all layers.** From the train-split rollouts' prompts, one uncached forward per
+   prompt collects the residual at every layer 1–31 and the final residual at every position; one
+   ridge solve per layer (λ chosen by held-out reconstruction error on a fifth of the prompts, fixed
+   before reading any lens output). Thirty-one matrices, minutes.
+2. **Jacobian lens, all layers.** Same-position derivative of the final residual with respect to the
+   layer-L residual, by batched finite differences on the cached single position, averaged over
+   sampled positions stratified by span; the stopping rule is the hosted fit's (running mean changing
+   by less than 0.2% between batches of prompts); the cached single-position derivative must first
+   reproduce the uncached full-sequence derivative on a short prompt (R52) before any fit is read.
+   All 31 layers, in order of the regression profile's readability but none omitted; ~20 minutes per
+   layer at 150 positions, run as one overnight job.
+3. **Reading.** The pilot's thirteen episodes are replayed under each fitted lens at each layer; the two
+   pre-registered summaries (foreknowledge at h = 1/4/8; agreement with the next prompt token by span)
+   are reported **per layer as a profile**, with the output's own h = 4 share as the base rate on every
+   row. No layer is named primary in advance; the profile is the result. The regression lens's h = 1
+   numbers carry the bias stated in the 16:45 explanation and are not read against the base rate.
+4. **Complement.** Content a lens cannot verbalise may still be located by the per-layer state probes in
+   the tree (`probes/state_probe.py`); a layer that reads poorly through both lenses but carries task
+   state under a probe is a finding, not a failure of the layer.
