@@ -164,3 +164,16 @@ Three corrections of wording, none of conclusion, and one discrepancy with the l
 The `.as-run.py.txt` transcripts here, like the ten before them in four earlier records, sit
 outside the record-guard rule's `*.py` discovery while importing MLX at module scope. That is a
 gap in issue 89's rule, not in this record; it is filed for the Deputy as a follow-up.
+
+### Addendum to the review note (Chief, 2026-09-08, later)
+
+5. **The measurement table above lists raw peaks, not inputs-subtracted ones.** Its prose says
+   the input tensors' bytes were subtracted; the columns are `forward_peak_bytes` and
+   `backward_peak_bytes` from `sdpa.json` as recorded, inputs included. Subtracted, the backward
+   column reads 0.038, 0.124, 0.441, 1.656, 6.453 GiB and the forward 0.012, 0.040, 0.145,
+   0.547, 2.188 GiB. The per-length coefficients and the 102.3 fit did use the subtracted values,
+   so nothing downstream is affected; only the table's caption is wrong.
+
+6. **"About 2.6×" is a unit slip.** The issue's 17.2 GB against the measured 6.672 GiB is 2.4×
+   in consistent units (17.2 GB against 7.16 GB, or 16.0 GiB against 6.67 GiB); 2.6 comes from
+   reading the GiB figure as GB.
