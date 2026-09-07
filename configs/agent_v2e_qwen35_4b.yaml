@@ -34,6 +34,7 @@ train:
   scale: 32.0
   dropout: 0.0
   iters: 1200
+  iters_unit: batches   # mlx-lm iterations are batches (rows at batch 1), not optimizer updates
   batch_size: 1
   grad_accumulation_steps: 4
   learning_rate: 3.0e-5
