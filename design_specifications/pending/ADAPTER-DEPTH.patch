@@ -1,0 +1,305 @@
+# ADAPTER-DEPTH: issue 88's recipe knob, and the band coverage that keeps it honest
+
+**Issue 88 cannot run without this.** `cli.py` set the LoRA config's `num_layers` to
+`resolved.num_layers` unconditionally, so every run this repository has ever done adapted every
+layer and there was no way to ask for fewer. The ablation is "a recipe variant, not a probe
+variant", so the variant has to exist in the recipe.
+
+## `train.lora_layers`
+
+Absent, the depth is every layer — what every run before this did, and what R50 requires of any run
+whose adapter will be read. Present, it is the number of **top** layers `linear_to_lora_layers`
+adapts, so 8 on a 32-layer model means layers 25 to 32 and nothing below.
+
+**Validated, not clamped.** A depth of 0, a negative, or one past the model's layer count is a typo
+in a recipe, and silently training a different model than the config asked for is worse than
+refusing before the weights load.
+
+## The band coverage, because "most of the band" is the sentence to prevent
+
+R41d makes a declared pair one unit whose members carry the same role, so **a split pair is not a
+covered pair**. `_band_coverage` reports whole pairs, split pairs with the member that fell
+outside, and pairs entirely outside. On the 4B's five pairs:
+
+| depth | lowest adapted layer | whole | split |
+| --- | ---: | --- | --- |
+| top 8 | 25 | 27/28 — **one of five** | none |
+| top 16 | 17 | 19/20, 23/24, 27/28 — **three of five** | 16/17, with 17 in and 16 out |
+| all 32 | 1 | all five | none |
+
+It is recorded at every depth, including full, so a reader never infers coverage from
+`num_layers`, and it goes to both the run log and the provenance rather than only one.
+
+## The pairs come from the registry
+
+`probes.live_lens_pairs` was declared in `configs/models/qwen35-4b.yaml` and read only by
+`live_lens.instruments.read_band`, which validates against the installed block kinds and therefore
+needs a loaded model. This adds `spec.probes.live_lens_pairs` for readers that need the
+**declaration** rather than the validation — a second copy of the pairs beside the code that reports
+them is how the band ruling and the code drift apart. `read_band` is unchanged and remains the
+validating reader.
+
+## One thing I nearly shipped by accident, stated
+
+`ruff check --fix` on `cli.py` removed the module-scope `render` import while fixing a finding of
+mine, because a pre-existing `F811` marks it redefined by a local import further down. That is a
+behaviour-adjacent change I neither intended nor reviewed, so it is reverted and the pre-existing
+finding stands. Ruff's baseline for the changed files is 7 before and 7 after.
+
+## One assertion re-pinned deliberately
+
+`test_probes.py` pins the exact key set of a serialised `ModelSpec`, and the new field joins it
+with a comment saying why.
+
+## Verification
+
+```
+full suite:                     exit 0
+tests/test_cli.py:              exit 0, 3 new tests
+ruff, all changed files:        7 findings before, 7 after, 0 newly introduced
+git apply --check against HEAD: 0
+box: R45(b) inventory, 0 holders, checked before the suite
+```
+
+```diff
+diff --git a/src/local_llm_lab/models.py b/src/local_llm_lab/models.py
+index 94a9509..ee66ff2 100644
+--- a/src/local_llm_lab/models.py
++++ b/src/local_llm_lab/models.py
+@@ -60,6 +60,11 @@ class ProbesSpec:
+ 
+     layer_fractions: tuple[float, ...]
+     capture_dtype: Literal["native", "float32"]
++    #: The declared residual band, as 1-based layer pairs (R41e). Empty when the registry
++    #: declares none. `live_lens.instruments.read_band` is the *validating* reader, used where
++    #: the installed block kinds are known; this is the declaration itself, for readers that
++    #: only need to say which pairs a thing covers (issue 88).
++    live_lens_pairs: tuple[tuple[int, int], ...]
+ 
+ 
+ @dataclass(frozen=True)
+@@ -74,6 +79,9 @@ class ModelSpec:
+     probe_layer_fractions: tuple[float, ...]
+     memory_budget_gib: float
+     policies: dict[str, str]
++    #: The declared residual band as 1-based pairs (R41e). Defaulted because every existing
++    #: caller constructs a spec without it and a band is not required of a model.
++    probe_live_lens_pairs: tuple[tuple[int, int], ...] = ()
+     cache_equivalence_verified: dict[str, str] | None = None
+     # R18: native block execution during capture is the default; the float32 block path is for
+     # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
+@@ -84,6 +92,7 @@ class ModelSpec:
+         """The ``probes:`` block under the specs' own names; a view, not stored state."""
+         return ProbesSpec(
+             layer_fractions=self.probe_layer_fractions,
++            live_lens_pairs=self.probe_live_lens_pairs,
+             capture_dtype=self.probe_capture_dtype,
+         )
+ 
+@@ -283,6 +292,9 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
+         if cache_equivalence_verified is None
+         else dict(cache_equivalence_verified),
+         probe_layer_fractions=fractions,
++        probe_live_lens_pairs=tuple(
++            (int(pair[0]), int(pair[1])) for pair in probes.get("live_lens_pairs", ())
++        ),
+         probe_capture_dtype=capture_dtype,
+         memory_budget_gib=float(memory.get("budget_gib")),
+         policies=dict(policies),
+diff --git a/src/local_llm_lab/pipeline/cli.py b/src/local_llm_lab/pipeline/cli.py
+index 3f85370..e94e6a6 100644
+--- a/src/local_llm_lab/pipeline/cli.py
++++ b/src/local_llm_lab/pipeline/cli.py
+@@ -10,7 +10,7 @@ import math
+ import shutil
+ import sys
+ import time
+-from collections.abc import Callable, Iterator
++from collections.abc import Callable, Iterator, Mapping, Sequence
+ from dataclasses import dataclass, replace
+ from pathlib import Path
+ from types import SimpleNamespace
+@@ -217,6 +217,67 @@ def stage_render(*, source: Path, output: Path, model: str, overwrite: bool = Fa
+     print(f"Wrote {output} (source rows carried verbatim from {manifest['source']['directory']})")
+ 
+ 
++
++def _adapter_depth(train: Mapping[str, Any], resolved: ResolvedSpec) -> int:
++    """How many of the model's top layers carry adapters (issue 88, R50).
++
++    ``mlx_lm``'s ``linear_to_lora_layers`` adapts the **top** ``n`` layers, so a depth of 8 on a
++    32-layer model means layers 25 to 32 and nothing below. Absent from a config, the depth is
++    every layer, which is what every run before this one did and what R50 requires of any run
++    whose adapter will be read.
++
++    Validated rather than clamped: a depth of 0, a negative, or one past the model's own layer
++    count is a typo in a recipe, and silently training a different model than the config asked
++    for is worse than refusing before the weights load.
++    """
++    declared = train.get("lora_layers")
++    if declared is None:
++        return int(resolved.num_layers)
++    depth = int(declared)
++    if not 1 <= depth <= int(resolved.num_layers):
++        raise SystemExit(
++            f"train.lora_layers is {declared}; this model has {resolved.num_layers} layers and "
++            "the value counts them from the top, so it must be between 1 and that"
++        )
++    return depth
++
++
++def _band_coverage(depth: int, pairs: Sequence[Sequence[int]], num_layers: int) -> dict[str, Any]:
++    """Which declared band pairs an adapter of this depth can be read at (R41d, issue 88).
++
++    The top ``depth`` layers are ``num_layers - depth + 1`` upward, in the 1-based numbering the
++    band ruling uses. **A split pair is not a covered pair**: R41d makes a declared pair one unit
++    whose members carry the same role, so a pair with one member adapted and one not is reported
++    as split rather than counted, and the report says which member fell outside.
++
++    This is what stops "the top 16 covers most of the band" from being written down. It covers
++    three of five, and it splits one.
++    """
++    lowest_adapted = num_layers - depth + 1
++    whole, split, outside = [], [], []
++    for pair in pairs:
++        members = [int(layer) for layer in pair]
++        inside = [layer for layer in members if layer >= lowest_adapted]
++        if len(inside) == len(members):
++            whole.append(members)
++        elif inside:
++            split.append({"pair": members, "adapted": inside,
++                          "outside": [layer for layer in members if layer < lowest_adapted]})
++        else:
++            outside.append(members)
++    return {
++        "lowest_adapted_layer": lowest_adapted,
++        "pairs_whole": whole,
++        "pairs_split": split,
++        "pairs_outside": outside,
++        "summary": (
++            f"{len(whole)} of {len(pairs)} whole"
++            + (f", {len(split)} split" if split else "")
++            + (f", {len(outside)} outside" if outside else "")
++        ),
++    }
++
++
+ def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
+     """Stamp a stage's data output with manifest.json after it succeeds.
+ 
+@@ -514,7 +575,7 @@ def lora_config(
+         "optimizer": "adamw",
+         "data": str(config["data"]),
+         "seed": config["seed"],
+-        "num_layers": resolved.num_layers,
++        "num_layers": _adapter_depth(train, resolved),
+         "batch_size": train["batch_size"],
+         "grad_accumulation_steps": train["grad_accumulation_steps"],
+         "iters": train["iters"],
+@@ -868,6 +929,11 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+                 status="ok",
+                 fallbacks=_recorded_fallbacks(backbone),
+             )
++            coverage = _band_coverage(
++                int(lora["num_layers"]),
++                resolved.spec.probes.live_lens_pairs,
++                int(resolved.num_layers),
++            )
+             # R26(f): provenance carries the same health record health.json does, written
+             # after on_finish so the verdict recorded there is the final one.
+             write_provenance(
+@@ -877,10 +943,19 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+                 extra={
+                     "stage": "train",
+                     "training_config": lora,
++                    # Which band pairs this adapter can be read at (R41d, issue 88). Recorded
++                    # even at full depth, so a reader never has to infer it from num_layers.
++                    "band_coverage": coverage,
+                     "health_thresholds": thresholds.as_dict(),
+                     "health": summary,
+                 },
+             )
++            runlog.info(
++                "adapter depth",
++                layers=lora["num_layers"],
++                band_pairs=coverage["summary"],
++                lowest_adapted_layer=coverage["lowest_adapted_layer"],
++            )
+             runlog.info(
+                 "training finished",
+                 minutes=round((time.monotonic() - started) / 60, 1),
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index faee65e..729ca5d 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -2032,3 +2032,55 @@ def test_a_missing_preflight_artifact_falls_back_and_says_so(monkeypatch, tmp_pa
+     truncated.write_text('{"memory": {"budget_g', encoding="utf-8")
+     monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: truncated)
+     assert cli._resolved_memory_budget_gib(spec)[1].startswith("registry declaration")
++
++
++def test_the_adapter_depth_defaults_to_every_layer_and_is_validated(monkeypatch) -> None:
++    """Issue 88's knob. Absent, it is every layer, which is what every run before this did.
++
++    Validated rather than clamped: a depth of 0 or one past the model's layer count is a typo in
++    a recipe, and silently training something other than what the config asked for is worse than
++    refusing before the weights load.
++    """
++    from types import SimpleNamespace
++
++    resolved = SimpleNamespace(num_layers=32)
++    assert cli._adapter_depth({}, resolved) == 32
++    assert cli._adapter_depth({"lora_layers": 8}, resolved) == 8
++    assert cli._adapter_depth({"lora_layers": 32}, resolved) == 32
++
++    for bad in (0, -1, 33):
++        with pytest.raises(SystemExit, match="lora_layers"):
++            cli._adapter_depth({"lora_layers": bad}, resolved)
++
++
++def test_band_coverage_counts_whole_pairs_and_names_a_split_one() -> None:
++    """R41d: a declared pair is one unit, so a split pair is not a covered pair (issue 88).
++
++    This is what stops "the top 16 covers most of the band" from being written down. On the 4B's
++    five pairs, the top 8 covers one, and the top 16 covers three and splits 16/17 with 17 inside
++    and 16 outside.
++    """
++    pairs = [[12, 13], [16, 17], [19, 20], [23, 24], [27, 28]]
++
++    top8 = cli._band_coverage(8, pairs, 32)
++    assert top8["lowest_adapted_layer"] == 25
++    assert top8["pairs_whole"] == [[27, 28]]
++    assert top8["pairs_split"] == []
++    assert top8["summary"].startswith("1 of 5 whole")
++
++    top16 = cli._band_coverage(16, pairs, 32)
++    assert top16["lowest_adapted_layer"] == 17
++    assert top16["pairs_whole"] == [[19, 20], [23, 24], [27, 28]]
++    assert top16["pairs_split"] == [{"pair": [16, 17], "adapted": [17], "outside": [16]}]
++    assert "3 of 5 whole" in top16["summary"] and "1 split" in top16["summary"]
++
++    full = cli._band_coverage(32, pairs, 32)
++    assert full["pairs_whole"] == pairs and full["pairs_split"] == []
++
++
++def test_the_registry_declares_the_band_and_the_spec_carries_it() -> None:
++    """The pairs come from the registry, not from a constant beside the code that reads them."""
++    from local_llm_lab.models import load_model_spec
++
++    spec = load_model_spec("qwen35-4b")
++    assert spec.probes.live_lens_pairs == ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))
+diff --git a/tests/test_probes.py b/tests/test_probes.py
+index 36184bc..a34dd5f 100644
+--- a/tests/test_probes.py
++++ b/tests/test_probes.py
+@@ -1731,6 +1731,9 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
+         "cache_strategy",
+         "cache_equivalence_verified",
+         "probe_layer_fractions",
++        # Added 2026-09-08 (issue 88): the declared residual band, so a run can say which pairs
++        # its adapter depth covers without a second copy of the pairs beside the code.
++        "probe_live_lens_pairs",
+         "probe_capture_dtype",
+         "memory_budget_gib",
+         "policies",
+```
