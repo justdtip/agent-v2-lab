@@ -20,7 +20,12 @@ __all__ = [
 ]
 
 _THINKING_MODES = frozenset({"unsupported", "off", "inference", "trained"})
-_CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "none"})
+_CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "history", "none"})
+# The installed generator's default prefill cadence (``mlx_lm.generate.generate_step``,
+# ``prefill_step_size``). The history cache plans its forward partition with this number so that
+# reuse matches the ordinary schedule; ``tests/test_history_cache.py`` pins it to the library's
+# signature default so an upgrade cannot move one without the other being noticed.
+NATIVE_PREFILL_STEP_SIZE = 2048
 _CAPTURE_DTYPES = frozenset({"native", "float32"})
 _DEFAULT_PROBE_FRACTIONS = (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
 _REGISTRY_DIR = Path(__file__).resolve().parents[2] / "configs" / "models"
@@ -65,7 +70,7 @@ class ModelSpec:
     chat: ChatSpec
     lora: LoraSpec
     train: dict[str, Any]
-    cache_strategy: Literal["auto", "trim", "snapshot", "none"]
+    cache_strategy: Literal["auto", "trim", "snapshot", "history", "none"]
     probe_layer_fractions: tuple[float, ...]
     memory_budget_gib: float
     policies: dict[str, str]
@@ -93,7 +98,7 @@ class ModelSpec:
         view = ArchitectureView.from_model(model)
         layer_types = tuple(view.layer_kind(index) for index in range(view.num_layers))
         lora_keys = view.lora_targets(self.lora.keys)
-        cache_strategy: Literal["trim", "snapshot", "none"]
+        cache_strategy: Literal["trim", "snapshot", "history", "none"]
         if self.cache_strategy == "auto":
             if view.cache_trimmable:
                 cache_strategy = "trim"
@@ -117,8 +122,7 @@ class ModelSpec:
             lora_keys=lora_keys,
             trainable_parameters=view.lora_parameter_count(lora_keys, self.lora.rank),
             probe_layers=tuple(
-                max(1, round(fraction * view.num_layers))
-                for fraction in self.probe_layer_fractions
+                max(1, round(fraction * view.num_layers)) for fraction in self.probe_layer_fractions
             ),
             cache_strategy=cache_strategy,
             cache_strategy_reason=cache_strategy_reason,
@@ -138,7 +142,7 @@ class ResolvedSpec:
     lora_keys: tuple[str, ...]
     trainable_parameters: int
     probe_layers: tuple[int, ...]
-    cache_strategy: Literal["trim", "snapshot", "none"]
+    cache_strategy: Literal["trim", "snapshot", "history", "none"]
     cache_strategy_reason: str
     snapshot_revision: str | None
     jvp_method: Literal["forward", "finite_difference", "untested"]

@@ -295,6 +295,19 @@ def test_explicit_cache_resolution_records_declared_strategy(monkeypatch, strate
     )
 
 
+def test_history_strategy_is_explicit_only_and_does_not_certify_a_checkpoint(monkeypatch):
+    _install_view(monkeypatch, False, ("linear_attention",) * 3 + ("attention",))
+    raw = _registry_mapping(None)
+    raw["cache"]["strategy"] = "history"
+    raw["lora"]["keys"] = "auto"
+    spec = models._model_spec_from_mapping(raw, source="fixture")
+    resolved = spec.resolve(object(), SimpleNamespace())
+    assert resolved.cache_strategy == "history"
+    assert spec.cache_equivalence_verified is None
+    auto = replace(spec, cache_strategy="auto").resolve(object(), SimpleNamespace())
+    assert auto.cache_strategy == "none"
+
+
 @pytest.mark.parametrize("name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"])
 def test_registry_budget_stays_the_declared_cap_the_device_resolves(name: str) -> None:
     """R32(b): the minimum is resolved at preflight, so the registry keeps its declared intent.

@@ -1,0 +1,215 @@
+diff --git a/src/local_llm_lab/pipeline/coherence.py b/src/local_llm_lab/pipeline/coherence.py
+index 402bced..fe1e8df 100644
+--- a/src/local_llm_lab/pipeline/coherence.py
++++ b/src/local_llm_lab/pipeline/coherence.py
+@@ -96,13 +96,42 @@ def _recovered(failed: dict[str, Any], later: list[dict[str, Any]], *, kind: str
+     return any(_observation_kind(step) is None and step["action"]["name"] == name for step in candidates)
+ 
+ 
+-def loop_step(steps: list[dict[str, Any]]) -> int | None:
+-    """The index of the step at which ``detect_loop`` first closes, or None."""
++def _step_index(step: dict[str, Any], position: int, horizon: int) -> int:
++    """The step's index on the one scale every cause is reported on.
++
++    This is ``integrity._policy_index``'s rule, deliberately: the integrity cause is the
++    checker's ``Violation.step``, computed that way (``integrity.py:231-235``), and
++    ``first_cause`` is a minimum across the four causes, so a cause on a different scale would
++    make that minimum meaningless rather than merely wrong. Reading ``step["index"]`` alone made
++    the module require a key only the runner writes, which is what the seven ``test_patch``
++    failures were: hand-built steps carry none.
++
++    It matches the checker *exactly*, including admitting ``True`` as the integer 1, because a
++    test pins the two functions against each other and a well-meant improvement here is a
++    divergence there. That test caught exactly that.
++    """
++    saved = step.get("index")
++    if isinstance(saved, int) and 0 <= saved < horizon:
++        return saved
++    return position
++
++
++def loop_step(steps: list[dict[str, Any]], horizon: int | None = None) -> int | None:
++    """The index of the step at which ``detect_loop`` first closes, or None.
++
++    ``horizon`` is the scale every cause is reported on (the task's step count when the caller
++    knows it); without it the trajectory's own length stands in. ``trajectory_events`` always
++    passes its resolved horizon, so the loop cause sits on the same scale as the other three:
++    a saved index valid at the task horizon but at or beyond the trajectory's length would
++    otherwise be replaced by its position here and nowhere else, and ``first_cause``, being a
++    minimum, would flip on that artefact (Deputy, 7 September, reproduced).
++    """
+     from local_llm_lab.pipeline.runner import detect_loop  # local import: runner imports env
+ 
++    scale = max(len(steps), 1) if horizon is None else max(int(horizon), len(steps), 1)
+     for count in range(1, len(steps) + 1):
+         if detect_loop(steps[:count]):
+-            return int(steps[count - 1]["index"])
++            return _step_index(steps[count - 1], count - 1, scale)
+     return None
+ 
+ 
+@@ -117,7 +146,16 @@ def trajectory_events(
+     tool-error censoring."""
+     steps = list(getattr(trajectory, "steps", []) or [])
+     events: dict[str, int | None] = {cause: None for cause in CAUSES}
+-    last_index = max((int(step["index"]) for step in steps), default=0)
++    # The checker's horizon is the task's step count, not the number of steps actually taken
++    # (``integrity.py:364``), so a trajectory that stopped early still admits its saved indices.
++    horizon = int(getattr(trajectory, "horizon", -1) or -1)
++    if horizon < len(steps):
++        horizon = len(steps)
++    index_of = {
++        id(step): _step_index(step, position, horizon)
++        for position, step in enumerate(steps)
++    }
++    last_index = max(index_of.values(), default=0)
+     # integrity: the checker's first violation carries its step
+     integrity = getattr(trajectory, "integrity", {}) or {}
+     first = integrity.get("first_violation") if isinstance(integrity, dict) else None
+@@ -126,13 +164,13 @@ def trajectory_events(
+     # invalid action: a parse-error step, or a refused call other than an unknown tool
+     for step in steps:
+         if "parse_error" in step:
+-            events["invalid_action"] = int(step["index"])
++            events["invalid_action"] = index_of[id(step)]
+             break
+         if "action" in step and _observation_kind(step) == "invalid_action":
+-            events["invalid_action"] = int(step["index"])
++            events["invalid_action"] = index_of[id(step)]
+             break
+-    # loop: recomputed over the stored steps
+-    events["loop"] = loop_step(steps)
++    # loop: recomputed over the stored steps, on the same scale as the other causes
++    events["loop"] = loop_step(steps, horizon)
+     # tool error: the first error not recovered within the next `window` executed steps; an
+     # error with fewer than `window` executed steps after it is censored, whatever the outcome
+     executed = _executed(steps)
+@@ -147,7 +185,7 @@ def trajectory_events(
+         if len(later) < window:
+             censored_tail = True  # recovery cannot be observed inside the last `window` steps
+             continue
+-        events["tool_error"] = int(step["index"])
++        events["tool_error"] = index_of[id(step)]
+         break
+     fired = {cause: step for cause, step in events.items() if step is not None}
+     first_cause = min(fired, key=lambda cause: (fired[cause], CAUSES.index(cause))) if fired else None
+diff --git a/tests/test_coherence.py b/tests/test_coherence.py
+index eff711f..3e61142 100644
+--- a/tests/test_coherence.py
++++ b/tests/test_coherence.py
+@@ -14,6 +14,7 @@ from __future__ import annotations
+ from local_llm_lab.pipeline.coherence import (
+     CAUSES,
+     coherence_summary,
++    loop_step,
+     primary_arguments,
+     trajectory_events,
+ )
+@@ -210,3 +211,81 @@ def test_the_first_event_is_scaled_by_the_task_horizon() -> None:
+     steps = [_step(i, "read_file", {"path": "same"}, "contents") for i in range(1, 5)]
+     record = trajectory_events(_trajectory(steps, success=False, horizon=6))
+     assert record["first_step"] == 3 and record["first_step_over_horizon"] == 0.5
++
++
++def test_a_step_without_an_index_key_is_indexed_by_position_and_agrees_with_the_key() -> None:
++    """Hand-built steps carry no ``"index"``; the seven ``test_patch`` failures were that.
++
++    The fixture builds the same trajectory twice, once with the key and once without, because a
++    scheme that fell back to position but disagreed with the key would pass a test that only
++    checked the keyless case. Both must give the same answer, since ``first_cause`` is a minimum
++    across causes and the integrity cause is on the key-or-position scale by construction.
++    """
++    from types import SimpleNamespace
++
++    def parse_error_at(position: int, *, with_index_key: bool):
++        steps = []
++        for n in range(position + 1):
++            step: dict = {"thought": "t", "raw": "r"}
++            if with_index_key:
++                step["index"] = n
++            if n == position:
++                step["parse_error"] = "no fenced block"
++            else:
++                step["action"] = {"name": "read_file", "arguments": {"path": "/a"}}
++                step["observation"] = "contents"
++            steps.append(step)
++        return SimpleNamespace(steps=steps, integrity={}, success=False, horizon=-1)
++
++    without = trajectory_events(parse_error_at(3, with_index_key=False))
++    assert without["events"]["invalid_action"] == 3
++    assert without == trajectory_events(parse_error_at(3, with_index_key=True))
++
++
++def test_the_index_rule_is_the_integrity_checkers_own() -> None:
++    """The two modules must not drift: ``first_cause`` is a minimum across causes and the
++    integrity cause is whatever the checker reported, so a divergence would silently compare
++    positions against saved indices."""
++    from local_llm_lab.pipeline.coherence import _step_index
++    from local_llm_lab.pipeline.integrity import _policy_index
++
++    cases = [
++        ({}, 4, 8),
++        ({"index": 2}, 4, 8),
++        ({"index": 9}, 4, 8),
++        ({"index": -1}, 4, 8),
++        ({"index": True}, 4, 8),
++        ({"index": "3"}, 4, 8),
++        ({"index": 0}, 0, 8),
++    ]
++    for record, position, horizon in cases:
++        mine = _step_index(record, position, horizon)
++        assert mine == _policy_index(record, position, horizon), record
++
++
++def test_the_loop_cause_shares_the_saved_index_scale_when_the_horizon_exceeds_the_length() -> None:
++    """Deputy's reproduction, 7 September: three identical calls closing a loop carry saved
++    indices 3, 4, 5 with task horizon 6, so every saved index is valid at the horizon and at or
++    beyond the trajectory's length. If ``loop_step`` scaled by the length alone, the loop cause
++    would read 2 (position) against integrity's 5 (saved index) and ``first_cause`` would flip
++    to ``loop`` on that artefact. Runner-written steps cannot produce this shape (index equals
++    position there); hand-built ones can, which is why the earlier fixtures did not catch it."""
++    from types import SimpleNamespace
++
++    call = {"name": "read_file", "arguments": {"path": "same"}}
++    steps = [
++        {"index": n, "thought": "t", "raw": "r", "action": call, "observation": "contents"}
++        for n in (3, 4, 5)
++    ]
++    trajectory = SimpleNamespace(
++        steps=steps,
++        success=False,
++        horizon=6,
++        integrity={"first_violation": {"step": 5, "rule": "carry"}},
++    )
++    record = trajectory_events(trajectory)
++    assert record["events"]["loop"] == 5
++    assert record["events"]["integrity"] == 5
++    assert record["first_cause"] == "integrity"
++    assert loop_step(steps) == 2  # the length scale, when no horizon is given
++    assert loop_step(steps, 6) == 5
+diff --git a/tests/test_jspace_sweep.py b/tests/test_jspace_sweep.py
+index 6ef1f75..7dfd89b 100644
+--- a/tests/test_jspace_sweep.py
++++ b/tests/test_jspace_sweep.py
+@@ -32,6 +32,8 @@ _CONFIGS_WITH_SPLIT_TABLES = (
+     "agent_v2c.yaml",
+     "agent_v2d.yaml",
+     "agent_v2d_qwen35_4b.yaml",
++    "agent_v2e.yaml",
++    "agent_v2e_qwen35_4b.yaml",
+ )
+ 
+ 
+diff --git a/tests/test_tasks.py b/tests/test_tasks.py
+index ad83304..392df40 100644
+--- a/tests/test_tasks.py
++++ b/tests/test_tasks.py
+@@ -861,6 +861,8 @@ _CONFIGS_WITH_SPLIT_TABLES = (
+     "agent_v2c.yaml",
+     "agent_v2d.yaml",
+     "agent_v2d_qwen35_4b.yaml",
++    "agent_v2e.yaml",
++    "agent_v2e_qwen35_4b.yaml",
+ )
+ 
+ 

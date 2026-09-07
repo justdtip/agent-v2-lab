@@ -192,6 +192,34 @@ def test_two_capture_owners_cannot_wrap_the_same_model():
         wrapped(mx.array([[1]]))
 
 
+def test_capture_uses_the_shared_forward_ledger_and_keeps_reuse_forbidden():
+    from types import SimpleNamespace
+
+    from local_llm_lab.forward import ForwardLedger
+    from local_llm_lab.pipeline.live_lens.session import CaptureSession
+
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    rows = []
+    session = CaptureSession(view, None, rows.append, layers=(4,), top_k=3)
+    tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kw: [1, 2])
+    with session.generation(model, tokenizer, "fixture", turn_cache=None) as captured:
+        assert isinstance(session.ledger, ForwardLedger)
+        cache = model.make_cache()
+        captured(mx.array([[1, 2]]), cache=cache)
+        captured(mx.array([[3]]), cache=cache)
+        assert session.ledger.offset == 3
+        session.emitted(3)
+        assert session.ledger.offset == 3
+    assert rows[-1]["forwarded_count"] == 3
+    assert rows[-1]["emitted_count"] == 1
+    with (
+        pytest.raises(ValueError, match="no-reuse"),
+        session.generation(model, tokenizer, "fixture", turn_cache=object()),
+    ):
+        pass
+
+
 def test_injection_rejects_an_already_cached_source_and_accepts_rebuilt_state():
     model = tiny_model()
     view = ArchitectureView.from_model(model)
