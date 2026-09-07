@@ -1,0 +1,866 @@
+# TRANSCRIPT-GUARDS: the `.py.txt` rename closed the import, not the launcher
+
+The record-guard rule was written against `*.py`. On the day it landed it reported this tree clean
+while **nineteen as-run transcripts across five records reached the model and one carried a
+guard**. Sixteen of the nineteen load the checkpoint.
+
+`python probe.as-run.py.txt` runs the file exactly as a `.py` would. The rename was made so a
+record copy could not be *imported*, and it did fix that; it never touched running, and nothing
+said so.
+
+## What changed
+
+`_record_sources` finds `*.py` and `*.as-run.py.txt` alike, so `_guarded_record_scripts` covers
+both. Everything downstream is unchanged: the same AST sites decide whether the rule applies, the
+same structural guard check, the same `compile()`, the same execution under stub packages.
+
+Eighteen transcripts gained the standard refusal. The nineteenth,
+`TRAIN-COST-2026-09-05/train_cost_probe.as-run.py.txt`, already had one — it was copied from a
+script that carried it.
+
+| record | guarded | of which load the checkpoint |
+| --- | ---: | ---: |
+| WP12-BROADCAST-HEADS-2026-09-06 | 12 | 12 |
+| RETRIEVAL-CHANNELS-2026-09-06 | 3 | 3 |
+| ATTENTION-TERM-2026-09-08 | 2 | 0 |
+| RECURRENCE-EXPONENT-2026-09-07 | 1 | 1 |
+
+Two of them are mine, from this evening. I wrote unguarded, runnable, model-reaching transcripts
+into a record hours after landing the rule that exists to stop exactly that, and the rule did not
+catch them because of the suffix.
+
+## Byte-exactness, which is the real cost
+
+No manifest pins a transcript's bytes, so there was nothing to update in that sense. The stronger
+claim is in the records' own prose: these files are described as **byte-exact** copies of what ran.
+They are not any more.
+
+Each affected record now carries a dated declaration with the pre- and post-guard sha256 of every
+file it holds, so the original bytes remain verifiable, and `TRAIN-COST-2026-09-05` carries a note
+saying its own item (4) still holds locally but no longer tree-wide. Full digests are in
+`research/records/GUARD-HASHES-2026-09-08.json`, and every one was checked against the file on
+disk after the guards went in.
+
+## A slip of mine during this work, disclosed
+
+While mutation-testing I removed a guard from `singles.as-run.py.txt`, restored the file with
+`git checkout` — which reverts to HEAD, i.e. to the *unguarded* version rather than to my working
+state — and then ran it directly to check the refusal. **It was unguarded and it loads the
+checkpoint.** It died at line 10 on `sys.argv[1]` before any MLX import, so nothing loaded and no
+lock was taken; I checked the process table and the lock path immediately afterwards and both were
+clear. That was luck rather than design.
+
+The rule's own execution check runs these files under stub `mlx`, `mlx_lm` and `local_llm_lab`
+packages precisely so a failed guard cannot reach the model, and running one by hand bypassed
+that. The mutation was redone with a file copy instead of `git checkout`, and the guard's digest
+re-verified against the declaration afterwards.
+
+## Verification
+
+```
+full suite:                       exit 0
+tests/test_repository_rules.py:   exit 0, 1 new test
+mutation: a guard removed from a transcript is named by the rule at its line
+18 of 18 declared post-guard digests match the file on disk
+two guards run by hand: exit 1 with the refusal, before any MLX import
+ruff, tests/test_repository_rules.py: 0 findings
+git apply --check against HEAD:   0
+concurrency: no libmlx-mapped process and no model-run lock, checked before the full suite
+```
+
+```diff
+diff --git a/research/records/ATTENTION-TERM-2026-09-08/README.md b/research/records/ATTENTION-TERM-2026-09-08/README.md
+index 5ae2a31..b62c8bf 100644
+--- a/research/records/ATTENTION-TERM-2026-09-08/README.md
++++ b/research/records/ATTENTION-TERM-2026-09-08/README.md
+@@ -252,3 +252,30 @@ is the right comparison, because what the issue projected was the added cost, no
+ `fit.json` and the table above say 5,014, from arithmetic done here. The landed
+ `_row_ceiling_tokens` gives **5,013**, and its test checks the value against the gate itself at
+ both sides of the boundary. The code is authoritative; this record was off by one.
++
++
++---
++
++## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
++
++Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
++byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
++docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
++table restores the original claim for anyone who needs to verify it.
++
++**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
++not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
++executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
++the day it landed it reported this tree clean while nineteen transcripts across five records
++reached the model and one carried a guard. The rule now covers both suffixes, and these are the
++guards that follow from it.
++
++| transcript | reaches | sha256 before | sha256 after |
++| --- | --- | --- | --- |
++| `headdim.as-run.py.txt` | initialises Metal | `6755ddb90ea41783…` | `34634d677d9a69de…` |
++| `sdpa_backward_probe.as-run.py.txt` | initialises Metal | `dbfb01e905a14f40…` | `5225e032fe57456d…` |
++
++Full digests are in the commit that added the guards. The guard is the standard form:
++the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
++the model, and the rule verifies that by running each file under stub packages rather than
++by reading it.
+diff --git a/research/records/ATTENTION-TERM-2026-09-08/headdim.as-run.py.txt b/research/records/ATTENTION-TERM-2026-09-08/headdim.as-run.py.txt
+index a047c10..c40cc07 100644
+--- a/research/records/ATTENTION-TERM-2026-09-08/headdim.as-run.py.txt
++++ b/research/records/ATTENTION-TERM-2026-09-08/headdim.as-run.py.txt
+@@ -5,6 +5,19 @@ its Metal kernels cover. If 256 is outside that set, the 4B's full-attention blo
+ unfused path, which builds `q @ k.T` in the forward as well as the backward -- a much sharper
+ statement than "the backward materialises scores". Head dimensions 64 and 128 are the control.
+ """
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it initialises Metal, which is the
++# working-set and R45 hazard. The bytes above and below this block are the transcript as it ran;
++# the pre-guard sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-08 attention- "
++        "score measurement, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json
+ import mlx.core as mx
+ 
+diff --git a/research/records/ATTENTION-TERM-2026-09-08/sdpa_backward_probe.as-run.py.txt b/research/records/ATTENTION-TERM-2026-09-08/sdpa_backward_probe.as-run.py.txt
+index b93761c..9cdcc3d 100644
+--- a/research/records/ATTENTION-TERM-2026-09-08/sdpa_backward_probe.as-run.py.txt
++++ b/research/records/ATTENTION-TERM-2026-09-08/sdpa_backward_probe.as-run.py.txt
+@@ -16,6 +16,19 @@ inspection -- 512 and 1,024 tokens put the score matrix at 16 and 67 MB.
+ """
+ from __future__ import annotations
+ 
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it initialises Metal, which is the
++# working-set and R45 hazard. The bytes above and below this block are the transcript as it ran;
++# the pre-guard sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-08 attention- "
++        "score measurement, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
++
+ import json
+ import math
+ import sys
+diff --git a/research/records/GUARD-HASHES-2026-09-08.json b/research/records/GUARD-HASHES-2026-09-08.json
+new file mode 100644
+index 0000000..73115ea
+--- /dev/null
++++ b/research/records/GUARD-HASHES-2026-09-08.json
+@@ -0,0 +1,118 @@
++{
++  "ATTENTION-TERM-2026-09-08": [
++    {
++      "after": "34634d677d9a69ded3b5acc8a0342299397b995e3031cbef646eceaccdc4a8e8",
++      "before": "6755ddb90ea41783b8f5c301e9d2b08bb30b49c2a433045dd95fc9f565c9781c",
++      "file": "headdim.as-run.py.txt",
++      "loads_checkpoint": false
++    },
++    {
++      "after": "5225e032fe57456d82fad16d80f2a198c9b8c02de2a1e43d6b16309e8b7f5b78",
++      "before": "dbfb01e905a14f40352b2b5884c33c8b9910c477f6842f59b78aa967607030fb",
++      "file": "sdpa_backward_probe.as-run.py.txt",
++      "loads_checkpoint": false
++    }
++  ],
++  "RECURRENCE-EXPONENT-2026-09-07": [
++    {
++      "after": "70daef69308c1d2e2f3b337ec2c9e4b3bf3a0d189acbfc2602ae90a7fc0c3ea0",
++      "before": "757c58949bb7817fde81dafef691289db114caa05bf6545935ae848715634da2",
++      "file": "recurrence_exponent_sweep.as-run.py.txt",
++      "loads_checkpoint": true
++    }
++  ],
++  "RETRIEVAL-CHANNELS-2026-09-06": [
++    {
++      "after": "cf738e8fc3a6600e43a3aa349cc892ad0c630d0231a018d2d67aa3f231f2030b",
++      "before": "5de7dd9360285466c661425bf73b7da635d2fce1223c52e398f1bc5555424576",
++      "file": "habit_probe.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "cf634824a2f8c557c9982a70f8b7dba1bc4ffe227935aade8025f839013d34be",
++      "before": "b34f4d9ab373c64279a189fefa2a448e8000de1d2142e38a3febe2f18f4a6043",
++      "file": "retrieval_probe.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "8389b103aa1b29e5b83e39e840b286233ca3cb8b478b96a8bfdabe8addd1fe15",
++      "before": "bd1b76d796d7708f5627c63c8b04e7f92a401040302a4773481d3e3fa540d7c1",
++      "file": "sink_probe.as-run.py.txt",
++      "loads_checkpoint": true
++    }
++  ],
++  "WP12-BROADCAST-HEADS-2026-09-06": [
++    {
++      "after": "666b81dabd5d13ea06809cf83617e6d9f4bb2ac63b41cff5cd3310013a8c20f5",
++      "before": "5f68005d17d3cc31f79305fde2c148854bd41d86ec7d1e610a50a143946a8fee",
++      "file": "ablation.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "ba795ff3987cdf06476ea03ef0b3583cd8508d381ba805a30aaadcd8c1d889b5",
++      "before": "3278f4ba3e9fd0abef6affc22fbde5c234a8d927f90aa12af91d82dc6d358483",
++      "file": "broadcast_heads.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "989228e8109d183ed7f7c7015854df93e71fbf4907fe4f396e0952440e73a9e4",
++      "before": "a64c9aed6b23c6788efdc5738236d507913569799e14c9c0dc8821b0f7ac919e",
++      "file": "broadcast_heads_nulldist.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "75a601832e19e7da057e6be9511a77f2946da5b2e99f0e7286d33f2bdd31ff25",
++      "before": "bfe3757ab0e72459370015d281071b3bb85dc8df997539d35652c285010ee78b",
++      "file": "broadcast_heads_orth.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "e5be8bdcd8cd0d1f492aa15c45b576fc8e43916156c8fe3f1daae85023ba7498",
++      "before": "d2166b6fea43753ecf7affb3ec1911e8fd3d7137da3574a0576e1b2637aa2c9b",
++      "file": "composition.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "5c8dcda2587c5a11d3d95c0f6335708af35a8490cfe7d7ccd9e9cbae1bbd4a54",
++      "before": "80007d206bfe7685c9473bf03d3f6613eec32d568a6e256358ae00561c21e6b8",
++      "file": "contrast.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "31c4061c6bfda06190d03ae8f6b8a13c4c4b01021ddcfecdd2451625411b9ea8",
++      "before": "130a8931f1e8e81a34f5751e4d8057207be9d80bc89c385680450ab88643008b",
++      "file": "coupling.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "a84674b3aef0a9bdd29008d67a26705baabda7a3ad3f9239e96ed97ad5a9d994",
++      "before": "568492671f71f35d812039a4cbb210f74ef25f16265326b88a7478bc6a907d48",
++      "file": "inject.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "85d4429ac59ddf575d7db53c7772d5c11f16c8c65d8f11713deacbc87f5b81f2",
++      "before": "e8f344b46ec8637d72b078396fa989134d20472e0f12e3d91c5678f4b9078a53",
++      "file": "inject_events.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "c07d3614a5d8af87dc2d0227503645ec2fa0c9558cc47732f758be8a1c04cea7",
++      "before": "93d035bcd8d058307fdaac53ba3e3d120c93bfecca799cb0f46634c2af4ae625",
++      "file": "kvgroup.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "9b81213523b806ef5a403eb8d7158b376bbae61342aca2313f4f1b058c2fe04b",
++      "before": "1db1ed80586e6edadf788eee35ae0bfd9825d671745611095e1ae3c9d728268b",
++      "file": "separation.as-run.py.txt",
++      "loads_checkpoint": true
++    },
++    {
++      "after": "6450c6ab6c7397178e3a4452db58f3a86d65b440467fc797db4618a4a225e23a",
++      "before": "46fc5784c283b4320d8a5896d2dd2f1621828f924c7a48f914599c82a92df66d",
++      "file": "singles.as-run.py.txt",
++      "loads_checkpoint": true
++    }
++  ]
++}
+diff --git a/research/records/RECURRENCE-EXPONENT-2026-09-07/RESULT.md b/research/records/RECURRENCE-EXPONENT-2026-09-07/RESULT.md
+index d8a3c6e..1f31fd5 100644
+--- a/research/records/RECURRENCE-EXPONENT-2026-09-07/RESULT.md
++++ b/research/records/RECURRENCE-EXPONENT-2026-09-07/RESULT.md
+@@ -122,3 +122,29 @@ the algebra. The original "forward 1.43" muddied that by suggesting both were su
+ Nothing in the consequence for #85 changes: the linear recurrence term stands at chunk 256, the
+ whole-step rise is the attention term, and the cap is set by attention and R55(b)'s buffer
+ arithmetic rather than by the recurrence.
++
++
++---
++
++## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
++
++Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
++byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
++docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
++table restores the original claim for anyone who needs to verify it.
++
++**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
++not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
++executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
++the day it landed it reported this tree clean while nineteen transcripts across five records
++reached the model and one carried a guard. The rule now covers both suffixes, and these are the
++guards that follow from it.
++
++| transcript | reaches | sha256 before | sha256 after |
++| --- | --- | --- | --- |
++| `recurrence_exponent_sweep.as-run.py.txt` | loads the checkpoint | `757c58949bb7817f…` | `70daef69308c1d2e…` |
++
++Full digests are in the commit that added the guards. The guard is the standard form:
++the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
++the model, and the rule verifies that by running each file under stub packages rather than
++by reading it.
+diff --git a/research/records/RECURRENCE-EXPONENT-2026-09-07/recurrence_exponent_sweep.as-run.py.txt b/research/records/RECURRENCE-EXPONENT-2026-09-07/recurrence_exponent_sweep.as-run.py.txt
+index 16f533c..af9f89b 100644
+--- a/research/records/RECURRENCE-EXPONENT-2026-09-07/recurrence_exponent_sweep.as-run.py.txt
++++ b/research/records/RECURRENCE-EXPONENT-2026-09-07/recurrence_exponent_sweep.as-run.py.txt
+@@ -14,6 +14,19 @@ before the conclusion.
+ """
+ from __future__ import annotations
+ 
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-07 "
++        "recurrence-exponent sweep, not a launcher; runs go through the package entry "
++        "points under R47 and R48, in a window the Director declares, and take the model- "
++        "run lock of issue 83"
++    )
++
+ import argparse
+ import json
+ import math
+diff --git a/research/records/RETRIEVAL-CHANNELS-2026-09-06/README.md b/research/records/RETRIEVAL-CHANNELS-2026-09-06/README.md
+index 2c11ffb..913fd42 100644
+--- a/research/records/RETRIEVAL-CHANNELS-2026-09-06/README.md
++++ b/research/records/RETRIEVAL-CHANNELS-2026-09-06/README.md
+@@ -267,3 +267,31 @@ same tokens and the finding is a property of the model, with two mechanisms: a q
+ in attention and a write-rule sink in the recurrent state. (3) The three candidates sit at their
+ nulls and at the long-gate typical value; nothing distinguishes them from the population, which is
+ the close.
++
++
++---
++
++## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
++
++Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
++byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
++docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
++table restores the original claim for anyone who needs to verify it.
++
++**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
++not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
++executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
++the day it landed it reported this tree clean while nineteen transcripts across five records
++reached the model and one carried a guard. The rule now covers both suffixes, and these are the
++guards that follow from it.
++
++| transcript | reaches | sha256 before | sha256 after |
++| --- | --- | --- | --- |
++| `habit_probe.as-run.py.txt` | loads the checkpoint | `5de7dd9360285466…` | `cf738e8fc3a6600e…` |
++| `retrieval_probe.as-run.py.txt` | loads the checkpoint | `b34f4d9ab373c642…` | `cf634824a2f8c557…` |
++| `sink_probe.as-run.py.txt` | loads the checkpoint | `bd1b76d796d7708f…` | `8389b103aa1b29e5…` |
++
++Full digests are in the commit that added the guards. The guard is the standard form:
++the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
++the model, and the rule verifies that by running each file under stub packages rather than
++by reading it.
+diff --git a/research/records/RETRIEVAL-CHANNELS-2026-09-06/habit_probe.as-run.py.txt b/research/records/RETRIEVAL-CHANNELS-2026-09-06/habit_probe.as-run.py.txt
+index 2c2c5a0..2f843b4 100644
+--- a/research/records/RETRIEVAL-CHANNELS-2026-09-06/habit_probe.as-run.py.txt
++++ b/research/records/RETRIEVAL-CHANNELS-2026-09-06/habit_probe.as-run.py.txt
+@@ -4,6 +4,19 @@ read position, recorded as absolute positions and as fractions of the context, p
+ query-randomised null. A positional habit shows as top-10 sets that overlap across different contexts
+ far above the null; a content read shows overlap at the null. Six value heads, 72 forwards."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 retrieval- "
++        "channel probes, not a launcher; runs go through the package entry points under "
++        "R47 and R48, in a window the Director declares, and take the model-run lock of "
++        "issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/RETRIEVAL-CHANNELS-2026-09-06/retrieval_probe.as-run.py.txt b/research/records/RETRIEVAL-CHANNELS-2026-09-06/retrieval_probe.as-run.py.txt
+index 83da708..b7a6ed9 100644
+--- a/research/records/RETRIEVAL-CHANNELS-2026-09-06/retrieval_probe.as-run.py.txt
++++ b/research/records/RETRIEVAL-CHANNELS-2026-09-06/retrieval_probe.as-run.py.txt
+@@ -13,6 +13,19 @@ within a context (read positions differing only in the question) and across cont
+ """
+ from __future__ import annotations
+ 
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 retrieval- "
++        "channel probes, not a launcher; runs go through the package entry points under "
++        "R47 and R48, in a window the Director declares, and take the model-run lock of "
++        "issue 83"
++    )
++
+ import json
+ import os
+ import sys
+diff --git a/research/records/RETRIEVAL-CHANNELS-2026-09-06/sink_probe.as-run.py.txt b/research/records/RETRIEVAL-CHANNELS-2026-09-06/sink_probe.as-run.py.txt
+index ad81a05..c93de7e 100644
+--- a/research/records/RETRIEVAL-CHANNELS-2026-09-06/sink_probe.as-run.py.txt
++++ b/research/records/RETRIEVAL-CHANNELS-2026-09-06/sink_probe.as-run.py.txt
+@@ -4,6 +4,19 @@ GAP) in the first 1, 5 and 10 percent of the eligible range and at position 0 al
+ uniform fraction and the random-query null; the same for every attention head from the recomputed
+ probabilities. Summaries by channel, by gate-constant band, and by layer."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 retrieval- "
++        "channel probes, not a launcher; runs go through the package entry points under "
++        "R47 and R48, in a window the Director declares, and take the model-run lock of "
++        "issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/TRAIN-COST-2026-09-05/README.md b/research/records/TRAIN-COST-2026-09-05/README.md
+index c9136da..fa96962 100644
+--- a/research/records/TRAIN-COST-2026-09-05/README.md
++++ b/research/records/TRAIN-COST-2026-09-05/README.md
+@@ -125,3 +125,17 @@ is the convexity from the other side and gives issue 87 a stated expiry: a savin
+ length is not a saving at another. (4) The as-run scripts are kept as `*.as-run.py.txt`, byte-exact
+ copies of what ran that cannot be imported or executed by accident; the guarded `*.py` beside them
+ are the runnable forms and carry the refusal. Issue 89 makes that a repository rule.
++
++---
++
++## Note, appended 2026-09-08: "byte-exact" now has one exception, and it is not in this record
++
++Item (4) above says the as-run scripts are kept as `*.as-run.py.txt`, byte-exact and unimportable.
++That still holds for this record: `train_cost_probe.as-run.py.txt` already carried a refusal guard
++when it was copied, and `run_train_cost_probe.as-run.py.txt` reaches no model, so neither changed.
++
++It no longer holds tree-wide. Eighteen transcripts in four other records gained a guard on
++2026-09-08, because the rename stops a file being imported but not run, and issue 89's rule was
++written against `*.py` only. Each of those records carries its own dated declaration with the
++pre- and post-guard digests; the full set is in `research/records/GUARD-HASHES-2026-09-08.json`.
++The unimportability the rename bought is unaffected.
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/README.md b/research/records/WP12-BROADCAST-HEADS-2026-09-06/README.md
+index 323c5df..d75a47f 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/README.md
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/README.md
+@@ -1197,3 +1197,40 @@ experiment identified above. Generated and not tested: the suppression hypothesi
+ consistent second observation. Instrument findings F10, F11, F12 and the rules R53 and R54 stand.
+ The model goes to the Director's training order ("Continue all work. Resume training goal.",
+ 12:10).
++
++
++---
++
++## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
++
++Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
++byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
++docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
++table restores the original claim for anyone who needs to verify it.
++
++**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
++not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
++executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
++the day it landed it reported this tree clean while nineteen transcripts across five records
++reached the model and one carried a guard. The rule now covers both suffixes, and these are the
++guards that follow from it.
++
++| transcript | reaches | sha256 before | sha256 after |
++| --- | --- | --- | --- |
++| `ablation.as-run.py.txt` | loads the checkpoint | `5f68005d17d3cc31…` | `666b81dabd5d13ea…` |
++| `broadcast_heads.as-run.py.txt` | loads the checkpoint | `3278f4ba3e9fd0ab…` | `ba795ff3987cdf06…` |
++| `broadcast_heads_nulldist.as-run.py.txt` | loads the checkpoint | `a64c9aed6b23c678…` | `989228e8109d183e…` |
++| `broadcast_heads_orth.as-run.py.txt` | loads the checkpoint | `bfe3757ab0e72459…` | `75a601832e19e7da…` |
++| `composition.as-run.py.txt` | loads the checkpoint | `d2166b6fea43753e…` | `e5be8bdcd8cd0d1f…` |
++| `contrast.as-run.py.txt` | loads the checkpoint | `80007d206bfe7685…` | `5c8dcda2587c5a11…` |
++| `coupling.as-run.py.txt` | loads the checkpoint | `130a8931f1e8e81a…` | `31c4061c6bfda061…` |
++| `inject.as-run.py.txt` | loads the checkpoint | `568492671f71f35d…` | `a84674b3aef0a9bd…` |
++| `inject_events.as-run.py.txt` | loads the checkpoint | `e8f344b46ec8637d…` | `85d4429ac59ddf57…` |
++| `kvgroup.as-run.py.txt` | loads the checkpoint | `93d035bcd8d05830…` | `c07d3614a5d8af87…` |
++| `separation.as-run.py.txt` | loads the checkpoint | `1db1ed80586e6eda…` | `9b81213523b806ef…` |
++| `singles.as-run.py.txt` | loads the checkpoint | `46fc5784c283b432…` | `6450c6ab6c739717…` |
++
++Full digests are in the commit that added the guards. The guard is the standard form:
++the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
++the model, and the rule verifies that by running each file under stub packages rather than
++by reading it.
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/ablation.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/ablation.as-run.py.txt
+index 491e8f9..6e61ebd 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/ablation.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/ablation.as-run.py.txt
+@@ -9,6 +9,19 @@ and the next-token change rate (the fraction of positions whose top-1 prediction
+ threshold, stated in advance: a recall drop counts only if the change rate stays within twice the
+ layer-matched random control's at the same k."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads.as-run.py.txt
+index 71ee750..e3e9732 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads.as-run.py.txt
+@@ -20,6 +20,19 @@ when its gain on J exceeds its gain on BOTH controls and its label preservation
+ controls'; the count is reported as n of N per channel and the whole list is written ordered by the
+ worse of the two J-minus-best-control margins (in units of the control's value)."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_nulldist.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_nulldist.as-run.py.txt
+index 3644078..63fb17f 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_nulldist.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_nulldist.as-run.py.txt
+@@ -20,6 +20,19 @@ when its gain on J exceeds its gain on BOTH controls and its label preservation
+ controls'; the count is reported as n of N per channel and the whole list is written ordered by the
+ worse of the two J-minus-best-control margins (in units of the control's value)."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_orth.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_orth.as-run.py.txt
+index a24875c..77a0056 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_orth.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/broadcast_heads_orth.as-run.py.txt
+@@ -20,6 +20,19 @@ when its gain on J exceeds its gain on BOTH controls and its label preservation
+ controls'; the count is reported as n of N per channel and the whole list is written ordered by the
+ worse of the two J-minus-best-control margins (in units of the control's value)."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/composition.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/composition.as-run.py.txt
+index 148cd3e..138b47a 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/composition.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/composition.as-run.py.txt
+@@ -10,6 +10,19 @@ token-identity directions (2,000 embedding rows) against lens directions, by the
+ preservation metric. Reads the relay sets from out/selection_nulldist.json (early = relays at
+ layers 4 and 8; band = all heads at layers 16 to 28, with the relays and the retrieval heads flagged)."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/contrast.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/contrast.as-run.py.txt
+index bc24129..7412d83 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/contrast.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/contrast.as-run.py.txt
+@@ -12,6 +12,19 @@ falls below the minimum of the five random sets; it closes negative if the relay
+ This variant keeps the per-event recall outcomes (64 events per arm) so the relay arm can be tested against the five random sets
+ by the per-event permutation statistic. Alpha is taken from out/inject.json (chosen there before any ablation arm was read).
+ Writes out/inject_events.json."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/coupling.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/coupling.as-run.py.txt
+index 71f8f8f..0560d20 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/coupling.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/coupling.as-run.py.txt
+@@ -5,6 +5,19 @@ each of the 26 in-band relays' own attention outputs at the sampled positions, m
+ for the 54 unselected in-band heads. Reading: if the three layer-4 relays (selection_orth.json, layer 4) perturb the band relays
+ no more than the other thirteen layer-4 heads do, and no more than they perturb the unselected band heads, the coupling
+ hypothesis is refuted causally as well as by weight composition. Writes out/coupling.json."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject.as-run.py.txt
+index e45c931..f6febda 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject.as-run.py.txt
+@@ -9,6 +9,19 @@ seeds. Magnitude: alpha times the median residual norm at layer 12, alpha chosen
+ hypothesis survives redundancy if, at k = 8 or 16, the relays' recall of the injected concept at layer 28 (same position, or +4)
+ falls below the minimum of the five random sets; it closes negative if the relays sit within the random range at both.
+ Writes out/inject.json."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject_events.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject_events.as-run.py.txt
+index e9999c1..8a644ca 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject_events.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/inject_events.as-run.py.txt
+@@ -12,6 +12,19 @@ falls below the minimum of the five random sets; it closes negative if the relay
+ This variant keeps the per-event recall outcomes (64 events per arm) so the relay arm can be tested against the five random sets
+ by the per-event permutation statistic. Alpha is taken from out/inject.json (chosen there before any ablation arm was read).
+ Writes out/inject_events.json."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/kvgroup.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/kvgroup.as-run.py.txt
+index 3fa1cff..ee5e3c3 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/kvgroup.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/kvgroup.as-run.py.txt
+@@ -17,6 +17,19 @@ impose on an arbitrary population, so passing means the group structure is speci
+ secondary. In B the diagonal is real and the other 48 cells are maps the model never computes: a factorial probe of where the
+ property sits, not 64 head measurements.
+ Reads: the lens npz (argv[1]). Writes: out/kvgroup.json."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/separation.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/separation.as-run.py.txt
+index a4fec3c..bebbf55 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/separation.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/separation.as-run.py.txt
+@@ -3,6 +3,19 @@ preservation on lens directions, on token-identity directions, on lens direction
+ same token's identity direction (the part of the lens direction that is not the embedding), and on random
+ directions; for the three layer-4 relays and, for context, every layer-4 head and the five strongest band relays."""
+ from __future__ import annotations
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys
+ from pathlib import Path
+ import numpy as np
+diff --git a/research/records/WP12-BROADCAST-HEADS-2026-09-06/singles.as-run.py.txt b/research/records/WP12-BROADCAST-HEADS-2026-09-06/singles.as-run.py.txt
+index b9306ae..91b1c4e 100644
+--- a/research/records/WP12-BROADCAST-HEADS-2026-09-06/singles.as-run.py.txt
++++ b/research/records/WP12-BROADCAST-HEADS-2026-09-06/singles.as-run.py.txt
+@@ -4,6 +4,19 @@ against the unablated readout. Per head: top-25 overlap with the unablated reado
+ layers at or above the head (downstream), the overlap at layer 28 (downstream of every head, the one readout common to all),
+ and the next-token change rate. Purpose: does stage-1 preservation order heads by causal effect? Selected against unselected
+ at each layer, and the rank correlation of preservation with single-head damage over all 80 heads. Writes out/singles.json."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
++# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
++# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
++# sha256 is in the record beside this file.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
++        "broadcast-head probes, not a launcher; runs go through the package entry points "
++        "under R47 and R48, in a window the Director declares, and take the model-run "
++        "lock of issue 83"
++    )
+ import json, os, sys, time
+ from pathlib import Path
+ import numpy as np
+diff --git a/tests/test_repository_rules.py b/tests/test_repository_rules.py
+index aad178b..d3a4f4e 100644
+--- a/tests/test_repository_rules.py
++++ b/tests/test_repository_rules.py
+@@ -1419,11 +1419,26 @@ def _record_guard_faults(path: Path) -> list[str]:
+     return faults
+ 
+ 
++#: The as-run transcripts. Renamed from ``.py`` so a record copy cannot be *imported* -- which
++#: it did fix -- but ``python whatever.as-run.py.txt`` runs the file as happily as a ``.py``,
++#: and nineteen of the twenty in the tree reach the model. The rename closed the import
++#: accident and left the launcher open, so the rule covers both suffixes.
++_RECORD_TRANSCRIPT_SUFFIX = ".as-run.py.txt"
++
++
++def _record_sources(root: Path) -> list[Path]:
++    """Every file under a records tree that Python will run: ``.py`` and the transcripts."""
++    return sorted(
++        {*root.rglob("*.py"), *root.rglob(f"*{_RECORD_TRANSCRIPT_SUFFIX}")},
++        key=lambda path: path.as_posix(),
++    )
++
++
+ def _guarded_record_scripts() -> list[Path]:
+-    """Records scripts the rule applies to: those that reach the model."""
++    """Records sources the rule applies to: those that reach the model."""
+     return [
+         path
+-        for path in sorted(_RECORDS_ROOT.rglob("*.py"))
++        for path in _record_sources(_RECORDS_ROOT)
+         if _model_reaching_sites(ast.parse(path.read_text()))
+     ]
+ 
+@@ -1569,3 +1584,32 @@ def test_every_guarded_records_script_actually_refuses_when_run(stub_import_root
+         assert _STUB_MARKER not in completed.stderr, (
+             f"{name} reached a model import before refusing; only the stub stopped it"
+         )
++
++
++def test_the_rule_covers_the_as_run_transcripts_because_python_runs_them_too(tmp_path) -> None:
++    """The hole the ``.py.txt`` rename left open.
++
++    The rename was made so a record copy could not be *imported*, and it did fix that. It did
++    nothing about running: ``python probe.as-run.py.txt`` executes the file exactly as a ``.py``
++    would, and when the rule first covered only ``*.py`` it reported the records tree clean while
++    nineteen transcripts reached the model and one carried a guard.
++
++    Both halves are asserted. The discovery finds a transcript, and it finds it *for the same
++    reason* it finds a ``.py`` -- the model-reaching sites, not the suffix -- so a transcript with
++    no such site stays out.
++    """
++    (tmp_path / "reaches.as-run.py.txt").write_text('"""A transcript."""\nimport mlx.core as mx\n')
++    (tmp_path / "clean.as-run.py.txt").write_text('"""A transcript."""\nimport json\n')
++    (tmp_path / "reaches.py").write_text('"""A script."""\nimport mlx.core as mx\n')
++
++    found = {path.name for path in _record_sources(tmp_path)}
++    assert found == {"reaches.as-run.py.txt", "clean.as-run.py.txt", "reaches.py"}
++
++    reaching = {
++        path.name
++        for path in _record_sources(tmp_path)
++        if _model_reaching_sites(ast.parse(path.read_text()))
++    }
++    assert reaching == {"reaches.as-run.py.txt", "reaches.py"}
++    assert _record_guard_faults(tmp_path / "reaches.as-run.py.txt")
++    assert _record_guard_faults(tmp_path / "clean.as-run.py.txt") == []
+```
