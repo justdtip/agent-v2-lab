@@ -68,3 +68,74 @@ which is hours on the box and is not worth them for 0.22 GiB unless something el
 - `arm1.json`, `arm4.json` — the two arms, with the recipe and the working set recorded.
 - `accumulation_probe.as-run.py.txt` — the script, guarded under the issue-89 rule.
 - `run-arm4.log` — the second arm's log.
+
+---
+
+## Attribution, appended 2026-09-08: the residual is not row length, and no model is needed to say so
+
+The Chief pointed at data already on disk: the trainer's own stdout in
+`outputs/agent-v2e-qwen35-4b/train.log` reports `Peak mem` every ten iterations, cumulative. Arm
+A's running peak rose in **four discrete steps and nowhere else**, across 780 iterations:
+
+| iteration | peak | step |
+| ---: | ---: | ---: |
+| 10 | 8.1630 GiB | — |
+| 40 | 9.3281 GiB | +1.1651 |
+| 110 | 9.5274 GiB | +0.1993 |
+| 310 | 9.6047 GiB | +0.0773 |
+| 730 | 9.7267 GiB | +0.1220 |
+
+Nothing at the validation pass at iteration 400.
+
+### The model-free half, which settles the total
+
+`iterate_batches` truncates every sequence to `max_seq_length` and pads to
+`1 + 32·ceil(len/32)`, capped at the same, so **2,688 tokens is the widest batch the trainer can
+build**. The dataset attains it: tokenised with the model's own tokenizer, the 6,648 training rows
+run 80 to 2,764 tokens, median 1,193, and **14 rows sit at or over the cap**, giving a largest
+padded width of exactly 2,688 across 77 distinct widths.
+
+This evening's arm measured that worst case directly: **9.5050 GiB at 2,688 tokens, accumulation
+4**, the same recipe. Arm A reached **9.7267**.
+
+**A measurement against a measurement, with no model in between: arm A exceeds the widest row the
+trainer can build, at the same accumulation, by 0.2217 GiB. No row length can supply that.**
+
+### The inversion, which attributes the individual steps
+
+Taking the peak's shape in the row width from the landed calibration — the floor's slope plus the
+measured attention term — and anchoring it on this evening's own point so the accumulation cost
+and every fixed overhead cancel, each step implies a row width:
+
+| iteration | peak | implied padded width | possible under the 2,688 cap |
+| ---: | ---: | ---: | --- |
+| 10 | 8.1630 | 2,157 | yes |
+| 40 | 9.3281 | 2,619 | yes |
+| 110 | 9.5274 | 2,697 | **no** |
+| 310 | 9.6047 | 2,727 | **no** |
+| 730 | 9.7267 | 2,774 | **no** |
+
+So the first two steps are new longest rows and **the last three are not**. This half depends on
+the shape being right; the model-free comparison above does not, and the two agree on the total.
+
+### What that leaves
+
+**The allocator hypothesis is confirmed on the record rather than left as the last candidate**, and
+it is sharper than "long runs use more". The peak grows in rare discrete steps at iterations 110,
+310 and 730, long after the widest row has been seen, on a workload whose batch widths take 77
+distinct values. That is a pool acquiring block sizes it cannot reuse, not a run steadily consuming
+more.
+
+Two things it is not. It is not the validation pass, which left no step at 400. And the final
+step's 0.1220 GiB is close to one gradient tree (0.1209), but so is a two-bucket width change at
+2.114 MiB per token, so that coincidence carries no weight and is recorded only to say it was
+noticed and discarded.
+
+### The row order is not reproducible, which is why this is an inversion
+
+The Chief's suggested test — read the row lengths at iterations 40, 110, 310 and 730 — cannot be
+run. `iterate_batches` sorts by length, chunks into batches, then permutes the batch order with
+`np.random.permutation`, and the trainer's main loop calls it **without a seed**
+(`trainer.py:273`), so the permutation depends on numpy's global state at that moment rather than
+on the run's declared seed. The order is not deterministic from the config, and the peaks had to
+be attributed by their size rather than by their position.
