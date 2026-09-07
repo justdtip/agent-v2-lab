@@ -1,0 +1,10 @@
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2273.71it/s]
+{"task": "test-read-0000-clean", "n": 410, "cut": 403, "native_vs_split": {"max_abs": 0.0001, "argmax_same": true, "top1": [71093, 71093], "margin": [0.5769, 0.5769]}, "half": 0.00013, "restore": 0.0, "first_diff": null}
+{"task": "test-search-0001-clean", "n": 420, "cut": 413, "native_vs_split": {"max_abs": 7e-05, "argmax_same": true, "top1": [40, 40], "margin": [0.5357, 0.5358]}, "half": 0.00012, "restore": 0.0, "first_diff": null}
+{"task": "test-calculate-0002-clean", "n": 417, "cut": 410, "native_vs_split": {"max_abs": 6e-05, "argmax_same": true, "top1": [71093, 71093], "margin": [0.6848, 0.6848]}, "half": 0.0001, "restore": 0.0, "first_diff": null}
+{"task": "test-synthesis-0003-clean", "n": 436, "cut": 429, "native_vs_split": {"max_abs": 8e-05, "argmax_same": true, "top1": [71093, 71093], "margin": [0.4929, 0.4928]}, "half": 0.00013, "restore": 0.0, "first_diff": null}
+{"task": "test-update-0004-clean", "n": 427, "cut": 420, "native_vs_split": {"max_abs": 6e-05, "argmax_same": true, "top1": [40, 40], "margin": [0.7052, 0.7052]}, "half": 0.00014, "restore": 0.0, "first_diff": null}
+{"task": "test-list-0005-clean", "n": 420, "cut": 413, "native_vs_split": {"max_abs": 9e-05, "argmax_same": true, "top1": [40, 40], "margin": [1.4514, 1.4514]}, "half": 0.00015, "restore": 0.0, "first_diff": null}
+{"task": "test-pointer_chain-0006-clean", "n": 439, "cut": 432, "native_vs_split": {"max_abs": 6e-05, "argmax_same": true, "top1": [71093, 71093], "margin": [0.8022, 0.8021]}, "half": 0.00013, "restore": 0.0, "first_diff": null}
+{"task": "test-ledger_reconcile-0007-clean", "n": 464, "cut": 457, "native_vs_split": {"max_abs": 6e-05, "argmax_same": true, "top1": [40, 40], "margin": [0.0724, 0.0724]}, "half": 0.00017, "restore": 0.0, "first_diff": null}
+{"event": "done", "elapsed_s": 80.0}

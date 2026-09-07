@@ -1,0 +1,890 @@
+{
+ "parameters": {
+  "model": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "prefill_step": 2048,
+  "read_layers": [
+   12,
+   16,
+   20,
+   24,
+   28,
+   32
+  ],
+  "cases": 8,
+  "elapsed_s": 80.0
+ },
+ "cases": [
+  {
+   "task_id": "test-read-0000-clean",
+   "prompt_tokens": 410,
+   "prefix_tokens": 403,
+   "boundaries": {
+    "native": [
+     409,
+     410
+    ],
+    "split": [
+     403,
+     409,
+     410
+    ],
+    "half": [
+     205,
+     409,
+     410
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 0.0001,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.5769,
+     0.5769
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00013,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.5769,
+     0.5769
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.5769,
+     0.5769
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.5769,
+     0.5769
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.5769,
+     0.5769
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 4e-07
+    },
+    "16": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "20": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 6e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 6e-07
+    },
+    "28": {
+     "max_abs": 4e-05,
+     "rel_to_norm": 1.2e-06
+    },
+    "32": {
+     "max_abs": 3e-05,
+     "rel_to_norm": 6e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 30
+  },
+  {
+   "task_id": "test-search-0001-clean",
+   "prompt_tokens": 420,
+   "prefix_tokens": 413,
+   "boundaries": {
+    "native": [
+     419,
+     420
+    ],
+    "split": [
+     413,
+     419,
+     420
+    ],
+    "half": [
+     210,
+     419,
+     420
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 7e-05,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.5357,
+     0.5358
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00012,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.5357,
+     0.5358
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.5358,
+     0.5358
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.5358,
+     0.5358
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.5358,
+     0.5358
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 2e-07
+    },
+    "16": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "20": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 3e-07
+    },
+    "28": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "32": {
+     "max_abs": 2e-05,
+     "rel_to_norm": 4e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 41
+  },
+  {
+   "task_id": "test-calculate-0002-clean",
+   "prompt_tokens": 417,
+   "prefix_tokens": 410,
+   "boundaries": {
+    "native": [
+     416,
+     417
+    ],
+    "split": [
+     410,
+     416,
+     417
+    ],
+    "half": [
+     208,
+     416,
+     417
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 6e-05,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.6848,
+     0.6848
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.0001,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.6848,
+     0.6847
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.6848,
+     0.6848
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.6848,
+     0.6848
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.6848,
+     0.6848
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "16": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 6e-07
+    },
+    "20": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 6e-07
+    },
+    "28": {
+     "max_abs": 2e-05,
+     "rel_to_norm": 5e-07
+    },
+    "32": {
+     "max_abs": 2e-05,
+     "rel_to_norm": 4e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 32
+  },
+  {
+   "task_id": "test-synthesis-0003-clean",
+   "prompt_tokens": 436,
+   "prefix_tokens": 429,
+   "boundaries": {
+    "native": [
+     435,
+     436
+    ],
+    "split": [
+     429,
+     435,
+     436
+    ],
+    "half": [
+     218,
+     435,
+     436
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 8e-05,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.4929,
+     0.4928
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00013,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.4929,
+     0.4928
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.4928,
+     0.4928
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.4928,
+     0.4928
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.4928,
+     0.4928
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "16": {
+     "max_abs": 0.0,
+     "rel_to_norm": 4e-07
+    },
+    "20": {
+     "max_abs": 0.0,
+     "rel_to_norm": 4e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 3e-07
+    },
+    "28": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 3e-07
+    },
+    "32": {
+     "max_abs": 3e-05,
+     "rel_to_norm": 6e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 33
+  },
+  {
+   "task_id": "test-update-0004-clean",
+   "prompt_tokens": 427,
+   "prefix_tokens": 420,
+   "boundaries": {
+    "native": [
+     426,
+     427
+    ],
+    "split": [
+     420,
+     426,
+     427
+    ],
+    "half": [
+     213,
+     426,
+     427
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 6e-05,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.7052,
+     0.7052
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00014,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.7052,
+     0.7052
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.7052,
+     0.7052
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.7052,
+     0.7052
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.7052,
+     0.7052
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 5e-07
+    },
+    "16": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "20": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 3e-07
+    },
+    "28": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 3e-07
+    },
+    "32": {
+     "max_abs": 3e-05,
+     "rel_to_norm": 5e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 41
+  },
+  {
+   "task_id": "test-list-0005-clean",
+   "prompt_tokens": 420,
+   "prefix_tokens": 413,
+   "boundaries": {
+    "native": [
+     419,
+     420
+    ],
+    "split": [
+     413,
+     419,
+     420
+    ],
+    "half": [
+     210,
+     419,
+     420
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 9e-05,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     1.4514,
+     1.4514
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00015,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     1.4514,
+     1.4515
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     1.4514,
+     1.4514
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     1.4514,
+     1.4514
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     1.4514,
+     1.4514
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 6e-07
+    },
+    "16": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 8e-07
+    },
+    "20": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 1.2e-06
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "28": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 2e-07
+    },
+    "32": {
+     "max_abs": 4e-05,
+     "rel_to_norm": 8e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 41
+  },
+  {
+   "task_id": "test-pointer_chain-0006-clean",
+   "prompt_tokens": 439,
+   "prefix_tokens": 432,
+   "boundaries": {
+    "native": [
+     438,
+     439
+    ],
+    "split": [
+     432,
+     438,
+     439
+    ],
+    "half": [
+     219,
+     438,
+     439
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 6e-05,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.8022,
+     0.8021
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00013,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.8022,
+     0.8021
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.8021,
+     0.8021
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.8021,
+     0.8021
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     71093,
+     71093
+    ],
+    "margin": [
+     0.8021,
+     0.8021
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 7e-07
+    },
+    "16": {
+     "max_abs": 0.0,
+     "rel_to_norm": 4e-07
+    },
+    "20": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "28": {
+     "max_abs": 3e-05,
+     "rel_to_norm": 1e-06
+    },
+    "32": {
+     "max_abs": 4e-05,
+     "rel_to_norm": 8e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 38
+  },
+  {
+   "task_id": "test-ledger_reconcile-0007-clean",
+   "prompt_tokens": 464,
+   "prefix_tokens": 457,
+   "boundaries": {
+    "native": [
+     463,
+     464
+    ],
+    "split": [
+     457,
+     463,
+     464
+    ],
+    "half": [
+     232,
+     463,
+     464
+    ]
+   },
+   "1_native_vs_split": {
+    "max_abs": 6e-05,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.0724,
+     0.0724
+    ]
+   },
+   "4_native_vs_half_split": {
+    "max_abs": 0.00017,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.0724,
+     0.0724
+    ]
+   },
+   "2_split_fresh_vs_split_restored": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.0724,
+     0.0724
+    ]
+   },
+   "3_restore_after_advance_vs_restore_again": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.0724,
+     0.0724
+    ]
+   },
+   "2b_split_schedule_reproducible": {
+    "max_abs": 0.0,
+    "argmax_same": true,
+    "top1": [
+     40,
+     40
+    ],
+    "margin": [
+     0.0724,
+     0.0724
+    ]
+   },
+   "per_layer_residual_native_vs_split_at_last_position": {
+    "12": {
+     "max_abs": 0.0,
+     "rel_to_norm": 2e-07
+    },
+    "16": {
+     "max_abs": 0.0,
+     "rel_to_norm": 2e-07
+    },
+    "20": {
+     "max_abs": 0.0,
+     "rel_to_norm": 3e-07
+    },
+    "24": {
+     "max_abs": 1e-05,
+     "rel_to_norm": 4e-07
+    },
+    "28": {
+     "max_abs": 2e-05,
+     "rel_to_norm": 8e-07
+    },
+    "32": {
+     "max_abs": 2e-05,
+     "rel_to_norm": 4e-07
+    }
+   },
+   "continuation_first_differing_greedy_position": null,
+   "continuation_positions_compared": 41
+  }
+ ]
+}
