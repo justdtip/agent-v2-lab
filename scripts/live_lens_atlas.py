@@ -24,6 +24,8 @@ SPANS = ("system", "task", "observation", "note", "call", "template", "chat")
 def spans_for_prompt(tok, prompt: str, messages: list[dict], kind: str) -> list[str]:
     """One span label per prompt token, from the rendered messages' text located inside the prompt."""
     enc = tok(prompt, add_special_tokens=False, return_offsets_mapping=True)
+    if kind == "prose":
+        return ["chat"] * len(enc["input_ids"])
     labels = ["template"] * len(enc["input_ids"])
     ranges = []
     cursor = 0
@@ -55,6 +57,8 @@ def spans_for_prompt(tok, prompt: str, messages: list[dict], kind: str) -> list[
 
 
 def emitted_span(text_so_far: str, kind: str) -> str:
+    if kind == "prose":
+        return "continuation"
     if kind == "chat":
         return "chat"
     return "call" if "```json" in text_so_far else "note"

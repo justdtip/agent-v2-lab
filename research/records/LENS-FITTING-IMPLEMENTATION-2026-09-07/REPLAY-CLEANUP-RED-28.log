@@ -1,0 +1,399 @@
+.FFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[logits_sha256] _
+
+corrupt = 'logits_sha256'
+
+    @pytest.mark.parametrize(
+        "corrupt", [None, "logits_sha256", "logits_shape", "argmax", "offset", "input_ids"]
+    )
+    def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt):
+        """A fake public session checks orchestration without substituting native evidence."""
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+    
+        import numpy as np
+    
+        module = api()
+        events = [dict(kind="manifest"), *rows(), dict(kind="end_record", status="complete")]
+        second = copy.deepcopy(rows())
+        for row in second:
+            row["turn"] = 1
+        events[-1:-1] = second
+        calls, caches, written = [], [], []
+        model = object()
+    
+        def make_cache():
+            cache = object()
+            caches.append(cache)
+            return cache
+    
+        view = SimpleNamespace(model=model, make_cache=make_cache)
+        tok = SimpleNamespace(bos_token=None, encode=lambda *a, **kw: [1, 2])
+    
+        class Session:
+            def __init__(self, v, readout, emit, **kw):
+                self.emit, self.turn = emit, -1
+                assert kw["retain_logits"] is False
+    
+            def set_context(self, **kwargs):
+                pass
+    
+            @contextmanager
+            def generation(self, m, tokenizer, prompt, *, turn_cache):
+                assert m is model and turn_cache is None
+                self.turn += 1
+                self.emit(rows()[0] | {"turn": self.turn})
+                self.offset = 0
+    
+                def captured(ids, *, cache):
+                    assert cache is caches[self.turn]
+                    calls.append(("forward", ids.tolist()))
+                    row = rows()[3 if self.offset == 0 else 5] | {"turn": self.turn}
+                    self.offset += len(row["input_ids"])
+                    if corrupt:
+                        row[corrupt] = "changed"
+                    self.emit(row)
+    
+                completed = False
+                try:
+                    yield captured
+                    completed = True
+                finally:
+                    # §3.4: match the public session's abort emission during unwinding.
+                    self.emit(
+                        rows()[-1]
+                        | {"turn": self.turn, "status": "complete" if completed else "aborted"}
+                    )
+    
+            def emitted(self, token):
+                calls.append(("emitted", token))
+                self.emit(rows()[6] | {"turn": self.turn})
+    
+        if corrupt:
+>           with pytest.raises(ValueError, match=rf"native replay forward\.{corrupt} differs"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'native replay forward\\.logits_sha256 differs'
+E             Actual message: 'native replay end_turn.kind differs at control 1'
+
+tests/test_lens_replay.py:201: AssertionError
+_ test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[logits_shape] _
+
+corrupt = 'logits_shape'
+
+    @pytest.mark.parametrize(
+        "corrupt", [None, "logits_sha256", "logits_shape", "argmax", "offset", "input_ids"]
+    )
+    def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt):
+        """A fake public session checks orchestration without substituting native evidence."""
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+    
+        import numpy as np
+    
+        module = api()
+        events = [dict(kind="manifest"), *rows(), dict(kind="end_record", status="complete")]
+        second = copy.deepcopy(rows())
+        for row in second:
+            row["turn"] = 1
+        events[-1:-1] = second
+        calls, caches, written = [], [], []
+        model = object()
+    
+        def make_cache():
+            cache = object()
+            caches.append(cache)
+            return cache
+    
+        view = SimpleNamespace(model=model, make_cache=make_cache)
+        tok = SimpleNamespace(bos_token=None, encode=lambda *a, **kw: [1, 2])
+    
+        class Session:
+            def __init__(self, v, readout, emit, **kw):
+                self.emit, self.turn = emit, -1
+                assert kw["retain_logits"] is False
+    
+            def set_context(self, **kwargs):
+                pass
+    
+            @contextmanager
+            def generation(self, m, tokenizer, prompt, *, turn_cache):
+                assert m is model and turn_cache is None
+                self.turn += 1
+                self.emit(rows()[0] | {"turn": self.turn})
+                self.offset = 0
+    
+                def captured(ids, *, cache):
+                    assert cache is caches[self.turn]
+                    calls.append(("forward", ids.tolist()))
+                    row = rows()[3 if self.offset == 0 else 5] | {"turn": self.turn}
+                    self.offset += len(row["input_ids"])
+                    if corrupt:
+                        row[corrupt] = "changed"
+                    self.emit(row)
+    
+                completed = False
+                try:
+                    yield captured
+                    completed = True
+                finally:
+                    # §3.4: match the public session's abort emission during unwinding.
+                    self.emit(
+                        rows()[-1]
+                        | {"turn": self.turn, "status": "complete" if completed else "aborted"}
+                    )
+    
+            def emitted(self, token):
+                calls.append(("emitted", token))
+                self.emit(rows()[6] | {"turn": self.turn})
+    
+        if corrupt:
+>           with pytest.raises(ValueError, match=rf"native replay forward\.{corrupt} differs"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'native replay forward\\.logits_shape differs'
+E             Actual message: 'native replay end_turn.kind differs at control 1'
+
+tests/test_lens_replay.py:201: AssertionError
+_ test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[argmax] __
+
+corrupt = 'argmax'
+
+    @pytest.mark.parametrize(
+        "corrupt", [None, "logits_sha256", "logits_shape", "argmax", "offset", "input_ids"]
+    )
+    def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt):
+        """A fake public session checks orchestration without substituting native evidence."""
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+    
+        import numpy as np
+    
+        module = api()
+        events = [dict(kind="manifest"), *rows(), dict(kind="end_record", status="complete")]
+        second = copy.deepcopy(rows())
+        for row in second:
+            row["turn"] = 1
+        events[-1:-1] = second
+        calls, caches, written = [], [], []
+        model = object()
+    
+        def make_cache():
+            cache = object()
+            caches.append(cache)
+            return cache
+    
+        view = SimpleNamespace(model=model, make_cache=make_cache)
+        tok = SimpleNamespace(bos_token=None, encode=lambda *a, **kw: [1, 2])
+    
+        class Session:
+            def __init__(self, v, readout, emit, **kw):
+                self.emit, self.turn = emit, -1
+                assert kw["retain_logits"] is False
+    
+            def set_context(self, **kwargs):
+                pass
+    
+            @contextmanager
+            def generation(self, m, tokenizer, prompt, *, turn_cache):
+                assert m is model and turn_cache is None
+                self.turn += 1
+                self.emit(rows()[0] | {"turn": self.turn})
+                self.offset = 0
+    
+                def captured(ids, *, cache):
+                    assert cache is caches[self.turn]
+                    calls.append(("forward", ids.tolist()))
+                    row = rows()[3 if self.offset == 0 else 5] | {"turn": self.turn}
+                    self.offset += len(row["input_ids"])
+                    if corrupt:
+                        row[corrupt] = "changed"
+                    self.emit(row)
+    
+                completed = False
+                try:
+                    yield captured
+                    completed = True
+                finally:
+                    # §3.4: match the public session's abort emission during unwinding.
+                    self.emit(
+                        rows()[-1]
+                        | {"turn": self.turn, "status": "complete" if completed else "aborted"}
+                    )
+    
+            def emitted(self, token):
+                calls.append(("emitted", token))
+                self.emit(rows()[6] | {"turn": self.turn})
+    
+        if corrupt:
+>           with pytest.raises(ValueError, match=rf"native replay forward\.{corrupt} differs"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'native replay forward\\.argmax differs'
+E             Actual message: 'native replay end_turn.kind differs at control 1'
+
+tests/test_lens_replay.py:201: AssertionError
+_ test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[offset] __
+
+corrupt = 'offset'
+
+    @pytest.mark.parametrize(
+        "corrupt", [None, "logits_sha256", "logits_shape", "argmax", "offset", "input_ids"]
+    )
+    def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt):
+        """A fake public session checks orchestration without substituting native evidence."""
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+    
+        import numpy as np
+    
+        module = api()
+        events = [dict(kind="manifest"), *rows(), dict(kind="end_record", status="complete")]
+        second = copy.deepcopy(rows())
+        for row in second:
+            row["turn"] = 1
+        events[-1:-1] = second
+        calls, caches, written = [], [], []
+        model = object()
+    
+        def make_cache():
+            cache = object()
+            caches.append(cache)
+            return cache
+    
+        view = SimpleNamespace(model=model, make_cache=make_cache)
+        tok = SimpleNamespace(bos_token=None, encode=lambda *a, **kw: [1, 2])
+    
+        class Session:
+            def __init__(self, v, readout, emit, **kw):
+                self.emit, self.turn = emit, -1
+                assert kw["retain_logits"] is False
+    
+            def set_context(self, **kwargs):
+                pass
+    
+            @contextmanager
+            def generation(self, m, tokenizer, prompt, *, turn_cache):
+                assert m is model and turn_cache is None
+                self.turn += 1
+                self.emit(rows()[0] | {"turn": self.turn})
+                self.offset = 0
+    
+                def captured(ids, *, cache):
+                    assert cache is caches[self.turn]
+                    calls.append(("forward", ids.tolist()))
+                    row = rows()[3 if self.offset == 0 else 5] | {"turn": self.turn}
+                    self.offset += len(row["input_ids"])
+                    if corrupt:
+                        row[corrupt] = "changed"
+                    self.emit(row)
+    
+                completed = False
+                try:
+                    yield captured
+                    completed = True
+                finally:
+                    # §3.4: match the public session's abort emission during unwinding.
+                    self.emit(
+                        rows()[-1]
+                        | {"turn": self.turn, "status": "complete" if completed else "aborted"}
+                    )
+    
+            def emitted(self, token):
+                calls.append(("emitted", token))
+                self.emit(rows()[6] | {"turn": self.turn})
+    
+        if corrupt:
+>           with pytest.raises(ValueError, match=rf"native replay forward\.{corrupt} differs"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'native replay forward\\.offset differs'
+E             Actual message: 'native replay end_turn.kind differs at control 1'
+
+tests/test_lens_replay.py:201: AssertionError
+_ test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[input_ids] _
+
+corrupt = 'input_ids'
+
+    @pytest.mark.parametrize(
+        "corrupt", [None, "logits_sha256", "logits_shape", "argmax", "offset", "input_ids"]
+    )
+    def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt):
+        """A fake public session checks orchestration without substituting native evidence."""
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+    
+        import numpy as np
+    
+        module = api()
+        events = [dict(kind="manifest"), *rows(), dict(kind="end_record", status="complete")]
+        second = copy.deepcopy(rows())
+        for row in second:
+            row["turn"] = 1
+        events[-1:-1] = second
+        calls, caches, written = [], [], []
+        model = object()
+    
+        def make_cache():
+            cache = object()
+            caches.append(cache)
+            return cache
+    
+        view = SimpleNamespace(model=model, make_cache=make_cache)
+        tok = SimpleNamespace(bos_token=None, encode=lambda *a, **kw: [1, 2])
+    
+        class Session:
+            def __init__(self, v, readout, emit, **kw):
+                self.emit, self.turn = emit, -1
+                assert kw["retain_logits"] is False
+    
+            def set_context(self, **kwargs):
+                pass
+    
+            @contextmanager
+            def generation(self, m, tokenizer, prompt, *, turn_cache):
+                assert m is model and turn_cache is None
+                self.turn += 1
+                self.emit(rows()[0] | {"turn": self.turn})
+                self.offset = 0
+    
+                def captured(ids, *, cache):
+                    assert cache is caches[self.turn]
+                    calls.append(("forward", ids.tolist()))
+                    row = rows()[3 if self.offset == 0 else 5] | {"turn": self.turn}
+                    self.offset += len(row["input_ids"])
+                    if corrupt:
+                        row[corrupt] = "changed"
+                    self.emit(row)
+    
+                completed = False
+                try:
+                    yield captured
+                    completed = True
+                finally:
+                    # §3.4: match the public session's abort emission during unwinding.
+                    self.emit(
+                        rows()[-1]
+                        | {"turn": self.turn, "status": "complete" if completed else "aborted"}
+                    )
+    
+            def emitted(self, token):
+                calls.append(("emitted", token))
+                self.emit(rows()[6] | {"turn": self.turn})
+    
+        if corrupt:
+>           with pytest.raises(ValueError, match=rf"native replay forward\.{corrupt} differs"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'native replay forward\\.input_ids differs'
+E             Actual message: 'native replay end_turn.kind differs at control 1'
+
+tests/test_lens_replay.py:201: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_lens_replay.py::test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[logits_sha256]
+FAILED tests/test_lens_replay.py::test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[logits_shape]
+FAILED tests/test_lens_replay.py::test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[argmax]
+FAILED tests/test_lens_replay.py::test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[offset]
+FAILED tests/test_lens_replay.py::test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache[input_ids]
+5 failed, 1 passed, 26 deselected in 0.16s

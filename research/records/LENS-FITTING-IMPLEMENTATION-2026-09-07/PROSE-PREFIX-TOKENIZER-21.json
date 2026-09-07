@@ -1,0 +1,366 @@
+{
+  "protocol": "requirements section14; first824 held-window ids decoded as raw text",
+  "manifest_file_sha256": "02f7f818ce3aba2c57a229cde28e92f8a9375b9bdbe0c6db401be3b3105477b4",
+  "snapshot_path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3",
+  "checked": [
+    {
+      "index": 4,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 9,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 14,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 19,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 24,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 29,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 34,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 39,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 44,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 49,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 54,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 59,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 64,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 69,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 74,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 79,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 84,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 89,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 94,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 99,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 104,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 109,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 114,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 119,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 124,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 129,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 134,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 139,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 144,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 149,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 154,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 159,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 164,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 169,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 174,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 179,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 184,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 189,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 194,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 199,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 204,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 209,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 214,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 219,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 224,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 229,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 234,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 239,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 244,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 249,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    },
+    {
+      "index": 254,
+      "matches": true,
+      "original_tokens": 824,
+      "encoded_tokens": 824,
+      "first_difference": null
+    }
+  ],
+  "mlx_imported": [],
+  "preliminary_attempt": "Stopped with TypeError before checking rows: reader returns rows list, not tuple. No artifact or native work from that attempt."
+}

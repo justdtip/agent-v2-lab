@@ -49,3 +49,19 @@ Ownership: lens_fitting/profiles.py, scripts/lens_profiles.py, tests/test_lens_p
 Confirm primary cache landing, incorporate its exact commit into this isolated branch, and run the full suite once on this branch's source. Investigate added failures only. Build tokenizer-only corpora and freeze manifests. All checkpoint self-checks/fits/replays require the normal lock, recorded launch/end, R47 declaration where needed, and source/corpus hash freezing. Run serially only when authorised and available; stop for genuine cost/ruling decisions. Preserve evidence before reading profiles. No adapter runs until3.1–3.6 land.
 
 Review each completed piece and the complete branch. Commit records and changes by explicit path throughout, push the branch backup without force, and deliver a patch under design_specifications/pending/LENS-FITTING.patch plus an implementation report listing callers, evidence, remaining gates and all departures. Chief lands the patch; do not alter the shared branch. Keep the persistent worktree intact.
+
+## Resume amendment — sections 12 and 13, 7 September 2026
+
+Task 1 was reviewed and landed in primary at5712131. The isolated branch incorporates that exact tree before further source work. Sequence-level fit/held membership intentionally shares trajectories: held sequences select the ridge alpha; only disjoint pilot episodes assess generalisation. No split reassignment or corpus rewrite.
+
+Task 2 uses section12: penalty alpha * mean_diag(fit_XTX), with fixed alpha grid (0.001,0.01,0.1,1,10). The row solve is (XTX + absolute_penalty I) W = XTY. Record alpha, total mean diagonal, n, absolute penalty, and the equivalent per-position lambda. The earlier unresolved n-factor note is resolved by the Director, not an implementer choice.
+
+Task 4 explicitly replaces the selected spec with cache_strategy='none' before load_policy. Registry history is now the authorised default; capture entry points must not depend on auto or silently disable a turn cache. Fit forwards remain uncached through ArchitectureView.
+
+The Director explicitly authorised GitHub backup pushes. The first push of codex/lens-fitting succeeded; continue ordinary non-force backups after committed pieces. No adapter fits before3.1–3.6 land. Shared checkout remains Chief-owned.
+
+## Section 14 amendment — prose evaluation and Task 5 split
+
+The Director resolved the target-origin question in requirements §14 (primary afb3c35): use all 51 held prose windows, the first 824 authored tokens as raw prompt under the recorded BOS/tokenizer policy, then at most 200 greedy emitted tokens. Stop at EOS; drop and count continuations under 32 tokens. State the held-set ridge-selection overlap. Authored trailing tokens are descriptive only. Prose foreknowledge uses its own final-distribution base rate; agreement scores the authored prompt. PROSE-PREFIX-TOKENIZER-21.json confirms all 51 raw prefixes encode back to the exact frozen IDs.
+
+Split Task 5 into sequential source pieces: 5a adds the prose capture producer (lens_fitting/prose.py, scripts/lens_prose_capture.py, tests/test_lens_prose.py) with a frozen pre-load plan/README and standard CaptureSession records. Then 5b adds profiles/specificity and narrow prose-kind span support in the existing atlas. Old pilot atlas values must remain exactly unchanged. The agent-tool generator adds tool-close stops, so prose uses the installed stream_generate directly inside the public capture context; only EOS/cap stop it. Continue source and pure tests while model-time priority rests with issue 88. Every native test, capture or fit requires an explicit queue handoff. No further download or adapter experiment.
