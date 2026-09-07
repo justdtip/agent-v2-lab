@@ -1,0 +1,24 @@
+{
+  "started_utc": "2026-09-07T11:35:43.682030+00:00",
+  "owned_pid": 76097,
+  "git_commit": "452f75c4b599581a436a6b6c4479cc86de8d0a5c",
+  "source_hashes": {
+    "scripts/lens_regression_preflight.py": "e92c04169a9f6a7af60ba97d64db1f62b8803a444fb5c8fd6f5916fa0375d18b",
+    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "e9f291438e4d5c972900ca13cd4c244b6a07887035cc7871980b3a38fd20dcf3",
+    "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "f2049f849e7f3883f7a084faa2641717ae2d2de1f922ce8660e56164a5210dff",
+    "src/local_llm_lab/pipeline/lens_fitting/artifacts.py": "d4c42871db649951a4df052f6ede2cfadecfa3c7445886d650ca43ecf46423fd",
+    "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "63c85989e9551f6d42f451b3124203be14ffe2dee6bf82e2077547d9338562e8",
+    "src/local_llm_lab/arch.py": "a69109c71c8743c43e1ba70b4ab06018a51f2fb83b33fc62dd63f40b56a9615d",
+    "src/local_llm_lab/models.py": "335d9478f65619cc9f17f0ed655cea55efd87391d9ddfeb31df6cc237f8bec3b",
+    "src/local_llm_lab/runlock.py": "bc9ed43d34efe87f36677e7b897497f4ede49ac571e4cb7660ea9a2fb085b9c0",
+    "configs/models/qwen35-4b.yaml": "ae368edce30ba5df79b7fbe6ca59261f3a2211bc3b03f0a1c96762393adba1d5"
+  },
+  "packages": {
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "numpy": "2.5.2",
+    "transformers": "5.16.1"
+  },
+  "scope": "resource calibration only; not a fit or scientific reading",
+  "exclusive_authority": "Director-relayed heartbeat 5a17860; excludes MLX-reaching tests at any import scope"
+}

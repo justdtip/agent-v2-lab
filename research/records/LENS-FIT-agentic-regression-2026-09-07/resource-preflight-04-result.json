@@ -1,0 +1,61 @@
+{
+  "completed_observed_utc": "2026-09-07T11:40:01.908328+00:00",
+  "status": "measured",
+  "working_set_bytes": 19069665280,
+  "cap_bytes": 11441799168.0,
+  "measurements": [
+    {
+      "event": "measured",
+      "tokens": 256,
+      "peak_bytes": 6640482892,
+      "seconds_per_sequence": 0.8595106040002065,
+      "projected_peak_bytes": 10737418240.0
+    },
+    {
+      "event": "measured",
+      "tokens": 512,
+      "peak_bytes": 6624753192,
+      "seconds_per_sequence": 1.2568420625002545,
+      "projected_peak_bytes": 10737418240.0
+    },
+    {
+      "event": "measured",
+      "tokens": 1024,
+      "peak_bytes": 6902626860,
+      "seconds_per_sequence": 2.4932589579993873,
+      "projected_peak_bytes": 9644670600.0
+    },
+    {
+      "event": "measured",
+      "tokens": 2044,
+      "peak_bytes": 7330967572,
+      "seconds_per_sequence": 5.001346103999822,
+      "projected_peak_bytes": 10736114359.547424
+    }
+  ],
+  "solve": {
+    "event": "measured_solve",
+    "peak_bytes": 5893467928,
+    "projected_peak_bytes": 6037544708,
+    "elapsed_s": 0.7636180409990629
+  },
+  "timing": {
+    "event": "timing",
+    "timing_exponent": 1.007124325866543,
+    "forward_seconds": 1377.3874889104727,
+    "solve_seconds": 23.67215927097095,
+    "projected_fit_seconds": 1401.0596481814437,
+    "scope": "projection only; excludes loading and artifact serialization; not an under-hour acceptance",
+    "one_layer_fixed_grid_seconds": 0.7636180409990629
+  },
+  "pressure_observations": {
+    "before_launch": 1,
+    "during_first_sizes": 1,
+    "after_exit": 1,
+    "scope": "read-only sysctl observations; all normal, no intervention"
+  },
+  "lock_after_exit": null,
+  "mapped_MLX_after_exit": [],
+  "source_commit": "452f75c4b599581a436a6b6c4479cc86de8d0a5c",
+  "fit_started": false
+}
