@@ -1,0 +1,25 @@
+........................................................................ [ 34%]
+........................................................................ [ 69%]
+..........................................F.....................         [100%]
+=================================== FAILURES ===================================
+________ test_banned_model_constants_are_absent_from_run_configuration _________
+
+    def test_banned_model_constants_are_absent_from_run_configuration() -> None:
+        """Briefing §1.7 applied to `configs/*.yaml`, which no Python scanner can reach."""
+        root = Path(__file__).resolve().parents[1]
+    
+>       assert (
+            _banned_config_model_assumptions(
+                _discover_arm_config_sources(root), _FORBIDDEN_MODEL_CONSTANTS
+            )
+            == []
+        )
+E       AssertionError: assert ['agent_v2e_q..._length:2048'] == []
+E         
+E         Left contains 2 more items, first extra item: 'agent_v2e_qwen35_4b_cap2048.yaml:train.max_seq_length:2048'
+E         Use -v to get more diff
+
+tests/test_repository_rules.py:383: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_repository_rules.py::test_banned_model_constants_are_absent_from_run_configuration
+1 failed, 207 passed in 4.09s

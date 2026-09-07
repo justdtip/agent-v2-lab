@@ -1,0 +1,17 @@
+{
+  "configs/models/qwen35-4b.yaml": "32e30da996bf6a25c67d6b7110696808dbc186338c1935d2bd4562bc28f03dac",
+  "src/local_llm_lab/arch.py": "a69109c71c8743c43e1ba70b4ab06018a51f2fb83b33fc62dd63f40b56a9615d",
+  "src/local_llm_lab/pipeline/cli.py": "157b1f0c57b03cf07a6dbb991921fa6ca228ba710cd6b435897ad1856e4c95dd",
+  "src/local_llm_lab/pipeline/runner.py": "bac0f1c726adf2f17a832aadf9d74b7e3148f1f20f25dee9a5cbe5acfe80bff0",
+  "tests/test_models.py": "e187b58d24c7539e8ccd51fc01014e730019214ca80e1902a2a22b032b39dbb9",
+  "tests/test_runner.py": "ef4d0a7d510e531d0bd24d364e2af00603783f6cee0e4eb7906ddfa779dbfd28",
+  "tests/test_live_lens.py": "7415ad6848f77884b6770c072ab0147a99ddf134de8af60270df2df58d3edcf7",
+  "tests/test_live_lens_native.py": "304f8c8021207db573389b141ae55b0e1cc3ddb89f2b32407523023e45137c18",
+  "tests/test_training_preflight.py": "e71e62cc0971442dcb9e891821790f0da03754694172cf2870d91bb941b34032",
+  "src/local_llm_lab/pipeline/live_lens/__init__.py": "a012de8fdc9ee0e26b49f0ad7e10b67a888e9db86b8e8fd06027fc292c3eff66",
+  "src/local_llm_lab/pipeline/live_lens/instruments.py": "e920d5ce09df197750d47f765f13387e1d3d3fd439a91f9f783d1f9209362425",
+  "src/local_llm_lab/pipeline/live_lens/preflight.py": "d76b2448b1b69a443cb39ef058d10c226652409cafd8aa08cc1d4ca1308f590c",
+  "src/local_llm_lab/pipeline/live_lens/records.py": "f09debc979faca436fa3017e4c2bf648133d1d15673fab378056ab8167f713de",
+  "src/local_llm_lab/pipeline/live_lens/session.py": "d88efae0886aa3fa63218d5f45c1c4c252c7b48d74cd4e0506996714df3f2061",
+  "src/local_llm_lab/pipeline/live_lens/validation.py": "50490ef55e10098303c68bb3bf4f1acea5cc5559a8b3da3667996817cc45434c"
+}

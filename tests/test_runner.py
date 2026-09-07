@@ -707,3 +707,37 @@ def test_run_task_uses_resolved_cache_factory_and_records_model(monkeypatch) -> 
 
     assert factory_calls == [(model, view, resolved, 4)]
     assert trajectory.model == model_payload
+
+
+def test_capture_uses_native_stream_and_closes_it_before_restoring(monkeypatch):
+    from contextlib import contextmanager
+    events = []
+    native, wrapped = object(), object()
+    pieces = ['note\n```json\n', '{"name":"finish","arguments":{"answer":"x"}}', '\n```', 'JUNK']
+
+    class Capture:
+        @contextmanager
+        def generation(self, model, tokenizer, prompt, *, turn_cache):
+            assert model is native and turn_cache is None
+            events.append('enter')
+            try:
+                yield wrapped
+            finally:
+                events.append('restore')
+
+        def emitted(self, token):
+            events.append(('emitted', token))
+
+    def stream(model, tokenizer, **kwargs):
+        assert model is wrapped
+        try:
+            for i, piece in enumerate(pieces):
+                yield _FakeResponse(i, piece)
+        finally:
+            events.append('close')
+
+    monkeypatch.setitem(sys.modules, 'mlx_lm', SimpleNamespace(stream_generate=stream))
+    text, count, _ = generate_turn_with_count(native, _FakeTokenizer(pieces), 'prompt', None, 20,
+                                             spec=load_model_spec('qwen35-4b'), capture=Capture())
+    assert count == 3 and 'JUNK' not in text
+    assert events == ['enter', ('emitted', 0), ('emitted', 1), ('emitted', 2), 'close', 'restore']

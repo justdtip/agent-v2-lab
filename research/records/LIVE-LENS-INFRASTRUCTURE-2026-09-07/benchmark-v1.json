@@ -1,0 +1,179 @@
+{
+  "protocol": {
+    "model": "unadapted cached Qwen3.5-4B-MLX-4bit",
+    "prefix": "A short fixed prefix for native lens validation.",
+    "decode_forwards": 8,
+    "warmups_per_mode": 1,
+    "measured_repeats": 3,
+    "mode_order": "rotate the listed mode order by repeat index",
+    "modes": [
+      "native",
+      "residual",
+      "lens",
+      "attention",
+      "head_vectors",
+      "full_record"
+    ],
+    "aggregation": "median wall time per fixed prefix plus 8 decode forwards; individual times retained",
+    "gate": "every forward hash matches the native fixed history exactly",
+    "scope": "short-prefix cost only; not a long-context or full-episode forecast",
+    "memory_window_gib": 12,
+    "metal_cache_gib": 2
+  },
+  "prefix_tokens": 9,
+  "decode_forwards": 8,
+  "rows": [
+    {
+      "mode": "native",
+      "trial": 0,
+      "seconds": 0.1552330000049551,
+      "peak_memory_gib": 2.6601083632558584,
+      "hashes_identical": true
+    },
+    {
+      "mode": "residual",
+      "trial": 0,
+      "seconds": 0.18121604200132424,
+      "peak_memory_gib": 2.6361292945221066,
+      "hashes_identical": true
+    },
+    {
+      "mode": "lens",
+      "trial": 0,
+      "seconds": 2.0553570839983877,
+      "peak_memory_gib": 2.692154658958316,
+      "hashes_identical": true
+    },
+    {
+      "mode": "attention",
+      "trial": 0,
+      "seconds": 0.19394216699583922,
+      "peak_memory_gib": 2.6339270658791065,
+      "hashes_identical": true
+    },
+    {
+      "mode": "head_vectors",
+      "trial": 0,
+      "seconds": 0.21011441700102296,
+      "peak_memory_gib": 2.636298518627882,
+      "hashes_identical": true
+    },
+    {
+      "mode": "full_record",
+      "trial": 0,
+      "seconds": 4.164046124999004,
+      "peak_memory_gib": 2.7089211214333773,
+      "hashes_identical": true
+    },
+    {
+      "mode": "residual",
+      "trial": 1,
+      "seconds": 0.18830395900295116,
+      "peak_memory_gib": 2.634034391492605,
+      "hashes_identical": true
+    },
+    {
+      "mode": "lens",
+      "trial": 1,
+      "seconds": 2.119249249997665,
+      "peak_memory_gib": 2.692154658958316,
+      "hashes_identical": true
+    },
+    {
+      "mode": "attention",
+      "trial": 1,
+      "seconds": 0.196441958003561,
+      "peak_memory_gib": 2.6362803988158703,
+      "hashes_identical": true
+    },
+    {
+      "mode": "head_vectors",
+      "trial": 1,
+      "seconds": 0.22528062500350643,
+      "peak_memory_gib": 2.6339480150491,
+      "hashes_identical": true
+    },
+    {
+      "mode": "full_record",
+      "trial": 1,
+      "seconds": 4.2023986670028535,
+      "peak_memory_gib": 2.7089211214333773,
+      "hashes_identical": true
+    },
+    {
+      "mode": "native",
+      "trial": 1,
+      "seconds": 0.15841066699795192,
+      "peak_memory_gib": 2.6601083632558584,
+      "hashes_identical": true
+    },
+    {
+      "mode": "lens",
+      "trial": 2,
+      "seconds": 2.115627790997678,
+      "peak_memory_gib": 2.692154658958316,
+      "hashes_identical": true
+    },
+    {
+      "mode": "attention",
+      "trial": 2,
+      "seconds": 0.1955044159985846,
+      "peak_memory_gib": 2.6340596172958612,
+      "hashes_identical": true
+    },
+    {
+      "mode": "head_vectors",
+      "trial": 2,
+      "seconds": 0.21200229199894238,
+      "peak_memory_gib": 2.636202197521925,
+      "hashes_identical": true
+    },
+    {
+      "mode": "full_record",
+      "trial": 2,
+      "seconds": 4.221807959002035,
+      "peak_memory_gib": 2.7089268434792757,
+      "hashes_identical": true
+    },
+    {
+      "mode": "native",
+      "trial": 2,
+      "seconds": 0.15551716600020882,
+      "peak_memory_gib": 2.6601083632558584,
+      "hashes_identical": true
+    },
+    {
+      "mode": "residual",
+      "trial": 2,
+      "seconds": 0.17472400000406196,
+      "peak_memory_gib": 2.6340343756601214,
+      "hashes_identical": true
+    }
+  ],
+  "summary": {
+    "native": {
+      "median_seconds": 0.15551716600020882,
+      "ratio_to_native": 1.0
+    },
+    "residual": {
+      "median_seconds": 0.18121604200132424,
+      "ratio_to_native": 1.165247841521758
+    },
+    "lens": {
+      "median_seconds": 2.115627790997678,
+      "ratio_to_native": 13.603821657828032
+    },
+    "attention": {
+      "median_seconds": 0.1955044159985846,
+      "ratio_to_native": 1.2571243485643384
+    },
+    "head_vectors": {
+      "median_seconds": 0.21200229199894238,
+      "ratio_to_native": 1.3632083033114024
+    },
+    "full_record": {
+      "median_seconds": 4.2023986670028535,
+      "ratio_to_native": 27.022088783415786
+    }
+  }
+}

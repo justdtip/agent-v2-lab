@@ -12,6 +12,13 @@ lora:
   scale: 32.0
   dropout: 0.0
 train:
+  # Recorded working recipe on this host (Arm A, 2026-09-07). Other settings need
+  # measured launch evidence; these bounds are not a general memory guarantee.
+  launch_preflight:
+    chunk_size: 256
+    max_row_tokens: 2688
+    max_batch_size: 1
+    max_metal_cache_gib: 2.0
   max_seq_length: 2688
   batch_size: 2
   grad_accumulation_steps: 2
@@ -21,6 +28,8 @@ cache:
   strategy: auto
   equivalence_verified: null
 probes:
+  # Residual pairs from the recorded band ruling; verify against installed block kinds.
+  live_lens_pairs: [[12, 13], [16, 17], [19, 20], [23, 24], [27, 28]]
   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
   # R18: native block execution during capture; float32 only on the J-lens tail.
   capture_dtype: native

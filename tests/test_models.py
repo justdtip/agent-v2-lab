@@ -42,6 +42,12 @@ from local_llm_lab.models import load_model_spec
                 "grad_accumulation_steps": 2,
                 "learning_rate": 3.0e-5,
                 "grad_checkpoint": True,
+                "launch_preflight": {
+                    "chunk_size": 256,
+                    "max_row_tokens": 2688,
+                    "max_batch_size": 1,
+                    "max_metal_cache_gib": 2.0,
+                },
             },
         ),
         (

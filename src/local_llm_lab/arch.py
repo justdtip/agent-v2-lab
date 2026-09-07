@@ -7,11 +7,15 @@ shortcut would make multi-token probe activations disagree with inference.
 
 from __future__ import annotations
 
+import math
 import sys
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from typing import Any, Literal
 
-__all__ = ["ArchitectureView", "LORA_POLICIES"]
+__all__ = ["ArchitectureView", "LORA_POLICIES", "NativeCapture"]
+
+_ACTIVE_CAPTURES: set[int] = set()
 
 LORA_POLICIES = frozenset({"auto", "attention+mlp", "all-linear"})
 
@@ -101,6 +105,13 @@ class ArchitectureView:
         if token_ids.ndim != 2:
             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
         return self.text_module.embed_tokens(token_ids).astype(mx.float32)
+
+    def native_readout(self, h: Any) -> Any:
+        """Apply the installed norm and unembedding without altering native precision."""
+        normalized = self.text_module.norm(h)
+        if self._unembed_module is None:
+            return self.text_module.embed_tokens.as_linear(normalized)
+        return self._unembed_module(normalized)
 
     def masks(
         self,
@@ -593,3 +604,224 @@ def _linear_dimensions(module: Any) -> tuple[int, int]:
             raise ValueError(f"quantized linear has unsupported bits value {bits!r}")
         input_size = input_size * 32 // bits
     return output_size, input_size
+
+
+class NativeCapture(AbstractContextManager):
+    """Observe installed native forwards without replacing their arithmetic or masks.
+
+    Attention rows are diagnostic recomputations from native queries and cached keys.
+    Head contributions use the actual post-gate projection input. Neither diagnostic feeds
+    generation. Wrappers are scoped and restored on every exit.
+    """
+
+    def __init__(self, view, sink, *, layers, attention_blocks=(), injection=None,
+                 head_vectors=True):
+        self.view = view
+        self.model = view.model
+        self.sink = sink
+        self.layers = set(layers)
+        self.attention_blocks = set(attention_blocks)
+        self.injection = injection  # (post-block residual layer, absolute source, delta)
+        self.head_vectors = head_vectors
+        self._restore = []
+        self._active = False
+        self._injected = False
+        self._offset = 0
+        self._attention = {}
+        if not self.layers or any(
+            type(layer) is not int or not 0 <= layer <= view.num_layers for layer in self.layers
+        ):
+            raise ValueError("capture layers outside model")
+        if any(
+            not 0 <= b < view.num_layers or view.layer_kind(b) != "attention"
+            for b in self.attention_blocks
+        ):
+            raise ValueError("attention capture requires an attention block")
+        if injection is not None:
+            layer, source, delta = injection
+            if (
+                type(layer) is not int
+                or not 1 <= layer <= view.num_layers
+                or type(source) is not int
+                or source < 0
+                or len(delta) != view.hidden_size
+                or any(not math.isfinite(float(value)) for value in delta)
+            ):
+                raise ValueError("invalid injection layer, source or direction")
+
+    def __getattr__(self, name):
+        return getattr(self.model, name)
+
+    def __call__(self, ids, *args, **kwargs):
+        if not self._active:
+            raise RuntimeError("native capture must be entered before forwarding")
+        if len(ids.shape) != 2 or ids.shape[0] != 1:
+            raise ValueError("capture supports an unpadded batch of one")
+        cache = kwargs.get("cache", args[0] if args else None)
+        entries = [
+            cache[i]
+            for i in range(self.view.num_layers)
+            if cache is not None and self.view.layer_kind(i) == "attention"
+        ]
+        self._offset = int(entries[0].offset) if entries else 0
+        if any(int(c.offset) != self._offset for c in entries):
+            raise ValueError("attention caches disagree on the current position")
+        from mlx_lm.models.cache import KVCache
+
+        if any(type(c) is not KVCache for c in entries):
+            raise ValueError("capture requires ordinary, unquantized KV caches")
+        if self._offset == 0:
+            self._injected = False
+        if self.injection is not None and self._offset > self.injection[1] and not self._injected:
+            raise ValueError("injection source is already cached; rebuild from a fresh prefill")
+        logits = self.model(ids, *args, **kwargs)
+        self.sink.output(self._offset, ids[0].tolist(), logits)
+        return logits
+
+    def __enter__(self):
+        import mlx.core as mx
+        import mlx.nn as nn
+        from mlx_lm.models.qwen3_next import Qwen3NextAttention
+
+        if self._active or id(self.model) in _ACTIVE_CAPTURES:
+            raise RuntimeError("native capture cannot be nested")
+        self._active = True
+        _ACTIVE_CAPTURES.add(id(self.model))
+        owner = self
+
+        class Tap(nn.Module):
+            def __init__(self, inner, before=None, after=None):
+                super().__init__()
+                self.inner = inner
+                self.before = before
+                self.after = after
+
+            def __getattr__(self, name):
+                try:
+                    return super().__getattr__(name)
+                except AttributeError:
+                    if name == "inner":
+                        raise
+                    return getattr(super().__getattr__("inner"), name)
+
+            def __call__(self, *args, **kwargs):
+                if self.before is not None:
+                    self.before(args, kwargs)
+                out = self.inner(*args, **kwargs)
+                return self.after(args, kwargs, out) if self.after is not None else out
+
+        class ModelTap(Tap):
+            # Keep the original model visible to MLX parameter traversal / wired_limit.
+            def __call__(self, *args, **kwargs):
+                return owner(*args, **kwargs)
+
+        def replace(obj, key, value):
+            previous = obj[key] if isinstance(obj, list) else getattr(obj, key)
+            self._restore.append((obj, key, previous))
+            if isinstance(obj, list):
+                obj[key] = value
+            else:
+                setattr(obj, key, value)
+
+        def remember(block, name):
+            def after(args, kwargs, out):
+                owner._attention[block][name] = (args[0], out)
+                return out
+
+            return after
+
+        try:
+            for index, block in enumerate(self.view.blocks):
+                if index in self.attention_blocks:
+                    att = block.self_attn
+                    if not isinstance(att, Qwen3NextAttention):
+                        raise ValueError("head capture currently supports Qwen3NextAttention only")
+                    self._attention[index] = {"module": att, "projection": att.o_proj}
+                    for name in ("q_norm", "k_norm", "o_proj"):
+                        replace(att, name, Tap(getattr(att, name), after=remember(index, name)))
+
+                def before(args, kwargs, i=index):
+                    if i == 0 and 0 in owner.layers:
+                        owner.sink.residual(0, owner._offset, args[0])
+                    if i in owner.attention_blocks:
+                        info = owner._attention[i]
+                        info["mask"] = kwargs.get("mask", args[1] if len(args) > 1 else None)
+                        info["cache"] = kwargs.get("cache", args[2] if len(args) > 2 else None)
+                        if i not in owner.layers:
+                            owner.sink.residual(i, owner._offset, args[0])
+
+                def after(args, kwargs, out, i=index):
+                    if owner.injection is not None and i + 1 == owner.injection[0]:
+                        _, source, delta = owner.injection
+                        local = source - owner._offset
+                        if 0 <= local < out.shape[1]:
+                            direction = mx.array(delta).astype(out.dtype)
+                            # Zero is a strict no-op, preserving native rounding and sign bits.
+                            if bool(mx.any(direction != 0).item()):
+                                out = out.at[0, local].add(direction)
+                            owner._injected = True
+                    if i + 1 in owner.layers:
+                        owner.sink.residual(i + 1, owner._offset, out)
+                    if i in owner.attention_blocks:
+                        owner._emit_head(i, mx)
+                    return out
+
+                replace(self.view.text_module.layers, index, Tap(block, before, after))
+            return ModelTap(self.model)
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def _emit_head(self, block, mx):
+        info = self._attention[block]
+        att = info["module"]
+        q = info["q_norm"][1].transpose(0, 2, 1, 3)
+        q = att.rope(q, offset=self._offset)[:, :, -1:, :]
+        cache = info["cache"]
+        if cache is None:
+            keys = att.rope(info["k_norm"][1].transpose(0, 2, 1, 3))
+        else:
+            keys = cache.state[0]
+            if not hasattr(keys, "shape"):
+                raise ValueError("quantized or rotating KV caches are not supported for capture")
+        repeats = att.num_attention_heads // att.num_key_value_heads
+        scores = (
+            q.astype(mx.float32)
+            @ mx.repeat(keys, repeats, axis=1).astype(mx.float32).swapaxes(-1, -2)
+        ) * att.scale
+        mask = info["mask"]
+        if mask is not None and not isinstance(mask, str):
+            last = mask[..., -1:, :]
+            scores = (
+                mx.where(last, scores, -float("inf")) if last.dtype == mx.bool_ else scores + last
+            )
+        elif isinstance(mask, str) and mask != "causal":
+            raise ValueError(f"unsupported attention mask: {mask}")
+        weights = mx.softmax(scores, axis=-1)[0, :, 0, :]
+        gated, native_total = info["o_proj"]
+        last = gated[:, -1:, :]
+        contributions = []
+        if self.head_vectors:
+            for h in range(att.num_attention_heads):
+                isolated = mx.zeros_like(last)
+                begin, end = h * att.head_dim, (h + 1) * att.head_dim
+                isolated = isolated.at[..., begin:end].add(last[..., begin:end])
+                contributions.append(info["projection"](isolated)[0, 0])
+        target = self._offset + gated.shape[1] - 1
+        written = mx.stack(contributions) if self.head_vectors else None
+        self.sink.attention(block, target, weights, written, native_total[0, -1])
+        for key in ("q_norm", "k_norm", "o_proj", "cache", "mask"):
+            info.pop(key, None)
+
+    def __exit__(self, *exc):
+        for obj, key, old in reversed(self._restore):
+            if isinstance(obj, list):
+                obj[key] = old
+            else:
+                setattr(obj, key, old)
+        self._restore.clear()
+        self._attention.clear()
+        if self._active:
+            _ACTIVE_CAPTURES.discard(id(self.model))
+        self._active = False
+        return False

@@ -1,0 +1,64 @@
+{
+  "protocol_sha256": "1bd78a0af686558eeba06ea3f7d7c5903a8855dea4394ddf6cc90d6c5546dbbd",
+  "started": 1788756080.349843,
+  "model_snapshot": "/Users/daniel.tipton/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3",
+  "model_config_sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+  "band": [
+    [
+      12,
+      13
+    ],
+    [
+      16,
+      17
+    ],
+    [
+      19,
+      20
+    ],
+    [
+      23,
+      24
+    ],
+    [
+      27,
+      28
+    ]
+  ],
+  "cache_strategy": "none",
+  "episode": {
+    "task_id": "live-lens-fidelity-pointer_chain-0006-clean",
+    "turns": 5,
+    "tokens": 190,
+    "native_seconds": 15.618201041004795,
+    "captured_seconds": 17.25832933300262,
+    "forward_count": 200,
+    "forward_hashes_identical": true,
+    "turns_identical": true,
+    "window_transition_exercised": true,
+    "head_rows": 16000,
+    "head_sum_max_abs_error": 0.0625
+  },
+  "zero_injection": {
+    "max_abs_error": 0.0,
+    "hash_equal": true
+  },
+  "final_identity": {
+    "max_abs_error": 0.0,
+    "hash_equal": true
+  },
+  "record_reproducibility": {
+    "byte_identical": true,
+    "sha256": "94c713c14774fd5fa233bc10577bce45835ff6b2d01b4b11874c2643d1d92ea3"
+  },
+  "replay": {
+    "forwards": 2,
+    "max_abs_error": 0.0,
+    "argmax_equal": true,
+    "atol": 0.0,
+    "rtol": 0.0
+  },
+  "status": "pass",
+  "peak_memory_gib": 3.92996272072196,
+  "elapsed_seconds": 38.4343421459198
+}

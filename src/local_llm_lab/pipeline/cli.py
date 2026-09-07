@@ -709,6 +709,9 @@ def _log_fallbacks(runlog: RunLog, fallbacks: dict[str, int] | str) -> None:
 
 
 def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | None = None) -> None:
+    from local_llm_lab.pipeline.live_lens.preflight import training_preflight
+
+    launch = training_preflight(config['train'], load_model_spec(config['model']), iters=iters)
     output: Path = config["output"]
     adapters = output / "adapters"
     checkpoints = output / "checkpoints"
@@ -743,6 +746,8 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
         identity=_training_identity(config, effective),
     ) as runlog:
         try:
+            if launch is not None:
+                runlog.info('training launch preflight', **launch)
             cache_limit = _limit_metal_cache(config["train"])
             runlog.info("metal cache limit", bytes=cache_limit, gib=round(cache_limit / 2**30, 2))
             runlog.info("loading base", model=effective.hf_id)

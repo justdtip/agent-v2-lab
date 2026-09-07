@@ -1,0 +1,1641 @@
+diff --git a/configs/models/qwen35-4b.yaml b/configs/models/qwen35-4b.yaml
+index 8b5e456..e59d0bf 100644
+--- a/configs/models/qwen35-4b.yaml
++++ b/configs/models/qwen35-4b.yaml
+@@ -12,6 +12,13 @@ lora:
+   scale: 32.0
+   dropout: 0.0
+ train:
++  # Recorded working recipe on this host (Arm A, 2026-09-07). Other settings need
++  # measured launch evidence; these bounds are not a general memory guarantee.
++  launch_preflight:
++    chunk_size: 256
++    max_row_tokens: 2688
++    max_batch_size: 1
++    max_metal_cache_gib: 2.0
+   max_seq_length: 2688
+   batch_size: 2
+   grad_accumulation_steps: 2
+@@ -21,6 +28,8 @@ cache:
+   strategy: auto
+   equivalence_verified: null
+ probes:
++  # Residual pairs from the recorded band ruling; verify against installed block kinds.
++  live_lens_pairs: [[12, 13], [16, 17], [19, 20], [23, 24], [27, 28]]
+   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
+   # R18: native block execution during capture; float32 only on the J-lens tail.
+   capture_dtype: native
+diff --git a/src/local_llm_lab/arch.py b/src/local_llm_lab/arch.py
+index b368ab3..cd1a803 100644
+--- a/src/local_llm_lab/arch.py
++++ b/src/local_llm_lab/arch.py
+@@ -7,11 +7,15 @@ shortcut would make multi-token probe activations disagree with inference.
+ 
+ from __future__ import annotations
+ 
++import math
+ import sys
+ from collections.abc import Callable, Sequence
++from contextlib import AbstractContextManager
+ from typing import Any, Literal
+ 
+-__all__ = ["ArchitectureView", "LORA_POLICIES"]
++__all__ = ["ArchitectureView", "LORA_POLICIES", "NativeCapture"]
++
++_ACTIVE_CAPTURES: set[int] = set()
+ 
+ LORA_POLICIES = frozenset({"auto", "attention+mlp", "all-linear"})
+ 
+@@ -102,6 +106,13 @@ class ArchitectureView:
+             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
+         return self.text_module.embed_tokens(token_ids).astype(mx.float32)
+ 
++    def native_readout(self, h: Any) -> Any:
++        """Apply the installed norm and unembedding without altering native precision."""
++        normalized = self.text_module.norm(h)
++        if self._unembed_module is None:
++            return self.text_module.embed_tokens.as_linear(normalized)
++        return self._unembed_module(normalized)
++
+     def masks(
+         self,
+         h: Any,
+@@ -593,3 +604,224 @@ def _linear_dimensions(module: Any) -> tuple[int, int]:
+             raise ValueError(f"quantized linear has unsupported bits value {bits!r}")
+         input_size = input_size * 32 // bits
+     return output_size, input_size
++
++
++class NativeCapture(AbstractContextManager):
++    """Observe installed native forwards without replacing their arithmetic or masks.
++
++    Attention rows are diagnostic recomputations from native queries and cached keys.
++    Head contributions use the actual post-gate projection input. Neither diagnostic feeds
++    generation. Wrappers are scoped and restored on every exit.
++    """
++
++    def __init__(self, view, sink, *, layers, attention_blocks=(), injection=None,
++                 head_vectors=True):
++        self.view = view
++        self.model = view.model
++        self.sink = sink
++        self.layers = set(layers)
++        self.attention_blocks = set(attention_blocks)
++        self.injection = injection  # (post-block residual layer, absolute source, delta)
++        self.head_vectors = head_vectors
++        self._restore = []
++        self._active = False
++        self._injected = False
++        self._offset = 0
++        self._attention = {}
++        if not self.layers or any(
++            type(layer) is not int or not 0 <= layer <= view.num_layers for layer in self.layers
++        ):
++            raise ValueError("capture layers outside model")
++        if any(
++            not 0 <= b < view.num_layers or view.layer_kind(b) != "attention"
++            for b in self.attention_blocks
++        ):
++            raise ValueError("attention capture requires an attention block")
++        if injection is not None:
++            layer, source, delta = injection
++            if (
++                type(layer) is not int
++                or not 1 <= layer <= view.num_layers
++                or type(source) is not int
++                or source < 0
++                or len(delta) != view.hidden_size
++                or any(not math.isfinite(float(value)) for value in delta)
++            ):
++                raise ValueError("invalid injection layer, source or direction")
++
++    def __getattr__(self, name):
++        return getattr(self.model, name)
++
++    def __call__(self, ids, *args, **kwargs):
++        if not self._active:
++            raise RuntimeError("native capture must be entered before forwarding")
++        if len(ids.shape) != 2 or ids.shape[0] != 1:
++            raise ValueError("capture supports an unpadded batch of one")
++        cache = kwargs.get("cache", args[0] if args else None)
++        entries = [
++            cache[i]
++            for i in range(self.view.num_layers)
++            if cache is not None and self.view.layer_kind(i) == "attention"
++        ]
++        self._offset = int(entries[0].offset) if entries else 0
++        if any(int(c.offset) != self._offset for c in entries):
++            raise ValueError("attention caches disagree on the current position")
++        from mlx_lm.models.cache import KVCache
++
++        if any(type(c) is not KVCache for c in entries):
++            raise ValueError("capture requires ordinary, unquantized KV caches")
++        if self._offset == 0:
++            self._injected = False
++        if self.injection is not None and self._offset > self.injection[1] and not self._injected:
++            raise ValueError("injection source is already cached; rebuild from a fresh prefill")
++        logits = self.model(ids, *args, **kwargs)
++        self.sink.output(self._offset, ids[0].tolist(), logits)
++        return logits
++
++    def __enter__(self):
++        import mlx.core as mx
++        import mlx.nn as nn
++        from mlx_lm.models.qwen3_next import Qwen3NextAttention
++
++        if self._active or id(self.model) in _ACTIVE_CAPTURES:
++            raise RuntimeError("native capture cannot be nested")
++        self._active = True
++        _ACTIVE_CAPTURES.add(id(self.model))
++        owner = self
++
++        class Tap(nn.Module):
++            def __init__(self, inner, before=None, after=None):
++                super().__init__()
++                self.inner = inner
++                self.before = before
++                self.after = after
++
++            def __getattr__(self, name):
++                try:
++                    return super().__getattr__(name)
++                except AttributeError:
++                    if name == "inner":
++                        raise
++                    return getattr(super().__getattr__("inner"), name)
++
++            def __call__(self, *args, **kwargs):
++                if self.before is not None:
++                    self.before(args, kwargs)
++                out = self.inner(*args, **kwargs)
++                return self.after(args, kwargs, out) if self.after is not None else out
++
++        class ModelTap(Tap):
++            # Keep the original model visible to MLX parameter traversal / wired_limit.
++            def __call__(self, *args, **kwargs):
++                return owner(*args, **kwargs)
++
++        def replace(obj, key, value):
++            previous = obj[key] if isinstance(obj, list) else getattr(obj, key)
++            self._restore.append((obj, key, previous))
++            if isinstance(obj, list):
++                obj[key] = value
++            else:
++                setattr(obj, key, value)
++
++        def remember(block, name):
++            def after(args, kwargs, out):
++                owner._attention[block][name] = (args[0], out)
++                return out
++
++            return after
++
++        try:
++            for index, block in enumerate(self.view.blocks):
++                if index in self.attention_blocks:
++                    att = block.self_attn
++                    if not isinstance(att, Qwen3NextAttention):
++                        raise ValueError("head capture currently supports Qwen3NextAttention only")
++                    self._attention[index] = {"module": att, "projection": att.o_proj}
++                    for name in ("q_norm", "k_norm", "o_proj"):
++                        replace(att, name, Tap(getattr(att, name), after=remember(index, name)))
++
++                def before(args, kwargs, i=index):
++                    if i == 0 and 0 in owner.layers:
++                        owner.sink.residual(0, owner._offset, args[0])
++                    if i in owner.attention_blocks:
++                        info = owner._attention[i]
++                        info["mask"] = kwargs.get("mask", args[1] if len(args) > 1 else None)
++                        info["cache"] = kwargs.get("cache", args[2] if len(args) > 2 else None)
++                        if i not in owner.layers:
++                            owner.sink.residual(i, owner._offset, args[0])
++
++                def after(args, kwargs, out, i=index):
++                    if owner.injection is not None and i + 1 == owner.injection[0]:
++                        _, source, delta = owner.injection
++                        local = source - owner._offset
++                        if 0 <= local < out.shape[1]:
++                            direction = mx.array(delta).astype(out.dtype)
++                            # Zero is a strict no-op, preserving native rounding and sign bits.
++                            if bool(mx.any(direction != 0).item()):
++                                out = out.at[0, local].add(direction)
++                            owner._injected = True
++                    if i + 1 in owner.layers:
++                        owner.sink.residual(i + 1, owner._offset, out)
++                    if i in owner.attention_blocks:
++                        owner._emit_head(i, mx)
++                    return out
++
++                replace(self.view.text_module.layers, index, Tap(block, before, after))
++            return ModelTap(self.model)
++        except BaseException:
++            self.__exit__(None, None, None)
++            raise
++
++    def _emit_head(self, block, mx):
++        info = self._attention[block]
++        att = info["module"]
++        q = info["q_norm"][1].transpose(0, 2, 1, 3)
++        q = att.rope(q, offset=self._offset)[:, :, -1:, :]
++        cache = info["cache"]
++        if cache is None:
++            keys = att.rope(info["k_norm"][1].transpose(0, 2, 1, 3))
++        else:
++            keys = cache.state[0]
++            if not hasattr(keys, "shape"):
++                raise ValueError("quantized or rotating KV caches are not supported for capture")
++        repeats = att.num_attention_heads // att.num_key_value_heads
++        scores = (
++            q.astype(mx.float32)
++            @ mx.repeat(keys, repeats, axis=1).astype(mx.float32).swapaxes(-1, -2)
++        ) * att.scale
++        mask = info["mask"]
++        if mask is not None and not isinstance(mask, str):
++            last = mask[..., -1:, :]
++            scores = (
++                mx.where(last, scores, -float("inf")) if last.dtype == mx.bool_ else scores + last
++            )
++        elif isinstance(mask, str) and mask != "causal":
++            raise ValueError(f"unsupported attention mask: {mask}")
++        weights = mx.softmax(scores, axis=-1)[0, :, 0, :]
++        gated, native_total = info["o_proj"]
++        last = gated[:, -1:, :]
++        contributions = []
++        if self.head_vectors:
++            for h in range(att.num_attention_heads):
++                isolated = mx.zeros_like(last)
++                begin, end = h * att.head_dim, (h + 1) * att.head_dim
++                isolated = isolated.at[..., begin:end].add(last[..., begin:end])
++                contributions.append(info["projection"](isolated)[0, 0])
++        target = self._offset + gated.shape[1] - 1
++        written = mx.stack(contributions) if self.head_vectors else None
++        self.sink.attention(block, target, weights, written, native_total[0, -1])
++        for key in ("q_norm", "k_norm", "o_proj", "cache", "mask"):
++            info.pop(key, None)
++
++    def __exit__(self, *exc):
++        for obj, key, old in reversed(self._restore):
++            if isinstance(obj, list):
++                obj[key] = old
++            else:
++                setattr(obj, key, old)
++        self._restore.clear()
++        self._attention.clear()
++        if self._active:
++            _ACTIVE_CAPTURES.discard(id(self.model))
++        self._active = False
++        return False
+diff --git a/src/local_llm_lab/pipeline/cli.py b/src/local_llm_lab/pipeline/cli.py
+index bdc53b3..b7170c4 100644
+--- a/src/local_llm_lab/pipeline/cli.py
++++ b/src/local_llm_lab/pipeline/cli.py
+@@ -709,6 +709,9 @@ def _log_fallbacks(runlog: RunLog, fallbacks: dict[str, int] | str) -> None:
+ 
+ 
+ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | None = None) -> None:
++    from local_llm_lab.pipeline.live_lens.preflight import training_preflight
++
++    launch = training_preflight(config['train'], load_model_spec(config['model']), iters=iters)
+     output: Path = config["output"]
+     adapters = output / "adapters"
+     checkpoints = output / "checkpoints"
+@@ -743,6 +746,8 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+         identity=_training_identity(config, effective),
+     ) as runlog:
+         try:
++            if launch is not None:
++                runlog.info('training launch preflight', **launch)
+             cache_limit = _limit_metal_cache(config["train"])
+             runlog.info("metal cache limit", bytes=cache_limit, gib=round(cache_limit / 2**30, 2))
+             runlog.info("loading base", model=effective.hf_id)
+diff --git a/src/local_llm_lab/pipeline/runner.py b/src/local_llm_lab/pipeline/runner.py
+index 63317b6..cb87b1e 100644
+--- a/src/local_llm_lab/pipeline/runner.py
++++ b/src/local_llm_lab/pipeline/runner.py
+@@ -270,6 +270,7 @@ def generate_turn_with_count(
+     turn_cache: TurnCacheBase | None = None,
+     *,
+     spec: ModelSpec,
++    capture: Any | None = None,
+ ) -> tuple[str, int, int]:
+     """Generate one assistant turn, stopping as soon as the tool call closes.
+ 
+@@ -287,6 +288,8 @@ def generate_turn_with_count(
+     kwargs: dict[str, Any] = {}
+     prompt_input: Any = prompt
+     prompt_ids: list[int] = []
++    if capture is not None and turn_cache is not None:
++        raise ValueError('capture requires the resolved no-reuse cache strategy')
+     if turn_cache is not None:
+         prompt_ids = list(tokenizer.encode(prompt))
+         prompt_input = mx.array(turn_cache.prepare(prompt_ids))
+@@ -298,19 +301,32 @@ def generate_turn_with_count(
+         max_tokens=spec.chat.max_think_tokens,
+     )
+ 
+-    for response in stream_generate(
+-        model, tokenizer, prompt=prompt_input, max_tokens=max_tokens, sampler=sampler, **kwargs
+-    ):
+-        ids.append(response.token)
+-        decoded = tokenizer.decode(ids)
+-        thinking.update(ids, decoded, tokenizer)
+-        if response.token in stop_ids:
+-            break
+-        piece = response.text or ""
+-        if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
+-            thinking.decoded_text(ids, tokenizer)
+-        ):
+-            break
++    context = (
++        capture.generation(model, tokenizer, prompt, turn_cache=turn_cache)
++        if capture is not None else contextlib.nullcontext(model)
++    )
++    with context as generation_model:
++        stream = stream_generate(
++            generation_model, tokenizer, prompt=prompt_input,
++            max_tokens=max_tokens, sampler=sampler, **kwargs
++        )
++        try:
++            for response in stream:
++                ids.append(response.token)
++                if capture is not None:
++                    capture.emitted(response.token)
++                decoded = tokenizer.decode(ids)
++                thinking.update(ids, decoded, tokenizer)
++                if response.token in stop_ids:
++                    break
++                piece = response.text or ""
++                if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
++                    thinking.decoded_text(ids, tokenizer)
++                ):
++                    break
++        finally:
++            if capture is not None and callable(getattr(stream, 'close', None)):
++                stream.close()
+     if turn_cache is not None:
+         turn_cache.commit(prompt_ids, ids)
+     think_tokens = thinking.tokens if thinking.started else 0
+@@ -380,6 +396,7 @@ def run_task(
+     faults: tuple[Fault, ...] | None = None,
+     transcript: Transcript | None = None,
+     use_cache: bool = True,
++    capture: Any | None = None,
+ ) -> Trajectory:
+     """Drive one task end to end, mirroring every step to the transcript.
+ 
+@@ -433,8 +450,14 @@ def run_task(
+             keep_last=keep_last,
+             generation=True,
+         )
++        capture_kwargs = {}
++        if capture is not None:
++            capture.set_context(task_id=task.task_id, step=index, keep_last=keep_last,
++                                messages=window_messages(messages, keep_last=keep_last))
++            capture_kwargs['capture'] = capture
+         raw, n_tokens, think_tokens = generate_turn_with_count(
+-            model, tokenizer, prompt, sampler, max_tokens, turn_cache, spec=spec
++            model, tokenizer, prompt, sampler, max_tokens, turn_cache,
++            spec=spec, **capture_kwargs
+         )
+         trajectory.turns += 1
+         trajectory.generated_tokens += n_tokens
+diff --git a/tests/test_models.py b/tests/test_models.py
+index 173a9f4..cbb2393 100644
+--- a/tests/test_models.py
++++ b/tests/test_models.py
+@@ -42,6 +42,12 @@ from local_llm_lab.models import load_model_spec
+                 "grad_accumulation_steps": 2,
+                 "learning_rate": 3.0e-5,
+                 "grad_checkpoint": True,
++                "launch_preflight": {
++                    "chunk_size": 256,
++                    "max_row_tokens": 2688,
++                    "max_batch_size": 1,
++                    "max_metal_cache_gib": 2.0,
++                },
+             },
+         ),
+         (
+diff --git a/tests/test_runner.py b/tests/test_runner.py
+index e486fee..1b42225 100644
+--- a/tests/test_runner.py
++++ b/tests/test_runner.py
+@@ -707,3 +707,37 @@ def test_run_task_uses_resolved_cache_factory_and_records_model(monkeypatch) ->
+ 
+     assert factory_calls == [(model, view, resolved, 4)]
+     assert trajectory.model == model_payload
++
++
++def test_capture_uses_native_stream_and_closes_it_before_restoring(monkeypatch):
++    from contextlib import contextmanager
++    events = []
++    native, wrapped = object(), object()
++    pieces = ['note\n```json\n', '{"name":"finish","arguments":{"answer":"x"}}', '\n```', 'JUNK']
++
++    class Capture:
++        @contextmanager
++        def generation(self, model, tokenizer, prompt, *, turn_cache):
++            assert model is native and turn_cache is None
++            events.append('enter')
++            try:
++                yield wrapped
++            finally:
++                events.append('restore')
++
++        def emitted(self, token):
++            events.append(('emitted', token))
++
++    def stream(model, tokenizer, **kwargs):
++        assert model is wrapped
++        try:
++            for i, piece in enumerate(pieces):
++                yield _FakeResponse(i, piece)
++        finally:
++            events.append('close')
++
++    monkeypatch.setitem(sys.modules, 'mlx_lm', SimpleNamespace(stream_generate=stream))
++    text, count, _ = generate_turn_with_count(native, _FakeTokenizer(pieces), 'prompt', None, 20,
++                                             spec=load_model_spec('qwen35-4b'), capture=Capture())
++    assert count == 3 and 'JUNK' not in text
++    assert events == ['enter', ('emitted', 0), ('emitted', 1), ('emitted', 2), 'close', 'restore']
+diff --git a/tests/test_live_lens.py b/tests/test_live_lens.py
+new file mode 100644
+index 0000000..9bca8d7
+--- /dev/null
++++ b/tests/test_live_lens.py
+@@ -0,0 +1,130 @@
++"""Instrument contracts: Director's 2026-09-07 population and refit rulings.
++
++Selection evidence: research/records/WP12-BROADCAST-HEADS-2026-09-06/out/selection_orth.json.
++These tests do not load MLX or any model checkpoint.
++"""
++
++import hashlib
++import json
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++from local_llm_lab.pipeline.live_lens.instruments import FrozenPopulation, LensMaps, read_band
++from local_llm_lab.pipeline.live_lens.records import FutureRanks, transport_overlap
++from local_llm_lab.pipeline.live_lens.validation import layer_verdict
++
++ROOT = Path(__file__).resolve().parents[1]
++SELECTION = ROOT / "research/records/WP12-BROADCAST-HEADS-2026-09-06/out/selection_orth.json"
++
++
++def test_population_is_frozen_from_the_record_and_tampering_fails(tmp_path):
++    population = FrozenPopulation.from_selection(SELECTION, (11, 15, 19, 23, 27))
++    assert len(population.primary) == 23
++    assert len(population.sensitivity) == 26
++    assert set(population.sensitivity) - set(population.primary) == {(27, 15), (19, 4), (27, 13)}
++    assert population.source_sha256 == hashlib.sha256(SELECTION.read_bytes()).hexdigest()
++    path = tmp_path / "frozen.json"
++    population.write(path)
++    assert FrozenPopulation.read(path) == population
++    with pytest.raises(FileExistsError):
++        population.write(path)
++    obj = json.loads(path.read_text())
++    obj["primary"][0][1] = 99
++    path.write_text(json.dumps(obj))
++    with pytest.raises(ValueError, match="hash"):
++        FrozenPopulation.read(path)
++
++
++def test_band_comes_from_registry_and_is_verified_against_real_layer_kinds():
++    kinds = ["attention" if (i + 1) % 4 == 0 else "linear_attention" for i in range(32)]
++    band = read_band(ROOT / "configs/models/qwen35-4b.yaml", kinds)
++    assert band == ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))
++    kinds[11] = "linear_attention"
++    with pytest.raises(ValueError, match="opposite"):
++        read_band(ROOT / "configs/models/qwen35-4b.yaml", kinds)
++
++
++def test_lens_orientation_identity_and_hash_verification(tmp_path):
++    path = tmp_path / "lens.npz"
++    np.savez(path, J0=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float16))
++    sha = hashlib.sha256(path.read_bytes()).hexdigest()
++    lens = LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=2)
++    np.testing.assert_array_equal(lens.apply(np.array([5.0, 6.0]), 1), [17.0, 39.0])
++    np.testing.assert_array_equal(lens.apply(np.array([5.0, 6.0]), 2), [5.0, 6.0])
++    with pytest.raises(ValueError, match="hash"):
++        LensMaps.load(path, expected_sha256="0" * 64, hidden_size=2, num_layers=2)
++
++
++def test_future_ranks_use_source_positions_and_censor_unseen_future():
++    ring = FutureRanks(horizons=(1, 4, 8), capacity=16)
++    # Residual at absolute position 9 predicts the token at position 10.
++    ring.capture(9, {20: np.array([0.1, 0.2, 0.7])})
++    assert ring.observe(10, 0) == [
++        {"position": 9, "layer": 20, "horizon": 1, "token_id": 0, "rank": 3, "probability": 0.1}
++    ]
++    assert ring.observe(13, 1)[0]["rank"] == 2
++    assert ring.observe(17, 2)[0]["rank"] == 1
++    ring.reset()
++    assert ring.observe(18, 0) == []
++    with pytest.raises(ValueError):
++        FutureRanks(horizons=(8,), capacity=8)
++
++
++def test_ranks_have_explicit_competition_ties_and_reject_nonprobabilities():
++    ring = FutureRanks()
++    ring.capture(0, {20: np.array([0.5, 0.5])})
++    assert ring.observe(1, 1)[0]["rank"] == 1
++    with pytest.raises(ValueError):
++        ring.capture(1, {20: np.array([np.nan, 1.0])})
++
++
++def test_transport_excludes_self_and_retains_mass_instead_of_renormalizing():
++    # Half the mass is self-attention. Prior-source overlap is 1 and 1/2.
++    result = transport_overlap(
++        [1, 2],
++        [[1, 2], [2, 3], [1, 2]],
++        [0.2, 0.3, 0.5],
++        source_positions=[0, 1, 2],
++        target_position=2,
++    )
++    assert result["score"] == pytest.approx(0.35)
++    assert result["past_mass"] == pytest.approx(0.5)
++    assert result["conditional_overlap"] == pytest.approx(0.7)
++    assert result["source_positions"] == [0, 1]
++    assert (
++        transport_overlap([1], [[1]], [1.0], source_positions=[2], target_position=2)[
++            "conditional_overlap"
++        ]
++        is None
++    )
++
++
++def test_refit_is_only_triggered_by_a_failed_map_check():
++    assert layer_verdict("pass", "pass", 999.0) == {
++        "outcome": "readable",
++        "refit_required": False,
++        "map_check": "pass",
++        "concept_check": "pass",
++        "output_divergence": 999.0,
++    }
++    assert layer_verdict("pass", "fail", 0.0)["outcome"] == "not readable"
++    assert layer_verdict("pass", "fail", 0.0)["refit_required"] is False
++    assert layer_verdict("fail", "pass", 0.0)["refit_required"] is True
++    assert layer_verdict("inconclusive", "pass", 0.0)["outcome"] == "inconclusive"
++    assert layer_verdict("inconclusive", "pass", 0.0)["refit_required"] is False
++
++
++def test_capture_record_is_deterministic_and_detects_tampering(tmp_path):
++    from local_llm_lab.pipeline.live_lens.session import RecordWriter, read_record
++
++    paths = [tmp_path / name for name in ("one.jsonl", "two.jsonl")]
++    for path in paths:
++        with RecordWriter(path, {"model_sha256": "a" * 64}) as write:
++            write({"kind": "emitted", "position": 9, "token_id": 1})
++    assert paths[0].read_bytes() == paths[1].read_bytes()
++    assert read_record(paths[0])[1]["position"] == 9
++    paths[0].write_text(paths[0].read_text().replace('"position":9', '"position":8'))
++    with pytest.raises(ValueError, match="hash"):
++        read_record(paths[0])
+diff --git a/tests/test_live_lens_native.py b/tests/test_live_lens_native.py
+new file mode 100644
+index 0000000..6ec9b9a
+--- /dev/null
++++ b/tests/test_live_lens_native.py
+@@ -0,0 +1,221 @@
++"""Native arithmetic tests use a tiny installed Qwen3.5 model, never a checkpoint.
++
++These are implementation tests, not the research checkpoint's acceptance gate.
++"""
++
++import mlx.core as mx
++import numpy as np
++import pytest
++from mlx_lm.models.qwen3_5 import TextModel, TextModelArgs
++
++from local_llm_lab.arch import ArchitectureView, NativeCapture
++
++
++def tiny_model():
++    mx.random.seed(37)
++    # The installed Metal recurrence tiles keys in groups of 32; smaller keys are invalid.
++    args = TextModelArgs(
++        model_type="qwen3_5",
++        hidden_size=64,
++        intermediate_size=128,
++        num_hidden_layers=4,
++        num_attention_heads=2,
++        num_key_value_heads=1,
++        head_dim=64,
++        vocab_size=32,
++        linear_num_value_heads=2,
++        linear_num_key_heads=1,
++        linear_key_head_dim=32,
++        linear_value_head_dim=32,
++        linear_conv_kernel_dim=4,
++        tie_word_embeddings=True,
++    )
++    model = TextModel(args)
++    model.eval()
++    return model
++
++
++class Sink:
++    def __init__(self):
++        self.residuals = []
++        self.heads = []
++        self.logits = []
++
++    def residual(self, layer, offset, h):
++        self.residuals.append((layer, offset, np.array(h)))
++
++    def attention(self, block, target, weights, written, total):
++        self.heads.append((block, target, np.array(weights), np.array(written), np.array(total)))
++
++    def output(self, offset, ids, logits):
++        self.logits.append((offset, list(ids), np.array(logits)))
++
++
++def test_native_observer_preserves_uncached_and_cached_logits_and_restores_modules():
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    originals = list(model.layers)
++    ids = mx.array([[1, 2, 3, 4]])
++    native_cache = model.make_cache()
++    native = [
++        np.array(model(ids, cache=native_cache)),
++        np.array(model(mx.array([[5]]), cache=native_cache)),
++    ]
++    sink = Sink()
++    with NativeCapture(view, sink, layers=(3, 4), attention_blocks=(3,)) as captured:
++        cache = model.make_cache()
++        got = [
++            np.array(captured(ids, cache=cache)),
++            np.array(captured(mx.array([[5]]), cache=cache)),
++        ]
++        for a, b in zip(native, got, strict=True):
++            np.testing.assert_array_equal(a, b)
++    assert all(a is b for a, b in zip(originals, model.layers, strict=True))
++    assert [entry[0] for entry in sink.logits] == [0, 4]
++    for _, target, weights, written, total in sink.heads:
++        assert weights.shape == (2, target + 1)
++        np.testing.assert_allclose(weights.sum(-1), 1.0, atol=1e-6)
++        np.testing.assert_allclose(written.sum(0), total, atol=1e-6)
++    assert {layer for layer, _, _ in sink.residuals} == {3, 4}
++
++
++def test_zero_injection_is_exact_and_nonzero_source_changes_later_positions():
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    ids = mx.array([[1, 2, 3, 4]])
++    baseline = np.array(model(ids))
++    with NativeCapture(
++        view, Sink(), layers=(2, 4), injection=(2, 1, np.zeros(64, dtype=np.float32))
++    ) as wrapped:
++        np.testing.assert_array_equal(np.array(wrapped(ids)), baseline)
++    direction = np.arange(64, dtype=np.float32) / 64
++    with NativeCapture(view, Sink(), layers=(2, 4), injection=(2, 1, direction)) as wrapped:
++        changed = np.array(wrapped(ids))
++    np.testing.assert_array_equal(changed[:, 0], baseline[:, 0])
++    assert not np.array_equal(changed[:, -1], baseline[:, -1])
++
++
++def test_native_wrappers_restore_even_when_a_sink_raises():
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    blocks = list(model.layers)
++    sink = Sink()
++
++    def fail(*args):
++        raise RuntimeError("capture writer failed")
++
++    sink.residual = fail
++    with (
++        pytest.raises(RuntimeError, match="capture writer failed"),
++        NativeCapture(view, sink, layers=(3,)) as wrapped,
++    ):
++        wrapped(mx.array([[1, 2]]))
++    assert all(a is b for a, b in zip(blocks, model.layers, strict=True))
++
++
++def test_session_handles_lookahead_and_replays_recorded_forward_chunks(tmp_path):
++    from types import SimpleNamespace
++
++    from local_llm_lab.pipeline.live_lens.instruments import LensMaps
++    from local_llm_lab.pipeline.live_lens.session import CaptureSession, LensReadout, replay
++
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    reader = LensReadout(view, LensMaps({3: np.eye(64)}, "fixture", 64, 4))
++    rows = []
++    session = CaptureSession(
++        view, reader, rows.append, layers=(3, 4), attention_blocks=(3,), top_k=3, audit_modulus=1
++    )
++    tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kw: [1, 2, 3])
++    with session.generation(model, tokenizer, "fixture", turn_cache=None) as captured:
++        cache = model.make_cache()
++        first = captured(mx.array([[1, 2, 3]]), cache=cache)
++        native_next = int(mx.argmax(first[0, -1]).item())
++        captured(mx.array([[native_next]]), cache=cache)  # stream_generate lookahead
++        session.emitted(native_next)
++    rank_rows = [r for r in rows if r["kind"] == "rank"]
++    assert [(r["position"], r["horizon"]) for r in rank_rows] == [(2, 1), (2, 1)]
++    emitted = [r for r in rows if r["kind"] == "emitted"]
++    assert emitted[0]["position"] == 3
++    assert emitted[0]["token_id"] == native_next
++    assert all(r["rank"] == 1 for r in rank_rows if r["layer"] == 4)
++    assert replay(view, rows, atol=0.0, rtol=0.0)["max_abs_error"] == 0.0
++    for row in (r for r in rows if r["kind"] == "head" and "audit" in r):
++        from local_llm_lab.pipeline.live_lens.records import transport_overlap
++
++        audit = row["audit"]
++        recomputed = transport_overlap(
++            row["written_top"],
++            audit["source_top"],
++            audit["attention"],
++            source_positions=audit["positions"],
++            target_position=row["position"],
++        )
++        assert recomputed["score"] == row["score"]
++    with session.generation(model, tokenizer, "fixture", turn_cache=None):
++        assert not session.ranks.buffer
++
++
++def test_final_layer_lens_readout_preserves_native_precision():
++    from local_llm_lab.pipeline.live_lens.instruments import LensMaps
++    from local_llm_lab.pipeline.live_lens.session import LensReadout
++
++    for dtype in (mx.float32, mx.bfloat16):
++        model = tiny_model()
++        model.set_dtype(dtype)
++        view = ArchitectureView.from_model(model)
++        sink = Sink()
++        # Keep the native dtype rather than converting through NumPy (which lacks bf16).
++        values = {}
++        sink.residual = lambda layer, offset, h, values=values: values.update({layer: h})
++        sink.output = lambda *args: None
++        reader = LensReadout(view, LensMaps({}, "identity", 64, 4))
++        with NativeCapture(view, sink, layers=(4,)) as wrapped:
++            logits = wrapped(mx.array([[1, 2, 3]]))
++        # Preserve batch shape too: matrix-vector and matrix-matrix reductions can round
++        # differently even when norm, unembedding, and residual dtype are identical.
++        np.testing.assert_array_equal(
++            np.array(reader.logits(values[4], 4)), np.array(logits.astype(mx.float32))
++        )
++
++
++def test_two_capture_owners_cannot_wrap_the_same_model():
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    with (
++        NativeCapture(view, Sink(), layers=(4,)),
++        pytest.raises(RuntimeError, match="nested"),
++        NativeCapture(view, Sink(), layers=(4,)),
++    ):
++        pass
++    with NativeCapture(view, Sink(), layers=(4,)) as wrapped:
++        wrapped(mx.array([[1]]))
++
++
++def test_injection_rejects_an_already_cached_source_and_accepts_rebuilt_state():
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    cache = model.make_cache()
++    model(mx.array([[1, 2, 3]]), cache=cache)
++    with NativeCapture(view, Sink(), layers=(4,), injection=(2, 1, np.zeros(64))) as wrapped:
++        with pytest.raises(ValueError, match="fresh prefill"):
++            wrapped(mx.array([[4]]), cache=cache)
++        # Rebuild both recurrent and attention states; matching zero intervention is exact.
++        rebuilt = model.make_cache()
++        actual = np.array(wrapped(mx.array([[1, 2, 3]]), cache=rebuilt))
++    expected = np.array(model(mx.array([[1, 2, 3]]), cache=model.make_cache()))
++    np.testing.assert_array_equal(actual, expected)
++
++
++def test_attention_only_mode_skips_head_projection_but_preserves_native_logits():
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    ids = mx.array([[1, 2, 3]])
++    expected = np.array(model(ids))
++    sink = Sink()
++    rows = []
++    sink.attention = lambda block, target, weights, written, total: rows.append(written)
++    with NativeCapture(view, sink, layers=(3, 4), attention_blocks=(3,),
++                       head_vectors=False) as wrapped:
++        np.testing.assert_array_equal(np.array(wrapped(ids)), expected)
++    assert rows == [None]
+diff --git a/tests/test_training_preflight.py b/tests/test_training_preflight.py
+new file mode 100644
+index 0000000..2d54f98
+--- /dev/null
++++ b/tests/test_training_preflight.py
+@@ -0,0 +1,74 @@
++"""Launch checks exercise the recorded hybrid recipe without importing MLX.
++
++Recipe evidence: configs/agent_v2e_qwen35_4b.yaml and the 2026-09-06 training log.
++"""
++
++from __future__ import annotations
++
++import copy
++
++import pytest
++
++from local_llm_lab.models import load_model_spec
++from local_llm_lab.pipeline.live_lens.preflight import training_preflight
++
++
++def recipe():
++    return {
++        "gated_delta_mode": "chunkwise",
++        "gated_delta_chunk": 256,
++        "max_seq_length": 2688,
++        "batch_size": 1,
++        "grad_accumulation_steps": 4,
++        "iters": 1200,
++        "iters_unit": "batches",
++        "metal_cache_gib": 2.0,
++    }
++
++
++@pytest.mark.parametrize(
++    ("change", "message"),
++    [
++        ({"gated_delta_mode": None}, "chunkwise"),
++        ({"gated_delta_mode": "checkpointed"}, "chunkwise"),
++        ({"gated_delta_chunk": 64}, "verified envelope"),
++        ({"max_seq_length": 4096}, "verified envelope"),
++        ({"batch_size": 2}, "verified envelope"),
++        ({"iters_unit": "optimizer_steps"}, "batches"),
++        ({"iters_unit": None}, "batches"),
++        ({"iters": 1201}, "unapplied"),
++        ({"metal_cache_gib": float("nan")}, "cache"),
++        ({"metal_cache_gib": float("inf")}, "cache"),
++        ({"metal_cache_gib": 0}, "cache"),
++        ({"metal_cache_gib": 3}, "cache"),
++    ],
++)
++def test_launch_refusals(change, message):
++    with pytest.raises(ValueError, match=message):
++        training_preflight(recipe() | change, load_model_spec("qwen35-4b"))
++
++
++def test_preflight_reports_actual_batches_rows_and_optimizer_updates():
++    config = recipe()
++    original = copy.deepcopy(config)
++    result = training_preflight(config, load_model_spec("qwen35-4b"))
++    assert result["batches"] == result["rows"] == 1200
++    assert result["optimizer_updates"] == 300
++    assert result["metal_cache_bytes"] == 2 * 2**30
++    assert config == original
++    assert training_preflight({}, load_model_spec("qwen25-coder-3b")) is None
++
++
++def test_invalid_recipe_fails_before_trainer_import_or_output_write(monkeypatch, tmp_path):
++    from local_llm_lab.pipeline import cli
++
++    events = []
++    monkeypatch.setattr(cli, "_load_training_entry", lambda: events.append("trainer imported"))
++    config = {
++        "model": "qwen35-4b",
++        "train": recipe() | {"gated_delta_mode": None},
++        "output": tmp_path / "not_created",
++    }
++    with pytest.raises(ValueError, match="chunkwise"):
++        cli.stage_train(config, iters=None)
++    assert not events and not config["output"].exists()
+diff --git a/src/local_llm_lab/pipeline/live_lens/__init__.py b/src/local_llm_lab/pipeline/live_lens/__init__.py
+new file mode 100644
+index 0000000..ac0427c
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/live_lens/__init__.py
+@@ -0,0 +1 @@
++"""Live lens instrumentation. Importing the package does not initialize MLX."""
+diff --git a/src/local_llm_lab/pipeline/live_lens/instruments.py b/src/local_llm_lab/pipeline/live_lens/instruments.py
+new file mode 100644
+index 0000000..124fc53
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/live_lens/instruments.py
+@@ -0,0 +1,137 @@
++"""Immutable, hash-identified instruments; no model runtime is imported here."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from dataclasses import asdict, dataclass
++from pathlib import Path
++
++import numpy as np
++import yaml
++
++
++def file_sha256(path: Path) -> str:
++    with path.open("rb") as stream:
++        return hashlib.file_digest(stream, "sha256").hexdigest()
++
++
++def _digest(value: dict) -> str:
++    return hashlib.sha256(
++        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
++    ).hexdigest()
++
++
++@dataclass(frozen=True)
++class FrozenPopulation:
++    source_sha256: str
++    primary: tuple[tuple[int, int], ...]
++    sensitivity: tuple[tuple[int, int], ...]
++    floor: float = 0.1
++
++    @classmethod
++    def from_selection(cls, path: Path, blocks: tuple[int, ...]) -> FrozenPopulation:
++        raw = path.read_bytes()
++        rows = [r for r in json.loads(raw)["selected_attention"] if r["block"] in blocks]
++        if any(
++            r["layer_written"] != r["block"] + 1
++            or not 0 <= r["head"] < 16
++            or not np.isfinite(r["J_mrr"])
++            for r in rows
++        ):
++            raise ValueError("invalid selection row")
++        secondary = tuple(sorted((r["block"], r["head"]) for r in rows))
++        primary = tuple(sorted((r["block"], r["head"]) for r in rows if r["J_mrr"] >= 0.1))
++        if len(set(secondary)) != len(secondary):
++            raise ValueError("duplicate head in selection")
++        if len(primary) != 23 or len(secondary) != 26:
++            raise ValueError("record does not yield the ruled 23 primary / 26 sensitivity heads")
++        return cls(hashlib.sha256(raw).hexdigest(), primary, secondary)
++
++    @property
++    def sha256(self) -> str:
++        return _digest(asdict(self))
++
++    def write(self, path: Path) -> None:
++        """Exclusive create: never replace membership after any results have been read."""
++        payload = asdict(self) | {"population_sha256": self.sha256, "schema_version": 1}
++        with path.open("x", encoding="utf-8") as stream:
++            json.dump(payload, stream, indent=2, allow_nan=False)
++            stream.write("\n")
++
++    @classmethod
++    def read(cls, path: Path) -> FrozenPopulation:
++        data = json.loads(path.read_text())
++        population = cls(
++            data["source_sha256"],
++            tuple(map(tuple, data["primary"])),
++            tuple(map(tuple, data["sensitivity"])),
++            data["floor"],
++        )
++        if data["schema_version"] != 1 or population.sha256 != data["population_sha256"]:
++            raise ValueError("population manifest hash mismatch")
++        if (
++            population.floor != 0.1
++            or len(population.primary) != 23
++            or len(population.sensitivity) != 26
++            or not set(population.primary) <= set(population.sensitivity)
++        ):
++            raise ValueError("population differs from the ruled selection")
++        return population
++
++
++def read_band(registry_path: Path, layer_kinds: list[str]) -> tuple[tuple[int, int], ...]:
++    data = yaml.safe_load(registry_path.read_text())
++    pairs = tuple(tuple(pair) for pair in data["probes"]["live_lens_pairs"])
++    if not pairs or len({p for pair in pairs for p in pair}) != 2 * len(pairs):
++        raise ValueError("band pairs must be nonempty and disjoint")
++    for pair in pairs:
++        if len(pair) != 2 or any(
++            type(p) is not int or not 1 <= p <= len(layer_kinds) for p in pair
++        ):
++            raise ValueError("invalid residual indices in registry band")
++        if abs(pair[1] - pair[0]) != 1 or {layer_kinds[p - 1] for p in pair} != {
++            "attention",
++            "linear_attention",
++        }:
++            raise ValueError("band pair must join adjacent opposite layer kinds")
++    return pairs
++
++
++@dataclass(frozen=True)
++class LensMaps:
++    maps: dict[int, np.ndarray]
++    sha256: str
++    hidden_size: int
++    num_layers: int
++
++    @classmethod
++    def load(
++        cls, path: Path, *, expected_sha256: str, hidden_size: int, num_layers: int
++    ) -> LensMaps:
++        sha = file_sha256(path)
++        if sha != expected_sha256:
++            raise ValueError("lens file hash mismatch")
++        maps = {}
++        with np.load(path, allow_pickle=False) as archive:
++            for name in archive.files:
++                if not name.startswith("J") or not name[1:].isdigit():
++                    raise ValueError(f"invalid lens map name: {name}")
++                layer = int(name[1:]) + 1
++                a = np.array(archive[name], dtype=np.float32)
++                if (
++                    not 1 <= layer < num_layers
++                    or a.shape != (hidden_size, hidden_size)
++                    or not np.isfinite(a).all()
++                ):
++                    raise ValueError(f"invalid lens map at layer {layer}")
++                a.flags.writeable = False
++                maps[layer] = a
++        if not maps:
++            raise ValueError("lens archive is empty")
++        return cls(maps, sha, hidden_size, num_layers)
++
++    def apply(self, residual: np.ndarray, layer: int) -> np.ndarray:
++        if residual.shape[-1] != self.hidden_size:
++            raise ValueError("residual dimension does not match lens")
++        return residual if layer == self.num_layers else residual @ self.maps[layer].T
+diff --git a/src/local_llm_lab/pipeline/live_lens/preflight.py b/src/local_llm_lab/pipeline/live_lens/preflight.py
+new file mode 100644
+index 0000000..a7b5f44
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/live_lens/preflight.py
+@@ -0,0 +1,65 @@
++"""Pure launch checks; safe to import before the trainer or Metal runtime."""
++
++from __future__ import annotations
++
++import math
++
++
++def training_preflight(train, spec, *, iters=None):
++    """Check only models with an evidence-backed launch envelope in their registry.
++
++    This checks recipe declarations; it does not prove that data fit the tokenizer's prompt
++    cap or grant a model-use window. The existing rendered-split loader still checks each row.
++    """
++    envelope = spec.train.get("launch_preflight")
++    if envelope is None:
++        return None
++    if train.get("gated_delta_mode") != "chunkwise":
++        raise ValueError("train.gated_delta_mode must explicitly name chunkwise")
++
++    def integer(name, value):
++        if type(value) is not int or value <= 0:
++            raise ValueError(f"train.{name} must be a positive integer")
++        return value
++
++    chunk = integer("gated_delta_chunk", train.get("gated_delta_chunk"))
++    cap = integer("max_seq_length", train.get("max_seq_length"))
++    batch = integer("batch_size", train.get("batch_size"))
++    if (
++        chunk != envelope["chunk_size"]
++        or not chunk <= cap <= envelope["max_row_tokens"]
++        or batch > envelope["max_batch_size"]
++    ):
++        raise ValueError(
++            "chunk, row cap or batch size is outside the verified envelope; "
++            "a new measured envelope is required before this launch"
++        )
++    if train.get("iters_unit") != "batches":
++        raise ValueError(
++            "train.iters_unit must explicitly be batches; iters is not optimizer steps"
++        )
++    batches = integer("iters", train.get("iters") if iters is None else iters)
++    accumulation = integer("grad_accumulation_steps", train.get("grad_accumulation_steps"))
++    # mlx-lm 0.31.3 calls optimizer.update only when it % accumulation == 0.
++    if batches % accumulation:
++        raise ValueError("iteration count leaves unapplied accumulated gradients")
++    gib = train.get("metal_cache_gib", 2.0)
++    if (
++        isinstance(gib, bool)
++        or not isinstance(gib, (float, int))
++        or not math.isfinite(gib)
++        or not 0 < gib <= envelope["max_metal_cache_gib"]
++    ):
++        raise ValueError(
++            "train.metal_cache_gib must be finite, positive and inside the cache envelope"
++        )
++    return {
++        "batches": batches,
++        "rows": batches * batch,
++        "optimizer_updates": batches // accumulation,
++        "iterations_unit": "batches",
++        "chunk_size": chunk,
++        "max_row_tokens": cap,
++        "metal_cache_bytes": int(gib * 2**30),
++        "envelope": dict(envelope),
++    }
+diff --git a/src/local_llm_lab/pipeline/live_lens/records.py b/src/local_llm_lab/pipeline/live_lens/records.py
+new file mode 100644
+index 0000000..2e3d258
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/live_lens/records.py
+@@ -0,0 +1,96 @@
++"""CPU reducers with explicit token coordinates, ties, and missing future observations."""
++
++from __future__ import annotations
++
++from collections import OrderedDict
++
++import numpy as np
++
++
++class FutureRanks:
++    """A residual at t is scored against emitted tokens t+1, t+4 and t+8.
++
++    Ranks are competition ranks (1 + number of strictly greater probabilities).
++    reset() must be called between turns: harness/tool tokens are not generated futures.
++    Future events never observed before reset are censored, not assigned a failure rank.
++    """
++
++    def __init__(self, *, horizons=(1, 4, 8), capacity=16):
++        if not horizons or any(type(h) is not int or h <= 0 for h in horizons):
++            raise ValueError("horizons must be positive integers")
++        if capacity <= max(horizons):
++            raise ValueError("capacity must exceed the greatest horizon")
++        self.horizons = tuple(horizons)
++        self.capacity = capacity
++        self.buffer = OrderedDict()
++
++    def reset(self):
++        self.buffer.clear()
++
++    def capture(self, position, probabilities):
++        if self.buffer and position <= next(reversed(self.buffer)):
++            raise ValueError("capture positions must increase within a turn")
++        stored = {}
++        for layer, values in probabilities.items():
++            a = np.asarray(values)
++            if (
++                a.ndim != 1
++                or not a.size
++                or not np.isfinite(a).all()
++                or (a < 0).any()
++                or not np.isclose(a.sum(), 1.0, rtol=1e-5, atol=1e-7)
++            ):
++                raise ValueError("expected a finite normalized probability vector")
++            stored[layer] = a.copy()
++        self.buffer[position] = stored
++        while len(self.buffer) > self.capacity:
++            self.buffer.popitem(last=False)
++
++    def observe(self, position, token_id):
++        records = []
++        for horizon in self.horizons:
++            source = position - horizon
++            for layer, p in self.buffer.get(source, {}).items():
++                if not 0 <= token_id < len(p):
++                    raise ValueError("token id outside vocabulary")
++                records.append(
++                    {
++                        "position": source,
++                        "layer": layer,
++                        "horizon": horizon,
++                        "token_id": int(token_id),
++                        "rank": int(np.count_nonzero(p > p[token_id])) + 1,
++                        "probability": float(p[token_id]),
++                    }
++                )
++        return records
++
++
++def transport_overlap(written_top, source_top, attention, *, source_positions, target_position):
++    """Attention-weighted overlap with earlier sources only; self mass is reported apart.
++
++    This is an observational overlap statistic, not a claim that softmax is linear or that
++    a particular direction was causally transported. The full row is sufficient to audit it.
++    """
++    weights = np.asarray(attention, dtype=np.float64)
++    if (
++        len(source_top) != len(weights)
++        or len(source_positions) != len(weights)
++        or not np.isfinite(weights).all()
++        or (weights < 0).any()
++        or not np.isclose(weights.sum(), 1.0, atol=1e-5)
++    ):
++        raise ValueError("expected one normalized attention row aligned to source positions")
++    words = set(map(int, written_top))
++    if not words or len(words) != len(written_top):
++        raise ValueError("written top-k must be nonempty and unique")
++    prior = [i for i, p in enumerate(source_positions) if p < target_position]
++    overlap = [len(words.intersection(source_top[i])) / len(words) for i in prior]
++    mass = float(weights[prior].sum())
++    score = float(sum(weights[i] * o for i, o in zip(prior, overlap, strict=True)))
++    return {
++        "score": score,
++        "past_mass": mass,
++        "conditional_overlap": score / mass if mass > 0 else None,
++        "source_positions": [source_positions[i] for i in prior],
++    }
+diff --git a/src/local_llm_lab/pipeline/live_lens/session.py b/src/local_llm_lab/pipeline/live_lens/session.py
+new file mode 100644
+index 0000000..ad9969f
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/live_lens/session.py
+@@ -0,0 +1,349 @@
++"""Streaming capture with explicit coordinates and reproducible, hash-chained records.
++
++Only the last query of each native forward is observed for attention (one row per decode
++step). Prompt source readings cover the full prefix. Forward chunks are retained so replay
++uses the identical prefix and partition, including the generator's un-emitted lookahead.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from contextlib import contextmanager
++from pathlib import Path
++
++import numpy as np
++
++from local_llm_lab.arch import NativeCapture
++from local_llm_lab.pipeline.live_lens.records import FutureRanks, transport_overlap
++
++
++def _encoded(value):
++    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
++
++
++class RecordWriter:
++    """Exclusive new file; hash every event and close with a required footer."""
++
++    def __init__(self, path: Path, manifest: dict):
++        self.stream = path.open("x", encoding="utf-8")
++        self.previous = "0" * 64
++        self.count = 0
++        self({"kind": "manifest", "schema_version": 1, "provenance": manifest})
++
++    def __call__(self, event):
++        payload = {"event": event, "previous": self.previous, "sequence": self.count}
++        digest = hashlib.sha256(_encoded(payload)).hexdigest()
++        self.stream.write(_encoded(payload | {"sha256": digest}).decode() + "\n")
++        self.stream.flush()
++        self.previous = digest
++        self.count += 1
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, error_type, error, traceback):
++        try:
++            self({"kind": "end_record", "status": "complete" if error_type is None else "aborted"})
++        finally:
++            self.stream.close()
++
++
++def read_record(path: Path):
++    previous = "0" * 64
++    events = []
++    for sequence, line in enumerate(path.read_text().splitlines()):
++        payload = json.loads(line)
++        digest = payload.pop("sha256")
++        if (
++            payload["sequence"] != sequence
++            or payload["previous"] != previous
++            or hashlib.sha256(_encoded(payload)).hexdigest() != digest
++        ):
++            raise ValueError("capture record hash chain mismatch")
++        events.append(payload["event"])
++        previous = digest
++    if (
++        not events
++        or events[0]["kind"] != "manifest"
++        or events[-1]["kind"] != "end_record"
++        or events[-1]["status"] != "complete"
++    ):
++        raise ValueError("capture record is incomplete")
++    return events
++
++
++class LensReadout:
++    """J{L-1} maps to the final pre-norm residual; the final layer is native identity.
++
++    Intermediate matrix products and their readout use float32, recorded explicitly by the
++    caller. Identity retains native dtype through norm and unembedding before returning fp32.
++    """
++
++    def __init__(self, view, lens):
++        self.view = view
++        self.lens = lens
++        self._maps = {}
++
++    def logits(self, residual, layer):
++        import mlx.core as mx
++
++        if layer == self.view.num_layers:
++            mapped = residual
++        else:
++            if layer not in self._maps:
++                self._maps[layer] = mx.array(self.lens.maps[layer])
++            mapped = residual.astype(mx.float32) @ self._maps[layer].T
++        return self.view.native_readout(mapped).astype(mx.float32)
++
++    def __call__(self, residual, layer):
++        import mlx.core as mx
++
++        return np.array(mx.softmax(self.logits(residual, layer), axis=-1))
++
++
++def top_tokens(probabilities, k):
++    # Token-id tie breaking is stable; foreknowledge uses competition ranks separately.
++    threshold = np.partition(probabilities, len(probabilities) - k)[-k]
++    candidates = np.flatnonzero(probabilities >= threshold)
++    return candidates[np.argsort(-probabilities[candidates], kind="stable")[:k]].tolist()
++
++
++def _logit_hash(logits):
++    import mlx.core as mx
++
++    digest = hashlib.sha256()
++    # Avoid materializing a prefill's full-vocabulary matrix as Python float objects.
++    for row in logits.reshape(-1, logits.shape[-1]):
++        digest.update(np.array(row.astype(mx.float32)).astype("<f4", copy=False).tobytes())
++    return digest.hexdigest()
++
++
++class CaptureSession:
++    def __init__(
++        self,
++        view,
++        readout,
++        emit,
++        *,
++        layers,
++        attention_blocks=(),
++        top_k=10,
++        audit_modulus=23,
++        audit_seed=0,
++        retain_logits=False,
++    ):
++        if not 0 < top_k <= view.vocab_size or audit_modulus < 1:
++            raise ValueError("invalid top-k or audit sampling modulus")
++        self.view, self.readout, self.emit = view, readout, emit
++        self.layers = tuple(sorted(set(layers)))
++        self.attention_blocks = tuple(sorted(set(attention_blocks)))
++        self.top_k, self.audit_modulus, self.audit_seed = top_k, audit_modulus, audit_seed
++        self.retain_logits = retain_logits
++        self.ranks = FutureRanks()
++        self.context = {}
++        self.turn = -1
++        self._active = False
++
++    def set_context(self, **metadata):
++        if self._active:
++            raise RuntimeError("cannot replace context during a turn")
++        self.context = metadata
++
++    def _write(self, kind, **values):
++        self.emit({"kind": kind, "turn": self.turn, **values})
++
++    @contextmanager
++    def generation(self, model, tokenizer, prompt, *, turn_cache):
++        if self._active or model is not self.view.model:
++            raise ValueError("capture must use its own model and a single active turn")
++        if turn_cache is not None:
++            raise ValueError("capture requires the resolved no-reuse cache strategy")
++        bos = tokenizer.bos_token
++        prompt_ids = list(
++            tokenizer.encode(prompt, add_special_tokens=bos is None or not prompt.startswith(bos))
++        )
++        if not prompt_ids or len(prompt_ids) > 65536:
++            raise ValueError("prompt must contain 1 to 65536 tokens")
++        self.turn += 1
++        self.ranks.reset()
++        self.prompt_ids = prompt_ids
++        self.generated = []
++        self._residuals = {}
++        self._sources = {block: {} for block in self.attention_blocks}
++        self._next_offset = 0
++        self._active = True
++        self._write(
++            "begin_turn",
++            prompt=prompt,
++            prompt_ids=prompt_ids,
++            context=self.context,
++            layers=self.layers,
++            attention_blocks=self.attention_blocks,
++            top_k=self.top_k,
++            audit_modulus=self.audit_modulus,
++            audit_seed=self.audit_seed,
++            rank_horizons=self.ranks.horizons,
++            distribution_capacity=self.ranks.capacity,
++            readout_precision="fp32 intermediate maps; native final identity",
++        )
++        completed = False
++        try:
++            with NativeCapture(
++                self.view, self, layers=self.layers, attention_blocks=self.attention_blocks
++            ) as captured:
++                yield captured
++            completed = True
++        finally:
++            self._write(
++                "end_turn",
++                emitted_count=len(self.generated),
++                forwarded_count=self._next_offset,
++                status="complete" if completed else "aborted",
++                unresolved_futures="censored at turn boundary",
++            )
++            self._residuals.clear()
++            self._sources.clear()
++            self.ranks.reset()
++            self._active = False
++
++    def residual(self, layer, offset, h):
++        if layer in self.layers:
++            self._residuals[layer] = h
++        if layer in self._sources:
++            for local in range(h.shape[1]):
++                position = offset + local
++                top = top_tokens(self.readout(h[0, local], layer), self.top_k)
++                self._sources[layer][position] = top
++                self._write("source", layer=layer, position=position, top=top)
++
++    def attention(self, block, target, weights, written, total):
++        import mlx.core as mx
++
++        # Check decomposition descriptively; acceptance bounds are fixed by the caller.
++        error = float(mx.max(mx.abs(written.sum(0) - total)).item())
++        positions = list(range(weights.shape[-1]))
++        sources = [self._sources[block][position] for position in positions]
++        for head in range(weights.shape[0]):
++            top = top_tokens(self.readout(written[head], block + 1), self.top_k)
++            row = np.array(weights[head]).astype(float)
++            score = transport_overlap(
++                top, sources, row, source_positions=positions, target_position=target
++            )
++            score.pop("source_positions")
++            payload = dict(
++                block=block,
++                head=head,
++                position=target,
++                written_top=top,
++                head_sum_max_abs_error=error,
++                **score,
++            )
++            key = [self.audit_seed, self.turn, block, head, target]
++            if int(hashlib.sha256(_encoded(key)).hexdigest(), 16) % self.audit_modulus == 0:
++                payload["audit"] = {
++                    "attention": row.tolist(),
++                    "positions": positions,
++                    "source_top": sources,
++                }
++            self._write("head", **payload)
++
++    def output(self, offset, ids, logits):
++        import mlx.core as mx
++
++        if offset != self._next_offset or offset + len(ids) > 65536:
++            raise ValueError("non-contiguous forward or context exceeds 65536 tokens")
++        if set(self._residuals) != set(self.layers):
++            raise ValueError("native path did not capture every requested layer")
++        prompt_end = min(len(self.prompt_ids), offset + len(ids))
++        if ids[: prompt_end - offset] != self.prompt_ids[offset:prompt_end] and offset < prompt_end:
++            raise ValueError("captured tokens disagree with the rendered prompt")
++        # The next forward can precede the yield. Score only tokens actually yielded, below.
++        for local in range(len(ids)):
++            position = offset + local
++            probabilities = {
++                layer: (
++                    np.array(mx.softmax(logits[0, local].astype(mx.float32)))
++                    if layer == self.view.num_layers
++                    else self.readout(h[0, local], layer)
++                )
++                for layer, h in self._residuals.items()
++            }
++            self.ranks.capture(position, probabilities)
++            self._write(
++                "reading",
++                position=position,
++                top={str(layer): top_tokens(p, self.top_k) for layer, p in probabilities.items()},
++            )
++        record = {
++            "logits_sha256": _logit_hash(logits),
++            "logits_shape": list(logits.shape),
++            "argmax": np.array(mx.argmax(logits, axis=-1)).tolist(),
++        }
++        if self.retain_logits:
++            record["logits"] = np.array(logits.astype(mx.float32)).tolist()
++        self._write("forward", offset=offset, input_ids=ids, **record)
++        self._next_offset = offset + len(ids)
++        self._residuals.clear()
++
++    def emitted(self, token_id):
++        if not self._active:
++            raise RuntimeError("token emitted outside capture context")
++        position = len(self.prompt_ids) + len(self.generated)
++        self.generated.append(int(token_id))
++        self._write("emitted", position=position, token_id=int(token_id))
++        for row in self.ranks.observe(position, int(token_id)):
++            self._write("rank", **row)
++
++
++def replay(view, rows, *, atol, rtol):
++    """Replay complete turns' native forward partitions with a fresh cache per turn.
++
++    Use the same checkpoint for equivalence. Different adapters may consume the same fixed
++    histories, but their output differences do not imply capture error or require lens refits.
++    """
++    import mlx.core as mx
++
++    if not np.isfinite([atol, rtol]).all() or min(atol, rtol) < 0:
++        raise ValueError("replay bounds must be finite and nonnegative")
++    cache = None
++    max_error = 0.0
++    forwards = 0
++    tokens_equal = True
++    for row in rows:
++        if row["kind"] == "begin_turn":
++            cache = view.make_cache()
++        elif row["kind"] == "forward":
++            if cache is None:
++                raise ValueError("forward without turn prefix")
++            if (atol or rtol) and "logits" not in row:
++                raise ValueError("nonzero replay tolerances require retained logits")
++            logits = view.model(mx.array([row["input_ids"]]), cache=cache)
++            if list(logits.shape) != row["logits_shape"] or not bool(mx.all(mx.isfinite(logits))):
++                raise ValueError("replay output shape or finiteness mismatch")
++            if "logits" in row:
++                actual = np.array(logits.astype(mx.float32))
++                expected = np.asarray(row["logits"], dtype=np.float32)
++                error = float(np.max(np.abs(actual - expected)))
++                max_error = max(max_error, error)
++                if not np.allclose(actual, expected, atol=atol, rtol=rtol):
++                    raise ValueError(f"native replay exceeds declared tolerance: {error}")
++            elif _logit_hash(logits) != row["logits_sha256"]:
++                raise ValueError(
++                    "native replay logit hash differs (retain logits for tolerance checks)"
++                )
++            tokens_equal &= np.array_equal(np.array(mx.argmax(logits, -1)), row["argmax"])
++            forwards += 1
++        elif row["kind"] == "end_turn":
++            if row["status"] != "complete":
++                raise ValueError("cannot accept an aborted turn")
++            cache = None
++    if not forwards or cache is not None:
++        raise ValueError("replay requires complete captured turns")
++    return {
++        "forwards": forwards,
++        "max_abs_error": max_error,
++        "argmax_equal": bool(tokens_equal),
++        "atol": atol,
++        "rtol": rtol,
++    }
+diff --git a/src/local_llm_lab/pipeline/live_lens/validation.py b/src/local_llm_lab/pipeline/live_lens/validation.py
+new file mode 100644
+index 0000000..5ada7e9
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/live_lens/validation.py
+@@ -0,0 +1,54 @@
++"""Independent map agreement, content readability, and output diagnostics.
++
++Director's 2026-09-07 ruling: only a failed Jacobian-response check requests refitting.
++All thresholds are supplied by the caller before inspecting the measured responses.
++"""
++
++from __future__ import annotations
++
++import numpy as np
++
++
++def layer_verdict(map_check, concept_check, output_divergence):
++    allowed = {"pass", "fail", "inconclusive"}
++    if map_check not in allowed or concept_check not in allowed:
++        raise ValueError("check outcome must be pass, fail or inconclusive")
++    if output_divergence is not None and (
++        not np.isfinite(output_divergence) or output_divergence < 0
++    ):
++        raise ValueError("output divergence must be finite and nonnegative, or missing")
++    outcome = "inconclusive"
++    if map_check == "pass":
++        outcome = {"pass": "readable", "fail": "not readable", "inconclusive": "inconclusive"}[
++            concept_check
++        ]
++    return {
++        "outcome": outcome,
++        "refit_required": map_check == "fail",
++        "map_check": map_check,
++        "concept_check": concept_check,
++        "output_divergence": output_divergence,
++    }
++
++
++def response_agreement(measured, predicted, *, atol, rtol, stable):
++    """Compare like-for-like derivative responses in the fitted final-residual space.
++
++    The caller must use the fit's source/target averaging, not compare a single local
++    derivative to a corpus-averaged map. Unstable finite differences are inconclusive.
++    """
++    if not np.isfinite([atol, rtol]).all() or atol < 0 or rtol < 0:
++        raise ValueError("nonnegative finite thresholds are required")
++    measured, predicted = np.asarray(measured), np.asarray(predicted)
++    if measured.shape != predicted.shape or not measured.size:
++        raise ValueError("derivative responses must have the same nonempty shape")
++    if not stable or not np.isfinite(measured).all() or not np.isfinite(predicted).all():
++        return {"outcome": "inconclusive", "max_error": None, "atol": atol, "rtol": rtol}
++    error = np.abs(measured - predicted)
++    passed = bool(np.all(error <= atol + rtol * np.abs(measured)))
++    return {
++        "outcome": "pass" if passed else "fail",
++        "max_error": float(error.max()),
++        "atol": atol,
++        "rtol": rtol,
++    }

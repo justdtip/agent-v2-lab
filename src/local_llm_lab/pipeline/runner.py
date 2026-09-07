@@ -270,6 +270,7 @@ def generate_turn_with_count(
     turn_cache: TurnCacheBase | None = None,
     *,
     spec: ModelSpec,
+    capture: Any | None = None,
 ) -> tuple[str, int, int]:
     """Generate one assistant turn, stopping as soon as the tool call closes.
 
@@ -287,6 +288,8 @@ def generate_turn_with_count(
     kwargs: dict[str, Any] = {}
     prompt_input: Any = prompt
     prompt_ids: list[int] = []
+    if capture is not None and turn_cache is not None:
+        raise ValueError('capture requires the resolved no-reuse cache strategy')
     if turn_cache is not None:
         prompt_ids = list(tokenizer.encode(prompt))
         prompt_input = mx.array(turn_cache.prepare(prompt_ids))
@@ -298,19 +301,32 @@ def generate_turn_with_count(
         max_tokens=spec.chat.max_think_tokens,
     )
 
-    for response in stream_generate(
-        model, tokenizer, prompt=prompt_input, max_tokens=max_tokens, sampler=sampler, **kwargs
-    ):
-        ids.append(response.token)
-        decoded = tokenizer.decode(ids)
-        thinking.update(ids, decoded, tokenizer)
-        if response.token in stop_ids:
-            break
-        piece = response.text or ""
-        if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
-            thinking.decoded_text(ids, tokenizer)
-        ):
-            break
+    context = (
+        capture.generation(model, tokenizer, prompt, turn_cache=turn_cache)
+        if capture is not None else contextlib.nullcontext(model)
+    )
+    with context as generation_model:
+        stream = stream_generate(
+            generation_model, tokenizer, prompt=prompt_input,
+            max_tokens=max_tokens, sampler=sampler, **kwargs
+        )
+        try:
+            for response in stream:
+                ids.append(response.token)
+                if capture is not None:
+                    capture.emitted(response.token)
+                decoded = tokenizer.decode(ids)
+                thinking.update(ids, decoded, tokenizer)
+                if response.token in stop_ids:
+                    break
+                piece = response.text or ""
+                if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
+                    thinking.decoded_text(ids, tokenizer)
+                ):
+                    break
+        finally:
+            if capture is not None and callable(getattr(stream, 'close', None)):
+                stream.close()
     if turn_cache is not None:
         turn_cache.commit(prompt_ids, ids)
     think_tokens = thinking.tokens if thinking.started else 0
@@ -380,6 +396,7 @@ def run_task(
     faults: tuple[Fault, ...] | None = None,
     transcript: Transcript | None = None,
     use_cache: bool = True,
+    capture: Any | None = None,
 ) -> Trajectory:
     """Drive one task end to end, mirroring every step to the transcript.
 
@@ -433,8 +450,14 @@ def run_task(
             keep_last=keep_last,
             generation=True,
         )
+        capture_kwargs = {}
+        if capture is not None:
+            capture.set_context(task_id=task.task_id, step=index, keep_last=keep_last,
+                                messages=window_messages(messages, keep_last=keep_last))
+            capture_kwargs['capture'] = capture
         raw, n_tokens, think_tokens = generate_turn_with_count(
-            model, tokenizer, prompt, sampler, max_tokens, turn_cache, spec=spec
+            model, tokenizer, prompt, sampler, max_tokens, turn_cache,
+            spec=spec, **capture_kwargs
         )
         trajectory.turns += 1
         trajectory.generated_tokens += n_tokens

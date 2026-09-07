@@ -1,0 +1,36 @@
+{
+  "atol": 0.0,
+  "rtol": 0.0,
+  "model": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "adapter": null,
+  "primary_population_sha256": "06cd76e1d31f9714ebac4d1b3b317a87f28088f8214efcc1b69860cab9698649",
+  "population_file_sha256": "10424db1237671ee484ca0310b10cc7f86b5ebe4b616ff2a4adab035382ab6da",
+  "episode": {
+    "split": "live-lens-fidelity",
+    "seed": 20260907,
+    "family": "pointer_chain",
+    "difficulty": 0,
+    "perturb": false,
+    "max_steps": 8,
+    "max_tokens": 160,
+    "keep_last": 2
+  },
+  "measurements": [
+    "native vs captured forward logit hashes and emitted tokens, including the observation-window transition",
+    "zero injection with a fresh cache",
+    "same-shape final residual identity",
+    "short-prefix capture record reproducibility"
+  ],
+  "limits": {
+    "model_lock": "/Users/daniel.tipton/Desktop/An app/outputs/.model-run.lock",
+    "metal_cache_gib": 2,
+    "memory_window_gib": 12,
+    "max_context_tokens": 4096
+  },
+  "not_authorized_here": [
+    "adapter Jacobian acceptance without a prespecified bound",
+    "factorial",
+    "grid",
+    "whole-episode ablation"
+  ]
+}
