@@ -1986,3 +1986,19 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   A second correction fell out of the same failure: the horizon is the **task's** step count, not the trajectory's length (`integrity.py:364` passes `len(task.steps)`), so a trajectory that stopped early still admits its own saved indices.
 
   **Still open from me**: #90's buffer counter, which as recorded at 10:40 cannot be written as a count at all — MLX exposes only byte APIs. Nothing of mine is on the box.
+
+- 2026-09-07 17:55 (**the Chief found the same defect left in the one place I did not close, and it flips `first_cause`**). Reproduced rather than accepted, with no MLX loaded (`"mlx" in sys.modules` is False), so the acceptance job's hold on the box was untouched.
+
+  `loop_step` was called with `max(len(steps), 1)` as its horizon while `trajectory_events` resolves the task's horizon when it is larger. Minimal case: three identical calls closing a loop, steps carrying saved indices 3, 4, 5, task horizon 6 — every saved index valid at the horizon, every one out of range at `len(steps) == 3`.
+
+  | | delivered patch | horizon threaded through |
+  | --- | --- | --- |
+  | `events['loop']` | **2** (position scale) | 5 |
+  | `events['integrity']` | 5 (checker's scale) | 5 |
+  | `first_cause` | **`loop`** | `integrity` |
+
+  **So it is not a mislabelled step, it is a different answer to the question the module exists to answer.** `first_cause` is a minimum, so the loop cause reads four steps earlier than it is and wins on the artefact.
+
+  This is exactly the failure I described in the delivery as the reason pure position would be wrong, **left in the one of four places I did not close**. And the tests I wrote could not catch it: a fixture whose saved indices all sit below `len(steps)` never makes the two horizons disagree, and runner-written steps never can, since index equals position there. **R38(d) in my own patch, on the day I have been citing it at other people** — a fixture that cannot fail the way the code can fail.
+
+  The Chief's fix works and the targeted tests stay green under it: `loop_step` gains an optional `horizon` defaulting to `None`, keeps `max(len(steps), 1)` when `None` so the existing signature still works, and `trajectory_events` passes the resolved horizon. They hold the landing and will extend the agreement test with the case above; I have not sent a competing patch.
