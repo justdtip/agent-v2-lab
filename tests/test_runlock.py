@@ -1204,10 +1204,10 @@ def test_the_collector_fires_inside_a_nested_run_under_a_temporary_state_root(
         from local_llm_lab.runlock import mark_items_for_a_foreign_window
 
         def pytest_collection_modifyitems(config, items):
-            mark_items_for_a_foreign_window(items, ("test_preflight.py",))
+            mark_items_for_a_foreign_window(items, ("test_window_probe_reaches_mlx.py",))
         """
     )
-    pytester.makepyfile(test_preflight="def test_one():\n    assert True\n")
+    pytester.makepyfile(test_window_probe_reaches_mlx="def test_one():\n    assert True\n")
 
     monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(state))
     monkeypatch.delenv(runlock.WINDOW_HOLDER_ENV, raising=False)
