@@ -34,6 +34,7 @@ _CONFIGS_WITH_SPLIT_TABLES = (
     "agent_v2d_qwen35_4b.yaml",
     "agent_v2e.yaml",
     "agent_v2e_qwen35_4b.yaml",
+    "agent_v2e_qwen35_4b_top8.yaml",
 )
 
 
