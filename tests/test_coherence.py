@@ -14,6 +14,7 @@ from __future__ import annotations
 from local_llm_lab.pipeline.coherence import (
     CAUSES,
     coherence_summary,
+    loop_step,
     primary_arguments,
     trajectory_events,
 )
@@ -210,3 +211,81 @@ def test_the_first_event_is_scaled_by_the_task_horizon() -> None:
     steps = [_step(i, "read_file", {"path": "same"}, "contents") for i in range(1, 5)]
     record = trajectory_events(_trajectory(steps, success=False, horizon=6))
     assert record["first_step"] == 3 and record["first_step_over_horizon"] == 0.5
+
+
+def test_a_step_without_an_index_key_is_indexed_by_position_and_agrees_with_the_key() -> None:
+    """Hand-built steps carry no ``"index"``; the seven ``test_patch`` failures were that.
+
+    The fixture builds the same trajectory twice, once with the key and once without, because a
+    scheme that fell back to position but disagreed with the key would pass a test that only
+    checked the keyless case. Both must give the same answer, since ``first_cause`` is a minimum
+    across causes and the integrity cause is on the key-or-position scale by construction.
+    """
+    from types import SimpleNamespace
+
+    def parse_error_at(position: int, *, with_index_key: bool):
+        steps = []
+        for n in range(position + 1):
+            step: dict = {"thought": "t", "raw": "r"}
+            if with_index_key:
+                step["index"] = n
+            if n == position:
+                step["parse_error"] = "no fenced block"
+            else:
+                step["action"] = {"name": "read_file", "arguments": {"path": "/a"}}
+                step["observation"] = "contents"
+            steps.append(step)
+        return SimpleNamespace(steps=steps, integrity={}, success=False, horizon=-1)
+
+    without = trajectory_events(parse_error_at(3, with_index_key=False))
+    assert without["events"]["invalid_action"] == 3
+    assert without == trajectory_events(parse_error_at(3, with_index_key=True))
+
+
+def test_the_index_rule_is_the_integrity_checkers_own() -> None:
+    """The two modules must not drift: ``first_cause`` is a minimum across causes and the
+    integrity cause is whatever the checker reported, so a divergence would silently compare
+    positions against saved indices."""
+    from local_llm_lab.pipeline.coherence import _step_index
+    from local_llm_lab.pipeline.integrity import _policy_index
+
+    cases = [
+        ({}, 4, 8),
+        ({"index": 2}, 4, 8),
+        ({"index": 9}, 4, 8),
+        ({"index": -1}, 4, 8),
+        ({"index": True}, 4, 8),
+        ({"index": "3"}, 4, 8),
+        ({"index": 0}, 0, 8),
+    ]
+    for record, position, horizon in cases:
+        mine = _step_index(record, position, horizon)
+        assert mine == _policy_index(record, position, horizon), record
+
+
+def test_the_loop_cause_shares_the_saved_index_scale_when_the_horizon_exceeds_the_length() -> None:
+    """Deputy's reproduction, 7 September: three identical calls closing a loop carry saved
+    indices 3, 4, 5 with task horizon 6, so every saved index is valid at the horizon and at or
+    beyond the trajectory's length. If ``loop_step`` scaled by the length alone, the loop cause
+    would read 2 (position) against integrity's 5 (saved index) and ``first_cause`` would flip
+    to ``loop`` on that artefact. Runner-written steps cannot produce this shape (index equals
+    position there); hand-built ones can, which is why the earlier fixtures did not catch it."""
+    from types import SimpleNamespace
+
+    call = {"name": "read_file", "arguments": {"path": "same"}}
+    steps = [
+        {"index": n, "thought": "t", "raw": "r", "action": call, "observation": "contents"}
+        for n in (3, 4, 5)
+    ]
+    trajectory = SimpleNamespace(
+        steps=steps,
+        success=False,
+        horizon=6,
+        integrity={"first_violation": {"step": 5, "rule": "carry"}},
+    )
+    record = trajectory_events(trajectory)
+    assert record["events"]["loop"] == 5
+    assert record["events"]["integrity"] == 5
+    assert record["first_cause"] == "integrity"
+    assert loop_step(steps) == 2  # the length scale, when no horizon is given
+    assert loop_step(steps, 6) == 5

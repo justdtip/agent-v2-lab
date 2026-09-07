@@ -96,13 +96,42 @@ def _recovered(failed: dict[str, Any], later: list[dict[str, Any]], *, kind: str
     return any(_observation_kind(step) is None and step["action"]["name"] == name for step in candidates)
 
 
-def loop_step(steps: list[dict[str, Any]]) -> int | None:
-    """The index of the step at which ``detect_loop`` first closes, or None."""
+def _step_index(step: dict[str, Any], position: int, horizon: int) -> int:
+    """The step's index on the one scale every cause is reported on.
+
+    This is ``integrity._policy_index``'s rule, deliberately: the integrity cause is the
+    checker's ``Violation.step``, computed that way (``integrity.py:231-235``), and
+    ``first_cause`` is a minimum across the four causes, so a cause on a different scale would
+    make that minimum meaningless rather than merely wrong. Reading ``step["index"]`` alone made
+    the module require a key only the runner writes, which is what the seven ``test_patch``
+    failures were: hand-built steps carry none.
+
+    It matches the checker *exactly*, including admitting ``True`` as the integer 1, because a
+    test pins the two functions against each other and a well-meant improvement here is a
+    divergence there. That test caught exactly that.
+    """
+    saved = step.get("index")
+    if isinstance(saved, int) and 0 <= saved < horizon:
+        return saved
+    return position
+
+
+def loop_step(steps: list[dict[str, Any]], horizon: int | None = None) -> int | None:
+    """The index of the step at which ``detect_loop`` first closes, or None.
+
+    ``horizon`` is the scale every cause is reported on (the task's step count when the caller
+    knows it); without it the trajectory's own length stands in. ``trajectory_events`` always
+    passes its resolved horizon, so the loop cause sits on the same scale as the other three:
+    a saved index valid at the task horizon but at or beyond the trajectory's length would
+    otherwise be replaced by its position here and nowhere else, and ``first_cause``, being a
+    minimum, would flip on that artefact (Deputy, 7 September, reproduced).
+    """
     from local_llm_lab.pipeline.runner import detect_loop  # local import: runner imports env
 
+    scale = max(len(steps), 1) if horizon is None else max(int(horizon), len(steps), 1)
     for count in range(1, len(steps) + 1):
         if detect_loop(steps[:count]):
-            return int(steps[count - 1]["index"])
+            return _step_index(steps[count - 1], count - 1, scale)
     return None
 
 
@@ -117,7 +146,16 @@ def trajectory_events(
     tool-error censoring."""
     steps = list(getattr(trajectory, "steps", []) or [])
     events: dict[str, int | None] = {cause: None for cause in CAUSES}
-    last_index = max((int(step["index"]) for step in steps), default=0)
+    # The checker's horizon is the task's step count, not the number of steps actually taken
+    # (``integrity.py:364``), so a trajectory that stopped early still admits its saved indices.
+    horizon = int(getattr(trajectory, "horizon", -1) or -1)
+    if horizon < len(steps):
+        horizon = len(steps)
+    index_of = {
+        id(step): _step_index(step, position, horizon)
+        for position, step in enumerate(steps)
+    }
+    last_index = max(index_of.values(), default=0)
     # integrity: the checker's first violation carries its step
     integrity = getattr(trajectory, "integrity", {}) or {}
     first = integrity.get("first_violation") if isinstance(integrity, dict) else None
@@ -126,13 +164,13 @@ def trajectory_events(
     # invalid action: a parse-error step, or a refused call other than an unknown tool
     for step in steps:
         if "parse_error" in step:
-            events["invalid_action"] = int(step["index"])
+            events["invalid_action"] = index_of[id(step)]
             break
         if "action" in step and _observation_kind(step) == "invalid_action":
-            events["invalid_action"] = int(step["index"])
+            events["invalid_action"] = index_of[id(step)]
             break
-    # loop: recomputed over the stored steps
-    events["loop"] = loop_step(steps)
+    # loop: recomputed over the stored steps, on the same scale as the other causes
+    events["loop"] = loop_step(steps, horizon)
     # tool error: the first error not recovered within the next `window` executed steps; an
     # error with fewer than `window` executed steps after it is censored, whatever the outcome
     executed = _executed(steps)
@@ -147,7 +185,7 @@ def trajectory_events(
         if len(later) < window:
             censored_tail = True  # recovery cannot be observed inside the last `window` steps
             continue
-        events["tool_error"] = int(step["index"])
+        events["tool_error"] = index_of[id(step)]
         break
     fired = {cause: step for cause, step in events.items() if step is not None}
     first_cause = min(fired, key=lambda cause: (fired[cause], CAUSES.index(cause))) if fired else None
