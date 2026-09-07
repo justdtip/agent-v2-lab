@@ -1,0 +1,33 @@
+{
+  "started_utc": "2026-09-07T21:59:22.959792+00:00",
+  "owned_pid": 29675,
+  "wrapper_pid": 29649,
+  "source_commit": "5f7a202c8676420c35520337ffd6e2508f232e6c",
+  "primary_window_source_commit": "fa271a4ffcf3a97d76566380ecbb2cc6ea5e94a9",
+  "primary_runlock_sha256": "0a1184aa816acd06d7fbaf8d87c8fa5743386d37b3965c2dd0784b638ab6a5c7",
+  "wrapper_sha256": "f99254751dfa01adddb101cd1784d324375c6020d25089236fc388be02554441",
+  "command": [
+    "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+    "/Users/daniel.tipton/worktrees/lens-fitting/scripts/lens_epsilon_diagnostic.py",
+    "--model",
+    "qwen35-4b",
+    "--corpus",
+    "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json",
+    "--plan",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FIT-agentic-jacobian-2026-09-07/plan.json",
+    "--revision",
+    "32f3e8ecf65426fc3306969496342d504bfa13f3",
+    "--record-dir",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FIT-agentic-jacobian-2026-09-07/diagnostic-01"
+  ],
+  "registration_sha256": "61f7322af521eee3fa84a747e1e3a10666cdb6946371a546e46b7f82a277dd37",
+  "source_hashes": {
+    "scripts/lens_epsilon_diagnostic.py": "847c2129dab3256af1a8ea4a2230620faba291bc7fbb5e25f3d73d3c52614aa1",
+    "src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py": "4cf6e9630ecc01f3e65639f2941cd9b27a1828934cddd47ded63229acc054647",
+    "src/local_llm_lab/pipeline/lens_fitting/jacobian.py": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893"
+  },
+  "window_path": "/Users/daniel.tipton/Desktop/An app/outputs/.box-window.json",
+  "window_nonce": "9deb4f7a7436401f80d31a5754817772",
+  "budget_seconds": 480,
+  "diagnostic_only": true
+}

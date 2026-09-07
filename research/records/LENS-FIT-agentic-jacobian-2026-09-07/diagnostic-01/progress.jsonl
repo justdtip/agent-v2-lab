@@ -1,0 +1,55 @@
+{"event": "preflight_started", "elapsed_s": 0.11515662499732571}
+{"event": "load_started", "elapsed_s": 2.3779135840013623}
+{"event": "diagnostic_started", "peak_memory_bytes": 2367528456.0, "elapsed_s": 7.093547999997099}
+{"layer": 1, "operation": "prepare", "peak_memory_bytes": 2367528456.0, "elapsed_s": 7.094116542000847}
+{"layer": 1, "scale": 0.125, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 8.186511250001786}
+{"event": "measurement_completed", "layer": 1, "scale": 0.125, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 34.77525808400242}
+{"layer": 1, "scale": 0.125, "operation": "restore", "peak_memory_bytes": 4151584296.0, "elapsed_s": 34.775866208998195}
+{"event": "measurement_completed", "layer": 1, "scale": 0.125, "operation": "restore", "peak_memory_bytes": 4151584296.0, "elapsed_s": 35.77678258399828}
+{"layer": 1, "scale": 0.125, "operation": "broadcast", "peak_memory_bytes": 4151584296.0, "elapsed_s": 35.77774070900341}
+{"event": "measurement_completed", "layer": 1, "scale": 0.125, "operation": "broadcast", "peak_memory_bytes": 4151584296.0, "elapsed_s": 36.25361116699787}
+{"layer": 1, "scale": 0.25, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 36.254772749998665}
+{"event": "measurement_completed", "layer": 1, "scale": 0.25, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 63.688868999997794}
+{"layer": 1, "scale": 0.5, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 63.68976195900177}
+{"event": "measurement_completed", "layer": 1, "scale": 0.5, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 88.54642845899798}
+{"layer": 1, "scale": 1.0, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 88.54766129200289}
+{"event": "measurement_completed", "layer": 1, "scale": 1.0, "operation": "reference", "peak_memory_bytes": 4151584296.0, "elapsed_s": 113.62030924999999}
+{"layer": 1, "scale": 1.0, "operation": "restore", "peak_memory_bytes": 4151584296.0, "elapsed_s": 113.62155633400107}
+{"event": "measurement_completed", "layer": 1, "scale": 1.0, "operation": "restore", "peak_memory_bytes": 4151584296.0, "elapsed_s": 114.47871491700062}
+{"layer": 1, "scale": 1.0, "operation": "broadcast", "peak_memory_bytes": 4151584296.0, "elapsed_s": 114.47991579199879}
+{"event": "measurement_completed", "layer": 1, "scale": 1.0, "operation": "broadcast", "peak_memory_bytes": 4151584296.0, "elapsed_s": 114.84533587499755}
+{"layer": 16, "operation": "prepare", "peak_memory_bytes": 4151584296.0, "elapsed_s": 114.84721229199931}
+{"layer": 16, "scale": 0.125, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 116.05161833400052}
+{"event": "measurement_completed", "layer": 16, "scale": 0.125, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 128.65883845899953}
+{"layer": 16, "scale": 0.125, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 128.6601747090026}
+{"event": "measurement_completed", "layer": 16, "scale": 0.125, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 129.20721400000184}
+{"layer": 16, "scale": 0.125, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 129.2087075840027}
+{"event": "measurement_completed", "layer": 16, "scale": 0.125, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 129.41441979200317}
+{"layer": 16, "scale": 0.25, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 129.4161407089996}
+{"event": "measurement_completed", "layer": 16, "scale": 0.25, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 142.02081529200223}
+{"layer": 16, "scale": 0.5, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 142.02232362500217}
+{"event": "measurement_completed", "layer": 16, "scale": 0.5, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 155.93749899999966}
+{"layer": 16, "scale": 1.0, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 155.93960425000114}
+{"event": "measurement_completed", "layer": 16, "scale": 1.0, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 168.37552983400383}
+{"layer": 16, "scale": 1.0, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 168.37749770899973}
+{"event": "measurement_completed", "layer": 16, "scale": 1.0, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 168.9344153339989}
+{"layer": 16, "scale": 1.0, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 168.93641295900306}
+{"event": "measurement_completed", "layer": 16, "scale": 1.0, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 169.14375850000215}
+{"layer": 31, "operation": "prepare", "peak_memory_bytes": 4156089896.0, "elapsed_s": 169.14622249999957}
+{"layer": 31, "scale": 0.125, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 170.71170916700066}
+{"event": "measurement_completed", "layer": 31, "scale": 0.125, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 171.5547272920012}
+{"layer": 31, "scale": 0.125, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 171.55699254199862}
+{"event": "measurement_completed", "layer": 31, "scale": 0.125, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 171.86433195899735}
+{"layer": 31, "scale": 0.125, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 171.86658537499898}
+{"event": "measurement_completed", "layer": 31, "scale": 0.125, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 171.91578624999966}
+{"layer": 31, "scale": 0.25, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 171.91833508400305}
+{"event": "measurement_completed", "layer": 31, "scale": 0.25, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 172.76491508400068}
+{"layer": 31, "scale": 0.5, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 172.76728733399796}
+{"event": "measurement_completed", "layer": 31, "scale": 0.5, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 173.61092374999862}
+{"layer": 31, "scale": 1.0, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 173.61326708400156}
+{"event": "measurement_completed", "layer": 31, "scale": 1.0, "operation": "reference", "peak_memory_bytes": 4156089896.0, "elapsed_s": 174.45377220900264}
+{"layer": 31, "scale": 1.0, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 174.45625141700293}
+{"event": "measurement_completed", "layer": 31, "scale": 1.0, "operation": "restore", "peak_memory_bytes": 4156089896.0, "elapsed_s": 174.7419186670013}
+{"layer": 31, "scale": 1.0, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 174.74449216700305}
+{"event": "measurement_completed", "layer": 31, "scale": 1.0, "operation": "broadcast", "peak_memory_bytes": 4156089896.0, "elapsed_s": 174.79437974999746}
+{"event": "diagnostic_finished", "status": "completed", "peak_memory_bytes": 4156089896.0, "elapsed_s": 174.79783433400007}

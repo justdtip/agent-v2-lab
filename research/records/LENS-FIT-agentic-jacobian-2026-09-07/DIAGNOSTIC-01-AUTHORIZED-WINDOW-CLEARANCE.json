@@ -1,0 +1,15 @@
+{
+  "recorded_utc": "2026-09-07T22:00:15.112350+00:00",
+  "authorization": "Director: Yes. clear it, it is stale",
+  "cleared_nonce": "16aa2c6f641d4a3f868a424a3773bc55",
+  "former_owner_pids": [
+    20550,
+    20551
+  ],
+  "owners_present_before_clear": false,
+  "primary_model_lock_before_clear": null,
+  "mapped_mlx_processes_before_clear": [],
+  "clear_method": "primary runlock.end_window with exact authorized stale nonce",
+  "no_foreign_process_stopped": true,
+  "followed_by": "reviewed diagnostic-launch.py; new independently acquired window and normal model lock"
+}

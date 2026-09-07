@@ -1,0 +1,97 @@
+"""Offline independent audit of completed diagnostic evidence; no model imports."""
+import hashlib
+import json
+from pathlib import Path
+import numpy as np
+
+root = Path('/Users/daniel.tipton/worktrees/lens-fitting')
+record = root / 'research/records/LENS-FIT-agentic-jacobian-2026-09-07'
+directory = record / 'diagnostic-01'
+r = json.loads((directory / 'diagnostic.json').read_text())
+assert r['status'] == 'completed', r['status']
+assert r['diagnostic_only'] is True and r['production_acceptance'] is False
+assert r['elapsed_s'] <= 480
+expected = json.loads((record / 'DIAGNOSTIC-01-ACCOUNTING-EXPECTATION.json').read_text())
+assert len(r['measurements']) == expected['expected_measurements']
+assert len(r['comparisons']) == expected['expected_comparisons']
+responses = {}
+for measurement in r['measurements']:
+    p = directory / measurement['file']
+    assert hashlib.sha256(p.read_bytes()).hexdigest() == measurement['file_sha256']
+    a = np.load(p, allow_pickle=False)
+    assert a.shape == (16, 2560) and a.dtype == np.float32
+    assert np.isfinite(a).all()
+    np.testing.assert_array_equal([np.linalg.norm(row.astype(np.float64)) for row in a], measurement['response_norms'])
+    responses[measurement['layer'], measurement['scale'], measurement['mode']] = a.astype(np.float64)
+comparisons = []
+for c in r['comparisons']:
+    layer = c['layer']
+    if c['kind'] == 'adjacent_stability':
+        a = responses[layer, c['reference_scale'], 'reference']
+        b = responses[layer, c['candidate_scale'], 'reference']
+        atol, rtol = .003, .03
+    else:
+        a = responses[layer, c['scale'], 'reference']
+        b = responses[layer, c['scale'], c['mode']]
+        atol, rtol = .0003, .003
+    assert (c['atol'], c['rtol']) == (atol, rtol)
+    difference = np.abs(a-b)
+    failed = difference > atol + rtol*np.abs(a)
+    assert c['failed_coordinates'] == int(np.count_nonzero(failed))
+    assert c['total_coordinates'] == a.size and c['nonfinite_coordinates'] == 0
+    assert c['max_error'] == float(np.max(difference))
+    assert c['rms_error'] == float(np.sqrt(np.mean(difference*difference)))
+    for index, row in enumerate(c['per_direction']):
+        assert row['failed_coordinates'] == int(np.count_nonzero(failed[index]))
+        assert row['max_error'] == float(np.max(difference[index]))
+        assert row['rms_error'] == float(np.sqrt(np.mean(difference[index]*difference[index])))
+    comparisons.append({k:v for k,v in c.items() if k != 'per_direction'})
+head = '0'*64
+started = {}
+returned = {}
+pending = []
+confirmed = set()
+for line in (directory/'block-ledger.jsonl').read_text().splitlines():
+    event = json.loads(line)
+    claimed = event.pop('sha256')
+    assert event['previous_sha256'] == head
+    head = hashlib.sha256(json.dumps(event, sort_keys=True, separators=(',',':')).encode()).hexdigest()
+    assert head == claimed
+    if event['event'] == 'block_started':
+        assert event['call'] == len(started)+1
+        assert event['block_tokens'] == event['batch'] * event['sequence']
+        started[event['call']] = event
+    elif event['event'] == 'block_returned':
+        call = event['call']
+        assert call in started and call not in returned
+        for field in ('block_index','batch','sequence','block_tokens','phase'):
+            assert event[field] == started[call][field]
+        returned[call] = event
+        pending.append(call)
+    elif event['event'] == 'materialized_workload':
+        assert event['calls'] == pending
+        assert not confirmed.intersection(pending)
+        confirmed.update(pending)
+        pending.clear()
+    else:
+        raise AssertionError('unexpected ledger event: '+event['event'])
+assert not pending and confirmed == set(returned) == set(started)
+tokens = sum(returned[c]['block_tokens'] for c in confirmed)
+assert tokens == expected['expected_materialized_block_tokens']
+assert len(returned) == expected['expected_block_calls']
+assert r['block_accounting']['materialized_block_tokens'] == tokens
+assert r['block_accounting']['scheduled_block_tokens'] == tokens
+assert r['block_accounting']['returned_block_calls'] == len(returned)
+assert r['block_accounting']['ledger_sha256'] == head
+assert r['block_accounting']['pending_block_calls'] == 0
+peak = r['peak_memory_bytes']
+assert 0 <= peak <= 8*2**30 and peak <= .6*r['provenance']['actual_working_set_bytes']
+end = json.loads((record/'diagnostic-01-end.json').read_text())
+assert end['exit_code'] == 0 and end['window_closed'] and end['child_exited'] and end['primary_lock_absent']
+samples = [json.loads(line) for line in (record/'diagnostic-01-supervision.jsonl').read_text().splitlines()]
+assert all(s['kernel_pressure'] == 1 for s in samples)
+report = dict(audit_passed=True, measurements=len(responses), comparisons=len(comparisons), returned_block_calls=len(returned), materialized_block_tokens=tokens, ledger_sha256=head, peak_memory_bytes=peak, elapsed_s=r['elapsed_s'], normal_pressure_samples=len(samples), cache_comparisons_passed=sum(c['kind']=='cache_reference' and c['failed_coordinates']==0 for c in comparisons), stability_comparisons_passed=sum(c['kind']=='adjacent_stability' and c['failed_coordinates']==0 for c in comparisons), comparison_summary=comparisons, diagnostic_sha256=hashlib.sha256((directory/'diagnostic.json').read_bytes()).hexdigest())
+with (record/'DIAGNOSTIC-01-AUDIT.json').open('x') as output:
+    json.dump(report, output, indent=2, allow_nan=False)
+    output.write('\n')
+print(json.dumps({k:v for k,v in report.items() if k!='comparison_summary'},indent=2))

@@ -1,0 +1,3 @@
+# Offline audit correction
+
+The first offline audit compared vector norms using NumPy's axis reduction, whereas the diagnostic records one vector norm call per direction. It found one coordinate differing by1.7763568394e-15 (relative1.80296911e-16) from reduction-order rounding. The audit now uses the same documented per-direction vector-norm operation and still requires exact equality for the saved summary. No native measurement, response, production tolerance or scientific verdict changed; no model rerun occurred. Raw responses remain immutable, and comparisons are independently recomputed from them.

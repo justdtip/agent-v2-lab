@@ -1,0 +1,86 @@
+{
+  "actual_working_set_bytes": 19069665280,
+  "allocator": {
+    "limit_bytes": 0,
+    "previous_limit_bytes": 24481313587
+  },
+  "corpus_manifest_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
+  "model_run_lock": "/Users/daniel.tipton/Desktop/An app/outputs/.model-run.lock",
+  "peak_limit_bytes": 8589934592,
+  "plan_file_sha256": "93717ed7e4df1a1f7b36742af84b7a1f89d9a014e96d6d7eaa9dad2ce7e72167",
+  "snapshot": {
+    "files": [
+      {
+        "bytes": 7756,
+        "name": "chat_template.jinja",
+        "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+      },
+      {
+        "bytes": 3366,
+        "name": "config.json",
+        "sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"
+      },
+      {
+        "bytes": 3034300695,
+        "name": "model.safetensors",
+        "sha256": "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db"
+      },
+      {
+        "bytes": 101944,
+        "name": "model.safetensors.index.json",
+        "sha256": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a"
+      },
+      {
+        "bytes": 390,
+        "name": "preprocessor_config.json",
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
+      },
+      {
+        "bytes": 1300,
+        "name": "processor_config.json",
+        "sha256": "14932921ca485d458a04dafd8069fbb0a4505622a48208d19ed247115801385b"
+      },
+      {
+        "bytes": 19989343,
+        "name": "tokenizer.json",
+        "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+      },
+      {
+        "bytes": 1139,
+        "name": "tokenizer_config.json",
+        "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"
+      },
+      {
+        "bytes": 385,
+        "name": "video_preprocessor_config.json",
+        "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+      },
+      {
+        "bytes": 6722759,
+        "name": "vocab.json",
+        "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      }
+    ],
+    "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+    "identity_basis": "exact config, model*.safetensors, indices and runtime assets",
+    "resolved_revision": "32f3e8ecf65426fc3306969496342d504bfa13f3",
+    "snapshot_path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3",
+    "snapshot_sha256": "d8e5ca95bde5faf0c52628b26ae58be3d0439c5d2a4107cb59081e051f5ebd9b"
+  },
+  "source_sha256": {
+    "scripts/lens_epsilon_diagnostic.py": "847c2129dab3256af1a8ea4a2230620faba291bc7fbb5e25f3d73d3c52614aa1",
+    "src/local_llm_lab/arch.py": "a69109c71c8743c43e1ba70b4ab06018a51f2fb83b33fc62dd63f40b56a9615d",
+    "src/local_llm_lab/pipeline/evaluate.py": "077bd0d9cbd3473e614791394df8b77e031d9388282c19835b08d5bef6b4c951",
+    "src/local_llm_lab/pipeline/lens_fitting/__init__.py": "da6ef981a767c1b6f7901703132ddf50078b935bcc05f78dd50c5d989d1ce21c",
+    "src/local_llm_lab/pipeline/lens_fitting/artifacts.py": "d4c42871db649951a4df052f6ede2cfadecfa3c7445886d650ca43ecf46423fd",
+    "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "63c85989e9551f6d42f451b3124203be14ffe2dee6bf82e2077547d9338562e8",
+    "src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py": "4cf6e9630ecc01f3e65639f2941cd9b27a1828934cddd47ded63229acc054647",
+    "src/local_llm_lab/pipeline/lens_fitting/jacobian.py": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893",
+    "src/local_llm_lab/pipeline/lens_fitting/profiles.py": "eb97423a631955cf59f032daa673664571a374407f7a758f89a6910b010db54d",
+    "src/local_llm_lab/pipeline/lens_fitting/prose.py": "1997f5ace7787b5879a3083317b17de6b3cdc9c14411cb40ecfd6e022448c2c6",
+    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "e9f291438e4d5c972900ca13cd4c244b6a07887035cc7871980b3a38fd20dcf3",
+    "src/local_llm_lab/pipeline/lens_fitting/replay.py": "b965be8c38296ccb2ec33863a163eab23ab8fb94f81e35cb13a1970bcdc583b5",
+    "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "f2049f849e7f3883f7a084faa2641717ae2d2de1f922ce8660e56164a5210dff",
+    "src/local_llm_lab/pipeline/lens_fitting/validation.py": "3fcc8152f23b3453697ec30b33135a394164e07a1d5153b3846d8de9b7723513"
+  }
+}

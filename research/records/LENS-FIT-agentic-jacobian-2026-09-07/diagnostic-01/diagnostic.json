@@ -1,0 +1,4343 @@
+{
+  "batch_size": 8,
+  "block_accounting": {
+    "accounting": "batch * sequence per actual run_block; partial-block computations; returned calls may be lazily evaluated; workload guards follow materialization",
+    "attempted_block_calls": 9792,
+    "ledger_sha256": "4480767e65d8b6c1567a53d4009f9963113c44aa236b445b9057fc78873012a6",
+    "materialized_block_tokens": 2766528,
+    "pending_block_calls": 0,
+    "returned_block_calls": 9792,
+    "scheduled_block_tokens": 2766528
+  },
+  "budget_seconds": 480,
+  "comparisons": [
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 1,
+      "max_error": 0.0016698837280273438,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.000437319278717041,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.888828339234547e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0009197890758514404,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.7974031953865055e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00029402971267700195,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.245063075056385e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0005617141723632812,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.9107366372800846e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0008330345153808594,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.631409256699139e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00018671154975891113,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.019306138794934e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00028651952743530273,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.675125296975731e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002675056457519531,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.2549778044616637e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0016698837280273438,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.692256615257279e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002148691564798355,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.789427491834292e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.000769004225730896,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.615617643306086e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.000637054443359375,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.0340495004602035e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00024124979972839355,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.280660017444775e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00029027462005615234,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.230261316829072e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002393713511992246,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.202652621898929e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00045228004455566406,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.2159248161845856e-05,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 5.6109273706226596e-05,
+      "rtol": 0.003,
+      "scale": 0.125,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 1,
+      "max_error": 0.001504063606262207,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002440810203552246,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.809271253677493e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.000867009162902832,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.805090478189923e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002714395523071289,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.0784758708849375e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00063323974609375,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.728972848695177e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0007724761962890625,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.615170081401737e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00020167231559753418,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.0374175657814184e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00022619962692260742,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.692057552352893e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002675056457519531,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.203718277251702e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.001504063606262207,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.51814809267652e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00019837543368339539,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.4703941034651205e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0006144493818283081,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.645082314500877e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0006859302520751953,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.023628896823306e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00023065414279699326,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.038754943922414e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002638101577758789,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.2026759783819864e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00022052318672649562,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.2791637565580507e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0004673004150390625,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.159598971975125e-05,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 5.533891978408798e-05,
+      "rtol": 0.003,
+      "scale": 0.125,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.125,
+      "denominator": "first/reference response",
+      "failed_coordinates": 1198,
+      "kind": "adjacent_stability",
+      "layer": 1,
+      "max_error": 0.04266834259033203,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 61,
+          "max_error": 0.022725164890289307,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0024464467786641155,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 60,
+          "max_error": 0.007996559143066406,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002221705180195816,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 45,
+          "max_error": 0.00793883204460144,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002070622981799038,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 94,
+          "max_error": 0.03057575225830078,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0030503531195783455,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 106,
+          "max_error": 0.010081857442855835,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0026756326438697976,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 110,
+          "max_error": 0.02595210075378418,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.003076057036132425,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 41,
+          "max_error": 0.012863874435424805,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0020446112605243586,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 49,
+          "max_error": 0.008565068244934082,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0021915059924452235,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 68,
+          "max_error": 0.016263961791992188,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002433649899302641,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 97,
+          "max_error": 0.04266834259033203,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0031942758835947728,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 69,
+          "max_error": 0.015838101506233215,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002498226975662593,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 79,
+          "max_error": 0.0226290225982666,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002907767851365814,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 125,
+          "max_error": 0.03976583480834961,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00306724043652656,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 19,
+          "max_error": 0.00666046142578125,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00191587762970774,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 70,
+          "max_error": 0.032019197940826416,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002486874311871848,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 105,
+          "max_error": 0.011470973491668701,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0030408390982435557,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 0.25,
+      "rms_error": 0.0026154538264859164,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.25,
+      "denominator": "first/reference response",
+      "failed_coordinates": 18039,
+      "kind": "adjacent_stability",
+      "layer": 1,
+      "max_error": 0.16615772247314453,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 1108,
+          "max_error": 0.09705758094787598,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.009676287181485131,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1097,
+          "max_error": 0.0323723703622818,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.008636635726893471,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 992,
+          "max_error": 0.030543416738510132,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.008166831476383021,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1135,
+          "max_error": 0.12244391441345215,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.011868668051547336,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1351,
+          "max_error": 0.039905935525894165,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.010615896089244625,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1269,
+          "max_error": 0.10836255550384521,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.011797828365223617,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 874,
+          "max_error": 0.05609959363937378,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.007984915826902078,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1016,
+          "max_error": 0.033497512340545654,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.008418725019095668,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1078,
+          "max_error": 0.04832196235656738,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.009227319502619664,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1236,
+          "max_error": 0.16615772247314453,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.012286901324430428,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1221,
+          "max_error": 0.0585479736328125,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.009428720178235333,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1115,
+          "max_error": 0.09816479682922363,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.011318940003733796,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1318,
+          "max_error": 0.14767241477966309,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.011432366335317723,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 873,
+          "max_error": 0.02745521068572998,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.007379570371225398,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1143,
+          "max_error": 0.12731540203094482,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.009697465133269864,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1213,
+          "max_error": 0.04417578876018524,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.011807338697152843,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 0.5,
+      "rms_error": 0.010105833451459496,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.5,
+      "denominator": "first/reference response",
+      "failed_coordinates": 33776,
+      "kind": "adjacent_stability",
+      "layer": 1,
+      "max_error": 0.601956844329834,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 2109,
+          "max_error": 0.4177520275115967,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.03701101125334903,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2088,
+          "max_error": 0.12774507328867912,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.03088604580472998,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2090,
+          "max_error": 0.12477084994316101,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.032159598048772935,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2123,
+          "max_error": 0.5316612720489502,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.04278593793412023,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2236,
+          "max_error": 0.14843715727329254,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.04111603358660006,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2176,
+          "max_error": 0.48968029022216797,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.04054766964376634,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2005,
+          "max_error": 0.28647521138191223,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.03028124143049988,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2049,
+          "max_error": 0.13344383239746094,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.029582532194155388,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2046,
+          "max_error": 0.10809706896543503,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.03142407203246427,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2134,
+          "max_error": 0.601956844329834,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.04247645539638278,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2120,
+          "max_error": 0.13565191626548767,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.030424612184872222,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2152,
+          "max_error": 0.504340410232544,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.043172548291471984,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2190,
+          "max_error": 0.4267359972000122,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.03558919743941186,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1982,
+          "max_error": 0.14105796813964844,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.026774075769201145,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2131,
+          "max_error": 0.46512070298194885,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.03545362699666165,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 2145,
+          "max_error": 0.14963195472955704,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.04315272093688638,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 1.0,
+      "rms_error": 0.0362277234603441,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 1,
+      "max_error": 0.00011205673217773438,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.244114875793457e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.444835406148461e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.785988807678223e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.840587109962384e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00010699033737182617,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.997052144604278e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.3446977138519287e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.815620832929959e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.031990051269531e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.079672535271359e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.772445678710938e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.350977430240908e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.642937660217285e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.387071503186132e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00011205673217773438,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.614105417930443e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.678436279296875e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.4512528131430875e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.5762786865234375e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.291694409737552e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 4.00543212890625e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.379339340200145e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.886354923248291e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.994966066438628e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.9638409614562988e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.082493825822236e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.746151924133301e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.435970836184593e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.660422801971436e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.794233812489547e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.218650817871094e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.404234757505661e-06,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 7.415784696570923e-06,
+      "rtol": 0.003,
+      "scale": 1.0,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 1,
+      "max_error": 0.00010085105895996094,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.1845102310180664e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.364905516140328e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.92605972290039e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.62141038172085e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00010085105895996094,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.862504597826063e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.467632293701172e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 6.688143134943241e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.127357482910156e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.113400509989164e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.645917892456055e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.192141478733912e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.182623863220215e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.006278574872799e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.989738464355469e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.618054737382114e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.989738464355469e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.166145562662115e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.1021575927734375e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.253035887480925e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 4.5239925384521484e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.3041931893944896e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.631545066833496e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.091240386878701e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.9787421226501465e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.039944638967253e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.826618194580078e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.332938824181291e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.000301361083984e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.466821840654706e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.658367156982422e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.0754032341693224e-06,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 7.278331331286545e-06,
+      "rtol": 0.003,
+      "scale": 1.0,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 16,
+      "max_error": 0.0003236532211303711,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.431341171264648e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3283111737382023e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00015461444854736328,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4865062706636225e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 4.823505878448486e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2305720940133153e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0001016855239868164,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.330835470969964e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0003236532211303711,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4768451963573839e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00015562772750854492,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.410731874695589e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.003677845001221e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2711714393143594e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00018668174743652344,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4134573374303563e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00020229816436767578,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4028544218789e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.261335849761963e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3322529463042249e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00018361210823059082,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4710267028772893e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.342811346054077e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3875736518789928e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.535649299621582e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3034693720919155e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00010892748832702637,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3363771415172577e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.653500556945801e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2825247505110836e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0001971125602722168,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4204011072760816e-05,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 1.3698549370501546e-05,
+      "rtol": 0.003,
+      "scale": 0.125,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 16,
+      "max_error": 0.00032782554626464844,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.224587559700012e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3435955825529659e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0001327991485595703,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4308719060426339e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 4.7713518142700195e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2194939807819632e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.3942203521728516e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.257174204762212e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00032782554626464844,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4841733239684038e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00014835596084594727,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3902094538695638e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.289912223815918e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2417203797309015e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0002447366714477539,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4255786750261381e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00017535686492919922,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4267901200805193e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.106363773345947e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3707363531579264e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00018361210823059082,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4303744010937745e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.5499374866485596e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3648327004261833e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 4.511914448812604e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.296800767959451e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.780548185110092e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3034247348383973e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.237758159637451e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2814571893761595e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00020438432693481445,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3784194730675074e-05,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 1.3549921900090034e-05,
+      "rtol": 0.003,
+      "scale": 0.125,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.125,
+      "denominator": "first/reference response",
+      "failed_coordinates": 1,
+      "kind": "adjacent_stability",
+      "layer": 16,
+      "max_error": 0.007234930992126465,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0036874711513519287,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0006416435079105289,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.004905402660369873,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0006603033672537611,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0021709054708480835,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0006036588821932003,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0036308765411376953,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0006760638473313009,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.004297971725463867,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0009551266041142629,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0026884377002716064,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0007875994966287493,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.002932623028755188,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0007954435024260738,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.006213545799255371,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0010326169507524074,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.007234930992126465,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0008199014803969505,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.006727591156959534,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0005913963961305645,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0020044296979904175,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0005045480017695304,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0037803053855895996,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0005617697254634607,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00336340069770813,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0007813007792546381,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1,
+          "max_error": 0.004498203285038471,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0007990160020985505,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0027742981910705566,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0006102067774894474,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.003452867269515991,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0009277444428091231,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 0.25,
+      "rms_error": 0.0007489510504891266,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.25,
+      "denominator": "first/reference response",
+      "failed_coordinates": 2767,
+      "kind": "adjacent_stability",
+      "layer": 16,
+      "max_error": 0.028171300888061523,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 110,
+          "max_error": 0.013970524072647095,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0024741897948840374,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 104,
+          "max_error": 0.01833099126815796,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0025289090346309493,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 113,
+          "max_error": 0.00849844515323639,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002334349117940692,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 170,
+          "max_error": 0.015555977821350098,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0026258313310752505,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 321,
+          "max_error": 0.015041481703519821,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0036236236564152094,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 209,
+          "max_error": 0.010346859693527222,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0030182616221703707,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 181,
+          "max_error": 0.011262759566307068,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.003047338758197542,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 417,
+          "max_error": 0.02526116371154785,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.003918051883407572,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 232,
+          "max_error": 0.028171300888061523,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0031245107091130288,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 77,
+          "max_error": 0.026004210114479065,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002297056351762499,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 45,
+          "max_error": 0.007828786969184875,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0019530821822360798,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 60,
+          "max_error": 0.015038549900054932,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.002174737663195255,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 171,
+          "max_error": 0.012960940599441528,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0030071323343998447,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 190,
+          "max_error": 0.016588681377470493,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0030549136694960257,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 89,
+          "max_error": 0.010668426752090454,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0023460840766006408,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 278,
+          "max_error": 0.013026028871536255,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.003489326466169071,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 0.5,
+      "rms_error": 0.0028654954717421306,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.5,
+      "denominator": "first/reference response",
+      "failed_coordinates": 25048,
+      "kind": "adjacent_stability",
+      "layer": 16,
+      "max_error": 0.11010277271270752,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 1441,
+          "max_error": 0.04557010531425476,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.008626467279052162,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1522,
+          "max_error": 0.0660352110862732,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00871264434068599,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1463,
+          "max_error": 0.03164747357368469,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.008293023738176001,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1523,
+          "max_error": 0.0751117467880249,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0094468139812065,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1777,
+          "max_error": 0.04992094449698925,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.01226180301647791,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1649,
+          "max_error": 0.035939574241638184,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.010302804735962673,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1624,
+          "max_error": 0.03932134807109833,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.01040115387680733,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1796,
+          "max_error": 0.11010277271270752,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.013030504476272945,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1651,
+          "max_error": 0.10106879472732544,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.010554809867351075,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1420,
+          "max_error": 0.09085455536842346,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00821381907740811,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1348,
+          "max_error": 0.027496986091136932,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0069562250018605784,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1373,
+          "max_error": 0.057241201400756836,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.007779649576974993,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1625,
+          "max_error": 0.045586973428726196,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.010490088383319007,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1661,
+          "max_error": 0.04547558072954416,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.010375377597352213,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1485,
+          "max_error": 0.03579933941364288,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.008114652520385377,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1690,
+          "max_error": 0.043833911418914795,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.011525830348979998,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 1.0,
+      "rms_error": 0.009832935434312393,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 16,
+      "max_error": 3.540515899658203e-05,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.540515899658203e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.9474117339395187e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.496906280517578e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6136442648397982e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.2308359146118164e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7236477957777858e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.8358230590820312e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6709790196919944e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.333521842956543e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7283168593640995e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.651746273040771e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6577187430266057e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.104043960571289e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.836743108823052e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.683170795440674e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7760190131776172e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.2590160369873047e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7091838051321089e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.7113983631134033e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.89588622587341e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.2308359146118164e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6578815068481903e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4960765838623047e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.8124770155393764e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.7374753952026367e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7778975160257842e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.152472734451294e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.742803652569844e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.299946784973145e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.908071354114405e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.650814950466156e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7829036243704034e-06,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 1.7675809020076368e-06,
+      "rtol": 0.003,
+      "scale": 1.0,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 16,
+      "max_error": 2.6464462280273438e-05,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.5540590286254883e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.8098928763352944e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.059906005859375e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6326673180478778e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.5020370483398438e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7395451002200475e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.7404556274414062e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6373116821531779e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.683831214904785e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6822956142247112e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.165836334228516e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.6648803674488228e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.3066997528076172e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.840979275707575e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.534159183502197e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7240848627602289e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.6464462280273438e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.763348977036659e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.8283724784851074e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.9086306341476495e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4647841453552246e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.63360685372965e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.5974044799804688e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.8066807826759532e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.2189149856567383e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7505177497141383e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.5156885385513306e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.7483473539491883e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.716938853263855e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.8761105195615092e-06,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4275312423706055e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.8021139553238605e-06,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 1.7533042651975657e-06,
+      "rtol": 0.003,
+      "scale": 1.0,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 31,
+      "max_error": 1.6286969184875488e-05,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.394701242446899e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.385591142065927e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.144625902175903e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.56259939553078e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.858259439468384e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.01264509267911e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.1570751667022705e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.278588376875215e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.536021828651428e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.823111647212376e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.495284080505371e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.506130488236487e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.2218952178955078e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.464490341376496e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.1146068572998047e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.210693779590068e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.786097168922424e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.851758220514412e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.642192602157593e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.325722543066383e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4787539839744568e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.453466840159412e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.0014426708221436e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.862588802398454e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.6070902347564697e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.850534061315008e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4781951904296875e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.489390980777272e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.1786818504333496e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.772222557807426e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.6286969184875488e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.651313853490149e-07,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 8.349551539661536e-07,
+      "rtol": 0.003,
+      "scale": 0.125,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 31,
+      "max_error": 1.971423625946045e-05,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.070600986480713e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.272900204883127e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 5.144625902175903e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.631182745413606e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.750226020812988e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.872894447940366e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.7352402210235596e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.65215312918719e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.750226020812988e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.677356434589214e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.432435035705566e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.354537577500454e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.8496675491333e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.256845320673166e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.0922551155090332e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.179143203145965e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.1572614312171936e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.882633275205888e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.643123924732208e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.385984956970851e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.6286969184875488e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.39696976502197e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.0014426708221436e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 7.817058489712896e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.971423625946045e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.939534843069306e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.2636184692382812e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.18034562394243e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 9.655952453613281e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.476757005903379e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.714378595352173e-05,
+          "nonfinite_coordinates": 0,
+          "rms_error": 8.760677490903227e-07,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 8.303270308962782e-07,
+      "rtol": 0.003,
+      "scale": 0.125,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.125,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "adjacent_stability",
+      "layer": 31,
+      "max_error": 0.0011985599994659424,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00013522058725357056,
+          "nonfinite_coordinates": 0,
+          "rms_error": 2.6705169027232558e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00016698986291885376,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.0719473431419585e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00036537647247314453,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.438330900326252e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0005271658301353455,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.461510922980415e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00015557557344436646,
+          "nonfinite_coordinates": 0,
+          "rms_error": 2.681837338703366e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00014850497245788574,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.142729634076686e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0011985599994659424,
+          "nonfinite_coordinates": 0,
+          "rms_error": 4.40550601287231e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0005992799997329712,
+          "nonfinite_coordinates": 0,
+          "rms_error": 2.888268279415959e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00014132820069789886,
+          "nonfinite_coordinates": 0,
+          "rms_error": 2.6388705872828987e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00012370198965072632,
+          "nonfinite_coordinates": 0,
+          "rms_error": 2.8437921516306858e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0005682017654180527,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.442035148051133e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.00019650906324386597,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.0736833107924354e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0011023357510566711,
+          "nonfinite_coordinates": 0,
+          "rms_error": 5.8491645977045414e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0005329549312591553,
+          "nonfinite_coordinates": 0,
+          "rms_error": 2.9071365902141546e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0003399848937988281,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.1579042308686926e-05,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0001241825520992279,
+          "nonfinite_coordinates": 0,
+          "rms_error": 3.0394775628285632e-05,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 0.25,
+      "rms_error": 3.385752830514264e-05,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.25,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "adjacent_stability",
+      "layer": 31,
+      "max_error": 0.004708915948867798,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0005255863070487976,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00010530545616177564,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0006681717932224274,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0001211590883124691,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0013779103755950928,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0001343747507905753,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0020096004009246826,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00013574527374404856,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0006132572889328003,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00010614437576199238,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0006482452154159546,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00012340956516674882,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.004708915948867798,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0001727675760037007,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.002337530255317688,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00011359684243243978,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0006228471174836159,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00010419407840628995,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0004837438464164734,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00011180622790338512,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.002214524894952774,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0001345508414935638,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0007684603333473206,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00012078126960735495,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0043012723326683044,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0002266906387708395,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.002160370349884033,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00011467303202715441,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0013070851564407349,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00012470486242299451,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0004907622933387756,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00011970226534345169,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 0.5,
+      "rms_error": 0.00013275190949893693,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.003,
+      "candidate_scale": 0.5,
+      "denominator": "first/reference response",
+      "failed_coordinates": 11,
+      "kind": "adjacent_stability",
+      "layer": 31,
+      "max_error": 0.016890719532966614,
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0019019506871700287,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00039731338128967854,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0024605654180049896,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0004592150907193079,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0052026063203811646,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0004986040018669711,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1,
+          "max_error": 0.006982855498790741,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0005093033907856177,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0027952343225479126,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.000410817774989358,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0025475919246673584,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.000464585129375548,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1,
+          "max_error": 0.016890719532966614,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0006338919839126154,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.008612781763076782,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0004295908531036845,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0021596113219857216,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00039292521843867456,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0018310844898223877,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00042312738127918225,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1,
+          "max_error": 0.007520895451307297,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.000495372160572738,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.0027499720454216003,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0004571061331622227,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 7,
+          "max_error": 0.014575652778148651,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0007968498451147865,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 1,
+          "max_error": 0.008063159883022308,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0004319701451634027,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.005119353532791138,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.00046764299751448653,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 0.001988053321838379,
+          "nonfinite_coordinates": 0,
+          "rms_error": 0.0004511309756332381,
+          "total_coordinates": 2560
+        }
+      ],
+      "reference_scale": 1.0,
+      "rms_error": 0.0004923955388489238,
+      "rtol": 0.03,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 31,
+      "max_error": 3.9637088775634766e-06,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.586794137954712e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1329459502104648e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.6614794731140137e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1493962341439122e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.9637088775634766e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.4065827799278692e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.341104507446289e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.0759841269252315e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.950429916381836e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2440965961679676e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.385807991027832e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1703189228583039e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.046627044677734e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1086769840314818e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.9818544387817383e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1883886549399371e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4994293451309204e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1459011165103277e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4998950064182281e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1388677985276115e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 6.295740604400635e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.0573798133357674e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.168118953704834e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1573986440367623e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.3336539268493652e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2229976985317554e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.972121238708496e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1743166762236411e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.086162567138672e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1291874649442112e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.652406692504883e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2333307444297395e-07,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 1.1736267284650103e-07,
+      "rtol": 0.003,
+      "scale": 1.0,
+      "total_coordinates": 40960
+    },
+    {
+      "atol": 0.0003,
+      "denominator": "first/reference response",
+      "failed_coordinates": 0,
+      "kind": "cache_reference",
+      "layer": 31,
+      "max_error": 3.941357135772705e-06,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "per_direction": [
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.847564458847046e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1276558769812939e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.5497207641601562e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1366143948041982e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 3.941357135772705e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.3734132257384927e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.773238182067871e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1070305274769916e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.652406692504883e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2224428696501762e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4454126358032227e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1730711714148891e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 8.046627044677734e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1186169001385232e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.3692846298217773e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2191844672358342e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4193356037139893e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1190377950177436e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.2051314115524292e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1156895572617504e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.497146725654602e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.0674951656895644e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.436339855194092e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.16758480492892e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 1.4975666999816895e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2001290040181825e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 7.078051567077637e-07,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1883116694073194e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.3543834686279297e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.1466552927243069e-07,
+          "total_coordinates": 2560
+        },
+        {
+          "failed_coordinates": 0,
+          "max_error": 2.864748239517212e-06,
+          "nonfinite_coordinates": 0,
+          "rms_error": 1.2534191605307694e-07,
+          "total_coordinates": 2560
+        }
+      ],
+      "rms_error": 1.1731778103867094e-07,
+      "rtol": 0.003,
+      "scale": 1.0,
+      "total_coordinates": 40960
+    }
+  ],
+  "diagnostic_only": true,
+  "direction_dtype": "float32",
+  "direction_seed": 20260904,
+  "direction_sha256": "642ee8d83cdcafb17b0b645d04de64b208bd7bd1e51df7269640a2930ba04ca1",
+  "direction_shape": [
+    16,
+    2560
+  ],
+  "elapsed_s": 174.79507775000093,
+  "endpoints": [
+    0.125,
+    1.0
+  ],
+  "input_ids": [
+    248045,
+    8678,
+    198,
+    2523,
+    513,
+    264,
+    16097,
+    36928,
+    8057,
+    10042,
+    264,
+    2526,
+    999,
+    26622,
+    1472,
+    7141,
+    13,
+    271,
+    4699,
+    2404,
+    11,
+    3165,
+    799,
+    2716,
+    4936,
+    5020,
+    11,
+    1179,
+    6681,
+    799,
+    5224,
+    1562,
+    13,
+    198,
+    760,
+    4936,
+    5020,
+    369,
+    678,
+    1132,
+    4779,
+    25,
+    6575,
+    5224,
+    2961,
+    513,
+    7920,
+    1238,
+    1330,
+    10263,
+    11,
+    748,
+    3150,
+    1396,
+    2029,
+    488,
+    1990,
+    1144,
+    318,
+    20960,
+    1990,
+    310,
+    3814,
+    11,
+    2663,
+    14129,
+    748,
+    2944,
+    11,
+    1092,
+    369,
+    2725,
+    11,
+    1092,
+    3905,
+    1727,
+    553,
+    271,
+    25177,
+    25,
+    198,
+    12,
+    9437,
+    955,
+    1528,
+    440,
+    7141,
+    4370,
+    314,
+    44925,
+    12351,
+    11,
+    999,
+    4874,
+    11,
+    466,
+    2663,
+    13,
+    198,
+    12,
+    5183,
+    1754,
+    1852,
+    383,
+    279,
+    5362,
+    5224,
+    1067,
+    321,
+    678,
+    8129,
+    13,
+    198,
+    12,
+    1368,
+    264,
+    5224,
+    4523,
+    449,
+    1412,
+    11,
+    1301,
+    424,
+    321,
+    11394,
+    25,
+    1103,
+    466,
+    2624,
+    310,
+    1423,
+    279,
+    1245,
+    1752,
+    11,
+    958,
+    449,
+    2420,
+    5224,
+    11,
+    466,
+    21979,
+    264,
+    39219,
+    7652,
+    13,
+    198,
+    12,
+    14271,
+    3591,
+    264,
+    3165,
+    24526,
+    2980,
+    264,
+    5224,
+    1067,
+    40988,
+    424,
+    26,
+    311,
+    27864,
+    264,
+    999,
+    1238,
+    9722,
+    424,
+    948,
+    4439,
+    310,
+    9845,
+    13,
+    198,
+    12,
+    6920,
+    6052,
+    1132,
+    948,
+    279,
+    3274,
+    369,
+    4434,
+    11,
+    440,
+    279,
+    4087,
+    303,
+    6681,
+    279,
+    10897,
+    1304,
+    13,
+    271,
+    18801,
+    3443,
+    25,
+    799,
+    2716,
+    4936,
+    5020,
+    11,
+    1179,
+    264,
+    37734,
+    11,
+    1179,
+    6681,
+    799,
+    5224,
+    1562,
+    430,
+    264,
+    80516,
+    4566,
+    2424,
+    314,
+    279,
+    4581,
+    1304,
+    198,
+    71093,
+    2164,
+    198,
+    4754,
+    591,
+    763,
+    3919,
+    13766,
+    20507,
+    328,
+    15889,
+    763,
+    14485,
+    3307,
+    198,
+    71093,
+    198,
+    7734,
+    4161,
+    1238,
+    279,
+    14870,
+    23873,
+    13,
+    271,
+    2,
+    13455,
+    198,
+    12,
+    1103,
+    10612,
+    37327,
+    25,
+    886,
+    1590,
+    1697,
+    3425,
+    3559,
+    264,
+    3972,
+    6025,
+    13,
+    198,
+    12,
+    1301,
+    2378,
+    5406,
+    25,
+    886,
+    1590,
+    4310,
+    799,
+    3972,
+    1414,
+    999,
+    13,
+    198,
+    12,
+    2624,
+    10612,
+    10425,
+    25,
+    886,
+    1590,
+    7145,
+    3972,
+    3425,
+    6483,
+    1752,
+    466,
+    2144,
+    5435,
+    264,
+    3134,
+    13,
+    198,
+    12,
+    10724,
+    46718,
+    25,
+    886,
+    1590,
+    52300,
+    264,
+    6557,
+    33633,
+    7258,
+    20359,
+    13,
+    198,
+    12,
+    8032,
+    4185,
+    5406,
+    25,
+    886,
+    11,
+    2235,
+    25,
+    886,
+    11,
+    491,
+    25,
+    886,
+    1590,
+    28592,
+    4581,
+    1414,
+    303,
+    799,
+    3972,
+    999,
+    13,
+    198,
+    12,
+    6052,
+    38015,
+    25,
+    886,
+    1590,
+    34358,
+    279,
+    3274,
+    440,
+    264,
+    61446,
+    42873,
+    4087,
+    13,
+    271,
+    6994,
+    6681,
+    799,
+    314,
+    1439,
+    7141,
+    791,
+    2404,
+    1608,
+    279,
+    80516,
+    4566,
+    2424,
+    3294,
+    26,
+    328,
+    15889,
+    1,
+    1902,
+    381,
+    264,
+    4566,
+    1576,
+    1608,
+    279,
+    5515,
+    4874,
+    9711,
+    13,
+    248046,
+    198,
+    248045,
+    846,
+    198,
+    4274,
+    26622,
+    49128,
+    14,
+    15,
+    15,
+    15,
+    15,
+    38786,
+    20668,
+    321,
+    1830,
+    279,
+    25009,
+    869,
+    6681,
+    13,
+    248046,
+    198,
+    248045,
+    74455,
+    198,
+    248068,
+    271,
+    248069,
+    271,
+    71093,
+    2164,
+    198,
+    4754,
+    591,
+    763,
+    328,
+    851,
+    2378,
+    487,
+    328,
+    15889,
+    763,
+    5046,
+    2267,
+    763,
+    328,
+    41490,
+    49128,
+    14,
+    15,
+    15,
+    15,
+    15,
+    38786,
+    20668,
+    29958,
+    198,
+    71093
+  ],
+  "input_ids_sha256": "c82e7316a34065f21fd4c2d489c497c0db55a575d44a6a038f486b76bfba075e",
+  "layers": [
+    1,
+    16,
+    31
+  ],
+  "measurements": [
+    {
+      "epsilon": [
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324724107980728,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324725598096848,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788
+      ],
+      "file": "layer-1-scale-0.125-reference.npy",
+      "file_sha256": "ec759d870c0b0941c8a35b8a958f62835b26fc18d4403a835dee46fa684e6e56",
+      "layer": 1,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        11.142865736778276,
+        8.970517798655308,
+        9.852397518733827,
+        14.552221063181182,
+        10.329947267279444,
+        11.111502418497507,
+        12.064860522106908,
+        10.175531729995079,
+        10.695701221911595,
+        13.741213989345965,
+        9.132805218265313,
+        14.468519379157579,
+        10.116010082692476,
+        10.434491869830675,
+        10.603635412553476,
+        13.194043559097414
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324724107980728,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324725598096848,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788
+      ],
+      "file": "layer-1-scale-0.125-restore.npy",
+      "file_sha256": "07b328384f5dfea9edd806dbba02d1af23dcd33fb1f7c110d2395ac547c71de5",
+      "layer": 1,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        11.142566025586762,
+        8.970748023932035,
+        9.853009331660923,
+        14.552462607571368,
+        10.330735279746051,
+        11.111479616552895,
+        12.06476329694268,
+        10.175421564348342,
+        10.695646642027059,
+        13.741112213156262,
+        9.133071163307683,
+        14.468376790637565,
+        10.115281000040463,
+        10.434319115154361,
+        10.603373158178238,
+        13.19395657553453
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324724107980728,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324725598096848,
+        0.06324725598096848,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788,
+        0.06324724853038788
+      ],
+      "file": "layer-1-scale-0.125-broadcast.npy",
+      "file_sha256": "1da668dd41f4e6afff27e2a46b42ac9c001170323f0ce4e7dc30b97cd2fc22f2",
+      "layer": 1,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        11.142636176586455,
+        8.970834050518427,
+        9.852845106023844,
+        14.552414095230706,
+        10.330619450605901,
+        11.111412796119918,
+        12.064724204109329,
+        10.175371326633478,
+        10.695546609858098,
+        13.741056224013583,
+        9.133056086499153,
+        14.468558539688772,
+        10.115161161512178,
+        10.43442930076918,
+        10.60325799531801,
+        13.193919604721748
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        0.12649449706077576,
+        0.12649451196193695,
+        0.12649448215961456,
+        0.12649449706077576,
+        0.12649449706077576,
+        0.12649451196193695,
+        0.12649449706077576,
+        0.12649449706077576,
+        0.12649449706077576,
+        0.12649449706077576,
+        0.12649451196193695,
+        0.12649451196193695,
+        0.12649449706077576,
+        0.12649449706077576,
+        0.12649449706077576,
+        0.12649449706077576
+      ],
+      "file": "layer-1-scale-0.25-reference.npy",
+      "file_sha256": "e4295890781abb1068cc339648bb1a3189749fa8c1a88593593adcd4b9bebfc6",
+      "layer": 1,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        11.107000459960362,
+        8.955591426677879,
+        9.816179734707019,
+        14.489911131797532,
+        10.290575501362042,
+        11.036275409143236,
+        12.051582385813361,
+        10.151948933047812,
+        10.680647547672434,
+        13.65352129251346,
+        9.07687283657089,
+        14.411116278549253,
+        10.032259505543413,
+        10.430952169007737,
+        10.569064369056145,
+        13.126604951433158
+      ],
+      "scale": 0.25
+    },
+    {
+      "epsilon": [
+        0.2529889941215515,
+        0.2529890239238739,
+        0.2529889643192291,
+        0.2529889941215515,
+        0.2529889941215515,
+        0.2529890239238739,
+        0.2529889941215515,
+        0.2529889941215515,
+        0.2529889941215515,
+        0.2529889941215515,
+        0.2529890239238739,
+        0.2529890239238739,
+        0.2529889941215515,
+        0.2529889941215515,
+        0.2529889941215515,
+        0.2529889941215515
+      ],
+      "file": "layer-1-scale-0.5-reference.npy",
+      "file_sha256": "b8d6ac92f71e14ccbd9e2b625f9d3a1405b709a52e5d00ebfe8627a387e6bf33",
+      "layer": 1,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        10.979313966951448,
+        8.904532288667236,
+        9.667279746600663,
+        14.239943731171383,
+        10.135561323054002,
+        10.7564763253285,
+        11.990179785362923,
+        10.069070070309452,
+        10.628602365693158,
+        13.318575666937372,
+        8.873208739065658,
+        14.162839973178608,
+        9.73113863853201,
+        10.408336592548205,
+        10.430709240511147,
+        12.868033760761222
+      ],
+      "scale": 0.5
+    },
+    {
+      "epsilon": [
+        0.505977988243103,
+        0.5059780478477478,
+        0.5059779286384583,
+        0.505977988243103,
+        0.505977988243103,
+        0.5059780478477478,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.5059780478477478,
+        0.5059780478477478,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103
+      ],
+      "file": "layer-1-scale-1-reference.npy",
+      "file_sha256": "394e84499f46ae78d8b678d2f2729f1170f94ec1ab3f10230ca12ea2f6c984ae",
+      "layer": 1,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        10.642328191882955,
+        8.810747741628253,
+        9.018292212970374,
+        13.283435470838567,
+        9.619015927571864,
+        9.901600681761263,
+        11.625831555079467,
+        9.86657407834394,
+        10.500881603668462,
+        12.194606157252874,
+        8.291238739761607,
+        12.94011652027565,
+        8.889363857550157,
+        10.208991211877956,
+        9.854967895366737,
+        11.955339359204345
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        0.505977988243103,
+        0.5059780478477478,
+        0.5059779286384583,
+        0.505977988243103,
+        0.505977988243103,
+        0.5059780478477478,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.5059780478477478,
+        0.5059780478477478,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103
+      ],
+      "file": "layer-1-scale-1-restore.npy",
+      "file_sha256": "04ab7e811de4916bf038cbeefd375ebf7d655b49f902060f8bda2f5894922b98",
+      "layer": 1,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        10.642301722670119,
+        8.810813771260452,
+        9.01827066221299,
+        13.283454490568444,
+        9.619032017732321,
+        9.901615491849247,
+        11.625849696789246,
+        9.866551424328856,
+        10.500822943670558,
+        12.19466905150028,
+        8.291241797654955,
+        12.940040762385204,
+        8.889401397466907,
+        10.208918595286788,
+        9.855036147630784,
+        11.955317432882667
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        0.505977988243103,
+        0.5059780478477478,
+        0.5059779286384583,
+        0.505977988243103,
+        0.505977988243103,
+        0.5059780478477478,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.5059780478477478,
+        0.5059780478477478,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103,
+        0.505977988243103
+      ],
+      "file": "layer-1-scale-1-broadcast.npy",
+      "file_sha256": "74a9344cdbfa599f35efd88c7756d627e6e7b19e116baa421644f59347906c8d",
+      "layer": 1,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        10.642316594558373,
+        8.810822356454807,
+        9.018273693741891,
+        13.283443878598472,
+        9.619032214284477,
+        9.901618122786294,
+        11.62585281752826,
+        9.866575797094894,
+        10.50083149186494,
+        12.194682141837964,
+        8.29123284797393,
+        12.940037065636684,
+        8.889402665719567,
+        10.20892228008363,
+        9.855014662331753,
+        11.955333283845894
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        0.22982129454612732,
+        0.2298213094472885,
+        0.22982126474380493,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.2298213094472885,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.2298213094472885,
+        0.2298213094472885,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732
+      ],
+      "file": "layer-16-scale-0.125-reference.npy",
+      "file_sha256": "0779c8d078b6e6791abd72eed48b7879cb22dbcee9bdffa9b8e40c0e29474f7c",
+      "layer": 16,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.592145282712448,
+        4.331073954625987,
+        4.2889443342187334,
+        4.861039816138963,
+        5.214231586428995,
+        4.731970526308878,
+        4.971062060003169,
+        5.699627666184122,
+        4.6842200819389666,
+        4.36392598592113,
+        3.877331311155897,
+        4.4317646198462,
+        4.80372310683313,
+        4.484193766041678,
+        4.278217795218956,
+        5.3852919866265365
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        0.22982129454612732,
+        0.2298213094472885,
+        0.22982126474380493,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.2298213094472885,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.2298213094472885,
+        0.2298213094472885,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732
+      ],
+      "file": "layer-16-scale-0.125-restore.npy",
+      "file_sha256": "d801237c02473bbcbf6fba32fd91434067c02d7077478b520f498dde40755b0c",
+      "layer": 16,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.5921771999541265,
+        4.331014349485354,
+        4.28889891106698,
+        4.8609986988250595,
+        5.214054345496541,
+        4.731961566193805,
+        4.971099047020586,
+        5.69948073265455,
+        4.6841269792381555,
+        4.363929551135286,
+        3.8773702459304804,
+        4.431642719569569,
+        4.803798438858257,
+        4.484214038996224,
+        4.27820157188331,
+        5.385312227771144
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        0.22982129454612732,
+        0.2298213094472885,
+        0.22982126474380493,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.2298213094472885,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.2298213094472885,
+        0.2298213094472885,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732,
+        0.22982129454612732
+      ],
+      "file": "layer-16-scale-0.125-broadcast.npy",
+      "file_sha256": "da38fb27e3da105dbe167341d546f4ded2a754676e05ab918da8196647806e9b",
+      "layer": 16,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.5921936126181375,
+        4.331040065166782,
+        4.2889015393274414,
+        4.860974019181467,
+        5.214039299916694,
+        4.7319736510984685,
+        4.971140456284419,
+        5.699469827518104,
+        4.684114449046252,
+        4.363949102568403,
+        3.877357340059413,
+        4.431654402379854,
+        4.803807901191637,
+        4.484221378643583,
+        4.278196995769218,
+        5.385324095201558
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        0.45964258909225464,
+        0.459642618894577,
+        0.45964252948760986,
+        0.45964258909225464,
+        0.45964258909225464,
+        0.459642618894577,
+        0.45964258909225464,
+        0.45964258909225464,
+        0.45964258909225464,
+        0.45964258909225464,
+        0.459642618894577,
+        0.459642618894577,
+        0.45964258909225464,
+        0.45964258909225464,
+        0.45964258909225464,
+        0.45964258909225464
+      ],
+      "file": "layer-16-scale-0.25-reference.npy",
+      "file_sha256": "0c2c2a1c9197aba3bae519c30fdb5a7c296f469d4c9168bfa54b45907fcf638b",
+      "layer": 16,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.573421009229351,
+        4.30936732214589,
+        4.273159378348444,
+        4.846021410844509,
+        5.182310417719815,
+        4.707107378438391,
+        4.94388825133576,
+        5.669566298837338,
+        4.656273769611229,
+        4.346964391342859,
+        3.863418226594376,
+        4.416083836661357,
+        4.778307329682368,
+        4.456989118878837,
+        4.25950432155861,
+        5.354592282550315
+      ],
+      "scale": 0.25
+    },
+    {
+      "epsilon": [
+        0.9192851781845093,
+        0.919285237789154,
+        0.9192850589752197,
+        0.9192851781845093,
+        0.9192851781845093,
+        0.919285237789154,
+        0.9192851781845093,
+        0.9192851781845093,
+        0.9192851781845093,
+        0.9192851781845093,
+        0.919285237789154,
+        0.919285237789154,
+        0.9192851781845093,
+        0.9192851781845093,
+        0.9192851781845093,
+        0.9192851781845093
+      ],
+      "file": "layer-16-scale-0.5-reference.npy",
+      "file_sha256": "a6989f4d6293bfc78594e7c41972bfa934e39356a52834de5d44fd95e6d1f3ea",
+      "layer": 16,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.5013879655622535,
+        4.226663867644315,
+        4.212857279029847,
+        4.787972734516396,
+        5.062324014550368,
+        4.612104962228676,
+        4.839850998566488,
+        5.555189047451827,
+        4.550204102251467,
+        4.280862462864768,
+        3.8096807858853414,
+        4.35615946241263,
+        4.680673269762566,
+        4.353270941916187,
+        4.188102756297709,
+        5.239442380416259
+      ],
+      "scale": 0.5
+    },
+    {
+      "epsilon": [
+        1.8385703563690186,
+        1.838570475578308,
+        1.8385701179504395,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.838570475578308,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.838570475578308,
+        1.838570475578308,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186
+      ],
+      "file": "layer-16-scale-1-reference.npy",
+      "file_sha256": "4532f02de154dbfab3c2cd5ddff9781cf208b34d2d871d54c519ac5220fb2b0f",
+      "layer": 16,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.254889648505198,
+        3.9470108357724536,
+        4.00594736999243,
+        4.5789498766466705,
+        4.667319208878588,
+        4.291304897162953,
+        4.485387909103291,
+        5.168194488951341,
+        4.1971961074329975,
+        4.044106707227118,
+        3.622344544834331,
+        4.147851208837286,
+        4.345617717514605,
+        4.008840394822197,
+        3.9455552552193893,
+        4.865342612466019
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        1.8385703563690186,
+        1.838570475578308,
+        1.8385701179504395,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.838570475578308,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.838570475578308,
+        1.838570475578308,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186
+      ],
+      "file": "layer-16-scale-1-restore.npy",
+      "file_sha256": "07099929dea34b8c3f8cc9ca4d65113d2c53913c6877f044915c56dc3ed5f294",
+      "layer": 16,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.254882915517236,
+        3.9470124255156214,
+        4.005950915366653,
+        4.578954910518035,
+        4.66732740371528,
+        4.291298999225386,
+        4.485393897530647,
+        5.168190219609084,
+        4.197209121449708,
+        4.044102396844997,
+        3.6223404248432676,
+        4.147853402679363,
+        4.34560670029697,
+        4.008837282761982,
+        3.9455637650392625,
+        4.865330734578914
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        1.8385703563690186,
+        1.838570475578308,
+        1.8385701179504395,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.838570475578308,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.838570475578308,
+        1.838570475578308,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186,
+        1.8385703563690186
+      ],
+      "file": "layer-16-scale-1-broadcast.npy",
+      "file_sha256": "9525417a2e772ca6af1f0c77a022946e01649fd7901cb42f5993b5d3f2c96020",
+      "layer": 16,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        4.2548826753429605,
+        3.947012940140772,
+        4.005950737581326,
+        4.578956014084033,
+        4.66732697977253,
+        4.291300790265216,
+        4.485392900636585,
+        5.168191172631501,
+        4.197210052838117,
+        4.044103159087709,
+        3.622341699867243,
+        4.147852438225962,
+        4.345608079501834,
+        4.008838089867375,
+        3.9455590961558515,
+        4.8653278914615345
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125718355178833,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125720739364624,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729
+      ],
+      "file": "layer-31-scale-0.125-reference.npy",
+      "file_sha256": "b5984a428d8043e146906de25e0ff9f376aa7b1df9053c6d897d1d5e7f6e91ef",
+      "layer": 31,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.1359309312567234,
+        1.1504800665422874,
+        1.1950286699791897,
+        1.1685450182465194,
+        1.1702170642099172,
+        1.1844986123627868,
+        1.171494182812716,
+        1.1753905212826237,
+        1.1509626163116047,
+        1.13390937246672,
+        1.1564061106479788,
+        1.1572028500828277,
+        1.1958351625177484,
+        1.162843867233832,
+        1.180387042199517,
+        1.1630706094581154
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125718355178833,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125720739364624,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729
+      ],
+      "file": "layer-31-scale-0.125-restore.npy",
+      "file_sha256": "df9c99187509be52f5871f4f2a0ee2bfa316a1665a737593c8c9879c0ef4c751",
+      "layer": 31,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.135932318188159,
+        1.150479447880708,
+        1.1950265277168184,
+        1.1685435093654937,
+        1.1702156924894214,
+        1.1844986017089925,
+        1.1714949705093938,
+        1.1753873770806968,
+        1.150962700218536,
+        1.1339082522188821,
+        1.1564028567737419,
+        1.1572021792108425,
+        1.195838569059065,
+        1.1628451877278287,
+        1.180387638271004,
+        1.1630696974478014
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125718355178833,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125720739364624,
+        1.1125720739364624,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729,
+        1.1125719547271729
+      ],
+      "file": "layer-31-scale-0.125-broadcast.npy",
+      "file_sha256": "d9b0ed7e18fb18d5737ad54461289ba27179968961ad3ec7e58871186054493e",
+      "layer": 31,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.1359319683170537,
+        1.150479826469645,
+        1.1950265422386537,
+        1.1685429652645576,
+        1.1702158910518612,
+        1.1844988502375005,
+        1.1714942398816053,
+        1.1753875843714983,
+        1.1509631281427453,
+        1.1339083561200454,
+        1.1564029828871165,
+        1.1572022036433394,
+        1.195838045333874,
+        1.162845815833604,
+        1.1803874313049447,
+        1.1630697203022724
+      ],
+      "scale": 0.125
+    },
+    {
+      "epsilon": [
+        2.2251439094543457,
+        2.225144147872925,
+        2.2251436710357666,
+        2.2251439094543457,
+        2.2251439094543457,
+        2.225144147872925,
+        2.2251439094543457,
+        2.2251439094543457,
+        2.2251439094543457,
+        2.2251439094543457,
+        2.225144147872925,
+        2.225144147872925,
+        2.2251439094543457,
+        2.2251439094543457,
+        2.2251439094543457,
+        2.2251439094543457
+      ],
+      "file": "layer-31-scale-0.25-reference.npy",
+      "file_sha256": "2a0d8aeb446e57db8028ccdc30643bc1fe6d70d651edeb31036381b1e0666b4f",
+      "layer": 31,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.1356154396304556,
+        1.1501925848677246,
+        1.1945758500876156,
+        1.1680043332895196,
+        1.1699472800874158,
+        1.1839543710941929,
+        1.1709684814714192,
+        1.1749504398997215,
+        1.1506393835059299,
+        1.1337069766483623,
+        1.155805797215326,
+        1.156792506772784,
+        1.1947832154800055,
+        1.1623858047177054,
+        1.1799956914614829,
+        1.1626986390479828
+      ],
+      "scale": 0.25
+    },
+    {
+      "epsilon": [
+        4.450287818908691,
+        4.45028829574585,
+        4.450287342071533,
+        4.450287818908691,
+        4.450287818908691,
+        4.45028829574585,
+        4.450287818908691,
+        4.450287818908691,
+        4.450287818908691,
+        4.450287818908691,
+        4.45028829574585,
+        4.45028829574585,
+        4.450287818908691,
+        4.450287818908691,
+        4.450287818908691,
+        4.450287818908691
+      ],
+      "file": "layer-31-scale-0.5-reference.npy",
+      "file_sha256": "b10a9f4138e50712ca04c26c9cd2763c7530ee6b68dcb8ecf8a3ef7c5dfbc90b",
+      "layer": 31,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.1343757796763407,
+        1.1490561159716393,
+        1.1927918339864605,
+        1.1658886659031924,
+        1.1688751129923947,
+        1.181815048498836,
+        1.1689241378206832,
+        1.1732183503567986,
+        1.1493558016022734,
+        1.1329198750317206,
+        1.153474838313973,
+        1.1551907787503366,
+        1.1907117413384716,
+        1.1605727992408097,
+        1.1784515238321527,
+        1.1612430736120858
+      ],
+      "scale": 0.5
+    },
+    {
+      "epsilon": [
+        8.900575637817383,
+        8.9005765914917,
+        8.900574684143066,
+        8.900575637817383,
+        8.900575637817383,
+        8.9005765914917,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.9005765914917,
+        8.9005765914917,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383
+      ],
+      "file": "layer-31-scale-1-reference.npy",
+      "file_sha256": "b158fc55987f4d6e52c5db8c249cdf2d33e061bb73d263d6f7acaad1b402a781",
+      "layer": 31,
+      "mode": "reference",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.129736965285165,
+        1.144688992181138,
+        1.1858120572287603,
+        1.1580078737444481,
+        1.1646004901344955,
+        1.1737920986574233,
+        1.1615133665256865,
+        1.166649043348698,
+        1.1444047263469448,
+        1.1299814622248925,
+        1.1449416423997134,
+        1.149423785740753,
+        1.1764084753382187,
+        1.1536884144421924,
+        1.1726402397631752,
+        1.1557805052901362
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        8.900575637817383,
+        8.9005765914917,
+        8.900574684143066,
+        8.900575637817383,
+        8.900575637817383,
+        8.9005765914917,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.9005765914917,
+        8.9005765914917,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383
+      ],
+      "file": "layer-31-scale-1-restore.npy",
+      "file_sha256": "602cacf1dfdb14fb15bc299b8e7214c31a8cb8d20b1e9a4146d8d0544475e34d",
+      "layer": 31,
+      "mode": "restore",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.129736632306486,
+        1.1446891717256027,
+        1.1858122917076692,
+        1.1580074822585957,
+        1.1646004636997747,
+        1.1737920251395602,
+        1.1615132042963119,
+        1.1666494018005105,
+        1.1444044607715584,
+        1.129981585879706,
+        1.144941935019459,
+        1.1494234070734781,
+        1.176408004194487,
+        1.15368840846634,
+        1.1726403888594608,
+        1.1557808776777232
+      ],
+      "scale": 1.0
+    },
+    {
+      "epsilon": [
+        8.900575637817383,
+        8.9005765914917,
+        8.900574684143066,
+        8.900575637817383,
+        8.900575637817383,
+        8.9005765914917,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.9005765914917,
+        8.9005765914917,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383,
+        8.900575637817383
+      ],
+      "file": "layer-31-scale-1-broadcast.npy",
+      "file_sha256": "69d49b8b19db230ab85b38b0fdefde35c7871c6fd82786fcc072d703b220a377",
+      "layer": 31,
+      "mode": "broadcast",
+      "nonfinite_coordinates": 0,
+      "response_norms": [
+        1.1297366501238402,
+        1.1446891831312778,
+        1.1858122786869028,
+        1.1580074246635352,
+        1.1646005693645034,
+        1.1737919894134632,
+        1.1615131087780268,
+        1.1666494779765768,
+        1.144404500469703,
+        1.129981577842929,
+        1.144941873474879,
+        1.1494232770584643,
+        1.1764080611450018,
+        1.153688297560505,
+        1.1726405201485353,
+        1.1557809213700416
+      ],
+      "scale": 1.0
+    }
+  ],
+  "peak_memory_bytes": 4156089896.0,
+  "peak_memory_scope": "actual MLX process peak including load",
+  "plan_sha256": "9fa35bb395d8c424b982d817f966204dc39bdb8d31f28ed9b9dd716d33dbc558",
+  "position": 438,
+  "primals": [
+    {
+      "full_primal_norm": 50.59779739379883,
+      "layer": 1,
+      "selected_position_norm": 2.195511402850738
+    },
+    {
+      "full_primal_norm": 183.85704040527344,
+      "layer": 16,
+      "selected_position_norm": 8.16646843632407
+    },
+    {
+      "full_primal_norm": 890.0575561523438,
+      "layer": 31,
+      "selected_position_norm": 37.278529626892926
+    }
+  ],
+  "production_acceptance": false,
+  "progress": {
+    "event": "diagnostic_finished",
+    "peak_memory_bytes": 4156089896.0,
+    "status": "completed"
+  },
+  "provenance": {
+    "actual_working_set_bytes": 19069665280,
+    "allocator": {
+      "limit_bytes": 0,
+      "previous_limit_bytes": 24481313587
+    },
+    "corpus_manifest_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
+    "model_run_lock": "/Users/daniel.tipton/Desktop/An app/outputs/.model-run.lock",
+    "peak_limit_bytes": 8589934592,
+    "plan_file_sha256": "93717ed7e4df1a1f7b36742af84b7a1f89d9a014e96d6d7eaa9dad2ce7e72167",
+    "snapshot": {
+      "files": [
+        {
+          "bytes": 7756,
+          "name": "chat_template.jinja",
+          "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+        },
+        {
+          "bytes": 3366,
+          "name": "config.json",
+          "sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"
+        },
+        {
+          "bytes": 3034300695,
+          "name": "model.safetensors",
+          "sha256": "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db"
+        },
+        {
+          "bytes": 101944,
+          "name": "model.safetensors.index.json",
+          "sha256": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a"
+        },
+        {
+          "bytes": 390,
+          "name": "preprocessor_config.json",
+          "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
+        },
+        {
+          "bytes": 1300,
+          "name": "processor_config.json",
+          "sha256": "14932921ca485d458a04dafd8069fbb0a4505622a48208d19ed247115801385b"
+        },
+        {
+          "bytes": 19989343,
+          "name": "tokenizer.json",
+          "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+        },
+        {
+          "bytes": 1139,
+          "name": "tokenizer_config.json",
+          "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"
+        },
+        {
+          "bytes": 385,
+          "name": "video_preprocessor_config.json",
+          "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+        },
+        {
+          "bytes": 6722759,
+          "name": "vocab.json",
+          "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+        }
+      ],
+      "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "identity_basis": "exact config, model*.safetensors, indices and runtime assets",
+      "resolved_revision": "32f3e8ecf65426fc3306969496342d504bfa13f3",
+      "snapshot_path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3",
+      "snapshot_sha256": "d8e5ca95bde5faf0c52628b26ae58be3d0439c5d2a4107cb59081e051f5ebd9b"
+    },
+    "source_sha256": {
+      "scripts/lens_epsilon_diagnostic.py": "847c2129dab3256af1a8ea4a2230620faba291bc7fbb5e25f3d73d3c52614aa1",
+      "src/local_llm_lab/arch.py": "a69109c71c8743c43e1ba70b4ab06018a51f2fb83b33fc62dd63f40b56a9615d",
+      "src/local_llm_lab/pipeline/evaluate.py": "077bd0d9cbd3473e614791394df8b77e031d9388282c19835b08d5bef6b4c951",
+      "src/local_llm_lab/pipeline/lens_fitting/__init__.py": "da6ef981a767c1b6f7901703132ddf50078b935bcc05f78dd50c5d989d1ce21c",
+      "src/local_llm_lab/pipeline/lens_fitting/artifacts.py": "d4c42871db649951a4df052f6ede2cfadecfa3c7445886d650ca43ecf46423fd",
+      "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "63c85989e9551f6d42f451b3124203be14ffe2dee6bf82e2077547d9338562e8",
+      "src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py": "4cf6e9630ecc01f3e65639f2941cd9b27a1828934cddd47ded63229acc054647",
+      "src/local_llm_lab/pipeline/lens_fitting/jacobian.py": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893",
+      "src/local_llm_lab/pipeline/lens_fitting/profiles.py": "eb97423a631955cf59f032daa673664571a374407f7a758f89a6910b010db54d",
+      "src/local_llm_lab/pipeline/lens_fitting/prose.py": "1997f5ace7787b5879a3083317b17de6b3cdc9c14411cb40ecfd6e022448c2c6",
+      "src/local_llm_lab/pipeline/lens_fitting/regression.py": "e9f291438e4d5c972900ca13cd4c244b6a07887035cc7871980b3a38fd20dcf3",
+      "src/local_llm_lab/pipeline/lens_fitting/replay.py": "b965be8c38296ccb2ec33863a163eab23ab8fb94f81e35cb13a1970bcdc583b5",
+      "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "f2049f849e7f3883f7a084faa2641717ae2d2de1f922ce8660e56164a5210dff",
+      "src/local_llm_lab/pipeline/lens_fitting/validation.py": "3fcc8152f23b3453697ec30b33135a394164e07a1d5153b3846d8de9b7723513"
+    }
+  },
+  "row": 0,
+  "scales": [
+    0.125,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "snapshot_sha256": "d8e5ca95bde5faf0c52628b26ae58be3d0439c5d2a4107cb59081e051f5ebd9b",
+  "status": "completed"
+}
