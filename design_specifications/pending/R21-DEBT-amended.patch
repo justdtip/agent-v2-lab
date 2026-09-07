@@ -1,0 +1,367 @@
+# R21-DEBT-amended: the fourth site existed, and I asked the wrong question about it
+
+Supersedes `R21-DEBT.patch`. Apply this one; the original's two migrations are unchanged inside it.
+
+## The correction
+
+`R21-DEBT.patch`, the heartbeat entry at `dd095d6` and the issue-74 comment all say the block's
+fourth site "never existed". **It exists.** The comment's words were "`probes/state_probe.py:2845`
+duplicates this helper", and the helper it means is the **atomic writer**, not the manifest write.
+
+At `30424d6`, the commit that wrote the comment, line 2845 of `state_probe.py` is
+`def _atomic_text(path, text)`. It is a functional twin of `runlog.write_text_atomic`:
+same-directory temporary with the dotted name and `.tmp` suffix, write, flush, `fsync`, `replace`,
+`unlink` on failure. At HEAD it sits at 2940 with eight callers — 4124, 4130, 4227, 4233, 4796,
+4803, 4822, 4830, for the JSON results and the markdown — and no reference anywhere outside the
+module, tests included.
+
+I ran `git log -S'manifest.json'` on that file and reported it empty. It is empty, and the search
+was the wrong question: the comment never claimed the file wrote a manifest. **The same error as
+the two in the fork-sites amendment** — checking a mechanism instead of reading the text — and now
+three times in one day, which is why it is stated here rather than folded quietly into a diff.
+
+## What this patch adds
+
+- `_atomic_text` is deleted; its eight callers go through `runlog.write_text_atomic`, which
+  `state_probe.py` already imported alongside `RunLog`, `git_commit` and `sha256_of`. The
+  semantics match, so nothing else moves.
+- `tempfile` and `os` stay imported: the two `np.savez_compressed` writers at 1131 and 3198 still
+  use them. They are **left alone deliberately** — they are binary and `runlog` has no bytes
+  variant. They do duplicate each other within the module, which is worth its own line and not
+  this issue.
+- The test's fourth-site assertion is replaced. The old one checked that `"manifest.json"` was
+  absent from `state_probe.py`, which proves nothing about the claim it was checking. The new one
+  asserts, by AST, that the module defines no function combining `NamedTemporaryFile` with
+  `os.replace` and `mode="w"`, and that `write_text_atomic` appears by name. `mode="w"` is what
+  keeps the two npz writers out of it, and both directions are mutation-checked: restoring
+  `_atomic_text` names it in the failure, and the npz writers do not trip it.
+
+## Verification
+
+```
+full suite:                       exit 0
+tests/test_cli.py:                exit 0
+mutation: _atomic_text restored is named in the failure; the two npz writers are not flagged
+ruff, all changed files:          7 findings before, 7 after, 0 newly introduced
+git apply --check against HEAD:   0
+concurrency: no libmlx-mapped process and no model-run lock, checked in the launching command
+```
+
+The heartbeat entry and the issue comment carry appended corrections rather than edits, per
+the 2026-09-07 19:50 ruling.
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/cli.py b/src/local_llm_lab/pipeline/cli.py
+index b7170c4..4521143 100644
+--- a/src/local_llm_lab/pipeline/cli.py
++++ b/src/local_llm_lab/pipeline/cli.py
+@@ -195,9 +195,15 @@ def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
+ 
+     The R21 guard fires only on this file, so without it the rollout/branch guard calls
+     would be inert; the stamp also gives those outputs the provenance they were missing.
++
++    Atomic (issue 74), for the reason ``runlog.write_text_atomic`` states: the manifest is the
++    guard's own sentinel, so a truncated one is worse than none. It does not merely lose
++    provenance -- it can wave a later write straight over rollout data that is in fact
++    complete. ``branch.py`` and ``rollout.py`` stamp through the same call, and this was the
++    last stamp that did not.
+     """
+     target.mkdir(parents=True, exist_ok=True)
+-    (target / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
++    write_text_atomic(target / "manifest.json", json.dumps(payload, indent=2) + "\n")
+ 
+ 
+ def _load_training_base(hf_id: str) -> tuple[Any, Any]:
+@@ -880,8 +886,14 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+                     status=status,
+                     fallbacks=_recorded_fallbacks(backbone),
+                 )
+-            (output / "health.json").write_text(
+-                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
++            # Atomic (issue 74). This is the R26 training-health record: the file a reader
++            # opens to decide whether a run is usable, written at the end of a run that took
++            # seventy minutes and cannot be repeated cheaply. A truncated one is a health
++            # verdict that will not parse, produced at the moment the information is least
++            # reproducible. Unlike the sentinels, nothing downstream is waved past by it --
++            # the cost is the record itself, which is worse.
++            write_text_atomic(
++                output / "health.json", json.dumps(summary, indent=2, sort_keys=True) + "\n"
+             )
+             runlog.close(status=status, verdict=health.verdict, flags=len(health.flags))
+             del callback, train_set, valid_set, test_set, model, tokenizer
+@@ -1106,8 +1118,8 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
+     # Atomic because this file is a stage sentinel like the dataset manifests: `best-adapter/`
+     # has already been copied by the time it is written, so a truncated selection.json is the
+     # one artifact saying WHICH checkpoint that copy is, left unparseable next to a directory
+-    # that looks finished. Whole or absent, never half. This module's own _write_stage_manifest
+-    # and health.json writes are still plain write_text; see DEBT(R21) in pipeline/data.py.
++    # that looks finished. Whole or absent, never half. Every sentinel this module writes goes
++    # through the same call now (issue 74).
+     write_text_atomic(selection_path, json.dumps(selection, indent=2) + "\n")
+     write_provenance(
+         output,
+diff --git a/src/local_llm_lab/pipeline/data.py b/src/local_llm_lab/pipeline/data.py
+index ab841f7..1b04694 100644
+--- a/src/local_llm_lab/pipeline/data.py
++++ b/src/local_llm_lab/pipeline/data.py
+@@ -29,12 +29,6 @@ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
+ from local_llm_lab.project import PROJECT_ROOT
+ from local_llm_lab.runlog import write_text_atomic
+ 
+-# DEBT(R21): the same non-atomic manifest write survives at three sites owned by other lanes
+-# this cycle — `pipeline/cli.py:184` (`_write_stage_manifest`, which also stamps the rollout and
+-# branch outputs at `cli.py:1009` and `cli.py:1224`) and `pipeline/cli.py:703` (health.json) —
+-# and `probes/state_probe.py:2845` duplicates this helper. Route all four through
+-# `runlog.write_text_atomic`; see design_specifications/complete/R21-RENDER-GUARD-REPORT.md.
+-
+ # Ruling R21: these datasets are irreplaceable (runs A and B cannot be regenerated from the
+ # current source; the generator revision that produced them is unrecoverable). No write path
+ # may target them, with or without an override flag.
+diff --git a/src/local_llm_lab/probes/state_probe.py b/src/local_llm_lab/probes/state_probe.py
+index 0ad9f80..47214c6 100644
+--- a/src/local_llm_lab/probes/state_probe.py
++++ b/src/local_llm_lab/probes/state_probe.py
+@@ -56,7 +56,7 @@ from local_llm_lab.probes.capture import (
+     note_token_span,
+     strip_state_fields,
+ )
+-from local_llm_lab.runlog import RunLog, git_commit, sha256_of
++from local_llm_lab.runlog import RunLog, git_commit, sha256_of, write_text_atomic
+ 
+ __all__ = [
+     "CAPTURE_POSITIONS",
+@@ -2937,28 +2937,6 @@ def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
+     return "\n".join(out)
+ 
+ 
+-def _atomic_text(path: Path, text: str) -> None:
+-    path.parent.mkdir(parents=True, exist_ok=True)
+-    temporary: Path | None = None
+-    try:
+-        with tempfile.NamedTemporaryFile(
+-            mode="w",
+-            encoding="utf-8",
+-            prefix=f".{path.name}.",
+-            suffix=".tmp",
+-            dir=path.parent,
+-            delete=False,
+-        ) as handle:
+-            temporary = Path(handle.name)
+-            handle.write(text)
+-            handle.flush()
+-            os.fsync(handle.fileno())
+-        os.replace(temporary, path)
+-    finally:
+-        if temporary is not None:
+-            temporary.unlink(missing_ok=True)
+-
+-
+ def _json_compliant(value: Any) -> Any:
+     """Replace non-finite floats with JSON null while preserving the report structure."""
+     if isinstance(value, dict):
+@@ -4121,13 +4099,13 @@ def _main_compare(argv: list[str]) -> None:
+         results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
+         json_path = args.output / "compare.json"
+         markdown_path = args.output / "compare.md"
+-        _atomic_text(
++        write_text_atomic(
+             json_path,
+             json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
+             + "\n",
+         )
+         markdown = render_compare_markdown(results)
+-        _atomic_text(markdown_path, markdown + "\n")
++        write_text_atomic(markdown_path, markdown + "\n")
+         print(markdown)
+         log.info("wrote", path=str(json_path))
+         log.info("wrote", path=str(markdown_path))
+@@ -4224,13 +4202,13 @@ def _main_reanalyse(argv: list[str]) -> None:
+             stem += f".{args.position}"
+         json_path = args.output / f"{stem}.json"
+         markdown_path = args.output / f"{stem}.md"
+-        _atomic_text(
++        write_text_atomic(
+             json_path,
+             json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
+             + "\n",
+         )
+         markdown = render_reanalysis_markdown(results, args.input.stem)
+-        _atomic_text(markdown_path, markdown + "\n")
++        write_text_atomic(markdown_path, markdown + "\n")
+         print(markdown)
+         log.info("wrote", path=str(json_path))
+         log.info("wrote", path=str(markdown_path))
+@@ -4793,14 +4771,14 @@ def _main_refit_bf16(argv: list[str]) -> None:
+         stem = args.input.name.removesuffix(".npz") + ".reanalysis-bf16"
+         written: list[Path] = []
+         json_path = args.output / f"{stem}.json"
+-        _atomic_text(
++        write_text_atomic(
+             json_path,
+             json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
+             + "\n",
+         )
+         written.append(json_path)
+         markdown_path = args.output / f"{stem}.md"
+-        _atomic_text(markdown_path, render_reanalysis_markdown(results, args.input.stem) + "\n")
++        write_text_atomic(markdown_path, render_reanalysis_markdown(results, args.input.stem) + "\n")
+         written.append(markdown_path)
+         comparison = compare_refit(
+             baseline,
+@@ -4819,7 +4797,7 @@ def _main_refit_bf16(argv: list[str]) -> None:
+             },
+         )
+         comparison_json = args.output / "refit-comparison.json"
+-        _atomic_text(
++        write_text_atomic(
+             comparison_json,
+             json.dumps(_json_compliant(comparison), indent=2, ensure_ascii=False, allow_nan=False)
+             + "\n",
+@@ -4827,7 +4805,7 @@ def _main_refit_bf16(argv: list[str]) -> None:
+         written.append(comparison_json)
+         markdown = render_refit_comparison_markdown(comparison, args.input.stem)
+         comparison_markdown = args.output / "refit-comparison.md"
+-        _atomic_text(comparison_markdown, markdown + "\n")
++        write_text_atomic(comparison_markdown, markdown + "\n")
+         written.append(comparison_markdown)
+         print(markdown)
+         for path in written:
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 7939df1..8539dd8 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import ast
+ import contextlib
+ import hashlib
+ import importlib
+@@ -1855,3 +1856,126 @@ def test_stage_train_ignores_a_stale_checkpoint_from_an_earlier_run(monkeypatch,
+     assert health["verdict"] == "incomplete"
+     assert health["final_checkpoint"] is False
+     assert "incomplete_run" in {flag["flag"] for flag in health["flags"]}
++
++
++# ------------------------------------------- the last two non-atomic sentinels (issue 74)
++#
++# `_interrupt_the_manifest_writer` is imported rather than copied. It truncates *both* writers
++# -- `runlog`'s `os.fdopen` and `Path.write_text` -- so the assertion rests on the outcome
++# rather than on which writer is in use, which is what makes it fail if a site is reverted to
++# a plain stamp. Two copies of that helper could drift, and a copy that stopped patching
++# `Path.write_text` would keep passing while proving nothing.
++from test_branch import _interrupt_the_manifest_writer  # noqa: E402
++
++
++def test_a_stage_manifest_is_whole_or_absent_when_the_write_is_interrupted(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """The last stamp in this module that was not atomic (issue 74).
++
++    `manifest.json` is the R21 guard's own sentinel: `guard_dataset_write` decides whether a
++    later write is permitted by whether this file is there. A truncated one does not merely
++    lose provenance, it waves a later write straight over data that is in fact complete.
++    `branch.py` and `rollout.py` already stamped through `write_text_atomic`; this one did not,
++    and it is the helper the rollout and branch stage outputs go through.
++    """
++    target = tmp_path / "rollouts"
++    target.mkdir()
++    original = '{"stage": "rollout", "kept": true}\n'
++    (target / "manifest.json").write_text(original, encoding="utf-8")
++
++    _interrupt_the_manifest_writer(monkeypatch, 12)
++    with pytest.raises(OSError, match="no space left on device"):
++        cli._write_stage_manifest(target, {"stage": "rollout", "split": "train"})
++    monkeypatch.undo()
++
++    assert (target / "manifest.json").read_text(encoding="utf-8") == original
++    leftovers = sorted(path.name for path in target.iterdir() if path.name.startswith("."))
++    assert leftovers == [], "no partial temporary file may survive at the destination"
++
++
++def test_a_health_record_is_whole_or_absent_when_the_write_is_interrupted(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """`health.json` is the one of the four where the record itself is the loss (issue 74).
++
++    The sentinels' failure mode is a later write over complete data, which is bad and already
++    reasoned about. This file is the R26 training-health record -- what a reader opens to decide
++    whether a run is usable -- written from the stage's `finally` at the end of a run that took
++    seventy minutes. A truncated one is a health verdict that will not parse, produced at the
++    moment the information is least reproducible.
++
++    Driven through `stage_train` rather than through a direct call, because the write happens on
++    the way out of a `finally` block and the question is what survives that path.
++    """
++    config = _training_config(tmp_path)
++    output = config["output"]
++    _patch_stage_train(monkeypatch, _short_trainer)
++
++    _interrupt_the_manifest_writer(monkeypatch, 10)
++    with pytest.raises(OSError, match="no space left on device"):
++        cli.stage_train(config, iters=2)
++    monkeypatch.undo()
++
++    assert not (output / "health.json").exists(), (
++        "a health record that cannot be parsed is worse than none: the reader cannot tell an "
++        "unhealthy run from an interrupted write"
++    )
++    leftovers = sorted(path.name for path in output.iterdir() if path.name.startswith("."))
++    assert leftovers == [], "no partial temporary file may survive at the destination"
++
++
++def test_the_r21_debt_comment_is_gone_because_the_debt_is() -> None:
++    """A comment that outlives its work sends the next reader looking for work that is done.
++
++    The block in `pipeline/data.py` named two writes in `cli.py` and a fourth site it called a
++    duplicate of the helper. All three are addressed here: the two writes go through
++    `runlog.write_text_atomic`, and `probes/state_probe.py`'s `_atomic_text` is deleted and its
++    eight callers rerouted. That function was a functional twin of `write_text_atomic` --
++    same-directory temporary with the dotted name and `.tmp` suffix, write, flush, fsync,
++    replace, unlink on failure -- with no reference outside its own module.
++
++    The first delivery of this test asserted that `"manifest.json"` was absent from
++    `state_probe.py`, and called the fourth site imaginary on that basis. **That was the wrong
++    question.** The comment said the file duplicated *the helper*, not the manifest write, so
++    searching for the manifest proved nothing about the claim it was checking. The assertion
++    below asks what the comment actually said.
++    """
++    # From this file, not from `cli.__file__`: the package may be installed rather than
++    # imported from the tree, and then its parents point into site-packages.
++    root = Path(__file__).resolve().parents[1]
++    data_source = (root / "src/local_llm_lab/pipeline/data.py").read_text(encoding="utf-8")
++    assert "DEBT(R21)" not in data_source
++
++    for module in ("pipeline/cli.py",):
++        source = (root / "src/local_llm_lab" / module).read_text(encoding="utf-8")
++        assert '"manifest.json").write_text(' not in source
++        assert '"health.json").write_text(' not in source
++
++    probe = (root / "src/local_llm_lab/probes/state_probe.py").read_text(encoding="utf-8")
++    tree = ast.parse(probe)
++
++    def _calls(node: ast.AST, attribute: str) -> bool:
++        return any(
++            isinstance(call.func, ast.Attribute) and call.func.attr == attribute
++            for call in ast.walk(node)
++            if isinstance(call, ast.Call)
++        )
++
++    # A text twin, not a binary one. The two `np.savez_compressed` writers in this module use
++    # the same temporary-and-replace shape and must stay: `runlog` has no bytes variant, and
++    # giving it one is a different issue. `mode="w"` is what separates them.
++    twins = [
++        node.name
++        for node in ast.walk(tree)
++        if isinstance(node, ast.FunctionDef)
++        and _calls(node, "NamedTemporaryFile")
++        and _calls(node, "replace")
++        and 'mode="w"' in (ast.get_source_segment(probe, node) or "")
++    ]
++    assert twins == [], (
++        f"state_probe.py defines its own atomic text writer again: {twins}. There is one, in "
++        "runlog, and this module imports it. Two implementations of one contract is how they "
++        "drift."
++    )
++    assert "write_text_atomic" in probe, "its callers must reach runlog's writer by name"
+```
