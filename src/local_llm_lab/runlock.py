@@ -78,6 +78,7 @@ __all__ = [
     "mark_items_for_a_foreign_window",
     "blocking_window",
     "end_window",
+    "extend_window",
     "read_window",
     "refusal_for_window",
     "MLX_LIBRARY",
@@ -242,6 +243,11 @@ def box_state_root() -> Path:
 #: The announcing command exports this with the window's nonce, and every child inherits it. That
 #: is what separates "the seat that opened the window" from "everybody else" without a pid tree:
 #: a suite the holder starts is theirs, a suite anybody else starts is not.
+#:
+#: **It lives in the launching command's shell.** A later command in a *new* shell does not have
+#: it and is treated as a non-holder, so the holder's own MLX-reaching tests are skipped there.
+#: That is the safe direction and it is deliberate, but it surprises the holder, so: export the
+#: token again in any shell that should count as the holder.
 WINDOW_HOLDER_ENV = "AGENT_V2_BOX_WINDOW"
 
 #: How far past its own expected end a window may sit before it is called overdue. Reported, never
@@ -366,6 +372,36 @@ def end_window(nonce: str, path: Path | None = None) -> bool:
     return True
 
 
+def extend_window(nonce: str, expected_minutes: float, path: Path | None = None) -> bool:
+    """Move an open window's expected end without dropping the slot. Holder only.
+
+    Ending and re-announcing would be the obvious way to correct a duration and it is the wrong
+    one: the file has no way to say "the same holder, a moment later", so between the two calls
+    the slot is genuinely free and another seat may take it. A block that overran its estimate is
+    exactly when that must not happen.
+
+    Nonce-guarded like :func:`end_window`, and it prints nothing: the token is already in the
+    holder's shell, so there is no export line to emit.
+    """
+    target = path if path is not None else default_window_path()
+    held = read_window(target)
+    if held is None or held.nonce != nonce:
+        return False
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    payload["expected_end_epoch"] = time.time() + expected_minutes * 60.0
+    payload["expected_minutes"] = expected_minutes
+    payload.setdefault("extensions", []).append(
+        {"at": _utc_now(), "new_expected_minutes": expected_minutes}
+    )
+    # Written in place rather than replaced: an exclusive create would fail on the file that is
+    # the point, and a delete-then-create is the slot-dropping this function exists to avoid.
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return True
+
+
 def blocking_window(path: Path | None = None, *, holder: str | None = None) -> BoxWindow | None:
     """The window that blocks **this** process, or None.
 
@@ -392,6 +428,10 @@ def mark_items_for_a_foreign_window(items: Sequence[Any], names: Sequence[str]) 
     nothing wrong, and the natural response to a red suite is to run it again -- which is the
     collision. A skip keeps the rest of the suite honest, says whose slot this is, and leaves
     nothing to rerun.
+
+    Returns the window and how many items it marked, because a silent skip is its own hazard: a
+    reviewer read "exit 0" on 2026-09-08 and reported a file green that the collector had skipped
+    entire. The caller uses the count to say so where a reader will meet it.
     """
     window = blocking_window()
     if window is None:
@@ -406,10 +446,12 @@ def mark_items_for_a_foreign_window(items: Sequence[Any], names: Sequence[str]) 
         )
     )
     wanted = set(names)
+    marked = 0
     for item in items:
         if Path(str(item.fspath)).name in wanted:
             item.add_marker(marker)
-    return window
+            marked += 1
+    return window, marked
 
 
 def refusal_for_window(window: BoxWindow) -> str:
@@ -1004,6 +1046,8 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
     opening.add_argument("--seat", required=True)
     opening.add_argument("--purpose", required=True)
     opening.add_argument("--minutes", type=float, required=True)
+    lengthen = sub.add_parser("extend")
+    lengthen.add_argument("--minutes", type=float, required=True)
     sub.add_parser("end")
     sub.add_parser("status")
     args = parser.parse_args(argv)
@@ -1011,6 +1055,13 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
     if args.action == "announce":
         nonce = announce_window(args.seat, args.purpose, args.minutes)
         print(f"export {WINDOW_HOLDER_ENV}={nonce}")
+        return 0
+    if args.action == "extend":
+        token = os.environ.get(WINDOW_HOLDER_ENV, "")
+        if not token or not extend_window(token, args.minutes):
+            print("no window of this seat's to extend")
+            return 1
+        print(f"window extended to {args.minutes:g} minutes from now")
         return 0
     if args.action == "end":
         token = os.environ.get(WINDOW_HOLDER_ENV, "")

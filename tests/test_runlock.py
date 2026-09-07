@@ -1051,7 +1051,10 @@ def test_the_collector_skips_the_mlx_files_under_another_seats_window(monkeypatc
 
     loads_mlx = _Item("test_preflight.py")
     does_not = _Item("test_runlock.py")
-    conftest.pytest_collection_modifyitems(None, [loads_mlx, does_not])
+    class _Config:
+        stash: dict = {}
+
+    conftest.pytest_collection_modifyitems(_Config(), [loads_mlx, does_not])
 
     assert len(loads_mlx.markers) == 1, "an MLX-loading file is skipped"
     assert does_not.markers == [], "a file that loads no MLX is untouched"
@@ -1073,7 +1076,10 @@ def test_the_collector_leaves_the_holders_own_suite_alone(monkeypatch) -> None:
         def add_marker(self, marker):  # pragma: no cover - must not be reached
             raise AssertionError("the holder's own suite must not be skipped")
 
-    conftest.pytest_collection_modifyitems(None, [_Item()])
+    class _Config:
+        stash: dict = {}
+
+    conftest.pytest_collection_modifyitems(_Config(), [_Item()])
 
 
 def test_the_pinned_mlx_file_list_has_one_home(monkeypatch) -> None:
@@ -1116,7 +1122,9 @@ def test_the_lock_refuses_a_launch_into_another_seats_window_and_admits_the_hold
     assert Path(held).is_file(), "the seat that announced the window may launch into it"
 
 
-def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(tmp_path, monkeypatch) -> None:
+def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(
+    tmp_path, monkeypatch, unredirected_window_path
+) -> None:
     """The defect that would have left all four of 2026-09-08's refusals unprevented (issue 95).
 
     Both files used to hang off `PROJECT_ROOT`, which is the **running checkout's** root. Every
@@ -1156,7 +1164,9 @@ def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(tmp_path, mo
     assert runlock.box_state_root() == primary
 
 
-def test_the_state_root_override_is_operational_not_a_test_knob(tmp_path, monkeypatch) -> None:
+def test_the_state_root_override_is_operational_not_a_test_knob(
+    tmp_path, monkeypatch, unredirected_window_path
+) -> None:
     """A second clone on one machine keeps its own box state unless pointed at the shared one.
 
     That is the same defeat a worktree used to have, one level up, and it cannot be read off the
@@ -1181,7 +1191,7 @@ def test_an_unreadable_git_marker_falls_back_to_the_checkouts_own_root(
 
 
 def test_the_collector_fires_inside_a_nested_run_under_a_temporary_state_root(
-    pytester, tmp_path, monkeypatch
+    pytester, tmp_path, monkeypatch, unredirected_window_path
 ) -> None:
     """The registration gap the first delivery could not close, closed (issue 95).
 
@@ -1221,3 +1231,80 @@ def test_the_collector_fires_inside_a_nested_run_under_a_temporary_state_root(
     monkeypatch.setenv(runlock.WINDOW_HOLDER_ENV, nonce)
     holders = pytester.runpytest()
     holders.assert_outcomes(passed=1)
+
+
+def test_a_window_is_extended_without_the_slot_being_dropped(tmp_path) -> None:
+    """Correcting a duration must not free the box for a moment (issue 95, second amendment).
+
+    Ending and re-announcing is the obvious way and the wrong one: the file cannot say "the same
+    holder, a moment later", so between the two calls the slot is genuinely free and another seat
+    may take it. A block that overran its estimate is exactly when that must not happen — which is
+    the case that produced this, a 100-minute announcement for a 131-minute block.
+    """
+    path = tmp_path / "window.json"
+    nonce = runlock.announce_window("deputy", "88 block 1", 100.0, path=path)
+    before = runlock.read_window(path)
+
+    assert runlock.extend_window("not-the-nonce", 140.0, path=path) is False
+    assert runlock.read_window(path).expected_end_epoch == before.expected_end_epoch
+
+    assert runlock.extend_window(nonce, 140.0, path=path) is True
+    after = runlock.read_window(path)
+    assert after.nonce == nonce, "the same window, not a new one"
+    assert after.expected_end_epoch > before.expected_end_epoch
+    assert path.is_file(), "the file never left, so the slot never opened"
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["extensions"][0]["new_expected_minutes"] == 140.0
+
+
+def test_extending_a_window_nobody_holds_is_refused(tmp_path) -> None:
+    """There is nothing to extend, and inventing one would hand out a slot."""
+    assert runlock.extend_window("any-token", 30.0, path=tmp_path / "absent.json") is False
+
+
+def test_the_terminal_summary_says_a_window_skipped_part_of_the_run() -> None:
+    """The hazard the skip design carries, addressed where a reader will meet it.
+
+    A skip is right and a silent skip is not: on 2026-09-08 a reviewer read "exit 0" from a run
+    whose whole `test_cli.py` the collector had skipped, and reported the file green. The exit
+    code was honest and the count was in the summary; nothing said the omission had a cause.
+    """
+    import conftest
+
+    window = runlock.BoxWindow(
+        path=Path("outputs/.box-window.json"),
+        seat="deputy",
+        purpose="88 block 1",
+        opened="2026-09-08T12:17:03Z",
+        expected_end_epoch=None,
+        nonce="abc",
+        raw="{}",
+        age_seconds=60.0,
+    )
+
+    class _Reporter:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def write_sep(self, _char, title, **_kwargs) -> None:
+            self.lines.append(f"[{title}]")
+
+        def write_line(self, text) -> None:
+            self.lines.append(text)
+
+    class _Config:
+        def __init__(self, value) -> None:
+            self.stash = {conftest._WINDOW_SKIP: value}
+
+    reporter = _Reporter()
+    conftest.pytest_terminal_summary(reporter, 0, _Config((window, 71)))
+    joined = "\n".join(reporter.lines)
+    assert "[box window]" in joined
+    assert "71 test(s) were skipped, not run" in joined
+    assert "deputy: 88 block 1" in joined
+    assert "before reporting them green" in joined
+
+    quiet = _Reporter()
+    conftest.pytest_terminal_summary(quiet, 0, _Config(None))
+    assert quiet.lines == [], "a run no window touched says nothing"

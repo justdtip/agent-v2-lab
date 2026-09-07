@@ -37,6 +37,18 @@ REAL_PROCESS_TABLE = runlock._process_table
 REAL_MAPPED_PIDS = runlock._mapped_pids
 
 
+#: `default_window_path` as it is before the suite-wide redirect below, for the handful of tests
+#: that are *about* where the window lives and must see the real function.
+REAL_DEFAULT_WINDOW_PATH = runlock.default_window_path
+
+
+@pytest.fixture
+def unredirected_window_path(monkeypatch):
+    """Give one test the real `default_window_path` back, for tests about the path itself."""
+    monkeypatch.setattr(runlock, "default_window_path", REAL_DEFAULT_WINDOW_PATH)
+    return REAL_DEFAULT_WINDOW_PATH
+
+
 @pytest.fixture
 def machine_lock_path() -> Path:
     """The real ``outputs/.model-run.lock``, past the redirect below."""
@@ -59,6 +71,13 @@ def _the_model_run_lock_is_never_the_machines(_suite_lock_path, monkeypatch):
     child processes against a library of their own.
     """
     monkeypatch.setattr(runlock, "default_lock_path", lambda: _suite_lock_path)
+    # And the window, for the same reason and one the lock did not have: `_acquire` consults it
+    # (issue 95), so a **real** window open on this machine failed three of these tests the first
+    # time one was. Host state must not be able to fail the suite; a test that exercises the
+    # window passes its own path.
+    monkeypatch.setattr(
+        runlock, "default_window_path", lambda: _suite_lock_path.parent / ".box-window.json"
+    )
     # Explicit no-op lambdas, not the `list`/`dict` builtins. `running_model_processes` calls
     # `_mapped_pids(library)` positionally, so the `dict` builtin evaluated
     # `dict("libmlx.dylib")` and raised ValueError from inside the guard. It reached the six
@@ -244,6 +263,9 @@ TESTS_THAT_LOAD_MLX = (
 #: Pinned like its sibling and checked against an any-scope AST walk by
 #: `tests/test_repository_rules.py`, so a new function-local import cannot quietly rejoin the
 #: set of files a window lets through.
+#: Where the collector leaves what it did, for the terminal summary to report.
+_WINDOW_SKIP = pytest.StashKey[object]()
+
 TESTS_THAT_CAN_REACH_MLX = tuple(
     sorted(
         {
@@ -279,4 +301,30 @@ def pytest_collection_modifyitems(config, items):
     """
     from local_llm_lab.runlock import mark_items_for_a_foreign_window
 
-    mark_items_for_a_foreign_window(items, TESTS_THAT_CAN_REACH_MLX)
+    config.stash[_WINDOW_SKIP] = mark_items_for_a_foreign_window(items, TESTS_THAT_CAN_REACH_MLX)
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Say, where a reader will meet it, that a window skipped part of this run.
+
+    A skip is the right response to somebody else's window and a silent one is its own hazard: on
+    2026-09-08 a reviewer read "exit 0" from a run whose whole `test_cli.py` the collector had
+    skipped, and reported the file green. The exit code was honest and the summary line was there;
+    what was missing was anything that said the omission had a *cause*.
+    """
+    skipped = config.stash.get(_WINDOW_SKIP, None)
+    if not skipped:
+        return
+    window, count = skipped
+    if not count:
+        # A window was open and this run collected nothing it covers. Saying so would be noise
+        # on every unrelated run made during somebody's block.
+        return
+    terminalreporter.write_sep("=", "box window", yellow=True)
+    terminalreporter.write_line(
+        f"{count} test(s) were skipped, not run: the box window is held by {window.describe()}."
+    )
+    terminalreporter.write_line(
+        "This run did NOT exercise the files that can reach MLX. Re-run after the end line "
+        "before reporting them green."
+    )
