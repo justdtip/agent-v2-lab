@@ -224,9 +224,16 @@ _CALIBRATION_POINTS: tuple[_CalibrationPoint, ...] = (
         note="one optimiser step per row, ten steps; the procedure's own condition",
     ),
     # The run the gate exists for, and it departs from the procedure twice over. Of the 0.3438
-    # GiB above the point before it, accumulation carries a measured 0.1228 and 0.2210 belongs
-    # to running long and is unattributed. It is in the table because an upper envelope that a
-    # real run exceeds is not an envelope, and it lifts the chunkwise offset by 0.089.
+    # GiB above the point before it, accumulation carries a measured 0.1228 and the remaining
+    # 0.2217 is **allocator growth, not row length**. `iterate_batches` truncates and pads to at
+    # most `max_seq_length`, so 2,688 tokens is the widest batch the trainer can build; the
+    # dataset attains it (14 of 6,648 rows reach the cap, 77 distinct padded widths); and the
+    # arm above measured that worst case at 9.5050 GiB at the same accumulation, which arm A
+    # exceeds. Its running peak rose in four steps and nowhere else, and the last three imply
+    # widths of 2,697, 2,727 and 2,774 -- none of them buildable. So this point is here because
+    # an upper envelope a real run exceeds is not an envelope, and because the excess is a
+    # property of running long across many batch widths rather than of any row the gate sizes
+    # for. It lifts the chunkwise offset by 0.089. See ACCUMULATION-2026-09-08.
     _CalibrationPoint(
         "chunkwise", 2688, 256, 9.7260, _OK,
         note=(
