@@ -1,0 +1,550 @@
+diff --git a/src/local_llm_lab/runlock.py b/src/local_llm_lab/runlock.py
+index ad14fa4..a365021 100644
+--- a/src/local_llm_lab/runlock.py
++++ b/src/local_llm_lab/runlock.py
+@@ -57,13 +57,14 @@ import threading
+ import time
+ import uuid
+ from collections.abc import Iterator, Sequence
+-from contextlib import contextmanager
++from contextlib import contextmanager, suppress
+ from dataclasses import dataclass
+ from datetime import UTC, datetime
+ from pathlib import Path
+ from typing import Any
+ 
+ from local_llm_lab.project import PROJECT_ROOT
++from local_llm_lab.spawn import popen as spawn_popen
+ from local_llm_lab.spawn import run as spawn_run
+ 
+ __all__ = [
+@@ -74,6 +75,7 @@ __all__ = [
+     "WINDOW_RELATIVE_PATH",
+     "BoxWindow",
+     "announce_window",
++    "run_under_window",
+     "box_state_root",
+     "mark_items_for_a_foreign_window",
+     "blocking_window",
+@@ -255,6 +257,10 @@ WINDOW_HOLDER_ENV = "AGENT_V2_BOX_WINDOW"
+ #: inconvenient is not a mechanism.
+ WINDOW_OVERDUE_SECONDS = 60 * 60
+ 
++#: How long a relayed signal is given to end the child before the window closes anyway.
++#: Short, because the alternative to closing is the failure this verb exists to prevent.
++_CHILD_SIGNAL_GRACE_SECONDS = 5.0
++
+ 
+ def default_window_path() -> Path:
+     return box_state_root() / WINDOW_RELATIVE_PATH
+@@ -272,6 +278,41 @@ class BoxWindow:
+     nonce: str
+     raw: str
+     age_seconds: float | None
++    #: The recorded holder, or None when the file carries no usable pid. Whose life the window is
++    #: read against, which is not always the process that wrote it -- see ``announce_window``.
++    pid: int | None = None
++
++    @property
++    def holder_state(self) -> str:
++        """``"running"``, ``"not running"``, or ``"unknown"`` -- never inferred.
++
++        Three states rather than two, because a window with no recorded pid, or one whose pid
++        belongs to another user, is not evidence either way and must not be reported as though
++        it were. **Orphaned and overdue are different facts**: a window can be well within its
++        expected end and have no holder alive, which is precisely what happened on 2026-09-08
++        when a block finished and its ``end`` never ran, and nothing in the file could say so.
++
++        ``"running"`` is evidence of *a* process at that pid, not proof that it is the holder:
++        pids are reused, and a window left by a dead seat can read as held by whatever the
++        kernel handed the number to next. That is one more reason the report never removes.
++        """
++        if self.pid is None:
++            return "unknown"
++        try:
++            os.kill(self.pid, 0)
++        except ProcessLookupError:
++            return "not running"
++        except PermissionError:
++            # It exists and belongs to somebody else. Existence is what was asked.
++            return "running"
++        except (OSError, TypeError):
++            return "unknown"
++        return "running"
++
++    @property
++    def orphaned(self) -> bool:
++        """The holder is gone and the window is still here. Reported, never removed."""
++        return self.holder_state == "not running"
+ 
+     @property
+     def overdue(self) -> bool:
+@@ -281,8 +322,15 @@ class BoxWindow:
+         return time.time() > self.expected_end_epoch + WINDOW_OVERDUE_SECONDS
+ 
+     def describe(self) -> str:
+-        late = " (overdue)" if self.overdue else ""
+-        return f"{self.seat}: {self.purpose}, opened {self.opened}{late}"
++        notes = []
++        if self.orphaned:
++            notes.append("holder not running")
++        elif self.holder_state == "unknown":
++            notes.append("holder unknown")
++        if self.overdue:
++            notes.append("overdue")
++        suffix = f" ({', '.join(notes)})" if notes else ""
++        return f"{self.seat}: {self.purpose}, opened {self.opened}{suffix}"
+ 
+ 
+ def read_window(path: Path | None = None, *, now: float | None = None) -> BoxWindow | None:
+@@ -314,6 +362,7 @@ def read_window(path: Path | None = None, *, now: float | None = None) -> BoxWin
+         ),
+         nonce=str(payload.get("nonce", "")),
+         raw=raw,
++        pid=int(payload["pid"]) if isinstance(payload.get("pid"), int) else None,
+         age_seconds=(
+             moment - float(opened_epoch) if isinstance(opened_epoch, int | float) else None
+         ),
+@@ -321,12 +370,23 @@ def read_window(path: Path | None = None, *, now: float | None = None) -> BoxWin
+ 
+ 
+ def announce_window(
+-    seat: str, purpose: str, expected_minutes: float, path: Path | None = None
++    seat: str,
++    purpose: str,
++    expected_minutes: float,
++    path: Path | None = None,
++    pid: int | None = None,
+ ) -> str:
+     """Open the box window and return its nonce, which the caller exports as the holder token.
+ 
+     Exclusive create, like the lock and for the same reason: two seats announcing at once must
+     not both believe they hold the slot.
++
++    ``pid`` is **whose life the window should be read against**, and it is an argument because the
++    obvious default was wrong. The CLI's ``announce`` exits a second after it writes, so a window
++    recording ``os.getpid()`` there names a process that is already gone: every such window read
++    as "holder not running" from the moment it opened, and a dead pid could never be the witness
++    that a window had been orphaned. ``announce`` passes its parent, the shell that holds the
++    token; ``run`` passes its own, because it lives for the whole command.
+     """
+     target = path if path is not None else default_window_path()
+     nonce = uuid.uuid4().hex
+@@ -339,7 +399,7 @@ def announce_window(
+         "expected_end_epoch": now + expected_minutes * 60.0,
+         "expected_minutes": expected_minutes,
+         "nonce": nonce,
+-        "pid": os.getpid(),
++        "pid": os.getpid() if pid is None else int(pid),
+     }
+     try:
+         _write_lock(target, payload)
+@@ -1026,6 +1086,73 @@ def load_weights(hf_id: str, **kwargs: Any) -> tuple[Any, Any]:
+     return load(hf_id, **kwargs)
+ 
+ 
++def run_under_window(seat: str, purpose: str, expected_minutes: float, argv: Sequence[str]) -> int:
++    """Announce, run ``argv``, and end the window on the way out whatever happened.
++
++    The verb that exists because a window's lifetime must not be a person's attention. On
++    2026-09-08 a training block finished at 13:57Z, its ``end`` never ran because the seat that
++    announced it had gone idle, and the box sat unusable for eight hours behind a window nobody
++    held. Nothing in the mechanism could notice: it knew overdue and did not know orphaned.
++
++    ``finally`` rather than a success path: a command that crashes, is killed, or exits non-zero
++    must still release the slot, and the failure mode this replaces is precisely the one where
++    nothing tidy happened at the end.
++
++    The child inherits the holder token, so the command's own suites and launches are the
++    holder's. The window records **this** process, which lives for the whole command, so
++    ``status`` can say whether the holder is running and mean it.
++
++    ``SIGTERM`` and ``SIGHUP`` are relayed to the child and then closed over, because ``finally``
++    never runs on either. ``SIGKILL`` cannot be caught, and that window is an orphaned one for
++    ``status`` to report.
++    """
++    nonce = announce_window(seat, purpose, expected_minutes, pid=os.getpid())
++    environment = {**os.environ, WINDOW_HOLDER_ENV: nonce}
++    child: subprocess.Popen[Any] | None = None
++    restore: list[tuple[int, Any]] = []
++
++    def relay(signum: int, _frame: Any) -> None:
++        """Pass the signal to the child, close the window, then die as we would have.
++
++        ``finally`` does not run on ``SIGTERM`` or ``SIGHUP``: the default disposition ends the
++        process without unwinding, so a killed wrapper would leave its window exactly as the
++        CLI's ``announce`` left the one that cost the group eight hours. This is the shape
++        ``_install_signal_release`` already uses for the lock, with the child added, because a
++        wrapper that released the slot and left the command running would be worse than either.
++        """
++        if child is not None and child.poll() is None:
++            with suppress(ProcessLookupError, OSError):
++                child.send_signal(signum)
++            with suppress(subprocess.TimeoutExpired):
++                child.wait(timeout=_CHILD_SIGNAL_GRACE_SECONDS)
++        end_window(nonce)
++        signal.signal(signum, signal.SIG_DFL)
++        os.kill(os.getpid(), signum)
++
++    if threading.current_thread() is threading.main_thread():
++        for signum in (signal.SIGTERM, signal.SIGHUP):
++            try:
++                previous = signal.getsignal(signum)
++            except (ValueError, OSError):  # pragma: no cover - platform without the signal
++                continue
++            if previous is not signal.SIG_DFL:
++                # Only defaults are taken, so this never displaces a handler a caller installed.
++                continue
++            try:
++                signal.signal(signum, relay)
++            except (ValueError, OSError):  # pragma: no cover - not a main thread
++                continue
++            restore.append((signum, previous))
++    try:
++        child = spawn_popen(list(argv), env=environment)
++        return int(child.wait())
++    finally:
++        for signum, previous in restore:
++            with suppress(ValueError, OSError):
++                signal.signal(signum, previous)
++        end_window(nonce)
++
++
+ def _window_cli(argv: Sequence[str] | None = None) -> int:
+     """``python -m local_llm_lab.runlock announce|end|status`` (issue 95).
+ 
+@@ -1046,16 +1173,48 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
+     opening.add_argument("--seat", required=True)
+     opening.add_argument("--purpose", required=True)
+     opening.add_argument("--minutes", type=float, required=True)
++    running = sub.add_parser("run")
++    running.add_argument("--seat", required=True)
++    running.add_argument("--purpose", required=True)
++    running.add_argument("--minutes", type=float, required=True)
++    running.add_argument("command", nargs=argparse.REMAINDER)
+     lengthen = sub.add_parser("extend")
+     lengthen.add_argument("--minutes", type=float, required=True)
+     sub.add_parser("end")
+     sub.add_parser("status")
+     args = parser.parse_args(argv)
+ 
++    def refuse(action: str, error: RunLockBusy) -> int:
++        """A refused window is a report, not a traceback: the seat reads it and waits."""
++        print(f"runlock {action}: {error}", file=sys.stderr)
++        return 1
++
+     if args.action == "announce":
+-        nonce = announce_window(args.seat, args.purpose, args.minutes)
++        # The parent, not this process: `announce` exits a second from now and a window naming a
++        # dead pid can never witness that it was orphaned. The shell that evals the export line
++        # is the thing whose life the window should be read against.
++        try:
++            nonce = announce_window(args.seat, args.purpose, args.minutes, pid=os.getppid())
++        except RunLockBusy as error:
++            return refuse("announce", error)
+         print(f"export {WINDOW_HOLDER_ENV}={nonce}")
+         return 0
++    if args.action == "run":
++        # Only the leading separator, the one argparse's REMAINDER leaves us. Dropping every
++        # `--` would eat the command's own: `runlock run ... -- pytest -- tests/` must keep it.
++        command = list(args.command)
++        if command and command[0] == "--":
++            command = command[1:]
++        if not command:
++            print("runlock run needs a command after --")
++            return 2
++        try:
++            status = run_under_window(args.seat, args.purpose, args.minutes, command)
++        except RunLockBusy as error:
++            return refuse("run", error)
++        # A child killed by signal N reports -N, which `sys.exit` would take as a truncated
++        # status. The shell's own spelling is 128 + N, and that is what a wrapper should hand on.
++        return 128 - status if status < 0 else status
+     if args.action == "extend":
+         token = os.environ.get(WINDOW_HOLDER_ENV, "")
+         if not token or not extend_window(token, args.minutes):
+@@ -1079,7 +1238,17 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
+         print("window closed")
+         return 0
+     held = read_window()
+-    print("no window is open" if held is None else held.describe())
++    if held is None:
++        print("no window is open")
++        return 0
++    print(held.describe())
++    print(f"  holder pid {held.pid}: {held.holder_state}")
++    if held.orphaned:
++        print(
++            "  This window has no live holder. It is reported, never removed automatically:\n"
++            "  clearing another seat's state is how a mechanism stops being one. Ask that seat\n"
++            "  to end it, or end it yourself only with their word."
++        )
+     return 0
+ 
+ 
+diff --git a/tests/test_runlock.py b/tests/test_runlock.py
+index cdef808..cf84c24 100644
+--- a/tests/test_runlock.py
++++ b/tests/test_runlock.py
+@@ -1308,3 +1308,261 @@ def test_the_terminal_summary_says_a_window_skipped_part_of_the_run() -> None:
+     quiet = _Reporter()
+     conftest.pytest_terminal_summary(quiet, 0, _Config(None))
+     assert quiet.lines == [], "a run no window touched says nothing"
++
++
++def test_a_windows_holder_state_is_read_not_inferred(tmp_path) -> None:
++    """Three states, because two would make a guess look like a fact (issue 97).
++
++    A window with no recorded pid, or one whose pid belongs to another user, is not evidence
++    either way. `unknown` says so; reporting it as "not running" would invite somebody to clear
++    another seat's live slot.
++    """
++    path = tmp_path / "window.json"
++    runlock.announce_window("deputy", "a block", 10.0, path=path, pid=os.getpid())
++    assert runlock.read_window(path).holder_state == "running"
++    assert runlock.read_window(path).orphaned is False
++
++    payload = json.loads(path.read_text(encoding="utf-8"))
++    payload["pid"] = _a_pid_that_is_not_running()
++    path.write_text(json.dumps(payload), encoding="utf-8")
++    dead = runlock.read_window(path)
++    assert dead.holder_state == "not running"
++    assert dead.orphaned is True
++    assert "holder not running" in dead.describe()
++
++    payload.pop("pid")
++    path.write_text(json.dumps(payload), encoding="utf-8")
++    assert runlock.read_window(path).holder_state == "unknown"
++    assert runlock.read_window(path).orphaned is False, "unknown is not evidence of an orphan"
++
++
++def _a_pid_that_is_not_running() -> int:
++    """A pid nothing holds, found rather than assumed."""
++    for candidate in range(400000, 500000):
++        try:
++            os.kill(candidate, 0)
++        except ProcessLookupError:
++            return candidate
++        except (PermissionError, OSError):
++            continue
++    raise AssertionError("no free pid found")
++
++
++def test_orphaned_and_overdue_are_different_facts(tmp_path, monkeypatch) -> None:
++    """The distinction the mechanism lacked on 2026-09-08, when it cost a night of box time.
++
++    A block finished at 13:57Z, its `end` never ran, and the window sat for eight hours **well
++    inside** the hour of slack past its expected end. Overdue could not have caught it; only the
++    holder's absence could, and nothing recorded a pid whose life meant anything.
++    """
++    path = tmp_path / "window.json"
++    runlock.announce_window("deputy", "a block", 100.0, path=path, pid=_a_pid_that_is_not_running())
++
++    window = runlock.read_window(path)
++    assert window.orphaned is True
++    assert window.overdue is False, "well inside its expected end, and still nobody holds it"
++
++
++def test_run_announces_runs_and_ends_whatever_the_command_did(
++    tmp_path, monkeypatch, unredirected_window_path
++) -> None:
++    """The verb that stops a window outliving the seat that opened it (issue 97).
++
++    `finally`, not a success path: a command that crashes or exits non-zero must still release
++    the slot, because the failure this replaces is exactly the one where nothing tidy happened at
++    the end.
++
++    Two things this test had to be rewritten to do, and they are the same lesson. It took
++    `unredirected_window_path`, because the suite's autouse fixture redirects
++    `default_window_path` to its own temporary directory and the `BOX_STATE_DIR_ENV` override
++    below therefore reached nothing: the window was written where the fixture pointed and the
++    asserted path never held a file. And the command is now `test -e` on that path, so the
++    child's exit status is the evidence that the window existed *while it ran* -- otherwise
++    `not window.exists()` afterwards would pass just as well if `run` had never opened one,
++    which is the one thing the test exists to rule out. An instrument proves itself (R52).
++    """
++    state = tmp_path / "state"
++    (state / "outputs").mkdir(parents=True)
++    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(state))
++    window = state / runlock.WINDOW_RELATIVE_PATH
++    assert runlock.default_window_path() == window, "the test asserts on the path the code writes"
++
++    code = runlock.run_under_window("deputy", "a command", 5.0, ["/bin/test", "-e", str(window)])
++    assert code == 0, "the child found the window open while it ran"
++    assert not window.exists(), "the window ends with the command"
++
++    # `/bin/sh -c 'exit 3'` rather than `/bin/false`, which is not at that path on this host.
++    failing = runlock.run_under_window(
++        "deputy", "a failing command", 5.0, ["/bin/sh", "-c", "exit 3"]
++    )
++    assert failing == 3, "the exit status is the command's, passed through"
++    assert not window.exists(), "and the window ends anyway, which is the whole point"
++
++
++def test_run_ends_its_window_when_the_wrapper_is_killed(tmp_path) -> None:
++    """`finally` never runs on SIGTERM, and that is how last night's window survived.
++
++    Through the CLI as a subprocess, because the thing under test is a signal disposition and a
++    child process, neither of which exists when `run_under_window` is called in-process. The
++    wrapper is killed the way a person or a scheduler kills one; the window must be gone and the
++    child with it, or the verb has only moved the failure from `announce` to `run`.
++    """
++    state = tmp_path / "state"
++    (state / "outputs").mkdir(parents=True)
++    window = state / runlock.WINDOW_RELATIVE_PATH
++    environment = {**_child_env(), runlock.BOX_STATE_DIR_ENV: str(state)}
++
++    wrapper = spawn.popen(
++        [
++            sys.executable,
++            "-m",
++            "local_llm_lab.runlock",
++            "run",
++            "--seat",
++            "deputy",
++            "--purpose",
++            "a command that outlives its wrapper unless something stops it",
++            "--minutes",
++            "5",
++            "--",
++            "/bin/sleep",
++            "30",
++        ],
++        env=environment,
++    )
++    try:
++        deadline = time.monotonic() + 20.0
++        while not window.exists() and time.monotonic() < deadline:
++            time.sleep(0.05)
++        assert window.exists(), "the wrapper opened its window"
++        held = runlock.read_window(window)
++        assert held is not None and held.holder_state == "running"
++
++        wrapper.send_signal(signal.SIGTERM)
++        status = wrapper.wait(timeout=20.0)
++    finally:
++        if wrapper.poll() is None:  # pragma: no cover - only if the assertions above failed
++            wrapper.kill()
++            wrapper.wait(timeout=10.0)
++
++    assert not window.exists(), "SIGTERM closed the window on the way out"
++    assert status != 0, "and the wrapper died of the signal rather than returning cleanly"
++
++
++def test_run_gives_its_child_the_holder_token(tmp_path, monkeypatch) -> None:
++    """The command's own suites and launches are the holder's, or the verb defeats itself."""
++    state = tmp_path / "state"
++    (state / "outputs").mkdir(parents=True)
++    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(state))
++    seen = tmp_path / "token.txt"
++
++    runlock.run_under_window(
++        "deputy",
++        "a command that reports its token",
++        5.0,
++        ["/bin/sh", "-c", f'printf "%s" "${runlock.WINDOW_HOLDER_ENV}" > {seen}'],
++    )
++    assert seen.read_text(encoding="utf-8"), "the child saw a token"
++
++
++def test_the_window_records_the_pid_it_is_told_to(tmp_path) -> None:
++    """Issue 97's cause: the CLI's `announce` exits a second after writing.
++
++    A window recording that process names something already gone, so every such window read as
++    "holder not running" from the moment it opened and a dead pid could never be the witness that
++    one had been orphaned. `announce` passes its parent; `run` passes its own.
++    """
++    path = tmp_path / "window.json"
++    runlock.announce_window("deputy", "a block", 10.0, path=path, pid=4242)
++    assert runlock.read_window(path).pid == 4242
++
++    path.unlink()
++    runlock.announce_window("deputy", "a block", 10.0, path=path)
++    assert runlock.read_window(path).pid == os.getpid(), "the default is still this process"
++
++
++def test_the_cli_strips_only_the_separator_argparse_left_it(monkeypatch) -> None:
++    """`runlock run ... -- pytest -- tests/` must reach pytest with its own `--` intact.
++
++    `REMAINDER` hands back the leading separator and nothing else needs removing, so a filter
++    over every element silently rewrites the command it was asked to run -- and the commands
++    where it matters are exactly the ones a seat reaches for under a window.
++    """
++    seen: list[list[str]] = []
++
++    def record(seat: str, purpose: str, minutes: float, argv: list[str]) -> int:
++        seen.append(list(argv))
++        return 0
++
++    monkeypatch.setattr(runlock, "run_under_window", record)
++    common = ["run", "--seat", "deputy", "--purpose", "p", "--minutes", "5"]
++
++    runlock._window_cli([*common, "--", "/bin/echo", "--", "after"])
++    runlock._window_cli([*common, "/bin/echo", "--", "after"])
++
++    assert seen == [["/bin/echo", "--", "after"], ["/bin/echo", "--", "after"]], (
++        "the leading separator goes, the command's own stays, and either spelling works"
++    )
++
++
++def test_a_refused_window_is_a_refusal_at_the_cli_not_a_traceback(
++    tmp_path, monkeypatch, capsys, unredirected_window_path
++) -> None:
++    """A seat that cannot have the box reads why and waits; a traceback reads as a bug.
++
++    Both verbs, because `run` reaches `announce_window` through `run_under_window` and would
++    otherwise raise from inside the wrapper with a window already open somewhere else.
++
++    `unredirected_window_path` for the same reason the `run` test above needs it: without it the
++    planted window and the CLI's own lookup are two different files and the refusal never fires.
++    """
++    state = tmp_path / "state"
++    (state / "outputs").mkdir(parents=True)
++    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(state))
++    window = state / runlock.WINDOW_RELATIVE_PATH
++    assert runlock.default_window_path() == window
++    runlock.announce_window("another seat", "a block of theirs", 30.0)
++
++    common = ["--seat", "deputy", "--purpose", "p", "--minutes", "5"]
++    for argv in (["announce", *common], ["run", *common, "--", "/bin/echo", "hi"]):
++        capsys.readouterr()
++        assert runlock._window_cli(argv) == 1, "refused, and said so"
++        refusal = capsys.readouterr().err
++        assert "already open" in refusal and "another seat" in refusal
++    assert window.exists(), "and the other seat's window is untouched"
++
++
++def test_a_child_killed_by_a_signal_becomes_the_shells_own_status(tmp_path) -> None:
++    """`Popen` reports -N for a child killed by signal N, and `sys.exit(-N)` truncates.
++
++    128 + N is what every shell in the chain expects, and the wrapper's whole job is to be
++    transparent about what the command did.
++    """
++    state = tmp_path / "state"
++    (state / "outputs").mkdir(parents=True)
++    environment = {**_child_env(), runlock.BOX_STATE_DIR_ENV: str(state)}
++
++    completed = spawn.run(
++        [
++            sys.executable,
++            "-m",
++            "local_llm_lab.runlock",
++            "run",
++            "--seat",
++            "deputy",
++            "--purpose",
++            "a command that kills itself",
++            "--minutes",
++            "5",
++            "--",
++            "/bin/sh",
++            "-c",
++            "kill -TERM $$",
++        ],
++        env=environment,
++        capture_output=True,
++        text=True,
++        timeout=_TIMEOUT,
++    )
++    assert completed.returncode == 128 + signal.SIGTERM, completed.stderr
++    assert not (state / runlock.WINDOW_RELATIVE_PATH).exists(), "and the window still ended"
