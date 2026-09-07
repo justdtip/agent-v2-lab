@@ -54,7 +54,9 @@ dev = [
 packages = ["src/local_llm_lab"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+# `pytester` is loaded so the box-window collector can be proved to fire inside a nested
+# run against a temporary state root (issue 95), rather than against the real window path.
+addopts = "-q -p pytester"
 testpaths = ["tests"]
 
 [tool.ruff]

@@ -10,7 +10,12 @@ from typing import Any
 
 import pytest
 import yaml
-from conftest import PRE_EXISTING_FORK_SITES, SPAWN_SANCTIONED_PATHS
+from conftest import (
+    PRE_EXISTING_FORK_SITES,
+    SPAWN_SANCTIONED_PATHS,
+    TESTS_THAT_CAN_REACH_MLX,
+    TESTS_THAT_LOAD_MLX,
+)
 
 from local_llm_lab import spawn
 
@@ -1016,22 +1021,10 @@ def test_the_process_start_scanner_reports_the_families_and_ignores_lookalikes(t
 # So the set is pinned here and computed by walking the closure, and the walk crosses into
 # third-party packages: stopping at them is what misses `test_tuner_data.py`, and a false
 # negative here is the dangerous direction -- it clears a file to run beside a live model.
-_TESTS_THAT_LOAD_MLX = (
-    "test_arch.py",
-    "test_capture.py",
-    "test_gated_delta_chunked.py",
-    "test_gated_delta_chunkwise.py",
-    "test_history_cache.py",
-    "test_jlens.py",
-    "test_jspace_sweep.py",
-    "test_live_lens_native.py",
-    "test_patch.py",
-    "test_pipeline.py",
-    "test_preflight.py",
-    "test_probes.py",
-    "test_state_swap.py",
-    "test_tuner_data.py",
-)
+#: Imported from ``conftest`` rather than kept here: the collector that skips these files
+#: while another seat holds the box window reads the same tuple (issue 95), and two copies of
+#: one list is how they drift. The pin's *check* stays here, where the closure walker is.
+_TESTS_THAT_LOAD_MLX = TESTS_THAT_LOAD_MLX
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -1191,6 +1184,12 @@ def test_the_grep_that_this_rule_replaces_is_wrong_in_both_directions() -> None:
     assert cleared_but_loads == ["test_tuner_data.py"]
     assert _loads_mlx(tests / "test_tuner_data.py", _IMPORT_ROOTS) == "mlx_lm.tuner.trainer"
     assert held_but_clean == [
+        # Added 2026-09-08 and it strengthens the point rather than weakening it: `conftest.py`
+        # now *discusses* function-local mlx imports, in the comment on the any-scope set the
+        # window collector keys on (issue 95). It imports nothing. The grep holds a file for
+        # talking about the thing, which is the failure mode a substring rule always has and a
+        # closure never does.
+        "conftest.py",
         "test_cache_equivalence.py",
         "test_metal_cache_limit.py",
         "test_repository_rules.py",
@@ -1613,3 +1612,48 @@ def test_the_rule_covers_the_as_run_transcripts_because_python_runs_them_too(tmp
     assert reaching == {"reaches.as-run.py.txt", "reaches.py"}
     assert _record_guard_faults(tmp_path / "reaches.as-run.py.txt")
     assert _record_guard_faults(tmp_path / "clean.as-run.py.txt") == []
+
+
+def test_the_any_scope_mlx_set_is_the_pinned_superset_the_collector_needs() -> None:
+    """Two questions, two pinned lists, and the collector needs the wider one (issue 95).
+
+    `TESTS_THAT_LOAD_MLX` answers "what maps MLX **on import**", which is what the closure walker
+    above computes and what a person needs before running a suite beside a live model.
+    `TESTS_THAT_CAN_REACH_MLX` answers "what can map MLX **at all**", which is what a window has
+    to exclude: a function-local `import mlx` maps the library exactly as surely when the test
+    runs, and the exclusive-handoff terms of 2026-09-08 say "at any scope" for that reason.
+
+    Five files sit between the two: they import mlx or mlx_lm inside a function or fixture. A
+    collector keyed on the narrower list would have let them run inside somebody else's window
+    and refused that seat's launch, which is the failure the window exists to stop.
+    """
+
+    def reaches_at_any_scope(path: Path) -> bool:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(
+                alias.name.split(".")[0] in {"mlx", "mlx_lm"} for alias in node.names
+            ):
+                return True
+            if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in {
+                "mlx",
+                "mlx_lm",
+            }:
+                return True
+        return False
+
+    computed = tuple(
+        sorted(
+            path.name
+            for path in Path(__file__).parent.glob("*.py")
+            if reaches_at_any_scope(path)
+        )
+    )
+    assert computed == TESTS_THAT_CAN_REACH_MLX, (
+        "the any-scope set is pinned so a new function-local mlx import has to be added here "
+        "deliberately, and so a file that stops reaching mlx has to be removed"
+    )
+    assert set(TESTS_THAT_LOAD_MLX) < set(TESTS_THAT_CAN_REACH_MLX), (
+        "import-time loading is a strict subset of reaching at any scope; if they are equal the "
+        "wider list has stopped being computed from a wider question"
+    )

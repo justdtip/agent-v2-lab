@@ -76,9 +76,14 @@ def test_the_lock_path_is_the_one_the_concurrency_clause_names(machine_lock_path
 
     `machine_lock_path` reads past the suite-wide redirect in `conftest.py`, which points every
     other test at a temporary lock so the suite never takes the machine's.
+
+    Against `box_state_root()` rather than `PROJECT_ROOT` since issue 95: the two are the same
+    directory in the primary checkout and differ in a linked worktree, where the lock used to be
+    private and therefore useless. The relative path is what the clause names and it has not
+    moved; what moved is which root it hangs off.
     """
     assert runlock.LOCK_RELATIVE_PATH.as_posix() == "outputs/.model-run.lock"
-    assert machine_lock_path == PROJECT_ROOT / runlock.LOCK_RELATIVE_PATH
+    assert machine_lock_path == runlock.box_state_root() / runlock.LOCK_RELATIVE_PATH
 
 
 def test_the_lock_records_the_session_command_timestamp_and_pid(tmp_path, monkeypatch) -> None:
@@ -916,3 +921,303 @@ def test_a_release_from_a_forked_child_leaves_the_parents_lock(tmp_path) -> None
     runlock._release(stolen)
 
     assert lock.exists()
+
+
+# ---------------------------------------------------------- the box window (issue 95)
+
+
+def test_a_window_is_announced_exclusively_and_closed_by_the_seat_that_opened_it(
+    tmp_path,
+) -> None:
+    """Two seats announcing at once must not both believe they hold the slot.
+
+    Exclusive create, like the lock, and the nonce is the same guard `_release` uses: a window is
+    closed by whoever opened it, never by whoever happens to run next.
+    """
+    path = tmp_path / "window.json"
+    nonce = runlock.announce_window("deputy", "issue 88 first block", 90.0, path=path)
+    assert path.is_file()
+
+    with pytest.raises(runlock.RunLockBusy, match="already open"):
+        runlock.announce_window("codex", "regression calibration", 20.0, path=path)
+
+    assert runlock.end_window("not-the-nonce", path=path) is False
+    assert path.is_file(), "another seat's window is not closed by the wrong token"
+    assert runlock.end_window(nonce, path=path) is True
+    assert not path.exists()
+
+
+def test_the_holder_is_not_blocked_by_its_own_window(tmp_path) -> None:
+    """A seat is never blocked by the slot it holds, and every child of its command is the seat.
+
+    The token comes from the environment the announcing command exports, so a suite the holder
+    starts is the holder's; a suite anybody else starts is not.
+    """
+    path = tmp_path / "window.json"
+    nonce = runlock.announce_window("codex", "replay checks", 20.0, path=path)
+
+    assert runlock.blocking_window(path, holder=nonce) is None
+    blocked = runlock.blocking_window(path, holder="")
+    assert blocked is not None
+    assert blocked.seat == "codex"
+    assert "replay checks" in blocked.describe()
+
+
+def test_an_overdue_window_is_reported_and_never_removed(tmp_path, monkeypatch) -> None:
+    """The lock's rule, for the lock's reason.
+
+    A mechanism that clears the state it finds inconvenient is not a mechanism. The refusal says
+    the window is overdue and says who to ask; nothing here unlinks it.
+    """
+    path = tmp_path / "window.json"
+    runlock.announce_window("codex", "regression calibration", 20.0, path=path)
+
+    real = time.time
+    monkeypatch.setattr(
+        time, "time", lambda: real() + 20 * 60 + runlock.WINDOW_OVERDUE_SECONDS + 1
+    )
+    window = runlock.read_window(path)
+    assert window is not None and window.overdue is True
+    assert "overdue" in runlock.refusal_for_window(window)
+    assert "not removed" in runlock.refusal_for_window(window)
+    assert path.is_file(), "an overdue window is reported, not cleared"
+
+
+def test_a_truncated_window_still_refuses_rather_than_reading_as_absent(tmp_path) -> None:
+    """A half-written window is the case where guessing is worst.
+
+    Absent means "the box is free". A file that will not parse means somebody wrote something and
+    we cannot tell what, and reading that as free is how a launch lands in a live slot.
+    """
+    path = tmp_path / "window.json"
+    path.write_text('{"seat": "codex", "purp', encoding="utf-8")
+
+    window = runlock.read_window(path)
+    assert window is not None
+    assert window.seat == "unknown seat"
+    assert runlock.blocking_window(path, holder="") is not None
+
+
+def test_the_refusal_says_what_the_inventory_could_not(tmp_path) -> None:
+    """The wording carries the distinction the whole issue turns on.
+
+    Four launches were refused on 2026-09-08 because two people checked the live inventory, which
+    was honest and answered a different question. The refusal says so, so the next reader does not
+    have to rediscover it.
+    """
+    path = tmp_path / "window.json"
+    runlock.announce_window("codex", "regression calibration retry", 20.0, path=path)
+    text = runlock.refusal_for_window(runlock.read_window(path))
+
+    assert "another seat holds the box window" in text
+    assert "codex" in text and "regression calibration retry" in text
+    assert "next minutes" in text and "inventory cannot" in text
+
+
+def test_the_collector_skips_the_mlx_files_under_another_seats_window(monkeypatch) -> None:
+    """The suite's half of the mechanism (issue 95).
+
+    Skipped rather than refused: a refusal makes the whole suite red for somebody who has done
+    nothing wrong, and the natural response to a red suite is to run it again, which is the
+    collision. The reason carries the window so the reader learns whose slot they are in.
+
+    Driven by calling the hook rather than by nesting a pytest run. A nested run would have to
+    write the window at the real path, since `default_window_path` derives from `PROJECT_ROOT`,
+    and a test that briefly refuses live seats is the wrong way to test a mechanism built because
+    live seats kept being refused.
+    """
+    import conftest
+
+    window = runlock.BoxWindow(
+        path=Path("outputs/.box-window.json"),
+        seat="codex",
+        purpose="regression calibration retry",
+        opened="2026-09-08T11:11:02Z",
+        expected_end_epoch=None,
+        nonce="abc",
+        raw="{}",
+        age_seconds=10.0,
+    )
+    monkeypatch.setattr(conftest, "blocking_window", lambda *a, **k: window, raising=False)
+    monkeypatch.setattr(runlock, "blocking_window", lambda *a, **k: window)
+
+    class _Item:
+        def __init__(self, name: str) -> None:
+            self.fspath = Path("/repo/tests") / name
+            self.markers: list = []
+
+        def add_marker(self, marker) -> None:
+            self.markers.append(marker)
+
+    loads_mlx = _Item("test_preflight.py")
+    does_not = _Item("test_runlock.py")
+    conftest.pytest_collection_modifyitems(None, [loads_mlx, does_not])
+
+    assert len(loads_mlx.markers) == 1, "an MLX-loading file is skipped"
+    assert does_not.markers == [], "a file that loads no MLX is untouched"
+    reason = loads_mlx.markers[0].kwargs["reason"]
+    assert "codex" in reason and "regression calibration retry" in reason
+    assert "issue 95" in reason
+
+
+def test_the_collector_leaves_the_holders_own_suite_alone(monkeypatch) -> None:
+    """`blocking_window` returns None for the holder, so the hook is a no-op for that seat."""
+    import conftest
+
+    monkeypatch.setattr(runlock, "blocking_window", lambda *a, **k: None)
+
+    class _Item:
+        fspath = Path("/repo/tests/test_preflight.py")
+        markers: list = []
+
+        def add_marker(self, marker):  # pragma: no cover - must not be reached
+            raise AssertionError("the holder's own suite must not be skipped")
+
+    conftest.pytest_collection_modifyitems(None, [_Item()])
+
+
+def test_the_pinned_mlx_file_list_has_one_home(monkeypatch) -> None:
+    """One list, two enforcers: the collector and the closure rule read the same tuple.
+
+    `tests/test_repository_rules.py` binds `_TESTS_THAT_LOAD_MLX` to `conftest`'s tuple rather
+    than keeping a copy, so a file that starts or stops loading MLX cannot be right in one place
+    and wrong in the other.
+    """
+    import conftest
+    import test_repository_rules
+
+    assert test_repository_rules._TESTS_THAT_LOAD_MLX is conftest.TESTS_THAT_LOAD_MLX
+
+
+def test_the_lock_refuses_a_launch_into_another_seats_window_and_admits_the_holders(
+    monkeypatch, tmp_path
+) -> None:
+    """The lock's half, and the order matters.
+
+    The window is consulted **before** the process inventory, because a seat can hold the next
+    twenty minutes without holding a process this instant. That gap is the whole issue: on
+    2026-09-08 two people checked the live inventory, got an honest answer to a different
+    question, and refused a third seat's launch four times between them.
+    """
+    path = tmp_path / "window.json"
+    nonce = runlock.announce_window("codex", "regression calibration", 20.0, path=path)
+    monkeypatch.setattr(runlock, "default_window_path", lambda: path)
+    monkeypatch.setattr(runlock, "running_model_processes", lambda *a, **k: [])
+    monkeypatch.delenv(runlock.WINDOW_HOLDER_ENV, raising=False)
+
+    with pytest.raises(runlock.RunLockBusy) as refusal:
+        runlock.hold_model_run_lock(path=tmp_path / "run.lock")
+    assert "another seat holds the box window" in str(refusal.value)
+    assert "codex" in str(refusal.value)
+    assert not (tmp_path / "run.lock").exists(), "a refused launch leaves no lock"
+
+    monkeypatch.setenv(runlock.WINDOW_HOLDER_ENV, nonce)
+    held = runlock.hold_model_run_lock(path=tmp_path / "run.lock")
+    assert Path(held).is_file(), "the seat that announced the window may launch into it"
+
+
+def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(tmp_path, monkeypatch) -> None:
+    """The defect that would have left all four of 2026-09-08's refusals unprevented (issue 95).
+
+    Both files used to hang off `PROJECT_ROOT`, which is the **running checkout's** root. Every
+    suite that refused a peer that day ran in a linked worktree, so each was looking in its own
+    empty `outputs/` and could not see a window announced from the primary. The mechanism built
+    to prevent those refusals would have prevented none of them.
+
+    A real worktree, made through `spawn.run` because this file may not fork (R45).
+    """
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    for argv in (
+        ["git", "-C", str(primary), "init", "-q"],
+        ["git", "-C", str(primary), "config", "user.email", "t@example.com"],
+        ["git", "-C", str(primary), "config", "user.name", "t"],
+        ["git", "-C", str(primary), "commit", "-q", "--allow-empty", "-m", "root"],
+        ["git", "-C", str(primary), "worktree", "add", "-q", str(tmp_path / "linked")],
+    ):
+        spawn.run(argv, capture_output=True, text=True, check=True)
+
+    linked = tmp_path / "linked"
+    assert (linked / ".git").is_file(), "a linked worktree's .git is a file, which is the signal"
+
+    monkeypatch.setattr(runlock, "PROJECT_ROOT", linked)
+    monkeypatch.delenv(runlock.BOX_STATE_DIR_ENV, raising=False)
+    assert runlock.box_state_root() == primary.resolve()
+    # The window path is asserted through the function; the lock's is asserted as the root plus
+    # the relative path, because `conftest` redirects `default_lock_path` for the whole suite so
+    # no test can take the machine's lock. Both derive from the same root, which is the claim.
+    assert runlock.default_window_path() == primary.resolve() / runlock.WINDOW_RELATIVE_PATH
+    assert runlock.box_state_root() / runlock.LOCK_RELATIVE_PATH == (
+        primary.resolve() / runlock.LOCK_RELATIVE_PATH
+    )
+
+    # The primary is unchanged, which is the other half: only worktrees move.
+    monkeypatch.setattr(runlock, "PROJECT_ROOT", primary)
+    assert runlock.box_state_root() == primary
+
+
+def test_the_state_root_override_is_operational_not_a_test_knob(tmp_path, monkeypatch) -> None:
+    """A second clone on one machine keeps its own box state unless pointed at the shared one.
+
+    That is the same defeat a worktree used to have, one level up, and it cannot be read off the
+    filesystem the way a worktree's `.git` file can — so it is an environment variable, documented
+    as operational rather than introduced for a test.
+    """
+    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(tmp_path / "shared"))
+    assert runlock.box_state_root() == tmp_path / "shared"
+    assert runlock.default_window_path() == tmp_path / "shared" / runlock.WINDOW_RELATIVE_PATH
+
+
+def test_an_unreadable_git_marker_falls_back_to_the_checkouts_own_root(
+    tmp_path, monkeypatch
+) -> None:
+    """Refusing on a broken `.git` would be worse than behaving as it did before this existed."""
+    checkout = tmp_path / "odd"
+    checkout.mkdir()
+    (checkout / ".git").write_text("not a gitdir line at all\n", encoding="utf-8")
+    monkeypatch.setattr(runlock, "PROJECT_ROOT", checkout)
+    monkeypatch.delenv(runlock.BOX_STATE_DIR_ENV, raising=False)
+    assert runlock.box_state_root() == checkout
+
+
+def test_the_collector_fires_inside_a_nested_run_under_a_temporary_state_root(
+    pytester, tmp_path, monkeypatch
+) -> None:
+    """The registration gap the first delivery could not close, closed (issue 95).
+
+    A nested pytest run is what proves the hook is wired into pytest at all, rather than merely
+    correct when called. It could not be written before because the window's path came from
+    `PROJECT_ROOT` and a nested run would have written the real one and briefly refused live
+    seats. With the state root overridable, the nested run gets a temporary directory and the
+    real path is never touched.
+
+    Both directions: a foreign window skips the file, and the holder's own token runs it.
+    """
+    state = tmp_path / "state"
+    (state / "outputs").mkdir(parents=True)
+    nonce = runlock.announce_window(
+        "codex", "regression calibration retry", 20.0, path=state / runlock.WINDOW_RELATIVE_PATH
+    )
+
+    pytester.makeconftest(
+        """
+        from local_llm_lab.runlock import mark_items_for_a_foreign_window
+
+        def pytest_collection_modifyitems(config, items):
+            mark_items_for_a_foreign_window(items, ("test_preflight.py",))
+        """
+    )
+    pytester.makepyfile(test_preflight="def test_one():\n    assert True\n")
+
+    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(state))
+    monkeypatch.delenv(runlock.WINDOW_HOLDER_ENV, raising=False)
+    # In-process, not `runpytest_subprocess`: pytester's subprocess runner forks, and the fork
+    # guard refuses it because this interpreter has MLX up (R45). In-process still exercises the
+    # thing this test exists for -- pytest collecting a conftest and calling its hook.
+    foreign = pytester.runpytest("-rs")
+    foreign.assert_outcomes(skipped=1)
+    foreign.stdout.fnmatch_lines(["*codex: regression calibration retry*"])
+
+    monkeypatch.setenv(runlock.WINDOW_HOLDER_ENV, nonce)
+    holders = pytester.runpytest()
+    holders.assert_outcomes(passed=1)

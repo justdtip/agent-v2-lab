@@ -209,3 +209,68 @@ def _forking_is_refused_rather_than_fatal():
             target = sys.modules[module]
             patch.setattr(target, attribute, _fork_refusal(getattr(target, attribute)))
         yield
+
+
+#: Test files whose import loads MLX, so Metal is up for the whole session once any of them is
+#: collected. Pinned rather than computed, and the pin is checked against an AST import closure by
+#: `tests/test_repository_rules.py`, which imports this tuple rather than keeping a second copy:
+#: one list, two enforcers, the same shape as the fork-site sets above.
+TESTS_THAT_LOAD_MLX = (
+    "test_arch.py",
+    "test_capture.py",
+    "test_gated_delta_chunked.py",
+    "test_gated_delta_chunkwise.py",
+    "test_history_cache.py",
+    "test_jlens.py",
+    "test_jspace_sweep.py",
+    "test_live_lens_native.py",
+    "test_patch.py",
+    "test_pipeline.py",
+    "test_preflight.py",
+    "test_probes.py",
+    "test_state_swap.py",
+    "test_tuner_data.py",
+)
+
+
+#: Test files that can reach MLX **at any scope**, including a function-local import that only
+#: runs when the test does. A superset of the tuple above, and the right one for the collector:
+#: `TESTS_THAT_LOAD_MLX` answers "what maps MLX on import", which is the question the closure
+#: walker asks, and the collector's question is "what can map MLX at all". The five extra files
+#: import mlx inside a function or a fixture and map it exactly as surely when that runs.
+#:
+#: Pinned like its sibling and checked against an any-scope AST walk by
+#: `tests/test_repository_rules.py`, so a new function-local import cannot quietly rejoin the
+#: set of files a window lets through.
+TESTS_THAT_CAN_REACH_MLX = tuple(
+    sorted(
+        {
+            *TESTS_THAT_LOAD_MLX,
+            "test_adapter_delta.py",
+            "test_cache_equivalence.py",
+            "test_metal_cache_limit.py",
+            "test_runner.py",
+            "test_state_probe.py",
+        }
+    )
+)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip the MLX-loading files while another seat holds the box window (issue 95).
+
+    Skipped rather than refused. A refusal makes the whole suite red for somebody who has done
+    nothing wrong, and the natural response to a red suite is to run it again -- which is the
+    collision. A skip keeps the rest of the suite honest, says whose slot this is, and leaves
+    nothing to rerun.
+
+    The holder's own suite is untouched: `blocking_window` returns None when the window's nonce
+    matches the token the announcing command exported, and every child of that command inherits
+    it.
+
+    The body lives in `runlock` so this hook and the nested run that proves it fires are one
+    implementation rather than two that agree today.
+    """
+    from local_llm_lab.runlock import mark_items_for_a_foreign_window
+
+    mark_items_for_a_foreign_window(items, TESTS_THAT_CAN_REACH_MLX)

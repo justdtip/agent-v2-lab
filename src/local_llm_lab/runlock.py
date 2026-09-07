@@ -68,6 +68,18 @@ from local_llm_lab.spawn import run as spawn_run
 
 __all__ = [
     "LOCK_RELATIVE_PATH",
+    "BOX_STATE_DIR_ENV",
+    "WINDOW_HOLDER_ENV",
+    "WINDOW_OVERDUE_SECONDS",
+    "WINDOW_RELATIVE_PATH",
+    "BoxWindow",
+    "announce_window",
+    "box_state_root",
+    "mark_items_for_a_foreign_window",
+    "blocking_window",
+    "end_window",
+    "read_window",
+    "refusal_for_window",
     "MLX_LIBRARY",
     "MappedProcess",
     "STALE_AFTER_SECONDS",
@@ -132,7 +144,11 @@ class RunLockBusy(RunLockError):
 
 
 def default_lock_path() -> Path:
-    return PROJECT_ROOT / LOCK_RELATIVE_PATH
+    """The lock, under the shared box-state root rather than the running checkout's own.
+
+    Unchanged for the primary. A worktree used to take a lock nobody else could see.
+    """
+    return box_state_root() / LOCK_RELATIVE_PATH
 
 
 def _utc_now() -> str:
@@ -160,6 +176,256 @@ def _duration(seconds: float | None) -> str:
     hours, rest = divmod(total, 3600)
     minutes, secs = divmod(rest, 60)
     return f"{hours}:{minutes:02d}:{secs:02d}"
+
+
+# ------------------------------------------------------------------------ the box window
+#
+# The lock answers "is a model resident **now**". A window answers "has a seat been promised the
+# next twenty minutes", and the two are not the same question. On 2026-09-08 four launches were
+# refused, three of them one seat's, and two of the refusals came from people who had read the
+# announcement practice and meant to follow it: each checked the live inventory, which was honest
+# and answered the other question. A practice that fails two careful readers in one evening is
+# the case for a mechanism, and this is it (issue 95).
+#
+# The heartbeat announcement stays as the human record. This file is what tooling reads.
+
+WINDOW_RELATIVE_PATH = Path("outputs/.box-window.json")
+
+#: Where the lock and the window live, when it is not the running checkout's own root.
+#:
+#: **Operational, not a test knob.** A second clone of this repository on the same machine has a
+#: different root and would otherwise keep its own box state, which defeats the mechanism exactly
+#: as a worktree does. Point every checkout on one machine at one directory.
+BOX_STATE_DIR_ENV = "AGENT_V2_BOX_STATE_DIR"
+
+
+def box_state_root() -> Path:
+    """The one directory the box's lock and window live under, for every checkout on this machine.
+
+    ``PROJECT_ROOT`` is the **running checkout's** root, and both files used to hang off it. Every
+    suite that refused a peer's launch on 2026-09-08 ran in a linked worktree, so each was looking
+    at its own empty ``outputs/`` and could not see a window announced from the primary; the
+    mechanism built to prevent those four refusals would have prevented none of them. The lock has
+    always had the same weakness, which is why one seat's runtime rebinds ``PROJECT_ROOT`` by hand
+    before taking it; what has made the lock work across checkouts anyway is that the *process*
+    inventory is global while the file is not.
+
+    A linked worktree's ``.git`` is a **file** reading ``gitdir: <primary>/.git/worktrees/<name>``,
+    and the primary is the parent of that ``.git`` directory. A directory ``.git`` means this
+    checkout is the primary. That is read rather than shelled out for, so the answer costs no
+    process and cannot fail on a machine where git is missing.
+
+    The primary's behaviour is unchanged: it resolves to its own root, as before. Only worktrees
+    move, from a private and useless file to the shared one.
+    """
+    override = os.environ.get(BOX_STATE_DIR_ENV)
+    if override:
+        return Path(override)
+    marker = PROJECT_ROOT / ".git"
+    try:
+        if marker.is_file():
+            text = marker.read_text(encoding="utf-8").strip()
+            if text.startswith("gitdir:"):
+                gitdir = Path(text.split(":", 1)[1].strip())
+                if not gitdir.is_absolute():
+                    gitdir = (PROJECT_ROOT / gitdir).resolve()
+                for parent in gitdir.parents:
+                    if parent.name == ".git":
+                        return parent.parent
+    except OSError:
+        # An unreadable `.git` is not a reason to refuse; it is a reason to behave as the
+        # checkout's own root, which is what happened before this function existed.
+        pass
+    return PROJECT_ROOT
+
+
+#: The announcing command exports this with the window's nonce, and every child inherits it. That
+#: is what separates "the seat that opened the window" from "everybody else" without a pid tree:
+#: a suite the holder starts is theirs, a suite anybody else starts is not.
+WINDOW_HOLDER_ENV = "AGENT_V2_BOX_WINDOW"
+
+#: How far past its own expected end a window may sit before it is called overdue. Reported, never
+#: removed -- the lock's rule, for the lock's reason: a mechanism that clears the state it finds
+#: inconvenient is not a mechanism.
+WINDOW_OVERDUE_SECONDS = 60 * 60
+
+
+def default_window_path() -> Path:
+    return box_state_root() / WINDOW_RELATIVE_PATH
+
+
+@dataclass(frozen=True)
+class BoxWindow:
+    """One announced slot as it reads on disk."""
+
+    path: Path
+    seat: str
+    purpose: str
+    opened: str
+    expected_end_epoch: float | None
+    nonce: str
+    raw: str
+    age_seconds: float | None
+
+    @property
+    def overdue(self) -> bool:
+        """Past its own expected end by :data:`WINDOW_OVERDUE_SECONDS`."""
+        if self.expected_end_epoch is None:
+            return False
+        return time.time() > self.expected_end_epoch + WINDOW_OVERDUE_SECONDS
+
+    def describe(self) -> str:
+        late = " (overdue)" if self.overdue else ""
+        return f"{self.seat}: {self.purpose}, opened {self.opened}{late}"
+
+
+def read_window(path: Path | None = None, *, now: float | None = None) -> BoxWindow | None:
+    """The announced window, or None. Readable even when the JSON is truncated or foreign."""
+    target = path if path is not None else default_window_path()
+    try:
+        raw = target.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+    try:
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("not an object")
+    except (json.JSONDecodeError, ValueError):
+        payload = {}
+    opened_epoch = payload.get("opened_epoch")
+    moment = time.time() if now is None else now
+    return BoxWindow(
+        path=target,
+        seat=str(payload.get("seat", "unknown seat")),
+        purpose=str(payload.get("purpose", "unstated purpose")),
+        opened=str(payload.get("opened", "an unrecorded time")),
+        expected_end_epoch=(
+            float(payload["expected_end_epoch"])
+            if isinstance(payload.get("expected_end_epoch"), int | float)
+            else None
+        ),
+        nonce=str(payload.get("nonce", "")),
+        raw=raw,
+        age_seconds=(
+            moment - float(opened_epoch) if isinstance(opened_epoch, int | float) else None
+        ),
+    )
+
+
+def announce_window(
+    seat: str, purpose: str, expected_minutes: float, path: Path | None = None
+) -> str:
+    """Open the box window and return its nonce, which the caller exports as the holder token.
+
+    Exclusive create, like the lock and for the same reason: two seats announcing at once must
+    not both believe they hold the slot.
+    """
+    target = path if path is not None else default_window_path()
+    nonce = uuid.uuid4().hex
+    now = time.time()
+    payload = {
+        "seat": seat,
+        "purpose": purpose,
+        "opened": _utc_now(),
+        "opened_epoch": now,
+        "expected_end_epoch": now + expected_minutes * 60.0,
+        "expected_minutes": expected_minutes,
+        "nonce": nonce,
+        "pid": os.getpid(),
+    }
+    try:
+        _write_lock(target, payload)
+    except FileExistsError as error:
+        held = read_window(target)
+        raise RunLockBusy(
+            "refusing to announce a window: one is already open.\n"
+            f"  {held.describe() if held else target}\n"
+            "Wait for its end line, or ask that seat to close it."
+        ) from error
+    return nonce
+
+
+def end_window(nonce: str, path: Path | None = None) -> bool:
+    """Close a window this process opened. Returns False if the file is somebody else's.
+
+    The nonce check is the same guard ``_release`` uses: a window is closed by the seat that
+    opened it, never by whoever happens to run next.
+    """
+    target = path if path is not None else default_window_path()
+    held = read_window(target)
+    if held is None:
+        return False
+    if held.nonce != nonce:
+        return False
+    try:
+        target.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def blocking_window(path: Path | None = None, *, holder: str | None = None) -> BoxWindow | None:
+    """The window that blocks **this** process, or None.
+
+    None when no window is open, and None when the open one is ours -- the holder token comes
+    from the environment the announcing command exported, so every child of that command is the
+    holder too and a seat is never blocked by its own slot.
+    """
+    held = read_window(path)
+    if held is None:
+        return None
+    token = os.environ.get(WINDOW_HOLDER_ENV, "") if holder is None else holder
+    if token and token == held.nonce:
+        return None
+    return held
+
+
+def mark_items_for_a_foreign_window(items: Sequence[Any], names: Sequence[str]) -> BoxWindow | None:
+    """Mark every collected item from a named file as skipped while another seat holds the window.
+
+    The decision lives here rather than in ``conftest`` so the suite's hook and any nested run
+    that has to prove the hook fires are the same implementation, not two that agree today.
+
+    Skipped rather than refused. A refusal makes the whole suite red for somebody who has done
+    nothing wrong, and the natural response to a red suite is to run it again -- which is the
+    collision. A skip keeps the rest of the suite honest, says whose slot this is, and leaves
+    nothing to rerun.
+    """
+    window = blocking_window()
+    if window is None:
+        return None
+
+    import pytest
+
+    marker = pytest.mark.skip(
+        reason=(
+            f"the box window is held by {window.describe()}; this file can reach MLX at some "
+            "scope and would refuse that seat's launch (issue 95). Run it after the end line."
+        )
+    )
+    wanted = set(names)
+    for item in items:
+        if Path(str(item.fspath)).name in wanted:
+            item.add_marker(marker)
+    return window
+
+
+def refusal_for_window(window: BoxWindow) -> str:
+    """Why a launch is refused while somebody else holds the slot."""
+    overdue = (
+        "\nThis window is past its expected end. It is reported, not removed: clearing another\n"
+        "seat's state is how a mechanism stops being one. Ask that seat to close it."
+        if window.overdue
+        else ""
+    )
+    return (
+        "refusing to load a model: another seat holds the box window.\n"
+        f"  {window.describe()}\n"
+        "A window is a promise about the next minutes, which the live process inventory cannot\n"
+        f"see. Wait for its end line.{overdue}"
+    )
 
 
 # --------------------------------------------------------------------------- reading a lock
@@ -534,6 +800,12 @@ def _acquire(
     process_check = "skipped"
     if check_processes:
         _probe_failures.clear()
+        # The window first, because it answers the question the inventory cannot: a seat may hold
+        # the next twenty minutes without holding a process this instant, and a launch into
+        # somebody else's slot is the failure this whole pair exists to prevent (issue 95).
+        window = blocking_window()
+        if window is not None:
+            raise RunLockBusy(refusal_for_window(window))
         found = running_model_processes()
         if found:
             raise RunLockBusy(refusal_for_processes(found))
@@ -612,9 +884,7 @@ def model_run_lock(
     and ends after the model is gone; ``load_weights`` uses the process-scoped form instead,
     because a model loaded through it stays resident until the process exits.
     """
-    handle = _acquire(
-        command=command, session=session, path=path, check_processes=check_processes
-    )
+    handle = _acquire(command=command, session=session, path=path, check_processes=check_processes)
     try:
         yield handle.path
     finally:
@@ -712,3 +982,55 @@ def load_weights(hf_id: str, **kwargs: Any) -> tuple[Any, Any]:
     from mlx_lm import load
 
     return load(hf_id, **kwargs)
+
+
+def _window_cli(argv: Sequence[str] | None = None) -> int:
+    """``python -m local_llm_lab.runlock announce|end|status`` (issue 95).
+
+    A shell entry point, because the seats that need windows drive the box from shells and
+    wrappers rather than from Python. ``announce`` prints the export line to eval, so the token
+    reaches every child of the launching command and the holder is never blocked by its own slot:
+
+        eval "$(python -m local_llm_lab.runlock announce --seat deputy --purpose '88 block 1' \
+                --minutes 100)"
+        ... the launch ...
+        python -m local_llm_lab.runlock end
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="runlock", description="the box window")
+    sub = parser.add_subparsers(dest="action", required=True)
+    opening = sub.add_parser("announce")
+    opening.add_argument("--seat", required=True)
+    opening.add_argument("--purpose", required=True)
+    opening.add_argument("--minutes", type=float, required=True)
+    sub.add_parser("end")
+    sub.add_parser("status")
+    args = parser.parse_args(argv)
+
+    if args.action == "announce":
+        nonce = announce_window(args.seat, args.purpose, args.minutes)
+        print(f"export {WINDOW_HOLDER_ENV}={nonce}")
+        return 0
+    if args.action == "end":
+        token = os.environ.get(WINDOW_HOLDER_ENV, "")
+        if not token:
+            print(f"{WINDOW_HOLDER_ENV} is not set; a window is closed by the seat that opened it")
+            return 1
+        if not end_window(token):
+            held = read_window()
+            print(
+                "no window of this seat's to close"
+                if held is None
+                else f"not ours: {held.describe()}"
+            )
+            return 1
+        print("window closed")
+        return 0
+    held = read_window()
+    print("no window is open" if held is None else held.describe())
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - a shell entry point
+    sys.exit(_window_cli())
