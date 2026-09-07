@@ -358,8 +358,12 @@ def prepare_replay(
     lens = LensMaps.load(
         lens_path, expected_sha256=lens_sha256, hidden_size=hidden, num_layers=count
     )
-    if not set(selected) - {count} <= lens.maps.keys():
-        raise ValueError("lens lacks requested layers")
+    readout_layers = set(selected)
+    for record in identities:
+        for block in record["capture_policy"]["attention_blocks"]:
+            readout_layers.update((block, block + 1))
+    if not readout_layers - {count} <= lens.maps.keys():
+        raise ValueError("lens lacks requested reading or attention readout layers")
     del lens
     if hashlib.sha256(raw).hexdigest() != file_sha256(manifest_path):
         raise ValueError("source manifest changed during preflight")
@@ -491,21 +495,12 @@ def write_json(path, value):
         stream.write("\n")
 
 
-def legacy_identity(
-    records: Path,
-    source_atlas: Path,
-    *,
-    model: str,
-    snapshot: Path,
-    expected_atlas_sha256: str,
-) -> dict:
-    """Execute the actual legacy summarizer, then compare exact decoded JSON objects."""
+def legacy_summary(records: Path, *, model: str, snapshot: Path) -> dict:
+    """Produce atlas.json through the actual legacy summarizer for every replay."""
     import huggingface_hub
 
     script = PROJECT_ROOT / "scripts/live_lens_atlas.py"
     script_sha = file_sha256(script)
-    if file_sha256(source_atlas) != expected_atlas_sha256:
-        raise ValueError("source atlas changed")
     output = records / "atlas.json"
     if output.exists():
         raise FileExistsError(output)
@@ -524,17 +519,13 @@ def legacy_identity(
         runpy.run_path(str(script), run_name="__main__")
     finally:
         huggingface_hub.snapshot_download, sys.argv = original_download, original_argv
-    if file_sha256(script) != script_sha or file_sha256(source_atlas) != expected_atlas_sha256:
-        raise ValueError("identity reference changed during summarization")
+    if file_sha256(script) != script_sha:
+        raise ValueError("summary script changed during summarization")
     if record_hashes != {
         path.name: file_sha256(path) for path in records.glob("*.jsonl")
     } or manifest_hash != file_sha256(records / "manifest.json"):
         raise ValueError("replay inputs changed during summarization")
-    difference = first_difference(
-        json.loads(source_atlas.read_bytes()), json.loads(output.read_bytes())
-    )
     evidence = {
-        "source_atlas_sha256": expected_atlas_sha256,
         "output_atlas_sha256": file_sha256(output),
         "summarizer_sha256": script_sha,
         "output_records": record_hashes,
@@ -544,6 +535,30 @@ def legacy_identity(
             if (records / "replay-manifest.json").exists()
             else None
         ),
+    }
+    write_json(records / "atlas-provenance.json", evidence)
+    return evidence
+
+
+def legacy_identity(
+    records: Path,
+    source_atlas: Path,
+    *,
+    model: str,
+    snapshot: Path,
+    expected_atlas_sha256: str,
+) -> dict:
+    """Produce the actual legacy summary and compare exact decoded reference objects."""
+    if file_sha256(source_atlas) != expected_atlas_sha256:
+        raise ValueError("source atlas changed")
+    evidence = legacy_summary(records, model=model, snapshot=snapshot)
+    if file_sha256(source_atlas) != expected_atlas_sha256:
+        raise ValueError("identity reference changed during summarization")
+    difference = first_difference(
+        json.loads(source_atlas.read_bytes()), json.loads((records / "atlas.json").read_bytes())
+    )
+    evidence |= {
+        "source_atlas_sha256": expected_atlas_sha256,
         "exact_json_equal": difference is None,
         "first_difference": difference,
     }
@@ -637,6 +652,12 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
             model=prepared.spec.name,
             snapshot=Path(prepared.snapshot["snapshot_path"]),
             expected_atlas_sha256=prepared.identity_atlas_sha256,
+        )
+    else:
+        legacy_summary(
+            prepared.output,
+            model=prepared.spec.name,
+            snapshot=Path(prepared.snapshot["snapshot_path"]),
         )
     result = {"status": "complete", "outputs": outputs, "elapsed_s": time.time() - started}
     write_json(prepared.output / "replay-complete.json", result)

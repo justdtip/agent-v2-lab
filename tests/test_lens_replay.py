@@ -392,7 +392,8 @@ def test_preparation_validates_layers_lens_sources_and_exclusive_output(tmp_path
         )
 
 
-def test_output_records_verified_and_manifest_is_separate(tmp_path, monkeypatch):
+@pytest.mark.parametrize("summary_failure", [False, True])
+def test_output_records_verified_and_manifest_is_separate(tmp_path, monkeypatch, summary_failure):
     from types import SimpleNamespace
 
     module = api()
@@ -412,7 +413,29 @@ def test_output_records_verified_and_manifest_is_separate(tmp_path, monkeypatch)
         return {"forwards": 2, "tokens": 3}
 
     monkeypatch.setattr(module, "replay_record", replay)
+    import transformers
+
+    class Tokenizer:
+        def __call__(self, *a, **kw):
+            return {"input_ids": [1, 2], "offset_mapping": [(0, 1), (1, 2)]}
+
+        def decode(self, ids):
+            return "x"
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *a, **kw: Tokenizer())
+    if summary_failure:
+
+        def fail_summary(*args, **kwargs):
+            raise ValueError("summary refused")
+
+        monkeypatch.setattr(module, "legacy_summary", fail_summary)
+        with pytest.raises(ValueError, match="summary refused"):
+            module.run_replay(prepared, loaded, allocator_cache={"limit_bytes": 0})
+        assert not (prepared.output / "replay-complete.json").exists()
+        return
     result = module.run_replay(prepared, loaded, allocator_cache={"limit_bytes": 0})
+    assert (prepared.output / "atlas.json").is_file()
+    assert not (prepared.output / "identity.json").exists()
     assert result["status"] == "complete"
     assert (prepared.output / "manifest.json").read_bytes() == (
         prepared.source / "manifest.json"
@@ -458,3 +481,94 @@ def test_additional_structural_refusals(tmp_path, change):
     write(path, events)
     with pytest.raises(ValueError):
         api().read_source(path)
+
+
+@pytest.mark.parametrize("available", [[0], [0, 1], [0, 2], [0, 1, 2]])
+def test_attention_readout_dependencies_refused_during_preparation(
+    tmp_path, monkeypatch, available
+):
+    """Selected reading layers do not cover the block/source and head readouts."""
+    import numpy as np
+
+    module = api()
+    prepared = prepared_fixture(tmp_path, monkeypatch)
+    events = rows()
+    events[0]["attention_blocks"] = [2]
+    for index, positions in ((4, [2]), (1, [0, 1])):
+        events[index:index] = [
+            *[dict(kind="source", turn=0, layer=2, position=p, top=[1]) for p in positions],
+            dict(kind="head", turn=0, block=2, head=0, position=positions[-1]),
+        ]
+    path = prepared.source / "ep.jsonl"
+    path.unlink()
+    write(path, events)
+    manifest = json.loads((prepared.source / "manifest.json").read_bytes())
+    manifest["episodes"][0]["record_sha256"] = module.file_sha256(path)
+    (prepared.source / "manifest.json").write_text(json.dumps(manifest))
+    config = Path(prepared.snapshot["snapshot_path"]) / "config.json"
+    config.write_text(json.dumps({"hidden_size": 2, "num_hidden_layers": 4, "vocab_size": 5}))
+    np.savez(prepared.lens_path, **{f"J{i}": np.eye(2) for i in available})
+    if len(available) == 3:
+        module.prepare_replay(
+            prepared.source,
+            prepared.spec,
+            prepared.output,
+            prepared.lens_path,
+            lens_sha256=module.file_sha256(prepared.lens_path),
+            domain="prose",
+            kind="jacobian",
+            layers=[1, 4],
+        )
+    else:
+        with pytest.raises(ValueError, match="lens lacks"):
+            module.prepare_replay(
+                prepared.source,
+                prepared.spec,
+                prepared.output,
+                prepared.lens_path,
+                lens_sha256=module.file_sha256(prepared.lens_path),
+                domain="prose",
+                kind="jacobian",
+                layers=[1, 4],
+            )
+    assert not prepared.output.exists()
+
+
+def test_cli_explicit_layers_reach_preparation(tmp_path, monkeypatch):
+    import runpy
+
+    module = api()
+    prepared = prepared_fixture(tmp_path, monkeypatch)
+    observed = []
+
+    def prepare(*args, **kwargs):
+        observed.append(kwargs["layers"])
+        raise ValueError("preflight sentinel")
+
+    monkeypatch.setattr(module, "prepare_replay", prepare)
+    main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/lens_replay.py"))[
+        "main"
+    ]
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "--model",
+                prepared.spec.name,
+                "--records",
+                str(prepared.source),
+                "--lens",
+                str(prepared.lens_path),
+                "--lens-sha256",
+                prepared.lens_sha256,
+                "--domain",
+                "prose",
+                "--kind",
+                "jacobian",
+                "--out",
+                str(prepared.output),
+                "--layers",
+                "1,2",
+            ]
+        )
+    assert error.value.code == 2
+    assert observed == [(1, 2)]

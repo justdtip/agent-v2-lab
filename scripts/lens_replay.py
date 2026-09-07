@@ -11,6 +11,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
+def requested_layers(value):
+    """Parse named policies or an explicit comma-separated residual-layer list."""
+    if value in {"all", "source"}:
+        return value
+    try:
+        layers = tuple(int(part) for part in value.split(","))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "layers must be all, source, or integers such as 1,4"
+        ) from error
+    if not layers or layers != tuple(sorted(set(layers))) or any(layer < 1 for layer in layers):
+        raise argparse.ArgumentTypeError("explicit layers must be positive, unique and increasing")
+    return layers
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True)
@@ -19,7 +34,12 @@ def main(argv=None):
     parser.add_argument("--lens-sha256", required=True)
     parser.add_argument("--domain", required=True)
     parser.add_argument("--kind", required=True)
-    parser.add_argument("--layers", choices=("all", "source"), default="all")
+    parser.add_argument(
+        "--layers",
+        type=requested_layers,
+        default="all",
+        help="all, source, or comma-separated layers (including final identity)",
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--identity-atlas", type=Path)
     parser.add_argument("--revision", default="main")
