@@ -25,6 +25,7 @@ from local_llm_lab.pipeline.preflight import (
     require_preflight,
     run_preflight,
     run_residual_control,
+    write_report,
 )
 from local_llm_lab.training.gated_delta_chunked import training_state_bytes
 
@@ -2132,3 +2133,35 @@ def test_the_row_ceiling_is_the_longest_row_that_fits_with_headroom() -> None:
 def test_a_budget_below_the_intercept_gives_a_ceiling_of_zero() -> None:
     """No row fits, and the answer is a number rather than a negative or a crash."""
     assert _row_ceiling_tokens("chunkwise", budget_gib=0.5) == 0
+
+
+def test_a_preflight_artifact_is_whole_or_absent_when_the_write_is_interrupted(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Issue 92: this artifact is a gate input, and a re-run over a good one is the live case.
+
+    `require_preflight(consumer="training")` opens it to decide whether a training run may
+    start. A truncated one causes no wrong decision, because JSON that will not parse raises
+    rather than answering permissively. It causes a refusal that looks like a failed preflight,
+    at the start of the run the artifact exists to permit, with the cause invisible: the file is
+    there and the right size on a listing.
+
+    So the assertion is on the *previous* artifact surviving whole, not merely on the new one
+    being absent. That is the case a re-run hits, and it is the one where losing the file costs
+    another model load to rebuild.
+    """
+    from test_branch import _interrupt_the_manifest_writer
+
+    target = tmp_path / "fake-model.json"
+    original = '{"schema_version": 3, "passed": true}\n'
+    target.write_text(original, encoding="utf-8")
+
+    _interrupt_the_manifest_writer(monkeypatch, 11)
+    with pytest.raises(OSError, match="no space left on device"):
+        write_report({"schema_version": 3, "passed": False, "model_name": "fake-model"}, target)
+    monkeypatch.undo()
+
+    assert target.read_text(encoding="utf-8") == original
+    assert json.loads(target.read_text(encoding="utf-8"))["passed"] is True
+    leftovers = sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("."))
+    assert leftovers == [], "no partial temporary file may survive at the destination"

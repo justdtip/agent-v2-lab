@@ -12,6 +12,7 @@ from typing import Any
 from local_llm_lab.models import ModelSpec, ResolvedSpec
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.runlog import write_text_atomic
 from local_llm_lab.spawn import run as spawn_run
 
 _PACKAGES = ("mlx", "mlx-lm", "numpy", "transformers")
@@ -101,5 +102,9 @@ def write_provenance(
     }
     run_dir.mkdir(parents=True, exist_ok=True)
     target = run_dir / "provenance.json"
-    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Atomic (issue 92). ``runlog.git_commit``'s contract -- provenance is a nice-to-have and
+    # must never be the thing that kills a run -- covers failures in *collecting* provenance,
+    # and answers "unknown" for them. It does not cover a failure in the write, which leaves a
+    # record that parses as nothing and reads on a listing as complete.
+    write_text_atomic(target, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return target

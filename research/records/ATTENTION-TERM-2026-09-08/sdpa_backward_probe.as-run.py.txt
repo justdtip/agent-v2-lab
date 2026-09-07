@@ -16,6 +16,19 @@ inspection -- 512 and 1,024 tokens put the score matrix at 16 and 67 MB.
 """
 from __future__ import annotations
 
+# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
+# imported; it does not stop `python` running it, and it initialises Metal, which is the
+# working-set and R45 hazard. The bytes above and below this block are the transcript as it ran;
+# the pre-guard sha256 is in the record beside this file.
+import sys as _sys
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is the as-run transcript of the 2026-09-08 attention- "
+        "score measurement, not a launcher; runs go through the package entry points "
+        "under R47 and R48, in a window the Director declares, and take the model-run "
+        "lock of issue 83"
+    )
+
 import json
 import math
 import sys

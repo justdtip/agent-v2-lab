@@ -49,6 +49,7 @@ from typing import Any, Literal, NamedTuple
 
 from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
 from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+from local_llm_lab.runlog import write_text_atomic
 
 __all__ = [
     "artifact_path",
@@ -439,9 +440,18 @@ def longest_row_tokens(
 
 
 def write_report(report: Mapping[str, Any], path: Path) -> Path:
-    """Persist stable preflight metadata without the array-report writer."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    """Persist stable preflight metadata without the array-report writer.
+
+    Atomic (issue 92). This artifact is a **gate input**, not a sentinel:
+    ``require_preflight(consumer="training")`` opens it to decide whether a training run may
+    start, and the block it reads carries the memory envelope, the attention-score term and the
+    row ceiling. A truncated one causes no wrong decision -- JSON that will not parse raises
+    rather than answering permissively -- but it causes a refusal that looks like a failed
+    preflight, at the start of the run this file exists to permit, and the cause is invisible:
+    the file is there and the right size on a listing. The next move is to re-run the preflight,
+    which loads the model.
+    """
+    write_text_atomic(path, json.dumps(report, indent=2, sort_keys=True) + "\n")
     return path
 
 

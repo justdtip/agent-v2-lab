@@ -1197,3 +1197,40 @@ experiment identified above. Generated and not tested: the suppression hypothesi
 consistent second observation. Instrument findings F10, F11, F12 and the rules R53 and R54 stand.
 The model goes to the Director's training order ("Continue all work. Resume training goal.",
 12:10).
+
+
+---
+
+## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
+
+Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
+byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
+docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
+table restores the original claim for anyone who needs to verify it.
+
+**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
+not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
+executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
+the day it landed it reported this tree clean while nineteen transcripts across five records
+reached the model and one carried a guard. The rule now covers both suffixes, and these are the
+guards that follow from it.
+
+| transcript | reaches | sha256 before | sha256 after |
+| --- | --- | --- | --- |
+| `ablation.as-run.py.txt` | loads the checkpoint | `5f68005d17d3cc31…` | `666b81dabd5d13ea…` |
+| `broadcast_heads.as-run.py.txt` | loads the checkpoint | `3278f4ba3e9fd0ab…` | `ba795ff3987cdf06…` |
+| `broadcast_heads_nulldist.as-run.py.txt` | loads the checkpoint | `a64c9aed6b23c678…` | `989228e8109d183e…` |
+| `broadcast_heads_orth.as-run.py.txt` | loads the checkpoint | `bfe3757ab0e72459…` | `75a601832e19e7da…` |
+| `composition.as-run.py.txt` | loads the checkpoint | `d2166b6fea43753e…` | `e5be8bdcd8cd0d1f…` |
+| `contrast.as-run.py.txt` | loads the checkpoint | `80007d206bfe7685…` | `5c8dcda2587c5a11…` |
+| `coupling.as-run.py.txt` | loads the checkpoint | `130a8931f1e8e81a…` | `31c4061c6bfda061…` |
+| `inject.as-run.py.txt` | loads the checkpoint | `568492671f71f35d…` | `a84674b3aef0a9bd…` |
+| `inject_events.as-run.py.txt` | loads the checkpoint | `e8f344b46ec8637d…` | `85d4429ac59ddf57…` |
+| `kvgroup.as-run.py.txt` | loads the checkpoint | `93d035bcd8d05830…` | `c07d3614a5d8af87…` |
+| `separation.as-run.py.txt` | loads the checkpoint | `1db1ed80586e6eda…` | `9b81213523b806ef…` |
+| `singles.as-run.py.txt` | loads the checkpoint | `46fc5784c283b432…` | `6450c6ab6c739717…` |
+
+Full digests are in the commit that added the guards. The guard is the standard form:
+the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
+the model, and the rule verifies that by running each file under stub packages rather than
+by reading it.

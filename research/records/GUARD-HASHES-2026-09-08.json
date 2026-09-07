@@ -1,0 +1,118 @@
+{
+  "ATTENTION-TERM-2026-09-08": [
+    {
+      "after": "34634d677d9a69ded3b5acc8a0342299397b995e3031cbef646eceaccdc4a8e8",
+      "before": "6755ddb90ea41783b8f5c301e9d2b08bb30b49c2a433045dd95fc9f565c9781c",
+      "file": "headdim.as-run.py.txt",
+      "loads_checkpoint": false
+    },
+    {
+      "after": "5225e032fe57456d82fad16d80f2a198c9b8c02de2a1e43d6b16309e8b7f5b78",
+      "before": "dbfb01e905a14f40352b2b5884c33c8b9910c477f6842f59b78aa967607030fb",
+      "file": "sdpa_backward_probe.as-run.py.txt",
+      "loads_checkpoint": false
+    }
+  ],
+  "RECURRENCE-EXPONENT-2026-09-07": [
+    {
+      "after": "70daef69308c1d2e2f3b337ec2c9e4b3bf3a0d189acbfc2602ae90a7fc0c3ea0",
+      "before": "757c58949bb7817fde81dafef691289db114caa05bf6545935ae848715634da2",
+      "file": "recurrence_exponent_sweep.as-run.py.txt",
+      "loads_checkpoint": true
+    }
+  ],
+  "RETRIEVAL-CHANNELS-2026-09-06": [
+    {
+      "after": "cf738e8fc3a6600e43a3aa349cc892ad0c630d0231a018d2d67aa3f231f2030b",
+      "before": "5de7dd9360285466c661425bf73b7da635d2fce1223c52e398f1bc5555424576",
+      "file": "habit_probe.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "cf634824a2f8c557c9982a70f8b7dba1bc4ffe227935aade8025f839013d34be",
+      "before": "b34f4d9ab373c64279a189fefa2a448e8000de1d2142e38a3febe2f18f4a6043",
+      "file": "retrieval_probe.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "8389b103aa1b29e5b83e39e840b286233ca3cb8b478b96a8bfdabe8addd1fe15",
+      "before": "bd1b76d796d7708f5627c63c8b04e7f92a401040302a4773481d3e3fa540d7c1",
+      "file": "sink_probe.as-run.py.txt",
+      "loads_checkpoint": true
+    }
+  ],
+  "WP12-BROADCAST-HEADS-2026-09-06": [
+    {
+      "after": "666b81dabd5d13ea06809cf83617e6d9f4bb2ac63b41cff5cd3310013a8c20f5",
+      "before": "5f68005d17d3cc31f79305fde2c148854bd41d86ec7d1e610a50a143946a8fee",
+      "file": "ablation.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "ba795ff3987cdf06476ea03ef0b3583cd8508d381ba805a30aaadcd8c1d889b5",
+      "before": "3278f4ba3e9fd0abef6affc22fbde5c234a8d927f90aa12af91d82dc6d358483",
+      "file": "broadcast_heads.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "989228e8109d183ed7f7c7015854df93e71fbf4907fe4f396e0952440e73a9e4",
+      "before": "a64c9aed6b23c6788efdc5738236d507913569799e14c9c0dc8821b0f7ac919e",
+      "file": "broadcast_heads_nulldist.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "75a601832e19e7da057e6be9511a77f2946da5b2e99f0e7286d33f2bdd31ff25",
+      "before": "bfe3757ab0e72459370015d281071b3bb85dc8df997539d35652c285010ee78b",
+      "file": "broadcast_heads_orth.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "e5be8bdcd8cd0d1f492aa15c45b576fc8e43916156c8fe3f1daae85023ba7498",
+      "before": "d2166b6fea43753ecf7affb3ec1911e8fd3d7137da3574a0576e1b2637aa2c9b",
+      "file": "composition.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "5c8dcda2587c5a11d3d95c0f6335708af35a8490cfe7d7ccd9e9cbae1bbd4a54",
+      "before": "80007d206bfe7685c9473bf03d3f6613eec32d568a6e256358ae00561c21e6b8",
+      "file": "contrast.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "31c4061c6bfda06190d03ae8f6b8a13c4c4b01021ddcfecdd2451625411b9ea8",
+      "before": "130a8931f1e8e81a34f5751e4d8057207be9d80bc89c385680450ab88643008b",
+      "file": "coupling.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "a84674b3aef0a9bdd29008d67a26705baabda7a3ad3f9239e96ed97ad5a9d994",
+      "before": "568492671f71f35d812039a4cbb210f74ef25f16265326b88a7478bc6a907d48",
+      "file": "inject.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "85d4429ac59ddf575d7db53c7772d5c11f16c8c65d8f11713deacbc87f5b81f2",
+      "before": "e8f344b46ec8637d72b078396fa989134d20472e0f12e3d91c5678f4b9078a53",
+      "file": "inject_events.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "c07d3614a5d8af87dc2d0227503645ec2fa0c9558cc47732f758be8a1c04cea7",
+      "before": "93d035bcd8d058307fdaac53ba3e3d120c93bfecca799cb0f46634c2af4ae625",
+      "file": "kvgroup.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "9b81213523b806ef5a403eb8d7158b376bbae61342aca2313f4f1b058c2fe04b",
+      "before": "1db1ed80586e6edadf788eee35ae0bfd9825d671745611095e1ae3c9d728268b",
+      "file": "separation.as-run.py.txt",
+      "loads_checkpoint": true
+    },
+    {
+      "after": "6450c6ab6c7397178e3a4452db58f3a86d65b440467fc797db4618a4a225e23a",
+      "before": "46fc5784c283b4320d8a5896d2dd2f1621828f924c7a48f914599c82a92df66d",
+      "file": "singles.as-run.py.txt",
+      "loads_checkpoint": true
+    }
+  ]
+}

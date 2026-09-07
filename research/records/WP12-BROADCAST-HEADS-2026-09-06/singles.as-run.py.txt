@@ -4,6 +4,19 @@ against the unablated readout. Per head: top-25 overlap with the unablated reado
 layers at or above the head (downstream), the overlap at layer 28 (downstream of every head, the one readout common to all),
 and the next-token change rate. Purpose: does stage-1 preservation order heads by causal effect? Selected against unselected
 at each layer, and the rank correlation of preservation with single-head damage over all 80 heads. Writes out/singles.json."""
+
+# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
+# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
+# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
+# sha256 is in the record beside this file.
+import sys as _sys
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
+        "broadcast-head probes, not a launcher; runs go through the package entry points "
+        "under R47 and R48, in a window the Director declares, and take the model-run "
+        "lock of issue 83"
+    )
 import json, os, sys, time
 from pathlib import Path
 import numpy as np

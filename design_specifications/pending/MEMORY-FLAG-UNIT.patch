@@ -1,0 +1,353 @@
+# MEMORY-FLAG-UNIT: issue 93 — the R26 flag could not fire before the machine swapped
+
+Two faults compounded, and each on its own is smaller than the pair.
+
+## What the code did
+
+`mlx_lm/tuner/trainer.py:341` computes the peak as `mx.get_peak_memory() / 1e9`, so the trainer's
+number is **gigabytes** and `peak_memory_gb` is an honest name. `runlog.py` then compared it
+against `memory_budget_gib`, which is **gibibytes**: 7 percent of margin nobody earned.
+
+Worse, that budget was the **registry's declaration** rather than the resolved gate.
+`cli.py` handed `HealthThresholds` the model spec's `memory_budget_gib`, which for the 4B is the
+registry's `budget_gib: 22`, while `preflight.py:954` resolves the gate it actually applies as
+`min(registry, device)` — `min(22, 17.76)`. So the two gates watched the same run against
+different numbers by construction: the preflight refuses a run projected past 17.76 GiB, and the
+health record then watched it against 22.
+
+Together, `memory_over_budget` fired above 22 GB, which is **20.49 GiB, 2.7 GiB past a ceiling the
+hardware cannot exceed without swapping**. The flag was unreachable in practice.
+
+## What it does now
+
+- **One conversion, in one place.** `runlog.gib_from_gb` carries the comment about which side is
+  which, because the failure was two units meeting at a `>`.
+- **`peak_memory_gib` beside `peak_memory_gb`**, in the per-report record, the summary, and the
+  flag's detail. The old field keeps its name — it is honest about its unit and every
+  `health.json` already written uses it — and the detail carries both so a reader checks the
+  conversion instead of trusting it.
+- **The threshold is threaded from the preflight artifact**, `memory.budget_gib`, not re-derived.
+  A second copy of `min(registry, device)` in the tree is how the two drift apart again.
+- **The fallback says it is one.** `--skip-preflight-check` leaves no artifact, and then the
+  registry's declaration is the only number available. `_resolved_memory_budget_gib` returns it
+  with a source string that reaches the run log, rather than passing 22 off as resolved.
+
+## The fixtures
+
+At the boundary this machine actually has, 17.76 GiB:
+
+| peak | in GiB | old behaviour | now |
+| ---: | ---: | --- | --- |
+| 17.9 GB | 16.70 | flagged, with 1 GiB of headroom left | quiet |
+| 19.5 GB | 18.16 | quiet, 0.4 GiB past the ceiling | flagged |
+
+The first is a false alarm and the second is the miss, and the miss is the one that costs a run.
+Both mutations are checked: reverting the comparison to gigabytes fails the first case, and
+returning the registry's declaration instead of the resolved budget fails both budget tests.
+
+Four existing assertions are re-pinned deliberately, not relaxed: the flag detail gained a third
+key, the summary and the last-report dict each gained a field, and `test_summary_full_shape`'s key
+set grew by one.
+
+## Arm A, where the next reader will meet it
+
+`research/records/ARM-A-DIVERGENCE-2026-09-07/README.md` carries a dated note (`1ef18b9`): the
+recorded 10.444 is **9.726 GiB**, 0.548 of the working set. That number is also what #94's
+measurement has to be read against, which is why this lands first.
+
+## Verification
+
+```
+full suite:                     exit 0
+tests/test_runlog.py, test_cli.py: exit 0, 4 new tests
+mutation: unit reverted fails the 17.9 GB case; budget reverted fails both budget tests
+ruff, all changed files:        21 findings before, 21 after, 0 newly introduced
+git apply --check against HEAD: 0
+concurrency: no libmlx-mapped process and no model-run lock, checked in the launching command
+```
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/cli.py b/src/local_llm_lab/pipeline/cli.py
+index 4521143..3f85370 100644
+--- a/src/local_llm_lab/pipeline/cli.py
++++ b/src/local_llm_lab/pipeline/cli.py
+@@ -28,6 +28,7 @@ from local_llm_lab.pipeline.data import (
+ )
+ from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
+ from local_llm_lab.pipeline.prefer import run_prefer
++from local_llm_lab.pipeline.preflight import artifact_path as preflight_artifact_path
+ from local_llm_lab.pipeline.preflight import require_preflight, run_preflight
+ from local_llm_lab.pipeline.report import load_summaries, render
+ from local_llm_lab.pipeline.rollout import run_rollout
+@@ -84,6 +85,32 @@ def _require_config_preflight(config: dict[str, Any], *, skip: bool) -> None:
+     require_preflight(load_model_spec(config["model"]), skip=skip)
+ 
+ 
++
++def _resolved_memory_budget_gib(spec: ModelSpec) -> tuple[float, str]:
++    """The budget the health flag watches: the preflight's resolved one, not the registry's.
++
++    The registry declares an intent -- 22 GiB for the 4B -- and the preflight resolves the gate
++    it actually applies as the minimum of that and what the device grants, which on this machine
++    is a 17.76 GiB recommended working set. Handing the health flag the registry's 22 gave the
++    two gates different thresholds by construction: the preflight refuses a run projected past
++    17.76 while the health record then watches the same run against a number the hardware cannot
++    reach without swapping (issue 93).
++
++    So it is threaded from the artifact rather than re-derived here. Re-deriving it would put a
++    second copy of `min(registry, device)` in the tree, which is how the two drift apart again.
++
++    With `--skip-preflight-check` there is no artifact and no resolved budget. The registry's
++    declaration is the only number available, and the fallback says so in its second return
++    value rather than passing 22 off as resolved.
++    """
++    path = preflight_artifact_path(spec)
++    try:
++        record = json.loads(path.read_text(encoding="utf-8"))
++        return float(record["memory"]["budget_gib"]), "preflight artifact"
++    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
++        return float(spec.memory_budget_gib), "registry declaration (no preflight artifact read)"
++
++
+ def dataset_splits(config: dict[str, Any]) -> dict[str, SplitSpec]:
+     """Convert one supported data schema to role-aware deterministic split specifications."""
+     has_tasks = "tasks" in config
+@@ -725,8 +752,9 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+     effective = _effective_training_spec(config)
+     # Both are resolved before anything loads, so a typo under train.health costs no weights.
+     # The planned iteration count is lora["iters"] by the same override lora_config applies.
++    budget_gib, budget_source = _resolved_memory_budget_gib(effective)
+     thresholds = HealthThresholds.from_config(
+-        config["train"].get("health"), memory_budget_gib=effective.memory_budget_gib
++        config["train"].get("health"), memory_budget_gib=budget_gib
+     )
+     health = TrainingHealth(
+         thresholds, iters=config["train"]["iters"] if iters is None else iters
+@@ -754,6 +782,11 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+         try:
+             if launch is not None:
+                 runlog.info('training launch preflight', **launch)
++                # Which budget the health flag is watching, and where it came from, so a
++                # reader of the log can tell a resolved gate from a fallback (issue 93).
++                runlog.info(
++                    'memory budget', budget_gib=budget_gib, budget_source=budget_source
++                )
+             cache_limit = _limit_metal_cache(config["train"])
+             runlog.info("metal cache limit", bytes=cache_limit, gib=round(cache_limit / 2**30, 2))
+             runlog.info("loading base", model=effective.hf_id)
+diff --git a/src/local_llm_lab/runlog.py b/src/local_llm_lab/runlog.py
+index c60931e..c7b5c27 100644
+--- a/src/local_llm_lab/runlog.py
++++ b/src/local_llm_lab/runlog.py
+@@ -537,6 +537,19 @@ def _window_int(key: str, value: Any) -> int:
+     return number
+ 
+ 
++#: `mlx_lm/tuner/trainer.py` reports its peak as `mx.get_peak_memory() / 1e9`, so the trainer's
++#: number is **gigabytes**, and the field carrying it says so. Every budget in this repository is
++#: in gibibytes -- the registry declares `budget_gib`, the device reports a recommended working
++#: set in gibibytes, and `preflight` resolves the two in gibibytes. One conversion, in one place,
++#: because the failure this fixes was two units meeting at a `>` (issue 93).
++_BYTES_PER_GIB = 1024**3
++
++
++def gib_from_gb(gigabytes: float) -> float:
++    """Gigabytes as the trainer reports them, in the gibibytes every budget here is stated in."""
++    return gigabytes * 1e9 / _BYTES_PER_GIB
++
++
+ @dataclass(frozen=True)
+ class HealthThresholds:
+     """Documented engineering defaults for the training-health rules."""
+@@ -659,6 +672,9 @@ class TrainingHealth:
+                 "tokens_per_second": float(tokens_per_second),
+                 "trained_tokens": int(trained_tokens),
+                 "peak_memory_gb": float(peak_memory_gb),
++                # Beside it, not instead of it: `peak_memory_gb` is honest about its unit and
++                # readers of it exist, including every health.json already written (issue 93).
++                "peak_memory_gib": float(gib_from_gb(peak_memory_gb)),
+             }
+         )
+         raised: list[str] = []
+@@ -711,13 +727,22 @@ class TrainingHealth:
+                 raised.append("throughput_drop")
+ 
+         budget = self._thresholds.memory_budget_gib
+-        if budget is not None and not self._memory_flagged and peak_memory_gb > budget:
++        peak_memory_gib = gib_from_gb(peak_memory_gb)
++        if budget is not None and not self._memory_flagged and peak_memory_gib > budget:
+             self._memory_flagged = True
++            # Both values, and the unit of each, so a reader checks the conversion instead of
++            # trusting it. The comparison used to be `peak_memory_gb > budget`, gigabytes
++            # against gibibytes, which gave the flag 7 percent of margin it had not earned
++            # (issue 93).
+             self._record(
+                 "memory_over_budget",
+                 severity="warning",
+                 iteration=iteration,
+-                detail={"peak_memory_gb": float(peak_memory_gb), "budget_gib": float(budget)},
++                detail={
++                    "peak_memory_gb": float(peak_memory_gb),
++                    "peak_memory_gib": float(peak_memory_gib),
++                    "budget_gib": float(budget),
++                },
+             )
+             raised.append("memory_over_budget")
+ 
+@@ -845,6 +870,7 @@ class TrainingHealth:
+             "last_val": _safe_record(last_val),
+             "best_val": _safe_record(best_val),
+             "peak_memory_gb": max(memories) if memories else None,
++            "peak_memory_gib": gib_from_gb(max(memories)) if memories else None,
+             "median_tokens_per_second": statistics.median(throughput) if throughput else None,
+             "elapsed": float(elapsed),
+         }
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 8539dd8..faee65e 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -1979,3 +1979,56 @@ def test_the_r21_debt_comment_is_gone_because_the_debt_is() -> None:
+         "drift."
+     )
+     assert "write_text_atomic" in probe, "its callers must reach runlog's writer by name"
++
++
++def _spec_for_budget(*, memory_budget_gib: float):
++    """The smallest stand-in `_resolved_memory_budget_gib` reads: a declared budget."""
++    from types import SimpleNamespace
++
++    return SimpleNamespace(memory_budget_gib=memory_budget_gib, name="fake-model")
++
++
++def test_the_health_budget_is_the_preflights_resolved_one_not_the_registrys(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """Issue 93: two gates were watching the same run against different thresholds.
++
++    The registry declares an intent — 22 GiB for the 4B — and the preflight resolves the gate it
++    actually applies as the minimum of that and what the device grants, 17.76 GiB here. Handing
++    the health flag the registry's 22 meant the preflight refused a run projected past 17.76
++    while the health record then watched it against a number the machine cannot reach without
++    swapping.
++
++    Threaded from the artifact rather than re-derived, because a second copy of
++    ``min(registry, device)`` is how the two drift apart again.
++    """
++    spec = _spec_for_budget(memory_budget_gib=22.0)
++    artifact = tmp_path / "fake-model.json"
++    artifact.write_text(
++        json.dumps({"memory": {"budget_gib": 17.76, "registry_budget_gib": 22.0}}),
++        encoding="utf-8",
++    )
++    monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: artifact)
++
++    budget, source = cli._resolved_memory_budget_gib(spec)
++    assert budget == 17.76, "the resolved gate, not the declaration"
++    assert source == "preflight artifact"
++
++
++def test_a_missing_preflight_artifact_falls_back_and_says_so(monkeypatch, tmp_path: Path) -> None:
++    """``--skip-preflight-check`` leaves no artifact, and the fallback must not pass as resolved.
++
++    The registry's declaration is the only number available then. Returning it silently is what
++    reintroduces the bug, so the source string carries the difference and reaches the run log.
++    """
++    spec = _spec_for_budget(memory_budget_gib=22.0)
++    monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: tmp_path / "absent.json")
++
++    budget, source = cli._resolved_memory_budget_gib(spec)
++    assert budget == 22.0
++    assert "registry declaration" in source
++
++    truncated = tmp_path / "half.json"
++    truncated.write_text('{"memory": {"budget_g', encoding="utf-8")
++    monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: truncated)
++    assert cli._resolved_memory_budget_gib(spec)[1].startswith("registry declaration")
+diff --git a/tests/test_runlog.py b/tests/test_runlog.py
+index bc60b26..019312a 100644
+--- a/tests/test_runlog.py
++++ b/tests/test_runlog.py
+@@ -22,6 +22,7 @@ from local_llm_lab.runlog import (
+     Tee,
+     TrainingAborted,
+     TrainingHealth,
++    gib_from_gb,
+     git_commit,
+     sha256_of,
+ )
+@@ -704,7 +705,13 @@ def test_memory_over_budget_fires_once_per_run() -> None:
+     assert _train(health, 2, memory=12.0) == ["memory_over_budget"]
+     assert _train(health, 3, memory=13.0) == []
+     assert [flag["flag"] for flag in health.flags] == ["memory_over_budget"]
+-    assert health.flags[0]["detail"] == {"peak_memory_gb": 12.0, "budget_gib": 10.0}
++    # Three keys, not two: both units are recorded so a reader checks the conversion rather
++    # than trusting it (issue 93). 12.0 GB is 11.176 GiB, still over a 10 GiB budget.
++    assert health.flags[0]["detail"] == {
++        "peak_memory_gb": 12.0,
++        "peak_memory_gib": pytest.approx(11.175870895385742),
++        "budget_gib": 10.0,
++    }
+     assert health.flags[0]["iteration"] == 2
+ 
+ 
+@@ -889,6 +896,7 @@ def test_summary_full_shape() -> None:
+         "last_val",
+         "best_val",
+         "peak_memory_gb",
++        "peak_memory_gib",
+         "median_tokens_per_second",
+         "elapsed",
+     }
+@@ -907,10 +915,13 @@ def test_summary_full_shape() -> None:
+         "tokens_per_second": 300.0,
+         "trained_tokens": 30000,
+         "peak_memory_gb": 5.0,
++        # Beside it, not instead of it, so every reader of the old field keeps working (issue 93).
++        "peak_memory_gib": pytest.approx(4.656612873077393),
+     }
+     assert summary["last_val"] == {"iteration": 30, "val_loss": 2.0}
+     assert summary["best_val"] == {"iteration": 20, "val_loss": 1.0}
+     assert summary["peak_memory_gb"] == 6.0
++    assert summary["peak_memory_gib"] == pytest.approx(5.587935447692871)
+     assert summary["median_tokens_per_second"] == 200.0
+     assert summary["elapsed"] == 123.5
+     assert json.loads(json.dumps(summary)) == summary
+@@ -990,3 +1001,37 @@ def test_events_stay_strict_json_when_a_logged_field_is_not_finite(tmp_path):
+     assert event["fields"]["nested"]["peak"] == "inf"
+     assert event["fields"]["values"] == [1.0, "-inf"]
+     assert "NaN" not in "\n".join(lines) and "Infinity" not in "\n".join(lines)
++
++
++def test_the_memory_flag_compares_gibibytes_at_the_boundary_the_hardware_has() -> None:
++    """Issue 93: the trainer reports gigabytes and every budget here is gibibytes.
++
++    The two cases are chosen at the boundary that matters on this machine, a 17.76 GiB
++    recommended working set. Under the old comparison a 17.9 figure read as over budget when the
++    run was using 16.7 GiB and had 1 GiB of headroom left, and 19.5 read as under it when the run
++    was using 18.2 GiB and past the ceiling. One is a false alarm and the other is the miss, and
++    the miss is the one that costs a run.
++    """
++    quiet = _health(memory_budget_gib=17.76)
++    assert _train(quiet, 1, memory=17.9) == [], "17.9 GB is 16.7 GiB and fits"
++    assert list(quiet.flags) == []
++
++    loud = _health(memory_budget_gib=17.76)
++    assert _train(loud, 1, memory=19.5) == [
++        "memory_over_budget"
++    ], "19.5 GB is 18.2 GiB and does not"
++    detail = loud.flags[0]["detail"]
++    assert detail["peak_memory_gb"] == 19.5
++    assert detail["peak_memory_gib"] == pytest.approx(18.161, abs=1e-3)
++    assert detail["budget_gib"] == 17.76
++
++
++def test_gib_from_gb_names_the_trainers_unit_and_this_repositorys() -> None:
++    """Arm A's own record, converted, so the number appears where a reader will meet it.
++
++    `outputs/agent-v2e-qwen35-4b/health.json` records `peak_memory_gb: 10.4436`. That is
++    **9.726 GiB**, against a device working set of 17.76 GiB — which is what the run was really
++    using, and what the memory envelope in `preflight` should be checked against.
++    """
++    assert gib_from_gb(10.443645016) == pytest.approx(9.726, abs=5e-4)
++    assert gib_from_gb(1024**3 / 1e9) == pytest.approx(1.0)
+```

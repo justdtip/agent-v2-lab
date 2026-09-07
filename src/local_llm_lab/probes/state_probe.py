@@ -56,7 +56,7 @@ from local_llm_lab.probes.capture import (
     note_token_span,
     strip_state_fields,
 )
-from local_llm_lab.runlog import RunLog, git_commit, sha256_of
+from local_llm_lab.runlog import RunLog, git_commit, sha256_of, write_text_atomic
 
 __all__ = [
     "CAPTURE_POSITIONS",
@@ -2937,28 +2937,6 @@ def render_reanalysis_markdown(results: dict[str, Any], label: str) -> str:
     return "\n".join(out)
 
 
-def _atomic_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            dir=path.parent,
-            delete=False,
-        ) as handle:
-            temporary = Path(handle.name)
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-
-
 def _json_compliant(value: Any) -> Any:
     """Replace non-finite floats with JSON null while preserving the report structure."""
     if isinstance(value, dict):
@@ -4121,13 +4099,13 @@ def _main_compare(argv: list[str]) -> None:
         results["metadata"]["elapsed_seconds"] = time.perf_counter() - started
         json_path = args.output / "compare.json"
         markdown_path = args.output / "compare.md"
-        _atomic_text(
+        write_text_atomic(
             json_path,
             json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
             + "\n",
         )
         markdown = render_compare_markdown(results)
-        _atomic_text(markdown_path, markdown + "\n")
+        write_text_atomic(markdown_path, markdown + "\n")
         print(markdown)
         log.info("wrote", path=str(json_path))
         log.info("wrote", path=str(markdown_path))
@@ -4224,13 +4202,13 @@ def _main_reanalyse(argv: list[str]) -> None:
             stem += f".{args.position}"
         json_path = args.output / f"{stem}.json"
         markdown_path = args.output / f"{stem}.md"
-        _atomic_text(
+        write_text_atomic(
             json_path,
             json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
             + "\n",
         )
         markdown = render_reanalysis_markdown(results, args.input.stem)
-        _atomic_text(markdown_path, markdown + "\n")
+        write_text_atomic(markdown_path, markdown + "\n")
         print(markdown)
         log.info("wrote", path=str(json_path))
         log.info("wrote", path=str(markdown_path))
@@ -4793,14 +4771,14 @@ def _main_refit_bf16(argv: list[str]) -> None:
         stem = args.input.name.removesuffix(".npz") + ".reanalysis-bf16"
         written: list[Path] = []
         json_path = args.output / f"{stem}.json"
-        _atomic_text(
+        write_text_atomic(
             json_path,
             json.dumps(_json_compliant(results), indent=2, ensure_ascii=False, allow_nan=False)
             + "\n",
         )
         written.append(json_path)
         markdown_path = args.output / f"{stem}.md"
-        _atomic_text(markdown_path, render_reanalysis_markdown(results, args.input.stem) + "\n")
+        write_text_atomic(markdown_path, render_reanalysis_markdown(results, args.input.stem) + "\n")
         written.append(markdown_path)
         comparison = compare_refit(
             baseline,
@@ -4819,7 +4797,7 @@ def _main_refit_bf16(argv: list[str]) -> None:
             },
         )
         comparison_json = args.output / "refit-comparison.json"
-        _atomic_text(
+        write_text_atomic(
             comparison_json,
             json.dumps(_json_compliant(comparison), indent=2, ensure_ascii=False, allow_nan=False)
             + "\n",
@@ -4827,7 +4805,7 @@ def _main_refit_bf16(argv: list[str]) -> None:
         written.append(comparison_json)
         markdown = render_refit_comparison_markdown(comparison, args.input.stem)
         comparison_markdown = args.output / "refit-comparison.md"
-        _atomic_text(comparison_markdown, markdown + "\n")
+        write_text_atomic(comparison_markdown, markdown + "\n")
         written.append(comparison_markdown)
         print(markdown)
         for path in written:

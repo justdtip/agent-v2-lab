@@ -137,3 +137,38 @@ drives `run_task(capture=…)` or `CaptureSession` — the replay reader of §3.
 resolve the no-reuse strategy explicitly before loading (`replace(spec, cache_strategy="none")`), as
 `scripts/live_lens_pilot.py` now does; the runner raises on capture with a turn cache and does not
 fall back. Fits (§3.2, §3.3) use uncached full forwards through the view and are unaffected.
+
+## 14. The prose records for the cross-read (8 September; Codex's question at the replay handoff)
+
+§3.5's cross-read names "the agentic lens on prose, same summaries" but never says what a prose
+record is: the pilot's summaries score the model's **emitted** tokens (foreknowledge) and the
+**next prompt token** (agreement), and the frozen Wikipedia windows hold authored text only.
+
+**Ruling: record greedy continuations, and keep both summaries exactly as pre-registered.** No new
+metric. The authored tokens already have their place: they are the prompt positions, and the
+agreement summary scores them there.
+
+- **Material.** The 51 held prose windows of `qwen35-4b-prose` (1,024 tokens each). Not the fit
+  windows. The held windows chose the ridge weight among five values, which is the only leak;
+  the record states it. Fully disjoint prose would need the wikitext test shard, a further
+  download the Director has not authorised; the recommendation is to accept the stated leak.
+- **One window, one turn.** Prompt = the window's first 824 authored tokens, raw text under the
+  corpus's own tokenizer descriptor (no chat template, the same BOS policy the corpus recorded).
+  Continuation = **200 tokens, greedy**, the pilot's own per-turn cap (`max_tokens: 200` in its
+  manifest), so horizon support at `h = 8` is at least the pilot's. Stop at EOS if it comes first;
+  a window whose continuation is under 32 tokens is dropped and counted.
+- **Path.** The capture path with the no-reuse strategy resolved explicitly (§13), forward
+  partitions and the emitted rows recorded, hash-chained, exactly as the pilot's records are, so
+  §3.4's reader replays them under any lens set unchanged. Record directory
+  `research/records/LIVE-LENS-PROSE-2026-09-08/`, README before the run, manifest with the
+  window indices and SHA-256s, the prefix and continuation lengths, the sampler, the seed.
+- **Summaries.** The atlas summariser as it stands: kind `prose`, one span `continuation` for
+  foreknowledge at `h = 1/4/8`, and the prompt positions for agreement. The base rate on every
+  foreknowledge row is the **prose records' own** final-distribution share at the same `h`, not
+  the pilot's 0.210 and 0.116.
+- **Descriptive only, not a summary row.** The window's authored tokens 825–1,024 may be stored
+  beside the emitted continuation as `authored_continuation` for a reader's comparison. They are
+  not scored as foreknowledge: a lens reading upcoming *input* is the agreement summary, and a
+  third summary is outside §5's pre-registration.
+- **Cost.** 51 windows × 1,024 positions on the capture path, no reuse: under the lock, minutes,
+  announced in the heartbeat like every checkpoint launch.
