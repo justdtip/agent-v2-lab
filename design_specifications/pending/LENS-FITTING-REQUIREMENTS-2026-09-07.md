@@ -172,3 +172,36 @@ agreement summary scores them there.
   third summary is outside §5's pre-registration.
 - **Cost.** 51 windows × 1,024 positions on the capture path, no reuse: under the lock, minutes,
   announced in the heartbeat like every checkpoint launch.
+
+## 15. Ruling on the Jacobian step (8 September; Codex's self-check-01 failed its instrument gate)
+
+The self-check on the real checkpoint (`LENS-FIT-agentic-jacobian-2026-09-07/check-01`) failed
+the precommitted ε-against-ε/2 stability bound at all three layers tried: maximum response
+differences 0.60 at layer 1 with ε = 0.51, 0.11 at layer 16 with ε = 1.84, 0.017 at layer 31 with
+ε = 8.9. That is R52 working, and the cause is legible in the numbers. The inherited step rule,
+`ε = 0.01 · ‖full-sequence primal‖ / ‖tangent‖`, takes the norm of the residual over **every
+position** of the row, which for a 439-token row is about √439 ≈ 21 times the norm at the one
+position being perturbed; at layer 1 the step was a fifth of that position's whole residual placed
+on a single coordinate, far outside any linear regime, and the instability falls with depth only
+because deeper residuals are larger.
+
+**Ruling.**
+
+1. The step is relative to the **perturbed position's own residual**: `ε = c · ‖h_t‖ / ‖tangent‖`,
+   with `h_t` the layer-`L` residual at the position being perturbed, in float32.
+2. `c` is chosen **per layer by a preregistered sweep**, diagnostic only, no fit: the same 16
+   directions and three layers as check-01, `c ∈ {1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2}`, the
+   uncached full-sequence reference at each `c` and at `c/2`. A layer passes at the largest `c`
+   for which the precommitted stability bound holds at that point **and** at the next smaller
+   point (a plateau, not a touch). The bounds stay as precommitted; the sweep's grid, its
+   criterion and its layers are written in the record before it runs.
+3. With a plateau at every layer tried, the production rule takes that `c` (per layer, or the
+   largest common value, stated), the self-check reruns under the **original** acceptance, and the
+   fits follow only if it passes. A layer with no plateau, where float32 noise meets the tail's
+   nonlinearity before the bound holds, is **instrument-limited** for the Jacobian lens and is
+   reported as such, not fitted with a looser bound.
+4. The regression lens takes no derivative and proceeds regardless; its calibration (retry04)
+   stands as its resource evidence.
+5. The provenance of the inherited rule is to be stated in the record: whether the hosted lens's
+   own fit used finite differences with a whole-sequence norm, or exact autodifferentiation. If
+   the latter, the rule had no precedent to inherit, and the record should say so.
