@@ -118,3 +118,14 @@ Send the patch as a file under `design_specifications/pending/` with a record di
 
 - **Keep the worktree on a persistent path and commit to your branch as you go.** The laptop crashed at 17:03 and `/private/tmp` was cleared on reboot; the history-cache worktree and its uncommitted patch were lost there and had to be reconstructed from the reviewer's transcript. Put the worktree under your home directory (for example `~/worktrees/lens-fitting`), commit to the branch after every piece in §3, and push the branch to the shared repository's refs; the patch file under `design_specifications/pending/` is the delivery, the branch is the backup.
 - **Base on the shared HEAD after the history-cache patch lands.** Pieces 3.1 and 3.2 touch nothing that patch touches and can start now. Piece 3.4 (the replay reader) drives `CaptureSession`, whose internals that patch changes (a forward ledger replaces the session's own offset accounting); base 3.4 on the tree after the landing, which the Chief will announce in the heartbeat.
+
+## 12. Ruling on the ridge term (7 September, 20:10; Codex's question at the corpus-builder handoff)
+
+§3.2 wrote the grid as multiples of "the mean diagonal of XᵀX / n" and the prototype adds `n·λ·I`. The
+two are meant to be the same quantity and the prototype has it right: the ridge term must scale with the
+number of positions, because XᵀX does, or the strength of regularisation would depend on how many
+sequences were fitted. **Ruling:** the penalty is `α · d̄ · I` where `d̄` is the mean diagonal of the fit
+set's XᵀX (the total, not divided by n) and `α` runs over the grid `{1e-3, 1e-2, 1e-1, 1, 10}`; equivalently
+`n · α · (d̄ / n) · I`, which is what `scripts/fit_regression_lens.py` computes. The held-out selection of
+`α` per layer is unchanged. Record `α`, `d̄` and `n` per layer in the sidecar so the absolute `λ` is
+recoverable. §3.2's wording is superseded by this section; the document is not edited in place.
