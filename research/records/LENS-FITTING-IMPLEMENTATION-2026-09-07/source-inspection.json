@@ -1,0 +1,463 @@
+{
+  "inspected_utc": "2026-09-07T07:31:30.426287+00:00",
+  "sources": [
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json",
+      "sha256": "c456dccb04b6494f0671c4b02ee264fe51330042034a36616dfd8457b1428c61",
+      "split": "train",
+      "keep_last": 2,
+      "trajectories": 24,
+      "steps": 200,
+      "task_ids": [
+        "train-read-0000-clean",
+        "train-search-0001-clean",
+        "train-calculate-0002-clean",
+        "train-synthesis-0003-clean",
+        "train-update-0004-clean",
+        "train-list-0005-clean",
+        "train-pointer_chain-0006-clean",
+        "train-ledger_reconcile-0007-clean",
+        "train-cross_reference-0008-clean",
+        "train-conditional_update-0009-clean",
+        "train-batch_update-0010-clean",
+        "train-aggregate_report-0011-clean",
+        "train-read-0012-transient",
+        "train-search-0013-wrong_path",
+        "train-calculate-0014-transient",
+        "train-synthesis-0015-wrong_path",
+        "train-update-0016-wrong_path",
+        "train-list-0017-wrong_path",
+        "train-pointer_chain-0018-wrong_path",
+        "train-ledger_reconcile-0019-wrong_path",
+        "train-cross_reference-0020-wrong_path",
+        "train-conditional_update-0021-wrong_path",
+        "train-batch_update-0022-wrong_path",
+        "train-aggregate_report-0023-wrong_path"
+      ],
+      "model": {
+        "spec": {
+          "name": "qwen35-4b",
+          "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+          "family": "qwen3_5",
+          "chat": {
+            "thinking": "off",
+            "template_kwargs": {
+              "enable_thinking": false
+            },
+            "end_of_turn": "<|im_end|>",
+            "extra_stop_tokens": [
+              "<|endoftext|>"
+            ],
+            "max_think_tokens": 512
+          },
+          "lora": {
+            "keys": "auto",
+            "rank": 16,
+            "scale": 32.0,
+            "dropout": 0.0
+          },
+          "train": {
+            "launch_preflight": {
+              "chunk_size": 256,
+              "max_row_tokens": 2688,
+              "max_batch_size": 1,
+              "max_metal_cache_gib": 2.0
+            },
+            "max_seq_length": 2688,
+            "batch_size": 2,
+            "grad_accumulation_steps": 2,
+            "learning_rate": 3e-05,
+            "grad_checkpoint": true
+          },
+          "cache_strategy": "auto",
+          "probe_layer_fractions": [
+            0.167,
+            0.333,
+            0.5,
+            0.667,
+            0.833,
+            1.0
+          ],
+          "memory_budget_gib": 22.0,
+          "policies": {},
+          "cache_equivalence_verified": null,
+          "probe_capture_dtype": "native"
+        },
+        "num_layers": 32,
+        "hidden_size": 2560,
+        "vocab_size": 248320,
+        "tie_word_embeddings": true,
+        "layer_types": [
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention"
+        ],
+        "lora_keys": [
+          "self_attn.q_proj",
+          "self_attn.k_proj",
+          "self_attn.v_proj",
+          "self_attn.o_proj",
+          "mlp.gate_proj",
+          "mlp.up_proj",
+          "mlp.down_proj",
+          "linear_attn.in_proj_qkv",
+          "linear_attn.in_proj_z",
+          "linear_attn.in_proj_b",
+          "linear_attn.in_proj_a",
+          "linear_attn.out_proj"
+        ],
+        "trainable_parameters": 32464896,
+        "probe_layers": [
+          5,
+          11,
+          16,
+          21,
+          27,
+          32
+        ],
+        "cache_strategy": "none",
+        "cache_strategy_reason": "auto:equivalence_unverified",
+        "snapshot_revision": null,
+        "jvp_method": "untested"
+      }
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json",
+      "sha256": "0c605fc61d45529927253f466def8c7d62ee40b17061e66aa36474912d5eb608",
+      "split": "train1",
+      "keep_last": 2,
+      "trajectories": 24,
+      "steps": 201,
+      "task_ids": [
+        "train1-read-0000-clean",
+        "train1-search-0001-clean",
+        "train1-calculate-0002-clean",
+        "train1-synthesis-0003-clean",
+        "train1-update-0004-clean",
+        "train1-list-0005-clean",
+        "train1-pointer_chain-0006-clean",
+        "train1-ledger_reconcile-0007-clean",
+        "train1-cross_reference-0008-clean",
+        "train1-conditional_update-0009-clean",
+        "train1-batch_update-0010-clean",
+        "train1-aggregate_report-0011-clean",
+        "train1-read-0012-transient",
+        "train1-search-0013-wrong_path",
+        "train1-calculate-0014-transient",
+        "train1-synthesis-0015-wrong_path",
+        "train1-update-0016-wrong_path",
+        "train1-list-0017-wrong_path",
+        "train1-pointer_chain-0018-wrong_path",
+        "train1-ledger_reconcile-0019-wrong_path",
+        "train1-cross_reference-0020-wrong_path",
+        "train1-conditional_update-0021-wrong_path",
+        "train1-batch_update-0022-wrong_path",
+        "train1-aggregate_report-0023-wrong_path"
+      ],
+      "model": {
+        "spec": {
+          "name": "qwen35-4b",
+          "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+          "family": "qwen3_5",
+          "chat": {
+            "thinking": "off",
+            "template_kwargs": {
+              "enable_thinking": false
+            },
+            "end_of_turn": "<|im_end|>",
+            "extra_stop_tokens": [
+              "<|endoftext|>"
+            ],
+            "max_think_tokens": 512
+          },
+          "lora": {
+            "keys": "auto",
+            "rank": 16,
+            "scale": 32.0,
+            "dropout": 0.0
+          },
+          "train": {
+            "launch_preflight": {
+              "chunk_size": 256,
+              "max_row_tokens": 2688,
+              "max_batch_size": 1,
+              "max_metal_cache_gib": 2.0
+            },
+            "max_seq_length": 2688,
+            "batch_size": 2,
+            "grad_accumulation_steps": 2,
+            "learning_rate": 3e-05,
+            "grad_checkpoint": true
+          },
+          "cache_strategy": "auto",
+          "probe_layer_fractions": [
+            0.167,
+            0.333,
+            0.5,
+            0.667,
+            0.833,
+            1.0
+          ],
+          "memory_budget_gib": 22.0,
+          "policies": {},
+          "cache_equivalence_verified": null,
+          "probe_capture_dtype": "native"
+        },
+        "num_layers": 32,
+        "hidden_size": 2560,
+        "vocab_size": 248320,
+        "tie_word_embeddings": true,
+        "layer_types": [
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention"
+        ],
+        "lora_keys": [
+          "self_attn.q_proj",
+          "self_attn.k_proj",
+          "self_attn.v_proj",
+          "self_attn.o_proj",
+          "mlp.gate_proj",
+          "mlp.up_proj",
+          "mlp.down_proj",
+          "linear_attn.in_proj_qkv",
+          "linear_attn.in_proj_z",
+          "linear_attn.in_proj_b",
+          "linear_attn.in_proj_a",
+          "linear_attn.out_proj"
+        ],
+        "trainable_parameters": 32464896,
+        "probe_layers": [
+          5,
+          11,
+          16,
+          21,
+          27,
+          32
+        ],
+        "cache_strategy": "none",
+        "cache_strategy_reason": "auto:equivalence_unverified",
+        "snapshot_revision": null,
+        "jvp_method": "untested"
+      }
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json",
+      "sha256": "44722a553f26b3843007f86b40e94939bbf75ec634b3dbae787261eba45bfa03",
+      "split": "train2",
+      "keep_last": 2,
+      "trajectories": 24,
+      "steps": 199,
+      "task_ids": [
+        "train2-read-0000-clean",
+        "train2-search-0001-clean",
+        "train2-calculate-0002-clean",
+        "train2-synthesis-0003-clean",
+        "train2-update-0004-clean",
+        "train2-list-0005-clean",
+        "train2-pointer_chain-0006-clean",
+        "train2-ledger_reconcile-0007-clean",
+        "train2-cross_reference-0008-clean",
+        "train2-conditional_update-0009-clean",
+        "train2-batch_update-0010-clean",
+        "train2-aggregate_report-0011-clean",
+        "train2-read-0012-transient",
+        "train2-search-0013-wrong_path",
+        "train2-calculate-0014-transient",
+        "train2-synthesis-0015-wrong_path",
+        "train2-update-0016-wrong_path",
+        "train2-list-0017-wrong_path",
+        "train2-pointer_chain-0018-wrong_path",
+        "train2-ledger_reconcile-0019-wrong_path",
+        "train2-cross_reference-0020-wrong_path",
+        "train2-conditional_update-0021-wrong_path",
+        "train2-batch_update-0022-wrong_path",
+        "train2-aggregate_report-0023-wrong_path"
+      ],
+      "model": {
+        "spec": {
+          "name": "qwen35-4b",
+          "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+          "family": "qwen3_5",
+          "chat": {
+            "thinking": "off",
+            "template_kwargs": {
+              "enable_thinking": false
+            },
+            "end_of_turn": "<|im_end|>",
+            "extra_stop_tokens": [
+              "<|endoftext|>"
+            ],
+            "max_think_tokens": 512
+          },
+          "lora": {
+            "keys": "auto",
+            "rank": 16,
+            "scale": 32.0,
+            "dropout": 0.0
+          },
+          "train": {
+            "launch_preflight": {
+              "chunk_size": 256,
+              "max_row_tokens": 2688,
+              "max_batch_size": 1,
+              "max_metal_cache_gib": 2.0
+            },
+            "max_seq_length": 2688,
+            "batch_size": 2,
+            "grad_accumulation_steps": 2,
+            "learning_rate": 3e-05,
+            "grad_checkpoint": true
+          },
+          "cache_strategy": "auto",
+          "probe_layer_fractions": [
+            0.167,
+            0.333,
+            0.5,
+            0.667,
+            0.833,
+            1.0
+          ],
+          "memory_budget_gib": 22.0,
+          "policies": {},
+          "cache_equivalence_verified": null,
+          "probe_capture_dtype": "native"
+        },
+        "num_layers": 32,
+        "hidden_size": 2560,
+        "vocab_size": 248320,
+        "tie_word_embeddings": true,
+        "layer_types": [
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention",
+          "linear_attention",
+          "linear_attention",
+          "linear_attention",
+          "attention"
+        ],
+        "lora_keys": [
+          "self_attn.q_proj",
+          "self_attn.k_proj",
+          "self_attn.v_proj",
+          "self_attn.o_proj",
+          "mlp.gate_proj",
+          "mlp.up_proj",
+          "mlp.down_proj",
+          "linear_attn.in_proj_qkv",
+          "linear_attn.in_proj_z",
+          "linear_attn.in_proj_b",
+          "linear_attn.in_proj_a",
+          "linear_attn.out_proj"
+        ],
+        "trainable_parameters": 32464896,
+        "probe_layers": [
+          5,
+          11,
+          16,
+          21,
+          27,
+          32
+        ],
+        "cache_strategy": "none",
+        "cache_strategy_reason": "auto:equivalence_unverified",
+        "snapshot_revision": null,
+        "jvp_method": "untested"
+      }
+    }
+  ],
+  "checkpoint_loaded": false,
+  "baseline": {
+    "command": "PYTHONPATH=src /Users/daniel.tipton/Desktop/An app/.venv/bin/python -m pytest tests/test_live_lens.py tests/test_live_lens_native.py tests/test_jlens.py tests/test_repository_rules.py -ra",
+    "result": "84 passed in 5.52s"
+  },
+  "remote_backup": {
+    "status": "blocked_by_automatic_approval_review",
+    "branch": "codex/lens-fitting",
+    "remote": "https://github.com/justdtip/agent-v2-lab.git",
+    "reason": "requires direct authorisation for research-material egress"
+  }
+}
