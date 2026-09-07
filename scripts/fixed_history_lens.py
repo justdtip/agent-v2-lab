@@ -86,18 +86,22 @@ def load_pairs(adapter_transcripts: Path, base_eval: Path, only: set[str] | None
         if only and a["task_id"] not in only:
             continue
         steps = [s for s in a["steps"] if "action" in s]
-        t = divergence_step(steps)
-        kind = "no_repeat" if t is None else ("after_error" if str(steps[t - 1]["observation"]).startswith("ERROR") else "after_ok")
+        bsteps = [s for s in b["steps"] if "action" in s]
+        lock = divergence_step(steps)  # first identical repeat (lock-in)
+        # first step whose action differs from the base's at the same index; every earlier action coincides
+        t = next((i for i in range(min(len(steps), len(bsteps))) if canon(steps[i]["action"]) != canon(bsteps[i]["action"])), None)
         if t is None:
-            t = len(steps) - 1  # no identical repeat: compare at the last executed step
-        coincide = all(canon(b["steps"][i]["action"]) == canon(steps[i]["action"]) for i in range(min(t, len(b["steps"]))))
+            t = lock if lock is not None else len(steps) - 1
+        kind = "first_step" if t == 0 else ("after_error" if str(steps[t - 1]["observation"]).startswith("ERROR") else "after_ok")
         pairs.append({
             "task_id": a["task_id"], "family": a["family"], "prompt": a["prompt"], "t": t, "kind": kind,
-            "histories_coincide_to_t_minus_1": coincide,
+            "lock_in_step": lock,
+            "histories_coincide_to_t_minus_1": True,
             "adapter_turn_t_raw": steps[t]["raw"], "adapter_turn_t_action": steps[t]["action"],
             "adapter_turn_t_minus_1_action": steps[t - 1]["action"] if t > 0 else None,
-            "base_action_at_t": b["steps"][t]["action"] if t < len(b["steps"]) else None,
-            "base_turns": len(b["steps"]), "adapter_turns": len(steps),
+            "base_turn_t_raw": bsteps[t]["raw"] if t < len(bsteps) else None,
+            "base_action_at_t": bsteps[t]["action"] if t < len(bsteps) else None,
+            "base_turns": len(bsteps), "adapter_turns": len(steps),
             "messages": messages_before(a["prompt"], steps, t),
         })
     return pairs
@@ -110,17 +114,29 @@ def hf_tokenizer(hf_id: str):
     return AutoTokenizer.from_pretrained(path)
 
 
-def tool_name_slot(tok, text: str, n_prompt_chars: int) -> tuple[list[int], int | None, int | None]:
-    """Token ids of ``text`` and (index of the first token of the tool name, char offset of that name)."""
+def slots(tok, text: str, n_prompt_chars: int) -> tuple[list[int], int | None, int | None]:
+    """Token ids of ``text`` and the indices of the first token of the tool name and of the first argument value."""
     enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
     ids, offsets = enc["input_ids"], enc["offset_mapping"]
+
+    def first_token_at(char: int) -> int | None:
+        return next((i for i, (s, e) in enumerate(offsets) if e > char), None)
+
     key = '"name": "'
     k = text.find(key, n_prompt_chars)
     if k < 0:
         return ids, None, None
-    name_start = k + len(key)
-    first = next((i for i, (s, e) in enumerate(offsets) if e > name_start), None)
-    return ids, first, name_start
+    name_first = first_token_at(k + len(key))
+    arg_first = None
+    a = text.find('"arguments": {', k)
+    if a >= 0:
+        colon = text.find(": ", a + len('"arguments": {'))  # end of the first argument's key
+        if colon >= 0:
+            v = colon + 2
+            if v < len(text) and text[v] == '"':
+                v += 1  # the value's first character, inside its quotes
+            arg_first = first_token_at(v)
+    return ids, name_first, arg_first
 
 
 def candidate_first_tokens(tok) -> dict[str, int]:
@@ -156,15 +172,19 @@ def main() -> None:
         assert p["prompt_text"].endswith(generation_suffix(spec))
         p["n_prompt_tokens"] = len(tok(p["prompt_text"], add_special_tokens=False)["input_ids"])
         full = p["prompt_text"] + p["adapter_turn_t_raw"]
-        ids, slot, _ = tool_name_slot(tok, full, len(p["prompt_text"]))
+        ids, slot, arg = slots(tok, full, len(p["prompt_text"]))
         p["n_total_tokens"] = len(ids)
         p["slot_first_name_token"] = slot
-        p["repeated_tool"] = p["adapter_turn_t_action"]["name"]
+        p["slot_first_argument_token"] = arg
+        p["adapter_tool"] = p["adapter_turn_t_action"]["name"]
+        if p["base_turn_t_raw"] is not None:
+            bids, bslot, barg = slots(tok, p["prompt_text"] + p["base_turn_t_raw"], len(p["prompt_text"]))
+            p["base_turn_tokens"], p["base_slot_first_name_token"], p["base_slot_first_argument_token"] = len(bids) - p["n_prompt_tokens"], bslot, barg
     summary = [{k: v for k, v in p.items() if k not in ("messages", "prompt_text")} for p in pairs]
     json.dump({"candidate_first_tokens": {k: {"id": v, "text": tok.decode([v])} for k, v in cands.items()},
                "pairs": summary}, open(args.out / "pairs.json", "w"), indent=1)
     for p in pairs:
-        print(f"{p['task_id']:34s} t={p['t']:2d} {p['kind']:12s} prompt {p['n_prompt_tokens']:5d} tok | turn {p['n_total_tokens'] - p['n_prompt_tokens']:3d} tok | slot {p['slot_first_name_token']} | repeated {p['repeated_tool']} | base@t {p['base_action_at_t']['name'] if p['base_action_at_t'] else None}")
+        print(f"{p['task_id']:34s} t={p['t']:2d} lock={p['lock_in_step']} {p['kind']:11s} prompt {p['n_prompt_tokens']:5d} tok | turn {p['n_total_tokens'] - p['n_prompt_tokens']:3d} tok | name@{p['slot_first_name_token']} arg@{p['slot_first_argument_token']} | adapter {json.dumps(p['adapter_turn_t_action'])[:60]} | base {json.dumps(p['base_action_at_t'])[:60]}")
     if args.dry_run:
         print(json.dumps({"event": "dry_run_done", "pairs": len(pairs), "elapsed_s": round(time.time() - t0, 1)}))
         return
@@ -218,7 +238,21 @@ def main() -> None:
             lps = rows - (np.log(np.sum(np.exp(rows - rows.max(axis=1, keepdims=True)), axis=1, keepdims=True)) + rows.max(axis=1, keepdims=True))
             tok_lp = lps[np.arange(len(targets)), targets]
             want = dict(cands)
-            positions = {"turn_start": n_p - 1, "tool_name_slot": (slot - 1) if slot is not None else None}
+            arg = p["slot_first_argument_token"]
+            positions = {"turn_start": n_p - 1, "tool_name_slot": (slot - 1) if slot is not None else None,
+                         "first_argument_slot": (arg - 1) if arg is not None else None}
+            # the base's recorded turn at the same step, teacher-forced under this model (when the base has one)
+            base_turn = None
+            if p["base_turn_t_raw"] is not None:
+                bids = tok(p["prompt_text"] + p["base_turn_t_raw"], add_special_tokens=False)["input_ids"]
+                blg = np.array(model(mx.array(bids)[None])[0].astype(mx.float32))
+                brows = blg[n_p - 1 : len(bids) - 1]
+                blps = brows - (np.log(np.sum(np.exp(brows - brows.max(axis=1, keepdims=True)), axis=1, keepdims=True)) + brows.max(axis=1, keepdims=True))
+                btargets = np.array(bids[n_p:])
+                btok_lp = blps[np.arange(len(btargets)), btargets]
+                base_turn = {"sum_logp": round(float(btok_lp.sum()), 3), "mean_logp": round(float(btok_lp.mean()), 4),
+                             "per_token_logp": [round(float(x), 3) for x in btok_lp.tolist()],
+                             "tokens": [tok.decode([int(i)]) for i in btargets.tolist()]}
             # 3. residuals at the band layers at the two positions, through the lens
             res = view.residuals(ids_full, list(READ))
             per_layer = {}
@@ -245,7 +279,9 @@ def main() -> None:
                                     "tokens": [tok.decode([int(i)]) for i in targets.tolist()],
                                     "positions": positions,
                                     "logits_turn_start": readout(lg[n_p - 1], want),
-                                    "logits_tool_name_slot": readout(lg[slot - 1], want) if slot is not None else None},
+                                    "logits_tool_name_slot": readout(lg[slot - 1], want) if slot is not None else None,
+                                    "logits_first_argument_slot": readout(lg[arg - 1], want) if arg is not None else None},
+                "teacher_forced_base_turn": base_turn,
                 "lens": per_layer,
                 "_vecs": vecs,
             }
