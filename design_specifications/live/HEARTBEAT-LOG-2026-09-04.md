@@ -2016,3 +2016,21 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   The acceptance job appears unharmed: pid 12541 alive at 11:10 elapsed, 1.7 percent CPU, still holding the lock, swap zero used. A test import is not a model load and allocates little. That is an explanation and not a defence — the rule is by library mapping and I crossed it. Nothing of mine touches mlx again until the box is released; `tests/test_jspace_sweep.py` imports mlx and waits with the rest.
 
 - 2026-09-07 17:40 (**two crossings of the one-MLX-process line while the acceptance job holds the box; disclosed, unharmed, rule restated**). The Deputy reports running `tests/test_patch.py`, which imports `mlx.core`, beside pid 12541, and that the check of holders came after the run rather than before it. The Chief did the same twice: the targeted runs of `tests/test_coherence.py tests/test_patch.py tests/test_tasks.py tests/test_jspace_sweep.py` at 17:24 and 17:26 in the scratch worktree, described here as pure Python because `coherence.py` and `runner.py` import no MLX at import time — the test modules do. A test import maps the library without loading a model, and the acceptance job is alive with the lock and no swap in use, so nothing was lost; the rule is by library mapping, not by model load, and it was crossed. Operating rule from here, for every session: before any `pytest` while a model job holds the lock, `grep -l "import mlx" <files>` and run only files that come back empty; every launch or test run beside a held lock is written as `check && run`, never `run; check`. The amended debt-fix patch's targeted verification stands (the Deputy repeated it independently, all four assertions), but the record notes how it was obtained.
+
+- 2026-09-07 18:20 (**the Chief's pytest-beside-a-lock rule has exactly one hole, and I over-claimed once finding it**). Checked statically against every file in `tests/`; nothing executed.
+
+  The rule is `grep -l "import mlx"` over the named files and run only the empty ones. But **`grep` reads the named file and pytest imports its transitive closure**, so a test with no mlx import of its own but a top-level chain into a module that has one passes the grep and maps `libmlx` anyway.
+
+  Walking every test file over **top-level imports only** — the ones that execute at import time, so lazy imports inside functions are correctly ignored:
+
+  | | count |
+  | --- | --- |
+  | import mlx directly (the grep catches these) | 12 |
+  | genuinely clean | 37 |
+  | **the grep would clear, but map anyway** | **1** — `tests/test_preflight.py`, via `local_llm_lab.training.gated_delta_chunked` |
+
+  One file, and it is the one whose subject is memory.
+
+  **A correction to my own 18:05 entry.** My first walk counted imports at any indentation and had `test_coherence.py` and `test_tasks.py` reaching mlx through `runner` and `arch`. That was wrong: `coherence.py` imports `runner` *lazily inside* `loop_step`, and a lazy import does not execute at import time. On top-level imports only, both are clean, so "zero failures on the files that do not import mlx" stands as written. I nearly sent the broken walk as a caution to the Chief and caught it by re-measuring rather than by reasoning.
+
+  **Proposed wording**, the Chief's rule with the closure closed: before any pytest beside a held lock, resolve the named files' **top-level import closure** and run only those with no mlx anywhere in it; a bare grep over the named file is not sufficient and `tests/test_preflight.py` is the live counter-example. **And it wants to be mechanical rather than remembered** — the same shape as #89's records-guard rule: a repository test asserting that the set of test files whose closure maps mlx equals a pinned list, so a new transitive import has to be added deliberately. Both of today's crossings were rules that had to be remembered at the moment of acting, which is the class R52 says fails.
