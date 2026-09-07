@@ -33,11 +33,14 @@ SPANS = ("system", "task", "observation", "note", "call", "template", "chat")
 PROSE_CHUNK_TOKENS = 1024
 TRAINING_SPLITS = ("train", "train1", "train2")
 SPLIT_RULE = {"every": 5, "index_base": 0, "held_remainder": 4, "before_length_filter": True}
-PILOT_RULE = {
+_LEGACY_PILOT_RULE = {
     "allowed_splits": list(TRAINING_SPLITS),
     "excluded_splits": ["test", "valid", "validation", "pilot"],
     "task_id_validation": "training split + registered family + numeric index + variant",
 }
+
+# Legacy schema-1 artifacts omitted the scope; their exclusion always applied to task IDs.
+PILOT_RULE = {**_LEGACY_PILOT_RULE, "applies_to": "agentic_task_ids"}
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -154,25 +157,31 @@ def _encode(tokenizer: Any, text: str) -> tuple[list[int], list[list[int]]]:
     )
     ids = list(encoded["input_ids"])
     offsets = [list(pair) for pair in encoded.get("offset_mapping", [])]
-    if not ids or len(ids) != len(offsets):
+    if not ids or any(type(token) is not int or token < 0 for token in ids):
+        raise ValueError("token IDs must be nonempty nonnegative integers")
+    _validate_offsets(offsets, text_length=len(text), token_count=len(ids))
+    return ids, offsets
+
+
+def _validate_offsets(offsets: Any, *, text_length: int, token_count: int) -> None:
+    """Enforce the same offset format during tokenization and immutable-corpus reads."""
+    if not isinstance(offsets, list) or len(offsets) != token_count:
         raise ValueError("token alignment requires one offset per token")
     previous = (0, 0)
-    for token, pair in zip(ids, offsets, strict=True):
-        if type(token) is not int or token < 0:
-            raise ValueError("token IDs must be nonnegative integers")
+    for pair in offsets:
         if (
-            len(pair) != 2
+            not isinstance(pair, list)
+            or len(pair) != 2
             or any(type(n) is not int for n in pair)
-            or not 0 <= pair[0] <= pair[1] <= len(text)
+            or not 0 <= pair[0] <= pair[1] <= text_length
         ):
             raise ValueError("invalid token alignment offsets")
         if pair != [0, 0]:
             if pair[0] == pair[1] or pair[0] < previous[0] or pair[1] < previous[1]:
                 raise ValueError("nonmonotonic token alignment offsets")
             previous = tuple(pair)
-    if text and previous == (0, 0):
+    if text_length and previous == (0, 0):
         raise ValueError("token alignment has no nonempty offsets")
-    return ids, offsets
 
 
 def _content_ranges(prompt: str, messages: list[dict], raw: str) -> list[tuple[int, int, str]]:
@@ -440,7 +449,7 @@ def read_corpus(manifest_path: Path) -> list[dict]:
         manifest.get("schema_version") != 1
         or manifest.get("domain") not in ("agentic", "prose")
         or manifest.get("split_rule") != SPLIT_RULE
-        or manifest.get("pilot_exclusion") != PILOT_RULE
+        or manifest.get("pilot_exclusion") not in (PILOT_RULE, _LEGACY_PILOT_RULE)
     ):
         raise ValueError("unsupported corpus schema or split/exclusion rules")
     sources = manifest["sources"]
@@ -449,6 +458,9 @@ def read_corpus(manifest_path: Path) -> list[dict]:
         raise ValueError("duplicate or empty sources")
     seen: set[str] = set()
     expected_identities = []
+    trailing = 0
+    if manifest["domain"] == "prose" and manifest.get("chunk_tokens") != PROSE_CHUNK_TOKENS:
+        raise ValueError("unsupported prose chunk size")
     for source in sources:
         data = _verify_file(source)
         if manifest["domain"] == "agentic":
@@ -469,6 +481,26 @@ def read_corpus(manifest_path: Path) -> list[dict]:
                         break
             if source["source_steps"] != len(expected_identities) - before:
                 raise ValueError("source step count mismatch")
+        else:
+            tokens, tail = source.get("tokens"), source.get("discarded_trailing_tokens")
+            if (
+                type(tokens) is not int
+                or tokens < 0
+                or type(tail) is not int
+                or not 0 <= tail < PROSE_CHUNK_TOKENS
+                or tokens % PROSE_CHUNK_TOKENS != tail
+            ):
+                raise ValueError("invalid prose source token/tail counts")
+            trailing += tail
+            expected_identities.extend(
+                (source["path"], step, step * PROSE_CHUNK_TOKENS)
+                for step in range(tokens // PROSE_CHUNK_TOKENS)
+            )
+    if manifest["domain"] == "prose" and (
+        type(manifest.get("discarded_trailing_tokens")) is not int
+        or manifest["discarded_trailing_tokens"] != trailing
+    ):
+        raise ValueError("prose discarded tail count mismatch")
     for asset in manifest["tokenizer"]["files"]:
         _verify_file(asset)
     if manifest.get("download_descriptor"):
@@ -504,16 +536,16 @@ def read_corpus(manifest_path: Path) -> list[dict]:
             source = next(s for s in sources if s["path"] == row["source"])
             if row["task_id"] not in source["task_ids"] or len(ids) > manifest["max_tokens"]:
                 raise ValueError("invalid agentic source/length")
-            if (
-                not row["text"].startswith(row["prompt"])
-                or len(row["offsets"]) != len(ids)
-                or row["n_prompt"] != _prompt_count(row["offsets"], len(row["prompt"]))
+            _validate_offsets(row["offsets"], text_length=len(row["text"]), token_count=len(ids))
+            if not row["text"].startswith(row["prompt"]) or row["n_prompt"] != _prompt_count(
+                row["offsets"], len(row["prompt"])
             ):
                 raise ValueError("invalid prompt alignment")
         elif (
             len(ids) != PROSE_CHUNK_TOKENS
             or row["n_prompt"] != 0
             or set(spans) - {"chat", "template"}
+            or type(row["token_start"]) is not int
             or row["token_start"] != row["step_index"] * PROSE_CHUNK_TOKENS
         ):
             raise ValueError("invalid prose chunk")
@@ -527,14 +559,20 @@ def read_corpus(manifest_path: Path) -> list[dict]:
         ):
             raise ValueError("invalid dropped row")
         _training_id(row["task_id"])
-    if manifest["domain"] == "agentic":
-        if len(expected_identities) != manifest["source_sequence_count"]:
-            raise ValueError("source sequence count mismatch")
-        for row in [*rows, *dropped]:
-            identity = (row["source"], row["task_id"], row["step_index"])
-            index = row["index"]
-            if not 0 <= index < len(expected_identities) or identity != expected_identities[index]:
-                raise ValueError("source step identity mismatch")
+    if (
+        type(manifest["source_sequence_count"]) is not int
+        or len(expected_identities) != manifest["source_sequence_count"]
+    ):
+        raise ValueError("source sequence count mismatch")
+    for row in [*rows, *dropped]:
+        identity = (
+            (row["source"], row["task_id"], row["step_index"])
+            if manifest["domain"] == "agentic"
+            else (row["source"], row["step_index"], row["token_start"])
+        )
+        index = row["index"]
+        if not 0 <= index < len(expected_identities) or identity != expected_identities[index]:
+            raise ValueError("source step identity mismatch")
     indices = [row["index"] for row in [*rows, *dropped]]
     if sorted(indices) != list(range(manifest["source_sequence_count"])):
         raise ValueError("source-step coverage mismatch")

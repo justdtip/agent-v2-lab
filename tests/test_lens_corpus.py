@@ -576,3 +576,112 @@ def test_source_order_is_explicit_and_global(tmp_path, setup):
     assert rows[3]["task_id"] == "train1-read-0000-clean"
     assert rows[4]["step_index"] == 1
     assert rows[4]["split"] == "held"
+
+
+def _rewrite_rows(manifest, mutate):
+    sequence_path = Path(json.loads(manifest.read_text())["sequences"]["path"])
+    rows = [json.loads(line) for line in sequence_path.read_text().splitlines()]
+    mutate(rows)
+    sequence_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _rewrite_manifest(
+        manifest,
+        lambda m: m["sequences"].update(
+            sha256=hashlib.sha256(sequence_path.read_bytes()).hexdigest()
+        ),
+    )
+
+
+def _prose_manifest(tmp_path, setup):
+    spec, tok, assets = setup
+    first, second = tmp_path / "first.txt", tmp_path / "second.txt"
+    first.write_text("a" * 2050)  # BOS + text -> two chunks and three trailing tokens.
+    second.write_text("b" * 1024)  # BOS + text -> one chunk and one trailing token.
+    manifest = tmp_path / "prose.json"
+    api().build_prose_corpus([first, second], tok, spec, manifest, tokenizer_files=assets)
+    return manifest
+
+
+def test_reader_rejects_rehashed_wrong_prose_step(tmp_path, setup):
+    """§3.1/§10: internally consistent token_start cannot legitimize an absent source chunk."""
+    manifest = _prose_manifest(tmp_path, setup)
+    _rewrite_rows(manifest, lambda rows: rows[1].update(step_index=999, token_start=1022976))
+    with pytest.raises(ValueError, match="prose|source"):
+        api().read_corpus(manifest)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "source_order",
+        "tokens",
+        "source_tail",
+        "total_tail",
+        "total_count",
+        "chunk_size",
+        "typed_tail",
+    ],
+)
+def test_reader_reconciles_prose_sources_chunks_and_tails(tmp_path, setup, mutation):
+    """§3.1/§10: ordered source chunks and declared token/tail budgets must reconcile."""
+    manifest = _prose_manifest(tmp_path, setup)
+    if mutation == "source_order":
+        _rewrite_rows(manifest, lambda rows: rows[0].update(source=rows[2]["source"]))
+    else:
+
+        def change(metadata):
+            if mutation == "tokens":
+                metadata["sources"][0]["tokens"] += 1024
+            elif mutation == "source_tail":
+                metadata["sources"][0]["discarded_trailing_tokens"] = 1024
+            elif mutation == "total_tail":
+                metadata["discarded_trailing_tokens"] += 1
+            elif mutation == "total_count":
+                metadata["source_sequence_count"] += 1
+            elif mutation == "chunk_size":
+                metadata["chunk_tokens"] = 512
+            else:
+                metadata["sources"][1]["discarded_trailing_tokens"] = True
+
+        _rewrite_manifest(manifest, change)
+    with pytest.raises(ValueError, match="prose|source|chunk|tail"):
+        api().read_corpus(manifest)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["negative", "reversed", "out_of_text", "nonmonotonic", "boolean", "wrong_shape"]
+)
+def test_reader_rejects_rehashed_invalid_offsets(tmp_path, setup, mutation):
+    """§3.1/§10: reader enforces typed, bounded, monotonic offsets independently of hashes."""
+    manifest, _ = build(tmp_path, setup)
+
+    def change(rows):
+        row = rows[0]
+        if mutation == "negative":
+            row["offsets"][0] = [-100, 0]
+        elif mutation == "reversed":
+            row["offsets"][0] = [1, 0]
+        elif mutation == "out_of_text":
+            row["offsets"][-1][1] = len(row["text"]) + 1
+        elif mutation == "nonmonotonic":
+            row["offsets"][3] = [0, 1]
+        elif mutation == "boolean":
+            row["offsets"][0] = [False, 0]
+        else:
+            row["offsets"][0] = []
+
+    _rewrite_rows(manifest, change)
+    with pytest.raises(ValueError, match="alignment"):
+        api().read_corpus(manifest)
+
+
+@pytest.mark.parametrize("domain", ["agentic", "prose"])
+def test_pilot_rule_scope_and_legacy_manifest_compatibility(tmp_path, setup, domain):
+    """§3.1/§10: task-ID exclusions must not describe authorised prose validation as excluded."""
+    manifest = (
+        build(tmp_path, setup)[0] if domain == "agentic" else _prose_manifest(tmp_path, setup)
+    )
+    metadata = json.loads(manifest.read_text())
+    assert metadata["pilot_exclusion"]["applies_to"] == "agentic_task_ids"
+    expected = api().read_corpus(manifest)
+    _rewrite_manifest(manifest, lambda m: m["pilot_exclusion"].pop("applies_to"))
+    assert api().read_corpus(manifest) == expected
