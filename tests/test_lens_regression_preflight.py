@@ -180,3 +180,104 @@ def test_existing_report_is_preserved_before_loading(tmp_path, monkeypatch):
             ]
         )
     assert report.read_text() == "prior evidence"
+
+
+def test_falsified_initial_bound_stops_before_second_calibration():
+    """R47(b)/review: measured140 below cap150 still falsifies initial bound100."""
+    calls = []
+
+    def measure(tokens):
+        calls.append(tokens)
+        return {"tokens": tokens, "peak_bytes": 140}
+
+    rows, stop = api().run_ladder(
+        [256, 512],
+        measure,
+        fixed_bytes=10,
+        initial_bound_bytes=100,
+        cap_bytes=150,
+        emit=lambda e: None,
+    )
+    assert calls == [256]
+    assert len(rows) == 1
+    assert stop["reason"] == "measured peak falsified initial bound"
+    assert stop["projected_peak_bytes"] == 100
+    assert stop["peak_bytes"] == 140
+
+
+def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypatch):
+    """R47(b)/review: solve peak starts after forward and records measured+projected bytes."""
+    import json
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from local_llm_lab.pipeline.lens_fitting import regression, runtime
+
+    calls = []
+    backend = ModuleType("mlx.core")
+    backend.set_cache_limit = lambda n: 1024
+    backend.clear_cache = lambda: None
+    backend.get_active_memory = lambda: 10
+    backend.device_info = lambda: {"max_recommended_working_set_size": 1000}
+    backend.reset_peak_memory = lambda: calls.append("reset")
+    backend.get_peak_memory = lambda: 50 if calls[-1] == "solve" else 100
+    mlx = ModuleType("mlx")
+    mlx.core = backend
+    monkeypatch.setitem(sys.modules, "mlx", mlx)
+    monkeypatch.setitem(sys.modules, "mlx.core", backend)
+    prepared = SimpleNamespace(
+        rows=[dict(index=0, ids=[1] * 900, split="fit")],
+        snapshot={},
+        corpus_manifest_sha256="corpus",
+    )
+    monkeypatch.setattr(runtime, "prepare_fit", lambda *a, **k: prepared)
+    monkeypatch.setattr(
+        runtime,
+        "load_runtime",
+        lambda *a: SimpleNamespace(
+            model=SimpleNamespace(eval=lambda: None),
+            lock_path=tmp_path / "lock",
+            view=SimpleNamespace(hidden_size=1, num_layers=2),
+        ),
+    )
+
+    def accumulate(*args):
+        calls.append("forward")
+        return {"fit": {1: None}, "held": {1: None}}, {}
+
+    def solve(*args):
+        assert calls[-1] == "reset"
+        calls.append("solve")
+        return None
+
+    monkeypatch.setattr(regression, "accumulate", accumulate)
+    monkeypatch.setattr(regression, "solve_layer", solve)
+    registration = tmp_path / "registration.md"
+    registration.write_text("Declared bounds")
+    report = tmp_path / "report.jsonl"
+    assert (
+        api().main(
+            [
+                "--model",
+                "qwen35-4b",
+                "--corpus",
+                str(tmp_path / "corpus.json"),
+                "--planned-lens",
+                str(tmp_path / "lens.npz"),
+                "--registration",
+                str(registration),
+                "--report",
+                str(report),
+                "--initial-bound-gib",
+                str(200 / 2**30),
+            ]
+        )
+        == 0
+    )
+    event = next(
+        e
+        for e in map(json.loads, report.read_text().splitlines())
+        if e["event"] == "measured_solve"
+    )
+    assert event["peak_bytes"] == 50
+    assert event["projected_peak_bytes"] == 74

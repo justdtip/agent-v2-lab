@@ -81,6 +81,17 @@ def run_ladder(lengths, measure, *, fixed_bytes, initial_bound_bytes, cap_bytes,
             }
             emit(stop)
             return rows, stop
+        if len(rows) <= 2 and peak > initial_bound_bytes:
+            stop = {
+                "event": "stopped",
+                "reason": "measured peak falsified initial bound",
+                "tokens": tokens,
+                "peak_bytes": peak,
+                "projected_peak_bytes": initial_bound_bytes,
+                "cap_bytes": cap_bytes,
+            }
+            emit(stop)
+            return rows, stop
     return rows, None
 
 
@@ -237,11 +248,20 @@ def main(argv=None):
                     }
                 )
                 return 2
+            mx.reset_peak_memory()
             started = time.perf_counter()
             temporary = solve_layer(retained["fit"][1], retained["held"][1])
             solve_s = time.perf_counter() - started
             del temporary, retained
             solve_peak = mx.get_peak_memory()
+            emit(
+                {
+                    "event": "measured_solve",
+                    "peak_bytes": solve_peak,
+                    "projected_peak_bytes": solve_bound,
+                    "elapsed_s": solve_s,
+                }
+            )
             if solve_peak > 0.6 * device_bytes:
                 emit(
                     {
