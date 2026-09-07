@@ -10,6 +10,10 @@ fh = json.load(open(fh_path)) if fh_path.is_file() else None
 forms_f32 = json.load(open(R / "recurrence_forms_f32.json")) if (R / "recurrence_forms_f32.json").is_file() else None
 forms_bf16 = json.load(open(R / "recurrence_forms_bf16.json")) if (R / "recurrence_forms_bf16.json").is_file() else None
 cache_path = R / "cache" / "cache_split_diagnostic.json"
+paths_path = R / "cache" / "cache_runner_paths.json"
+paths = json.load(open(paths_path)) if paths_path.is_file() else None
+atlas_path = R.parent / "LIVE-LENS-PILOT-2026-09-07" / "atlas.json"
+atlas = json.load(open(atlas_path)) if atlas_path.is_file() else None
 cache = json.load(open(cache_path)) if cache_path.is_file() else None
 OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else S / "report.html"
 E = html.escape
@@ -204,7 +208,14 @@ if fh:
 add('<h3>3.6 The snapshot cache: the schedule, not the restore</h3>')
 if not cache:
     add('<div class="note">Pending: the isolation script is written and runs after the fixed-history job releases the model.</div>')
-if cache:
+if paths:
+    add('<h4>The library\'s own path</h4><div class="wrap"><table><tr><th>task</th><th class="n">first-token |Δ log p|, bf16</th><th class="n">margins native / snapshot</th><th class="n">first differing token, bf16 sampler</th><th class="n">with a float32 sampler</th><th class="n">repeat / array form</th></tr>')
+    for c in paths["cases"]:
+        ac = c["a_string_vs_c_snapshot"]; f32 = c["float32_sampler_native_vs_snapshot"]
+        add(f'<tr><td>{E(c["task_id"].replace("test-","").replace("-clean",""))}</td><td class="n">{ac["first_token"]["max_abs_logprob_diff"]:.3f}</td><td class="n">{ac["first_token"]["margin"][0]:.3f} / {ac["first_token"]["margin"][1]:.3f}</td><td class="n">{num(ac["first_differing_generated_position"])} of {ac["tokens_compared"]}</td><td class="n">{num(f32["first_differing_generated_position"])}</td><td class="n">{num(c["a_vs_a_repeat"]["first_differing_generated_position"])} / {num(c["a_string_vs_b_array"]["first_differing_generated_position"])}</td></tr>')
+    add('</table></div>')
+    add('<p>The float32 isolation above modelled the schedules correctly but drove the blocks in float32; the runner\'s path is bfloat16 end to end. On that path the two schedules differ at the first token by 0.4 to 0.9 nats, the greedy stream first differs at the Director\'s own flip positions (token 0 on the ledger task, an exact bfloat16 tie; token 4 on the list task; token 22 on the search task), and a float32 up-cast before the sampler leaves every flip in place: the difference is in the bfloat16 forward, whose rounding across 32 blocks depends on the shapes of the forward passes. The forward is deterministic and indifferent to the prompt\'s form. Consequence: no cache that changes forward-pass shapes can be bit-identical to the present runner on this path; equivalence has to be reuse against recomputation under one fixed schedule, which restoration meets exactly, with that schedule adopted for cached and uncached runs alike and the baseline change recorded once.</p>')
+elif cache:
     add('<p>Read with one caveat. The isolation drove the blocks through the architecture view, which promotes activations to float32; the runner\'s path is bfloat16 end to end and the greedy choice is taken on bfloat16 log-probabilities, whose unit in the last place at these magnitudes is 0.06 to 0.125, wider than the 0.07 first-token margin on the ledger task that flipped in the Director\'s run. Restoration is exact and the forward deterministic; the schedule perturbation is rounding-sized in float32 and is being re-measured on the library\'s own bfloat16 path with and without a float32 up-cast before the sampler. The uncached trajectories reproduce the earlier evaluation token for token, so the flips are a property of the cached schedule under bfloat16 rounding, not of a wrong state.</p>')
 else:
     add('<div class="wrap"><table><tr><th>task</th><th class="n">prompt / prefix tokens</th><th class="n">1 native vs split: max |Δ|, argmax same, margins</th><th class="n">4 native vs half-split: max |Δ|</th><th class="n">2 fresh vs restored split: max |Δ|</th><th class="n">3 restore after advance: max |Δ|</th><th class="n">first differing greedy position (of N)</th><th class="n">residual Δ/‖h‖ at L12 … L32</th></tr>')
@@ -212,6 +223,26 @@ else:
         a = c["1_native_vs_split"]; pl = c["per_layer_residual_native_vs_split_at_last_position"]
         add(f'<tr><td>{E(c["task_id"].replace("test-","").replace("-clean",""))}</td><td class="n">{c["prompt_tokens"]} / {c["prefix_tokens"]}</td><td class="n">{a["max_abs"]:.3f}, {a["argmax_same"]}, {a["margin"][0]:.2f} / {a["margin"][1]:.2f}</td><td class="n">{c["4_native_vs_half_split"]["max_abs"]:.3f}</td><td class="n">{c["2_split_fresh_vs_split_restored"]["max_abs"]:.3f}</td><td class="n">{c["3_restore_after_advance_vs_restore_again"]["max_abs"]:.3f}</td><td class="n">{c["continuation_first_differing_greedy_position"]} ({c["continuation_positions_compared"]})</td><td class="n">' + ", ".join(f'{v["rel_to_norm"]:.1e}' for v in pl.values()) + '</td></tr>')
     add('</table></div>')
+add('<h3>3.7 The live-lens pilot on the running model</h3>')
+if not atlas:
+    add('<div class="note">Pending: thirteen episodes on the capture path.</div>')
+else:
+    eps = atlas["episodes"]
+    add(f'<p>Thirteen episodes on the capture path: ten agentic tasks at three difficulties and three two-turn chat prompts, {sum(e["rank_rows"] for e in eps):,} foreknowledge rows and {sum(e["reading_rows"] for e in eps):,} prompt readings, 10 to 445 seconds an episode. Readings under the rules fixed before the run.</p>')
+    add('<div class="wrap"><table><tr><th>layer</th><th class="n">h=1 call</th><th class="n">h=1 note</th><th class="n">h=1 chat</th><th class="n">h=4 all</th><th class="n">h=8 all</th></tr>')
+    for L in ("L12", "L16", "L20", "L24", "L28", "L32"):
+        f = atlas["foreknowledge"].get(L, {})
+        cells = [f.get(k, {}).get("share_le_10") for k in ("h1|agentic|call", "h1|agentic|note", "h1|chat|chat", "h4|all|all", "h8|all|all")]
+        add(f'<tr><td>{"<strong>" + L + " (primary)</strong>" if L == "L20" else (L + " (native)" if L == "L32" else L)}</td>' + "".join(f'<td class="n">{num(c)}</td>' for c in cells) + '</tr>')
+    add('</table></div><figure><figcaption>Share of emitted tokens ranked in the lens\'s top ten at the position h tokens earlier. Layer 32 at h=1 is the native distribution under greedy decoding, rank 1 by construction.</figcaption></figure>')
+    add('<div class="wrap"><table><tr><th>layer</th><th class="n">system</th><th class="n">task</th><th class="n">observation</th><th class="n">note</th><th class="n">call</th><th class="n">chat prose</th></tr>')
+    for L in ("L12", "L16", "L20", "L24", "L28", "L32"):
+        row = atlas["prompt_agreement"].get(L, {})
+        def g(k):
+            v = row.get(k); return num(v["top1_agreement"]) if v else "—"
+        add(f'<tr><td>{L}</td>' + "".join(f'<td class="n">{g(k)}</td>' for k in ("system|agentic", "task|agentic", "observation|agentic", "note|agentic", "call|agentic", "chat|chat")) + '</tr>')
+    add('</table></div><figure><figcaption>Prompt positions: the lens top-1 equals the actual next prompt token, by span.</figcaption></figure>')
+    add('<p>By the rule fixed in advance, the layer-20 lens is compared at h=1 with the final layer at h=4 (0.210): call spans at 0.195 are <strong>not ahead of the output</strong>; note spans at 0.267 are marginally above. At four and eight tokens ahead every band layer sits between 0.02 and 0.06 while the output distribution itself sits at 0.21 and 0.12. Agreement with the next prompt token rises monotonically with depth and is highest in the templated spans at every layer. On the running model, read through this lens, the band carries a weak version of the output\'s next-token information and less of the tokens beyond it than the output does; the foreknowledge reading does not reproduce at pilot scale.</p>')
 add('<h2>4. Discussion</h2>')
 if fh:
     add('<p><strong>The fixed-history comparison settles the attribution.</strong> Given the adapter\'s own history, the base writes the full path, the arithmetic expression, the replacement or the finish in every pair, and the adapter writes what it wrote before in every pair. The adapter\'s log-probability for its wrong turn is between −0.1 and −4.3 nats; for the base\'s correct turn it is between −12 and −83. The base\'s numbers run the other way. The divergence is in the weights, and it is not marginal.</p>')
@@ -220,7 +251,7 @@ if fh:
 add('<p>Three things are established on the 19 tasks. First, the adapter is worse than the base on the same tasks by a wide margin, and the pairing removes task difficulty as an explanation. Second, its failures have a two-stage shape: a first wrong step that is a construction error (an argument, a path, a call re-issued after the note that should have led elsewhere), followed by a verbatim lock-in that the trained retry-after-error behaviour makes permanent. Third, the first-stage errors were not copied from the data; they are what the model now produces after the note templates it did copy. The most economical reading is that 200 updates of a rank-16 adapter over every projection of every block, at a learning rate sized for a longer run, moved the model far enough to reproduce the surface of the rows (validation loss 0.092) while damaging the base\'s ability to build the call from the note.</p>')
 add('<p>For the deliverable this means the checkpoint is a measurement, not a model: it answers the question the standard asks (coherence to completion collapses under this recipe) and it does not replace the base. For the next run the recipe changes are on record: transient repeats back to run D\'s value or below, more correction variants than retry variants, a doomed-trajectory stop as a rollout flag, and an early evaluation at the first checkpoint rather than at the end.</p>')
 add('<h2>5. Limitations</h2>')
-add('<ul><li>Nineteen tasks, one or two per family: the per-family readings are exact for these instances and are not rates.</li><li>The defect classes are a hand reading of the transcripts; the divergence and lock-in steps are mechanical.</li><li>The training-row search covers the three commonest defects, not every class.</li>' + ('' if fh else '<li>The fixed-history comparison is pending.</li>') + '</ul>')
+add('<ul><li>Nineteen tasks, one or two per family: the per-family readings are exact for these instances and are not rates.</li><li>The defect classes are a hand reading of the transcripts; the divergence and lock-in steps are mechanical.</li><li>The training-row search covers the three commonest defects, not every class.</li><li>The pilot is thirteen episodes on one model with head capture off and a lens fitted on prose; it is a picture, not a test.</li>' + ('' if fh else '<li>The fixed-history comparison is pending.</li>') + '</ul>')
 add('<p class="small">Sources: outputs/agent-v2e-qwen35-4b/transcripts/best-adapter-test/transcripts.jsonl; outputs/agent-v2/evals/base-test.json; data/agent_v2e-qwen35-4b-cap2688/train.jsonl; scripts/fixed_history_lens.py; heartbeat entries 14:30–15:00, 2026-09-07.</p>')
 add('</main>')
 OUT.write_text("\n".join(parts))
