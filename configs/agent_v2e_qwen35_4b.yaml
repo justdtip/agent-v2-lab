@@ -33,12 +33,12 @@ train:
   rank: 16
   scale: 32.0
   dropout: 0.0
-  iters: 1600
+  iters: 1200
   batch_size: 1
   grad_accumulation_steps: 4
   learning_rate: 3.0e-5
   max_seq_length: 2688
-  gated_delta_chunk: 128
+  gated_delta_chunk: 256
   # R32 stage 2: the chunkwise recurrence, the form the training-cost probe measured (2.4 MiB per token, fitting at
   # 4,096). The stage's default is the checkpointed per-token loop, whose backward memory is superlinear in the row
   # (issue 90), and every launch on 2026-09-06 that died of a Metal out-of-memory ran that default (heartbeat 14:45).
