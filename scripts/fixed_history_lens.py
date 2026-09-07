@@ -195,6 +195,8 @@ def main() -> None:
     from local_llm_lab.arch import ArchitectureView
     from local_llm_lab.pipeline.evaluate import load_policy, make_sampler
     from local_llm_lab.pipeline.runner import generate_turn_with_count
+    from local_llm_lab.training.gated_delta_chunkwise import install_chunkwise_gated_delta
+    CHUNK = 256
 
     model, mtok, view, resolved = load_policy(spec, None)
     model.eval()
@@ -233,6 +235,37 @@ def main() -> None:
             logits = model(arr)[0].astype(mx.float32)
             mx.eval(logits)
             lg = np.array(logits)
+            # the recurrence forms (Deputy, 15:10): the same forward in training mode runs the reference
+            # loop; with the installer it runs the chunkwise form arm A trained under. Eval mode restored after.
+            forms = {}
+            try:
+                model.train()
+                lo = np.array(model(arr)[0].astype(mx.float32))
+                with install_chunkwise_gated_delta(CHUNK):
+                    lc = np.array(model(arr)[0].astype(mx.float32))
+            finally:
+                model.eval()
+            def compare(a, b):
+                d = np.abs(a - b)
+                am = a.argmax(-1); bm = b.argmax(-1)
+                return {"max_abs": round(float(d.max()), 4), "mean_abs": round(float(d.mean()), 5),
+                        "argmax_agreement": round(float((am == bm).mean()), 4), "argmax_disagreements": int((am != bm).sum())}
+            for name, other in (("ops_vs_kernel", lo), ("chunkwise_vs_kernel", lc), ("chunkwise_vs_ops", None)):
+                a, b = (lc, lo) if other is None else (other, lg)
+                forms[name] = {"turn": compare(a[n_p - 1:], b[n_p - 1:]), "prompt": compare(a[:n_p - 1], b[:n_p - 1])}
+                if slot is not None:
+                    forms[name]["at_tool_name_slot"] = {"max_abs": round(float(np.abs(a[slot - 1] - b[slot - 1]).max()), 4), "argmax_same": bool(a[slot - 1].argmax() == b[slot - 1].argmax())}
+                if p["slot_first_argument_token"] is not None:
+                    q_ = p["slot_first_argument_token"] - 1
+                    forms[name]["at_first_argument_slot"] = {"max_abs": round(float(np.abs(a[q_] - b[q_]).max()), 4), "argmax_same": bool(a[q_].argmax() == b[q_].argmax())}
+            # the adapter's recorded turn under each form: per-token log-prob, and the greedy token at each turn position
+            def turn_logp(m):
+                rows_ = m[n_p - 1 : len(ids_full) - 1]
+                l_ = rows_ - (np.log(np.sum(np.exp(rows_ - rows_.max(axis=1, keepdims=True)), axis=1, keepdims=True)) + rows_.max(axis=1, keepdims=True))
+                return round(float(l_[np.arange(len(ids_full) - n_p), np.array(ids_full[n_p:])].sum()), 3)
+            forms["sum_logp_of_recorded_turn"] = {"kernel": turn_logp(lg), "ops": turn_logp(lo), "chunkwise": turn_logp(lc)}
+            forms["greedy_turn_tokens_agree"] = {"ops_vs_kernel": bool((lo[n_p - 1:].argmax(-1) == lg[n_p - 1:].argmax(-1)).all()), "chunkwise_vs_kernel": bool((lc[n_p - 1:].argmax(-1) == lg[n_p - 1:].argmax(-1)).all())}
+            del lo, lc
             targets = np.array(ids_full[n_p:])
             rows = lg[n_p - 1 : len(ids_full) - 1]
             lps = rows - (np.log(np.sum(np.exp(rows - rows.max(axis=1, keepdims=True)), axis=1, keepdims=True)) + rows.max(axis=1, keepdims=True))
@@ -283,9 +316,10 @@ def main() -> None:
                                     "logits_first_argument_slot": readout(lg[arg - 1], want) if arg is not None else None},
                 "teacher_forced_base_turn": base_turn,
                 "lens": per_layer,
+                "recurrence_forms": forms,
                 "_vecs": vecs,
             }
-            print(json.dumps({"event": "pair", "model": tag, "task": p["task_id"], "continuation": parsed, "same_as_repeated": parsed == p["adapter_turn_t_minus_1_action"], "tf_mean_logp": out[p["task_id"]]["teacher_forced"]["mean_logp"]}), flush=True)
+            print(json.dumps({"event": "pair", "model": tag, "task": p["task_id"], "continuation": parsed, "same_as_repeated": parsed == p["adapter_turn_t_minus_1_action"], "tf_mean_logp": out[p["task_id"]]["teacher_forced"]["mean_logp"], "forms_turn_max_abs": {k: v["turn"]["max_abs"] for k, v in forms.items() if isinstance(v, dict) and "turn" in v}, "forms_greedy_agree": forms["greedy_turn_tokens_agree"]}), flush=True)
         return out
 
     base_out = passes("base")
