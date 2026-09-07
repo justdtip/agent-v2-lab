@@ -102,3 +102,57 @@ enough to separate depth from run length with two arms.
 
 - `arm1-health.json`, `arm1-provenance.json`, `arm1-train-stdout.txt` — the run's own artefacts.
 - `trace.json` — the derived figures above, with every input, so each number can be recomputed.
+
+---
+
+## Correction and hypothesis, appended 2026-09-08 after the Chief's review
+
+### The 2.13× mixed two estimators
+
+Arm 1's 0.2070 is a **median of the reported per-report rates**; arm A's 0.0971 is a **wall-clock
+average**. Like for like, both ways:
+
+| estimator | arm A | arm 1 | ratio |
+| --- | ---: | ---: | ---: |
+| median of reported it/s | 0.1010 (78 reports) | 0.2070 (120 reports) | **2.05×** |
+| wall clock, iterations over elapsed | 780 / 8,030 s = 0.0971 | 1,200 / 6,044 s = 0.1985 | **2.04×** |
+| the mixed figure published above | — | — | 2.13× |
+
+**2.04× is the number.** The conclusion is unchanged and slightly weaker: the probe's 2.19× holds,
+with the measured ratio a little under it rather than a little over.
+
+### Why the depth term might be 3.6× the fitted one, and what would show it
+
+**The hypothesis.** With no trainable parameter below the lowest adapted layer, the backward stops
+there, so the frozen layers below need retain nothing. Then the per-layer cost is a cost **per
+retained layer**, and removing 24 layers from the retained set removes 24 layers' worth of retained
+activation — a whole-peak quantity, not a marginal slope.
+
+**What the probe measured, which is not the same thing.** The 0.0054 comes from
+`TRAIN-COST-2026-09-05`, variants M and N: adapters on the top 8 and 16, **one row, one optimiser
+step**, at the probe's fixed row lengths, and the fitted quantity is the **backward's addition per
+token** — 0.91, 0.96 and 1.04 MiB/token at 8, 16 and 32 layers — decomposed as 0.87 independent of
+depth plus 0.0054 per layer. That is a per-layer contribution to **one component's marginal slope**.
+
+Mine is the difference in **total peak** between two long runs at the same 2,688-token cap, at
+accumulation 4, on the real dataset. **The two quantities are not the same measurement**, so the
+3.6× is a discrepancy between two things rather than one correcting the other, and the record
+should not be read as saying the probe was wrong about what it measured.
+
+### The test arm 2 performs
+
+Under the per-retained-layer reading, top 16 retains 8 more layers than top 8:
+
+    8.335 + 8 × 0.0193 × 2,688 / 1,024 = 8.74 GiB, before allocator growth
+
+**Near 8.74 says the saving is per retained layer.** Near 8.34 says it is something else — a fixed
+cost of adapting at all, paid once whatever the depth. Arm A's 9.726 is the third point and it sits
+where the linear reading predicts (8.335 + 24 × 0.0193 × 2.625 = 9.55, before allocator growth,
+against 9.726 with it), which is consistent but is the point the term was fitted to and therefore
+proves nothing on its own.
+
+**Second thing arm 2 tests**: allocator growth against depth. Arm 1's late steps total 0.046 GiB
+against arm A's 0.221. If it scales with retained layers, arm 2 lands near 0.10; if it is a
+property of the run rather than the depth, near 0.22.
+
+Both projections go in arm 2's announcement per R47(b), before it runs.
