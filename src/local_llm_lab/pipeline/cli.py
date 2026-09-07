@@ -278,6 +278,52 @@ def _band_coverage(depth: int, pairs: Sequence[Sequence[int]], num_layers: int) 
     }
 
 
+
+def _seed_batch_order(seed: int, runlog: RunLog) -> dict[str, Any]:
+    """Make the trainer's batch order a function of the config, and say so (issue 96).
+
+    ``mlx_lm``'s ``iterate_batches`` sorts the dataset by length, chunks it into batches, then
+    permutes the batch order with ``np.random.permutation``. It accepts a ``seed`` and calls
+    ``np.random.seed`` when given one -- and the trainer's main loop calls it **without** one, so
+    the permutation is drawn from numpy's **global** state. What that state holds depends on
+    everything that consumed numpy randomness earlier in the process, which is not a property of
+    the run's config.
+
+    So two runs of the same config with the same declared seed could see their rows in different
+    orders: a different loss trace, a different checkpoint at any given iteration, and a different
+    set of rows seen at all by a run that stops early -- arm A stopped at 780 of 1,200. It also
+    cost issue 94 a direct measurement, because nothing said which rows sat at the iterations
+    where the peak stepped up.
+
+    Seeded here rather than by threading an argument through ``mlx_lm``'s signature, which keeps
+    the seeding where the run's identity already lives and covers the validation iterator too.
+
+    **Runs recorded before this cannot be replayed**, and the returned record says so rather than
+    leaving a reader to infer it from a missing field.
+
+    **A resumed run is replayable only from its own start.** Seeding here re-seeds from the
+    beginning of the permutation, so a run started with ``resume_from`` sees the order an
+    uninterrupted run would have seen *from iteration one*, not the order that would have followed
+    the iterations it skipped. Arm A's successor is exactly that case, so the record says it
+    rather than leaving the next reader to discover it.
+    """
+    import numpy as np
+
+    np.random.seed(seed)
+    runlog.info("batch order seeded", seed=int(seed))
+    return {
+        "numpy_global_seed": int(seed),
+        "seeded_at": "stage_train, immediately before the trainer is entered",
+        "why": (
+            "mlx_lm's iterate_batches permutes the batch order from numpy's global state and the "
+            "trainer's main loop passes it no seed, so without this the row order is not a "
+            "function of the config"
+        ),
+        "records_before_this_are_not_replayable": True,
+        "resumed_runs_replayable_only_from_their_own_start": True,
+    }
+
+
 def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
     """Stamp a stage's data output with manifest.json after it succeeds.
 
@@ -912,6 +958,10 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 )
                 # The backbone patches wrap the trainer call and nothing else, so no other
                 # stage — and no later inference — ever sees them (R32(a)).
+                # Immediately before the trainer, so nothing between here and the first batch
+                # can consume numpy randomness and move the order (issue 96).
+                batch_order = _seed_batch_order(int(config["seed"]), runlog)
+                batch_order["resumed_from"] = str(resume_from) if resume_from else None
                 with contextlib.redirect_stdout(
                     _Tee(runlog.tee(sys.stdout), log)
                 ), _training_backbone(
@@ -946,6 +996,9 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                     # Which band pairs this adapter can be read at (R41d, issue 88). Recorded
                     # even at full depth, so a reader never has to infer it from num_layers.
                     "band_coverage": coverage,
+                    # What made the row order a function of the config, and the admission that a
+                    # record without this field predates the fix (issue 96).
+                    "batch_order": batch_order,
                     "health_thresholds": thresholds.as_dict(),
                     "health": summary,
                 },

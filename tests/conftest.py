@@ -249,6 +249,9 @@ TESTS_THAT_CAN_REACH_MLX = tuple(
         {
             *TESTS_THAT_LOAD_MLX,
             "test_adapter_delta.py",
+            # Joined 2026-09-08 (issue 96): its new test reads `mlx_lm.tuner.trainer`'s source to
+            # check the library still passes no seed, so this file reaches MLX at that scope.
+            "test_cli.py",
             "test_cache_equivalence.py",
             "test_lens_jacobian.py",
             "test_metal_cache_limit.py",

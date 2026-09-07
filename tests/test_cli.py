@@ -2084,3 +2084,119 @@ def test_the_registry_declares_the_band_and_the_spec_carries_it() -> None:
 
     spec = load_model_spec("qwen35-4b")
     assert spec.probes.live_lens_pairs == ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))
+
+
+def test_the_batch_order_is_a_function_of_the_declared_seed() -> None:
+    """Issue 96, and the pair is the test: equality alone proves nothing.
+
+    Same seed, same order — and **different seeds, a different order**. An equality check on its
+    own passes against a function that always returns the same permutation, which is the standard
+    failure of a determinism test.
+    """
+    import numpy as np
+
+    def order(seed: int) -> list[int]:
+        np.random.seed(seed)
+        return list(np.random.permutation(64))
+
+    assert order(20260902) == order(20260902)
+    assert order(20260902) != order(20260903)
+
+
+def test_seeding_records_the_seed_and_that_earlier_runs_cannot_be_replayed() -> None:
+    """The provenance says what it can and cannot promise.
+
+    A record written before this carries no `batch_order` block at all, and a reader has to be
+    able to tell that apart from a run that was seeded. The field's presence is the signal, and
+    its contents say why the seeding was needed.
+    """
+
+    class _Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, dict]] = []
+
+        def info(self, message: str, **fields) -> None:
+            self.lines.append((message, fields))
+
+    log = _Log()
+    record = cli._seed_batch_order(20260902, log)
+
+    assert record["numpy_global_seed"] == 20260902
+    assert record["records_before_this_are_not_replayable"] is True
+    assert record["resumed_runs_replayable_only_from_their_own_start"] is True
+    assert "iterate_batches" in record["why"]
+    assert log.lines == [("batch order seeded", {"seed": 20260902})]
+
+
+def test_the_library_still_passes_no_seed_which_is_why_this_workaround_exists() -> None:
+    """Pinned against `mlx_lm`, so the workaround leaves when it stops being needed.
+
+    If a later release seeds its own batch order, this fails and somebody reads the two together
+    rather than leaving a redundant global seed in the stage for years.
+
+    **Read by AST, not by slicing the source to the first closing parenthesis.** The first version
+    of this test did the latter, and a later release writing any argument as a call --
+    `max_seq_length=int(args.max_seq_length)` would do it -- would have ended the slice there and
+    let a `seed=` after it pass unseen. A pin has one forbidden failure and it is the silent pass,
+    so the call is found as a call and its keywords are read as keywords.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from mlx_lm.tuner import trainer as mlx_trainer
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(mlx_trainer.train)))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "iterate_batches"
+    ]
+    assert calls, "mlx_lm's train no longer calls iterate_batches; read the two together"
+    for call in calls:
+        keywords = {keyword.arg for keyword in call.keywords if keyword.arg}
+        assert "seed" not in keywords, (
+            "mlx_lm's training loop now seeds its own batch order; issue 96's global seeding in "
+            "stage_train is redundant and should be removed with a note"
+        )
+
+
+def test_the_library_pin_would_catch_a_seed_written_past_a_nested_call() -> None:
+    """The pin's own failure mode, exercised rather than asserted.
+
+    A test that only ever sees the passing case cannot tell a working pin from one that always
+    passes. This runs the same reading against a source the first version of the pin let through.
+    """
+    import ast
+    import textwrap
+
+    plausible = textwrap.dedent(
+        """
+        def train(args, train_dataset):
+            for it, batch in zip(
+                range(1, args.iters + 1),
+                iterate_batches(
+                    dataset=train_dataset,
+                    max_seq_length=int(args.max_seq_length),
+                    seed=args.seed,
+                ),
+            ):
+                pass
+        """
+    )
+    tree = ast.parse(plausible)
+    seeds = [
+        keyword.arg
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "iterate_batches"
+        for keyword in node.keywords
+        if keyword.arg == "seed"
+    ]
+    assert seeds == ["seed"], "the AST reading sees a seed the string slice would have missed"
+
+    sliced = plausible.split("iterate_batches(", 1)[1].split(")", 1)[0]
+    assert "seed" not in sliced, "the string slice does not, which is why it was replaced"
