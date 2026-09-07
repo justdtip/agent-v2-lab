@@ -1,0 +1,29 @@
+{
+  "quadratic_bytes_per_token_squared": 102.3,
+  "bare_bf16_score_matrices": 3.2,
+  "per_length_coefficient": {
+    "512": 155.1,
+    "1024": 127.0,
+    "2048": 113.0,
+    "4096": 106.0,
+    "8192": 103.3
+  },
+  "floor_as_shipped": {
+    "slope_mib_per_token": 2.495,
+    "intercept_gib": 2.841
+  },
+  "floor_with_term": {
+    "slope_mib_per_token": 2.114,
+    "intercept_gib": 3.158
+  },
+  "attention_share_of_shipped_slope": 0.153,
+  "chunkwise_ceiling_tokens": {
+    "as_shipped": 5347,
+    "with_term": 5014
+  },
+  "predicted_peak_gib_at_8192": {
+    "as_shipped": 23.08,
+    "with_term": 26.71
+  },
+  "one_block_backward_gib_at_32768": 102.3
+}

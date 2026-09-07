@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import ast
+import os
+import sys
 import sysconfig
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from conftest import PRE_EXISTING_FORK_SITES, SPAWN_SANCTIONED_PATHS
+
+from local_llm_lab import spawn
 
 _PROJECTION_NAMES = frozenset(
     {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"}
@@ -843,12 +848,12 @@ _PROCESS_STARTER_PREFIXES = ("os.spawn", "os.exec")
 # guard there and this static rule must never disagree about which files may fork. One list,
 # two enforcers: a site that leaves the list is covered by both at once.
 #
-# `PRE_EXISTING_FORK_SITES` predates the helper and every entry still forks today. They are
-# **reported, not fixed** in the issue-83 slice: each needs its own argument change (`chat.py`,
-# `train_sft.py`, `provenance.py` and `tests/test_probes.py` pass `cwd`; `check_env.py`,
-# `guard.py` and the two git helpers name a bare program), each has its own callers and
-# fixtures, and putting seven untested edits next to the mechanism that gates every
-# model-loading run is the wrong trade.
+# `PRE_EXISTING_FORK_SITES` predated the helper. It was **reported, not fixed** in the issue-83
+# slice, on the ground that seven untested edits next to the mechanism gating every
+# model-loading run was the wrong trade, and a guard failing 114 tests on its first run is the
+# shape of a guard people switch off. Issue 84 then emptied it, `provenance.py` first because it
+# was the only entry that forked with a model already resident. The list is now empty and the
+# rule below refuses additions to it.
 
 
 def _discover_spawn_surface(root: Path) -> set[Path]:
@@ -899,6 +904,23 @@ def _direct_process_starts(paths: set[Path], root: Path) -> list[str]:
         relative = path.relative_to(root).as_posix()
         findings.extend(f"{relative}:{line}:{chain}" for line, chain in sorted(in_file))
     return findings
+
+
+def test_the_fork_exemption_list_is_empty_and_stays_empty() -> None:
+    """Issue 84's acceptance: no file is exempt from the spawn helper any more.
+
+    Stated as its own test rather than left implicit in an empty set, because the failure this
+    guards against is not a fork -- it is somebody adding a name to
+    ``PRE_EXISTING_FORK_SITES`` to make the rule above go green. That edit makes one file
+    invisible to *both* enforcers at once, the static rule here and the runtime guard in
+    ``conftest``, which is exactly how the seven accumulated. The list earned its exemptions by
+    predating the helper; nothing can earn one now.
+    """
+    assert frozenset() == PRE_EXISTING_FORK_SITES, (
+        "the fork exemption list is closed. A file that needs to start a process goes through "
+        "local_llm_lab.spawn; if it cannot, that is a finding about the file, not an entry "
+        f"here. Added: {sorted(PRE_EXISTING_FORK_SITES)}"
+    )
 
 
 def test_processes_are_started_only_through_the_spawn_helper() -> None:
@@ -1275,3 +1297,277 @@ def test_import_roots_come_from_the_interpreter_not_a_venv_under_the_repo(tmp_pa
     # And the behaviour: a third-party name still resolves under those roots.
     (tmp_path / "entry.py").write_text("from mlx_lm.tuner import trainer\n")
     assert _loads_mlx(tmp_path / "entry.py", roots) == "mlx_lm.tuner.trainer"
+
+
+# --- Issue 89: a records script that reaches the model refuses to run ---------------------
+#
+# Records under `research/records/` include the scripts that produced them. Those scripts load
+# the model and take no model-run lock, so a committed copy is a working launcher for code the
+# repository does not own. Three were guarded by hand, and one of those guards was silently
+# overwritten by a later copy of the same record, caught only because a reviewer reads every
+# records commit. This is that reviewer, mechanised.
+
+_RECORD_SENTINEL = "--i-am-a-record"
+_RECORDS_ROOT = _REPO_ROOT / "research" / "records"
+
+#: Raised by the stub packages the executed child sees instead of the real ones. If this string
+#: reaches a child's stderr, its guard did not fire and the stub is the only reason no model was
+#: loaded -- so the assertion that it is absent is load-bearing, not decorative.
+_STUB_MARKER = "stub package: the record guard did not fire"
+
+
+def _model_reaching_sites(tree: ast.Module) -> list[tuple[int, str]]:
+    """Every place a records script reaches the model, decided by AST and never by substring.
+
+    Two kinds of site:
+
+    * an ``mlx`` or ``mlx_lm`` import, **at any scope** -- unlike the closure walker above, which
+      deliberately ignores function-local imports because it asks what runs on import. Here the
+      question is whether running the file can reach the model, and ``main()``'s body runs.
+      ``HISTORY-CACHE-2026-09-07/prepare_corpus.py`` hides its only import inside ``main``;
+      a module-scope-only rule would clear it.
+    * a call to ``load_policy``, which takes the model-run lock.
+
+    ``mlx`` is included alongside the ``mlx_lm`` the issue names, because
+    ``LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py`` loads the checkpoint at module scope
+    while importing only ``mlx.core``: an ``mlx_lm``-only rule misses the worst file in the tree.
+    The hazard being guarded is Metal initialisation and the lock, and ``import mlx`` is both.
+    """
+    sites: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in {"mlx", "mlx_lm"}:
+                    sites.append((node.lineno, f"import {alias.name}"))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if node.level == 0 and module.split(".")[0] in {"mlx", "mlx_lm"}:
+                sites.append((node.lineno, f"from {module} import ..."))
+        elif isinstance(node, ast.Call):
+            func = node.func
+            name = (
+                func.id
+                if isinstance(func, ast.Name)
+                else func.attr
+                if isinstance(func, ast.Attribute)
+                else None
+            )
+            if name == "load_policy":
+                sites.append((node.lineno, "call load_policy"))
+    return sorted(sites)
+
+
+def _record_guard_line(tree: ast.Module) -> int | None:
+    """The line of the module-scope refusal guard, or None.
+
+    Structural, not textual: a module-level ``if`` whose test carries the sentinel **as a string
+    constant** and whose body leaves the interpreter. A file that merely prints the sentinel, or
+    mentions it in a comment, has no guard.
+    """
+    for node in tree.body:
+        if not isinstance(node, ast.If):
+            continue
+        carries = any(
+            isinstance(sub, ast.Constant) and sub.value == _RECORD_SENTINEL
+            for sub in ast.walk(node.test)
+        )
+        if not carries:
+            continue
+        exits = any(
+            (isinstance(sub, ast.Raise) and "SystemExit" in ast.dump(sub))
+            or (
+                isinstance(sub, ast.Call)
+                and (
+                    (isinstance(sub.func, ast.Name) and sub.func.id == "exit")
+                    or (isinstance(sub.func, ast.Attribute) and sub.func.attr == "exit")
+                )
+            )
+            for statement in node.body
+            for sub in ast.walk(statement)
+        )
+        if exits:
+            return node.lineno
+    return None
+
+
+def _record_guard_faults(path: Path) -> list[str]:
+    """Why ``path`` fails the rule, or an empty list. Never executes the file."""
+    source = path.read_text()
+    tree = ast.parse(source)
+    sites = _model_reaching_sites(tree)
+    if not sites:
+        return []
+    faults: list[str] = []
+    guard = _record_guard_line(tree)
+    if guard is None:
+        first_line, first_kind = sites[0]
+        return [
+            f"reaches the model at line {first_line} ({first_kind}) and carries no refusal guard; "
+            f"running it by hand starts a model process outside R47, R48 and the issue-83 lock"
+        ]
+    late = [f"line {line} ({kind})" for line, kind in sites if line < guard]
+    if late:
+        faults.append(
+            f"the guard is at line {guard}, after {', '.join(late)}; a guard that follows the "
+            f"import it guards refuses only once the model is already resident"
+        )
+    try:
+        # `ast.parse` is not enough. A guard placed above `from __future__` parses cleanly and
+        # raises SyntaxError only under `compile`, which is how the first hand-written guard
+        # passed review while being broken.
+        compile(source, str(path), "exec")
+    except SyntaxError as error:
+        faults.append(f"does not compile: {error.msg} (line {error.lineno})")
+    return faults
+
+
+def _guarded_record_scripts() -> list[Path]:
+    """Records scripts the rule applies to: those that reach the model."""
+    return [
+        path
+        for path in sorted(_RECORDS_ROOT.rglob("*.py"))
+        if _model_reaching_sites(ast.parse(path.read_text()))
+    ]
+
+
+@pytest.fixture(scope="module")
+def stub_import_root(tmp_path_factory) -> Path:
+    """A ``PYTHONPATH`` entry whose ``mlx``, ``mlx_lm`` and ``local_llm_lab`` refuse to import.
+
+    The execution check below runs real records scripts. If one of their guards does not fire,
+    the very next thing the file does is load a 4B checkpoint or take the primary model-run lock,
+    on the Director's laptop, possibly beside another run. These stubs make that impossible: the
+    child dies on the import instead, and the test reports the guard that failed.
+    """
+    root = tmp_path_factory.mktemp("stub-imports")
+    for package in ("mlx", "mlx_lm", "local_llm_lab"):
+        directory = root / package
+        directory.mkdir()
+        (directory / "__init__.py").write_text(
+            f'raise RuntimeError("{_STUB_MARKER}: {package} was imported")\n'
+        )
+    return root
+
+
+def test_every_records_script_that_reaches_the_model_carries_a_refusal_guard() -> None:
+    """The rule of issue 89, by AST.
+
+    Guarding is not optional politeness. These files hard-code absolute paths to the checkpoint
+    and to the primary checkout, so a copy that runs, runs against the real model.
+    """
+    faults = {
+        path.relative_to(_REPO_ROOT).as_posix(): reasons
+        for path in _guarded_record_scripts()
+        if (reasons := _record_guard_faults(path))
+    }
+    detail = "\n".join(
+        f"  {name}: {'; '.join(reasons)}" for name, reasons in sorted(faults.items())
+    )
+    assert not faults, f"records scripts that reach the model without a working guard:\n{detail}"
+
+
+def test_the_rule_reads_imports_and_calls_not_the_words_mlx_lm_and_load_policy() -> None:
+    """The negative fixture the rule would otherwise cry wolf on.
+
+    ``TRAIN-COST-2026-09-05/build_page.py`` writes an HTML page whose prose names both
+    ``mlx_lm`` and ``evaluate.load_policy``. It imports neither and calls neither. A substring
+    scanner flags it, someone switches the rule off, and the rule protects nothing after that.
+    """
+    page = _RECORDS_ROOT / "TRAIN-COST-2026-09-05" / "build_page.py"
+    source = page.read_text()
+
+    assert "mlx_lm" in source and "load_policy" in source
+    assert _model_reaching_sites(ast.parse(source)) == []
+    assert _record_guard_faults(page) == []
+
+
+def test_a_records_script_that_imports_mlx_lm_without_a_guard_fails_the_rule(tmp_path) -> None:
+    """The positive fixture, and the overwrite case that motivated the issue.
+
+    The second half is the one with teeth: it starts from a guard that passes and deletes it,
+    which is what a later copy of a record did by hand and nobody noticed.
+    """
+    unguarded = tmp_path / "probe.py"
+    unguarded.write_text('"""A probe."""\nimport mlx_lm\n\nmlx_lm.load("model")\n')
+    (faults,) = (_record_guard_faults(unguarded),)
+    assert faults and "carries no refusal guard" in faults[0]
+
+    guard = (
+        'import sys as _sys\n'
+        f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
+        '    _sys.exit("refusing to run: a record, not a launcher")\n'
+    )
+    guarded = tmp_path / "guarded.py"
+    guarded.write_text(f'"""A probe."""\n{guard}import mlx_lm\n')
+    assert _record_guard_faults(guarded) == []
+
+    # The overwrite: the same file, the guard gone.
+    overwritten = tmp_path / "overwritten.py"
+    overwritten.write_text(guarded.read_text().replace(guard, ""))
+    assert _record_guard_faults(overwritten)
+
+
+def test_a_guard_placed_after_the_import_it_guards_fails_the_rule(tmp_path) -> None:
+    """Order is the whole point: a refusal that runs after ``import mlx`` refuses too late."""
+    late = tmp_path / "late.py"
+    late.write_text(
+        '"""A probe."""\n'
+        "import mlx.core as mx\n"
+        "import sys as _sys\n"
+        f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
+        '    _sys.exit("refusing to run")\n'
+    )
+    (fault,) = _record_guard_faults(late)
+    assert "after line 2" in fault
+
+
+def test_a_guard_above_from_future_parses_but_does_not_compile(tmp_path) -> None:
+    """Why the placement check compiles rather than parses.
+
+    ``from __future__`` must be the first statement after the docstring. A guard inserted above
+    it satisfies ``ast.parse`` and raises ``SyntaxError`` only under ``compile`` -- exactly how
+    the first hand-written guard passed review while being broken. The rule must see it.
+    """
+    broken = tmp_path / "broken.py"
+    broken.write_text(
+        '"""A probe."""\n'
+        "import sys as _sys\n"
+        f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
+        '    _sys.exit("refusing to run")\n'
+        "from __future__ import annotations\n"
+        "import mlx_lm\n"
+    )
+    ast.parse(broken.read_text())  # parses, which is the trap
+
+    (fault,) = _record_guard_faults(broken)
+    assert "does not compile" in fault
+
+
+def test_every_guarded_records_script_actually_refuses_when_run(stub_import_root: Path) -> None:
+    """The guards are verified by running them, not by reading them.
+
+    Every records script the rule applies to is started as a subprocess with no sentinel
+    argument. Each must exit non-zero saying it refuses, before importing anything that would
+    reach the model -- proved by the stub packages, which raise if reached and whose marker must
+    not appear.
+
+    Started through ``local_llm_lab.spawn`` so the child arrives by ``posix_spawn`` (R45).
+    """
+    environment = {**os.environ, "PYTHONPATH": str(stub_import_root)}
+    for path in _guarded_record_scripts():
+        name = path.relative_to(_REPO_ROOT).as_posix()
+        completed = spawn.run(
+            [sys.executable, str(path)],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert completed.returncode != 0, f"{name} ran to completion instead of refusing"
+        assert "refusing to run" in completed.stderr, (
+            f"{name} exited {completed.returncode} without the refusal: "
+            f"{completed.stderr.strip()[-400:]}"
+        )
+        assert _STUB_MARKER not in completed.stderr, (
+            f"{name} reached a model import before refusing; only the stub stopped it"
+        )

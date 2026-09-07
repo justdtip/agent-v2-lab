@@ -123,11 +123,12 @@ class ForkInThisInterpreter(RuntimeError):
 #: dead code that still reports success. ``tests/test_spawn.py`` fails when either name goes.
 FORK_HOOKS = (("subprocess", "_fork_exec"), ("os", "fork"))
 
-#: Modules that started processes before ``local_llm_lab.spawn`` existed, and still fork today.
-#: They are **reported, not fixed** in the issue-83 slice (each needs its own argument change,
-#: its own callers checked, and putting seven untested edits next to the mechanism that gates
-#: every model-loading run is the wrong trade), so the guard lets them through and refuses
-#: everything else. Its contract is therefore "no *new* forks", not "no forks".
+#: Modules the fork guard lets through. **Now none**, so the guard's contract is "no forks",
+#: not "no *new* forks". The set was created by the issue-83 slice for the eight files that
+#: started processes before ``local_llm_lab.spawn`` existed and still forked; they were
+#: reported there rather than fixed, because seven untested edits next to the mechanism that
+#: gates every model-loading run was the wrong trade, and a guard that fails 114 tests on its
+#: first run is the shape of a guard people switch off.
 #:
 #: This is the same list ``test_repository_rules.py`` exempts from the static rule, imported
 #: from here so the two cannot drift, and
@@ -140,20 +141,21 @@ FORK_HOOKS = (("subprocess", "_fork_exec"), ("os", "fork"))
 #: orphaned -- the failure this whole slice exists to prevent, arriving from the provenance
 #: write at the end of a *successful* run. It now goes through ``spawn.run`` with the repository
 #: root in argv as ``git -C``, and ``test_a_provenance_write_after_a_load_does_not_fork`` fails
-#: if that is undone. The seven that remain are issue 84 items 2 and 3; ``runlog.git_commit``,
-#: ``integrity.git_tree_dirty`` and ``probes/guard.py`` run before the load, and this list is
-#: empty when 84 closes.
-PRE_EXISTING_FORK_SITES = frozenset(
-    {
-        "src/local_llm_lab/chat.py",
-        "src/local_llm_lab/check_env.py",
-        "src/local_llm_lab/pipeline/integrity.py",
-        "src/local_llm_lab/probes/guard.py",
-        "src/local_llm_lab/runlog.py",
-        "src/local_llm_lab/train_sft.py",
-        "tests/test_probes.py",
-    }
-)
+#: if that is undone.
+#:
+#: **Empty, and it stays empty** (issue 84 closed). The other seven went through the helper in
+#: three shapes, one per reason they had been exempted: ``git -C`` where a directory was passed
+#: to git (``runlog``, ``integrity``); ``/bin/sh -c 'cd … && exec …'`` where a child genuinely
+#: needs the project root, because ``mlx_lm``'s YAML resolves ``data:`` against it (``chat``,
+#: ``train_sft``); and simply dropping a ``cwd`` that turned out to be decorative
+#: (``tests/test_probes.py`` -- the repository root holds ``src/``, not the package, so the
+#: child never imported through it). ``probes/guard.py`` did not migrate: its check was deleted.
+#:
+#: A new entry here is not a way to pass the rule.
+#: ``test_the_fork_exemption_list_is_empty_and_stays_empty`` fails on any addition. If a file
+#: needs to start a process, it goes through ``local_llm_lab.spawn``; if it cannot, that is a
+#: finding about the file.
+PRE_EXISTING_FORK_SITES: frozenset[str] = frozenset()
 
 #: Paths the *static* rule exempts but the guard does not: the helper itself, and the test that
 #: proves the guard fires, which has to fork on purpose.

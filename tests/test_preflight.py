@@ -11,13 +11,16 @@ import pytest
 
 from local_llm_lab.models import ChatSpec, LoraSpec, ModelSpec, ResolvedSpec
 from local_llm_lab.pipeline.preflight import (
+    _ATTENTION_TERM_BYTES_PER_TOKEN_SQUARED,
     _CALIBRATION_POINTS,
     _ENVELOPES,
     _TRAINING_HEADROOM_FRACTION,
+    _attention_term_gib,
     _estimated_peak_gib,
     _linear_attention_state_shape,
     _native_gate_passed,
     _residual_metrics,
+    _row_ceiling_tokens,
     longest_row_tokens,
     require_preflight,
     run_preflight,
@@ -470,16 +473,20 @@ def test_run_preflight_writes_stable_complete_fake_report(tmp_path: Path) -> Non
         "keys": ["layers.0.q_proj", "layers.3.down_proj"],
         "trainable_parameters": 42,
     }
+    # `activation_bytes` is 480 bytes of hidden states (batch 2 x 5 tokens x hidden 8 x 4 layers
+    # x 4 bytes) plus 10,230 of attention scores (2 blocks x 102.3 B/token^2 x batch 2 x 5^2).
+    # The second term used to be absent; it is quadratic in the row, so no headroom fraction
+    # could have stood in for it (issue 85).
     assert report["memory"] == {
-        "activation_bytes": 480,
+        "activation_bytes": 480 + 10230,
         "budget_gib": 1.0,
         "budget_source": "registry",
         "device_working_set_gib": None,
         "device_working_set_note": "no device info source available; the registry value stands",
         "parameter_bytes": 16,
         "registry_budget_gib": 1.0,
-        "total_bytes": 496,
-        "total_gib": 496 / 1024**3,
+        "total_bytes": 496 + 10230,
+        "total_gib": (496 + 10230) / 1024**3,
         "within_budget": True,
     }
     assert report["training_footprint"]["skipped"] is True
@@ -1178,6 +1185,9 @@ def test_training_footprint_is_the_calibrated_envelope_for_the_configured_form(
     assert footprint["linear_attention_state_shape_source"] == "recurrence module"
     assert footprint["retained_recurrence_layers"] == 1
     assert footprint["calibration_domain_departures"] == []
+    # Checkpointing is on here, so one attention block is live at the peak and the term counts
+    # one -- the same bound `retained_recurrence_layers` reports just above (issue 85).
+    assert footprint["attention_blocks_at_peak"] == 1
     assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] == _estimated_peak_gib(
         "chunked", 997
     )
@@ -1354,10 +1364,19 @@ def test_running_without_gradient_checkpointing_is_recorded_not_scaled_for(
     assert footprint["grad_checkpoint"] is False
     assert footprint["retained_recurrence_layers"] == 2
     assert footprint["calibration"]["grad_checkpoint"] is True
-    assert len(footprint["calibration_domain_departures"]) == 1
-    assert "checkpointing is off" in footprint["calibration_domain_departures"][0]
-    # The estimate is unchanged: the fit is in the row length alone.
+    departures = footprint["calibration_domain_departures"]
+    assert len(departures) == 2
+    assert any("checkpointing is off" in line for line in departures)
+    assert any("multiplied by 2 live blocks" in line for line in departures)
+    # The affine fit is unchanged -- it is in the row length alone and nothing else it was held
+    # fixed at is scaled for. The attention term is the exception, and the reason it is not the
+    # same act: it is a measured per-block cost, and how many blocks are live is counted from the
+    # architecture rather than fitted. Both blocks are live without checkpointing (issue 85).
+    assert footprint["attention_blocks_at_peak"] == 2
     assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] == _estimated_peak_gib(
+        "chunked", 997, blocks=2
+    )
+    assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] > _estimated_peak_gib(
         "chunked", 997
     )
 
@@ -1649,8 +1668,10 @@ def test_a_backbone_with_no_recurrence_gates_on_the_floor_alone(tmp_path: Path) 
     assert footprint["linear_attention_layers"] == 0
     assert footprint["recurrence_mode"] == "floor"
     assert footprint["estimates"]["floor"]["gates"] is True
+    # Four attention blocks and no checkpointing, so the term counts all four (issue 85).
+    assert footprint["attention_blocks_at_peak"] == 4
     assert footprint["estimates"]["floor"]["estimated_train_peak_gib"] == _estimated_peak_gib(
-        "floor", 2874
+        "floor", 2874, blocks=4
     )
 
 
@@ -1684,7 +1705,9 @@ def test_the_calibrated_headroom_boundary_fits_at_exactly_one_point_one(
     tmp_path: Path,
 ) -> None:
     """10% headroom, at the boundary: exactly 1.10x fits and the next float down does not."""
-    peak = _estimated_peak_gib("chunked", 997)
+    # `_HybridView` has two attention blocks and the default spec leaves checkpointing off, so
+    # the term counts both -- the estimate the artifact will report at this row (issue 85).
+    peak = _estimated_peak_gib("chunked", 997, blocks=2)
     exactly = peak * (1.0 + _TRAINING_HEADROOM_FRACTION)
 
     fits = _preflight(
@@ -1729,10 +1752,25 @@ def test_the_artifact_records_the_coefficients_and_the_points_they_came_from(
     assert footprint["recurrence_mode"] == "chunked"
     assert footprint["chunk"] == 64
     assert chunked["chunk"] == 64
-    assert (
-        coefficients["slope_gib_per_token"] * footprint["max_row_tokens"]
+    # Re-derived from the artifact alone, which is the point of the assertion: the affine part
+    # from the coefficients, the quadratic part from the term the block now records beside them
+    # (issue 85). A reader who can rebuild the number can check it.
+    tokens = footprint["max_row_tokens"]
+    rebuilt = (
+        coefficients["slope_gib_per_token"] * tokens
         + coefficients["intercept_gib"]
-    ) == chunked["estimated_train_peak_gib"]
+        + footprint["attention_blocks_at_peak"]
+        * footprint["attention_term_bytes_per_token_squared"]
+        * tokens**2
+        / 1024**3
+    )
+    assert rebuilt == chunked["estimated_train_peak_gib"]
+    assert chunked["attention_term_gib"] == pytest.approx(
+        footprint["attention_blocks_at_peak"]
+        * footprint["attention_term_bytes_per_token_squared"]
+        * tokens**2
+        / 1024**3
+    )
     assert coefficients["shape"] == "affine"
     assert [(point["tokens"], point["chunk"], point["outcome"]) for point in chunked["points"]] == [
         (997, 32, "ok"),
@@ -1867,8 +1905,9 @@ def test_run_preflight_reads_the_longest_row_from_a_data_directory(tmp_path: Pat
     assert footprint["max_row_tokens"] == 17
     assert footprint["max_row_tokens_source"] == f"data:{data}"
     # The row count the dataset produced is the row count the envelope was evaluated at.
+    assert footprint["attention_blocks_at_peak"] == 2
     assert footprint["estimates"]["chunked"]["estimated_train_peak_gib"] == _estimated_peak_gib(
-        "chunked", 17
+        "chunked", 17, blocks=2
     )
 
 
@@ -2040,3 +2079,56 @@ def test_the_probe_precision_block_reads_the_artifact_the_preflight_actually_wri
     assert written, "and it does write the block one level down"
 
     assert preflight_precision_block(spec, output_root=tmp_path) == written
+
+
+# ------------------------------------------------------- the attention-score term (issue 85)
+
+
+def test_no_headroom_fraction_can_stand_in_for_the_attention_term() -> None:
+    """The issue's central claim, stated as a property rather than as an anecdote.
+
+    A headroom *fraction* corrects an estimate that is proportionally low. This term is of a
+    different order than the affine part, so the ratio between them is itself a function of the
+    row: whatever fraction is chosen is right at one length and wrong at every other. The test
+    fixes no particular fraction -- it shows the ratio moves, which is what makes every fraction
+    wrong somewhere.
+    """
+    def share(tokens: int) -> float:
+        peak = _estimated_peak_gib("chunkwise", tokens)
+        return _attention_term_gib(tokens) / peak
+
+    short, long = share(997), share(8192)
+    assert short < _TRAINING_HEADROOM_FRACTION < long, (
+        "the term is inside the headroom at the short end of the calibration window and outside "
+        f"it at 8,192 tokens: {short:.3f} then {long:.3f}. That crossing is the whole argument."
+    )
+    # And it keeps growing, so no larger fraction rescues it either.
+    assert share(16384) > long
+
+
+def test_the_term_is_quadratic_in_the_row_and_linear_in_the_blocks() -> None:
+    """Doubling the row quadruples the term; doubling the live blocks doubles it."""
+    assert _attention_term_gib(2048) == pytest.approx(4.0 * _attention_term_gib(1024))
+    assert _attention_term_gib(1024, blocks=2) == pytest.approx(2.0 * _attention_term_gib(1024))
+    assert _attention_term_gib(1024) == pytest.approx(
+        _ATTENTION_TERM_BYTES_PER_TOKEN_SQUARED * 1024**2 / 1024**3
+    )
+
+
+def test_the_row_ceiling_is_the_longest_row_that_fits_with_headroom() -> None:
+    """Issue 85's acceptance: the report answers "how long a row fits", not only "does this one".
+
+    Checked against the gate itself rather than against a re-derivation, at both sides of the
+    boundary, so a ceiling that drifts from what `fits_with_headroom` would say fails here.
+    """
+    budget = 17.76
+    for mode in _ENVELOPES:
+        ceiling = _row_ceiling_tokens(mode, budget_gib=budget)
+        limit = budget / (1.0 + _TRAINING_HEADROOM_FRACTION)
+        assert _estimated_peak_gib(mode, ceiling) <= limit
+        assert _estimated_peak_gib(mode, ceiling + 1) > limit
+
+
+def test_a_budget_below_the_intercept_gives_a_ceiling_of_zero() -> None:
+    """No row fits, and the answer is a number rather than a negative or a crash."""
+    assert _row_ceiling_tokens("chunkwise", budget_gib=0.5) == 0

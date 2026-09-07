@@ -1,0 +1,481 @@
+# RECORD-GUARD-RULE: issue 89, and the four unguarded launchers it found on its first run
+
+The rule of issue 89, by AST: any `.py` under `research/records/` that reaches the model carries
+the refusal guard, or the suite fails.
+
+## What it found
+
+The issue said "the next miss is invisible". It had already happened, twice, in records committed
+that same day. The rule's first run named four files with no guard:
+
+| file | what running it does |
+| --- | --- |
+| `LIVE-LENS-INFRASTRUCTURE-2026-09-07/acceptance-v1.py` | takes the primary model-run lock and loads the checkpoint, at module scope |
+| `LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py` | takes the primary model-run lock and loads the checkpoint, at module scope |
+| `HISTORY-CACHE-2026-09-07/prepare_corpus.py` | imports `mlx_lm` inside `main`, initialising Metal |
+| `HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py` | imports `mlx_lm` inside `main`, initialising Metal |
+
+The first two are the serious ones. Neither has an `if __name__ == "__main__"` block at all: every
+statement runs on import, the checkpoint path is absolute, `runlock.PROJECT_ROOT` is repointed at
+the primary checkout, and `hold_model_run_lock` is called on line 13. `python benchmark-v1.py`
+loads the 4B model on the Director's laptop and holds the primary lock. This patch adds the
+standard guard to all four.
+
+## Three decisions worth the reviewer's attention
+
+**1. `mlx` counts, not only `mlx_lm`.** The issue names `mlx_lm`. `benchmark-v1.py` imports only
+`mlx.core`, and reaches the checkpoint through `runlock.load_weights` rather than `load_policy`:
+an `mlx_lm`-only rule misses the worst file in the tree. The hazard being guarded is Metal
+initialisation and the lock, and `import mlx` is both. This is wider than the issue's letter and
+is flagged rather than done quietly.
+
+**2. Imports at any scope, unlike the closure walker beside it.** `_imports_that_execute` ignores
+function-local imports on purpose, because it asks what runs at import time. This rule asks
+whether *running the file* can reach the model, and `main()`'s body runs.
+`prepare_corpus.py` hides its only `mlx_lm` import inside `main`; a module-scope-only rule clears
+it.
+
+**3. The rule is one-directional.** Reaching the model requires a guard; a guard does not require
+reaching the model. `jlens-hosted-qwen35-4b-2026-09-05/convert_lens.py` is guarded and reaches
+nothing, and stays passing.
+
+## The execution check earns its place
+
+Issue 89 asked for the guard's placement to be verified by executing the file rather than parsing
+it. That turned out to be the load-bearing half. Three mutations were run against the finished
+rule:
+
+| mutation | caught by |
+| --- | --- |
+| the four new guards removed | the AST rule, naming all four |
+| a guard moved below the import it guards | the AST rule, naming the line it now follows |
+| a guard whose condition is inverted, so it never fires | **only** the execution check |
+
+The third is the point. `if __name__ == "__main__" and "--i-am-a-record" in _sys.argv:` — one
+word deleted — is a guard by every structural test and refuses nothing. The AST rule passed it.
+The subprocess died on `mlx` and the test said so.
+
+Which is why the execution is made safe rather than trusted. Each script runs with a `PYTHONPATH`
+whose `mlx`, `mlx_lm` and `local_llm_lab` are stub packages that raise on import. If a guard does
+not fire, the child dies on the stub instead of loading a checkpoint or taking the primary lock,
+and the stub's marker in stderr is what turns the test red. Children are started through
+`local_llm_lab.spawn` so they arrive by `posix_spawn` (R45).
+
+`compile()` is called as well as `ast.parse`, because a guard placed above `from __future__`
+parses cleanly and raises `SyntaxError` only under compilation — the way the first hand-written
+guard passed review while being broken. That has its own fixture.
+
+## The negative fixture
+
+`TRAIN-COST-2026-09-05/build_page.py` writes an HTML page whose prose names both `mlx_lm` and
+`evaluate.load_policy`. It imports neither and calls neither. The test asserts all three facts
+together: the strings are present, the AST finds no site, and the rule passes it. A substring
+scanner flags it, someone switches the rule off, and the rule protects nothing after that.
+
+## Cost
+
+`research/records` is not lint-clean and never has been: 67 ruff findings across these four files
+before this patch. The guards add four, all `I001` (`import sys as _sys` above the rest), which is
+the same finding the three hand-guarded records already carry. It is the structural price of a
+guard that must precede the imports it guards.
+
+## Verification
+
+```
+full suite:                            exit 0
+tests/test_repository_rules.py:        exit 0, 38 tests, 32 before (6 new)
+ruff, tests/test_repository_rules.py:  0 findings before, 0 after
+ruff, the four records scripts:        67 findings before, 71 after (+4 I001, see Cost)
+git apply --check against HEAD:        0
+mutations: 3 introduced, 3 caught (table above)
+concurrency: no libmlx-mapped process and no model-run lock, checked in the launching command
+```
+
+```diff
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py b/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py
+index 48d6873..8313794 100644
+--- a/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py
++++ b/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py
+@@ -1,5 +1,16 @@
+ """Freeze completed pilot histories and the eight native step-0 controls, without weights."""
+ 
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). Kept so the result can be read; it imports
++# mlx_lm, which initialises Metal here. Runs go through the package entry points under R47 and
++# R48, in a window the Director declares, and take the model-run lock of issue 83.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is a record of the 2026-09-07 history-cache corpus, "
++        "not a launcher; runs go through the package entry points under R47 and R48, in a "
++        "window the Director declares, and take the model-run lock of issue 83"
++    )
++
+ import hashlib
+ import json
+ from pathlib import Path
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py b/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py
+index 6f54da1..199606f 100644
+--- a/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py
++++ b/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py
+@@ -1,5 +1,16 @@
+ """Add deterministic long-history cases using token structure, before model comparisons."""
+ 
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). Kept so the result can be read; it imports
++# mlx_lm, which initialises Metal here. Runs go through the package entry points under R47 and
++# R48, in a window the Director declares, and take the model-run lock of issue 83.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is a record of the 2026-09-07 history-cache reuse "
++        "cases, not a launcher; runs go through the package entry points under R47 and "
++        "R48, in a window the Director declares, and take the model-run lock of issue 83"
++    )
++
+ import hashlib
+ import json
+ 
+diff --git a/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/acceptance-v1.py b/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/acceptance-v1.py
+index 5eeefc9..414e945 100644
+--- a/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/acceptance-v1.py
++++ b/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/acceptance-v1.py
+@@ -1,4 +1,16 @@
+ """Bounded native fidelity check, 2026-09-07. Uses the primary checkout's model lock."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). Kept so the result can be read; it takes the
++# primary model-run lock and loads the checkpoint at module scope. Runs go through the package
++# entry points under R47 and R48, in a window the Director declares, and take the model-run lock
++# of issue 83.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is a record of the 2026-09-07 live-lens fidelity run, "
++        "not a launcher; runs go through the package entry points under R47 and R48, in a "
++        "window the Director declares, and take the model-run lock of issue 83"
++    )
+ from contextlib import contextmanager
+ from pathlib import Path
+ import hashlib
+diff --git a/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py b/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py
+index 28c1043..70644b1 100644
+--- a/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py
++++ b/research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py
+@@ -1,4 +1,16 @@
+ """Per-mode fixed-history timing; preserves all timings and native-equivalence evidence."""
++
++# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). Kept so the result can be read; it takes the
++# primary model-run lock and loads the checkpoint at module scope. Runs go through the package
++# entry points under R47 and R48, in a window the Director declares, and take the model-run lock
++# of issue 83.
++import sys as _sys
++if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
++    _sys.exit(
++        "refusing to run: this file is a record of the 2026-09-07 live-lens timing run, "
++        "not a launcher; runs go through the package entry points under R47 and R48, in a "
++        "window the Director declares, and take the model-run lock of issue 83"
++    )
+ from pathlib import Path
+ from contextlib import nullcontext
+ import json
+diff --git a/tests/test_repository_rules.py b/tests/test_repository_rules.py
+index 573ffdb..4f72c36 100644
+--- a/tests/test_repository_rules.py
++++ b/tests/test_repository_rules.py
+@@ -1,14 +1,19 @@
+ from __future__ import annotations
+ 
+ import ast
++import os
++import sys
+ import sysconfig
+ from collections.abc import Iterator
+ from pathlib import Path
+ from typing import Any
+ 
++import pytest
+ import yaml
+ from conftest import PRE_EXISTING_FORK_SITES, SPAWN_SANCTIONED_PATHS
+ 
++from local_llm_lab import spawn
++
+ _PROJECTION_NAMES = frozenset(
+     {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"}
+ )
+@@ -1273,3 +1278,277 @@ def test_import_roots_come_from_the_interpreter_not_a_venv_under_the_repo(tmp_pa
+     # And the behaviour: a third-party name still resolves under those roots.
+     (tmp_path / "entry.py").write_text("from mlx_lm.tuner import trainer\n")
+     assert _loads_mlx(tmp_path / "entry.py", roots) == "mlx_lm.tuner.trainer"
++
++
++# --- Issue 89: a records script that reaches the model refuses to run ---------------------
++#
++# Records under `research/records/` include the scripts that produced them. Those scripts load
++# the model and take no model-run lock, so a committed copy is a working launcher for code the
++# repository does not own. Three were guarded by hand, and one of those guards was silently
++# overwritten by a later copy of the same record, caught only because a reviewer reads every
++# records commit. This is that reviewer, mechanised.
++
++_RECORD_SENTINEL = "--i-am-a-record"
++_RECORDS_ROOT = _REPO_ROOT / "research" / "records"
++
++#: Raised by the stub packages the executed child sees instead of the real ones. If this string
++#: reaches a child's stderr, its guard did not fire and the stub is the only reason no model was
++#: loaded -- so the assertion that it is absent is load-bearing, not decorative.
++_STUB_MARKER = "stub package: the record guard did not fire"
++
++
++def _model_reaching_sites(tree: ast.Module) -> list[tuple[int, str]]:
++    """Every place a records script reaches the model, decided by AST and never by substring.
++
++    Two kinds of site:
++
++    * an ``mlx`` or ``mlx_lm`` import, **at any scope** -- unlike the closure walker above, which
++      deliberately ignores function-local imports because it asks what runs on import. Here the
++      question is whether running the file can reach the model, and ``main()``'s body runs.
++      ``HISTORY-CACHE-2026-09-07/prepare_corpus.py`` hides its only import inside ``main``;
++      a module-scope-only rule would clear it.
++    * a call to ``load_policy``, which takes the model-run lock.
++
++    ``mlx`` is included alongside the ``mlx_lm`` the issue names, because
++    ``LIVE-LENS-INFRASTRUCTURE-2026-09-07/benchmark-v1.py`` loads the checkpoint at module scope
++    while importing only ``mlx.core``: an ``mlx_lm``-only rule misses the worst file in the tree.
++    The hazard being guarded is Metal initialisation and the lock, and ``import mlx`` is both.
++    """
++    sites: list[tuple[int, str]] = []
++    for node in ast.walk(tree):
++        if isinstance(node, ast.Import):
++            for alias in node.names:
++                if alias.name.split(".")[0] in {"mlx", "mlx_lm"}:
++                    sites.append((node.lineno, f"import {alias.name}"))
++        elif isinstance(node, ast.ImportFrom):
++            module = node.module or ""
++            if node.level == 0 and module.split(".")[0] in {"mlx", "mlx_lm"}:
++                sites.append((node.lineno, f"from {module} import ..."))
++        elif isinstance(node, ast.Call):
++            func = node.func
++            name = (
++                func.id
++                if isinstance(func, ast.Name)
++                else func.attr
++                if isinstance(func, ast.Attribute)
++                else None
++            )
++            if name == "load_policy":
++                sites.append((node.lineno, "call load_policy"))
++    return sorted(sites)
++
++
++def _record_guard_line(tree: ast.Module) -> int | None:
++    """The line of the module-scope refusal guard, or None.
++
++    Structural, not textual: a module-level ``if`` whose test carries the sentinel **as a string
++    constant** and whose body leaves the interpreter. A file that merely prints the sentinel, or
++    mentions it in a comment, has no guard.
++    """
++    for node in tree.body:
++        if not isinstance(node, ast.If):
++            continue
++        carries = any(
++            isinstance(sub, ast.Constant) and sub.value == _RECORD_SENTINEL
++            for sub in ast.walk(node.test)
++        )
++        if not carries:
++            continue
++        exits = any(
++            (isinstance(sub, ast.Raise) and "SystemExit" in ast.dump(sub))
++            or (
++                isinstance(sub, ast.Call)
++                and (
++                    (isinstance(sub.func, ast.Name) and sub.func.id == "exit")
++                    or (isinstance(sub.func, ast.Attribute) and sub.func.attr == "exit")
++                )
++            )
++            for statement in node.body
++            for sub in ast.walk(statement)
++        )
++        if exits:
++            return node.lineno
++    return None
++
++
++def _record_guard_faults(path: Path) -> list[str]:
++    """Why ``path`` fails the rule, or an empty list. Never executes the file."""
++    source = path.read_text()
++    tree = ast.parse(source)
++    sites = _model_reaching_sites(tree)
++    if not sites:
++        return []
++    faults: list[str] = []
++    guard = _record_guard_line(tree)
++    if guard is None:
++        first_line, first_kind = sites[0]
++        return [
++            f"reaches the model at line {first_line} ({first_kind}) and carries no refusal guard; "
++            f"running it by hand starts a model process outside R47, R48 and the issue-83 lock"
++        ]
++    late = [f"line {line} ({kind})" for line, kind in sites if line < guard]
++    if late:
++        faults.append(
++            f"the guard is at line {guard}, after {', '.join(late)}; a guard that follows the "
++            f"import it guards refuses only once the model is already resident"
++        )
++    try:
++        # `ast.parse` is not enough. A guard placed above `from __future__` parses cleanly and
++        # raises SyntaxError only under `compile`, which is how the first hand-written guard
++        # passed review while being broken.
++        compile(source, str(path), "exec")
++    except SyntaxError as error:
++        faults.append(f"does not compile: {error.msg} (line {error.lineno})")
++    return faults
++
++
++def _guarded_record_scripts() -> list[Path]:
++    """Records scripts the rule applies to: those that reach the model."""
++    return [
++        path
++        for path in sorted(_RECORDS_ROOT.rglob("*.py"))
++        if _model_reaching_sites(ast.parse(path.read_text()))
++    ]
++
++
++@pytest.fixture(scope="module")
++def stub_import_root(tmp_path_factory) -> Path:
++    """A ``PYTHONPATH`` entry whose ``mlx``, ``mlx_lm`` and ``local_llm_lab`` refuse to import.
++
++    The execution check below runs real records scripts. If one of their guards does not fire,
++    the very next thing the file does is load a 4B checkpoint or take the primary model-run lock,
++    on the Director's laptop, possibly beside another run. These stubs make that impossible: the
++    child dies on the import instead, and the test reports the guard that failed.
++    """
++    root = tmp_path_factory.mktemp("stub-imports")
++    for package in ("mlx", "mlx_lm", "local_llm_lab"):
++        directory = root / package
++        directory.mkdir()
++        (directory / "__init__.py").write_text(
++            f'raise RuntimeError("{_STUB_MARKER}: {package} was imported")\n'
++        )
++    return root
++
++
++def test_every_records_script_that_reaches_the_model_carries_a_refusal_guard() -> None:
++    """The rule of issue 89, by AST.
++
++    Guarding is not optional politeness. These files hard-code absolute paths to the checkpoint
++    and to the primary checkout, so a copy that runs, runs against the real model.
++    """
++    faults = {
++        path.relative_to(_REPO_ROOT).as_posix(): reasons
++        for path in _guarded_record_scripts()
++        if (reasons := _record_guard_faults(path))
++    }
++    detail = "\n".join(
++        f"  {name}: {'; '.join(reasons)}" for name, reasons in sorted(faults.items())
++    )
++    assert not faults, f"records scripts that reach the model without a working guard:\n{detail}"
++
++
++def test_the_rule_reads_imports_and_calls_not_the_words_mlx_lm_and_load_policy() -> None:
++    """The negative fixture the rule would otherwise cry wolf on.
++
++    ``TRAIN-COST-2026-09-05/build_page.py`` writes an HTML page whose prose names both
++    ``mlx_lm`` and ``evaluate.load_policy``. It imports neither and calls neither. A substring
++    scanner flags it, someone switches the rule off, and the rule protects nothing after that.
++    """
++    page = _RECORDS_ROOT / "TRAIN-COST-2026-09-05" / "build_page.py"
++    source = page.read_text()
++
++    assert "mlx_lm" in source and "load_policy" in source
++    assert _model_reaching_sites(ast.parse(source)) == []
++    assert _record_guard_faults(page) == []
++
++
++def test_a_records_script_that_imports_mlx_lm_without_a_guard_fails_the_rule(tmp_path) -> None:
++    """The positive fixture, and the overwrite case that motivated the issue.
++
++    The second half is the one with teeth: it starts from a guard that passes and deletes it,
++    which is what a later copy of a record did by hand and nobody noticed.
++    """
++    unguarded = tmp_path / "probe.py"
++    unguarded.write_text('"""A probe."""\nimport mlx_lm\n\nmlx_lm.load("model")\n')
++    (faults,) = (_record_guard_faults(unguarded),)
++    assert faults and "carries no refusal guard" in faults[0]
++
++    guard = (
++        'import sys as _sys\n'
++        f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
++        '    _sys.exit("refusing to run: a record, not a launcher")\n'
++    )
++    guarded = tmp_path / "guarded.py"
++    guarded.write_text(f'"""A probe."""\n{guard}import mlx_lm\n')
++    assert _record_guard_faults(guarded) == []
++
++    # The overwrite: the same file, the guard gone.
++    overwritten = tmp_path / "overwritten.py"
++    overwritten.write_text(guarded.read_text().replace(guard, ""))
++    assert _record_guard_faults(overwritten)
++
++
++def test_a_guard_placed_after_the_import_it_guards_fails_the_rule(tmp_path) -> None:
++    """Order is the whole point: a refusal that runs after ``import mlx`` refuses too late."""
++    late = tmp_path / "late.py"
++    late.write_text(
++        '"""A probe."""\n'
++        "import mlx.core as mx\n"
++        "import sys as _sys\n"
++        f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
++        '    _sys.exit("refusing to run")\n'
++    )
++    (fault,) = _record_guard_faults(late)
++    assert "after line 2" in fault
++
++
++def test_a_guard_above_from_future_parses_but_does_not_compile(tmp_path) -> None:
++    """Why the placement check compiles rather than parses.
++
++    ``from __future__`` must be the first statement after the docstring. A guard inserted above
++    it satisfies ``ast.parse`` and raises ``SyntaxError`` only under ``compile`` -- exactly how
++    the first hand-written guard passed review while being broken. The rule must see it.
++    """
++    broken = tmp_path / "broken.py"
++    broken.write_text(
++        '"""A probe."""\n'
++        "import sys as _sys\n"
++        f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
++        '    _sys.exit("refusing to run")\n'
++        "from __future__ import annotations\n"
++        "import mlx_lm\n"
++    )
++    ast.parse(broken.read_text())  # parses, which is the trap
++
++    (fault,) = _record_guard_faults(broken)
++    assert "does not compile" in fault
++
++
++def test_every_guarded_records_script_actually_refuses_when_run(stub_import_root: Path) -> None:
++    """The guards are verified by running them, not by reading them.
++
++    Every records script the rule applies to is started as a subprocess with no sentinel
++    argument. Each must exit non-zero saying it refuses, before importing anything that would
++    reach the model -- proved by the stub packages, which raise if reached and whose marker must
++    not appear.
++
++    Started through ``local_llm_lab.spawn`` so the child arrives by ``posix_spawn`` (R45).
++    """
++    environment = {**os.environ, "PYTHONPATH": str(stub_import_root)}
++    for path in _guarded_record_scripts():
++        name = path.relative_to(_REPO_ROOT).as_posix()
++        completed = spawn.run(
++            [sys.executable, str(path)],
++            env=environment,
++            capture_output=True,
++            text=True,
++            timeout=120,
++        )
++        assert completed.returncode != 0, f"{name} ran to completion instead of refusing"
++        assert "refusing to run" in completed.stderr, (
++            f"{name} exited {completed.returncode} without the refusal: "
++            f"{completed.stderr.strip()[-400:]}"
++        )
++        assert _STUB_MARKER not in completed.stderr, (
++            f"{name} reached a model import before refusing; only the stub stopped it"
++        )
+```

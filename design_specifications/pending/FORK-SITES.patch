@@ -1,0 +1,862 @@
+# FORK-SITES: issue 84 items 2 and 3 — the exemption list is empty, and closed
+
+`PRE_EXISTING_FORK_SITES` is `frozenset()`. Seven files went through
+`local_llm_lab.spawn`, in three shapes, one per reason each had been exempted. `provenance.py`
+landed earlier as item 1, because it was the only entry that forked with a model already resident.
+
+## Why an exemption was a real hazard and not bookkeeping
+
+CPython takes `posix_spawn` only when `cwd` is `None` and the program is absolute. Everything else
+forks, and a fork in an interpreter that has initialised Metal aborts in libplatform rather than
+raising. The abort is `SIGABRT`, so `atexit` never runs, so a held model-run lock is orphaned —
+then correctly reported stale and correctly never deleted. One aborted run locks the machine until
+a person clears it.
+
+An exemption made a file invisible to **both** enforcers at once: the static rule in
+`test_repository_rules.py` and the runtime guard in `conftest.py` read the same set. That is by
+design, so the two can never disagree — and it is also why the list had to end up empty rather
+than merely short.
+
+## The three shapes
+
+**`git -C`, where a directory was handed to git.** `runlog.git_commit` and
+`integrity.git_tree_dirty` passed `cwd=`. The directory moves into argv, where it costs nothing.
+Failure behaviour is identical: `git -C` on a path that is not a repository exits non-zero, which
+both callers already read as "not determined".
+
+**`/bin/sh -c 'cd … && exec …'`, where the directory is load-bearing.** `chat.py` and
+`train_sft.py` start `mlx_lm`, whose YAML resolves `data:` and `adapter_path:` against the working
+directory. That cannot be dropped and git's `-C` has no equivalent here, so it moves into argv in
+the form `spawn`'s own docstring names: the exec that actually happens stays visible, and `exec`
+means no extra process survives. The quoting is not decorative — this repository's root contains a
+space.
+
+**Dropping a `cwd` that was doing nothing.** `tests/test_probes.py` passed `cwd=<repo root>` to a
+child that imported `local_llm_lab`. The repository root holds `src/`, not the package, so the
+child never imported through it; the installed distribution did. The `cwd` bought nothing and cost
+the fork path — and this file imports `mlx.core` at module scope, so its fork happened with Metal
+already up. Of the seven, this was the live one.
+
+**`check_env.py`** named a bare `sysctl`; the helper resolves it.
+
+## `probes/guard.py` did not migrate. Its check was deleted.
+
+Issue 84 asked for the duplicate concurrency check to go rather than be repaired, and the reasons
+were all things that had already happened:
+
+- **It missed real processes.** Detection by `pgrep` against a fixed pattern of job names sees only
+  jobs whose command line matches. `ctxmax.py` held 16.6–17.2 GiB for twenty-three minutes on
+  2026-09-05 and was invisible to every name check on the machine.
+- **It was one entry point from blocking itself.** The pattern excluded only the caller's own pid,
+  so the first probe whose command line contained one of those names would refuse to run because it
+  found itself. The same self-match cost eight minutes during the hosted-lens conversion.
+- **It forked**, and was safe only because it happened to run before the first MLX allocation — a
+  property of call order that nothing enforced.
+
+`gpu_users()` is now a call to `runlock.running_model_processes()`, which asks the kernel which
+processes have `libmlx.dylib` mapped. `runlock._refusal_for_processes` becomes public so both
+callers refuse in one wording; two wordings for one condition is how two definitions of it start.
+
+## What the tests now assert
+
+`tests/test_fork_sites.py` is new and holds one place a reader finds how each site was fixed. The
+git helpers are checked twice over: the argv shape, and then a real call against this repository,
+because a shape test passes against a helper that builds a correct argv and never runs.
+
+Two existing tests changed meaning rather than being deleted.
+
+`test_the_fork_guard_lets_a_listed_site_through` asserted `runlog.py` **was** in the exemption
+list. It is now `test_the_last_exempt_site_no_longer_forks` and asserts it is **not**, making the
+same call: the guard raises `ForkInThisInterpreter` on the line that forks, and `git_commit`
+swallows `OSError` and `SubprocessError` but not a `RuntimeError`, so a 40-character hash means the
+call reached `posix_spawn` and "unknown" would mean git itself failed. Both outcomes stay
+distinguishable.
+
+The guard's pass-through branch lost its last user, so it is now driven directly with a stand-in
+for the fork primitive. It is **not** tested by exempting a file and calling `os.fork` for real:
+pytest imports MLX at collection, so that interpreter has Metal up, and whether the abort fires is
+a coin toss on the memory-pool thread's lock. A test that reproduces the crash it documents is not
+a test.
+
+## The closure
+
+`test_the_fork_exemption_list_is_empty_and_stays_empty` is stated separately rather than left
+implicit in an empty set, because the failure to guard against is not a fork. It is somebody adding
+a name to the list to make the static rule go green — the edit that makes a file invisible to both
+enforcers, and exactly how the seven accumulated. The list earned its exemptions by predating the
+helper. Nothing can earn one now.
+
+## Verification
+
+```
+full suite:                     exit 0
+ruff, all changed files:        11 findings before, 11 after, 0 newly introduced
+                                (all 11 pre-existing in runlog.py, away from the edit)
+git apply --check against HEAD: 0
+concurrency: no libmlx-mapped process and no model-run lock, checked in the launching command
+```
+
+Two notes on scope. Ruff's autofix silently modernised four unrelated things in `runlog.py`
+(a `timezone.utc`, a typing import, three quoted annotations); those were reverted and the
+file carries only the migration. And `PRE_EXISTING_FORK_SITES` is kept as an empty set rather
+than deleted along with its branch, because the issue's acceptance says the list is empty and
+the rule refuses additions, not that the mechanism goes. Deleting it is a larger call than
+this issue made.
+
+```diff
+diff --git a/src/local_llm_lab/chat.py b/src/local_llm_lab/chat.py
+index 97ab93a..c2dbe2a 100644
+--- a/src/local_llm_lab/chat.py
++++ b/src/local_llm_lab/chat.py
+@@ -1,13 +1,28 @@
+ from __future__ import annotations
+ 
+ import argparse
+-import subprocess
++import shlex
+ 
++from local_llm_lab import spawn
+ from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+ 
+ DEFAULT_MODEL = "mlx-community/Qwen3-0.6B-4bit"
+ 
+ 
++def _in_project_root(command: list[str]) -> list[str]:
++    """``command``, run from the project root, without ``subprocess``'s ``cwd``.
++
++    ``mlx_lm``'s YAML resolves ``data:`` and ``adapter_path:`` against the working directory, so
++    the directory is load-bearing and cannot simply be dropped. It moves into argv instead:
++    CPython takes ``posix_spawn`` only when ``cwd`` is ``None``, and a fork in an interpreter
++    that has initialised Metal aborts (R45, issue 84 item 3). ``spawn``'s docstring names this
++    form -- put ``/bin/sh -c`` in argv, so the exec that actually happens is visible -- and
++    ``exec`` means no extra process survives the call.
++    """
++    inner = shlex.join(command)
++    return ["/bin/sh", "-c", f"cd {shlex.quote(str(PROJECT_ROOT))} && exec {inner}"]
++
++
+ def main() -> None:
+     parser = argparse.ArgumentParser(description="Launch the MLX-LM chat interface.")
+     parser.add_argument("--model", default=DEFAULT_MODEL)
+@@ -25,4 +40,4 @@ def main() -> None:
+     if not args.run:
+         print("Preview only. Add --run to download/load the model.")
+         return
+-    subprocess.run(command, cwd=PROJECT_ROOT, check=True)
++    spawn.run(_in_project_root(command), check=True)
+diff --git a/src/local_llm_lab/check_env.py b/src/local_llm_lab/check_env.py
+index 1e49f7f..a0c9ba3 100644
+--- a/src/local_llm_lab/check_env.py
++++ b/src/local_llm_lab/check_env.py
+@@ -1,17 +1,21 @@
+ from __future__ import annotations
+ 
+ import platform
+-import subprocess
+ from importlib.metadata import PackageNotFoundError, version
++from subprocess import CalledProcessError
++
++from local_llm_lab import spawn
+ 
+ PACKAGES = ("mlx", "mlx-lm", "mlx-tune", "datasets")
+ 
+ 
+ def _memory_gib() -> float | None:
+     try:
+-        raw = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True)
+-        return int(raw.strip()) / 1024**3
+-    except (OSError, subprocess.SubprocessError, ValueError):
++        completed = spawn.run(
++            ["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, check=True
++        )
++        return int(completed.stdout.strip()) / 1024**3
++    except (OSError, ValueError, spawn.UnsafeSpawnError, CalledProcessError):
+         return None
+ 
+ 
+diff --git a/src/local_llm_lab/pipeline/integrity.py b/src/local_llm_lab/pipeline/integrity.py
+index c3f947d..b23b783 100644
+--- a/src/local_llm_lab/pipeline/integrity.py
++++ b/src/local_llm_lab/pipeline/integrity.py
+@@ -3,14 +3,15 @@ from __future__ import annotations
+ import argparse
+ import json
+ import re
+-import subprocess
+ import sys
+ from collections import Counter
+ from collections.abc import Mapping
+ from dataclasses import asdict, dataclass
+ from pathlib import Path
++from subprocess import SubprocessError
+ from typing import Any
+ 
++from local_llm_lab import spawn
+ from local_llm_lab.pipeline.env import Simulator
+ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
+ from local_llm_lab.runlog import RunLog, git_commit
+@@ -29,6 +30,20 @@ __all__ = [
+ _GIT_TIMEOUT = 10.0
+ 
+ 
++def _git_argv(cwd: Path | None, *arguments: str) -> list[str]:
++    """``git`` with the working directory expressed as ``-C``, not as ``subprocess``'s ``cwd``.
++
++    Same effect, different mechanism, and the mechanism is the point: CPython takes
++    ``posix_spawn`` only when ``cwd`` is ``None``, so passing a directory to ``subprocess``
++    forks -- which aborts an interpreter that has initialised Metal (R45, issue 84 item 3).
++    ``git -C`` moves the directory into argv, where it costs nothing.
++
++    Failure behaviour is unchanged: ``git -C`` on a path that does not exist exits non-zero,
++    which both callers already read as "not determined".
++    """
++    return ["git", *(("-C", str(cwd)) if cwd is not None else ()), *arguments]
++
++
+ def git_tree_dirty(cwd: Path | None = None) -> bool | None:
+     """Whether the working tree carries uncommitted changes, for R26(e) identity blocks.
+ 
+@@ -42,15 +57,14 @@ def git_tree_dirty(cwd: Path | None = None) -> bool | None:
+     ``None`` -- "not determined" -- rather than raised or silently read as clean.
+     """
+     try:
+-        completed = subprocess.run(
+-            ["git", "status", "--porcelain"],
+-            cwd=None if cwd is None else str(cwd),
++        completed = spawn.run(
++            _git_argv(cwd, "status", "--porcelain"),
+             capture_output=True,
+             text=True,
+             check=False,
+             timeout=_GIT_TIMEOUT,
+         )
+-    except (OSError, ValueError, subprocess.SubprocessError):
++    except (OSError, ValueError, spawn.UnsafeSpawnError, SubprocessError):
+         return None
+     if completed.returncode != 0:
+         return None
+diff --git a/src/local_llm_lab/probes/guard.py b/src/local_llm_lab/probes/guard.py
+index 76eca2d..eb3ecba 100644
+--- a/src/local_llm_lab/probes/guard.py
++++ b/src/local_llm_lab/probes/guard.py
+@@ -1,56 +1,64 @@
+-"""Refuse to load the 3B checkpoint while an evaluation is already using the GPU.
++"""Refuse to load a checkpoint while another process on this machine already holds MLX.
+ 
+ A pipeline evaluation and a probe both want the whole model resident; running them together
+ either thrashes unified memory or silently slows the evaluation whose numbers are being
+ collected. Every probe CLI that loads the real model checks first.
++
++**The check is not this module's own.** It delegates to :func:`runlock.running_model_processes`,
++which asks the kernel which processes have ``libmlx.dylib`` mapped. What used to be here was a
++second, name-based definition of "a model is already loaded" -- ``pgrep -fl`` against a fixed
++pattern of job names -- and issue 84 asked for it to be deleted rather than repaired. Three
++reasons, all of them things that had already happened:
++
++* **It missed real processes.** Detection by name sees only jobs whose command line matches the
++  pattern. ``ctxmax.py`` held 16.6-17.2 GiB for twenty-three minutes on 2026-09-05 and was
++  invisible to every name check on the machine (R45).
++* **It was about to block itself.** The pattern excluded only the caller's own pid, so the first
++  probe entry point whose command line contained one of those names would refuse to run because
++  it found *itself*. That is the same self-match that cost eight minutes during the hosted-lens
++  conversion, sitting latent here.
++* **It forked.** ``pgrep`` through ``subprocess`` was safe only because it ran before the first
++  MLX allocation -- a property of call order that nothing enforced and that any reordering broke
++  silently (R45, issue 84 item 2).
++
++Two definitions of one condition is how the disagreement between them recurs, so there is now one.
+ """
+ 
+ from __future__ import annotations
+ 
+ import argparse
+-import subprocess
+ 
+-__all__ = ["GPU_PROCESS_PATTERN", "add_gpu_arguments", "gpu_users", "require_idle_gpu"]
++from local_llm_lab import runlock
+ 
+-GPU_PROCESS_PATTERN = "agent-pipeline|agent-v2-eval|agent-v2-rollout|agent-v2-branch"
++__all__ = ["add_gpu_arguments", "gpu_users", "require_idle_gpu"]
+ 
+ 
+-def gpu_users(pattern: str = GPU_PROCESS_PATTERN) -> list[str]:
+-    """Lines from ``pgrep -fl <pattern>``, excluding this process; empty when the GPU is free."""
+-    import os
++def gpu_users() -> list[runlock.MappedProcess]:
++    """Processes outside this one that hold MLX; empty when no model is resident.
+ 
+-    try:
+-        completed = subprocess.run(
+-            ["pgrep", "-fl", pattern], capture_output=True, text=True, check=False, timeout=10
+-        )
+-    except (OSError, subprocess.SubprocessError):  # pragma: no cover - pgrep is always present
+-        return []
+-    mine = str(os.getpid())
+-    return [
+-        line
+-        for line in completed.stdout.splitlines()
+-        if line.strip() and line.split(" ", 1)[0] != mine
+-    ]
++    Kept as a name because the probe CLIs and their tests use it, but it is now a thin call to
++    the lock's own check rather than a second implementation of it.
++    """
++    return runlock.running_model_processes()
+ 
+ 
+ def add_gpu_arguments(parser: argparse.ArgumentParser) -> None:
+     parser.add_argument(
+         "--allow-busy-gpu",
+         action="store_true",
+-        help="Load the model even if an evaluation or rollout appears to be running.",
++        help="Load the model even if another process already holds MLX.",
+     )
+ 
+ 
+ def require_idle_gpu(
+     parser: argparse.ArgumentParser, args: argparse.Namespace, action: str
+ ) -> None:
+-    """Abort with a clear message when another job holds the GPU, unless overridden."""
++    """Abort with a clear message when another process holds MLX, unless overridden."""
+     if getattr(args, "allow_busy_gpu", False):
+         return
+     busy = gpu_users()
+     if busy:
+-        listed = "\n  ".join(busy)
+         parser.error(
+-            f"refusing {action}: another job is using the GPU:\n  {listed}\n"
+-            "Wait for it to finish, or pass --allow-busy-gpu."
++            f"refusing {action}: {runlock.refusal_for_processes(busy)}\n"
++            "Wait for it to exit, or pass --allow-busy-gpu."
+         )
+diff --git a/src/local_llm_lab/runlock.py b/src/local_llm_lab/runlock.py
+index ab1d397..c3ca97c 100644
+--- a/src/local_llm_lab/runlock.py
++++ b/src/local_llm_lab/runlock.py
+@@ -79,6 +79,7 @@ __all__ = [
+     "load_weights",
+     "model_run_lock",
+     "read_lock",
++    "refusal_for_processes",
+     "running_model_processes",
+ ]
+ 
+@@ -491,7 +492,12 @@ def _refusal_for_lock(held: LockHeld) -> str:
+     )
+ 
+ 
+-def _refusal_for_processes(found: Sequence[MappedProcess]) -> str:
++def refusal_for_processes(found: Sequence[MappedProcess]) -> str:
++    """One wording for "somebody else holds MLX", shared with ``probes.guard``.
++
++    Public because the probe CLIs refuse on the same evidence as the lock does, and two
++    wordings for one condition is how two definitions of it start.
++    """
+     listed = "\n".join(holder.describe() for holder in found)
+     return (
+         "refusing to load a model: another process on this machine already holds MLX.\n"
+@@ -530,7 +536,7 @@ def _acquire(
+         _probe_failures.clear()
+         found = running_model_processes()
+         if found:
+-            raise RunLockBusy(_refusal_for_processes(found))
++            raise RunLockBusy(refusal_for_processes(found))
+         process_check = "ok" if not _probe_failures else "failed: " + "; ".join(_probe_failures)
+ 
+     nonce = uuid.uuid4().hex
+diff --git a/src/local_llm_lab/runlog.py b/src/local_llm_lab/runlog.py
+index a431dae..c60931e 100644
+--- a/src/local_llm_lab/runlog.py
++++ b/src/local_llm_lab/runlog.py
+@@ -19,15 +19,17 @@ import json
+ import math
+ import os
+ import statistics
+-import subprocess
+ import sys
+ import tempfile
+ import time
+ from dataclasses import asdict, dataclass, fields
+ from datetime import datetime, timezone
+ from pathlib import Path
++from subprocess import SubprocessError
+ from typing import Any, Callable, Mapping, Sequence, TextIO
+ 
++from local_llm_lab import spawn
++
+ __all__ = [
+     "RunLog",
+     "Tee",
+@@ -151,6 +153,20 @@ def sha256_of(path: Path) -> str:
+     return digest.hexdigest()
+ 
+ 
++def _git_argv(cwd: Path | None, *arguments: str) -> list[str]:
++    """``git`` with the working directory expressed as ``-C``, not as ``subprocess``'s ``cwd``.
++
++    Same effect, different mechanism, and the mechanism is the point: CPython takes
++    ``posix_spawn`` only when ``cwd`` is ``None``, so passing a directory to ``subprocess``
++    forks -- which aborts an interpreter that has initialised Metal (R45, issue 84 item 3).
++    ``git -C`` moves the directory into argv, where it costs nothing.
++
++    Failure behaviour is unchanged: ``git -C`` on a path that does not exist exits non-zero,
++    which the caller already reads as "not determined".
++    """
++    return ["git", *(("-C", str(cwd)) if cwd is not None else ()), *arguments]
++
++
+ def git_commit(cwd: Path | None = None) -> str:
+     """``git rev-parse HEAD`` for provenance.
+ 
+@@ -158,15 +174,14 @@ def git_commit(cwd: Path | None = None) -> str:
+     error (no git, not a repository, timeout) is reported as ``"unknown"``.
+     """
+     try:
+-        completed = subprocess.run(
+-            ["git", "rev-parse", "HEAD"],
+-            cwd=None if cwd is None else str(cwd),
++        completed = spawn.run(
++            _git_argv(cwd, "rev-parse", "HEAD"),
+             capture_output=True,
+             text=True,
+             check=False,
+             timeout=_GIT_TIMEOUT,
+         )
+-    except (OSError, ValueError, subprocess.SubprocessError):
++    except (OSError, ValueError, spawn.UnsafeSpawnError, SubprocessError):
+         return "unknown"
+     if completed.returncode != 0:
+         return "unknown"
+diff --git a/src/local_llm_lab/train_sft.py b/src/local_llm_lab/train_sft.py
+index 52b6ed5..0eb4dcb 100644
+--- a/src/local_llm_lab/train_sft.py
++++ b/src/local_llm_lab/train_sft.py
+@@ -2,12 +2,26 @@ from __future__ import annotations
+ 
+ import argparse
+ import shlex
+-import subprocess
+ from pathlib import Path
+ 
++from local_llm_lab import spawn
+ from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
+ 
+ 
++def _in_project_root(command: list[str]) -> list[str]:
++    """``command``, run from the project root, without ``subprocess``'s ``cwd``.
++
++    ``mlx_lm``'s YAML resolves ``data:`` and ``adapter_path:`` against the working directory, so
++    the directory is load-bearing and cannot simply be dropped. It moves into argv instead:
++    CPython takes ``posix_spawn`` only when ``cwd`` is ``None``, and a fork in an interpreter
++    that has initialised Metal aborts (R45, issue 84 item 3). ``spawn``'s docstring names this
++    form -- put ``/bin/sh -c`` in argv, so the exec that actually happens is visible -- and
++    ``exec`` means no extra process survives the call.
++    """
++    inner = shlex.join(command)
++    return ["/bin/sh", "-c", f"cd {shlex.quote(str(PROJECT_ROOT))} && exec {inner}"]
++
++
+ def _validate_dataset(data_dir: Path) -> None:
+     missing = [
+         name
+@@ -49,4 +63,4 @@ def main() -> None:
+     if not args.run:
+         print("Dataset and config look valid. Add --run to begin training.")
+         return
+-    subprocess.run(command, cwd=PROJECT_ROOT, check=True)
++    spawn.run(_in_project_root(command), check=True)
+diff --git a/tests/conftest.py b/tests/conftest.py
+index ae08f3b..5bab49e 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -140,20 +140,21 @@ FORK_HOOKS = (("subprocess", "_fork_exec"), ("os", "fork"))
+ #: orphaned -- the failure this whole slice exists to prevent, arriving from the provenance
+ #: write at the end of a *successful* run. It now goes through ``spawn.run`` with the repository
+ #: root in argv as ``git -C``, and ``test_a_provenance_write_after_a_load_does_not_fork`` fails
+-#: if that is undone. The seven that remain are issue 84 items 2 and 3; ``runlog.git_commit``,
+-#: ``integrity.git_tree_dirty`` and ``probes/guard.py`` run before the load, and this list is
+-#: empty when 84 closes.
+-PRE_EXISTING_FORK_SITES = frozenset(
+-    {
+-        "src/local_llm_lab/chat.py",
+-        "src/local_llm_lab/check_env.py",
+-        "src/local_llm_lab/pipeline/integrity.py",
+-        "src/local_llm_lab/probes/guard.py",
+-        "src/local_llm_lab/runlog.py",
+-        "src/local_llm_lab/train_sft.py",
+-        "tests/test_probes.py",
+-    }
+-)
++#: if that is undone.
++#:
++#: **Empty, and it stays empty** (issue 84 closed). The other seven went through the helper in
++#: three shapes, one per reason they had been exempted: ``git -C`` where a directory was passed
++#: to git (``runlog``, ``integrity``); ``/bin/sh -c 'cd … && exec …'`` where a child genuinely
++#: needs the project root, because ``mlx_lm``'s YAML resolves ``data:`` against it (``chat``,
++#: ``train_sft``); and simply dropping a ``cwd`` that turned out to be decorative
++#: (``tests/test_probes.py`` -- the repository root holds ``src/``, not the package, so the
++#: child never imported through it). ``probes/guard.py`` did not migrate: its check was deleted.
++#:
++#: A new entry here is not a way to pass the rule.
++#: ``test_the_fork_exemption_list_is_empty_and_stays_empty`` fails on any addition. If a file
++#: needs to start a process, it goes through ``local_llm_lab.spawn``; if it cannot, that is a
++#: finding about the file.
++PRE_EXISTING_FORK_SITES: frozenset[str] = frozenset()
+ 
+ #: Paths the *static* rule exempts but the guard does not: the helper itself, and the test that
+ #: proves the guard fires, which has to fork on purpose.
+diff --git a/tests/test_fork_sites.py b/tests/test_fork_sites.py
+new file mode 100644
+index 0000000..39b97a3
+--- /dev/null
++++ b/tests/test_fork_sites.py
+@@ -0,0 +1,117 @@
++"""Issue 84 items 2 and 3: the last seven files that started a process by forking.
++
++One place a reader can find how each was fixed and why it needed its own fix. Every entry in
++``PRE_EXISTING_FORK_SITES`` was exempted for a concrete reason -- it passed ``cwd``, or it named a
++bare program -- and CPython takes ``posix_spawn`` only when ``cwd`` is ``None`` and the program is
++absolute. A fork in an interpreter that has initialised Metal aborts (R45), and an abort is
++``SIGABRT``, so ``atexit`` never runs and the model-run lock is orphaned.
++
++The conftest guard turns any fork in this interpreter into ``ForkInThisInterpreter`` on the line
++that caused it, so the tests here that actually run the migrated code fail outright if a migration
++is reverted. They do not need to assert on the exception.
++"""
++
++from __future__ import annotations
++
++import shlex
++from pathlib import Path
++
++import pytest
++
++from local_llm_lab import chat, check_env, runlog, train_sft
++from local_llm_lab.pipeline import integrity
++
++_REPO_ROOT = Path(__file__).resolve().parents[1]
++
++
++# ------------------------------------------------------- the two git helpers: `-C`, not `cwd`
++
++
++@pytest.mark.parametrize(
++    ("build", "verb"),
++    [(integrity._git_argv, "status"), (runlog._git_argv, "rev-parse")],
++)
++def test_the_git_helpers_put_the_directory_in_argv_rather_than_in_subprocess_cwd(
++    build, verb: str
++) -> None:
++    """``git -C <dir>`` is the same request by a mechanism that does not fork.
++
++    Asserted on the argv rather than on the result, because the result is identical either way --
++    which is exactly why a reviewer cannot tell the two apart without looking here.
++    """
++    assert build(Path("/somewhere"), verb) == ["git", "-C", "/somewhere", verb]
++    assert build(None, verb) == ["git", verb]
++
++
++@pytest.mark.parametrize(
++    ("call", "not_determined"),
++    [(integrity.git_tree_dirty, None), (runlog.git_commit, "unknown")],
++)
++def test_the_git_helpers_keep_reporting_not_determined_rather_than_raising(
++    call, not_determined, tmp_path: Path
++) -> None:
++    """The contract both helpers document: provenance never kills a run.
++
++    ``git -C`` on a directory that is not a repository exits non-zero, which is the same branch
++    the old ``cwd`` form took, so the migration changes the spawn path and nothing else.
++    """
++    assert call(tmp_path) == not_determined
++
++
++def test_the_git_helpers_read_this_repository_through_the_spawn_helper() -> None:
++    """Both helpers, against real git, under the fork guard.
++
++    The shape tests above would pass against a helper that built a correct argv and then never
++    ran. This one runs, so a migration that is reverted fails here rather than silently.
++    """
++    commit = runlog.git_commit(_REPO_ROOT)
++    assert len(commit) == 40 and set(commit) <= set("0123456789abcdef")
++    assert isinstance(integrity.git_tree_dirty(_REPO_ROOT), bool)
++
++
++# ---------------------------------- the two mlx_lm launchers: a visible `cd` in argv, not `cwd`
++
++
++@pytest.mark.parametrize("module", [chat, train_sft])
++def test_a_project_root_child_carries_its_directory_as_a_visible_shell_exec(module) -> None:
++    """``mlx_lm``'s YAML resolves ``data:`` and ``adapter_path:`` against the working directory.
++
++    So unlike the git helpers, the directory here cannot be dropped and git has no ``-C`` to move
++    it into. It moves into argv as ``/bin/sh -c 'cd … && exec …'``, the form ``spawn``'s docstring
++    names: the exec that actually happens stays visible, and ``exec`` leaves no extra process.
++    """
++    argv = module._in_project_root(["mlx_lm.lora", "--config", "a b.yaml"])
++    program, flag, script = argv
++
++    assert (program, flag) == ("/bin/sh", "-c")
++    assert len(argv) == 3, "anything after -c is an argument to the script, not part of it"
++    assert script.startswith(f"cd {shlex.quote(str(module.PROJECT_ROOT))} && exec ")
++    # Quoting is not decorative here: this repository's own root contains a space, so an
++    # unquoted `cd` would run in a directory that does not exist and mlx_lm would read the
++    # wrong dataset rather than fail.
++    assert shlex.split(script)[1] == str(module.PROJECT_ROOT)
++    assert shlex.split(script)[-1] == "a b.yaml"
++
++
++# --------------------------------------------------------- the bare program name: `sysctl`
++
++
++def test_memory_gib_reads_sysctl_through_the_helper() -> None:
++    """``sysctl`` was exempted for naming a bare program; the helper resolves it to a path.
++
++    Runs for real, so the resolution is exercised rather than described. The value is only
++    sanity-checked: this is a test of the spawn path, not of the machine.
++    """
++    memory = check_env._memory_gib()
++    assert memory is not None and 1 < memory < 4096
++
++
++def test_memory_gib_still_reports_none_when_the_child_fails(monkeypatch) -> None:
++    """Unchanged contract: ``check_env`` degrades to "not determined" rather than raising."""
++    from local_llm_lab import spawn
++
++    def refuse(*_args, **_kwargs):
++        raise OSError("no sysctl here")
++
++    monkeypatch.setattr(spawn, "run", refuse)
++    assert check_env._memory_gib() is None
+diff --git a/tests/test_probes.py b/tests/test_probes.py
+index d2cc111..36184bc 100644
+--- a/tests/test_probes.py
++++ b/tests/test_probes.py
+@@ -7,10 +7,10 @@ pattern the J-lens tests in ``test_pipeline.py`` established: the real checkpoin
+ 
+ from __future__ import annotations
+ 
++import ast
+ import json
+ import math
+ import os
+-import subprocess
+ import sys
+ import warnings
+ from dataclasses import asdict, fields
+@@ -21,6 +21,7 @@ import mlx.nn as nn
+ import numpy as np
+ import pytest
+ 
++from local_llm_lab import spawn
+ from local_llm_lab.arch import ArchitectureView
+ from local_llm_lab.models import load_model_spec
+ from local_llm_lab.pipeline import jlens
+@@ -2151,13 +2152,18 @@ print(_checkpoint_signature(
+     task, [1, 3], strip=False, keep_last=2, difficulty=0, context={}
+ )['task_sha256'])
+ """
++    # `cwd` is dropped rather than replaced: the repository root holds `src/`, not the package,
++    # so the child never imported through it -- the installed distribution did. Keeping a `cwd`
++    # that changed nothing would have kept this file on CPython's fork path, and this file
++    # imports `mlx.core` at module scope, so a fork here happens with Metal already up (R45).
+     hashes = {
+-        subprocess.check_output(
++        spawn.run(
+             [sys.executable, "-c", script],
+-            cwd=Path(__file__).resolve().parents[1],
+             env={**os.environ, "PYTHONHASHSEED": seed},
++            capture_output=True,
+             text=True,
+-        ).strip()
++            check=True,
++        ).stdout.strip()
+         for seed in ("1", "3")
+     }
+     assert len(hashes) == 1
+@@ -2908,31 +2914,54 @@ def test_render_build_markdown_contains_the_sanity_checks(planted) -> None:
+ # --------------------------------------------------------------------------- guards and policies
+ 
+ 
+-def test_gpu_users_reports_matching_processes(monkeypatch) -> None:
+-    import subprocess
++def test_gpu_users_delegates_to_the_locks_check_and_keeps_no_second_one(monkeypatch) -> None:
++    """Issue 84 item 2: the name-based check is deleted, not repaired.
+ 
++    What it returns matters less than where it comes from. A probe CLI and the run lock must
++    agree about whether a model is resident, and they agree by asking the same question --
++    which processes have the MLX library mapped -- rather than by two implementations that
++    happen to match today.
++    """
++    from local_llm_lab import runlock
+     from local_llm_lab.probes import guard
+ 
+-    class _Completed:
+-        stdout = "111 uv run agent-pipeline eval\n999 grep agent-pipeline\n"
+-
+-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Completed())
+-    monkeypatch.setattr("os.getpid", lambda: 999)
+-    assert guard.gpu_users() == ["111 uv run agent-pipeline eval"]
+-
+-    class _Empty:
+-        stdout = ""
++    holder = runlock.MappedProcess(pid=111, command="uv run agent-pipeline eval", library="libmlx")
++    monkeypatch.setattr(runlock, "running_model_processes", lambda *a, **k: [holder])
++    assert guard.gpu_users() == [holder]
+ 
+-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Empty())
++    monkeypatch.setattr(runlock, "running_model_processes", lambda *a, **k: [])
+     assert guard.gpu_users() == []
+ 
++    # The deletion itself, so a later "repair" that reinstates a pattern fails here. Both of the
++    # old module's failure modes were properties of matching names: `ctxmax.py` held 17 GiB
++    # invisibly for twenty-three minutes, and the pattern was one entry point away from matching
++    # the very process asking.
++    source = Path(guard.__file__).read_text()
++    tree = ast.parse(source)
++    assert "GPU_PROCESS_PATTERN" not in {
++        target.id
++        for node in ast.walk(tree)
++        if isinstance(node, ast.Assign)
++        for target in node.targets
++        if isinstance(target, ast.Name)
++    }
++    assert not [
++        node
++        for node in ast.walk(tree)
++        if isinstance(node, ast.Import | ast.ImportFrom)
++        and "subprocess"
++        in {getattr(node, "module", None) or "", *(alias.name for alias in node.names)}
++    ]
++
+ 
+ def test_require_idle_gpu_aborts_when_busy_and_passes_when_overridden(monkeypatch) -> None:
+     import argparse
+ 
++    from local_llm_lab import runlock
+     from local_llm_lab.probes import guard
+ 
+-    monkeypatch.setattr(guard, "gpu_users", lambda *a, **k: ["111 agent-v2-eval"])
++    holder = runlock.MappedProcess(pid=111, command="agent-v2-eval", library="libmlx.dylib")
++    monkeypatch.setattr(guard, "gpu_users", lambda *a, **k: [holder])
+     parser = argparse.ArgumentParser()
+     with pytest.raises(SystemExit):
+         guard.require_idle_gpu(parser, argparse.Namespace(allow_busy_gpu=False), "loading a model")
+diff --git a/tests/test_repository_rules.py b/tests/test_repository_rules.py
+index 573ffdb..220adbe 100644
+--- a/tests/test_repository_rules.py
++++ b/tests/test_repository_rules.py
+@@ -843,12 +843,12 @@ _PROCESS_STARTER_PREFIXES = ("os.spawn", "os.exec")
+ # guard there and this static rule must never disagree about which files may fork. One list,
+ # two enforcers: a site that leaves the list is covered by both at once.
+ #
+-# `PRE_EXISTING_FORK_SITES` predates the helper and every entry still forks today. They are
+-# **reported, not fixed** in the issue-83 slice: each needs its own argument change (`chat.py`,
+-# `train_sft.py`, `provenance.py` and `tests/test_probes.py` pass `cwd`; `check_env.py`,
+-# `guard.py` and the two git helpers name a bare program), each has its own callers and
+-# fixtures, and putting seven untested edits next to the mechanism that gates every
+-# model-loading run is the wrong trade.
++# `PRE_EXISTING_FORK_SITES` predated the helper. It was **reported, not fixed** in the issue-83
++# slice, on the ground that seven untested edits next to the mechanism gating every
++# model-loading run was the wrong trade, and a guard failing 114 tests on its first run is the
++# shape of a guard people switch off. Issue 84 then emptied it, `provenance.py` first because it
++# was the only entry that forked with a model already resident. The list is now empty and the
++# rule below refuses additions to it.
+ 
+ 
+ def _discover_spawn_surface(root: Path) -> set[Path]:
+@@ -901,6 +901,23 @@ def _direct_process_starts(paths: set[Path], root: Path) -> list[str]:
+     return findings
+ 
+ 
++
++def test_the_fork_exemption_list_is_empty_and_stays_empty() -> None:
++    """Issue 84's acceptance: no file is exempt from the spawn helper any more.
++
++    Stated as its own test rather than left implicit in an empty set, because the failure this
++    guards against is not a fork -- it is somebody adding a name to
++    ``PRE_EXISTING_FORK_SITES`` to make the rule above go green. That edit makes one file
++    invisible to *both* enforcers at once, the static rule here and the runtime guard in
++    ``conftest``, which is exactly how the seven accumulated. The list earned its exemptions by
++    predating the helper; nothing can earn one now.
++    """
++    assert frozenset() == PRE_EXISTING_FORK_SITES, (
++        "the fork exemption list is closed. A file that needs to start a process goes through "
++        "local_llm_lab.spawn; if it cannot, that is a finding about the file, not an entry "
++        f"here. Added: {sorted(PRE_EXISTING_FORK_SITES)}"
++    )
++
+ def test_processes_are_started_only_through_the_spawn_helper() -> None:
+     """Issue 83: a fork in an interpreter with Metal up aborts, so nothing here may fork.
+ 
+diff --git a/tests/test_spawn.py b/tests/test_spawn.py
+index f4dbd61..a9f3f1f 100644
+--- a/tests/test_spawn.py
++++ b/tests/test_spawn.py
+@@ -58,26 +58,56 @@ def test_the_fork_guard_fires_on_a_direct_os_fork() -> None:
+         os.fork()
+ 
+ 
+-def test_the_fork_guard_lets_a_listed_site_through() -> None:
+-    """The other half of the contract: the guard refuses *new* forks, not all of them.
++def test_the_last_exempt_site_no_longer_forks(monkeypatch) -> None:
++    """The same call this test used to make, with the assertion turned around (issue 84).
+ 
+-    `runlog.git_commit` shells out with a bare `git` and therefore forks. It is on
+-    `PRE_EXISTING_FORK_SITES` — reported in the issue-83 hand-off rather than fixed in that
+-    slice — so the guard hands the call to the real primitive instead of refusing it. Without
+-    this half the guard failed 114 tests the first time it was run against the whole suite,
+-    which is the shape of a guard that gets switched off rather than fixed.
++    `runlog.git_commit` used to shell out with a bare `git` and a `cwd`, so it forked, and it sat
++    on `PRE_EXISTING_FORK_SITES` so the guard handed it to the real primitive. It now builds
++    `git -C <dir>` and goes through the helper, and the list is empty, so nothing shields it: a
++    fork here raises `ForkInThisInterpreter` on the line that caused it.
+ 
+     `git_commit` swallows `OSError`, `ValueError` and `SubprocessError` and answers "unknown",
+-    but `ForkInThisInterpreter` is a `RuntimeError` and would propagate — so a real commit hash
+-    here means the fork genuinely happened.
++    but `ForkInThisInterpreter` is a `RuntimeError` and propagates — so a real commit hash here
++    means the call reached `posix_spawn`, and "unknown" would mean git itself failed rather than
++    that the migration held. Both outcomes are distinguishable, which is why this asserts on the
++    hash.
+     """
+-    assert "src/local_llm_lab/runlog.py" in PRE_EXISTING_FORK_SITES
++    assert "src/local_llm_lab/runlog.py" not in PRE_EXISTING_FORK_SITES
+ 
+     commit = runlog.git_commit(PROJECT_ROOT)
+ 
+     assert len(commit) == 40 and commit != "unknown"
+ 
+ 
++def test_the_guards_pass_through_branch_still_works_on_an_empty_list(monkeypatch) -> None:
++    """The branch survives its last user, so an exemption would still mean something.
++
++    `PRE_EXISTING_FORK_SITES` is empty and stays empty, which leaves
++    `if caller in PRE_EXISTING_FORK_SITES: return real(...)` with nothing exercising it. A
++    branch nothing runs is a branch that quietly stops working, and the next person to need an
++    exemption would find the guard refusing anyway.
++
++    The wrapper is driven directly, with a stand-in for the fork primitive, rather than by
++    exempting this file and calling `os.fork` for real. Letting a fork through here would be the
++    hazard itself: pytest imports MLX at collection, so this interpreter has Metal up, and the
++    abort is a coin toss on whether the memory-pool thread holds its lock. A test that reproduces
++    the crash it is documenting is not a test.
++    """
++    import conftest
++
++    passed_through = []
++    wrapped = conftest._fork_refusal(lambda *args, **kwargs: passed_through.append((args, kwargs)))
++
++    monkeypatch.setattr(conftest, "PRE_EXISTING_FORK_SITES", frozenset({"tests/test_spawn.py"}))
++    wrapped("argv", fd=3)
++    assert passed_through == [(("argv",), {"fd": 3})]
++
++    monkeypatch.setattr(conftest, "PRE_EXISTING_FORK_SITES", frozenset())
++    with pytest.raises(ForkInThisInterpreter):
++        wrapped("argv", fd=3)
++    assert len(passed_through) == 1, "the refusal must not also call the real primitive"
++
++
+ def test_the_fork_guard_hooks_are_still_the_names_cpython_uses() -> None:
+     """If a CPython release moves either private name, fail here rather than go quiet.
+ 
+```

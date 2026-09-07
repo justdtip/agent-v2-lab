@@ -1,0 +1,239 @@
+# R21-DEBT: issue 74 — the last two non-atomic sentinels, and a fourth site that never existed
+
+`DEBT(R21)` is gone from `pipeline/data.py`, because the debt is.
+
+## The block named four sites. Two were real.
+
+| the block's claim | what the code says |
+| --- | --- |
+| `cli.py` `_write_stage_manifest` | real, and migrated here. It is the helper the rollout and branch stage outputs go through. |
+| `cli.py` `health.json` | real, and migrated here, first, for the reason below. |
+| `probes/state_probe.py:2845` "duplicates this helper" | **there is no manifest write in that file, and there never was.** `git log -S'manifest.json'` on it is empty across its whole history. |
+
+The third was wrong when the comment was written, and issue 74 inherited the error from the
+comment. Which is the argument for deleting a debt comment rather than updating it: a comment
+naming work is a queue nobody audits, and this one had been sending readers to a file that had
+nothing to fix.
+
+## `health.json` differs in kind from the other sentinels
+
+For `manifest.json` the hazard is downstream. `guard_dataset_write` decides whether a later write
+is permitted by whether the file is there, so a truncated one waves a write straight over rollout
+data that is in fact complete — the reasoning `branch.py` and `rollout.py` already carry.
+
+`health.json` has no downstream. It is the R26 training-health record, the file a reader opens to
+decide whether a run is usable, written from the stage's `finally` at the end of a run that took
+seventy minutes. Nothing is waved past by a truncated one. **The record itself is the loss**, and
+it is lost at the moment the information is least reproducible. That is why it went first.
+
+## What the tests assert
+
+Two interruption tests and one that the comment is gone. All three fail against the un-migrated
+code, checked by reverting `cli.py` and `data.py` and running them.
+
+`_interrupt_the_manifest_writer` is **imported from `test_branch.py`, not copied.** It truncates
+both writers — `runlog`'s `os.fdopen` and `Path.write_text` — so the assertion rests on the outcome
+rather than on which writer is in use, which is exactly what makes it fail if a site is reverted to
+a plain stamp. A second copy could drift, and a copy that stopped patching `Path.write_text` would
+keep passing while proving nothing. Neither file loads MLX, so the import does not move
+`test_cli.py` into `_TESTS_THAT_LOAD_MLX`.
+
+The health test drives `stage_train` rather than calling the write directly, because the write
+happens on the way out of a `finally` block and the question is what survives that path.
+
+The third test also asserts `manifest.json` appears nowhere in `state_probe.py`, so if a stamp is
+ever added there it needs the same treatment and this test is the place that says so.
+
+## Out of scope, named rather than done
+
+- **A second `DEBT(R21)` survives, in `chat_replay.py:203`**, and it should. It states a reason
+  this one did not: the rows and manifest sit behind a weights-gated path no test can drive, so
+  the change needs a run to verify. That is a blocked item with its blocker written down, not an
+  unaudited queue.
+- A wider audit found other non-atomic JSON writes that no rule covers —
+  `preflight.py:354` writes the artifact a training run's gate reads, and `provenance.py:104`
+  writes the provenance record. Neither is in this block or this issue. `preflight.py`'s is the
+  one I would look at next if you want it; it is a gate input, so it is closer to `health.json`
+  in kind than to the sentinels.
+
+## Verification
+
+```
+full suite:                     exit 0
+tests/test_cli.py:              exit 0, 3 new tests
+mutation: all 3 fail with cli.py and data.py reverted, pass with the patch
+ruff, all changed files:        7 findings before, 7 after, 0 newly introduced
+git apply --check against HEAD: 0
+concurrency: no libmlx-mapped process and no model-run lock, checked in the launching command
+```
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/cli.py b/src/local_llm_lab/pipeline/cli.py
+index b7170c4..4521143 100644
+--- a/src/local_llm_lab/pipeline/cli.py
++++ b/src/local_llm_lab/pipeline/cli.py
+@@ -195,9 +195,15 @@ def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
+ 
+     The R21 guard fires only on this file, so without it the rollout/branch guard calls
+     would be inert; the stamp also gives those outputs the provenance they were missing.
++
++    Atomic (issue 74), for the reason ``runlog.write_text_atomic`` states: the manifest is the
++    guard's own sentinel, so a truncated one is worse than none. It does not merely lose
++    provenance -- it can wave a later write straight over rollout data that is in fact
++    complete. ``branch.py`` and ``rollout.py`` stamp through the same call, and this was the
++    last stamp that did not.
+     """
+     target.mkdir(parents=True, exist_ok=True)
+-    (target / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
++    write_text_atomic(target / "manifest.json", json.dumps(payload, indent=2) + "\n")
+ 
+ 
+ def _load_training_base(hf_id: str) -> tuple[Any, Any]:
+@@ -880,8 +886,14 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+                     status=status,
+                     fallbacks=_recorded_fallbacks(backbone),
+                 )
+-            (output / "health.json").write_text(
+-                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
++            # Atomic (issue 74). This is the R26 training-health record: the file a reader
++            # opens to decide whether a run is usable, written at the end of a run that took
++            # seventy minutes and cannot be repeated cheaply. A truncated one is a health
++            # verdict that will not parse, produced at the moment the information is least
++            # reproducible. Unlike the sentinels, nothing downstream is waved past by it --
++            # the cost is the record itself, which is worse.
++            write_text_atomic(
++                output / "health.json", json.dumps(summary, indent=2, sort_keys=True) + "\n"
+             )
+             runlog.close(status=status, verdict=health.verdict, flags=len(health.flags))
+             del callback, train_set, valid_set, test_set, model, tokenizer
+@@ -1106,8 +1118,8 @@ def stage_select(config: dict[str, Any], limit: int | None, quiet: bool) -> Path
+     # Atomic because this file is a stage sentinel like the dataset manifests: `best-adapter/`
+     # has already been copied by the time it is written, so a truncated selection.json is the
+     # one artifact saying WHICH checkpoint that copy is, left unparseable next to a directory
+-    # that looks finished. Whole or absent, never half. This module's own _write_stage_manifest
+-    # and health.json writes are still plain write_text; see DEBT(R21) in pipeline/data.py.
++    # that looks finished. Whole or absent, never half. Every sentinel this module writes goes
++    # through the same call now (issue 74).
+     write_text_atomic(selection_path, json.dumps(selection, indent=2) + "\n")
+     write_provenance(
+         output,
+diff --git a/src/local_llm_lab/pipeline/data.py b/src/local_llm_lab/pipeline/data.py
+index ab841f7..1b04694 100644
+--- a/src/local_llm_lab/pipeline/data.py
++++ b/src/local_llm_lab/pipeline/data.py
+@@ -29,12 +29,6 @@ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, make_tasks
+ from local_llm_lab.project import PROJECT_ROOT
+ from local_llm_lab.runlog import write_text_atomic
+ 
+-# DEBT(R21): the same non-atomic manifest write survives at three sites owned by other lanes
+-# this cycle — `pipeline/cli.py:184` (`_write_stage_manifest`, which also stamps the rollout and
+-# branch outputs at `cli.py:1009` and `cli.py:1224`) and `pipeline/cli.py:703` (health.json) —
+-# and `probes/state_probe.py:2845` duplicates this helper. Route all four through
+-# `runlog.write_text_atomic`; see design_specifications/complete/R21-RENDER-GUARD-REPORT.md.
+-
+ # Ruling R21: these datasets are irreplaceable (runs A and B cannot be regenerated from the
+ # current source; the generator revision that produced them is unrecoverable). No write path
+ # may target them, with or without an override flag.
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 7939df1..20e1af5 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -1855,3 +1855,97 @@ def test_stage_train_ignores_a_stale_checkpoint_from_an_earlier_run(monkeypatch,
+     assert health["verdict"] == "incomplete"
+     assert health["final_checkpoint"] is False
+     assert "incomplete_run" in {flag["flag"] for flag in health["flags"]}
++
++
++# ------------------------------------------- the last two non-atomic sentinels (issue 74)
++#
++# `_interrupt_the_manifest_writer` is imported rather than copied. It truncates *both* writers
++# -- `runlog`'s `os.fdopen` and `Path.write_text` -- so the assertion rests on the outcome
++# rather than on which writer is in use, which is what makes it fail if a site is reverted to
++# a plain stamp. Two copies of that helper could drift, and a copy that stopped patching
++# `Path.write_text` would keep passing while proving nothing.
++from test_branch import _interrupt_the_manifest_writer  # noqa: E402
++
++
++def test_a_stage_manifest_is_whole_or_absent_when_the_write_is_interrupted(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """The last stamp in this module that was not atomic (issue 74).
++
++    `manifest.json` is the R21 guard's own sentinel: `guard_dataset_write` decides whether a
++    later write is permitted by whether this file is there. A truncated one does not merely
++    lose provenance, it waves a later write straight over data that is in fact complete.
++    `branch.py` and `rollout.py` already stamped through `write_text_atomic`; this one did not,
++    and it is the helper the rollout and branch stage outputs go through.
++    """
++    target = tmp_path / "rollouts"
++    target.mkdir()
++    original = '{"stage": "rollout", "kept": true}\n'
++    (target / "manifest.json").write_text(original, encoding="utf-8")
++
++    _interrupt_the_manifest_writer(monkeypatch, 12)
++    with pytest.raises(OSError, match="no space left on device"):
++        cli._write_stage_manifest(target, {"stage": "rollout", "split": "train"})
++    monkeypatch.undo()
++
++    assert (target / "manifest.json").read_text(encoding="utf-8") == original
++    leftovers = sorted(path.name for path in target.iterdir() if path.name.startswith("."))
++    assert leftovers == [], "no partial temporary file may survive at the destination"
++
++
++def test_a_health_record_is_whole_or_absent_when_the_write_is_interrupted(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """`health.json` is the one of the four where the record itself is the loss (issue 74).
++
++    The sentinels' failure mode is a later write over complete data, which is bad and already
++    reasoned about. This file is the R26 training-health record -- what a reader opens to decide
++    whether a run is usable -- written from the stage's `finally` at the end of a run that took
++    seventy minutes. A truncated one is a health verdict that will not parse, produced at the
++    moment the information is least reproducible.
++
++    Driven through `stage_train` rather than through a direct call, because the write happens on
++    the way out of a `finally` block and the question is what survives that path.
++    """
++    config = _training_config(tmp_path)
++    output = config["output"]
++    _patch_stage_train(monkeypatch, _short_trainer)
++
++    _interrupt_the_manifest_writer(monkeypatch, 10)
++    with pytest.raises(OSError, match="no space left on device"):
++        cli.stage_train(config, iters=2)
++    monkeypatch.undo()
++
++    assert not (output / "health.json").exists(), (
++        "a health record that cannot be parsed is worse than none: the reader cannot tell an "
++        "unhealthy run from an interrupted write"
++    )
++    leftovers = sorted(path.name for path in output.iterdir() if path.name.startswith("."))
++    assert leftovers == [], "no partial temporary file may survive at the destination"
++
++
++def test_the_r21_debt_comment_is_gone_because_the_debt_is() -> None:
++    """A comment that outlives its work sends the next reader looking for work that is done.
++
++    The block in `pipeline/data.py` named three sites and a fourth it called a duplicate. Two
++    were real and are migrated here. The third, `probes/state_probe.py`, never wrote a manifest
++    at all -- `git log -S'manifest.json'` on that file is empty for its whole history -- so the
++    comment was wrong when it was written, and the issue inherited the error from it. That is
++    the argument for deleting rather than updating: a stale comment is a queue nobody audits.
++    """
++    # From this file, not from `cli.__file__`: the package may be installed rather than
++    # imported from the tree, and then its parents point into site-packages.
++    root = Path(__file__).resolve().parents[1]
++    data_source = (root / "src/local_llm_lab/pipeline/data.py").read_text(encoding="utf-8")
++    assert "DEBT(R21)" not in data_source
++
++    for module in ("pipeline/cli.py",):
++        source = (root / "src/local_llm_lab" / module).read_text(encoding="utf-8")
++        assert '"manifest.json").write_text(' not in source
++        assert '"health.json").write_text(' not in source
++
++    probe = (root / "src/local_llm_lab/probes/state_probe.py").read_text(encoding="utf-8")
++    assert "manifest.json" not in probe, (
++        "the DEBT block's fourth site: if a manifest write appears here, it needs the same "
++        "treatment and this test is the place that says so"
++    )
+```

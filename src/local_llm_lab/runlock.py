@@ -79,6 +79,7 @@ __all__ = [
     "load_weights",
     "model_run_lock",
     "read_lock",
+    "refusal_for_processes",
     "running_model_processes",
 ]
 
@@ -491,7 +492,12 @@ def _refusal_for_lock(held: LockHeld) -> str:
     )
 
 
-def _refusal_for_processes(found: Sequence[MappedProcess]) -> str:
+def refusal_for_processes(found: Sequence[MappedProcess]) -> str:
+    """One wording for "somebody else holds MLX", shared with ``probes.guard``.
+
+    Public because the probe CLIs refuse on the same evidence as the lock does, and two
+    wordings for one condition is how two definitions of it start.
+    """
     listed = "\n".join(holder.describe() for holder in found)
     return (
         "refusing to load a model: another process on this machine already holds MLX.\n"
@@ -530,7 +536,7 @@ def _acquire(
         _probe_failures.clear()
         found = running_model_processes()
         if found:
-            raise RunLockBusy(_refusal_for_processes(found))
+            raise RunLockBusy(refusal_for_processes(found))
         process_check = "ok" if not _probe_failures else "failed: " + "; ".join(_probe_failures)
 
     nonce = uuid.uuid4().hex

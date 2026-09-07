@@ -1,0 +1,126 @@
+"""Does the fused attention's backward materialise the score matrix? (issue 85)
+
+The preflight's activation estimate carries no attention-score term, and issue 85 offers two
+resolutions: add the term, or verify the fused kernel never materialises the scores and record
+that instead -- with the measurement, not the assertion. This is the measurement.
+
+No checkpoint is loaded. Synthetic q/k/v at the 4B's full-attention shape (16 query heads, 4 KV
+heads, head_dim 256, bf16) go through `mx.fast.scaled_dot_product_attention`, once forward-only
+and once under `mx.grad`. If the backward differentiates a fallback that builds `q @ k.T`, the
+peak above the forward grows as T^2 with a coefficient near `heads * T^2 * itemsize`. If the
+kernel has a fused backward that recomputes, the peak stays linear.
+
+R47(b): each row's peak is projected from the rows already measured before it runs, and the
+ladder stops rather than breaching. The first two sizes are unprojectable and are safe by
+inspection -- 512 and 1,024 tokens put the score matrix at 16 and 67 MB.
+"""
+from __future__ import annotations
+
+import json
+import math
+import sys
+import time
+
+import mlx.core as mx
+
+HEADS_Q, HEADS_KV, HEAD_DIM = 16, 4, 256
+DTYPE = mx.bfloat16
+SCALE = HEAD_DIM ** -0.5
+WORKING_SET = mx.device_info()["max_recommended_working_set_size"]
+CAP = 0.60 * WORKING_SET          # R47: the Director's laptop, no declared window
+LADDER = (512, 1024, 2048, 4096, 8192)
+
+
+def project_peak(rows: list[dict], tokens: int) -> float | None:
+    """R47(b): the next row's peak, from the two largest rows already measured."""
+    usable = [r for r in rows if r["backward_peak_bytes"] is not None]
+    if len(usable) < 2:
+        return None
+    (t0, p0), (t1, p1) = (
+        (usable[-2]["tokens"], usable[-2]["backward_peak_bytes"]),
+        (usable[-1]["tokens"], usable[-1]["backward_peak_bytes"]),
+    )
+    exponent = math.log(p1 / p0) / math.log(t1 / t0)
+    return p1 * (tokens / t1) ** exponent
+
+
+def one(tokens: int) -> dict:
+    mx.clear_cache()
+    key = mx.random.key(0)
+    q = mx.random.normal((1, HEADS_Q, tokens, HEAD_DIM), key=key).astype(DTYPE)
+    k = mx.random.normal((1, HEADS_KV, tokens, HEAD_DIM), key=key).astype(DTYPE)
+    v = mx.random.normal((1, HEADS_KV, tokens, HEAD_DIM), key=key).astype(DTYPE)
+    mx.eval(q, k, v)
+    resident = mx.get_active_memory()
+
+    def loss(q_, k_, v_):
+        out = mx.fast.scaled_dot_product_attention(q_, k_, v_, scale=SCALE, mask="causal")
+        return out.astype(mx.float32).sum()
+
+    mx.clear_cache()
+    mx.reset_peak_memory()
+    started = time.perf_counter()
+    mx.eval(loss(q, k, v))
+    forward_peak = mx.get_peak_memory()
+    forward_seconds = time.perf_counter() - started
+
+    mx.clear_cache()
+    mx.reset_peak_memory()
+    started = time.perf_counter()
+    grads = mx.grad(loss, argnums=(0, 1, 2))(q, k, v)
+    mx.eval(grads)
+    backward_peak = mx.get_peak_memory()
+    backward_seconds = time.perf_counter() - started
+
+    del q, k, v, grads
+    mx.clear_cache()
+    return {
+        "tokens": tokens,
+        "inputs_bytes": resident,
+        "forward_peak_bytes": forward_peak,
+        "forward_seconds": forward_seconds,
+        "backward_peak_bytes": backward_peak,
+        "backward_seconds": backward_seconds,
+        # What a materialised score matrix would cost at this length, for comparison.
+        "score_matrix_bytes": HEADS_Q * tokens * tokens * 2,
+    }
+
+
+def main() -> int:
+    rows: list[dict] = []
+    stopped = None
+    for tokens in LADDER:
+        projected = project_peak(rows, tokens)
+        if projected is not None and projected > CAP:
+            stopped = (
+                f"stopped before {tokens}: projected {projected / 2**30:.2f} GiB exceeds the "
+                f"{CAP / 2**30:.2f} GiB cap (0.60 of a {WORKING_SET / 2**30:.2f} GiB working set)"
+            )
+            break
+        row = one(tokens)
+        row["projected_peak_bytes"] = projected
+        rows.append(row)
+        print(
+            f"{tokens:>6} tokens  forward {row['forward_peak_bytes'] / 2**30:6.3f} GiB  "
+            f"backward {row['backward_peak_bytes'] / 2**30:6.3f} GiB  "
+            f"score matrix would be {row['score_matrix_bytes'] / 2**30:6.3f} GiB",
+            flush=True,
+        )
+    report = {
+        "heads_q": HEADS_Q,
+        "heads_kv": HEADS_KV,
+        "head_dim": HEAD_DIM,
+        "dtype": "bfloat16",
+        "working_set_bytes": WORKING_SET,
+        "cap_bytes": CAP,
+        "rows": rows,
+        "stopped": stopped,
+    }
+    if stopped:
+        print(stopped, flush=True)
+    json.dump(report, open("sdpa.json", "w"), indent=2)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

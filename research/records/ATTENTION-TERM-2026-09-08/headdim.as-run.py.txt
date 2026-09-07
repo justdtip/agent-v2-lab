@@ -1,0 +1,45 @@
+"""Is the quadratic peak a property of this model's head_dim, or of every shape? (issue 85)
+
+`mx.fast.scaled_dot_product_attention` dispatches to a fused kernel only for the head dimensions
+its Metal kernels cover. If 256 is outside that set, the 4B's full-attention blocks take the
+unfused path, which builds `q @ k.T` in the forward as well as the backward -- a much sharper
+statement than "the backward materialises scores". Head dimensions 64 and 128 are the control.
+"""
+import json
+import mlx.core as mx
+
+HEADS_Q, HEADS_KV = 16, 4
+SCALE_FOR = lambda d: d ** -0.5
+rows = []
+for head_dim in (64, 128, 256):
+    for tokens in (1024, 2048, 4096):
+        mx.clear_cache()
+        key = mx.random.key(0)
+        q = mx.random.normal((1, HEADS_Q, tokens, head_dim), key=key).astype(mx.bfloat16)
+        k = mx.random.normal((1, HEADS_KV, tokens, head_dim), key=key).astype(mx.bfloat16)
+        v = mx.random.normal((1, HEADS_KV, tokens, head_dim), key=key).astype(mx.bfloat16)
+        mx.eval(q, k, v)
+        inputs = mx.get_active_memory()
+
+        def loss(q_, k_, v_):
+            out = mx.fast.scaled_dot_product_attention(
+                q_, k_, v_, scale=SCALE_FOR(head_dim), mask="causal"
+            )
+            return out.astype(mx.float32).sum()
+
+        mx.clear_cache(); mx.reset_peak_memory()
+        mx.eval(loss(q, k, v))
+        forward = mx.get_peak_memory()
+        mx.clear_cache(); mx.reset_peak_memory()
+        mx.eval(mx.grad(loss, argnums=(0, 1, 2))(q, k, v))
+        backward = mx.get_peak_memory()
+        del q, k, v
+        mx.clear_cache()
+        rows.append(
+            {"head_dim": head_dim, "tokens": tokens, "inputs_bytes": inputs,
+             "forward_peak_bytes": forward, "backward_peak_bytes": backward,
+             "score_matrix_bytes": HEADS_Q * tokens * tokens * 2}
+        )
+        print(f"head_dim {head_dim:>3}  {tokens:>5} tokens  inputs {inputs/2**20:7.1f} MiB  "
+              f"forward {forward/2**20:8.1f} MiB  backward {backward/2**20:8.1f} MiB", flush=True)
+json.dump(rows, open("headdim.json", "w"), indent=2)

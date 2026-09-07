@@ -19,14 +19,16 @@ import json
 import math
 import os
 import statistics
-import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
+from subprocess import SubprocessError
 from typing import Any, Callable, Mapping, Sequence, TextIO
+
+from local_llm_lab import spawn
 
 __all__ = [
     "RunLog",
@@ -151,6 +153,20 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _git_argv(cwd: Path | None, *arguments: str) -> list[str]:
+    """``git`` with the working directory expressed as ``-C``, not as ``subprocess``'s ``cwd``.
+
+    Same effect, different mechanism, and the mechanism is the point: CPython takes
+    ``posix_spawn`` only when ``cwd`` is ``None``, so passing a directory to ``subprocess``
+    forks -- which aborts an interpreter that has initialised Metal (R45, issue 84 item 3).
+    ``git -C`` moves the directory into argv, where it costs nothing.
+
+    Failure behaviour is unchanged: ``git -C`` on a path that does not exist exits non-zero,
+    which the caller already reads as "not determined".
+    """
+    return ["git", *(("-C", str(cwd)) if cwd is not None else ()), *arguments]
+
+
 def git_commit(cwd: Path | None = None) -> str:
     """``git rev-parse HEAD`` for provenance.
 
@@ -158,15 +174,14 @@ def git_commit(cwd: Path | None = None) -> str:
     error (no git, not a repository, timeout) is reported as ``"unknown"``.
     """
     try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=None if cwd is None else str(cwd),
+        completed = spawn.run(
+            _git_argv(cwd, "rev-parse", "HEAD"),
             capture_output=True,
             text=True,
             check=False,
             timeout=_GIT_TIMEOUT,
         )
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except (OSError, ValueError, spawn.UnsafeSpawnError, SubprocessError):
         return "unknown"
     if completed.returncode != 0:
         return "unknown"

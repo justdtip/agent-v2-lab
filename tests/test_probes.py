@@ -7,10 +7,10 @@ pattern the J-lens tests in ``test_pipeline.py`` established: the real checkpoin
 
 from __future__ import annotations
 
+import ast
 import json
 import math
 import os
-import subprocess
 import sys
 import warnings
 from dataclasses import asdict, fields
@@ -21,6 +21,7 @@ import mlx.nn as nn
 import numpy as np
 import pytest
 
+from local_llm_lab import spawn
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline import jlens
@@ -2151,13 +2152,18 @@ print(_checkpoint_signature(
     task, [1, 3], strip=False, keep_last=2, difficulty=0, context={}
 )['task_sha256'])
 """
+    # `cwd` is dropped rather than replaced: the repository root holds `src/`, not the package,
+    # so the child never imported through it -- the installed distribution did. Keeping a `cwd`
+    # that changed nothing would have kept this file on CPython's fork path, and this file
+    # imports `mlx.core` at module scope, so a fork here happens with Metal already up (R45).
     hashes = {
-        subprocess.check_output(
+        spawn.run(
             [sys.executable, "-c", script],
-            cwd=Path(__file__).resolve().parents[1],
             env={**os.environ, "PYTHONHASHSEED": seed},
+            capture_output=True,
             text=True,
-        ).strip()
+            check=True,
+        ).stdout.strip()
         for seed in ("1", "3")
     }
     assert len(hashes) == 1
@@ -2908,31 +2914,54 @@ def test_render_build_markdown_contains_the_sanity_checks(planted) -> None:
 # --------------------------------------------------------------------------- guards and policies
 
 
-def test_gpu_users_reports_matching_processes(monkeypatch) -> None:
-    import subprocess
+def test_gpu_users_delegates_to_the_locks_check_and_keeps_no_second_one(monkeypatch) -> None:
+    """Issue 84 item 2: the name-based check is deleted, not repaired.
 
+    What it returns matters less than where it comes from. A probe CLI and the run lock must
+    agree about whether a model is resident, and they agree by asking the same question --
+    which processes have the MLX library mapped -- rather than by two implementations that
+    happen to match today.
+    """
+    from local_llm_lab import runlock
     from local_llm_lab.probes import guard
 
-    class _Completed:
-        stdout = "111 uv run agent-pipeline eval\n999 grep agent-pipeline\n"
+    holder = runlock.MappedProcess(pid=111, command="uv run agent-pipeline eval", library="libmlx")
+    monkeypatch.setattr(runlock, "running_model_processes", lambda *a, **k: [holder])
+    assert guard.gpu_users() == [holder]
 
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Completed())
-    monkeypatch.setattr("os.getpid", lambda: 999)
-    assert guard.gpu_users() == ["111 uv run agent-pipeline eval"]
-
-    class _Empty:
-        stdout = ""
-
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Empty())
+    monkeypatch.setattr(runlock, "running_model_processes", lambda *a, **k: [])
     assert guard.gpu_users() == []
+
+    # The deletion itself, so a later "repair" that reinstates a pattern fails here. Both of the
+    # old module's failure modes were properties of matching names: `ctxmax.py` held 17 GiB
+    # invisibly for twenty-three minutes, and the pattern was one entry point away from matching
+    # the very process asking.
+    source = Path(guard.__file__).read_text()
+    tree = ast.parse(source)
+    assert "GPU_PROCESS_PATTERN" not in {
+        target.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    assert not [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import | ast.ImportFrom)
+        and "subprocess"
+        in {getattr(node, "module", None) or "", *(alias.name for alias in node.names)}
+    ]
 
 
 def test_require_idle_gpu_aborts_when_busy_and_passes_when_overridden(monkeypatch) -> None:
     import argparse
 
+    from local_llm_lab import runlock
     from local_llm_lab.probes import guard
 
-    monkeypatch.setattr(guard, "gpu_users", lambda *a, **k: ["111 agent-v2-eval"])
+    holder = runlock.MappedProcess(pid=111, command="agent-v2-eval", library="libmlx.dylib")
+    monkeypatch.setattr(guard, "gpu_users", lambda *a, **k: [holder])
     parser = argparse.ArgumentParser()
     with pytest.raises(SystemExit):
         guard.require_idle_gpu(parser, argparse.Namespace(allow_busy_gpu=False), "loading a model")

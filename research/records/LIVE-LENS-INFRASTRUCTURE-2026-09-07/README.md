@@ -41,3 +41,11 @@ Still outstanding: a numerical acceptance bound for same-position nonzero inject
 `protocol.json` and `benchmark-protocol.json` precede the corresponding measurements. The scripts use the primary checkout's process-scoped model lock, even though they import this worktree's source. Launch/completion entries were appended to the shared heartbeat log; both model processes exited and released the lock. The hosted n1000 lens is verified against SHA-256 `381c089dcffead8147ee91f944496f468cce2c7d593e0a1b17230745055aea12`.
 
 `source-manifest.json` identifies the final source by file hashes. The default capture path used for acceptance is unchanged by the later attention-only benchmark switch; all native fixture checks were rerun, and the final benchmark verifies both switch values on the checkpoint. The patch remains in the isolated worktree pending Chief review; no implementation hunk has landed in the shared checkout.
+
+## Guard addition, 7 September 2026, 21:05 (Chief, landing issue 89's rule)
+
+`acceptance-v1.py` and `benchmark-v1.py` ran every statement on import — no `__main__` block —
+with the checkpoint path absolute and the primary model-run lock taken on line 13, so `python
+benchmark-v1.py` loaded the 4B model. Both now carry the standard refusal guard at the top; the
+guard is the only change (`acceptance-v1.py` e6adb67786088fae8b193701bf12383b52163042402d17051eabac9e5d665299 → 5040ef280d63975b19c551f1749db47c7896484944c9d927cdef5ce97dc0aaa3; `benchmark-v1.py` 614b8483f34e17f3d5db968b6b69dc4a6fb1e3b69ad7840adf95e1d0acb29f0b → 55a4fd8f6a6738ece3cbc2a0c91f7a703e1cf96d0735d604c9715adf06079669).
+`source-manifest.json` pins source files, not these scripts.

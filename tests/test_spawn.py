@@ -58,24 +58,54 @@ def test_the_fork_guard_fires_on_a_direct_os_fork() -> None:
         os.fork()
 
 
-def test_the_fork_guard_lets_a_listed_site_through() -> None:
-    """The other half of the contract: the guard refuses *new* forks, not all of them.
+def test_the_last_exempt_site_no_longer_forks() -> None:
+    """The same call this test used to make, with the assertion turned around (issue 84).
 
-    `runlog.git_commit` shells out with a bare `git` and therefore forks. It is on
-    `PRE_EXISTING_FORK_SITES` — reported in the issue-83 hand-off rather than fixed in that
-    slice — so the guard hands the call to the real primitive instead of refusing it. Without
-    this half the guard failed 114 tests the first time it was run against the whole suite,
-    which is the shape of a guard that gets switched off rather than fixed.
+    `runlog.git_commit` used to shell out with a bare `git` and a `cwd`, so it forked, and it sat
+    on `PRE_EXISTING_FORK_SITES` so the guard handed it to the real primitive. It now builds
+    `git -C <dir>` and goes through the helper, and the list is empty, so nothing shields it: a
+    fork here raises `ForkInThisInterpreter` on the line that caused it.
 
     `git_commit` swallows `OSError`, `ValueError` and `SubprocessError` and answers "unknown",
-    but `ForkInThisInterpreter` is a `RuntimeError` and would propagate — so a real commit hash
-    here means the fork genuinely happened.
+    but `ForkInThisInterpreter` is a `RuntimeError` and propagates — so a real commit hash here
+    means the call reached `posix_spawn`, and "unknown" would mean git itself failed rather than
+    that the migration held. Both outcomes are distinguishable, which is why this asserts on the
+    hash.
     """
-    assert "src/local_llm_lab/runlog.py" in PRE_EXISTING_FORK_SITES
+    assert "src/local_llm_lab/runlog.py" not in PRE_EXISTING_FORK_SITES
 
     commit = runlog.git_commit(PROJECT_ROOT)
 
     assert len(commit) == 40 and commit != "unknown"
+
+
+def test_the_guards_pass_through_branch_still_works_on_an_empty_list(monkeypatch) -> None:
+    """The branch survives its last user, so an exemption would still mean something.
+
+    `PRE_EXISTING_FORK_SITES` is empty and stays empty, which leaves
+    `if caller in PRE_EXISTING_FORK_SITES: return real(...)` with nothing exercising it. A
+    branch nothing runs is a branch that quietly stops working, and the next person to need an
+    exemption would find the guard refusing anyway.
+
+    The wrapper is driven directly, with a stand-in for the fork primitive, rather than by
+    exempting this file and calling `os.fork` for real. Letting a fork through here would be the
+    hazard itself: pytest imports MLX at collection, so this interpreter has Metal up, and the
+    abort is a coin toss on whether the memory-pool thread holds its lock. A test that reproduces
+    the crash it is documenting is not a test.
+    """
+    import conftest
+
+    passed_through = []
+    wrapped = conftest._fork_refusal(lambda *args, **kwargs: passed_through.append((args, kwargs)))
+
+    monkeypatch.setattr(conftest, "PRE_EXISTING_FORK_SITES", frozenset({"tests/test_spawn.py"}))
+    wrapped("argv", fd=3)
+    assert passed_through == [(("argv",), {"fd": 3})]
+
+    monkeypatch.setattr(conftest, "PRE_EXISTING_FORK_SITES", frozenset())
+    with pytest.raises(ForkInThisInterpreter):
+        wrapped("argv", fd=3)
+    assert len(passed_through) == 1, "the refusal must not also call the real primitive"
 
 
 def test_the_fork_guard_hooks_are_still_the_names_cpython_uses() -> None:
