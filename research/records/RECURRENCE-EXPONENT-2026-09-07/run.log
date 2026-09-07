@@ -1,0 +1,22 @@
+lock held at /Users/daniel.tipton/Desktop/An app/outputs/.model-run.lock
+chunkwise chunk 128 T=  512  fwd 0.0072s  bwd 0.0144s  peak 0.46 GiB
+chunkwise chunk 256 T=  512  fwd 0.0164s  bwd 0.0328s  peak 0.75 GiB
+unrolled  chunk   0 T=  512  fwd 0.0463s  bwd 0.2041s  peak 1.47 GiB
+chunkwise chunk 128 T= 1024  fwd 0.0117s  bwd 0.0283s  peak 0.69 GiB
+chunkwise chunk 256 T= 1024  fwd 0.0332s  bwd 0.0664s  peak 1.45 GiB
+unrolled  chunk   0 T= 1024  fwd 0.0957s  bwd 0.6416s  peak 2.50 GiB
+chunkwise chunk 128 T= 2048  fwd 0.0253s  bwd 0.0644s  peak 0.95 GiB
+chunkwise chunk 256 T= 2048  fwd 0.0668s  bwd 0.1405s  peak 1.57 GiB
+unrolled  chunk   0 T= 2048  fwd 0.1934s  bwd 2.0868s  peak 4.56 GiB
+chunkwise chunk 128 T= 2688  fwd 0.0338s  bwd 0.0896s  peak 1.06 GiB
+chunkwise chunk 256 T= 2688  fwd 0.0931s  bwd 0.1986s  peak 1.74 GiB
+unrolled  chunk   0 T= 2688  fwd 0.2553s  bwd 3.3721s  peak 5.85 GiB
+chunkwise chunk 128 T= 4096  fwd 0.0511s  bwd 0.1548s  peak 1.31 GiB
+chunkwise chunk 256 T= 4096  fwd 0.1338s  bwd 0.2950s  peak 1.84 GiB
+unrolled  chunk   0 T= 4096  fwd 0.3983s  bwd 7.2685s  peak 8.69 GiB
+chunkwise chunk 128 T= 8192  fwd 0.1014s  bwd 0.4016s  peak 1.92 GiB
+chunkwise chunk 256 T= 8192  fwd 0.2684s  bwd 0.6311s  peak 2.37 GiB
+unrolled  chunk   0 T= 8192  fwd 3.4435s  bwd 27.6270s  peak 16.78 GiB
+
+wrote research/records/RECURRENCE-EXPONENT-2026-09-07/sweep.json
+STOPPED: peak 16.78 GiB at 8192 tokens exceeds R47's 10.66 GiB; a declared window is needed

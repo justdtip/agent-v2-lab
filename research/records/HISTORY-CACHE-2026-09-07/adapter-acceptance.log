@@ -1,0 +1,2 @@
+ATTESTATION selected_model=qwen35-4b resolved_model=qwen35-4b hf_id=mlx-community/Qwen3.5-4B-MLX-4bit selected_strategy=history resolved_strategy=history reason=explicit:history
+{"accepted": true, "report": "research/records/HISTORY-CACHE-2026-09-07/adapter-acceptance.json", "registry_updated": false}
