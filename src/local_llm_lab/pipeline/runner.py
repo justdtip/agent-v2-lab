@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from local_llm_lab.agent_protocol import ActionParseError
+from local_llm_lab.forward import ForwardLedger, ForwardPass, encode_prompt, prefill_passes
+from local_llm_lab.models import NATIVE_PREFILL_STEP_SIZE
 from local_llm_lab.pipeline.env import Fault, Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
@@ -54,7 +56,9 @@ class Trajectory:
     integrity: dict[str, Any] = field(default_factory=dict)
     think_tokens: int = 0
     model: dict[str, Any] = field(default_factory=dict)
-    horizon: int = -1  # the task's expert step count, set by the evaluator; -1 when unknown (older artifacts)
+    horizon: int = (
+        -1
+    )  # the task's expert step count, set by the evaluator; -1 when unknown (older artifacts)
 
     @property
     def success(self) -> bool:
@@ -198,6 +202,182 @@ def _copy_cache_state(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
+def clone_prompt_cache(cache: list[Any]) -> list[Any]:
+    """Clone complete native objects, including offsets and offset-less mask metadata."""
+    import mlx.core as mx
+
+    def evaluate(entries):
+        mx.eval([entry.state for entry in entries])
+        for entry in entries:
+            for name in ("lengths", "left_padding"):
+                value = getattr(entry, name, None)
+                if value is not None:
+                    mx.eval(value)
+
+    evaluate(cache)
+    cloned = copy.deepcopy(cache)
+    evaluate(cloned)
+    return cloned
+
+
+@dataclass(frozen=True)
+class _HistorySnapshot:
+    passes: tuple[ForwardPass, ...]
+    cache: list[Any]
+    nbytes: int
+
+    @property
+    def offset(self) -> int:
+        last = self.passes[-1]
+        return last.offset + len(last.input_ids)
+
+
+class _HistoryModel:
+    """Delegate native arithmetic; observe actual inputs, never generated text."""
+
+    def __init__(self, owner):
+        self.owner = owner
+
+    def __getattr__(self, name):
+        return getattr(self.owner.model, name)
+
+    def __call__(self, ids, *, cache, **kwargs):
+        owner = self.owner
+        if cache is not owner.cache or owner.ledger is None:
+            raise ValueError("history forward must use its prepared cache")
+        if ids.ndim != 2 or ids.shape[0] != 1 or kwargs.get("input_embeddings") is not None:
+            raise ValueError("history cache supports single-sequence token inputs only")
+        tokens = ids[0].tolist()
+        offset = owner.ledger.offset
+        owner.ledger.validate(offset, tokens)
+        owner._check_offsets(offset)
+        try:
+            logits = owner.model(ids, cache=cache, **kwargs)
+            owner._check_offsets(offset + len(tokens))
+            owner.ledger.record(offset, tokens)
+        except BaseException:
+            # A partly advanced hybrid state cannot be rolled back by adjusting an offset.
+            owner.cache = None
+            owner.ledger = None
+            raise
+        owner.encoded_tokens += len(tokens)
+        if owner.ledger.offset < len(owner.ledger.prompt_ids):
+            owner._save()
+        return logits
+
+
+class HistoryCache:
+    """Bounded, episode-local hybrid snapshots at existing native forward boundaries.
+
+    Exact token AND partition prefixes are required for reuse. A partial prefill or a
+    token-by-token generated suffix cannot silently substitute for a differently shaped
+    prefill. Rewritten observations invalidate all dependent state. This strategy is
+    explicit-only until real-checkpoint acceptance; no registry is updated by this class.
+
+    Model weights must remain immutable for this object's lifetime (one run_task).
+    """
+
+    def __init__(
+        self,
+        model: Any,
+        view: ArchitectureView,
+        *,
+        prefill_step_size: int = NATIVE_PREFILL_STEP_SIZE,
+        max_checkpoints: int = 4,
+        max_bytes: int = 512 * 1024 * 1024,
+    ):
+        if any(
+            type(value) is not int or value < 1
+            for value in (prefill_step_size, max_checkpoints, max_bytes)
+        ):
+            raise ValueError("cache cadence and budgets must be positive integers")
+        if model is not view.model:
+            raise ValueError("history cache view must belong to its model")
+        self.model, self.view = model, view
+        self.prefill_step_size = prefill_step_size
+        self.max_checkpoints, self.max_bytes = max_checkpoints, max_bytes
+        self.cache: Any = None
+        self.ledger: ForwardLedger | None = None
+        self.reused_tokens = 0
+        self.encoded_tokens = 0
+        self._snapshots: list[_HistorySnapshot] = []
+        self.generation_model = _HistoryModel(self)
+
+    @property
+    def snapshot_bytes(self) -> int:
+        return sum(snapshot.nbytes for snapshot in self._snapshots)
+
+    def _check_offsets(self, expected: int) -> None:
+        for entry in self.cache:
+            if hasattr(entry, "offset") and entry.offset != expected:
+                raise ValueError(
+                    f"native cache offset {entry.offset} disagrees with ledger {expected}"
+                )
+
+    def _save(self) -> None:
+        assert self.ledger is not None
+        nbytes = sum(entry.nbytes for entry in self.cache)
+        nbytes += sum(
+            getattr(getattr(entry, name, None), "nbytes", 0)
+            for entry in self.cache
+            for name in ("lengths", "left_padding")
+        )
+        if nbytes > self.max_bytes:
+            return
+        self._snapshots = [s for s in self._snapshots if s.offset != self.ledger.offset]
+        # Evict before allocation so adding a new snapshot cannot double the stored budget.
+        while self._snapshots and (
+            len(self._snapshots) >= self.max_checkpoints
+            or self.snapshot_bytes + nbytes > self.max_bytes
+        ):
+            # Keep the earliest surviving boundary as a rollback anchor when possible;
+            # the remaining slots rotate through recent history.
+            self._snapshots.pop(1 if len(self._snapshots) > 1 else 0)
+        self._snapshots.append(
+            _HistorySnapshot(tuple(self.ledger.passes), clone_prompt_cache(self.cache), nbytes)
+        )
+
+    def prepare(self, token_ids: list[int]) -> list[int]:
+        # Validate before touching existing state, including the context bound.
+        ledger = ForwardLedger(token_ids)
+        planned = prefill_passes(token_ids, self.prefill_step_size)
+        self._snapshots = [
+            s
+            for s in self._snapshots
+            if s.offset < len(token_ids)
+            and all(
+                tuple(token_ids[p.offset : p.offset + len(p.input_ids)]) == p.input_ids
+                for p in s.passes
+            )
+        ]
+        eligible = [s for s in self._snapshots if s.passes == tuple(planned[: len(s.passes)])]
+        if eligible:
+            chosen = max(eligible, key=lambda s: s.offset)
+            self.cache = clone_prompt_cache(chosen.cache)
+            ledger = ForwardLedger(token_ids, restored_passes=chosen.passes)
+        else:
+            self.cache = self.view.make_cache()
+        self.ledger = ledger
+        self._check_offsets(ledger.offset)
+        self.reused_tokens += ledger.offset
+        return list(token_ids[ledger.offset :])
+
+    def emitted(self, token_id: int) -> None:
+        if self.ledger is None:
+            raise ValueError("emission requires a prepared history cache")
+        self.ledger.emitted(token_id)
+
+    def commit(self, token_ids: list[int], generated: list[int]) -> None:
+        # Display text and synthetic thinking delimiters are never a source of cache IDs.
+        del generated
+        if self.ledger is None or self.ledger.prompt_ids != list(token_ids):
+            raise ValueError("history commit disagrees with the prepared prompt")
+        if self.ledger.offset < len(token_ids):
+            raise ValueError("history commit before the prompt was fully forwarded")
+        self._check_offsets(self.ledger.offset)
+        self._save()
+
+
 def make_turn_cache(
     model: Any,
     view: ArchitectureView,
@@ -209,6 +389,8 @@ def make_turn_cache(
         return TrimCache(model)
     if resolved.cache_strategy == "snapshot":
         return SnapshotCache(model, view, prefix_tokens)
+    if resolved.cache_strategy == "history":
+        return HistoryCache(model, view)
     if resolved.cache_strategy == "none":
         hybrid = any(layer_type == "linear_attention" for layer_type in resolved.layer_types)
         if hybrid and resolved.cache_strategy_reason == "auto:equivalence_unverified":
@@ -289,11 +471,19 @@ def generate_turn_with_count(
     prompt_input: Any = prompt
     prompt_ids: list[int] = []
     if capture is not None and turn_cache is not None:
-        raise ValueError('capture requires the resolved no-reuse cache strategy')
+        raise ValueError("capture requires the resolved no-reuse cache strategy")
     if turn_cache is not None:
-        prompt_ids = list(tokenizer.encode(prompt))
+        prompt_ids = (
+            encode_prompt(tokenizer, prompt)
+            if isinstance(turn_cache, HistoryCache)
+            else list(tokenizer.encode(prompt))
+        )
         prompt_input = mx.array(turn_cache.prepare(prompt_ids))
         kwargs["prompt_cache"] = turn_cache.cache
+    if isinstance(turn_cache, HistoryCache):
+        if turn_cache.model is not model:
+            raise ValueError("history cache belongs to a different model")
+        kwargs["prefill_step_size"] = turn_cache.prefill_step_size
 
     ids: list[int] = []
     thinking = _ThinkingTracker(
@@ -303,18 +493,27 @@ def generate_turn_with_count(
 
     context = (
         capture.generation(model, tokenizer, prompt, turn_cache=turn_cache)
-        if capture is not None else contextlib.nullcontext(model)
+        if capture is not None
+        else contextlib.nullcontext(
+            turn_cache.generation_model if isinstance(turn_cache, HistoryCache) else model
+        )
     )
     with context as generation_model:
         stream = stream_generate(
-            generation_model, tokenizer, prompt=prompt_input,
-            max_tokens=max_tokens, sampler=sampler, **kwargs
+            generation_model,
+            tokenizer,
+            prompt=prompt_input,
+            max_tokens=max_tokens,
+            sampler=sampler,
+            **kwargs,
         )
         try:
             for response in stream:
                 ids.append(response.token)
                 if capture is not None:
                     capture.emitted(response.token)
+                if isinstance(turn_cache, HistoryCache):
+                    turn_cache.emitted(response.token)
                 decoded = tokenizer.decode(ids)
                 thinking.update(ids, decoded, tokenizer)
                 if response.token in stop_ids:
@@ -325,7 +524,9 @@ def generate_turn_with_count(
                 ):
                     break
         finally:
-            if capture is not None and callable(getattr(stream, 'close', None)):
+            if (capture is not None or isinstance(turn_cache, HistoryCache)) and callable(
+                getattr(stream, "close", None)
+            ):
                 stream.close()
     if turn_cache is not None:
         turn_cache.commit(prompt_ids, ids)
@@ -336,9 +537,7 @@ def generate_turn_with_count(
 def generate_turn(model: Any, tokenizer: Any, prompt: str, sampler: Any, max_tokens: int) -> str:
     """Text-only view of :func:`generate_turn_with_count`, for callers that ignore token counts."""
     spec, _, _ = _compatibility_runner_inputs(None, None, None)
-    return generate_turn_with_count(
-        model, tokenizer, prompt, sampler, max_tokens, spec=spec
-    )[0]
+    return generate_turn_with_count(model, tokenizer, prompt, sampler, max_tokens, spec=spec)[0]
 
 
 def detect_loop(steps: list[dict[str, Any]]) -> bool:
@@ -452,12 +651,15 @@ def run_task(
         )
         capture_kwargs = {}
         if capture is not None:
-            capture.set_context(task_id=task.task_id, step=index, keep_last=keep_last,
-                                messages=window_messages(messages, keep_last=keep_last))
-            capture_kwargs['capture'] = capture
+            capture.set_context(
+                task_id=task.task_id,
+                step=index,
+                keep_last=keep_last,
+                messages=window_messages(messages, keep_last=keep_last),
+            )
+            capture_kwargs["capture"] = capture
         raw, n_tokens, think_tokens = generate_turn_with_count(
-            model, tokenizer, prompt, sampler, max_tokens, turn_cache,
-            spec=spec, **capture_kwargs
+            model, tokenizer, prompt, sampler, max_tokens, turn_cache, spec=spec, **capture_kwargs
         )
         trajectory.turns += 1
         trajectory.generated_tokens += n_tokens

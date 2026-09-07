@@ -54,9 +54,7 @@ def test_cli_rejects_unattestable_cache_strategy(argv) -> None:
         cache_equivalence._parse_args(argv)
 
 
-def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(
-    monkeypatch, capsys
-) -> None:
+def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(monkeypatch, capsys) -> None:
     """A hard-coded model or omitted runner metadata makes equivalence evidence unauditable."""
     from local_llm_lab.pipeline import evaluate, runner, tasks
 
@@ -122,3 +120,222 @@ def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(
         assert kwargs["resolved"].cache_strategy == "snapshot"
         assert kwargs["resolved"].cache_strategy_reason == "explicit:snapshot"
         assert kwargs["use_cache"] is bool(index % 2)
+
+
+def test_fixed_history_requires_two_bitwise_gates_and_real_reuse():
+    from test_live_lens_native import tiny_model
+
+    module = _load_cache_equivalence_module()
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    prompt = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    cases = [dict(prompt_ids=prompt, continuation_ids=[10, 11])] * 2
+    report = module.check_fixed_history(model, view, cases)
+    assert report["gate_a"]["status"] == "passed"
+    assert report["gate_b"]["status"] == "passed"
+    assert report["accepted"] is True
+    assert report["reused_tokens"] > 0
+    assert report["checkpoint_certified"] is False
+
+    no_reuse = module.check_fixed_history(model, view, cases[:1])
+    assert no_reuse["gate_a"]["status"] == "inconclusive"
+    assert no_reuse["accepted"] is False
+
+
+def test_logit_check_rejects_one_bit_difference_even_with_identical_greedy_tokens():
+    import mlx.core as mx
+    import numpy as np
+
+    module = _load_cache_equivalence_module()
+    a = np.array([[1.0, 2.0, 4.0]], dtype=np.float32)
+    b = a.copy()
+    b[0, 0] = np.nextafter(b[0, 0], np.float32(2.0))
+    result = module.compare_logits(mx.array(a), mx.array(b))
+    assert result["bit_identical"] is False
+    assert result["argmax_equal"] is True
+    assert result["max_abs_error"] > 0
+    assert result["winning_margin"] == [2.0, 2.0]
+
+
+def test_fixed_history_rejects_a_new_schedule_that_changes_only_nonwinning_logits():
+    import mlx.core as mx
+    from test_live_lens_native import tiny_model
+
+    module = _load_cache_equivalence_module()
+    base = tiny_model()
+
+    class ShapeSensitiveModel:
+        def __getattr__(self, name):
+            return getattr(base, name)
+
+        def __call__(self, ids, *, cache):
+            logits = base(ids, cache=cache)
+            # Controlled shape dependence at a prefill boundary, passed into future state.
+            if ids.shape[1] == 4:
+                cache[0].state[1] = cache[0].state[1] + mx.array(0.001)
+            return logits
+
+    model = ShapeSensitiveModel()
+    view = ArchitectureView.from_model(model)
+    prompt = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    cases = [dict(prompt_ids=prompt, continuation_ids=[10])] * 2
+    report = module.check_fixed_history(model, view, cases, prefill_step_size=4)
+    assert report["gate_a"]["status"] == "passed"
+    assert report["gate_b"]["status"] == "failed"
+    assert report["accepted"] is False
+
+
+def test_fixed_history_cli_rejects_missing_report_and_legacy_strategy_before_load():
+    module = _load_cache_equivalence_module()
+    for argv in (
+        ["--strategy", "history"],
+        ["--strategy", "history", "--fixed-history", "fixture.json"],
+        ["--strategy", "snapshot", "--fixed-history", "fixture.json", "--report", "out.json"],
+    ):
+        with pytest.raises(SystemExit):
+            module._parse_args(argv)
+
+
+def test_fixed_history_gate_detects_a_corrupted_snapshot(monkeypatch):
+    from test_live_lens_native import tiny_model
+
+    from local_llm_lab.pipeline import runner
+
+    module = _load_cache_equivalence_module()
+    original = runner.clone_prompt_cache
+
+    def corrupt(cache):
+        result = original(cache)
+        result[0].state[1] = result[0].state[1] + 0.001
+        return result
+
+    monkeypatch.setattr(runner, "clone_prompt_cache", corrupt)
+    model = tiny_model()
+    cases = [dict(prompt_ids=[1, 2, 3, 4, 5], continuation_ids=[6])] * 2
+    report = module.check_fixed_history(model, ArchitectureView.from_model(model), cases)
+    assert report["gate_a"]["status"] == "failed"
+    assert report["accepted"] is False
+
+
+@pytest.mark.parametrize("precision", ["float32", "bfloat16", "4bit"])
+def test_fixed_history_with_growing_conversation_and_native_prefill_cadence(precision):
+    import mlx.core as mx
+    import mlx.nn as nn
+    from test_live_lens_native import tiny_model
+
+    module = _load_cache_equivalence_module()
+    model = tiny_model()
+    if precision != "float32":
+        model.set_dtype(mx.bfloat16)
+    if precision == "4bit":
+        nn.quantize(model, group_size=64, bits=4)
+    prompt = [i % 24 for i in range(2050)]
+    cases = [
+        dict(prompt_ids=prompt, continuation_ids=[3, 4]),
+        dict(prompt_ids=prompt + [3, 4, 5, 6], continuation_ids=[7, 8]),
+    ]
+    report = module.check_fixed_history(model, ArchitectureView.from_model(model), cases)
+    assert report["accepted"] is True
+    assert report["turns"][1]["reused_tokens"] == 2048
+    assert report["turns"][1]["gate_a"]["state_bit_identical"]
+    assert report["turns"][1]["gate_b"]["state_bit_identical"]
+
+
+def test_fixed_cli_writes_reviewable_report_without_changing_registry(tmp_path, monkeypatch):
+    import hashlib
+    import json
+
+    from test_live_lens_native import tiny_model
+
+    from local_llm_lab.pipeline import evaluate
+
+    module = _load_cache_equivalence_module()
+    model = tiny_model()
+    tokenizer = SimpleNamespace(snapshot_revision="tiny-random-weights")
+    calls = []
+
+    def load(spec, adapter):
+        calls.append((spec.name, adapter))
+        return model, tokenizer, ArchitectureView.from_model(model), spec.resolve(model, tokenizer)
+
+    monkeypatch.setattr(evaluate, "load_policy", load)
+    registry = PROJECT_ROOT / "configs/models/qwen35-4b.yaml"
+    before = hashlib.sha256(registry.read_bytes()).hexdigest()
+    corpus = tmp_path / "history.json"
+    report = tmp_path / "report.json"
+    corpus.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "episodes": [
+                    {
+                        "id": "tiny-fixture",
+                        "turns": [dict(prompt_ids=[1, 2, 3, 4, 5], continuation_ids=[6])] * 2,
+                    },
+                    {
+                        "id": "no-reuse-control",
+                        "turns": [dict(prompt_ids=[1, 2, 3], continuation_ids=[4])],
+                    },
+                ],
+            }
+        )
+    )
+    argv = [
+        "--model",
+        "qwen35-4b",
+        "--strategy",
+        "history",
+        "--fixed-history",
+        str(corpus),
+        "--report",
+        str(report),
+    ]
+    module.main(argv)
+    result = json.loads(report.read_text())
+    assert result["accepted"] is True
+    assert result["gate_a"]["status"] == result["gate_b"]["status"] == "passed"
+    assert result["registry_updated"] is False
+    assert result["corpus_sha256"] == hashlib.sha256(corpus.read_bytes()).hexdigest()
+    assert result["model"]["spec"]["cache_equivalence_verified"] is None
+    assert result["source_hashes"]["src/local_llm_lab/forward.py"]
+    assert result["runtime_sources"]["mlx_lm/models/gated_delta.py"]
+    assert before == hashlib.sha256(registry.read_bytes()).hexdigest()
+    assert calls == [("qwen35-4b", None)]
+    with pytest.raises(SystemExit, match="already exists"):
+        module.main(argv)
+    assert len(calls) == 1  # refusal occurs before attempting another load
+
+
+def test_fixed_cli_rejects_invalid_corpus_before_loading_weights(tmp_path, monkeypatch):
+    import json
+
+    from local_llm_lab.pipeline import evaluate
+
+    module = _load_cache_equivalence_module()
+
+    def forbidden(*args):
+        pytest.fail("invalid fixed history must not reach the loader")
+
+    monkeypatch.setattr(evaluate, "load_policy", forbidden)
+    corpus = tmp_path / "bad.json"
+    corpus.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "episodes": [
+                    {"id": "bad", "turns": [dict(prompt_ids=[True], continuation_ids=[])]}
+                ],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="integer token"):
+        module.main(
+            [
+                "--strategy",
+                "history",
+                "--fixed-history",
+                str(corpus),
+                "--report",
+                str(tmp_path / "out.json"),
+            ]
+        )

@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from local_llm_lab.arch import NativeCapture
+from local_llm_lab.forward import ForwardLedger, encode_prompt
 from local_llm_lab.pipeline.live_lens.records import FutureRanks, transport_overlap
 
 
@@ -159,19 +160,14 @@ class CaptureSession:
             raise ValueError("capture must use its own model and a single active turn")
         if turn_cache is not None:
             raise ValueError("capture requires the resolved no-reuse cache strategy")
-        bos = tokenizer.bos_token
-        prompt_ids = list(
-            tokenizer.encode(prompt, add_special_tokens=bos is None or not prompt.startswith(bos))
-        )
-        if not prompt_ids or len(prompt_ids) > 65536:
-            raise ValueError("prompt must contain 1 to 65536 tokens")
+        prompt_ids = encode_prompt(tokenizer, prompt)
+        self.ledger = ForwardLedger(prompt_ids)
         self.turn += 1
         self.ranks.reset()
         self.prompt_ids = prompt_ids
-        self.generated = []
+        self.generated = self.ledger.generated
         self._residuals = {}
         self._sources = {block: {} for block in self.attention_blocks}
-        self._next_offset = 0
         self._active = True
         self._write(
             "begin_turn",
@@ -198,7 +194,7 @@ class CaptureSession:
             self._write(
                 "end_turn",
                 emitted_count=len(self.generated),
-                forwarded_count=self._next_offset,
+                forwarded_count=self.ledger.offset,
                 status="complete" if completed else "aborted",
                 unresolved_futures="censored at turn boundary",
             )
@@ -251,13 +247,9 @@ class CaptureSession:
     def output(self, offset, ids, logits):
         import mlx.core as mx
 
-        if offset != self._next_offset or offset + len(ids) > 65536:
-            raise ValueError("non-contiguous forward or context exceeds 65536 tokens")
+        self.ledger.validate(offset, ids)
         if set(self._residuals) != set(self.layers):
             raise ValueError("native path did not capture every requested layer")
-        prompt_end = min(len(self.prompt_ids), offset + len(ids))
-        if ids[: prompt_end - offset] != self.prompt_ids[offset:prompt_end] and offset < prompt_end:
-            raise ValueError("captured tokens disagree with the rendered prompt")
         # The next forward can precede the yield. Score only tokens actually yielded, below.
         for local in range(len(ids)):
             position = offset + local
@@ -283,14 +275,14 @@ class CaptureSession:
         if self.retain_logits:
             record["logits"] = np.array(logits.astype(mx.float32)).tolist()
         self._write("forward", offset=offset, input_ids=ids, **record)
-        self._next_offset = offset + len(ids)
+        self.ledger.record(offset, ids)
         self._residuals.clear()
 
     def emitted(self, token_id):
         if not self._active:
             raise RuntimeError("token emitted outside capture context")
         position = len(self.prompt_ids) + len(self.generated)
-        self.generated.append(int(token_id))
+        self.ledger.emitted(int(token_id))
         self._write("emitted", position=position, token_id=int(token_id))
         for row in self.ranks.observe(position, int(token_id)):
             self._write("rank", **row)
