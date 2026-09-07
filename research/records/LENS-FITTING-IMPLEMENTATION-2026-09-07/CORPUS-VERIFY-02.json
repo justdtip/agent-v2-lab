@@ -1,0 +1,141 @@
+{
+  "source_commit": "016c5f640fc89b2e5b27ef81f5663047e8f9a15f",
+  "utc": "2026-09-07T08:01:57.122159+00:00",
+  "checks": [
+    {
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_lens_corpus.py",
+        "tests/test_repository_rules.py",
+        "--tb=short"
+      ],
+      "returncode": 0,
+      "log": "corpus-final-check-01.log"
+    },
+    {
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/ruff",
+        "check",
+        "src/local_llm_lab/pipeline/lens_fitting/__init__.py",
+        "src/local_llm_lab/pipeline/lens_fitting/corpus.py",
+        "scripts/lens_corpus.py",
+        "tests/test_lens_corpus.py"
+      ],
+      "returncode": 0,
+      "log": "corpus-final-check-02.log"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "returncode": 0,
+      "log": "corpus-final-check-03.log"
+    }
+  ],
+  "corpora": [
+    {
+      "domain": "agentic",
+      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json",
+      "manifest_file_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
+      "rows": 518,
+      "split_sequences": {
+        "fit": 418,
+        "held": 100
+      },
+      "counts": {
+        "fit": {
+          "sequences": 418,
+          "spans": {
+            "call": 88213,
+            "chat": 0,
+            "note": 13452,
+            "observation": 128819,
+            "system": 157168,
+            "task": 24417,
+            "template": 46122
+          },
+          "tokens": 458191
+        },
+        "held": {
+          "sequences": 100,
+          "spans": {
+            "call": 19564,
+            "chat": 0,
+            "note": 3988,
+            "observation": 29565,
+            "system": 37600,
+            "task": 5904,
+            "template": 10249
+          },
+          "tokens": 106870
+        }
+      },
+      "unchanged": true
+    },
+    {
+      "domain": "prose",
+      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.json",
+      "manifest_file_sha256": "02f7f818ce3aba2c57a229cde28e92f8a9375b9bdbe0c6db401be3b3105477b4",
+      "rows": 255,
+      "split_sequences": {
+        "fit": 204,
+        "held": 51
+      },
+      "counts": {
+        "fit": {
+          "sequences": 204,
+          "spans": {
+            "call": 0,
+            "chat": 208896,
+            "note": 0,
+            "observation": 0,
+            "system": 0,
+            "task": 0,
+            "template": 0
+          },
+          "tokens": 208896
+        },
+        "held": {
+          "sequences": 51,
+          "spans": {
+            "call": 0,
+            "chat": 52224,
+            "note": 0,
+            "observation": 0,
+            "system": 0,
+            "task": 0,
+            "template": 0
+          },
+          "tokens": 52224
+        }
+      },
+      "unchanged": true
+    }
+  ],
+  "checkpoint_loaded": false,
+  "corpus_read_process_mlx_imported": false,
+  "pytest_import_closure": {
+    "inspection": "Worker recursively resolved named corpus/rules tests and conftest before run; no MLX in top-level closure",
+    "local_modules": [
+      "agent_protocol",
+      "agent_tasks",
+      "models",
+      "pipeline.env",
+      "pipeline.protocol",
+      "pipeline.tasks",
+      "project",
+      "runlock",
+      "spawn",
+      "package initializers"
+    ],
+    "external_roots": [
+      "stdlib",
+      "pytest",
+      "yaml"
+    ]
+  }
+}
