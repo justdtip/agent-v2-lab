@@ -1,0 +1,206 @@
+# ATOMIC-GATE-INPUTS: issue 92 — the preflight artifact and the provenance record
+
+The last two non-atomic JSON writes the audit for #74 turned up. Both go through
+`runlog.write_text_atomic`. The semantics match, so nothing else moves.
+
+## The preflight artifact is a gate input, not a sentinel
+
+That distinction is the whole reason it is worth a patch. A sentinel's failure mode is
+permissive: `guard_dataset_write` reads `manifest.json`'s presence, so a truncated one wrongly
+allows a later write. This artifact fails the other way. `require_preflight(consumer="training")`
+opens it to decide whether a training run may start, and JSON that will not parse *raises* rather
+than answering permissively.
+
+So a truncated artifact causes no wrong decision. It causes **a refusal that looks like a failed
+preflight**, at the start of the run the file exists to permit, with the cause invisible: the file
+is there, and on a listing it is the right size. The next move a person makes is to re-run the
+preflight, which loads the model.
+
+That is also why the fixture asserts on the **previous** artifact surviving whole rather than
+merely on the new one being absent. A re-run over a good artifact is the live case, and it is the
+one where losing the file costs another model load to rebuild.
+
+## The provenance record fails in a way its own contract does not cover
+
+`runlog.git_commit` documents the rule this module lives by: provenance is a nice-to-have and must
+never be the thing that kills a run. That covers failures in *collecting* provenance — no git, not
+a repository, a timeout — and each answers "unknown". A failure in the **write** is different in
+kind, and the contract says nothing about it: what survives parses as nothing and reads on a
+listing as complete.
+
+## The fixtures
+
+Both use `_interrupt_the_manifest_writer` from `test_branch.py`, in the shape #74 established: it
+truncates both writers, so the assertion rests on the outcome rather than on which writer is in
+use. Both fail against the un-migrated code — checked by reverting each migration and running
+them, not assumed.
+
+## Left out, deliberately
+
+The two `np.savez_compressed` writers in `probes/state_probe.py` at 1131 and 3198 use the same
+temporary-and-replace shape and duplicate each other. They are binary and `runlog` has no bytes
+variant. Giving it one, or de-duplicating those two, is a separate call and is named in the issue
+rather than folded in here.
+
+## Verification
+
+```
+full suite:                       exit 0
+test_preflight.py, test_provenance.py: exit 0, 2 new tests
+mutation: both fail with their migration reverted, pass with it
+ruff, all changed files:          0 findings before, 0 after
+git apply --check against HEAD:   0
+concurrency: no libmlx-mapped process and no model-run lock, checked in the launching command
+```
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/preflight.py b/src/local_llm_lab/pipeline/preflight.py
+index 5838d6f..b9dba5b 100644
+--- a/src/local_llm_lab/pipeline/preflight.py
++++ b/src/local_llm_lab/pipeline/preflight.py
+@@ -49,6 +49,7 @@ from typing import Any, Literal, NamedTuple
+ 
+ from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
+ from local_llm_lab.project import PROJECT_ROOT, configure_local_cache
++from local_llm_lab.runlog import write_text_atomic
+ 
+ __all__ = [
+     "artifact_path",
+@@ -439,9 +440,18 @@ def longest_row_tokens(
+ 
+ 
+ def write_report(report: Mapping[str, Any], path: Path) -> Path:
+-    """Persist stable preflight metadata without the array-report writer."""
+-    path.parent.mkdir(parents=True, exist_ok=True)
+-    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
++    """Persist stable preflight metadata without the array-report writer.
++
++    Atomic (issue 92). This artifact is a **gate input**, not a sentinel:
++    ``require_preflight(consumer="training")`` opens it to decide whether a training run may
++    start, and the block it reads carries the memory envelope, the attention-score term and the
++    row ceiling. A truncated one causes no wrong decision -- JSON that will not parse raises
++    rather than answering permissively -- but it causes a refusal that looks like a failed
++    preflight, at the start of the run this file exists to permit, and the cause is invisible:
++    the file is there and the right size on a listing. The next move is to re-run the preflight,
++    which loads the model.
++    """
++    write_text_atomic(path, json.dumps(report, indent=2, sort_keys=True) + "\n")
+     return path
+ 
+ 
+diff --git a/src/local_llm_lab/provenance.py b/src/local_llm_lab/provenance.py
+index af657ea..5f1b055 100644
+--- a/src/local_llm_lab/provenance.py
++++ b/src/local_llm_lab/provenance.py
+@@ -12,6 +12,7 @@ from typing import Any
+ from local_llm_lab.models import ModelSpec, ResolvedSpec
+ from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
+ from local_llm_lab.project import PROJECT_ROOT
++from local_llm_lab.runlog import write_text_atomic
+ from local_llm_lab.spawn import run as spawn_run
+ 
+ _PACKAGES = ("mlx", "mlx-lm", "numpy", "transformers")
+@@ -101,5 +102,9 @@ def write_provenance(
+     }
+     run_dir.mkdir(parents=True, exist_ok=True)
+     target = run_dir / "provenance.json"
+-    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
++    # Atomic (issue 92). ``runlog.git_commit``'s contract -- provenance is a nice-to-have and
++    # must never be the thing that kills a run -- covers failures in *collecting* provenance,
++    # and answers "unknown" for them. It does not cover a failure in the write, which leaves a
++    # record that parses as nothing and reads on a listing as complete.
++    write_text_atomic(target, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+     return target
+diff --git a/tests/test_preflight.py b/tests/test_preflight.py
+index 74c24b3..2636078 100644
+--- a/tests/test_preflight.py
++++ b/tests/test_preflight.py
+@@ -25,6 +25,7 @@ from local_llm_lab.pipeline.preflight import (
+     require_preflight,
+     run_preflight,
+     run_residual_control,
++    write_report,
+ )
+ from local_llm_lab.training.gated_delta_chunked import training_state_bytes
+ 
+@@ -2132,3 +2133,35 @@ def test_the_row_ceiling_is_the_longest_row_that_fits_with_headroom() -> None:
+ def test_a_budget_below_the_intercept_gives_a_ceiling_of_zero() -> None:
+     """No row fits, and the answer is a number rather than a negative or a crash."""
+     assert _row_ceiling_tokens("chunkwise", budget_gib=0.5) == 0
++
++
++def test_a_preflight_artifact_is_whole_or_absent_when_the_write_is_interrupted(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """Issue 92: this artifact is a gate input, and a re-run over a good one is the live case.
++
++    `require_preflight(consumer="training")` opens it to decide whether a training run may
++    start. A truncated one causes no wrong decision, because JSON that will not parse raises
++    rather than answering permissively. It causes a refusal that looks like a failed preflight,
++    at the start of the run the artifact exists to permit, with the cause invisible: the file is
++    there and the right size on a listing.
++
++    So the assertion is on the *previous* artifact surviving whole, not merely on the new one
++    being absent. That is the case a re-run hits, and it is the one where losing the file costs
++    another model load to rebuild.
++    """
++    from test_branch import _interrupt_the_manifest_writer
++
++    target = tmp_path / "fake-model.json"
++    original = '{"schema_version": 3, "passed": true}\n'
++    target.write_text(original, encoding="utf-8")
++
++    _interrupt_the_manifest_writer(monkeypatch, 11)
++    with pytest.raises(OSError, match="no space left on device"):
++        write_report({"schema_version": 3, "passed": False, "model_name": "fake-model"}, target)
++    monkeypatch.undo()
++
++    assert target.read_text(encoding="utf-8") == original
++    assert json.loads(target.read_text(encoding="utf-8"))["passed"] is True
++    leftovers = sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("."))
++    assert leftovers == [], "no partial temporary file may survive at the destination"
+diff --git a/tests/test_provenance.py b/tests/test_provenance.py
+index 5da04c3..039d448 100644
+--- a/tests/test_provenance.py
++++ b/tests/test_provenance.py
+@@ -9,6 +9,8 @@ from dataclasses import dataclass
+ from importlib.metadata import PackageNotFoundError
+ from pathlib import Path
+ 
++import pytest
++
+ # `tests/` is not a package, so pytest puts it on `sys.path` and the suite's own conftest
+ # imports as a top-level module.
+ from conftest import PRE_EXISTING_FORK_SITES
+@@ -185,3 +187,30 @@ def test_a_provenance_write_after_a_load_does_not_fork(monkeypatch, tmp_path: Pa
+     assert len(git["commit"]) == 40 and set(git["commit"]) <= set("0123456789abcdef")
+     assert len(git["dirty_patch_sha256"]) == 64
+     assert lock.is_file(), "the write orphaned or dropped the lock the load was holding"
++
++
++def test_a_provenance_record_is_whole_or_absent_when_the_write_is_interrupted(
++    monkeypatch, tmp_path: Path
++) -> None:
++    """Issue 92: the write is the failure `git_commit`'s contract does not cover.
++
++    "Provenance is a nice-to-have and must never be the thing that kills a run" is about
++    *collecting* it -- no git, not a repository, a timeout -- and those answer "unknown". A
++    failure in the write is different in kind: it leaves a record that parses as nothing and
++    reads on a listing as complete.
++    """
++    from test_branch import _interrupt_the_manifest_writer
++
++    run_dir = tmp_path / "run"
++    run_dir.mkdir()
++    original = '{"kept": true}\n'
++    (run_dir / "provenance.json").write_text(original, encoding="utf-8")
++
++    _interrupt_the_manifest_writer(monkeypatch, 14)
++    with pytest.raises(OSError, match="no space left on device"):
++        write_provenance(run_dir, resolved=None, spec=_Spec("fallback"), extra={"stage": "x"})
++    monkeypatch.undo()
++
++    assert (run_dir / "provenance.json").read_text(encoding="utf-8") == original
++    leftovers = sorted(path.name for path in run_dir.iterdir() if path.name.startswith("."))
++    assert leftovers == [], "no partial temporary file may survive at the destination"
+```
