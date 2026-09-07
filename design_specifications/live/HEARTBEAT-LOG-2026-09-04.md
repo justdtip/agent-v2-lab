@@ -2320,3 +2320,13 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   **The lift.** A training run, and training lifts keep their own gate — but this is the block the Chief's box order places here after Codex's end line, and the Director's standing order is to compare runs. Stated so it can be overruled rather than discovered.
 
   **Sequencing.** Arm 1 is the shortest of the three, run first so the box returns soonest and so a fault in the new `lora_layers` path costs 1.6 hours rather than 3.4. Codex's regression fit, 23 minutes by their calibration, takes the gap at this block's end line.
+
+- 2026-09-08 (**correction to the window I announced 4 minutes ago: 131 minutes, not 100, and two early findings**). Posted now rather than at the end line, because other seats are planning around the number I gave.
+
+  **Duration.** Three reports in, the median is **0.153 iterations per second**, so 1,200 iterations is **131 minutes**, not the 100 I announced. My arithmetic scaled arm A's 10.29 s per row by this issue's measured throughput ratio of 276/126; the ratio is the error, not the row count. The window file's expected end stays at 100 minutes and I am **not** re-announcing, because ending and reopening would drop the slot; its overdue threshold is expected end plus an hour, so 131 minutes will not trip it and no seat will see a false overdue. Codex's regression fit takes the gap at the real end line.
+
+  **Finding 1: the throughput ratio does not hold at this recipe.** Arm A ran 780 rows in 8,030 s at full depth, which is 0.097 it/s. This arm is 0.153. That is **1.58×, against the 2.19× the probe measured** on fixed 2,688-token rows. These rows average about 1,100 tokens, and the depth-independent part of a step is a larger share of a shorter row, so the lever is smaller on the real dataset than on the probe's rows. Issue 88's report should state the ratio it measures rather than inherit the probe's.
+
+  **Finding 2: my R47(b) projection was conservative by a factor.** I projected 9.39 GiB from the landed envelope less issue 88's depth term (1.04 against 0.91 MiB per token at 32 against 8 adapted layers). The run is at **7.494 GB = 6.979 GiB, 0.393 of the working set**, and still climbing in the step pattern issue 94 characterised. So the depth term understates the saving substantially at this row length — in the safe direction for a gate, and wrong enough to be worth measuring properly. Both findings go into 88's report with the full trace rather than from three reports.
+
+  `Trainable parameters: 0.193% (8.116M/4205.750M)` against 32.46M at full depth — exactly a quarter for a quarter of the layers, which is the depth knob confirming itself.
