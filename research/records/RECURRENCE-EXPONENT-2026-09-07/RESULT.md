@@ -82,3 +82,43 @@ alone.
 **One caveat the numbers earn**: this is the operator at batch 1, one layer, float32, with no
 adapter and no optimizer. It isolates the recurrence, which is what the question asked, and it is
 not a training step.
+
+---
+
+## Correction, 2026-09-07 19:30 — and a note on how it was made
+
+**This correction was applied in place at `39ef8d4` before this section was written, which is
+against the append-only convention for records.** The superseded text — the exponent table reading
+1.763 with segments to 1.93, and "Forward: 1.01, 0.98 and 1.43" — is in the history at `70fb016` and
+nowhere in the current file, so a reader of the file alone sees the corrected numbers with no sign
+that they were ever different. That is exactly what append-only exists to prevent. Recording it here
+is the repair; the edit is not being undone, because the corrected numbers are the right ones to
+read first and a second reversal would make the file harder to follow, not easier.
+
+**What the correction was, from the Chief's independent refit.** The 8,192-token unrolled row ran at
+**16.78 GiB, 0.94 of the working set**, and its *forward* time is 3.44 s against 0.40 s at 4,096 — a
+**segment exponent of 3.11** after five segments at 1.05, 1.01, 1.02 and 1.06. A forward that is
+linear in every clean segment and then jumps eightfold in one doubling is memory pressure, not
+scaling. The row is condemned entire, not merely its forward number.
+
+| withdrawn | replaced by |
+| --- | --- |
+| unrolled forward **1.43** | **1.03** over the five clean sizes — the 1.43 was that row alone |
+| unrolled backward **1.763**, segments to 1.93 | **1.713** over the five clean sizes, segments 1.65, 1.70, 1.76, 1.82 |
+
+**One correction to the Chief's own figure**: the clean-five backward fit is **1.713**, not 1.76.
+1.763 is the all-six number that includes the contaminated row. The segment range quoted, 1.65 to
+1.82, is right.
+
+**The chunkwise figures are untouched, and the reason was checked rather than assumed.** All six of
+their sizes are clean: the chunkwise rows at 8,192 peaked at **1.92 and 2.37 GiB** and ran *before*
+the unrolled row created the pressure. The ordering happened to fall the right way, which is luck
+and is worth saying so.
+
+**The withdrawal sharpens the conclusion.** With a **linear forward** (1.03) and a **1.713
+backward**, the anomaly is located in the backward alone — which is what makes it surprising against
+the algebra. The original "forward 1.43" muddied that by suggesting both were superlinear.
+
+Nothing in the consequence for #85 changes: the linear recurrence term stands at chunk 256, the
+whole-step rise is the attention term, and the cap is set by attention and R55(b)'s buffer
+arithmetic rather than by the recurrence.
