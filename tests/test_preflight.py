@@ -1789,10 +1789,17 @@ def test_the_artifact_records_the_coefficients_and_the_points_they_came_from(
     assert footprint["calibration"]["grad_checkpoint"] is True
 
 
-def test_the_chunkwise_envelope_says_it_rests_on_a_single_observation(
+def test_a_flat_envelope_says_its_slope_is_unmeasured_however_many_points_it_has(
     tmp_path: Path,
 ) -> None:
-    """R32(d) honesty: one point is not a well-determined curve, and must not read as one."""
+    """R32(d) honesty, and the half of it that nearly went quiet (issue 94).
+
+    The chunkwise envelope rested on one point and said so. Adding the two measured points from
+    `ACCUMULATION-2026-09-08` would, under the old caveat, have dropped the admission entirely --
+    but a **flat** shape's slope is the floor's *by construction* and is never measured for that
+    form, whatever the point count. The count and the shape are separate admissions and the
+    caveat now makes both.
+    """
     spec = _spec(memory_budget_gib=22.0)
 
     footprint = _preflight(
@@ -1805,9 +1812,10 @@ def test_the_chunkwise_envelope_says_it_rests_on_a_single_observation(
     )["training_footprint"]
     chunkwise = footprint["estimates"]["chunkwise"]
 
-    assert chunkwise["single_observation"] is True
-    assert "single observation" in chunkwise["caveat"]
+    assert chunkwise["single_observation"] is False, "three points now, not one"
+    assert "3 measured points" in chunkwise["caveat"]
     assert str(_calibration_point("chunkwise", 2874, 64).tokens) in chunkwise["caveat"]
+    assert "the slope is not" in chunkwise["caveat"]
     assert "extrapolation" in chunkwise["caveat"]
     assert chunkwise["coefficients"]["shape"] == "flat"
     assert (
@@ -2165,3 +2173,68 @@ def test_a_preflight_artifact_is_whole_or_absent_when_the_write_is_interrupted(
     assert json.loads(target.read_text(encoding="utf-8"))["passed"] is True
     leftovers = sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("."))
     assert leftovers == [], "no partial temporary file may survive at the destination"
+
+
+def test_accumulation_is_named_as_a_departure_and_carries_its_measured_cost(
+    tmp_path: Path,
+) -> None:
+    """Issue 94: every calibration point is one optimiser step per row, and no arm runs that way.
+
+    The registry declares `grad_accumulation_steps: 2` and arm A's config raises it to 4, so the
+    departure has been live since the table was written and the artifact said nothing. It is
+    named rather than scaled, and the line carries the measured number so a reader can size it:
+    accumulation 4 costs 0.1228 GiB over accumulation 1 at 2,688 tokens, one copy of the LoRA
+    gradient tree (`ACCUMULATION-2026-09-08`).
+    """
+    spec = _spec(
+        memory_budget_gib=22.0,
+        train={"batch_size": 1, "max_seq_length": 2688, "grad_accumulation_steps": 4},
+    )
+    footprint = _preflight(
+        spec, _HybridView(), tmp_path, max_row_tokens=2688, gated_delta_mode="chunkwise"
+    )["training_footprint"]
+
+    assert footprint["grad_accumulation_steps"] == 4
+    accumulation_lines = [
+        line
+        for line in footprint["calibration_domain_departures"]
+        if "grad_accumulation_steps" in line
+    ]
+    assert len(accumulation_lines) == 1
+    assert "0.1228 GiB" in accumulation_lines[0]
+    assert "named rather than scaled" in accumulation_lines[0]
+
+    at_one = _spec(
+        memory_budget_gib=22.0,
+        train={"batch_size": 1, "max_seq_length": 2688, "grad_accumulation_steps": 1},
+    )
+    quiet = _preflight(
+        at_one, _HybridView(), tmp_path / "one", max_row_tokens=2688, gated_delta_mode="chunkwise"
+    )["training_footprint"]
+    assert not [
+        line for line in quiet["calibration_domain_departures"] if "grad_accumulation" in line
+    ]
+
+
+def test_the_chunkwise_envelope_clears_the_run_the_gate_exists_for(tmp_path: Path) -> None:
+    """An upper envelope a real run exceeds is not an envelope (issue 94).
+
+    Arm A peaked at 9.7260 GiB at a 2,688-token cap and the envelope read 9.6370. Its point is in
+    the table now, with its provenance on the point, so the envelope clears it — and the offset
+    lifts by the 0.089 that gap was worth, which drops the row ceiling by a few tokens.
+    """
+    # Two points sit at 2,688 with chunk 256 and they are the point of the pair: the procedure's
+    # own condition and arm A's, distinguished by their notes rather than by their coordinates.
+    at_2688 = [
+        point
+        for point in _CALIBRATION_POINTS
+        if point.mode == "chunkwise" and point.tokens == 2688
+    ]
+    procedure = next(point for point in at_2688 if "one optimiser step" in point.note)
+    arm_a = next(point for point in at_2688 if "arm A" in point.note)
+    assert procedure.peak_gib == 9.3822
+    assert arm_a.peak_gib == 9.7260
+    assert "grad_accumulation_steps 4" in arm_a.note
+    assert "9.7260 GiB" in arm_a.note, "the note carries the unit the recorded field does not"
+
+    assert _estimated_peak_gib("chunkwise", 2688) >= arm_a.peak_gib

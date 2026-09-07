@@ -122,6 +122,8 @@ _CALIBRATION_PROCEDURE = (
 _CALIBRATION_UNIT = "GiB (bytes / 1024**3), the unit the resolved budget is in"
 _CALIBRATION_BATCH_SIZE = 1
 _CALIBRATION_GRAD_CHECKPOINT = True
+#: One optimiser step per row, which is what `_CALIBRATION_PROCEDURE` says.
+_CALIBRATION_ACCUMULATION = 1
 _OK, _OOM = "ok", "oom"
 
 # The attention-score term the estimate used to omit (issue 85), measured rather than derived:
@@ -195,6 +197,9 @@ class _CalibrationPoint(NamedTuple):
     chunk: int | None
     peak_gib: float
     outcome: str
+    #: Where the point came from and how it departs from ``_CALIBRATION_PROCEDURE``, for the
+    #: points that do. Empty means the procedure as stated: one row, one optimiser step.
+    note: str = ""
 
 
 _CALIBRATION_POINTS: tuple[_CalibrationPoint, ...] = (
@@ -211,6 +216,24 @@ _CALIBRATION_POINTS: tuple[_CalibrationPoint, ...] = (
     _CalibrationPoint("chunked", 2085, 64, 19.29, _OOM),
     _CalibrationPoint("chunked", 2874, 64, 19.22, _OOM),
     _CalibrationPoint("chunkwise", 2874, 64, 10.12, _OK),
+    # Issue 94, `research/records/ACCUMULATION-2026-09-08`. The procedure's own condition at the
+    # row length the arm runs, which the envelope already cleared by 0.25 GiB -- the point is
+    # here because the table had one chunkwise observation and now has three.
+    _CalibrationPoint(
+        "chunkwise", 2688, 256, 9.3822, _OK,
+        note="one optimiser step per row, ten steps; the procedure's own condition",
+    ),
+    # The run the gate exists for, and it departs from the procedure twice over. Of the 0.3438
+    # GiB above the point before it, accumulation carries a measured 0.1228 and 0.2210 belongs
+    # to running long and is unattributed. It is in the table because an upper envelope that a
+    # real run exceeds is not an envelope, and it lifts the chunkwise offset by 0.089.
+    _CalibrationPoint(
+        "chunkwise", 2688, 256, 9.7260, _OK,
+        note=(
+            "arm A, outputs/agent-v2e-qwen35-4b/health.json: batch 1, checkpointing on, "
+            "grad_accumulation_steps 4, 780 rows; 10.4436 GB as recorded is 9.7260 GiB"
+        ),
+    ),
 )
 
 # How a mode's cost *above the floor* is allowed to move with the row length.  Each shape is
@@ -1047,8 +1070,10 @@ def _training_footprint(
     mode, mode_source = _select_recurrence_mode(
         layers=layers, chunk=gated_delta_chunk, configured_mode=gated_delta_mode
     )
+    accumulation = int(spec.train.get("grad_accumulation_steps", _CALIBRATION_ACCUMULATION))
     block: dict[str, Any] = {
         "batch_size": batch_size,
+        "grad_accumulation_steps": accumulation,
         # The registry's declaration, which is what sizes ``activation_bytes`` too.  An arm
         # config may train at a smaller batch (B4 runs 1 against the registry's 2); the
         # envelope was calibrated at batch 1 and does not model batch, so a departure is
@@ -1056,7 +1081,10 @@ def _training_footprint(
         "batch_size_source": "registry train.batch_size",
         "calibration": _calibration_record(),
         "calibration_domain_departures": _calibration_domain_departures(
-            batch_size, grad_checkpoint, _attention_blocks(view, grad_checkpoint)
+            batch_size,
+            grad_checkpoint,
+            _attention_blocks(view, grad_checkpoint),
+            int(spec.train.get("grad_accumulation_steps", _CALIBRATION_ACCUMULATION)),
         ),
         "attention_blocks_at_peak": None,
         "attention_term_bytes_per_token_squared": _ATTENTION_TERM_BYTES_PER_TOKEN_SQUARED,
@@ -1181,20 +1209,30 @@ def _calibrated_estimate(
 
 
 def _envelope_caveat(envelope: _Envelope) -> str | None:
-    """Say, in the artifact, when an envelope rests on one measurement (R32(d) honesty).
+    """Say, in the artifact, what the fit does not rest on (R32(d) honesty).
 
-    A single point fixes an offset and nothing else: the curve's slope comes from the shape
-    the recurrence is known to have, not from the data, so the number must not be read as a
-    well-determined fit.
+    Two separate admissions, and the second used to hide behind the first. A single point fixes
+    an offset and nothing else. But a **flat** shape's slope is the floor's *by construction* and
+    is never measured for that form, however many points the mode has -- so adding a second
+    chunkwise point (issue 94) would have silently dropped a warning that stayed true. The
+    caveat is therefore keyed on the shape as well as on the count.
     """
-    if not envelope.single_observation:
-        return None
-    (point,) = _calibration_points(envelope.mode, _OK)
-    return (
-        f"single observation: the {envelope.mode} envelope rests on one measured point "
-        f"({point.tokens} tokens, {point.peak_gib} GiB). {_SHAPE_CAVEATS[envelope.shape]} "
-        "Every other row length is an extrapolation, and the envelope is not well determined."
-    )
+    measured = _calibration_points(envelope.mode, _OK)
+    if envelope.single_observation:
+        (point,) = measured
+        return (
+            f"single observation: the {envelope.mode} envelope rests on one measured point "
+            f"({point.tokens} tokens, {point.peak_gib} GiB). {_SHAPE_CAVEATS[envelope.shape]} "
+            "Every other row length is an extrapolation, and the envelope is not well determined."
+        )
+    if envelope.shape in _SHAPE_CAVEATS:
+        lengths = sorted({point.tokens for point in measured})
+        return (
+            f"the {envelope.mode} envelope rests on {len(measured)} measured points at "
+            f"{lengths} tokens. {_SHAPE_CAVEATS[envelope.shape]} The offset is determined by the "
+            "data; the slope is not, so a row length outside that range is an extrapolation."
+        )
+    return None
 
 
 def _calibration_record() -> dict[str, Any]:
@@ -1216,7 +1254,10 @@ def _calibration_record() -> dict[str, Any]:
 
 
 def _calibration_domain_departures(
-    batch_size: int, grad_checkpoint: bool, attention_blocks: int = 1
+    batch_size: int,
+    grad_checkpoint: bool,
+    attention_blocks: int = 1,
+    accumulation: int = _CALIBRATION_ACCUMULATION,
 ) -> list[str]:
     """Name every way this arm sits outside the conditions every point was measured under.
 
@@ -1245,6 +1286,15 @@ def _calibration_domain_departures(
         departures.append(
             f"train.batch_size is {batch_size}; every calibration point was measured at "
             f"batch {_CALIBRATION_BATCH_SIZE} and the envelope does not model batch"
+        )
+    if accumulation != _CALIBRATION_ACCUMULATION:
+        departures.append(
+            f"train.grad_accumulation_steps is {accumulation}; every calibration point was "
+            f"measured at {_CALIBRATION_ACCUMULATION}, one optimiser step per row. Measured at "
+            "this recipe (issue 94, ACCUMULATION-2026-09-08): accumulation 4 costs 0.1228 GiB "
+            "over accumulation 1 at 2,688 tokens, which is one copy of the LoRA gradient tree. "
+            "That is named rather than scaled, because the measurement is at one row length and "
+            "one rank"
         )
     if grad_checkpoint != _CALIBRATION_GRAD_CHECKPOINT:
         departures.append(
