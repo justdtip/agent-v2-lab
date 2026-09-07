@@ -1,0 +1,84 @@
+# ATTENTION-TERM amendment (Chief, 2026-09-08): three wording edits on top of the Deputy's ded97f6 before landing
+
+Applied in `~/worktrees/attention-term` on the delivered diff, tested there, landed with it as one
+commit. The Deputy's patch is `ATTENTION-TERM.patch` beside this file and is otherwise unchanged.
+None of the three changes a number the gate computes; each changes what the code says about a
+number, where the record's arithmetic did not support the wording. The arithmetic is in the
+review note appended to `research/records/ATTENTION-TERM-2026-09-08/README.md` in the same commit.
+
+1. **The fit form.** The comment said 102.3 was "fitted on the two largest rows where the linear
+   terms have washed out". It is the slope against T² between the 4,096 and 8,192 rows with a
+   constant free. The per-length coefficient's fall (155 → 103.3) is a linear term over T², and a
+   fit that allows one gives 100.5 B/token² with about 21 KiB per token linear, on all five rows
+   and on the two largest alike. So 102.3 carries the linear remainder and errs high by under two
+   percent. The comment now says the fit form and the direction; the gate keeps 102.3, because it
+   is a bound in the right direction and the affine residual re-fit makes the envelope exact at
+   every calibration row whichever coefficient is used.
+
+2. **The forward finding.** "At 64 and 128 the forward peak equals the inputs to the byte" is a
+   cancellation in the probe, not an empty kernel: the float32 sources of the random draws were
+   still resident when the baseline was read (three times the bfloat16 inputs), and their release
+   during the forward exactly offsets the output and the float32 cast the loss takes. The
+   conclusion is unchanged and stronger than the wording, since an O(T) release cannot mask an
+   O(T²) allocation. The comment now says "adds no term quadratic in the row" at 64 and 128 and
+   "about 1.1 score matrices" at 256.
+
+3. **The block count without checkpointing.** `blocks × 102.3` is an upper bound, not a
+   measurement: the one-block figure includes the backward's transient part, which runs one block
+   at a time and does not stack, while the forward-retained scores do. The docstring and the
+   departure line now say so, and name the two-block measurement that would tighten it. The
+   Deputy's reading of the scaling rule is upheld: a measured per-block cost times a counted
+   number of blocks is not scaling an envelope by a variable it never saw, provided the product is
+   declared a bound, which it now is. Pinning one block always would err low, the wrong direction.
+
+Verification in the worktree: full suite 1,707 passed, 14 skipped, exit 0 on the delivered diff;
+`tests/test_preflight.py` 124 passed on the delivered diff and again on the amended bytes; ruff
+0 findings on both files, format drift unchanged from the delivered state.
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/preflight.py b/src/local_llm_lab/pipeline/preflight.py
+index 3b6f5ba..5838d6f 100644
+--- a/src/local_llm_lab/pipeline/preflight.py
++++ b/src/local_llm_lab/pipeline/preflight.py
+@@ -137,12 +137,15 @@ _OK, _OOM = "ok", "oom"
+ # 102.3 bytes per token squared is 3.20 bare bfloat16 score matrices (16 heads x 2 bytes). The
+ # backward keeps more than the scores: the softmax output its vjp needs, and a wider
+ # accumulation of the score gradient. The decomposition is not claimed; the coefficient is
+-# measured, fitted on the two largest rows where the linear terms have washed out.
++# measured. Its fit form is quadratic plus a constant on the two largest rows; the record's
++# review note shows that a quadratic plus a linear term on all five rows gives 100.5 with about
++# 21 KiB per token linear, so 102.3 carries the linear remainder and errs high by under two
++# percent -- the right direction for a gate, and immaterial at every row this machine can train.
+ #
+ # `mx.fast.scaled_dot_product_attention` has no fused vjp -- the same quadratic appears at head
+ # dimensions 64, 128 and 256 alike -- so this is a property of MLX, not of this checkpoint. The
+-# forward is the checkpoint's own: at 64 and 128 the forward peak equals the inputs to the byte,
+-# at 256 it does not, and 256 is this model's head dimension.
++# forward is the checkpoint's own: at 64 and 128 the forward adds no term quadratic in the row,
++# at 256 it adds about 1.1 score matrices, and 256 is this model's head dimension.
+ _ATTENTION_TERM_BYTES_PER_TOKEN_SQUARED = 102.3
+ _ATTENTION_TERM_SOURCE = (
+     "research/records/ATTENTION-TERM-2026-09-08: one attention block's backward peak above its "
+@@ -156,7 +159,9 @@ def _attention_term_gib(tokens: int, blocks: int = 1) -> float:
+     ``blocks`` is **one** while gradient checkpointing is on, for the same reason
+     ``retained_recurrence_layers`` is: the checkpoint hook bounds the live graph to a single
+     decoder layer, so the peak moment is one attention block rather than the model's eight. With
+-    checkpointing off it is all of them, and the term is eight times larger.
++    checkpointing off every block's forward-retained scores are live at once, and multiplying the
++    one-block figure by the count is an upper bound rather than a measurement: that figure also
++    holds the backward's transient part, which runs one block at a time and does not stack.
+     """
+     return blocks * _ATTENTION_TERM_BYTES_PER_TOKEN_SQUARED * tokens * tokens / 1024**3
+ 
+@@ -1222,7 +1227,9 @@ def _calibration_domain_departures(
+         departures.append(
+             f"the attention-score term is multiplied by {attention_blocks} live blocks; it was "
+             "measured on one block with gradient checkpointing on, and the block count is "
+-            "counted from the architecture rather than measured"
++            "counted from the architecture rather than measured. The product is an upper bound: "
++            "the one-block figure includes the backward's transient part, which does not stack "
++            "across blocks, so a two-block measurement without checkpointing would tighten it"
+         )
+     if batch_size != _CALIBRATION_BATCH_SIZE:
+         departures.append(
+```

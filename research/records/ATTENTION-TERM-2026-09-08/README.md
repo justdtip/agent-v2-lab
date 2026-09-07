@@ -122,3 +122,45 @@ is what a later reader needs when the kernel changes.
 - `sdpa.json`, `sdpa_backward_probe.as-run.py.txt` — the five-length sweep at head dimension 256.
 - `headdim.json`, `headdim.as-run.py.txt` — the head-dimension comparison.
 - `fit.json` — the coefficient, the re-fit, and the ceilings, derived from the two above.
+
+## Chief's review note, 2026-09-08 (appended at the landing; nothing above is edited)
+
+Three corrections of wording, none of conclusion, and one discrepancy with the landed code.
+
+1. **The fit form, and what "washed out" hides.** 102.3 is the slope of the inputs-subtracted
+   backward peak against T² between the 4,096 and 8,192 rows with a constant free, i.e. a fit of
+   the form `a·T² + c`. The per-length coefficient's fall (155 → 127 → 113 → 106 → 103.3) is a
+   linear term over T², and a fit that allows it gives, on all five rows, `a = 100.5 B/token²`,
+   `b ≈ 21 KiB/token`, `c ≈ 5 MiB`; on the two largest rows alone `a = 100.5`, `b ≈ 22 KiB/token`.
+   So the linear terms had not washed out; 102.3 carries them and errs high by under two percent.
+   The gate keeps 102.3: it is a bound in the right direction, the affine residual re-fit makes
+   the envelope exact at every calibration row whichever coefficient is used, and the difference
+   at 8,192 tokens is 0.11 GiB. The `asymptote` wording above should be read as "the two-row
+   quadratic-plus-constant fit".
+
+2. **"Equals the inputs to the byte" is a cancellation, not an empty kernel.** `inputs_bytes` is
+   three times the bfloat16 inputs at every row but the last: the float32 sources the random
+   draws were cast from are still resident when it is read. The forward must allocate its output
+   and the float32 cast the loss takes, which is exactly three query tensors; the float32 sources
+   are also exactly three query tensors (two bytes more per element, on 24/16 the elements), and
+   their release during the forward's evaluation masks the forward's own allocations. The 444
+   bytes over is the scalar and bookkeeping. The conclusion stands on stronger ground than the
+   wording: an O(T) release cannot mask an O(T²) allocation, so at 64 and 128 the forward adds no
+   quadratic term, and at 256 it adds 49 → 35 B/token², about 1.1 score matrices, which is the
+   unfused path. A cleaner probe draws the inputs in bfloat16 directly or deletes the float32
+   sources before reading the baseline; the 8,192 row, where only the query's source survived
+   (`inputs_bytes` at 2.33× rather than 3×), shows the baseline was not under control.
+
+3. **Row ceiling.** The landed `_row_ceiling_tokens` gives 5,013 for the chunkwise mode at
+   17.76 GiB; `fit.json` and the table above say 5,014. The code is authoritative: 5,013 fits with
+   headroom and 5,014 does not, and the test asserts both sides.
+
+4. **Block count without checkpointing.** `blocks × 102.3` is an upper bound, not a measurement:
+   the one-block figure includes the backward's transient part, which runs one block at a time
+   and does not stack, while the forward-retained scores (about 1.1 matrices per block at head
+   dimension 256) do. If any run ever trains with checkpointing off, a two-block measurement is
+   the way to tighten it. No configured run does.
+
+The `.as-run.py.txt` transcripts here, like the ten before them in four earlier records, sit
+outside the record-guard rule's `*.py` discovery while importing MLX at module scope. That is a
+gap in issue 89's rule, not in this record; it is filed for the Deputy as a follow-up.
