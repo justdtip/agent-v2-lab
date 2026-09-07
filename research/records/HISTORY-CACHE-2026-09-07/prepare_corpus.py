@@ -1,5 +1,16 @@
 """Freeze completed pilot histories and the eight native step-0 controls, without weights."""
 
+# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). Kept so the result can be read; it imports
+# mlx_lm, which initialises Metal here. Runs go through the package entry points under R47 and
+# R48, in a window the Director declares, and take the model-run lock of issue 83.
+import sys as _sys
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is a record of the 2026-09-07 history-cache corpus, "
+        "not a launcher; runs go through the package entry points under R47 and R48, in a "
+        "window the Director declares, and take the model-run lock of issue 83"
+    )
+
 import hashlib
 import json
 from pathlib import Path

@@ -12,3 +12,10 @@ handoff hashes (`b07cec34…`, `1b79bf53…`); the reuse corpus had to be regene
 absolute path because that path is written into the file. The reconstructed patch is at
 `design_specifications/pending/HISTORY-CACHE.patch` (the two corpus files are not in it; they are
 here). `handoff.json` is reproduced verbatim from the transcript.
+
+## Guard addition, 7 September 2026, 21:05 (Chief, landing issue 89's rule)
+
+The two corpus generators received the standard refusal guard (`--i-am-a-record`) at the top, as
+the jlens-hosted records carry. The guard is the only change; the bytes `handoff.json` pins are the
+pre-guard bytes. Hashes: `prepare_corpus.py` 1bab803fbab608efe31559586caa811bbf6ed376deb847852f3601ae308a041c → ac09d12f80a0c6114cd6ffcdfc68e10071f619cf0ef7c882432e0288b691a9ea; `prepare_reuse_corpus.py` 740ed8051eb3309cefdc5f0747979c0a22fc5d3075699526e6bd86bc9d51175e → fc2f858ce3560184d2c8ecefe017f0816bdd39e38a253610a33a153347b03041.
+Regeneration of the corpora now needs the sentinel argument.
