@@ -125,3 +125,17 @@ is the convexity from the other side and gives issue 87 a stated expiry: a savin
 length is not a saving at another. (4) The as-run scripts are kept as `*.as-run.py.txt`, byte-exact
 copies of what ran that cannot be imported or executed by accident; the guarded `*.py` beside them
 are the runnable forms and carry the refusal. Issue 89 makes that a repository rule.
+
+---
+
+## Note, appended 2026-09-08: "byte-exact" now has one exception, and it is not in this record
+
+Item (4) above says the as-run scripts are kept as `*.as-run.py.txt`, byte-exact and unimportable.
+That still holds for this record: `train_cost_probe.as-run.py.txt` already carried a refusal guard
+when it was copied, and `run_train_cost_probe.as-run.py.txt` reaches no model, so neither changed.
+
+It no longer holds tree-wide. Eighteen transcripts in four other records gained a guard on
+2026-09-08, because the rename stops a file being imported but not run, and issue 89's rule was
+written against `*.py` only. Each of those records carries its own dated declaration with the
+pre- and post-guard digests; the full set is in `research/records/GUARD-HASHES-2026-09-08.json`.
+The unimportability the rename bought is unaffected.

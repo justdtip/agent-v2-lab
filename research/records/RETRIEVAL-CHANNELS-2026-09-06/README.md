@@ -267,3 +267,31 @@ same tokens and the finding is a property of the model, with two mechanisms: a q
 in attention and a write-rule sink in the recurrent state. (3) The three candidates sit at their
 nulls and at the long-gate typical value; nothing distinguishes them from the population, which is
 the close.
+
+
+---
+
+## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
+
+Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
+byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
+docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
+table restores the original claim for anyone who needs to verify it.
+
+**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
+not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
+executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
+the day it landed it reported this tree clean while nineteen transcripts across five records
+reached the model and one carried a guard. The rule now covers both suffixes, and these are the
+guards that follow from it.
+
+| transcript | reaches | sha256 before | sha256 after |
+| --- | --- | --- | --- |
+| `habit_probe.as-run.py.txt` | loads the checkpoint | `5de7dd9360285466…` | `cf738e8fc3a6600e…` |
+| `retrieval_probe.as-run.py.txt` | loads the checkpoint | `b34f4d9ab373c642…` | `cf634824a2f8c557…` |
+| `sink_probe.as-run.py.txt` | loads the checkpoint | `bd1b76d796d7708f…` | `8389b103aa1b29e5…` |
+
+Full digests are in the commit that added the guards. The guard is the standard form:
+the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
+the model, and the rule verifies that by running each file under stub packages rather than
+by reading it.

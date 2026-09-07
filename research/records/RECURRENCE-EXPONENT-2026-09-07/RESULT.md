@@ -122,3 +122,29 @@ the algebra. The original "forward 1.43" muddied that by suggesting both were su
 Nothing in the consequence for #85 changes: the linear recurrence term stands at chunk 256, the
 whole-step rise is the attention term, and the cap is set by attention and R55(b)'s buffer
 arithmetic rather than by the recurrence.
+
+
+---
+
+## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
+
+Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
+byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
+docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
+table restores the original claim for anyone who needs to verify it.
+
+**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
+not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
+executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
+the day it landed it reported this tree clean while nineteen transcripts across five records
+reached the model and one carried a guard. The rule now covers both suffixes, and these are the
+guards that follow from it.
+
+| transcript | reaches | sha256 before | sha256 after |
+| --- | --- | --- | --- |
+| `recurrence_exponent_sweep.as-run.py.txt` | loads the checkpoint | `757c58949bb7817f…` | `70daef69308c1d2e…` |
+
+Full digests are in the commit that added the guards. The guard is the standard form:
+the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
+the model, and the rule verifies that by running each file under stub packages rather than
+by reading it.

@@ -9,6 +9,19 @@ and the next-token change rate (the fraction of positions whose top-1 prediction
 threshold, stated in advance: a recall drop counts only if the change rate stays within twice the
 layer-matched random control's at the same k."""
 from __future__ import annotations
+
+# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). The `.py.txt` suffix stops this file being
+# imported; it does not stop `python` running it, and it loads the checkpoint and takes no lock
+# of its own. The bytes above and below this block are the transcript as it ran; the pre-guard
+# sha256 is in the record beside this file.
+import sys as _sys
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is the as-run transcript of the 2026-09-06 WP12 "
+        "broadcast-head probes, not a launcher; runs go through the package entry points "
+        "under R47 and R48, in a window the Director declares, and take the model-run "
+        "lock of issue 83"
+    )
 import json, os, sys, time
 from pathlib import Path
 import numpy as np

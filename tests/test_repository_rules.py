@@ -1419,11 +1419,26 @@ def _record_guard_faults(path: Path) -> list[str]:
     return faults
 
 
+#: The as-run transcripts. Renamed from ``.py`` so a record copy cannot be *imported* -- which
+#: it did fix -- but ``python whatever.as-run.py.txt`` runs the file as happily as a ``.py``,
+#: and nineteen of the twenty in the tree reach the model. The rename closed the import
+#: accident and left the launcher open, so the rule covers both suffixes.
+_RECORD_TRANSCRIPT_SUFFIX = ".as-run.py.txt"
+
+
+def _record_sources(root: Path) -> list[Path]:
+    """Every file under a records tree that Python will run: ``.py`` and the transcripts."""
+    return sorted(
+        {*root.rglob("*.py"), *root.rglob(f"*{_RECORD_TRANSCRIPT_SUFFIX}")},
+        key=lambda path: path.as_posix(),
+    )
+
+
 def _guarded_record_scripts() -> list[Path]:
-    """Records scripts the rule applies to: those that reach the model."""
+    """Records sources the rule applies to: those that reach the model."""
     return [
         path
-        for path in sorted(_RECORDS_ROOT.rglob("*.py"))
+        for path in _record_sources(_RECORDS_ROOT)
         if _model_reaching_sites(ast.parse(path.read_text()))
     ]
 
@@ -1569,3 +1584,32 @@ def test_every_guarded_records_script_actually_refuses_when_run(stub_import_root
         assert _STUB_MARKER not in completed.stderr, (
             f"{name} reached a model import before refusing; only the stub stopped it"
         )
+
+
+def test_the_rule_covers_the_as_run_transcripts_because_python_runs_them_too(tmp_path) -> None:
+    """The hole the ``.py.txt`` rename left open.
+
+    The rename was made so a record copy could not be *imported*, and it did fix that. It did
+    nothing about running: ``python probe.as-run.py.txt`` executes the file exactly as a ``.py``
+    would, and when the rule first covered only ``*.py`` it reported the records tree clean while
+    nineteen transcripts reached the model and one carried a guard.
+
+    Both halves are asserted. The discovery finds a transcript, and it finds it *for the same
+    reason* it finds a ``.py`` -- the model-reaching sites, not the suffix -- so a transcript with
+    no such site stays out.
+    """
+    (tmp_path / "reaches.as-run.py.txt").write_text('"""A transcript."""\nimport mlx.core as mx\n')
+    (tmp_path / "clean.as-run.py.txt").write_text('"""A transcript."""\nimport json\n')
+    (tmp_path / "reaches.py").write_text('"""A script."""\nimport mlx.core as mx\n')
+
+    found = {path.name for path in _record_sources(tmp_path)}
+    assert found == {"reaches.as-run.py.txt", "clean.as-run.py.txt", "reaches.py"}
+
+    reaching = {
+        path.name
+        for path in _record_sources(tmp_path)
+        if _model_reaching_sites(ast.parse(path.read_text()))
+    }
+    assert reaching == {"reaches.as-run.py.txt", "reaches.py"}
+    assert _record_guard_faults(tmp_path / "reaches.as-run.py.txt")
+    assert _record_guard_faults(tmp_path / "clean.as-run.py.txt") == []

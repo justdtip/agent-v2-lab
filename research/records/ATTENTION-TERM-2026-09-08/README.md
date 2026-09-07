@@ -252,3 +252,30 @@ is the right comparison, because what the issue projected was the added cost, no
 `fit.json` and the table above say 5,014, from arithmetic done here. The landed
 `_row_ceiling_tokens` gives **5,013**, and its test checks the value against the gate itself at
 both sides of the boundary. The code is authoritative; this record was off by one.
+
+
+---
+
+## Declaration, appended 2026-09-08: the as-run transcripts here now carry a refusal guard
+
+Appended, never edited, per the 2026-09-07 19:50 ruling. **The transcripts below are no longer
+byte-identical to the scripts that ran.** Each has gained a refusal guard immediately after its
+docstring; everything above and below that block is unchanged, and the pre-guard sha256 in the
+table restores the original claim for anyone who needs to verify it.
+
+**Why the rename was not enough.** The `.as-run.py.txt` suffix was chosen so a record copy could
+not be *imported*, and it did fix that. It never touched running: `python probe.as-run.py.txt`
+executes the file exactly as a `.py` would. Issue 89's rule was written against `*.py` only, so on
+the day it landed it reported this tree clean while nineteen transcripts across five records
+reached the model and one carried a guard. The rule now covers both suffixes, and these are the
+guards that follow from it.
+
+| transcript | reaches | sha256 before | sha256 after |
+| --- | --- | --- | --- |
+| `headdim.as-run.py.txt` | initialises Metal | `6755ddb90ea41783…` | `34634d677d9a69de…` |
+| `sdpa_backward_probe.as-run.py.txt` | initialises Metal | `dbfb01e905a14f40…` | `5225e032fe57456d…` |
+
+Full digests are in the commit that added the guards. The guard is the standard form:
+the file exits non-zero unless `--i-am-a-record` is passed, before any import that reaches
+the model, and the rule verifies that by running each file under stub packages rather than
+by reading it.
