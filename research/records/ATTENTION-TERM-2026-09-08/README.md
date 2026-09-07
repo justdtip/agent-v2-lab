@@ -177,3 +177,78 @@ gap in issue 89's rule, not in this record; it is filed for the Deputy as a foll
 6. **"About 2.6×" is a unit slip.** The issue's 17.2 GB against the measured 6.672 GiB is 2.4×
    in consistent units (17.2 GB against 7.16 GB, or 16.0 GiB against 6.67 GiB); 2.6 comes from
    reading the GiB figure as GB.
+
+---
+
+## Correction, appended 2026-09-08 (Deputy, after the Chief's review at `2cec0e5`)
+
+Appended, never edited, per the 2026-09-07 19:50 ruling. The text above stands as written; every
+number it gets wrong is corrected here. **Nothing the gate computes moves**, and the coefficient
+the landed `preflight.py` uses is unchanged.
+
+### 1. The table above is raw peaks, and its caption says otherwise
+
+The caption claims the input tensors' bytes were subtracted. They were not: the columns are
+`forward_peak_bytes` and `backward_peak_bytes` as recorded. The 102.3 fit *did* use the subtracted
+values, so nothing downstream is affected, but the table and its caption contradict each other.
+
+| row tokens | forward, subtracted | backward, subtracted | one bare bf16 score matrix |
+| ---: | ---: | ---: | ---: |
+| 512 | 0.012 GiB | 0.038 GiB | 0.008 GiB |
+| 1,024 | 0.040 GiB | 0.124 GiB | 0.031 GiB |
+| 2,048 | 0.145 GiB | 0.441 GiB | 0.125 GiB |
+| 4,096 | 0.547 GiB | 1.656 GiB | 0.500 GiB |
+| 8,192 | 2.188 GiB | 6.453 GiB | 2.000 GiB |
+
+The subtracted backward makes the point better than the raw one did. Its ratios per doubling are
+3.28, 3.56, 3.75, 3.90 — converging on 4 — against 2.9 to 3.7 for the raw column.
+
+### 2. "The linear terms have washed out" is not what the data show
+
+102.3 is the slope of `a·T² + c` between the 4,096 and 8,192 rows. The per-length coefficient
+falling 155 → 127 → 113 → 106 → 103.3 is the signature of a linear term *over* `T²`, not of one
+that has vanished. Refitting `a·T² + b·T + c`:
+
+| rows used | a, B/token² | b, KiB/token |
+| --- | ---: | ---: |
+| all five | 100.5 | 21.3 |
+| the two largest | 100.5 | 22.0 |
+
+So **102.3 carries the linear remainder and errs high by 1.8 percent**, which is 0.11 GiB at 8,192
+tokens. The gate keeps it, because a bound in the high direction is the right kind of error for a
+memory gate and the residual re-fit makes the envelope exact at every calibration row whichever
+coefficient is used. What was wrong was the claim, not the number.
+
+### 3. "Equals the inputs to the byte" at head dimensions 64 and 128 is a cancellation
+
+`inputs_bytes` is **exactly 3.000×** the bfloat16 inputs at every row of both probes except the
+8,192 one, where it is 2.333×. The reason is in the probe: the draws are `mx.random.normal`, which
+produces float32, cast with `.astype(mx.bfloat16)`, and the float32 sources were still resident
+when the baseline was read. Three query tensors' worth of float32 is exactly three query tensors'
+worth of bfloat16 — 24/16 the elements at twice the bytes — and their release during the forward's
+evaluation offsets the forward's own output plus the float32 cast the loss takes, which is also
+three query tensors. The 444 bytes left over is the scalar and bookkeeping. The 8,192 row's 2.333×
+shows the baseline was not under control there either.
+
+**The conclusion survives, and on stronger ground than the wording it was given.** An `O(T)`
+release cannot mask an `O(T²)` allocation. So the correct statements are:
+
+- at head dimensions 64 and 128 the forward adds **no term quadratic in the row**;
+- at 256 it adds 41 → 37 → 35 bytes per token², **about 1.1 score matrices**, which is the unfused
+  path.
+
+"The fused kernel allocates nothing" and "to the byte, not to a rounding" are withdrawn. A cleaner
+probe draws in bfloat16 directly, or deletes the float32 sources before reading the baseline.
+
+### 4. "About 2.6× high" is a unit slip
+
+The issue projected 17.2 **GB**; the measurement is in **GiB**. In consistent units the issue's
+figure is 16.02 GiB against 6.453 GiB measured, subtracted, for one block at 8,192 tokens — a
+factor of **2.48**, not 2.6. (Against the raw peak of 6.672 GiB it is 2.40; the subtracted column
+is the right comparison, because what the issue projected was the added cost, not a total peak.)
+
+### 5. The row ceiling is 5,013, not 5,014
+
+`fit.json` and the table above say 5,014, from arithmetic done here. The landed
+`_row_ceiling_tokens` gives **5,013**, and its test checks the value against the gate itself at
+both sides of the boundary. The code is authoritative; this record was off by one.
