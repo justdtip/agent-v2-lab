@@ -218,3 +218,20 @@ applied to the shared tree from the two reviewed diffs (kept under pending as th
 review) and committed by name. Against the base evaluation: 115 of 180 coherent to completion
 (0.639) beside 123 successes; incidence integrity 0.206, loop 0.044, invalid action 0.017, tool
 error 0.056; 14 trajectories with an unrecovered tool-error event, 4 censored tails.
+
+**Pre-registered while arm A's test evaluation runs, 7 September (ten tasks read, the rest
+unread).** Arm A passed 3 of the first 10 test tasks against the base's 8 on the same tasks, and
+its failures are twenty-four-turn loops of one identical call: `calculate` with a malformed
+expression repeated 24 times, `read_file` on a wrong path 23 times, `calculate` with a placeholder
+expression 18 times. Hypothesis, stated before the summary is read: the adapter learned "after an
+ERROR, retry the identical call" as the response to any error, because this run doubled the
+`transient` recovery rows (repeat 1 to 2, "no variant below two"), and the transient variant is
+the one whose correct response is an identical retry; the base model, without the habit, corrects
+the call instead. Tests on the finished evaluation: the share of arm A's loops whose repeated call
+follows an ERROR observation and is identical to the errored call, against the base's loops; the
+coherence standard's cause incidence (loops after tool errors, with the tool-error cause's
+recovery rule counting an identical retry that keeps failing as unrecovered); and, from the
+training rows, the ratio of identical-retry to changed-call responses after an error. If the
+hypothesis holds, the next run's recipe returns transient repeats to run D's value and raises the
+correction variants instead, and the change is the Chief's, made without the Research Division's
+review in the night's rush, recorded as such.
