@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 
+import pytest
+
 # `tests/` is not a package, so pytest puts it on `sys.path` and the suite's own conftest
 # imports as a top-level module.
 from conftest import PRE_EXISTING_FORK_SITES
@@ -185,3 +187,30 @@ def test_a_provenance_write_after_a_load_does_not_fork(monkeypatch, tmp_path: Pa
     assert len(git["commit"]) == 40 and set(git["commit"]) <= set("0123456789abcdef")
     assert len(git["dirty_patch_sha256"]) == 64
     assert lock.is_file(), "the write orphaned or dropped the lock the load was holding"
+
+
+def test_a_provenance_record_is_whole_or_absent_when_the_write_is_interrupted(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Issue 92: the write is the failure `git_commit`'s contract does not cover.
+
+    "Provenance is a nice-to-have and must never be the thing that kills a run" is about
+    *collecting* it -- no git, not a repository, a timeout -- and those answer "unknown". A
+    failure in the write is different in kind: it leaves a record that parses as nothing and
+    reads on a listing as complete.
+    """
+    from test_branch import _interrupt_the_manifest_writer
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    original = '{"kept": true}\n'
+    (run_dir / "provenance.json").write_text(original, encoding="utf-8")
+
+    _interrupt_the_manifest_writer(monkeypatch, 14)
+    with pytest.raises(OSError, match="no space left on device"):
+        write_provenance(run_dir, resolved=None, spec=_Spec("fallback"), extra={"stage": "x"})
+    monkeypatch.undo()
+
+    assert (run_dir / "provenance.json").read_text(encoding="utf-8") == original
+    leftovers = sorted(path.name for path in run_dir.iterdir() if path.name.startswith("."))
+    assert leftovers == [], "no partial temporary file may survive at the destination"
