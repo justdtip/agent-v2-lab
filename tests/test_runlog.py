@@ -22,6 +22,7 @@ from local_llm_lab.runlog import (
     Tee,
     TrainingAborted,
     TrainingHealth,
+    gib_from_gb,
     git_commit,
     sha256_of,
 )
@@ -704,7 +705,13 @@ def test_memory_over_budget_fires_once_per_run() -> None:
     assert _train(health, 2, memory=12.0) == ["memory_over_budget"]
     assert _train(health, 3, memory=13.0) == []
     assert [flag["flag"] for flag in health.flags] == ["memory_over_budget"]
-    assert health.flags[0]["detail"] == {"peak_memory_gb": 12.0, "budget_gib": 10.0}
+    # Three keys, not two: both units are recorded so a reader checks the conversion rather
+    # than trusting it (issue 93). 12.0 GB is 11.176 GiB, still over a 10 GiB budget.
+    assert health.flags[0]["detail"] == {
+        "peak_memory_gb": 12.0,
+        "peak_memory_gib": pytest.approx(11.175870895385742),
+        "budget_gib": 10.0,
+    }
     assert health.flags[0]["iteration"] == 2
 
 
@@ -889,6 +896,7 @@ def test_summary_full_shape() -> None:
         "last_val",
         "best_val",
         "peak_memory_gb",
+        "peak_memory_gib",
         "median_tokens_per_second",
         "elapsed",
     }
@@ -907,10 +915,13 @@ def test_summary_full_shape() -> None:
         "tokens_per_second": 300.0,
         "trained_tokens": 30000,
         "peak_memory_gb": 5.0,
+        # Beside it, not instead of it, so every reader of the old field keeps working (issue 93).
+        "peak_memory_gib": pytest.approx(4.656612873077393),
     }
     assert summary["last_val"] == {"iteration": 30, "val_loss": 2.0}
     assert summary["best_val"] == {"iteration": 20, "val_loss": 1.0}
     assert summary["peak_memory_gb"] == 6.0
+    assert summary["peak_memory_gib"] == pytest.approx(5.587935447692871)
     assert summary["median_tokens_per_second"] == 200.0
     assert summary["elapsed"] == 123.5
     assert json.loads(json.dumps(summary)) == summary
@@ -990,3 +1001,37 @@ def test_events_stay_strict_json_when_a_logged_field_is_not_finite(tmp_path):
     assert event["fields"]["nested"]["peak"] == "inf"
     assert event["fields"]["values"] == [1.0, "-inf"]
     assert "NaN" not in "\n".join(lines) and "Infinity" not in "\n".join(lines)
+
+
+def test_the_memory_flag_compares_gibibytes_at_the_boundary_the_hardware_has() -> None:
+    """Issue 93: the trainer reports gigabytes and every budget here is gibibytes.
+
+    The two cases are chosen at the boundary that matters on this machine, a 17.76 GiB
+    recommended working set. Under the old comparison a 17.9 figure read as over budget when the
+    run was using 16.7 GiB and had 1 GiB of headroom left, and 19.5 read as under it when the run
+    was using 18.2 GiB and past the ceiling. One is a false alarm and the other is the miss, and
+    the miss is the one that costs a run.
+    """
+    quiet = _health(memory_budget_gib=17.76)
+    assert _train(quiet, 1, memory=17.9) == [], "17.9 GB is 16.7 GiB and fits"
+    assert list(quiet.flags) == []
+
+    loud = _health(memory_budget_gib=17.76)
+    assert _train(loud, 1, memory=19.5) == [
+        "memory_over_budget"
+    ], "19.5 GB is 18.2 GiB and does not"
+    detail = loud.flags[0]["detail"]
+    assert detail["peak_memory_gb"] == 19.5
+    assert detail["peak_memory_gib"] == pytest.approx(18.161, abs=1e-3)
+    assert detail["budget_gib"] == 17.76
+
+
+def test_gib_from_gb_names_the_trainers_unit_and_this_repositorys() -> None:
+    """Arm A's own record, converted, so the number appears where a reader will meet it.
+
+    `outputs/agent-v2e-qwen35-4b/health.json` records `peak_memory_gb: 10.4436`. That is
+    **9.726 GiB**, against a device working set of 17.76 GiB — which is what the run was really
+    using, and what the memory envelope in `preflight` should be checked against.
+    """
+    assert gib_from_gb(10.443645016) == pytest.approx(9.726, abs=5e-4)
+    assert gib_from_gb(1024**3 / 1e9) == pytest.approx(1.0)

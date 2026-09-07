@@ -1979,3 +1979,56 @@ def test_the_r21_debt_comment_is_gone_because_the_debt_is() -> None:
         "drift."
     )
     assert "write_text_atomic" in probe, "its callers must reach runlog's writer by name"
+
+
+def _spec_for_budget(*, memory_budget_gib: float):
+    """The smallest stand-in `_resolved_memory_budget_gib` reads: a declared budget."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(memory_budget_gib=memory_budget_gib, name="fake-model")
+
+
+def test_the_health_budget_is_the_preflights_resolved_one_not_the_registrys(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Issue 93: two gates were watching the same run against different thresholds.
+
+    The registry declares an intent — 22 GiB for the 4B — and the preflight resolves the gate it
+    actually applies as the minimum of that and what the device grants, 17.76 GiB here. Handing
+    the health flag the registry's 22 meant the preflight refused a run projected past 17.76
+    while the health record then watched it against a number the machine cannot reach without
+    swapping.
+
+    Threaded from the artifact rather than re-derived, because a second copy of
+    ``min(registry, device)`` is how the two drift apart again.
+    """
+    spec = _spec_for_budget(memory_budget_gib=22.0)
+    artifact = tmp_path / "fake-model.json"
+    artifact.write_text(
+        json.dumps({"memory": {"budget_gib": 17.76, "registry_budget_gib": 22.0}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: artifact)
+
+    budget, source = cli._resolved_memory_budget_gib(spec)
+    assert budget == 17.76, "the resolved gate, not the declaration"
+    assert source == "preflight artifact"
+
+
+def test_a_missing_preflight_artifact_falls_back_and_says_so(monkeypatch, tmp_path: Path) -> None:
+    """``--skip-preflight-check`` leaves no artifact, and the fallback must not pass as resolved.
+
+    The registry's declaration is the only number available then. Returning it silently is what
+    reintroduces the bug, so the source string carries the difference and reaches the run log.
+    """
+    spec = _spec_for_budget(memory_budget_gib=22.0)
+    monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: tmp_path / "absent.json")
+
+    budget, source = cli._resolved_memory_budget_gib(spec)
+    assert budget == 22.0
+    assert "registry declaration" in source
+
+    truncated = tmp_path / "half.json"
+    truncated.write_text('{"memory": {"budget_g', encoding="utf-8")
+    monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: truncated)
+    assert cli._resolved_memory_budget_gib(spec)[1].startswith("registry declaration")

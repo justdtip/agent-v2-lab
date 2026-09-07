@@ -28,6 +28,7 @@ from local_llm_lab.pipeline.data import (
 )
 from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
+from local_llm_lab.pipeline.preflight import artifact_path as preflight_artifact_path
 from local_llm_lab.pipeline.preflight import require_preflight, run_preflight
 from local_llm_lab.pipeline.report import load_summaries, render
 from local_llm_lab.pipeline.rollout import run_rollout
@@ -82,6 +83,32 @@ def _log(message: str) -> None:
 def _require_config_preflight(config: dict[str, Any], *, skip: bool) -> None:
     """Validate the declared base model before a stage can load it."""
     require_preflight(load_model_spec(config["model"]), skip=skip)
+
+
+
+def _resolved_memory_budget_gib(spec: ModelSpec) -> tuple[float, str]:
+    """The budget the health flag watches: the preflight's resolved one, not the registry's.
+
+    The registry declares an intent -- 22 GiB for the 4B -- and the preflight resolves the gate
+    it actually applies as the minimum of that and what the device grants, which on this machine
+    is a 17.76 GiB recommended working set. Handing the health flag the registry's 22 gave the
+    two gates different thresholds by construction: the preflight refuses a run projected past
+    17.76 while the health record then watches the same run against a number the hardware cannot
+    reach without swapping (issue 93).
+
+    So it is threaded from the artifact rather than re-derived here. Re-deriving it would put a
+    second copy of `min(registry, device)` in the tree, which is how the two drift apart again.
+
+    With `--skip-preflight-check` there is no artifact and no resolved budget. The registry's
+    declaration is the only number available, and the fallback says so in its second return
+    value rather than passing 22 off as resolved.
+    """
+    path = preflight_artifact_path(spec)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        return float(record["memory"]["budget_gib"]), "preflight artifact"
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return float(spec.memory_budget_gib), "registry declaration (no preflight artifact read)"
 
 
 def dataset_splits(config: dict[str, Any]) -> dict[str, SplitSpec]:
@@ -725,8 +752,9 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
     effective = _effective_training_spec(config)
     # Both are resolved before anything loads, so a typo under train.health costs no weights.
     # The planned iteration count is lora["iters"] by the same override lora_config applies.
+    budget_gib, budget_source = _resolved_memory_budget_gib(effective)
     thresholds = HealthThresholds.from_config(
-        config["train"].get("health"), memory_budget_gib=effective.memory_budget_gib
+        config["train"].get("health"), memory_budget_gib=budget_gib
     )
     health = TrainingHealth(
         thresholds, iters=config["train"]["iters"] if iters is None else iters
@@ -754,6 +782,11 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
         try:
             if launch is not None:
                 runlog.info('training launch preflight', **launch)
+                # Which budget the health flag is watching, and where it came from, so a
+                # reader of the log can tell a resolved gate from a fallback (issue 93).
+                runlog.info(
+                    'memory budget', budget_gib=budget_gib, budget_source=budget_source
+                )
             cache_limit = _limit_metal_cache(config["train"])
             runlog.info("metal cache limit", bytes=cache_limit, gib=round(cache_limit / 2**30, 2))
             runlog.info("loading base", model=effective.hf_id)

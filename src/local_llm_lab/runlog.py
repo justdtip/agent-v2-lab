@@ -537,6 +537,19 @@ def _window_int(key: str, value: Any) -> int:
     return number
 
 
+#: `mlx_lm/tuner/trainer.py` reports its peak as `mx.get_peak_memory() / 1e9`, so the trainer's
+#: number is **gigabytes**, and the field carrying it says so. Every budget in this repository is
+#: in gibibytes -- the registry declares `budget_gib`, the device reports a recommended working
+#: set in gibibytes, and `preflight` resolves the two in gibibytes. One conversion, in one place,
+#: because the failure this fixes was two units meeting at a `>` (issue 93).
+_BYTES_PER_GIB = 1024**3
+
+
+def gib_from_gb(gigabytes: float) -> float:
+    """Gigabytes as the trainer reports them, in the gibibytes every budget here is stated in."""
+    return gigabytes * 1e9 / _BYTES_PER_GIB
+
+
 @dataclass(frozen=True)
 class HealthThresholds:
     """Documented engineering defaults for the training-health rules."""
@@ -659,6 +672,9 @@ class TrainingHealth:
                 "tokens_per_second": float(tokens_per_second),
                 "trained_tokens": int(trained_tokens),
                 "peak_memory_gb": float(peak_memory_gb),
+                # Beside it, not instead of it: `peak_memory_gb` is honest about its unit and
+                # readers of it exist, including every health.json already written (issue 93).
+                "peak_memory_gib": float(gib_from_gb(peak_memory_gb)),
             }
         )
         raised: list[str] = []
@@ -711,13 +727,22 @@ class TrainingHealth:
                 raised.append("throughput_drop")
 
         budget = self._thresholds.memory_budget_gib
-        if budget is not None and not self._memory_flagged and peak_memory_gb > budget:
+        peak_memory_gib = gib_from_gb(peak_memory_gb)
+        if budget is not None and not self._memory_flagged and peak_memory_gib > budget:
             self._memory_flagged = True
+            # Both values, and the unit of each, so a reader checks the conversion instead of
+            # trusting it. The comparison used to be `peak_memory_gb > budget`, gigabytes
+            # against gibibytes, which gave the flag 7 percent of margin it had not earned
+            # (issue 93).
             self._record(
                 "memory_over_budget",
                 severity="warning",
                 iteration=iteration,
-                detail={"peak_memory_gb": float(peak_memory_gb), "budget_gib": float(budget)},
+                detail={
+                    "peak_memory_gb": float(peak_memory_gb),
+                    "peak_memory_gib": float(peak_memory_gib),
+                    "budget_gib": float(budget),
+                },
             )
             raised.append("memory_over_budget")
 
@@ -845,6 +870,7 @@ class TrainingHealth:
             "last_val": _safe_record(last_val),
             "best_val": _safe_record(best_val),
             "peak_memory_gb": max(memories) if memories else None,
+            "peak_memory_gib": gib_from_gb(max(memories)) if memories else None,
             "median_tokens_per_second": statistics.median(throughput) if throughput else None,
             "elapsed": float(elapsed),
         }
