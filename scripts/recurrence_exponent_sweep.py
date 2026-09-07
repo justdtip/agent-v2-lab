@@ -59,6 +59,27 @@ def _call(form: str, d: dict[str, mx.array], state0: mx.array, chunk: int):
     return gated_delta_ops(d["q"], d["k"], d["v"], d["g"], d["beta"], state0, None)
 
 
+def project_peak(measured: list[tuple[int, float]], tokens: int) -> float | None:
+    """R47(b): the next size's peak, extrapolated from the rows already in hand.
+
+    A peak read *after* a size has run is a record of a breach, not a guard -- which is exactly
+    what this sweep's first version did at 8,192 tokens on 2026-09-07, reaching 16.78 GiB against
+    R47's 10.66 GiB threshold and stopping one row too late. The peaks it already had -- 2.50,
+    4.56, 5.85 and 8.69 GiB -- project to 16.67, so this would have stopped before running it.
+
+    Log-log through the last two points of the same form and chunk. Returns None with fewer than
+    two, which is the honest limit: **the first two sizes of any sweep are unprojectable and must
+    be small enough to be safe by inspection.**
+    """
+    if len(measured) < 2:
+        return None
+    (t0, p0), (t1, p1) = measured[-2], measured[-1]
+    if t1 <= t0 or p0 <= 0 or p1 <= 0:
+        return None
+    slope = math.log(p1 / p0) / math.log(t1 / t0)
+    return p1 * (tokens / t1) ** slope
+
+
 def timed(form: str, d, state0, chunk: int, repeats: int) -> dict[str, float]:
     """Forward and backward medians, each after a discarded warm-up.
 
@@ -148,7 +169,26 @@ def main() -> None:
         state0 = mx.zeros((1, HV, DV, DK), dtype=mx.float32)
         for form in ("chunkwise", "unrolled"):
             for chunk in (args.chunks if form == "chunkwise" else [0]):
-                row = {"tokens": tokens, "form": form, "chunk": chunk}
+                prior = [
+                    (r["tokens"], r["peak_gib"])
+                    for r in rows
+                    if r["form"] == form and r["chunk"] == chunk
+                ]
+                projected = project_peak(prior, tokens)
+                if projected is not None and projected > WINDOW_GIB:
+                    stopped = (
+                        f"{form} chunk {chunk} at {tokens} tokens projects to "
+                        f"{projected:.2f} GiB from {prior[-2][1]:.2f} and {prior[-1][1]:.2f} GiB, "
+                        f"above R47's {WINDOW_GIB:.2f} GiB; NOT RUN, a window is needed"
+                    )
+                    print(f"STOPPING BEFORE THE RUN: {stopped}", flush=True)
+                    break
+                row = {
+                    "tokens": tokens,
+                    "form": form,
+                    "chunk": chunk,
+                    "projected_peak_gib": projected,
+                }
                 row.update(timed(form, d, state0, chunk, args.repeats))
                 rows.append(row)
                 print(
@@ -157,11 +197,12 @@ def main() -> None:
                     f"peak {row['peak_gib']:.2f} GiB",
                     flush=True,
                 )
-                # R47: stop before a size that would need a declared window, do not run it first
+                # Backstop only. The guard is the projection above; reaching this means the
+                # projection underestimated, which is itself worth reporting.
                 if row["peak_gib"] > WINDOW_GIB:
                     stopped = (
-                        f"peak {row['peak_gib']:.2f} GiB at {tokens} tokens exceeds R47's "
-                        f"{WINDOW_GIB:.2f} GiB; a declared window is needed"
+                        f"BACKSTOP: measured peak {row['peak_gib']:.2f} GiB at {tokens} tokens "
+                        f"exceeds R47's {WINDOW_GIB:.2f} GiB and the projection did not catch it"
                     )
                     break
             if stopped:
