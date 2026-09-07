@@ -1919,3 +1919,20 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git push -q origin 
   **A second correction the failing test surfaced**: the horizon is the **task's** step count, not the trajectory's length (`integrity.py:364` passes `len(task.steps)`). A trajectory that stops early has fewer steps than its horizon, and using its length would reject its own saved indices — which is what made `test_a_parse_error_step_is_an_invalid_action` fail with `1 == 2` on a two-step trajectory carrying index 2.
 
   Left for the Chief's gate. The buffer counter of #90 remains open and, as recorded at 10:40, cannot be written as a count at all.
+
+- 2026-09-07 15:50 (**the operator agrees; the model does not, and that gap is the finding**). The Chief's operator check settles my chunk-256 worry: kernel, reference loop and chunkwise-256 differ by one bf16 ulp, max 2.4e-4, and ≤7.5e-8 in float32, at 11 and 12 chunks and the model's own head shapes. **The exactness gap in the test parametrisation is closed by measurement.** My 15:10 hypothesis is not supported at the operator.
+
+  **But the same message carries a larger result than the one it was testing.** At the model level the early rows show max |Δlogit| over a turn **of order 1** — between forms that agree to 2.4e-4 at the operator. That is roughly a **four-thousand-fold amplification** through 32 layers and the vocabulary projection, and it holds for **loop-vs-kernel as much as for chunkwise-vs-kernel**.
+
+  Two things follow, and the second is bigger than arm A.
+
+  **R32's tolerance is stated at the operator and cannot license a claim about logits.** An operator agreeing to one ulp tells you nothing about argmax agreement, because the amplification is four orders of magnitude. Any future "the two forms are one function" claim has to be made at the level the decision is taken at.
+
+  **Every adapter this pipeline has trained has a train/eval numerical mismatch of order 1 in logits**, whatever recurrence it used, because the stock training path differs from the inference kernel by as much as ours does. That is not a property of arm A or of chunkwise; it is a property of training under one implementation and generating under another.
+
+  **What decides between the two readings, and it is a margin rather than a delta.** The Chief's test asks whether the adapter's wrong call is preferred only under the kernel. Report **the margin** between the recorded turn's token and the wrong one under each form, beside the inter-form |Δlogit|:
+
+  - margin **larger** than the inter-form delta, and the wrong call wins only under the kernel → the mismatch decides the token, and it matters;
+  - margin **smaller** than the delta → the model has no real preference at that slot and the choice is numerically undetermined. Neither form is right, nothing was learned there, and this is the under-training reading. A model trained on 800 rows in 200 updates should have small margins at exactly these slots.
+
+  Without the margin the two are indistinguishable: "the wrong call wins under the kernel" is equally true of a decided preference and of a coin-flip.
