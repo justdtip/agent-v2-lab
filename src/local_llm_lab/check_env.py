@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import platform
-import subprocess
 from importlib.metadata import PackageNotFoundError, version
+from subprocess import CalledProcessError
+
+from local_llm_lab import spawn
 
 PACKAGES = ("mlx", "mlx-lm", "mlx-tune", "datasets")
 
 
 def _memory_gib() -> float | None:
     try:
-        raw = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True)
-        return int(raw.strip()) / 1024**3
-    except (OSError, subprocess.SubprocessError, ValueError):
+        completed = spawn.run(
+            ["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, check=True
+        )
+        return int(completed.stdout.strip()) / 1024**3
+    except (OSError, ValueError, spawn.UnsafeSpawnError, CalledProcessError):
         return None
 
 

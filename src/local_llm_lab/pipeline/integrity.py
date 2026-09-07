@@ -3,14 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from subprocess import SubprocessError
 from typing import Any
 
+from local_llm_lab import spawn
 from local_llm_lab.pipeline.env import Simulator
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, Task, replay_task_from_id
 from local_llm_lab.runlog import RunLog, git_commit
@@ -29,6 +30,20 @@ __all__ = [
 _GIT_TIMEOUT = 10.0
 
 
+def _git_argv(cwd: Path | None, *arguments: str) -> list[str]:
+    """``git`` with the working directory expressed as ``-C``, not as ``subprocess``'s ``cwd``.
+
+    Same effect, different mechanism, and the mechanism is the point: CPython takes
+    ``posix_spawn`` only when ``cwd`` is ``None``, so passing a directory to ``subprocess``
+    forks -- which aborts an interpreter that has initialised Metal (R45, issue 84 item 3).
+    ``git -C`` moves the directory into argv, where it costs nothing.
+
+    Failure behaviour is unchanged: ``git -C`` on a path that does not exist exits non-zero,
+    which both callers already read as "not determined".
+    """
+    return ["git", *(("-C", str(cwd)) if cwd is not None else ()), *arguments]
+
+
 def git_tree_dirty(cwd: Path | None = None) -> bool | None:
     """Whether the working tree carries uncommitted changes, for R26(e) identity blocks.
 
@@ -42,15 +57,14 @@ def git_tree_dirty(cwd: Path | None = None) -> bool | None:
     ``None`` -- "not determined" -- rather than raised or silently read as clean.
     """
     try:
-        completed = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=None if cwd is None else str(cwd),
+        completed = spawn.run(
+            _git_argv(cwd, "status", "--porcelain"),
             capture_output=True,
             text=True,
             check=False,
             timeout=_GIT_TIMEOUT,
         )
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except (OSError, ValueError, spawn.UnsafeSpawnError, SubprocessError):
         return None
     if completed.returncode != 0:
         return None

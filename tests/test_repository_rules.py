@@ -848,12 +848,12 @@ _PROCESS_STARTER_PREFIXES = ("os.spawn", "os.exec")
 # guard there and this static rule must never disagree about which files may fork. One list,
 # two enforcers: a site that leaves the list is covered by both at once.
 #
-# `PRE_EXISTING_FORK_SITES` predates the helper and every entry still forks today. They are
-# **reported, not fixed** in the issue-83 slice: each needs its own argument change (`chat.py`,
-# `train_sft.py`, `provenance.py` and `tests/test_probes.py` pass `cwd`; `check_env.py`,
-# `guard.py` and the two git helpers name a bare program), each has its own callers and
-# fixtures, and putting seven untested edits next to the mechanism that gates every
-# model-loading run is the wrong trade.
+# `PRE_EXISTING_FORK_SITES` predated the helper. It was **reported, not fixed** in the issue-83
+# slice, on the ground that seven untested edits next to the mechanism gating every
+# model-loading run was the wrong trade, and a guard failing 114 tests on its first run is the
+# shape of a guard people switch off. Issue 84 then emptied it, `provenance.py` first because it
+# was the only entry that forked with a model already resident. The list is now empty and the
+# rule below refuses additions to it.
 
 
 def _discover_spawn_surface(root: Path) -> set[Path]:
@@ -904,6 +904,23 @@ def _direct_process_starts(paths: set[Path], root: Path) -> list[str]:
         relative = path.relative_to(root).as_posix()
         findings.extend(f"{relative}:{line}:{chain}" for line, chain in sorted(in_file))
     return findings
+
+
+def test_the_fork_exemption_list_is_empty_and_stays_empty() -> None:
+    """Issue 84's acceptance: no file is exempt from the spawn helper any more.
+
+    Stated as its own test rather than left implicit in an empty set, because the failure this
+    guards against is not a fork -- it is somebody adding a name to
+    ``PRE_EXISTING_FORK_SITES`` to make the rule above go green. That edit makes one file
+    invisible to *both* enforcers at once, the static rule here and the runtime guard in
+    ``conftest``, which is exactly how the seven accumulated. The list earned its exemptions by
+    predating the helper; nothing can earn one now.
+    """
+    assert frozenset() == PRE_EXISTING_FORK_SITES, (
+        "the fork exemption list is closed. A file that needs to start a process goes through "
+        "local_llm_lab.spawn; if it cannot, that is a finding about the file, not an entry "
+        f"here. Added: {sorted(PRE_EXISTING_FORK_SITES)}"
+    )
 
 
 def test_processes_are_started_only_through_the_spawn_helper() -> None:

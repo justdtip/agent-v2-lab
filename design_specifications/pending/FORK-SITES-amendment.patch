@@ -1,0 +1,132 @@
+# FORK-SITES amendment (Chief, 2026-09-08): four edits on top of the Deputy's 155a817 before landing
+
+Applied in `~/worktrees/fork-sites` on the delivered diff, tested there, landed with it as one
+commit. The Deputy's patch is `FORK-SITES.patch` beside this file and is otherwise unchanged.
+
+1. **`probes/guard.py`, the refusal.** The lock's wording already opens with "refusing to load a
+   model:", so the guard's `f"refusing {action}: …"` printed "refusing loading the J-lens model:
+   refusing to load a model: …" and then two "Wait for … to exit" lines. The guard now prints the
+   lock's refusal verbatim and one closing line naming the action. One wording was the point of
+   making `refusal_for_processes` public; the prefix undid it.
+
+2. **`probes/guard.py`, `--allow-busy-gpu`.** The delivered help text said "Load the model even if
+   another process already holds MLX." It does not: nothing passes the flag through to the lock,
+   `runlock.load_weights` calls `hold_model_run_lock()` with the process check on, and the lock
+   has no override. The flag skips the guard's early check and the load refuses on the same
+   evidence a moment later. The help text and the function's docstring now say that, and the
+   refusal no longer offers the flag as a way past. Removing the flag from the probe CLIs is a
+   separate small issue, not part of 84.
+
+3. **`tests/conftest.py`, the comment above the set.** The hunk rewrote the tail of the comment
+   but left its head reading "and still fork today … reported, not fixed … Its contract is
+   therefore 'no *new* forks', not 'no forks'". With the set empty the contract is "no forks";
+   the head now says so and keeps the issue-83 reasoning as history.
+
+4. **Whitespace and an unused fixture.** The new test in `test_repository_rules.py` had three
+   blank lines before it and one after; `test_the_last_exempt_site_no_longer_forks` took a
+   `monkeypatch` it never used. Both fixed by hand, no formatter run over either file.
+
+Ruling on the question the Deputy left: `PRE_EXISTING_FORK_SITES` and the guard's pass-through
+branch stay. The acceptance is "empty and refuses additions", the branch is now tested directly,
+it costs one set lookup, and the closed-list test makes any future exemption a visible two-place
+edit (the set and the test) rather than an ad hoc rewrite of the guard.
+
+Verification in the worktree: full suite on the delivered diff exit 0; ruff on the four amended
+files 0 findings and format-clean; the targeted files (`test_spawn`, `test_repository_rules`,
+`test_fork_sites`, the guard and hash-seed tests in `test_probes`) 72 passed; full suite on the
+amended bytes recorded in the heartbeat entry for the landing.
+
+```diff
+diff --git a/src/local_llm_lab/probes/guard.py b/src/local_llm_lab/probes/guard.py
+index eb3ecba..baf48ea 100644
+--- a/src/local_llm_lab/probes/guard.py
++++ b/src/local_llm_lab/probes/guard.py
+@@ -46,19 +46,28 @@ def add_gpu_arguments(parser: argparse.ArgumentParser) -> None:
+     parser.add_argument(
+         "--allow-busy-gpu",
+         action="store_true",
+-        help="Load the model even if another process already holds MLX.",
++        help=(
++            "Skip this CLI's early check for another process holding MLX. The model-run lock "
++            "repeats the check at the load and has no override, so this only moves where a "
++            "refusal happens."
++        ),
+     )
+ 
+ 
+ def require_idle_gpu(
+     parser: argparse.ArgumentParser, args: argparse.Namespace, action: str
+ ) -> None:
+-    """Abort with a clear message when another process holds MLX, unless overridden."""
++    """Abort with the lock's own refusal when another process holds MLX, unless overridden.
++
++    The override skips only this early check. ``runlock.load_weights`` takes the lock and
++    makes the same check again with no override, so ``--allow-busy-gpu`` moves a refusal
++    from here to the load and buys nothing else; the refusal below does not offer it as a
++    way past.
++    """
+     if getattr(args, "allow_busy_gpu", False):
+         return
+     busy = gpu_users()
+     if busy:
+         parser.error(
+-            f"refusing {action}: {runlock.refusal_for_processes(busy)}\n"
+-            "Wait for it to exit, or pass --allow-busy-gpu."
++            f"{runlock.refusal_for_processes(busy)}\nThis command stops here rather than {action}."
+         )
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 5bab49e..c87887b 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -123,11 +123,12 @@ class ForkInThisInterpreter(RuntimeError):
+ #: dead code that still reports success. ``tests/test_spawn.py`` fails when either name goes.
+ FORK_HOOKS = (("subprocess", "_fork_exec"), ("os", "fork"))
+ 
+-#: Modules that started processes before ``local_llm_lab.spawn`` existed, and still fork today.
+-#: They are **reported, not fixed** in the issue-83 slice (each needs its own argument change,
+-#: its own callers checked, and putting seven untested edits next to the mechanism that gates
+-#: every model-loading run is the wrong trade), so the guard lets them through and refuses
+-#: everything else. Its contract is therefore "no *new* forks", not "no forks".
++#: Modules the fork guard lets through. **Now none**, so the guard's contract is "no forks",
++#: not "no *new* forks". The set was created by the issue-83 slice for the eight files that
++#: started processes before ``local_llm_lab.spawn`` existed and still forked; they were
++#: reported there rather than fixed, because seven untested edits next to the mechanism that
++#: gates every model-loading run was the wrong trade, and a guard that fails 114 tests on its
++#: first run is the shape of a guard people switch off.
+ #:
+ #: This is the same list ``test_repository_rules.py`` exempts from the static rule, imported
+ #: from here so the two cannot drift, and
+diff --git a/tests/test_repository_rules.py b/tests/test_repository_rules.py
+index 784a31f..aad178b 100644
+--- a/tests/test_repository_rules.py
++++ b/tests/test_repository_rules.py
+@@ -906,7 +906,6 @@ def _direct_process_starts(paths: set[Path], root: Path) -> list[str]:
+     return findings
+ 
+ 
+-
+ def test_the_fork_exemption_list_is_empty_and_stays_empty() -> None:
+     """Issue 84's acceptance: no file is exempt from the spawn helper any more.
+ 
+@@ -923,6 +922,7 @@ def test_the_fork_exemption_list_is_empty_and_stays_empty() -> None:
+         f"here. Added: {sorted(PRE_EXISTING_FORK_SITES)}"
+     )
+ 
++
+ def test_processes_are_started_only_through_the_spawn_helper() -> None:
+     """Issue 83: a fork in an interpreter with Metal up aborts, so nothing here may fork.
+ 
+diff --git a/tests/test_spawn.py b/tests/test_spawn.py
+index a9f3f1f..c0e7bf2 100644
+--- a/tests/test_spawn.py
++++ b/tests/test_spawn.py
+@@ -58,7 +58,7 @@ def test_the_fork_guard_fires_on_a_direct_os_fork() -> None:
+         os.fork()
+ 
+ 
+-def test_the_last_exempt_site_no_longer_forks(monkeypatch) -> None:
++def test_the_last_exempt_site_no_longer_forks() -> None:
+     """The same call this test used to make, with the assertion turned around (issue 84).
+ 
+     `runlog.git_commit` used to shell out with a bare `git` and a `cwd`, so it forked, and it sat
+```
