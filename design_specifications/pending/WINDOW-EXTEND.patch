@@ -1,0 +1,398 @@
+# WINDOW-EXTEND: `extend`, the shell note, and a skip that says the omission had a cause
+
+Three things the mechanism's first hours asked for, in the file they belong to.
+
+## `extend`, because correcting a duration must not free the box
+
+I announced 100 minutes for a block that is running 131. The obvious correction — end and
+re-announce — is the wrong one: the file cannot say "the same holder, a moment later", so between
+the two calls the slot is genuinely free and another seat may take it. **A block that overran its
+estimate is exactly when that must not happen.**
+
+`extend_window(nonce, minutes)` rewrites `expected_end_epoch` in place, holder-only and
+nonce-guarded like `end_window`, appending to an `extensions` list so the correction is visible
+rather than silent. It prints nothing: the token is already in the holder's shell, so there is no
+export line to emit. `runlock extend --minutes N` on the command line.
+
+The test asserts the property that matters — **the file never left**, so the slot never opened —
+and that a wrong token changes nothing.
+
+## The token lives in the launching command's shell
+
+Documented on `WINDOW_HOLDER_ENV`, because it surprised its author. A later command in a *new*
+shell does not have the token, is treated as a non-holder, and has its own MLX-reaching tests
+skipped. Safe direction, deliberate, and worth saying.
+
+## A silent skip is its own hazard
+
+**This one is not a polish.** On 2026-09-08 a reviewer ran a suite during my window, read `exit 0`,
+and reported a file green that the collector had skipped entire — 71 tests. The exit code was
+honest and the count was in pytest's own summary; nothing said the omission had a **cause**.
+
+`pytest_terminal_summary` now writes a `box window` section naming the holder, the count, and the
+sentence that matters: *this run did NOT exercise the files that can reach MLX; re-run after the
+end line before reporting them green.* It is silent when no window is open **and when a window is
+open but this run collected nothing it covers**, so it is not noise on every unrelated run made
+during somebody's block.
+
+`mark_items_for_a_foreign_window` returns the window and the count for that, rather than the
+window alone.
+
+## A latent flake, found by running the suite during a live window
+
+Three `test_runlock` tests failed the first time a **real** window was open, because `_acquire`
+consults it and the suite had no protection. `conftest` redirects `default_window_path` to a
+temporary path for the whole suite, exactly as it already redirects the lock and for the same
+reason — **host state must not be able to fail the suite**. The handful of tests that are *about*
+where the window lives take an `unredirected_window_path` fixture and see the real function.
+
+Nothing about this was visible until a window existed. It would have bitten the next seat to run a
+suite during any block.
+
+## Verification
+
+```
+test_runlock.py, test_repository_rules.py, test_spawn.py: 110 passed
+ruff: clean on all three changed files
+git apply --check against HEAD: 0
+```
+
+**Run as the window's holder under stub `mlx` and `mlx_lm`**: the token exported so the
+collector let the files through, the stubs in force so nothing could map MLX beside the live
+training block. The full suite runs at the block's end line.
+
+One thing this patch cannot demonstrate live and covers by unit test instead: the summary
+section firing on a real run. Doing that needs a peer's run collecting a covered file during
+an open window, which is the situation the patch exists to make legible rather than one to
+manufacture.
+
+```diff
+diff --git a/src/local_llm_lab/runlock.py b/src/local_llm_lab/runlock.py
+index 8ca6c33..ad14fa4 100644
+--- a/src/local_llm_lab/runlock.py
++++ b/src/local_llm_lab/runlock.py
+@@ -78,6 +78,7 @@ __all__ = [
+     "mark_items_for_a_foreign_window",
+     "blocking_window",
+     "end_window",
++    "extend_window",
+     "read_window",
+     "refusal_for_window",
+     "MLX_LIBRARY",
+@@ -242,6 +243,11 @@ def box_state_root() -> Path:
+ #: The announcing command exports this with the window's nonce, and every child inherits it. That
+ #: is what separates "the seat that opened the window" from "everybody else" without a pid tree:
+ #: a suite the holder starts is theirs, a suite anybody else starts is not.
++#:
++#: **It lives in the launching command's shell.** A later command in a *new* shell does not have
++#: it and is treated as a non-holder, so the holder's own MLX-reaching tests are skipped there.
++#: That is the safe direction and it is deliberate, but it surprises the holder, so: export the
++#: token again in any shell that should count as the holder.
+ WINDOW_HOLDER_ENV = "AGENT_V2_BOX_WINDOW"
+ 
+ #: How far past its own expected end a window may sit before it is called overdue. Reported, never
+@@ -366,6 +372,36 @@ def end_window(nonce: str, path: Path | None = None) -> bool:
+     return True
+ 
+ 
++def extend_window(nonce: str, expected_minutes: float, path: Path | None = None) -> bool:
++    """Move an open window's expected end without dropping the slot. Holder only.
++
++    Ending and re-announcing would be the obvious way to correct a duration and it is the wrong
++    one: the file has no way to say "the same holder, a moment later", so between the two calls
++    the slot is genuinely free and another seat may take it. A block that overran its estimate is
++    exactly when that must not happen.
++
++    Nonce-guarded like :func:`end_window`, and it prints nothing: the token is already in the
++    holder's shell, so there is no export line to emit.
++    """
++    target = path if path is not None else default_window_path()
++    held = read_window(target)
++    if held is None or held.nonce != nonce:
++        return False
++    try:
++        payload = json.loads(target.read_text(encoding="utf-8"))
++    except (OSError, json.JSONDecodeError):
++        return False
++    payload["expected_end_epoch"] = time.time() + expected_minutes * 60.0
++    payload["expected_minutes"] = expected_minutes
++    payload.setdefault("extensions", []).append(
++        {"at": _utc_now(), "new_expected_minutes": expected_minutes}
++    )
++    # Written in place rather than replaced: an exclusive create would fail on the file that is
++    # the point, and a delete-then-create is the slot-dropping this function exists to avoid.
++    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
++    return True
++
++
+ def blocking_window(path: Path | None = None, *, holder: str | None = None) -> BoxWindow | None:
+     """The window that blocks **this** process, or None.
+ 
+@@ -392,6 +428,10 @@ def mark_items_for_a_foreign_window(items: Sequence[Any], names: Sequence[str])
+     nothing wrong, and the natural response to a red suite is to run it again -- which is the
+     collision. A skip keeps the rest of the suite honest, says whose slot this is, and leaves
+     nothing to rerun.
++
++    Returns the window and how many items it marked, because a silent skip is its own hazard: a
++    reviewer read "exit 0" on 2026-09-08 and reported a file green that the collector had skipped
++    entire. The caller uses the count to say so where a reader will meet it.
+     """
+     window = blocking_window()
+     if window is None:
+@@ -406,10 +446,12 @@ def mark_items_for_a_foreign_window(items: Sequence[Any], names: Sequence[str])
+         )
+     )
+     wanted = set(names)
++    marked = 0
+     for item in items:
+         if Path(str(item.fspath)).name in wanted:
+             item.add_marker(marker)
+-    return window
++            marked += 1
++    return window, marked
+ 
+ 
+ def refusal_for_window(window: BoxWindow) -> str:
+@@ -1004,6 +1046,8 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
+     opening.add_argument("--seat", required=True)
+     opening.add_argument("--purpose", required=True)
+     opening.add_argument("--minutes", type=float, required=True)
++    lengthen = sub.add_parser("extend")
++    lengthen.add_argument("--minutes", type=float, required=True)
+     sub.add_parser("end")
+     sub.add_parser("status")
+     args = parser.parse_args(argv)
+@@ -1012,6 +1056,13 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
+         nonce = announce_window(args.seat, args.purpose, args.minutes)
+         print(f"export {WINDOW_HOLDER_ENV}={nonce}")
+         return 0
++    if args.action == "extend":
++        token = os.environ.get(WINDOW_HOLDER_ENV, "")
++        if not token or not extend_window(token, args.minutes):
++            print("no window of this seat's to extend")
++            return 1
++        print(f"window extended to {args.minutes:g} minutes from now")
++        return 0
+     if args.action == "end":
+         token = os.environ.get(WINDOW_HOLDER_ENV, "")
+         if not token:
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 3d4efb1..3f8f0a7 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -37,6 +37,18 @@ REAL_PROCESS_TABLE = runlock._process_table
+ REAL_MAPPED_PIDS = runlock._mapped_pids
+ 
+ 
++#: `default_window_path` as it is before the suite-wide redirect below, for the handful of tests
++#: that are *about* where the window lives and must see the real function.
++REAL_DEFAULT_WINDOW_PATH = runlock.default_window_path
++
++
++@pytest.fixture
++def unredirected_window_path(monkeypatch):
++    """Give one test the real `default_window_path` back, for tests about the path itself."""
++    monkeypatch.setattr(runlock, "default_window_path", REAL_DEFAULT_WINDOW_PATH)
++    return REAL_DEFAULT_WINDOW_PATH
++
++
+ @pytest.fixture
+ def machine_lock_path() -> Path:
+     """The real ``outputs/.model-run.lock``, past the redirect below."""
+@@ -59,6 +71,13 @@ def _the_model_run_lock_is_never_the_machines(_suite_lock_path, monkeypatch):
+     child processes against a library of their own.
+     """
+     monkeypatch.setattr(runlock, "default_lock_path", lambda: _suite_lock_path)
++    # And the window, for the same reason and one the lock did not have: `_acquire` consults it
++    # (issue 95), so a **real** window open on this machine failed three of these tests the first
++    # time one was. Host state must not be able to fail the suite; a test that exercises the
++    # window passes its own path.
++    monkeypatch.setattr(
++        runlock, "default_window_path", lambda: _suite_lock_path.parent / ".box-window.json"
++    )
+     # Explicit no-op lambdas, not the `list`/`dict` builtins. `running_model_processes` calls
+     # `_mapped_pids(library)` positionally, so the `dict` builtin evaluated
+     # `dict("libmlx.dylib")` and raised ValueError from inside the guard. It reached the six
+@@ -244,6 +263,9 @@ TESTS_THAT_LOAD_MLX = (
+ #: Pinned like its sibling and checked against an any-scope AST walk by
+ #: `tests/test_repository_rules.py`, so a new function-local import cannot quietly rejoin the
+ #: set of files a window lets through.
++#: Where the collector leaves what it did, for the terminal summary to report.
++_WINDOW_SKIP = pytest.StashKey[object]()
++
+ TESTS_THAT_CAN_REACH_MLX = tuple(
+     sorted(
+         {
+@@ -276,4 +298,30 @@ def pytest_collection_modifyitems(config, items):
+     """
+     from local_llm_lab.runlock import mark_items_for_a_foreign_window
+ 
+-    mark_items_for_a_foreign_window(items, TESTS_THAT_CAN_REACH_MLX)
++    config.stash[_WINDOW_SKIP] = mark_items_for_a_foreign_window(items, TESTS_THAT_CAN_REACH_MLX)
++
++
++def pytest_terminal_summary(terminalreporter, exitstatus, config):
++    """Say, where a reader will meet it, that a window skipped part of this run.
++
++    A skip is the right response to somebody else's window and a silent one is its own hazard: on
++    2026-09-08 a reviewer read "exit 0" from a run whose whole `test_cli.py` the collector had
++    skipped, and reported the file green. The exit code was honest and the summary line was there;
++    what was missing was anything that said the omission had a *cause*.
++    """
++    skipped = config.stash.get(_WINDOW_SKIP, None)
++    if not skipped:
++        return
++    window, count = skipped
++    if not count:
++        # A window was open and this run collected nothing it covers. Saying so would be noise
++        # on every unrelated run made during somebody's block.
++        return
++    terminalreporter.write_sep("=", "box window", yellow=True)
++    terminalreporter.write_line(
++        f"{count} test(s) were skipped, not run: the box window is held by {window.describe()}."
++    )
++    terminalreporter.write_line(
++        "This run did NOT exercise the files that can reach MLX. Re-run after the end line "
++        "before reporting them green."
++    )
+diff --git a/tests/test_runlock.py b/tests/test_runlock.py
+index 5dc049c..cdef808 100644
+--- a/tests/test_runlock.py
++++ b/tests/test_runlock.py
+@@ -1051,7 +1051,10 @@ def test_the_collector_skips_the_mlx_files_under_another_seats_window(monkeypatc
+ 
+     loads_mlx = _Item("test_preflight.py")
+     does_not = _Item("test_runlock.py")
+-    conftest.pytest_collection_modifyitems(None, [loads_mlx, does_not])
++    class _Config:
++        stash: dict = {}
++
++    conftest.pytest_collection_modifyitems(_Config(), [loads_mlx, does_not])
+ 
+     assert len(loads_mlx.markers) == 1, "an MLX-loading file is skipped"
+     assert does_not.markers == [], "a file that loads no MLX is untouched"
+@@ -1073,7 +1076,10 @@ def test_the_collector_leaves_the_holders_own_suite_alone(monkeypatch) -> None:
+         def add_marker(self, marker):  # pragma: no cover - must not be reached
+             raise AssertionError("the holder's own suite must not be skipped")
+ 
+-    conftest.pytest_collection_modifyitems(None, [_Item()])
++    class _Config:
++        stash: dict = {}
++
++    conftest.pytest_collection_modifyitems(_Config(), [_Item()])
+ 
+ 
+ def test_the_pinned_mlx_file_list_has_one_home(monkeypatch) -> None:
+@@ -1116,7 +1122,9 @@ def test_the_lock_refuses_a_launch_into_another_seats_window_and_admits_the_hold
+     assert Path(held).is_file(), "the seat that announced the window may launch into it"
+ 
+ 
+-def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(tmp_path, monkeypatch) -> None:
++def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(
++    tmp_path, monkeypatch, unredirected_window_path
++) -> None:
+     """The defect that would have left all four of 2026-09-08's refusals unprevented (issue 95).
+ 
+     Both files used to hang off `PROJECT_ROOT`, which is the **running checkout's** root. Every
+@@ -1156,7 +1164,9 @@ def test_a_linked_worktree_resolves_to_the_primarys_lock_and_window(tmp_path, mo
+     assert runlock.box_state_root() == primary
+ 
+ 
+-def test_the_state_root_override_is_operational_not_a_test_knob(tmp_path, monkeypatch) -> None:
++def test_the_state_root_override_is_operational_not_a_test_knob(
++    tmp_path, monkeypatch, unredirected_window_path
++) -> None:
+     """A second clone on one machine keeps its own box state unless pointed at the shared one.
+ 
+     That is the same defeat a worktree used to have, one level up, and it cannot be read off the
+@@ -1181,7 +1191,7 @@ def test_an_unreadable_git_marker_falls_back_to_the_checkouts_own_root(
+ 
+ 
+ def test_the_collector_fires_inside_a_nested_run_under_a_temporary_state_root(
+-    pytester, tmp_path, monkeypatch
++    pytester, tmp_path, monkeypatch, unredirected_window_path
+ ) -> None:
+     """The registration gap the first delivery could not close, closed (issue 95).
+ 
+@@ -1221,3 +1231,80 @@ def test_the_collector_fires_inside_a_nested_run_under_a_temporary_state_root(
+     monkeypatch.setenv(runlock.WINDOW_HOLDER_ENV, nonce)
+     holders = pytester.runpytest()
+     holders.assert_outcomes(passed=1)
++
++
++def test_a_window_is_extended_without_the_slot_being_dropped(tmp_path) -> None:
++    """Correcting a duration must not free the box for a moment (issue 95, second amendment).
++
++    Ending and re-announcing is the obvious way and the wrong one: the file cannot say "the same
++    holder, a moment later", so between the two calls the slot is genuinely free and another seat
++    may take it. A block that overran its estimate is exactly when that must not happen — which is
++    the case that produced this, a 100-minute announcement for a 131-minute block.
++    """
++    path = tmp_path / "window.json"
++    nonce = runlock.announce_window("deputy", "88 block 1", 100.0, path=path)
++    before = runlock.read_window(path)
++
++    assert runlock.extend_window("not-the-nonce", 140.0, path=path) is False
++    assert runlock.read_window(path).expected_end_epoch == before.expected_end_epoch
++
++    assert runlock.extend_window(nonce, 140.0, path=path) is True
++    after = runlock.read_window(path)
++    assert after.nonce == nonce, "the same window, not a new one"
++    assert after.expected_end_epoch > before.expected_end_epoch
++    assert path.is_file(), "the file never left, so the slot never opened"
++
++    payload = json.loads(path.read_text(encoding="utf-8"))
++    assert payload["extensions"][0]["new_expected_minutes"] == 140.0
++
++
++def test_extending_a_window_nobody_holds_is_refused(tmp_path) -> None:
++    """There is nothing to extend, and inventing one would hand out a slot."""
++    assert runlock.extend_window("any-token", 30.0, path=tmp_path / "absent.json") is False
++
++
++def test_the_terminal_summary_says_a_window_skipped_part_of_the_run() -> None:
++    """The hazard the skip design carries, addressed where a reader will meet it.
++
++    A skip is right and a silent skip is not: on 2026-09-08 a reviewer read "exit 0" from a run
++    whose whole `test_cli.py` the collector had skipped, and reported the file green. The exit
++    code was honest and the count was in the summary; nothing said the omission had a cause.
++    """
++    import conftest
++
++    window = runlock.BoxWindow(
++        path=Path("outputs/.box-window.json"),
++        seat="deputy",
++        purpose="88 block 1",
++        opened="2026-09-08T12:17:03Z",
++        expected_end_epoch=None,
++        nonce="abc",
++        raw="{}",
++        age_seconds=60.0,
++    )
++
++    class _Reporter:
++        def __init__(self) -> None:
++            self.lines: list[str] = []
++
++        def write_sep(self, _char, title, **_kwargs) -> None:
++            self.lines.append(f"[{title}]")
++
++        def write_line(self, text) -> None:
++            self.lines.append(text)
++
++    class _Config:
++        def __init__(self, value) -> None:
++            self.stash = {conftest._WINDOW_SKIP: value}
++
++    reporter = _Reporter()
++    conftest.pytest_terminal_summary(reporter, 0, _Config((window, 71)))
++    joined = "\n".join(reporter.lines)
++    assert "[box window]" in joined
++    assert "71 test(s) were skipped, not run" in joined
++    assert "deputy: 88 block 1" in joined
++    assert "before reporting them green" in joined
++
++    quiet = _Reporter()
++    conftest.pytest_terminal_summary(quiet, 0, _Config(None))
++    assert quiet.lines == [], "a run no window touched says nothing"
+```
