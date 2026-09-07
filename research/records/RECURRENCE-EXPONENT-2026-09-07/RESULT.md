@@ -25,9 +25,28 @@ project from the rows it has, not report the row it just ran.**
 | --- | --- | --- |
 | chunkwise, chunk 256 | **1.070** | 1.02, 1.08, 1.27, 0.94, 1.10 |
 | chunkwise, chunk 128 | **1.202** | 0.97, 1.19, 1.21, 1.30, 1.38 |
-| unrolled | **1.763** | 1.65, 1.70, 1.76, 1.82, 1.93 |
+| unrolled, five clean sizes | **1.713** | 1.65, 1.70, 1.76, 1.82 |
+| unrolled, including the breach row | 1.763 | …, 1.93 — **contaminated, see below** |
 
-Forward: 1.01, 0.98 and 1.43.
+Forward: chunk 256 **1.02**, chunk 128 **0.97**, unrolled **1.03** over the five clean sizes.
+
+## The breach row is contaminated, and it is excluded
+
+The 8,192-token unrolled row ran at 16.78 GiB, 0.94 of the working set. **Its forward time gives a
+segment exponent of 3.11 after five segments at 1.05, 1.01, 1.02 and 1.06** — the forward is linear
+in every clean segment and then jumps by a factor of eight in one doubling. That is memory pressure,
+not scaling, and it condemns the whole row.
+
+Two figures I published from it are withdrawn. **The unrolled forward is 1.03, not 1.43**: the 1.43
+was entirely the contaminated row, and the clean forward is linear exactly as the algebra says.
+**The backward's last segment, 1.93, is not clean either**; the clean segments are 1.65, 1.70, 1.76
+and 1.82.
+
+**The conclusion does not rest on that row.** The unrolled backward fits **1.713** over the five
+clean sizes alone, against chunkwise's 1.070 and 1.202 — all six of whose sizes are clean, since the
+chunkwise rows at 8,192 peaked at 1.92 and 2.37 GiB and ran before the pressure. And the withdrawal
+**sharpens** the finding rather than weakening it: with a linear forward and a 1.71 backward, the
+anomaly is located in the backward alone, which is what the algebra makes surprising.
 
 **The exponent does not transfer.** At chunk 256 the chunkwise backward is 1.07 across four
 octaves, which is the algebra's 1.0 within the spread. **Chunk 128 is 1.20 and rises to 1.38 in the
@@ -36,8 +55,8 @@ smaller chunk pays more per token as rows grow.
 
 ## The premise is restated, as pre-registered
 
-**The unrolled path does not reproduce 1.57 here.** It fits **1.763** over this range and its
-segments rise monotonically, 1.65 to 1.93. The original figure came from 125 to 1,000 tokens, four
+**The unrolled path does not reproduce 1.57 here.** It fits **1.713** over the five clean sizes and
+its segments rise monotonically, **1.65 to 1.82**. The original figure came from 125 to 1,000 tokens, four
 points over one octave. So **1.57 is a description of that range and the exponent is not constant:
 it steepens with length.** The anomaly is real and larger than reported, not an artefact — the
 fourth outcome of the pre-registered table.

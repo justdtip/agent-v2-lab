@@ -107,8 +107,10 @@ that range than the larger, because we are only partly dispatch-bound.
    a half. Everything else is priced against it.
 **CORRECTION, 2026-09-07 (Deputy, `research/records/RECURRENCE-EXPONENT-2026-09-07`).** The 1.57
 below is **one octave's figure**: it was fitted over 125 to 1,000 tokens, four points. Measured over
-512 to 8,192 in a harness timing both forms on the same tensors, the unrolled backward fits **1.763**
-with segments rising monotonically 1.65, 1.70, 1.76, 1.82, 1.93. **The exponent is not constant; it
+512 to 8,192 in a harness timing both forms on the same tensors, the unrolled backward fits **1.713**
+over the five sizes measured below the memory threshold, with segments rising monotonically 1.65,
+1.70, 1.76, 1.82. (The 8,192 row ran at 0.94 of the working set and is excluded: its *forward*
+segment exponent is 3.11 against 1.0 elsewhere, which is pressure rather than scaling.) **The exponent is not constant; it
 steepens with length**, so 1.57 describes its own range and the anomaly is larger than reported. The
 question item 2 asks is answered: the chunkwise path does **not** share it — 1.070 at chunk 256 and
 1.202 at chunk 128 over the same range, with the forward at 1.01 and 0.98.
