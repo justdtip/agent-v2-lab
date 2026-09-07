@@ -95,6 +95,11 @@ def main() -> None:
     from local_llm_lab.pipeline.live_lens.session import CaptureSession, LensReadout, RecordWriter, read_record
 
     mx.set_cache_limit(2 * 2**30)
+    # Capture requires no cross-turn reuse; the registry default is `history` since 2026-09-07,
+    # so this entry point resolves `none` explicitly rather than inheriting the default.
+    from dataclasses import replace
+
+    spec = replace(spec, cache_strategy="none")
     model, mtok, view, resolved = load_policy(spec, None)
     model.eval()
     assert resolved.cache_strategy == "none", resolved.cache_strategy

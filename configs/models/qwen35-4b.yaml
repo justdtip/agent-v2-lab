@@ -25,7 +25,16 @@ train:
   learning_rate: 3.0e-5
   grad_checkpoint: true
 cache:
-  strategy: auto
+  # Director's decision, 2026-09-07 20:20: the history strategy is this model's default. It was
+  # verified bit-identical against the ordinary runner on the real checkpoint, base and adapter
+  # (research/records/HISTORY-CACHE-2026-09-07/{base,adapter}-acceptance.json). For prompts under
+  # the native prefill cadence it reuses nothing and runs the identical forward schedule; it
+  # reuses whole native chunks on longer contexts. Capture-carrying entry points (the live-lens
+  # pilot, the replay reader) must resolve `none` explicitly: capture requires no reuse.
+  strategy: history
+  # R1's field for the *snapshot* strategy, which failed equivalence on 2026-09-07 (four of six
+  # trajectories diverged). It stays null: `auto` would resolve to snapshot on it, and snapshot is
+  # not the verified strategy on this model.
   equivalence_verified: null
 probes:
   # Residual pairs from the recorded band ruling; verify against installed block kinds.

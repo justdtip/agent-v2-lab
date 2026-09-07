@@ -129,3 +129,11 @@ set's XᵀX (the total, not divided by n) and `α` runs over the grid `{1e-3, 1e
 `n · α · (d̄ / n) · I`, which is what `scripts/fit_regression_lens.py` computes. The held-out selection of
 `α` per layer is unchanged. Record `α`, `d̄` and `n` per layer in the sidecar so the absolute `λ` is
 recoverable. §3.2's wording is superseded by this section; the document is not edited in place.
+
+## 13. The registry default changed (7 September, 20:20)
+
+`configs/models/qwen35-4b.yaml` now declares `cache.strategy: history` (R1(b)). Any entry point that
+drives `run_task(capture=…)` or `CaptureSession` — the replay reader of §3.4 in particular — must
+resolve the no-reuse strategy explicitly before loading (`replace(spec, cache_strategy="none")`), as
+`scripts/live_lens_pilot.py` now does; the runner raises on capture with a turn cache and does not
+fall back. Fits (§3.2, §3.3) use uncached full forwards through the view and are unaffected.

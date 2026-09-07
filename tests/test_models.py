@@ -34,7 +34,10 @@ from local_llm_lab.models import load_model_spec
             "qwen35-4b",
             "mlx-community/Qwen3.5-4B-MLX-4bit",
             "off",
-            "auto",
+            # R1(b), the Director's decision of 2026-09-07 20:20: the history strategy, verified
+            # bit-identically on the real checkpoint (research/records/HISTORY-CACHE-2026-09-07),
+            # is this model's default. The other registered models keep R1's `auto`.
+            "history",
             "auto",
             {
                 "max_seq_length": 2688,
@@ -89,13 +92,16 @@ def test_model_spec_registry_values(
     ("name", "strategy"),
     [
         ("qwen25-coder-3b", "trim"),
-        ("qwen35-4b", "auto"),
+        ("qwen35-4b", "history"),
         ("qwen35-9b", "auto"),
     ],
 )
 def test_registered_cache_declarations_start_without_equivalence_evidence(
     name: str, strategy: str
 ) -> None:
+    """R1: no registered model carries snapshot-equivalence evidence; R1(b): qwen35-4b's declared
+    strategy is ``history`` (Director, 2026-09-07 20:20), whose acceptance is a record, not this
+    field — the field licenses ``snapshot``, which failed equivalence on the same day."""
     spec = load_model_spec(name)
 
     assert spec.cache_strategy == strategy
