@@ -1,0 +1,90 @@
+{
+  "builder_commit": "31ec13ceaa6e6c6ff93164b4955569b60c6ebf3f",
+  "branch_commit": "53343a3",
+  "checkpoint_loaded": false,
+  "corpora": [
+    {
+      "domain": "agentic",
+      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json",
+      "file_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
+      "canonical_payload_sha256": "b6f9e0e284132f6861442ff362e8d2217eae8621b8449218afc1617cfca14885",
+      "sequences_sha256": "d3b5911bef2b55513927b4720f7d7fee34f19a1bb870ef50a6d0d922b93660ab",
+      "counts": {
+        "fit": {
+          "sequences": 418,
+          "spans": {
+            "call": 88213,
+            "chat": 0,
+            "note": 13452,
+            "observation": 128819,
+            "system": 157168,
+            "task": 24417,
+            "template": 46122
+          },
+          "tokens": 458191
+        },
+        "held": {
+          "sequences": 100,
+          "spans": {
+            "call": 19564,
+            "chat": 0,
+            "note": 3988,
+            "observation": 29565,
+            "system": 37600,
+            "task": 5904,
+            "template": 10249
+          },
+          "tokens": 106870
+        }
+      },
+      "source_sequences": 600,
+      "dropped": 82,
+      "discarded_trailing_tokens": 0
+    },
+    {
+      "domain": "prose",
+      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.json",
+      "file_sha256": "02f7f818ce3aba2c57a229cde28e92f8a9375b9bdbe0c6db401be3b3105477b4",
+      "canonical_payload_sha256": "b4d13f930acab27d5f27886086c9c0802e4024a685d6a5a91361734550e126c4",
+      "sequences_sha256": "261cd05fa62b2ae15ce9ecca8ae0d685e3ed2a14790e76a2e11848163c175266",
+      "counts": {
+        "fit": {
+          "sequences": 204,
+          "spans": {
+            "call": 0,
+            "chat": 208896,
+            "note": 0,
+            "observation": 0,
+            "system": 0,
+            "task": 0,
+            "template": 0
+          },
+          "tokens": 208896
+        },
+        "held": {
+          "sequences": 51,
+          "spans": {
+            "call": 0,
+            "chat": 52224,
+            "note": 0,
+            "observation": 0,
+            "system": 0,
+            "task": 0,
+            "template": 0
+          },
+          "tokens": 52224
+        }
+      },
+      "source_sequences": 255,
+      "dropped": 0,
+      "discarded_trailing_tokens": 164
+    }
+  ],
+  "download_descriptor_sha256": "864cfaf8001a89a33912693a19fd86704be14756a11d5c4c5320aa6afb17279f",
+  "notices": [
+    "Transformers reports PyTorch absent; tokenizer/file utilities operate successfully.",
+    "HF download used unauthenticated requests; completed at pinned revision."
+  ],
+  "review_status": "two reader invariant fixes pending; built records remain immutable",
+  "ridge_scaling": "awaiting Director ruling"
+}
