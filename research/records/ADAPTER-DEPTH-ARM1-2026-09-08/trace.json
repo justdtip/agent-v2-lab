@@ -1,0 +1,74 @@
+{
+  "arm": "top 8",
+  "reports": 120,
+  "median_it_per_s": 0.207,
+  "arm_a_it_per_s": 0.09713574097135741,
+  "speedup": 2.1310384615384614,
+  "probe_ratio": 2.1904761904761907,
+  "peak_first_gib": 6.103888154029846,
+  "peak_final_gib": 8.335337042808533,
+  "peak_steps": [
+    {
+      "iter": 20,
+      "peak_gib": 6.536021828651428,
+      "step_gib": 0.4321336746215816
+    },
+    {
+      "iter": 30,
+      "peak_gib": 6.979331374168396,
+      "step_gib": 0.4433095455169678
+    },
+    {
+      "iter": 40,
+      "peak_gib": 7.548369467258453,
+      "step_gib": 0.5690380930900579
+    },
+    {
+      "iter": 70,
+      "peak_gib": 8.289702236652374,
+      "step_gib": 0.7413327693939203
+    },
+    {
+      "iter": 230,
+      "peak_gib": 8.29063355922699,
+      "step_gib": 0.0009313225746149623
+    },
+    {
+      "iter": 300,
+      "peak_gib": 8.335337042808533,
+      "step_gib": 0.04470348358154301
+    }
+  ],
+  "late_step_total_gib": 0.045634806156157975,
+  "arm_a_late_step_total_gib": 0.221,
+  "arm_a_peak_gib": 9.72640236467123,
+  "arm1_peak_gib": 8.334987342357635,
+  "raw_difference_gib": 1.3914150223135946,
+  "val": [
+    {
+      "iter": 1,
+      "loss": 0.721
+    },
+    {
+      "iter": 400,
+      "loss": 0.194
+    },
+    {
+      "iter": 800,
+      "loss": 0.011
+    },
+    {
+      "iter": 1200,
+      "loss": 0.14
+    }
+  ],
+  "loss_spikes": {
+    "arm1": 29,
+    "arm_a": 15
+  },
+  "elapsed_minutes": 100.73997843819998,
+  "allocator_adjusted_difference_gib": 1.2160498284697525,
+  "depth_term_measured_mib_per_token_per_layer": 0.01930237822967861,
+  "depth_term_fitted_in_issue_88": 0.0054,
+  "ratio_measured_to_fitted": 3.5745144869775203
+}

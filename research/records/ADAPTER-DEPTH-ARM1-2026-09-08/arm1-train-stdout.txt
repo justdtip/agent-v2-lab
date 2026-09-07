@@ -1,0 +1,302 @@
+22:17:04 +00:00 train │ start command=.venv/bin/agent-pipeline --config configs/agent_v2e_qwen35_4b_top8.yaml train log=/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/run.log model=qwen35-4b hf_id=mlx-community/Qwen3.5-4B-MLX-4bit config=/Users/daniel.tipton/Desktop/An app/configs/agent_v2e_qwen35_4b_top8.yaml data_manifest_sha256=d9a8d1daada615d81749a2e1a8a332eadbef8b86cafd38387e3aab78b8056db5 git_commit=e9be43841d291b1a42824825b51806487031fae3
+22:17:04 +00:00 train │ training launch preflight batches=1200 rows=1200 optimizer_updates=300 iterations_unit=batches chunk_size=256 max_row_tokens=2688 metal_cache_bytes=2147483648 envelope={"chunk_size":256,"max_row_tokens":2688,"max_batch_size":1,"max_metal_cache_gib":2.0}
+22:17:04 +00:00 train │ memory budget budget_gib=17.76 budget_source=preflight artifact
+22:17:04 +00:00 train │ metal cache limit bytes=2147483648 gib=2
+22:17:04 +00:00 train │ loading base model=mlx-community/Qwen3.5-4B-MLX-4bit
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 2534.78it/s]
+22:17:06 +00:01 train │ resolved lora targets count=12 keys=["self_attn.q_proj","self_attn.k_proj","self_attn.v_proj","self_attn.o_proj","mlp.gate_proj","mlp.up_proj","mlp.down_proj","linear_attn.in_proj_qkv","linear_attn.in_proj_z","linear_attn.in_proj_b","linear_attn.in_proj_a","linear_attn.out_proj"]
+22:17:12 +00:07 train │ splits train=6648 valid=375 test=-
+22:17:12 +00:07 train │ trainer entry=mlx_lm.lora.train_model iters=1200 batch_size=1 grad_accumulation_steps=4 max_seq_length=2688 steps_per_report=10 steps_per_eval=400 save_every=400 gated_delta_chunk=256 gated_delta_mode=chunkwise
+
+### 22:17:12 train: mlx_lm.lora.train_model
+Trainable parameters: 0.193% (8.116M/4205.750M)
+Starting training..., iters: 1200
+Calculating loss...:   0%|          | 0/24 [00:00<?, ?it/s]Calculating loss...:   4%|▍         | 1/24 [00:03<01:21,  3.53s/it]Calculating loss...:   8%|▊         | 2/24 [00:04<00:40,  1.83s/it]Calculating loss...:  12%|█▎        | 3/24 [00:06<00:46,  2.20s/it]Calculating loss...:  17%|█▋        | 4/24 [00:08<00:39,  1.97s/it]Calculating loss...:  21%|██        | 5/24 [00:12<00:52,  2.79s/it]Calculating loss...:  25%|██▌       | 6/24 [00:16<00:57,  3.18s/it]Calculating loss...:  29%|██▉       | 7/24 [00:21<01:01,  3.63s/it]Calculating loss...:  33%|███▎      | 8/24 [00:22<00:48,  3.01s/it]Calculating loss...:  38%|███▊      | 9/24 [00:23<00:32,  2.16s/it]Calculating loss...:  42%|████▏     | 10/24 [00:23<00:23,  1.71s/it]Calculating loss...:  46%|████▌     | 11/24 [00:25<00:21,  1.62s/it]Calculating loss...:  50%|█████     | 12/24 [00:26<00:17,  1.45s/it]Calculating loss...:  54%|█████▍    | 13/24 [00:27<00:15,  1.37s/it]Calculating loss...:  58%|█████▊    | 14/24 [00:29<00:14,  1.46s/it]Calculating loss...:  62%|██████▎   | 15/24 [00:33<00:21,  2.37s/it]Calculating loss...:  67%|██████▋   | 16/24 [00:34<00:16,  2.02s/it]Calculating loss...:  71%|███████   | 17/24 [00:38<00:18,  2.64s/it]Calculating loss...:  75%|███████▌  | 18/24 [00:43<00:19,  3.22s/it]Calculating loss...:  79%|███████▉  | 19/24 [00:46<00:15,  3.02s/it]Calculating loss...:  83%|████████▎ | 20/24 [00:50<00:13,  3.46s/it]Calculating loss...:  88%|████████▊ | 21/24 [00:51<00:08,  2.80s/it]Calculating loss...:  92%|█████████▏| 22/24 [00:56<00:06,  3.33s/it]Calculating loss...:  96%|█████████▌| 23/24 [00:57<00:02,  2.75s/it]Calculating loss...: 100%|██████████| 24/24 [00:59<00:00,  2.30s/it]Calculating loss...: 100%|██████████| 24/24 [00:59<00:00,  2.46s/it]
+Iter 1: Val loss 0.721, Val took 59.084s
+22:18:11 +01:06 train │ val iteration=0 val_loss=0.7212 best=0.7212 best_iteration=0
+Iter 10: Train loss 0.633, Learning Rate 3.000e-05, It/sec 0.153, Tokens/sec 10.622, Trained Tokens 694, Peak mem 6.554 GB
+22:19:16 +02:12 train │ [train 10/1200 1%] loss=0.6333 lr=3e-05 tok_s=10.62 tokens=694 peak_gb=6.554 budget_gib=17.76 eta 4:21:51
+Iter 20: Train loss 0.418, Learning Rate 3.000e-05, It/sec 0.161, Tokens/sec 13.484, Trained Tokens 1531, Peak mem 7.018 GB
+22:20:18 +03:14 train │ [train 20/1200 2%] loss=0.4179 lr=3e-05 tok_s=13.48 tokens=1531 peak_gb=7.018 budget_gib=17.76 eta 3:10:52
+Iter 30: Train loss 0.207, Learning Rate 3.000e-05, It/sec 0.151, Tokens/sec 15.215, Trained Tokens 2537, Peak mem 7.494 GB
+22:21:25 +04:20 train │ [train 30/1200 2%] loss=0.2072 lr=3e-05 tok_s=15.22 tokens=2537 peak_gb=7.494 budget_gib=17.76 eta 2:49:08
+Iter 40: Train loss 0.212, Learning Rate 3.000e-05, It/sec 0.145, Tokens/sec 11.718, Trained Tokens 3345, Peak mem 8.105 GB
+22:22:34 +05:29 train │ [train 40/1200 3%] loss=0.2118 lr=3e-05 tok_s=11.72 tokens=3345 peak_gb=8.105 budget_gib=17.76 eta 2:39:06
+Iter 50: Train loss 0.420, Learning Rate 3.000e-05, It/sec 0.215, Tokens/sec 21.005, Trained Tokens 4322, Peak mem 8.105 GB
+22:23:20 +06:15 train │ [train 50/1200 4%] loss=0.4201 lr=3e-05 tok_s=21 tokens=4322 peak_gb=8.105 budget_gib=17.76 eta 2:24:01
+Iter 60: Train loss 0.241, Learning Rate 3.000e-05, It/sec 0.201, Tokens/sec 14.761, Trained Tokens 5055, Peak mem 8.105 GB
+22:24:10 +07:05 train │ [train 60/1200 5%] loss=0.2412 lr=3e-05 tok_s=14.76 tokens=5055 peak_gb=8.105 budget_gib=17.76 eta 2:14:41
+Iter 70: Train loss 0.234, Learning Rate 3.000e-05, It/sec 0.192, Tokens/sec 20.415, Trained Tokens 6121, Peak mem 8.901 GB
+22:25:02 +07:57 train │ [train 70/1200 6%] loss=0.2339 lr=3e-05 tok_s=20.42 tokens=6121 peak_gb=8.901 budget_gib=17.76 eta 2:08:29
+Iter 80: Train loss 0.202, Learning Rate 3.000e-05, It/sec 0.179, Tokens/sec 12.383, Trained Tokens 6813, Peak mem 8.901 GB
+22:25:58 +08:53 train │ [train 80/1200 7%] loss=0.2016 lr=3e-05 tok_s=12.38 tokens=6813 peak_gb=8.901 budget_gib=17.76 eta 2:04:28
+Iter 90: Train loss 0.078, Learning Rate 3.000e-05, It/sec 0.203, Tokens/sec 15.913, Trained Tokens 7596, Peak mem 8.901 GB
+22:26:47 +09:42 train │ [train 90/1200 8%] loss=0.07785 lr=3e-05 tok_s=15.91 tokens=7596 peak_gb=8.901 budget_gib=17.76 eta 1:59:46
+Iter 100: Train loss 0.269, Learning Rate 3.000e-05, It/sec 0.226, Tokens/sec 20.309, Trained Tokens 8495, Peak mem 8.901 GB
+22:27:31 +10:26 train │ [train 100/1200 8%] loss=0.2692 lr=3e-05 tok_s=20.31 tokens=8495 peak_gb=8.901 budget_gib=17.76 eta 1:54:56
+Iter 110: Train loss 0.186, Learning Rate 3.000e-05, It/sec 0.251, Tokens/sec 22.122, Trained Tokens 9376, Peak mem 8.901 GB
+22:28:11 +11:06 train │ [train 110/1200 9%] loss=0.1859 lr=3e-05 tok_s=22.12 tokens=9376 peak_gb=8.901 budget_gib=17.76 eta 1:50:07
+Iter 120: Train loss 0.027, Learning Rate 3.000e-05, It/sec 0.159, Tokens/sec 12.486, Trained Tokens 10162, Peak mem 8.901 GB
+22:29:14 +12:09 train │ [train 120/1200 10%] loss=0.02663 lr=3e-05 tok_s=12.49 tokens=10162 peak_gb=8.901 budget_gib=17.76 eta 1:49:27
+Iter 130: Train loss 0.112, Learning Rate 3.000e-05, It/sec 0.179, Tokens/sec 16.236, Trained Tokens 11070, Peak mem 8.901 GB
+22:30:10 +13:05 train │ [train 130/1200 11%] loss=0.1123 lr=3e-05 tok_s=16.24 tokens=11070 peak_gb=8.901 budget_gib=17.76 eta 1:47:46
+Iter 140: Train loss 0.127, Learning Rate 3.000e-05, It/sec 0.216, Tokens/sec 19.526, Trained Tokens 11975, Peak mem 8.901 GB
+22:30:56 +13:51 train │ [train 140/1200 12%] loss=0.1273 lr=3e-05 tok_s=19.53 tokens=11975 peak_gb=8.901 budget_gib=17.76 eta 1:44:59
+Iter 150: Train loss 0.107, Learning Rate 3.000e-05, It/sec 0.203, Tokens/sec 19.229, Trained Tokens 12923, Peak mem 8.901 GB
+22:31:46 +14:41 train │ [train 150/1200 12%] loss=0.1072 lr=3e-05 tok_s=19.23 tokens=12923 peak_gb=8.901 budget_gib=17.76 eta 1:42:49
+Iter 160: Train loss 0.092, Learning Rate 3.000e-05, It/sec 0.249, Tokens/sec 19.674, Trained Tokens 13713, Peak mem 8.901 GB
+22:32:26 +15:21 train │ [train 160/1200 13%] loss=0.09219 lr=3e-05 tok_s=19.67 tokens=13713 peak_gb=8.901 budget_gib=17.76 eta 1:39:49
+Iter 170: Train loss 0.191, Learning Rate 3.000e-05, It/sec 0.280, Tokens/sec 20.013, Trained Tokens 14427, Peak mem 8.901 GB
+22:33:01 +15:57 train │ [train 170/1200 14%] loss=0.191 lr=3e-05 tok_s=20.01 tokens=14427 peak_gb=8.901 budget_gib=17.76 eta 1:36:39
+Iter 180: Train loss 0.118, Learning Rate 3.000e-05, It/sec 0.186, Tokens/sec 16.557, Trained Tokens 15315, Peak mem 8.901 GB
+22:33:55 +16:50 train │ [train 180/1200 15%] loss=0.1181 lr=3e-05 tok_s=16.56 tokens=15315 peak_gb=8.901 budget_gib=17.76 eta 1:35:27
+Iter 190: Train loss 0.043, Learning Rate 3.000e-05, It/sec 0.199, Tokens/sec 16.558, Trained Tokens 16149, Peak mem 8.901 GB
+22:34:45 +17:41 train │ [train 190/1200 16%] loss=0.04303 lr=3e-05 tok_s=16.56 tokens=16149 peak_gb=8.901 budget_gib=17.76 eta 1:34:00
+Iter 200: Train loss 0.070, Learning Rate 3.000e-05, It/sec 0.180, Tokens/sec 15.424, Trained Tokens 17005, Peak mem 8.901 GB
+22:35:41 +18:36 train │ [train 200/1200 17%] loss=0.06985 lr=3e-05 tok_s=15.42 tokens=17005 peak_gb=8.901 budget_gib=17.76 eta 1:33:03
+Iter 210: Train loss 0.179, Learning Rate 3.000e-05, It/sec 0.179, Tokens/sec 14.809, Trained Tokens 17833, Peak mem 8.901 GB
+22:36:37 +19:32 train │ [train 210/1200 18%] loss=0.1793 lr=3e-05 tok_s=14.81 tokens=17833 peak_gb=8.901 budget_gib=17.76 eta 1:32:07
+Iter 220: Train loss 0.090, Learning Rate 3.000e-05, It/sec 0.281, Tokens/sec 18.958, Trained Tokens 18508, Peak mem 8.901 GB
+22:37:13 +20:08 train │ [train 220/1200 18%] loss=0.09038 lr=3e-05 tok_s=18.96 tokens=18508 peak_gb=8.901 budget_gib=17.76 eta 1:29:41
+Iter 230: Train loss 0.085, Learning Rate 3.000e-05, It/sec 0.162, Tokens/sec 13.920, Trained Tokens 19366, Peak mem 8.902 GB
+22:38:14 +21:09 train │ [train 230/1200 19%] loss=0.08476 lr=3e-05 tok_s=13.92 tokens=19366 peak_gb=8.902 budget_gib=17.76 eta 1:29:15
+Iter 240: Train loss 0.099, Learning Rate 3.000e-05, It/sec 0.229, Tokens/sec 17.525, Trained Tokens 20132, Peak mem 8.902 GB
+22:38:58 +21:53 train │ [train 240/1200 20%] loss=0.09898 lr=3e-05 tok_s=17.52 tokens=20132 peak_gb=8.902 budget_gib=17.76 eta 1:27:34
+Iter 250: Train loss 0.149, Learning Rate 3.000e-05, It/sec 0.198, Tokens/sec 16.755, Trained Tokens 20979, Peak mem 8.902 GB
+22:39:48 +22:44 train │ [train 250/1200 21%] loss=0.1493 lr=3e-05 tok_s=16.76 tokens=20979 peak_gb=8.902 budget_gib=17.76 eta 1:26:23
+Iter 260: Train loss 0.047, Learning Rate 3.000e-05, It/sec 0.243, Tokens/sec 19.163, Trained Tokens 21767, Peak mem 8.902 GB
+22:40:30 +23:25 train │ [train 260/1200 22%] loss=0.04747 lr=3e-05 tok_s=19.16 tokens=21767 peak_gb=8.902 budget_gib=17.76 eta 1:24:40
+Iter 270: Train loss 0.037, Learning Rate 3.000e-05, It/sec 0.254, Tokens/sec 15.873, Trained Tokens 22392, Peak mem 8.902 GB
+22:41:09 +24:04 train │ [train 270/1200 22%] loss=0.03718 lr=3e-05 tok_s=15.87 tokens=22392 peak_gb=8.902 budget_gib=17.76 eta 1:22:55
+Iter 280: Train loss 0.022, Learning Rate 3.000e-05, It/sec 0.167, Tokens/sec 14.386, Trained Tokens 23256, Peak mem 8.902 GB
+22:42:09 +25:04 train │ [train 280/1200 23%] loss=0.0222 lr=3e-05 tok_s=14.39 tokens=23256 peak_gb=8.902 budget_gib=17.76 eta 1:22:23
+Iter 290: Train loss 0.038, Learning Rate 3.000e-05, It/sec 0.230, Tokens/sec 18.423, Trained Tokens 24057, Peak mem 8.902 GB
+22:42:52 +25:48 train │ [train 290/1200 24%] loss=0.03842 lr=3e-05 tok_s=18.42 tokens=24057 peak_gb=8.902 budget_gib=17.76 eta 1:20:57
+Iter 300: Train loss 0.051, Learning Rate 3.000e-05, It/sec 0.192, Tokens/sec 17.410, Trained Tokens 24962, Peak mem 8.950 GB
+22:43:44 +26:40 train │ [train 300/1200 25%] loss=0.05103 lr=3e-05 tok_s=17.41 tokens=24962 peak_gb=8.95 budget_gib=17.76 eta 1:20:00
+Iter 310: Train loss 0.098, Learning Rate 3.000e-05, It/sec 0.194, Tokens/sec 16.812, Trained Tokens 25829, Peak mem 8.950 GB
+22:44:36 +27:31 train │ health flag flag=loss_spike iteration=310 train_loss=0.09843 median=0.03842 threshold=0.07683 window=5
+22:44:36 +27:31 train │ [train 310/1200 26%] loss=0.09843 lr=3e-05 tok_s=16.81 tokens=25829 peak_gb=8.95 budget_gib=17.76 eta 1:19:01
+Iter 320: Train loss 0.114, Learning Rate 3.000e-05, It/sec 0.189, Tokens/sec 14.662, Trained Tokens 26603, Peak mem 8.950 GB
+22:45:29 +28:24 train │ health flag flag=loss_spike iteration=320 train_loss=0.1139 median=0.03842 threshold=0.07683 window=5
+22:45:29 +28:24 train │ [train 320/1200 27%] loss=0.1139 lr=3e-05 tok_s=14.66 tokens=26603 peak_gb=8.95 budget_gib=17.76 eta 1:18:07
+Iter 330: Train loss 0.027, Learning Rate 3.000e-05, It/sec 0.198, Tokens/sec 16.728, Trained Tokens 27448, Peak mem 8.950 GB
+22:46:19 +29:14 train │ [train 330/1200 28%] loss=0.0266 lr=3e-05 tok_s=16.73 tokens=27448 peak_gb=8.95 budget_gib=17.76 eta 1:17:06
+Iter 340: Train loss 0.142, Learning Rate 3.000e-05, It/sec 0.233, Tokens/sec 21.627, Trained Tokens 28378, Peak mem 8.950 GB
+22:47:02 +29:57 train │ health flag flag=loss_spike iteration=340 train_loss=0.1417 median=0.05103 threshold=0.1021 window=5
+22:47:02 +29:57 train │ [train 340/1200 28%] loss=0.1417 lr=3e-05 tok_s=21.63 tokens=28378 peak_gb=8.95 budget_gib=17.76 eta 1:15:47
+Iter 350: Train loss 0.039, Learning Rate 3.000e-05, It/sec 0.230, Tokens/sec 17.083, Trained Tokens 29121, Peak mem 8.950 GB
+22:47:46 +30:41 train │ [train 350/1200 29%] loss=0.03945 lr=3e-05 tok_s=17.08 tokens=29121 peak_gb=8.95 budget_gib=17.76 eta 1:14:32
+Iter 360: Train loss 0.032, Learning Rate 3.000e-05, It/sec 0.210, Tokens/sec 17.076, Trained Tokens 29933, Peak mem 8.950 GB
+22:48:33 +31:29 train │ [train 360/1200 30%] loss=0.03219 lr=3e-05 tok_s=17.08 tokens=29933 peak_gb=8.95 budget_gib=17.76 eta 1:13:27
+Iter 370: Train loss 0.061, Learning Rate 3.000e-05, It/sec 0.199, Tokens/sec 18.132, Trained Tokens 30846, Peak mem 8.950 GB
+22:49:24 +32:19 train │ [train 370/1200 31%] loss=0.06127 lr=3e-05 tok_s=18.13 tokens=30846 peak_gb=8.95 budget_gib=17.76 eta 1:12:30
+Iter 380: Train loss 0.029, Learning Rate 3.000e-05, It/sec 0.182, Tokens/sec 14.844, Trained Tokens 31660, Peak mem 8.950 GB
+22:50:19 +33:14 train │ [train 380/1200 32%] loss=0.02904 lr=3e-05 tok_s=14.84 tokens=31660 peak_gb=8.95 budget_gib=17.76 eta 1:11:43
+Iter 390: Train loss 0.025, Learning Rate 3.000e-05, It/sec 0.193, Tokens/sec 15.882, Trained Tokens 32484, Peak mem 8.950 GB
+22:51:10 +34:06 train │ [train 390/1200 32%] loss=0.02476 lr=3e-05 tok_s=15.88 tokens=32484 peak_gb=8.95 budget_gib=17.76 eta 1:10:49
+Calculating loss...:   0%|          | 0/24 [00:00<?, ?it/s]Calculating loss...:   4%|▍         | 1/24 [00:01<00:28,  1.25s/it]Calculating loss...:   8%|▊         | 2/24 [00:03<00:40,  1.82s/it]Calculating loss...:  12%|█▎        | 3/24 [00:03<00:25,  1.23s/it]Calculating loss...:  17%|█▋        | 4/24 [00:06<00:37,  1.90s/it]Calculating loss...:  21%|██        | 5/24 [00:07<00:26,  1.40s/it]Calculating loss...:  25%|██▌       | 6/24 [00:10<00:35,  1.98s/it]Calculating loss...:  29%|██▉       | 7/24 [00:13<00:39,  2.33s/it]Calculating loss...:  33%|███▎      | 8/24 [00:15<00:37,  2.35s/it]Calculating loss...:  38%|███▊      | 9/24 [00:16<00:26,  1.74s/it]Calculating loss...:  42%|████▏     | 10/24 [00:19<00:29,  2.11s/it]Calculating loss...:  46%|████▌     | 11/24 [00:20<00:24,  1.90s/it]Calculating loss...:  50%|█████     | 12/24 [00:21<00:18,  1.58s/it]Calculating loss...:  54%|█████▍    | 13/24 [00:23<00:19,  1.76s/it]Calculating loss...:  58%|█████▊    | 14/24 [00:24<00:15,  1.57s/it]Calculating loss...:  62%|██████▎   | 15/24 [00:26<00:13,  1.46s/it]Calculating loss...:  67%|██████▋   | 16/24 [00:29<00:16,  2.01s/it]Calculating loss...:  71%|███████   | 17/24 [00:32<00:15,  2.21s/it]Calculating loss...:  75%|███████▌  | 18/24 [00:35<00:14,  2.50s/it]Calculating loss...:  79%|███████▉  | 19/24 [00:37<00:12,  2.54s/it]Calculating loss...:  83%|████████▎ | 20/24 [00:40<00:10,  2.65s/it]Calculating loss...:  88%|████████▊ | 21/24 [00:41<00:05,  2.00s/it]Calculating loss...:  92%|█████████▏| 22/24 [00:41<00:03,  1.50s/it]Calculating loss...:  96%|█████████▌| 23/24 [00:42<00:01,  1.46s/it]Calculating loss...: 100%|██████████| 24/24 [00:46<00:00,  2.08s/it]Calculating loss...: 100%|██████████| 24/24 [00:46<00:00,  1.94s/it]
+Iter 400: Val loss 0.194, Val took 46.489s
+22:52:31 +35:26 train │ val iteration=399 val_loss=0.1938 best=0.1938 best_iteration=399
+Iter 400: Train loss 0.035, Learning Rate 3.000e-05, It/sec 0.252, Tokens/sec 19.631, Trained Tokens 33264, Peak mem 8.950 GB
+22:52:37 +35:32 train │ [train 400/1200 33%] loss=0.03484 lr=3e-05 tok_s=19.63 tokens=33264 peak_gb=8.95 budget_gib=17.76 eta 1:11:04
+Iter 400: Saved adapter weights to /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/adapters.safetensors and /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/0000400_adapters.safetensors.
+Iter 410: Train loss 0.154, Learning Rate 3.000e-05, It/sec 0.236, Tokens/sec 22.607, Trained Tokens 34223, Peak mem 8.950 GB
+22:53:19 +36:14 train │ health flag flag=loss_spike iteration=410 train_loss=0.154 median=0.03219 threshold=0.06439 window=5
+22:53:19 +36:14 train │ [train 410/1200 34%] loss=0.154 lr=3e-05 tok_s=22.61 tokens=34223 peak_gb=8.95 budget_gib=17.76 eta 1:09:50
+Iter 420: Train loss 0.026, Learning Rate 3.000e-05, It/sec 0.245, Tokens/sec 16.851, Trained Tokens 34912, Peak mem 8.950 GB
+22:54:00 +36:55 train │ [train 420/1200 35%] loss=0.02649 lr=3e-05 tok_s=16.85 tokens=34912 peak_gb=8.95 budget_gib=17.76 eta 1:08:34
+Iter 430: Train loss 0.119, Learning Rate 3.000e-05, It/sec 0.241, Tokens/sec 22.250, Trained Tokens 35836, Peak mem 8.950 GB
+22:54:42 +37:37 train │ health flag flag=loss_spike iteration=430 train_loss=0.1186 median=0.02904 threshold=0.05809 window=5
+22:54:42 +37:37 train │ [train 430/1200 36%] loss=0.1186 lr=3e-05 tok_s=22.25 tokens=35836 peak_gb=8.95 budget_gib=17.76 eta 1:07:21
+Iter 440: Train loss 0.033, Learning Rate 3.000e-05, It/sec 0.207, Tokens/sec 18.045, Trained Tokens 36706, Peak mem 8.950 GB
+22:55:30 +38:25 train │ [train 440/1200 37%] loss=0.03258 lr=3e-05 tok_s=18.04 tokens=36706 peak_gb=8.95 budget_gib=17.76 eta 1:06:22
+Iter 450: Train loss 0.116, Learning Rate 3.000e-05, It/sec 0.240, Tokens/sec 16.491, Trained Tokens 37393, Peak mem 8.950 GB
+22:56:11 +39:07 train │ health flag flag=loss_spike iteration=450 train_loss=0.1156 median=0.03484 threshold=0.06969 window=5
+22:56:11 +39:07 train │ [train 450/1200 38%] loss=0.1156 lr=3e-05 tok_s=16.49 tokens=37393 peak_gb=8.95 budget_gib=17.76 eta 1:05:11
+Iter 460: Train loss 0.030, Learning Rate 3.000e-05, It/sec 0.181, Tokens/sec 15.382, Trained Tokens 38243, Peak mem 8.950 GB
+22:57:07 +40:02 train │ [train 460/1200 38%] loss=0.03002 lr=3e-05 tok_s=15.38 tokens=38243 peak_gb=8.95 budget_gib=17.76 eta 1:04:24
+Iter 470: Train loss 0.056, Learning Rate 3.000e-05, It/sec 0.235, Tokens/sec 23.855, Trained Tokens 39259, Peak mem 8.950 GB
+22:57:49 +40:44 train │ [train 470/1200 39%] loss=0.05593 lr=3e-05 tok_s=23.86 tokens=39259 peak_gb=8.95 budget_gib=17.76 eta 1:03:17
+Iter 480: Train loss 0.073, Learning Rate 3.000e-05, It/sec 0.241, Tokens/sec 23.714, Trained Tokens 40245, Peak mem 8.950 GB
+22:58:31 +41:26 train │ [train 480/1200 40%] loss=0.07328 lr=3e-05 tok_s=23.71 tokens=40245 peak_gb=8.95 budget_gib=17.76 eta 1:02:09
+Iter 490: Train loss 0.045, Learning Rate 3.000e-05, It/sec 0.241, Tokens/sec 18.949, Trained Tokens 41030, Peak mem 8.950 GB
+22:59:12 +42:07 train │ [train 490/1200 41%] loss=0.04527 lr=3e-05 tok_s=18.95 tokens=41030 peak_gb=8.95 budget_gib=17.76 eta 1:01:02
+Iter 500: Train loss 0.033, Learning Rate 3.000e-05, It/sec 0.217, Tokens/sec 16.284, Trained Tokens 41781, Peak mem 8.950 GB
+22:59:58 +42:54 train │ [train 500/1200 42%] loss=0.03255 lr=3e-05 tok_s=16.28 tokens=41781 peak_gb=8.95 budget_gib=17.76 eta 1:00:03
+Iter 510: Train loss 0.021, Learning Rate 3.000e-05, It/sec 0.175, Tokens/sec 13.945, Trained Tokens 42576, Peak mem 8.950 GB
+23:00:55 +43:51 train │ [train 510/1200 42%] loss=0.02145 lr=3e-05 tok_s=13.95 tokens=42576 peak_gb=8.95 budget_gib=17.76 eta 59:19
+Iter 520: Train loss 0.010, Learning Rate 3.000e-05, It/sec 0.217, Tokens/sec 17.169, Trained Tokens 43368, Peak mem 8.950 GB
+23:01:42 +44:37 train │ [train 520/1200 43%] loss=0.01009 lr=3e-05 tok_s=17.17 tokens=43368 peak_gb=8.95 budget_gib=17.76 eta 58:20
+Iter 530: Train loss 0.004, Learning Rate 3.000e-05, It/sec 0.279, Tokens/sec 15.624, Trained Tokens 43928, Peak mem 8.950 GB
+23:02:17 +45:13 train │ [train 530/1200 44%] loss=0.003582 lr=3e-05 tok_s=15.62 tokens=43928 peak_gb=8.95 budget_gib=17.76 eta 57:09
+Iter 540: Train loss 0.006, Learning Rate 3.000e-05, It/sec 0.222, Tokens/sec 18.105, Trained Tokens 44745, Peak mem 8.950 GB
+23:03:03 +45:58 train │ [train 540/1200 45%] loss=0.005573 lr=3e-05 tok_s=18.11 tokens=44745 peak_gb=8.95 budget_gib=17.76 eta 56:11
+Iter 550: Train loss 0.095, Learning Rate 3.000e-05, It/sec 0.209, Tokens/sec 18.356, Trained Tokens 45625, Peak mem 8.950 GB
+23:03:50 +46:46 train │ health flag flag=loss_spike iteration=550 train_loss=0.0946 median=0.01009 threshold=0.02018 window=5
+23:03:50 +46:46 train │ [train 550/1200 46%] loss=0.0946 lr=3e-05 tok_s=18.36 tokens=45625 peak_gb=8.95 budget_gib=17.76 eta 55:16
+Iter 560: Train loss 0.056, Learning Rate 3.000e-05, It/sec 0.229, Tokens/sec 21.030, Trained Tokens 46542, Peak mem 8.950 GB
+23:04:34 +47:29 train │ health flag flag=loss_spike iteration=560 train_loss=0.0558 median=0.01009 threshold=0.02018 window=5
+23:04:34 +47:29 train │ [train 560/1200 47%] loss=0.0558 lr=3e-05 tok_s=21.03 tokens=46542 peak_gb=8.95 budget_gib=17.76 eta 54:16
+Iter 570: Train loss 0.004, Learning Rate 3.000e-05, It/sec 0.225, Tokens/sec 16.592, Trained Tokens 47280, Peak mem 8.950 GB
+23:05:19 +48:14 train │ [train 570/1200 48%] loss=0.00381 lr=3e-05 tok_s=16.59 tokens=47280 peak_gb=8.95 budget_gib=17.76 eta 53:18
+Iter 580: Train loss 0.129, Learning Rate 3.000e-05, It/sec 0.238, Tokens/sec 16.377, Trained Tokens 47967, Peak mem 8.950 GB
+23:06:01 +48:56 train │ health flag flag=loss_spike iteration=580 train_loss=0.1288 median=0.005573 threshold=0.01115 window=5
+23:06:01 +48:56 train │ [train 580/1200 48%] loss=0.1288 lr=3e-05 tok_s=16.38 tokens=47967 peak_gb=8.95 budget_gib=17.76 eta 52:18
+Iter 590: Train loss 0.007, Learning Rate 3.000e-05, It/sec 0.190, Tokens/sec 14.601, Trained Tokens 48737, Peak mem 8.950 GB
+23:06:53 +49:48 train │ [train 590/1200 49%] loss=0.006544 lr=3e-05 tok_s=14.6 tokens=48737 peak_gb=8.95 budget_gib=17.76 eta 51:30
+Iter 600: Train loss 0.008, Learning Rate 3.000e-05, It/sec 0.191, Tokens/sec 17.158, Trained Tokens 49635, Peak mem 8.950 GB
+23:07:46 +50:41 train │ [train 600/1200 50%] loss=0.007848 lr=3e-05 tok_s=17.16 tokens=49635 peak_gb=8.95 budget_gib=17.76 eta 50:41
+Iter 610: Train loss 0.005, Learning Rate 3.000e-05, It/sec 0.167, Tokens/sec 14.139, Trained Tokens 50482, Peak mem 8.950 GB
+23:08:46 +51:41 train │ [train 610/1200 51%] loss=0.00492 lr=3e-05 tok_s=14.14 tokens=50482 peak_gb=8.95 budget_gib=17.76 eta 49:59
+Iter 620: Train loss 0.019, Learning Rate 3.000e-05, It/sec 0.209, Tokens/sec 17.539, Trained Tokens 51322, Peak mem 8.950 GB
+23:09:33 +52:29 train │ health flag flag=loss_spike iteration=620 train_loss=0.01923 median=0.006544 threshold=0.01309 window=5
+23:09:33 +52:29 train │ [train 620/1200 52%] loss=0.01923 lr=3e-05 tok_s=17.54 tokens=51322 peak_gb=8.95 budget_gib=17.76 eta 49:05
+Iter 630: Train loss 0.024, Learning Rate 3.000e-05, It/sec 0.199, Tokens/sec 17.405, Trained Tokens 52198, Peak mem 8.950 GB
+23:10:24 +53:19 train │ health flag flag=loss_spike iteration=630 train_loss=0.02372 median=0.007848 threshold=0.0157 window=5
+23:10:24 +53:19 train │ [train 630/1200 52%] loss=0.02372 lr=3e-05 tok_s=17.41 tokens=52198 peak_gb=8.95 budget_gib=17.76 eta 48:14
+Iter 640: Train loss 0.005, Learning Rate 3.000e-05, It/sec 0.161, Tokens/sec 12.999, Trained Tokens 53005, Peak mem 8.950 GB
+23:11:26 +54:21 train │ [train 640/1200 53%] loss=0.004776 lr=3e-05 tok_s=13 tokens=53005 peak_gb=8.95 budget_gib=17.76 eta 47:33
+Iter 650: Train loss 0.009, Learning Rate 3.000e-05, It/sec 0.264, Tokens/sec 18.405, Trained Tokens 53703, Peak mem 8.950 GB
+23:12:04 +54:59 train │ [train 650/1200 54%] loss=0.008759 lr=3e-05 tok_s=18.4 tokens=53703 peak_gb=8.95 budget_gib=17.76 eta 46:31
+Iter 660: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.193, Tokens/sec 15.800, Trained Tokens 54521, Peak mem 8.950 GB
+23:12:56 +55:51 train │ [train 660/1200 55%] loss=0.001142 lr=3e-05 tok_s=15.8 tokens=54521 peak_gb=8.95 budget_gib=17.76 eta 45:41
+Iter 670: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.241, Tokens/sec 16.543, Trained Tokens 55207, Peak mem 8.950 GB
+23:13:37 +56:32 train │ [train 670/1200 56%] loss=0.002495 lr=3e-05 tok_s=16.54 tokens=55207 peak_gb=8.95 budget_gib=17.76 eta 44:43
+Iter 680: Train loss 0.078, Learning Rate 3.000e-05, It/sec 0.306, Tokens/sec 25.946, Trained Tokens 56054, Peak mem 8.950 GB
+23:14:10 +57:05 train │ health flag flag=loss_spike iteration=680 train_loss=0.07831 median=0.004776 threshold=0.009552 window=5
+23:14:10 +57:05 train │ [train 680/1200 57%] loss=0.07831 lr=3e-05 tok_s=25.95 tokens=56054 peak_gb=8.95 budget_gib=17.76 eta 43:39
+Iter 690: Train loss 0.075, Learning Rate 3.000e-05, It/sec 0.260, Tokens/sec 16.751, Trained Tokens 56699, Peak mem 8.950 GB
+23:14:48 +57:43 train │ health flag flag=loss_spike iteration=690 train_loss=0.07495 median=0.004776 threshold=0.009552 window=5
+23:14:48 +57:43 train │ [train 690/1200 57%] loss=0.07495 lr=3e-05 tok_s=16.75 tokens=56699 peak_gb=8.95 budget_gib=17.76 eta 42:40
+Iter 700: Train loss 0.038, Learning Rate 3.000e-05, It/sec 0.197, Tokens/sec 18.422, Trained Tokens 57634, Peak mem 8.950 GB
+23:15:39 +58:34 train │ health flag flag=loss_spike iteration=700 train_loss=0.03813 median=0.008759 threshold=0.01752 window=5
+23:15:39 +58:34 train │ [train 700/1200 58%] loss=0.03813 lr=3e-05 tok_s=18.42 tokens=57634 peak_gb=8.95 budget_gib=17.76 eta 41:50
+Iter 710: Train loss 0.000, Learning Rate 3.000e-05, It/sec 0.231, Tokens/sec 16.059, Trained Tokens 58329, Peak mem 8.950 GB
+23:16:22 +59:17 train │ [train 710/1200 59%] loss=0.0002285 lr=3e-05 tok_s=16.06 tokens=58329 peak_gb=8.95 budget_gib=17.76 eta 40:55
+Iter 720: Train loss 0.012, Learning Rate 3.000e-05, It/sec 0.197, Tokens/sec 16.629, Trained Tokens 59175, Peak mem 8.950 GB
+23:17:13 +1:00:08 train │ [train 720/1200 60%] loss=0.01201 lr=3e-05 tok_s=16.63 tokens=59175 peak_gb=8.95 budget_gib=17.76 eta 40:05
+Iter 730: Train loss 0.006, Learning Rate 3.000e-05, It/sec 0.213, Tokens/sec 17.190, Trained Tokens 59983, Peak mem 8.950 GB
+23:18:00 +1:00:55 train │ [train 730/1200 61%] loss=0.006477 lr=3e-05 tok_s=17.19 tokens=59983 peak_gb=8.95 budget_gib=17.76 eta 39:13
+Iter 740: Train loss 0.004, Learning Rate 3.000e-05, It/sec 0.237, Tokens/sec 16.171, Trained Tokens 60665, Peak mem 8.950 GB
+23:18:42 +1:01:37 train │ [train 740/1200 62%] loss=0.004438 lr=3e-05 tok_s=16.17 tokens=60665 peak_gb=8.95 budget_gib=17.76 eta 38:18
+Iter 750: Train loss 0.028, Learning Rate 3.000e-05, It/sec 0.224, Tokens/sec 16.971, Trained Tokens 61424, Peak mem 8.950 GB
+23:19:27 +1:02:22 train │ health flag flag=loss_spike iteration=750 train_loss=0.0285 median=0.006477 threshold=0.01295 window=5
+23:19:27 +1:02:22 train │ [train 750/1200 62%] loss=0.0285 lr=3e-05 tok_s=16.97 tokens=61424 peak_gb=8.95 budget_gib=17.76 eta 37:25
+Iter 760: Train loss 0.042, Learning Rate 3.000e-05, It/sec 0.264, Tokens/sec 17.642, Trained Tokens 62092, Peak mem 8.950 GB
+23:20:05 +1:03:00 train │ health flag flag=loss_spike iteration=760 train_loss=0.04155 median=0.006477 threshold=0.01295 window=5
+23:20:05 +1:03:00 train │ [train 760/1200 63%] loss=0.04155 lr=3e-05 tok_s=17.64 tokens=62092 peak_gb=8.95 budget_gib=17.76 eta 36:28
+Iter 770: Train loss 0.019, Learning Rate 3.000e-05, It/sec 0.221, Tokens/sec 21.349, Trained Tokens 63056, Peak mem 8.950 GB
+23:20:50 +1:03:45 train │ [train 770/1200 64%] loss=0.01927 lr=3e-05 tok_s=21.35 tokens=63056 peak_gb=8.95 budget_gib=17.76 eta 35:36
+Iter 780: Train loss 0.295, Learning Rate 3.000e-05, It/sec 0.206, Tokens/sec 15.944, Trained Tokens 63830, Peak mem 8.950 GB
+23:21:39 +1:04:34 train │ health flag flag=loss_spike iteration=780 train_loss=0.2945 median=0.01927 threshold=0.03853 window=5
+23:21:39 +1:04:34 train │ [train 780/1200 65%] loss=0.2945 lr=3e-05 tok_s=15.94 tokens=63830 peak_gb=8.95 budget_gib=17.76 eta 34:46
+Iter 790: Train loss 0.005, Learning Rate 3.000e-05, It/sec 0.202, Tokens/sec 12.110, Trained Tokens 64429, Peak mem 8.950 GB
+23:22:28 +1:05:23 train │ [train 790/1200 66%] loss=0.004778 lr=3e-05 tok_s=12.11 tokens=64429 peak_gb=8.95 budget_gib=17.76 eta 33:56
+Calculating loss...:   0%|          | 0/24 [00:00<?, ?it/s]Calculating loss...:   4%|▍         | 1/24 [00:03<01:11,  3.10s/it]Calculating loss...:   8%|▊         | 2/24 [00:06<01:09,  3.17s/it]Calculating loss...:  12%|█▎        | 3/24 [00:09<01:11,  3.39s/it]Calculating loss...:  17%|█▋        | 4/24 [00:12<00:58,  2.93s/it]Calculating loss...:  21%|██        | 5/24 [00:13<00:41,  2.18s/it]Calculating loss...:  25%|██▌       | 6/24 [00:16<00:44,  2.47s/it]Calculating loss...:  29%|██▉       | 7/24 [00:18<00:42,  2.51s/it]Calculating loss...:  33%|███▎      | 8/24 [00:19<00:32,  2.05s/it]Calculating loss...:  38%|███▊      | 9/24 [00:20<00:25,  1.70s/it]Calculating loss...:  42%|████▏     | 10/24 [00:23<00:27,  1.95s/it]Calculating loss...:  46%|████▌     | 11/24 [00:26<00:30,  2.36s/it]Calculating loss...:  50%|█████     | 12/24 [00:30<00:33,  2.78s/it]Calculating loss...:  54%|█████▍    | 13/24 [00:33<00:32,  2.99s/it]Calculating loss...:  58%|█████▊    | 14/24 [00:36<00:30,  3.04s/it]Calculating loss...:  62%|██████▎   | 15/24 [00:40<00:29,  3.24s/it]Calculating loss...:  67%|██████▋   | 16/24 [00:40<00:18,  2.32s/it]Calculating loss...:  71%|███████   | 17/24 [00:41<00:13,  1.96s/it]Calculating loss...:  75%|███████▌  | 18/24 [00:42<00:09,  1.66s/it]Calculating loss...:  79%|███████▉  | 19/24 [00:44<00:08,  1.68s/it]Calculating loss...:  83%|████████▎ | 20/24 [00:47<00:08,  2.11s/it]Calculating loss...:  88%|████████▊ | 21/24 [00:51<00:07,  2.51s/it]Calculating loss...:  92%|█████████▏| 22/24 [00:54<00:05,  2.87s/it]Calculating loss...:  96%|█████████▌| 23/24 [00:57<00:02,  2.92s/it]Calculating loss...: 100%|██████████| 24/24 [00:59<00:00,  2.41s/it]Calculating loss...: 100%|██████████| 24/24 [00:59<00:00,  2.46s/it]
+Iter 800: Val loss 0.011, Val took 59.050s
+23:24:21 +1:07:16 train │ val iteration=799 val_loss=0.01113 best=0.01113 best_iteration=799
+Iter 800: Train loss 0.004, Learning Rate 3.000e-05, It/sec 0.176, Tokens/sec 15.042, Trained Tokens 65283, Peak mem 8.950 GB
+23:24:24 +1:07:19 train │ [train 800/1200 67%] loss=0.004044 lr=3e-05 tok_s=15.04 tokens=65283 peak_gb=8.95 budget_gib=17.76 eta 33:39
+Iter 800: Saved adapter weights to /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/adapters.safetensors and /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/0000800_adapters.safetensors.
+Iter 810: Train loss 0.010, Learning Rate 3.000e-05, It/sec 0.168, Tokens/sec 12.127, Trained Tokens 66006, Peak mem 8.950 GB
+23:25:24 +1:08:19 train │ [train 810/1200 68%] loss=0.0104 lr=3e-05 tok_s=12.13 tokens=66006 peak_gb=8.95 budget_gib=17.76 eta 32:53
+Iter 820: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.215, Tokens/sec 15.699, Trained Tokens 66735, Peak mem 8.950 GB
+23:26:10 +1:09:05 train │ [train 820/1200 68%] loss=0.0008148 lr=3e-05 tok_s=15.7 tokens=66735 peak_gb=8.95 budget_gib=17.76 eta 32:01
+Iter 830: Train loss 0.096, Learning Rate 3.000e-05, It/sec 0.211, Tokens/sec 19.955, Trained Tokens 67679, Peak mem 8.950 GB
+23:26:57 +1:09:52 train │ health flag flag=loss_spike iteration=830 train_loss=0.09595 median=0.004778 threshold=0.009556 window=5
+23:26:57 +1:09:52 train │ [train 830/1200 69%] loss=0.09595 lr=3e-05 tok_s=19.95 tokens=67679 peak_gb=8.95 budget_gib=17.76 eta 31:09
+Iter 840: Train loss 0.007, Learning Rate 3.000e-05, It/sec 0.186, Tokens/sec 16.964, Trained Tokens 68589, Peak mem 8.950 GB
+23:27:51 +1:10:46 train │ [train 840/1200 70%] loss=0.0074 lr=3e-05 tok_s=16.96 tokens=68589 peak_gb=8.95 budget_gib=17.76 eta 30:19
+Iter 850: Train loss 0.005, Learning Rate 3.000e-05, It/sec 0.210, Tokens/sec 16.328, Trained Tokens 69365, Peak mem 8.950 GB
+23:28:38 +1:11:34 train │ [train 850/1200 71%] loss=0.005343 lr=3e-05 tok_s=16.33 tokens=69365 peak_gb=8.95 budget_gib=17.76 eta 29:28
+Iter 860: Train loss 0.003, Learning Rate 3.000e-05, It/sec 0.250, Tokens/sec 18.489, Trained Tokens 70106, Peak mem 8.950 GB
+23:29:19 +1:12:14 train │ [train 860/1200 72%] loss=0.002525 lr=3e-05 tok_s=18.49 tokens=70106 peak_gb=8.95 budget_gib=17.76 eta 28:33
+Iter 870: Train loss 0.046, Learning Rate 3.000e-05, It/sec 0.203, Tokens/sec 17.865, Trained Tokens 70987, Peak mem 8.950 GB
+23:30:08 +1:13:03 train │ health flag flag=loss_spike iteration=870 train_loss=0.04637 median=0.005343 threshold=0.01069 window=5
+23:30:08 +1:13:03 train │ [train 870/1200 72%] loss=0.04637 lr=3e-05 tok_s=17.86 tokens=70987 peak_gb=8.95 budget_gib=17.76 eta 27:42
+Iter 880: Train loss 0.003, Learning Rate 3.000e-05, It/sec 0.174, Tokens/sec 15.897, Trained Tokens 71899, Peak mem 8.950 GB
+23:31:05 +1:14:00 train │ [train 880/1200 73%] loss=0.003023 lr=3e-05 tok_s=15.9 tokens=71899 peak_gb=8.95 budget_gib=17.76 eta 26:54
+Iter 890: Train loss 0.153, Learning Rate 3.000e-05, It/sec 0.288, Tokens/sec 20.749, Trained Tokens 72620, Peak mem 8.950 GB
+23:31:40 +1:14:35 train │ health flag flag=loss_spike iteration=890 train_loss=0.1535 median=0.005343 threshold=0.01069 window=5
+23:31:40 +1:14:35 train │ [train 890/1200 74%] loss=0.1535 lr=3e-05 tok_s=20.75 tokens=72620 peak_gb=8.95 budget_gib=17.76 eta 25:58
+Iter 900: Train loss 0.006, Learning Rate 3.000e-05, It/sec 0.217, Tokens/sec 17.152, Trained Tokens 73409, Peak mem 8.950 GB
+23:32:26 +1:15:21 train │ [train 900/1200 75%] loss=0.006402 lr=3e-05 tok_s=17.15 tokens=73409 peak_gb=8.95 budget_gib=17.76 eta 25:07
+Iter 910: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.199, Tokens/sec 17.476, Trained Tokens 74285, Peak mem 8.950 GB
+23:33:16 +1:16:11 train │ [train 910/1200 76%] loss=0.0009708 lr=3e-05 tok_s=17.48 tokens=74285 peak_gb=8.95 budget_gib=17.76 eta 24:16
+Iter 920: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.196, Tokens/sec 15.872, Trained Tokens 75096, Peak mem 8.950 GB
+23:34:07 +1:17:02 train │ [train 920/1200 77%] loss=0.001162 lr=3e-05 tok_s=15.87 tokens=75096 peak_gb=8.95 budget_gib=17.76 eta 23:26
+Iter 930: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.200, Tokens/sec 14.827, Trained Tokens 75836, Peak mem 8.950 GB
+23:34:57 +1:17:52 train │ [train 930/1200 78%] loss=0.001689 lr=3e-05 tok_s=14.83 tokens=75836 peak_gb=8.95 budget_gib=17.76 eta 22:36
+Iter 940: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.187, Tokens/sec 14.579, Trained Tokens 76615, Peak mem 8.950 GB
+23:35:51 +1:18:46 train │ [train 940/1200 78%] loss=0.001273 lr=3e-05 tok_s=14.58 tokens=76615 peak_gb=8.95 budget_gib=17.76 eta 21:47
+Iter 950: Train loss 0.188, Learning Rate 3.000e-05, It/sec 0.248, Tokens/sec 18.809, Trained Tokens 77373, Peak mem 8.950 GB
+23:36:31 +1:19:26 train │ health flag flag=loss_spike iteration=950 train_loss=0.1885 median=0.001273 threshold=0.002545 window=5
+23:36:31 +1:19:26 train │ [train 950/1200 79%] loss=0.1885 lr=3e-05 tok_s=18.81 tokens=77373 peak_gb=8.95 budget_gib=17.76 eta 20:54
+Iter 960: Train loss 0.045, Learning Rate 3.000e-05, It/sec 0.262, Tokens/sec 20.877, Trained Tokens 78170, Peak mem 8.950 GB
+23:37:09 +1:20:04 train │ health flag flag=loss_spike iteration=960 train_loss=0.04468 median=0.001273 threshold=0.002545 window=5
+23:37:09 +1:20:04 train │ [train 960/1200 80%] loss=0.04468 lr=3e-05 tok_s=20.88 tokens=78170 peak_gb=8.95 budget_gib=17.76 eta 20:01
+Iter 970: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.235, Tokens/sec 17.863, Trained Tokens 78930, Peak mem 8.950 GB
+23:37:52 +1:20:47 train │ [train 970/1200 81%] loss=0.001562 lr=3e-05 tok_s=17.86 tokens=78930 peak_gb=8.95 budget_gib=17.76 eta 19:09
+Iter 980: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.235, Tokens/sec 16.537, Trained Tokens 79635, Peak mem 8.950 GB
+23:38:34 +1:21:29 train │ [train 980/1200 82%] loss=0.002059 lr=3e-05 tok_s=16.54 tokens=79635 peak_gb=8.95 budget_gib=17.76 eta 18:17
+Iter 990: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.170, Tokens/sec 13.751, Trained Tokens 80442, Peak mem 8.950 GB
+23:39:33 +1:22:28 train │ [train 990/1200 82%] loss=0.001745 lr=3e-05 tok_s=13.75 tokens=80442 peak_gb=8.95 budget_gib=17.76 eta 17:29
+Iter 1000: Train loss 0.081, Learning Rate 3.000e-05, It/sec 0.197, Tokens/sec 17.998, Trained Tokens 81357, Peak mem 8.950 GB
+23:40:24 +1:23:19 train │ health flag flag=loss_spike iteration=1000 train_loss=0.08093 median=0.002059 threshold=0.004118 window=5
+23:40:24 +1:23:19 train │ [train 1000/1200 83%] loss=0.08093 lr=3e-05 tok_s=18 tokens=81357 peak_gb=8.95 budget_gib=17.76 eta 16:39
+Iter 1010: Train loss 0.116, Learning Rate 3.000e-05, It/sec 0.184, Tokens/sec 18.941, Trained Tokens 82387, Peak mem 8.950 GB
+23:41:18 +1:24:13 train │ health flag flag=loss_spike iteration=1010 train_loss=0.116 median=0.002059 threshold=0.004118 window=5
+23:41:18 +1:24:13 train │ [train 1010/1200 84%] loss=0.116 lr=3e-05 tok_s=18.94 tokens=82387 peak_gb=8.95 budget_gib=17.76 eta 15:50
+Iter 1020: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.199, Tokens/sec 14.471, Trained Tokens 83116, Peak mem 8.950 GB
+23:42:09 +1:25:04 train │ [train 1020/1200 85%] loss=0.002337 lr=3e-05 tok_s=14.47 tokens=83116 peak_gb=8.95 budget_gib=17.76 eta 15:00
+Iter 1030: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.186, Tokens/sec 14.974, Trained Tokens 83919, Peak mem 8.950 GB
+23:43:02 +1:25:57 train │ [train 1030/1200 86%] loss=0.0006951 lr=3e-05 tok_s=14.97 tokens=83919 peak_gb=8.95 budget_gib=17.76 eta 14:11
+Iter 1040: Train loss 0.000, Learning Rate 3.000e-05, It/sec 0.175, Tokens/sec 15.005, Trained Tokens 84774, Peak mem 8.950 GB
+23:43:59 +1:26:54 train │ [train 1040/1200 87%] loss=0.000428 lr=3e-05 tok_s=15 tokens=84774 peak_gb=8.95 budget_gib=17.76 eta 13:22
+Iter 1050: Train loss 0.014, Learning Rate 3.000e-05, It/sec 0.184, Tokens/sec 16.095, Trained Tokens 85647, Peak mem 8.950 GB
+23:44:53 +1:27:48 train │ health flag flag=loss_spike iteration=1050 train_loss=0.01361 median=0.002337 threshold=0.004674 window=5
+23:44:53 +1:27:48 train │ [train 1050/1200 88%] loss=0.01361 lr=3e-05 tok_s=16.09 tokens=85647 peak_gb=8.95 budget_gib=17.76 eta 12:32
+Iter 1060: Train loss 0.326, Learning Rate 3.000e-05, It/sec 0.225, Tokens/sec 16.519, Trained Tokens 86380, Peak mem 8.950 GB
+23:45:38 +1:28:33 train │ health flag flag=loss_spike iteration=1060 train_loss=0.3261 median=0.002337 threshold=0.004674 window=5
+23:45:38 +1:28:33 train │ [train 1060/1200 88%] loss=0.3261 lr=3e-05 tok_s=16.52 tokens=86380 peak_gb=8.95 budget_gib=17.76 eta 11:41
+Iter 1070: Train loss 0.003, Learning Rate 3.000e-05, It/sec 0.192, Tokens/sec 15.103, Trained Tokens 87165, Peak mem 8.950 GB
+23:46:30 +1:29:25 train │ [train 1070/1200 89%] loss=0.002934 lr=3e-05 tok_s=15.1 tokens=87165 peak_gb=8.95 budget_gib=17.76 eta 10:51
+Iter 1080: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.238, Tokens/sec 16.293, Trained Tokens 87850, Peak mem 8.950 GB
+23:47:12 +1:30:07 train │ [train 1080/1200 90%] loss=0.001095 lr=3e-05 tok_s=16.29 tokens=87850 peak_gb=8.95 budget_gib=17.76 eta 10:00
+Iter 1090: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.221, Tokens/sec 16.979, Trained Tokens 88618, Peak mem 8.950 GB
+23:47:57 +1:30:52 train │ [train 1090/1200 91%] loss=0.002483 lr=3e-05 tok_s=16.98 tokens=88618 peak_gb=8.95 budget_gib=17.76 eta 09:10
+Iter 1100: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.271, Tokens/sec 19.099, Trained Tokens 89323, Peak mem 8.950 GB
+23:48:34 +1:31:29 train │ [train 1100/1200 92%] loss=0.0006077 lr=3e-05 tok_s=19.1 tokens=89323 peak_gb=8.95 budget_gib=17.76 eta 08:19
+Iter 1110: Train loss 0.005, Learning Rate 3.000e-05, It/sec 0.208, Tokens/sec 16.952, Trained Tokens 90137, Peak mem 8.950 GB
+23:49:22 +1:32:17 train │ [train 1110/1200 92%] loss=0.004908 lr=3e-05 tok_s=16.95 tokens=90137 peak_gb=8.95 budget_gib=17.76 eta 07:28
+Iter 1120: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.229, Tokens/sec 17.321, Trained Tokens 90894, Peak mem 8.950 GB
+23:50:06 +1:33:01 train │ [train 1120/1200 93%] loss=0.0009633 lr=3e-05 tok_s=17.32 tokens=90894 peak_gb=8.95 budget_gib=17.76 eta 06:38
+Iter 1130: Train loss 0.000, Learning Rate 3.000e-05, It/sec 0.194, Tokens/sec 14.047, Trained Tokens 91617, Peak mem 8.950 GB
+23:50:57 +1:33:52 train │ [train 1130/1200 94%] loss=0.0004192 lr=3e-05 tok_s=14.05 tokens=91617 peak_gb=8.95 budget_gib=17.76 eta 05:48
+Iter 1140: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.198, Tokens/sec 15.911, Trained Tokens 92422, Peak mem 8.950 GB
+23:51:48 +1:34:43 train │ [train 1140/1200 95%] loss=0.000942 lr=3e-05 tok_s=15.91 tokens=92422 peak_gb=8.95 budget_gib=17.76 eta 04:59
+Iter 1150: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.176, Tokens/sec 13.577, Trained Tokens 93194, Peak mem 8.950 GB
+23:52:45 +1:35:40 train │ [train 1150/1200 96%] loss=0.001226 lr=3e-05 tok_s=13.58 tokens=93194 peak_gb=8.95 budget_gib=17.76 eta 04:09
+Iter 1160: Train loss 0.011, Learning Rate 3.000e-05, It/sec 0.196, Tokens/sec 14.457, Trained Tokens 93931, Peak mem 8.950 GB
+23:53:36 +1:36:31 train │ health flag flag=loss_spike iteration=1160 train_loss=0.01103 median=0.0009633 threshold=0.001927 window=5
+23:53:36 +1:36:31 train │ [train 1160/1200 97%] loss=0.01103 lr=3e-05 tok_s=14.46 tokens=93931 peak_gb=8.95 budget_gib=17.76 eta 03:19
+Iter 1170: Train loss 0.001, Learning Rate 3.000e-05, It/sec 0.230, Tokens/sec 19.385, Trained Tokens 94774, Peak mem 8.950 GB
+23:54:19 +1:37:14 train │ [train 1170/1200 98%] loss=0.001311 lr=3e-05 tok_s=19.39 tokens=94774 peak_gb=8.95 budget_gib=17.76 eta 02:29
+Iter 1180: Train loss 0.347, Learning Rate 3.000e-05, It/sec 0.203, Tokens/sec 18.022, Trained Tokens 95661, Peak mem 8.950 GB
+23:55:08 +1:38:03 train │ health flag flag=loss_spike iteration=1180 train_loss=0.3474 median=0.001226 threshold=0.002452 window=5
+23:55:08 +1:38:03 train │ [train 1180/1200 98%] loss=0.3474 lr=3e-05 tok_s=18.02 tokens=95661 peak_gb=8.95 budget_gib=17.76 eta 01:39
+Iter 1190: Train loss 0.002, Learning Rate 3.000e-05, It/sec 0.180, Tokens/sec 14.674, Trained Tokens 96477, Peak mem 8.950 GB
+23:56:04 +1:38:59 train │ [train 1190/1200 99%] loss=0.001868 lr=3e-05 tok_s=14.67 tokens=96477 peak_gb=8.95 budget_gib=17.76 eta 00:49
+Calculating loss...:   0%|          | 0/24 [00:00<?, ?it/s]Calculating loss...:   4%|▍         | 1/24 [00:03<01:26,  3.75s/it]Calculating loss...:   8%|▊         | 2/24 [00:04<00:39,  1.79s/it]Calculating loss...:  12%|█▎        | 3/24 [00:07<00:49,  2.36s/it]Calculating loss...:  17%|█▋        | 4/24 [00:10<00:52,  2.63s/it]Calculating loss...:  21%|██        | 5/24 [00:13<00:56,  2.95s/it]Calculating loss...:  25%|██▌       | 6/24 [00:15<00:44,  2.45s/it]Calculating loss...:  29%|██▉       | 7/24 [00:18<00:45,  2.65s/it]Calculating loss...:  33%|███▎      | 8/24 [00:21<00:44,  2.77s/it]Calculating loss...:  38%|███▊      | 9/24 [00:24<00:43,  2.91s/it]Calculating loss...:  42%|████▏     | 10/24 [00:26<00:38,  2.72s/it]Calculating loss...:  46%|████▌     | 11/24 [00:27<00:29,  2.24s/it]Calculating loss...:  50%|█████     | 12/24 [00:30<00:28,  2.34s/it]Calculating loss...:  54%|█████▍    | 13/24 [00:34<00:32,  2.91s/it]Calculating loss...:  58%|█████▊    | 14/24 [00:35<00:23,  2.31s/it]Calculating loss...:  62%|██████▎   | 15/24 [00:40<00:27,  3.02s/it]Calculating loss...:  67%|██████▋   | 16/24 [00:43<00:24,  3.03s/it]Calculating loss...:  71%|███████   | 17/24 [00:44<00:17,  2.54s/it]Calculating loss...:  75%|███████▌  | 18/24 [00:48<00:16,  2.75s/it]Calculating loss...:  79%|███████▉  | 19/24 [00:49<00:11,  2.35s/it]Calculating loss...:  83%|████████▎ | 20/24 [00:50<00:07,  1.99s/it]Calculating loss...:  88%|████████▊ | 21/24 [00:51<00:04,  1.56s/it]Calculating loss...:  92%|█████████▏| 22/24 [00:53<00:03,  1.85s/it]Calculating loss...:  96%|█████████▌| 23/24 [00:57<00:02,  2.38s/it]Calculating loss...: 100%|██████████| 24/24 [01:00<00:00,  2.51s/it]Calculating loss...: 100%|██████████| 24/24 [01:00<00:00,  2.51s/it]
+Iter 1200: Val loss 0.140, Val took 60.158s
+23:57:44 +1:40:39 train │ val iteration=1199 val_loss=0.1395 best=0.01113 best_iteration=799
+Iter 1200: Train loss 0.031, Learning Rate 3.000e-05, It/sec 0.236, Tokens/sec 18.783, Trained Tokens 97274, Peak mem 8.950 GB
+23:57:46 +1:40:42 train │ health flag flag=loss_spike iteration=1200 train_loss=0.03074 median=0.001868 threshold=0.003736 window=5
+23:57:46 +1:40:42 train │ [train 1200/1200 100%] loss=0.03074 lr=3e-05 tok_s=18.78 tokens=97274 peak_gb=8.95 budget_gib=17.76 eta 00:00
+Iter 1200: Saved adapter weights to /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/adapters.safetensors and /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/0001200_adapters.safetensors.
+Saved final weights to /Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters/adapters.safetensors.
+23:57:49 +1:40:44 train │ adapter depth layers=8 band_pairs=1 of 5 whole, 4 outside lowest_adapted_layer=25
+23:57:49 +1:40:44 train │ training finished minutes=100.7 checkpoints=/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters verdict=warnings
+23:57:49 +1:40:44 train │ gated delta recurrence fallbacks=none: chunkwise throughout
+23:57:49 +1:40:44 train │ end status=ok elapsed=1:40:44 verdict=warnings flags=29

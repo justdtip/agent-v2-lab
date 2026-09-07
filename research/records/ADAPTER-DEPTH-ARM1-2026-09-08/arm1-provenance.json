@@ -1,0 +1,708 @@
+{
+  "command": [
+    ".venv/bin/agent-pipeline",
+    "--config",
+    "configs/agent_v2e_qwen35_4b_top8.yaml",
+    "train"
+  ],
+  "extra": {
+    "band_coverage": {
+      "lowest_adapted_layer": 25,
+      "pairs_outside": [
+        [
+          12,
+          13
+        ],
+        [
+          16,
+          17
+        ],
+        [
+          19,
+          20
+        ],
+        [
+          23,
+          24
+        ]
+      ],
+      "pairs_split": [],
+      "pairs_whole": [
+        [
+          27,
+          28
+        ]
+      ],
+      "summary": "1 of 5 whole, 4 outside"
+    },
+    "health": {
+      "best_val": {
+        "iteration": 799,
+        "val_loss": 0.011133008636534214
+      },
+      "elapsed": 6044.398706291999,
+      "final_checkpoint": true,
+      "flags": [
+        {
+          "detail": {
+            "median": 0.03841567635536194,
+            "threshold": 0.07683135271072387,
+            "train_loss": 0.09843348264694214,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 310,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.03841567635536194,
+            "threshold": 0.07683135271072387,
+            "train_loss": 0.11386411190032959,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 320,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.051034587621688846,
+            "threshold": 0.10206917524337769,
+            "train_loss": 0.14171864986419677,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 340,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.03219348192214966,
+            "threshold": 0.06438696384429932,
+            "train_loss": 0.15398672819137574,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 410,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.029044246673583983,
+            "threshold": 0.058088493347167966,
+            "train_loss": 0.11861170530319214,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 430,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.034843546152114865,
+            "threshold": 0.06968709230422973,
+            "train_loss": 0.11556624174118042,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 450,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.010091215372085571,
+            "threshold": 0.020182430744171143,
+            "train_loss": 0.09460213780403137,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 550,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.010091215372085571,
+            "threshold": 0.020182430744171143,
+            "train_loss": 0.05579579472541809,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 560,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.005573303252458572,
+            "threshold": 0.011146606504917144,
+            "train_loss": 0.12879778146743776,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 580,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.006543750315904618,
+            "threshold": 0.013087500631809235,
+            "train_loss": 0.019232048094272612,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 620,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.007847577333450317,
+            "threshold": 0.015695154666900635,
+            "train_loss": 0.023721253871917723,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 630,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.004775913432240486,
+            "threshold": 0.009551826864480972,
+            "train_loss": 0.07830804586410522,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 680,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.004775913432240486,
+            "threshold": 0.009551826864480972,
+            "train_loss": 0.07494924664497375,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 690,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.008758985996246338,
+            "threshold": 0.017517971992492675,
+            "train_loss": 0.03812568783760071,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 700,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.006477296352386475,
+            "threshold": 0.01295459270477295,
+            "train_loss": 0.028495138883590697,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 750,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.006477296352386475,
+            "threshold": 0.01295459270477295,
+            "train_loss": 0.041546037793159483,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 760,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.019265787303447725,
+            "threshold": 0.03853157460689545,
+            "train_loss": 0.2945128917694092,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 780,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.004777846112847328,
+            "threshold": 0.009555692225694657,
+            "train_loss": 0.09594537019729614,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 830,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0053431946784257885,
+            "threshold": 0.010686389356851577,
+            "train_loss": 0.04637327492237091,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 870,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0053431946784257885,
+            "threshold": 0.010686389356851577,
+            "train_loss": 0.1534635066986084,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 890,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0012726725079119205,
+            "threshold": 0.002545345015823841,
+            "train_loss": 0.18847618103027344,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 950,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0012726725079119205,
+            "threshold": 0.002545345015823841,
+            "train_loss": 0.04468146562576294,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 960,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0020589374005794527,
+            "threshold": 0.004117874801158905,
+            "train_loss": 0.08093219995498657,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1000,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0020589374005794527,
+            "threshold": 0.004117874801158905,
+            "train_loss": 0.11597775220870972,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1010,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0023370634764432905,
+            "threshold": 0.004674126952886581,
+            "train_loss": 0.01361486166715622,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1050,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0023370634764432905,
+            "threshold": 0.004674126952886581,
+            "train_loss": 0.326119589805603,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1060,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0009633148089051247,
+            "threshold": 0.0019266296178102494,
+            "train_loss": 0.011025036126375199,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1160,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0012261302210390568,
+            "threshold": 0.0024522604420781136,
+            "train_loss": 0.3474243402481079,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1180,
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "median": 0.0018681634217500686,
+            "threshold": 0.0037363268435001372,
+            "train_loss": 0.030736908316612244,
+            "window": 5
+          },
+          "flag": "loss_spike",
+          "iteration": 1200,
+          "severity": "warning"
+        }
+      ],
+      "gated_delta_fallbacks": {},
+      "iterations_done": 1200,
+      "iters_done": 1200,
+      "iters_planned": 1200,
+      "last_train": {
+        "iteration": 1200,
+        "learning_rate": 2.9999999242136255e-05,
+        "peak_memory_gb": 8.949624512,
+        "peak_memory_gib": 8.334987342357635,
+        "tokens_per_second": 18.78258901504689,
+        "train_loss": 0.030736908316612244,
+        "trained_tokens": 97274
+      },
+      "last_val": {
+        "iteration": 1199,
+        "val_loss": 0.13952882587909698
+      },
+      "median_tokens_per_second": 16.752916873711833,
+      "peak_memory_gb": 8.949624512,
+      "peak_memory_gib": 8.334987342357635,
+      "status": "ok",
+      "thresholds": {
+        "loss_spike_factor": 2.0,
+        "loss_window": 5,
+        "memory_budget_gib": 17.760009765625,
+        "throughput_drop_factor": 0.5,
+        "val_rising_reports": 3
+      },
+      "train_reports": 120,
+      "val_reports": 4,
+      "verdict": "warnings"
+    },
+    "health_thresholds": {
+      "loss_spike_factor": 2.0,
+      "loss_window": 5,
+      "memory_budget_gib": 17.760009765625,
+      "throughput_drop_factor": 0.5,
+      "val_rising_reports": 3
+    },
+    "stage": "train",
+    "training_config": {
+      "adapter_path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b-top8/adapters",
+      "batch_size": 1,
+      "clear_cache_threshold": 0,
+      "config": null,
+      "data": "/Users/daniel.tipton/Desktop/An app/data/agent_v2e-qwen35-4b-cap2688",
+      "fine_tune_type": "lora",
+      "gated_delta_chunk": 256,
+      "gated_delta_mode": "chunkwise",
+      "grad_accumulation_steps": 4,
+      "grad_checkpoint": true,
+      "iters": 1200,
+      "learning_rate": 3e-05,
+      "lora_parameters": {
+        "dropout": 0.0,
+        "keys": [
+          "self_attn.q_proj",
+          "self_attn.k_proj",
+          "self_attn.v_proj",
+          "self_attn.o_proj",
+          "mlp.gate_proj",
+          "mlp.up_proj",
+          "mlp.down_proj",
+          "linear_attn.in_proj_qkv",
+          "linear_attn.in_proj_z",
+          "linear_attn.in_proj_b",
+          "linear_attn.in_proj_a",
+          "linear_attn.out_proj"
+        ],
+        "rank": 16,
+        "scale": 32.0
+      },
+      "lr_schedule": null,
+      "mask_prompt": true,
+      "max_seq_length": 2688,
+      "model": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "num_layers": 8,
+      "optimizer": "adamw",
+      "optimizer_config": {
+        "adafactor": {},
+        "adam": {},
+        "adamw": {},
+        "muon": {},
+        "sgd": {}
+      },
+      "project_name": null,
+      "report_to": null,
+      "resume_adapter_file": null,
+      "save_every": 400,
+      "seed": 20260902,
+      "steps_per_eval": 400,
+      "steps_per_report": 10,
+      "test": false,
+      "test_batches": 500,
+      "train": true,
+      "val_batches": 24
+    }
+  },
+  "generator_version": 4,
+  "git": {
+    "branch": "codex/agent-v2-specs",
+    "commit": "bbc8e09d625fe3d380c32253f3031cd5f95880c4",
+    "dirty_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "model": {
+    "cache_strategy": "history",
+    "cache_strategy_reason": "explicit:history",
+    "hidden_size": 2560,
+    "jvp_method": "untested",
+    "layer_types": [
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention",
+      "linear_attention",
+      "linear_attention",
+      "linear_attention",
+      "attention"
+    ],
+    "lora_keys": [
+      "self_attn.q_proj",
+      "self_attn.k_proj",
+      "self_attn.v_proj",
+      "self_attn.o_proj",
+      "mlp.gate_proj",
+      "mlp.up_proj",
+      "mlp.down_proj",
+      "linear_attn.in_proj_qkv",
+      "linear_attn.in_proj_z",
+      "linear_attn.in_proj_b",
+      "linear_attn.in_proj_a",
+      "linear_attn.out_proj"
+    ],
+    "num_layers": 32,
+    "probe_layers": [
+      5,
+      11,
+      16,
+      21,
+      27,
+      32
+    ],
+    "snapshot_revision": null,
+    "spec": {
+      "cache_equivalence_verified": null,
+      "cache_strategy": "history",
+      "chat": {
+        "end_of_turn": "<|im_end|>",
+        "extra_stop_tokens": [
+          "<|endoftext|>"
+        ],
+        "max_think_tokens": 512,
+        "template_kwargs": {
+          "enable_thinking": false
+        },
+        "thinking": "off"
+      },
+      "family": "qwen3_5",
+      "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "lora": {
+        "dropout": 0.0,
+        "keys": "auto",
+        "rank": 16,
+        "scale": 32.0
+      },
+      "memory_budget_gib": 22.0,
+      "name": "qwen35-4b",
+      "policies": {},
+      "probe_capture_dtype": "native",
+      "probe_layer_fractions": [
+        0.167,
+        0.333,
+        0.5,
+        0.667,
+        0.833,
+        1.0
+      ],
+      "probe_live_lens_pairs": [
+        [
+          12,
+          13
+        ],
+        [
+          16,
+          17
+        ],
+        [
+          19,
+          20
+        ],
+        [
+          23,
+          24
+        ],
+        [
+          27,
+          28
+        ]
+      ],
+      "train": {
+        "batch_size": 2,
+        "grad_accumulation_steps": 2,
+        "grad_checkpoint": true,
+        "launch_preflight": {
+          "chunk_size": 256,
+          "max_batch_size": 1,
+          "max_metal_cache_gib": 2.0,
+          "max_row_tokens": 2688
+        },
+        "learning_rate": 3e-05,
+        "max_seq_length": 2688
+      }
+    },
+    "tie_word_embeddings": true,
+    "trainable_parameters": 32464896,
+    "vocab_size": 248320
+  },
+  "packages": {
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "numpy": "2.5.2",
+    "transformers": "5.16.1"
+  },
+  "source_tree_hashes": {
+    "configs/agent_lora.yaml": "d897d6bf694b3c88b9ae8ba4112d79d471fee29adca91e8647134f3dedaf3b28",
+    "configs/agent_v2.yaml": "d9b5ae43a6231fe5321a492aa468b30d2324816d1ce0aed5987e6128959c7062",
+    "configs/agent_v2b.yaml": "bcbe32e1275c249f2bf7992b708a88365c991ef93e173e3caf0f73d8383fdfb1",
+    "configs/agent_v2b_qwen35_4b.yaml": "5c7f5d8a65f12a08ffde724246c39bc88cb29e89d0741060d9e13ed34e6a2b9c",
+    "configs/agent_v2c.yaml": "8832b7031edfa11e7b0dfbf7ef67b7259d45e58ca940ec929917ca173a40be2e",
+    "configs/agent_v2d.yaml": "6067081100a972ded1085244e8d98e669c93c58104b0076af187a15c9ffaa707",
+    "configs/agent_v2d_qwen35_4b.yaml": "8fe67b4a296206453e9ec7b9f248efb97edf409df8de73cfc44fe2c055953119",
+    "configs/agent_v2e.yaml": "eba384cebe805ebaf4a2a665cbd7d22f3517d3bf99527a0e9d166beb9e1334f1",
+    "configs/agent_v2e_qwen35_4b.yaml": "c13431bbde87baf9078024144c9a70a20480d7a76563385b0b2b132b1ff46aa1",
+    "configs/agent_v2e_qwen35_4b_top8.yaml": "468bb27ec6f81757ad8617bfa1ea721dbf420ca24aa18efddaf269b8031e283b",
+    "configs/lora.yaml": "6a438a4bc11645090a2727d1ee97a1bfa1318a4545ddc79108ede6e631fe385c",
+    "configs/models/qwen25-coder-3b.yaml": "7d776e5c253b288de6ac5a9ae5716196df7f6ff606483cdad9a49207e7d8ec13",
+    "configs/models/qwen35-4b.yaml": "ae368edce30ba5df79b7fbe6ca59261f3a2211bc3b03f0a1c96762393adba1d5",
+    "configs/models/qwen35-9b.yaml": "906b3b41cf1414b06015f4e0be2408150dc13abd7cab0d478352aee83112755f",
+    "src/local_llm_lab/__init__.py": "dcbdef2e02c3757b8f9fc3ba34a5595f7f33d295cf1415ec75d07e516662f45b",
+    "src/local_llm_lab/agent_protocol.py": "2adfd82e40f22528bef823fe6d257042f83327b0c735784e9432427fb9bd59cf",
+    "src/local_llm_lab/agent_tasks.py": "7c413b7cb457369b8d4be82a83a2791e360a12bae6454894fa1096a96354e9e8",
+    "src/local_llm_lab/arch.py": "a69109c71c8743c43e1ba70b4ab06018a51f2fb83b33fc62dd63f40b56a9615d",
+    "src/local_llm_lab/build_expanded_data.py": "3fbdb3d6e79c6d55712f79d7598fad96915fa9bf25c6ad2c0b94f7ad2bc9ec00",
+    "src/local_llm_lab/chat.py": "0313b45a752db441a6b67c0e7e3f4e2f315629ce06bbbb0cc3ec5d3adf26ad30",
+    "src/local_llm_lab/chat_replay.py": "b5b9052ea72ffc1b0bc781843da0b31f779f0cc3dc8d452f68b874185ba24dd4",
+    "src/local_llm_lab/check_env.py": "1cdb830c1d24367350ccefdaf972ceb8cc6cb4cb53998f0faedd2aa603968b72",
+    "src/local_llm_lab/compare_agent.py": "8b283b4e4fff81722df21379c3fb30b120f1adf5064dd16e4b354cef7b29f30f",
+    "src/local_llm_lab/compare_chat.py": "b0fb19a54d3a2a84c05f92d1dffa884cd15a7abad91b52cd516565e47a055352",
+    "src/local_llm_lab/complex_agent_protocol.py": "3bbdc5ab1ba727ebb22841260c85ed5231d4caf044c3aa4ad500bf749bdf7368",
+    "src/local_llm_lab/complex_agent_tasks.py": "7c3dd3eba8f66f4921a0148f2e8b6f2ed7d21dede2a895a55cb138ead962e1c1",
+    "src/local_llm_lab/depth_expansion.py": "8288be5b0266b1532d232c3b1df6c5c0e2b5dab9b755cb73cf9ac7528cf922a5",
+    "src/local_llm_lab/evaluate_agent.py": "a32196f4544da72465a5bf9e4cba4b3c26d8551fb6fc7529f5458b808b9b5d93",
+    "src/local_llm_lab/evaluate_complex_agent.py": "befb4dad4e4a04befea2b8f4e8161f8a92bb8f54c61a625f327b1a6bb1558361",
+    "src/local_llm_lab/forward.py": "636e0df604e5b7c330c4b4094ac57d602b9576c46cfe0c1127e81e02fa82d759",
+    "src/local_llm_lab/generate_agent_data.py": "c789d234bec483e676eaca3ed781b48cef8684b4813e5bb092c52626d2921079",
+    "src/local_llm_lab/generate_complex_data.py": "fc6dd50d31f2b81e32e6ecb6835d7bd6dc5513bd85343fd5f9c69a908526febd",
+    "src/local_llm_lab/models.py": "9a7db290ff9b9bab37becdb28c19a49a3c16b764d4244f4cb3193d702ae7628a",
+    "src/local_llm_lab/pipeline/__init__.py": "149384f3721df199454edd7f1bf4542ff00519781f565fc5ababead2c982fcdf",
+    "src/local_llm_lab/pipeline/branch.py": "5f1b3c18d464c3645a619f81157816bc13ab69bc9d0390907517c618487b34e7",
+    "src/local_llm_lab/pipeline/cli.py": "e9a1b76832968b666307f188667a9b782b1b682c17d715cea3e62475ecdee1e5",
+    "src/local_llm_lab/pipeline/coherence.py": "1c1f4f8ea1855458c37076be83f32e8f1e97172cd1eb6336dfccb69c84cf3bdb",
+    "src/local_llm_lab/pipeline/data.py": "bfb5c03c9217e98f8a6e4bf264a9d0615532982ba7aec4c379c12fe229c3ba92",
+    "src/local_llm_lab/pipeline/env.py": "4867472eced16d44b9a2f6f3e7227f9f63015fbbbbc0952ca4535f97c94eb1b1",
+    "src/local_llm_lab/pipeline/evaluate.py": "077bd0d9cbd3473e614791394df8b77e031d9388282c19835b08d5bef6b4c951",
+    "src/local_llm_lab/pipeline/integrity.py": "a203d3bf61ca3ea85f73cb02b8a63792f01f0ac2fb9e5ae3bb3989ba19ed142e",
+    "src/local_llm_lab/pipeline/jlens.py": "eb9d300b6bacc20d0952abcddde62a6f6ec9ec9bf5f34b68bd642ac5dbc1f350",
+    "src/local_llm_lab/pipeline/lens_fitting/__init__.py": "da6ef981a767c1b6f7901703132ddf50078b935bcc05f78dd50c5d989d1ce21c",
+    "src/local_llm_lab/pipeline/lens_fitting/artifacts.py": "d4c42871db649951a4df052f6ede2cfadecfa3c7445886d650ca43ecf46423fd",
+    "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "63c85989e9551f6d42f451b3124203be14ffe2dee6bf82e2077547d9338562e8",
+    "src/local_llm_lab/pipeline/lens_fitting/jacobian.py": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893",
+    "src/local_llm_lab/pipeline/lens_fitting/profiles.py": "eb97423a631955cf59f032daa673664571a374407f7a758f89a6910b010db54d",
+    "src/local_llm_lab/pipeline/lens_fitting/prose.py": "1997f5ace7787b5879a3083317b17de6b3cdc9c14411cb40ecfd6e022448c2c6",
+    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "e9f291438e4d5c972900ca13cd4c244b6a07887035cc7871980b3a38fd20dcf3",
+    "src/local_llm_lab/pipeline/lens_fitting/replay.py": "b965be8c38296ccb2ec33863a163eab23ab8fb94f81e35cb13a1970bcdc583b5",
+    "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "f2049f849e7f3883f7a084faa2641717ae2d2de1f922ce8660e56164a5210dff",
+    "src/local_llm_lab/pipeline/lens_fitting/validation.py": "3fcc8152f23b3453697ec30b33135a394164e07a1d5153b3846d8de9b7723513",
+    "src/local_llm_lab/pipeline/live_lens/__init__.py": "a012de8fdc9ee0e26b49f0ad7e10b67a888e9db86b8e8fd06027fc292c3eff66",
+    "src/local_llm_lab/pipeline/live_lens/instruments.py": "e920d5ce09df197750d47f765f13387e1d3d3fd439a91f9f783d1f9209362425",
+    "src/local_llm_lab/pipeline/live_lens/preflight.py": "d76b2448b1b69a443cb39ef058d10c226652409cafd8aa08cc1d4ca1308f590c",
+    "src/local_llm_lab/pipeline/live_lens/records.py": "f09debc979faca436fa3017e4c2bf648133d1d15673fab378056ab8167f713de",
+    "src/local_llm_lab/pipeline/live_lens/session.py": "7f4cd28e4f322374f56f63aa39ae13091fd3e0be257754d280491238047f59d0",
+    "src/local_llm_lab/pipeline/live_lens/validation.py": "50490ef55e10098303c68bb3bf4f1acea5cc5559a8b3da3667996817cc45434c",
+    "src/local_llm_lab/pipeline/prefer.py": "2005d4e09432fb0f92c23dc589af480bea921672e4f1389c9e690e13beed4aab",
+    "src/local_llm_lab/pipeline/preflight.py": "b0d72a8098ae0b1c23542306611af5753240739d2441a04ca11d52bf070047b1",
+    "src/local_llm_lab/pipeline/protocol.py": "6dcab265db649e2baf5030f132366a8d2c9499ba8e105a452515ac5832466304",
+    "src/local_llm_lab/pipeline/report.py": "e5790964327a0396bf2b168624a44c3e2b7f8daca1fc4984cf1568ec08c3fa04",
+    "src/local_llm_lab/pipeline/rollout.py": "14b5d7f4035d35041d05a26b93ac32c64a0bc2d0b0879b7197d5ec5c8bb8758c",
+    "src/local_llm_lab/pipeline/runner.py": "1b5def3b554e2dd54fd2e1d6c0ee8c1e10a9216248b94f6e14327f491324f49b",
+    "src/local_llm_lab/pipeline/tasks.py": "31cd2768123e9768da24305904eed4616a8acf98929b9b3add42186d2668fafb",
+    "src/local_llm_lab/pipeline/transcript.py": "240f156cec0a19728d53dd1ba43aa2d948e42c67015bb8d0a22fe966a25a2edb",
+    "src/local_llm_lab/probes/__init__.py": "8204d1ae562f204433519287bd386c46a5d2e8c5ed0a9ee4486b673d4d184ccf",
+    "src/local_llm_lab/probes/adapter_delta.py": "d1f849e9c32abfa1a6dab691924bc5be9165ad73b410acacfb6d46120c7f971f",
+    "src/local_llm_lab/probes/assistant_axis.py": "b511d0805177c96ed726ad77a719a9eb010d957196e951ce1116506af780e12c",
+    "src/local_llm_lab/probes/capture.py": "f8bae60a81b8900b03389211921086889e61d79a3d3ca5e526b510352f37c2ee",
+    "src/local_llm_lab/probes/guard.py": "bc31f0877a1a9349d47e0c67e13b9282ca33637e16c619a68439705face363ab",
+    "src/local_llm_lab/probes/jspace_sweep.py": "9057b3bd99ad9a2fe58460dd7af815945854adc38a647b15090e614aab7f1202",
+    "src/local_llm_lab/probes/patch.py": "c9e6891b0af10bfe77ee58bed250b5e6a08eec63ec6c9abc757dcaf33be4ab40",
+    "src/local_llm_lab/probes/policies.py": "f74aa2f9d6b608bc81edbc30ed611baa8e599f8111d507d03e7d2550b334ebf8",
+    "src/local_llm_lab/probes/power.py": "c9e36ca8c078b00feb61427c0c12b9a71c534be48c696b5d9b03b6e72b1816b0",
+    "src/local_llm_lab/probes/read_share.py": "b38403b1fa215262b4b7eba359dc31f9f92991bc1e55750a2a9ee8957aea3e0d",
+    "src/local_llm_lab/probes/state_probe.py": "595dc49e80b830e367339d6b81a87c57b7f7f1f08bfe4c2e900d6e308c998a11",
+    "src/local_llm_lab/probes/state_swap.py": "00ed18c1abd887b24c6777a07012d521d5959b12f3550ae9d52851d2a8f9283e",
+    "src/local_llm_lab/probes/stats.py": "382de699cdcaa447068b6919d36f7c518f74c4c7f179afb65ea4520c9355ad0b",
+    "src/local_llm_lab/project.py": "d5302a4a1b68906e1e8b2f814cc016e3be144ecea43ae7370ddc392fdeaf14fe",
+    "src/local_llm_lab/provenance.py": "8780cffa41b29847f106c88ba25827f27276840abe315fedc9315c80f1f5ff7f",
+    "src/local_llm_lab/rewards.py": "b1e15308570bd60171d80f5bfee91e62bc66ca653fc4380e34bd962feb9eb7d6",
+    "src/local_llm_lab/runlock.py": "0a1184aa816acd06d7fbaf8d87c8fa5743386d37b3965c2dd0784b638ab6a5c7",
+    "src/local_llm_lab/runlog.py": "cdf8fbbd43b452ba4f7e2b9115ca7cf91d61fdc8494c1aa04331a8c276fa6a51",
+    "src/local_llm_lab/spawn.py": "d6dc6969a36262580bb4b77e2e6a8e167ad985a7c590a2d08fde731ba349b1a3",
+    "src/local_llm_lab/train_expanded.py": "872f61b63ebe0b74393b993eb84958e00ec953a09107861a850dc62827e1dde3",
+    "src/local_llm_lab/train_grpo.py": "54a01e4c31cef8b32fbccae60059fb535a9821e5e11e38f684ff2eeb2252286c",
+    "src/local_llm_lab/train_sft.py": "c05970c15555843d146acd4480d44b347be7e1de9bc6cf83aaded443465ea474",
+    "src/local_llm_lab/training/__init__.py": "5a574011056cca7b2676b4057860b3b3abf36ff9276f7b45cf1611fc7d88a0dd",
+    "src/local_llm_lab/training/gated_delta_chunked.py": "86a64790108bef94d07bfd1656b7375391b736b859c9f19d3f5e43354a8c3da1",
+    "src/local_llm_lab/training/gated_delta_chunkwise.py": "70a642d8086ae395a96874e495d20b4396e19f3b4c99ca866c36e6c6a959234e",
+    "src/local_llm_lab/tuner_data.py": "fa99a16ab6cc3396b96d03c1bce8fcc23481b535ff02b9376bdb6e9475a2dd01",
+    "uv.lock": "762d4aabc7a7fd500de7625e4e04b706bddd063d0b28410ad79385378e1beef1"
+  }
+}

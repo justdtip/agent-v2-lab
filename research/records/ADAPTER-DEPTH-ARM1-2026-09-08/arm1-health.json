@@ -1,0 +1,360 @@
+{
+  "best_val": {
+    "iteration": 799,
+    "val_loss": 0.011133008636534214
+  },
+  "elapsed": 6044.398706291999,
+  "final_checkpoint": true,
+  "flags": [
+    {
+      "detail": {
+        "median": 0.03841567635536194,
+        "threshold": 0.07683135271072387,
+        "train_loss": 0.09843348264694214,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 310,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.03841567635536194,
+        "threshold": 0.07683135271072387,
+        "train_loss": 0.11386411190032959,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 320,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.051034587621688846,
+        "threshold": 0.10206917524337769,
+        "train_loss": 0.14171864986419677,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 340,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.03219348192214966,
+        "threshold": 0.06438696384429932,
+        "train_loss": 0.15398672819137574,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 410,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.029044246673583983,
+        "threshold": 0.058088493347167966,
+        "train_loss": 0.11861170530319214,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 430,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.034843546152114865,
+        "threshold": 0.06968709230422973,
+        "train_loss": 0.11556624174118042,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 450,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.010091215372085571,
+        "threshold": 0.020182430744171143,
+        "train_loss": 0.09460213780403137,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 550,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.010091215372085571,
+        "threshold": 0.020182430744171143,
+        "train_loss": 0.05579579472541809,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 560,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.005573303252458572,
+        "threshold": 0.011146606504917144,
+        "train_loss": 0.12879778146743776,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 580,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.006543750315904618,
+        "threshold": 0.013087500631809235,
+        "train_loss": 0.019232048094272612,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 620,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.007847577333450317,
+        "threshold": 0.015695154666900635,
+        "train_loss": 0.023721253871917723,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 630,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.004775913432240486,
+        "threshold": 0.009551826864480972,
+        "train_loss": 0.07830804586410522,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 680,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.004775913432240486,
+        "threshold": 0.009551826864480972,
+        "train_loss": 0.07494924664497375,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 690,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.008758985996246338,
+        "threshold": 0.017517971992492675,
+        "train_loss": 0.03812568783760071,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 700,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.006477296352386475,
+        "threshold": 0.01295459270477295,
+        "train_loss": 0.028495138883590697,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 750,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.006477296352386475,
+        "threshold": 0.01295459270477295,
+        "train_loss": 0.041546037793159483,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 760,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.019265787303447725,
+        "threshold": 0.03853157460689545,
+        "train_loss": 0.2945128917694092,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 780,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.004777846112847328,
+        "threshold": 0.009555692225694657,
+        "train_loss": 0.09594537019729614,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 830,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0053431946784257885,
+        "threshold": 0.010686389356851577,
+        "train_loss": 0.04637327492237091,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 870,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0053431946784257885,
+        "threshold": 0.010686389356851577,
+        "train_loss": 0.1534635066986084,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 890,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0012726725079119205,
+        "threshold": 0.002545345015823841,
+        "train_loss": 0.18847618103027344,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 950,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0012726725079119205,
+        "threshold": 0.002545345015823841,
+        "train_loss": 0.04468146562576294,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 960,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0020589374005794527,
+        "threshold": 0.004117874801158905,
+        "train_loss": 0.08093219995498657,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1000,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0020589374005794527,
+        "threshold": 0.004117874801158905,
+        "train_loss": 0.11597775220870972,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1010,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0023370634764432905,
+        "threshold": 0.004674126952886581,
+        "train_loss": 0.01361486166715622,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1050,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0023370634764432905,
+        "threshold": 0.004674126952886581,
+        "train_loss": 0.326119589805603,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1060,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0009633148089051247,
+        "threshold": 0.0019266296178102494,
+        "train_loss": 0.011025036126375199,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1160,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0012261302210390568,
+        "threshold": 0.0024522604420781136,
+        "train_loss": 0.3474243402481079,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1180,
+      "severity": "warning"
+    },
+    {
+      "detail": {
+        "median": 0.0018681634217500686,
+        "threshold": 0.0037363268435001372,
+        "train_loss": 0.030736908316612244,
+        "window": 5
+      },
+      "flag": "loss_spike",
+      "iteration": 1200,
+      "severity": "warning"
+    }
+  ],
+  "gated_delta_fallbacks": {},
+  "iterations_done": 1200,
+  "iters_done": 1200,
+  "iters_planned": 1200,
+  "last_train": {
+    "iteration": 1200,
+    "learning_rate": 2.9999999242136255e-05,
+    "peak_memory_gb": 8.949624512,
+    "peak_memory_gib": 8.334987342357635,
+    "tokens_per_second": 18.78258901504689,
+    "train_loss": 0.030736908316612244,
+    "trained_tokens": 97274
+  },
+  "last_val": {
+    "iteration": 1199,
+    "val_loss": 0.13952882587909698
+  },
+  "median_tokens_per_second": 16.752916873711833,
+  "peak_memory_gb": 8.949624512,
+  "peak_memory_gib": 8.334987342357635,
+  "status": "ok",
+  "thresholds": {
+    "loss_spike_factor": 2.0,
+    "loss_window": 5,
+    "memory_budget_gib": 17.760009765625,
+    "throughput_drop_factor": 0.5,
+    "val_rising_reports": 3
+  },
+  "train_reports": 120,
+  "val_reports": 4,
+  "verdict": "warnings"
+}
