@@ -1,0 +1,90 @@
+{
+  "purpose": "Legacy summarizer integrity control only; no native replay or new lens readings",
+  "exact_decoded_atlas_equality": true,
+  "source_manifest_sha256": "26d985c7f9c6e860f10fba006f94e352f3191da33fe27f47054ea793d7e593c0",
+  "expected_atlas_sha256": "28f5f4d558bf9a501e1b489419367145b71e904fe8f7450f046bd0e3be3fca41",
+  "control_atlas_sha256": "28f5f4d558bf9a501e1b489419367145b71e904fe8f7450f046bd0e3be3fca41",
+  "summarizer_sha256": "56454eb75a67521599949d0e70da149d86445a0df5441539eb46d11c82196a99",
+  "tokenizer_snapshot": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3",
+  "tokenizer_lookup": [
+    {
+      "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "allow_patterns": [
+        "tokenizer*",
+        "*.json"
+      ],
+      "local_files_only": true
+    }
+  ],
+  "records": [
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d0-list-0005.jsonl.gz",
+      "compressed_sha256": "32fbd55b5299f607d0796488dccd56bb1da8661116006ecffbf8ab939979f891",
+      "record_sha256": "a3d206f2cddd661a3e8d0f717dabb3674d08fb94622246326fa043b72651ab14"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d0-pointer_chain-0006.jsonl.gz",
+      "compressed_sha256": "50eb785e3153d3c0f58d35c8ec6089d6b2c53641d29786a5c5b1c34895198b8b",
+      "record_sha256": "46f2cd2b5f947c59f625c5db185d7aa3f7180e5756eb53d76923c77f3654be4e"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d0-read-0000.jsonl.gz",
+      "compressed_sha256": "ba812bbb4664ad9efe0a6a6ab9fe49bd97a03153b33d791af98d5fd30c88c91c",
+      "record_sha256": "4ec19457bd49409c955063169ff79e2cf5c3c33d742701a18038e0cf0f3b7a71"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d1-batch_update-0010.jsonl.gz",
+      "compressed_sha256": "04e61d61d9c7ff459a497568796ba2c328dd14b759367cefa10ceae2ff23c639",
+      "record_sha256": "5cf817d188ae31bcdde1b33fdf86bf5e93371920d56d66870167d19fac8dd697"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d1-search-0001.jsonl.gz",
+      "compressed_sha256": "55e129c6bcbff926ced7610a87927d05fbc86054843dfbe480b6227212553e07",
+      "record_sha256": "e43aa6116a4a4d3680b26585d5972dee827acca96b461e3a002a092297cbbf12"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d1-synthesis-0003.jsonl.gz",
+      "compressed_sha256": "156da021e1655d09cc022800c08870740396a5b83719a5b13d94a7f321678c20",
+      "record_sha256": "cfcb52a94751c30fa0e87601c0832d3437e447e79ff3ebea78b03b5b181de739"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-aggregate_report-0011.jsonl.gz",
+      "compressed_sha256": "2d7c832da65971d3aacb638a4a556b2a2f10c942decafc8f822bedf881078472",
+      "record_sha256": "e345b0994f528bb596609a12c2336dbfd855c6593ac06cbd39f05c2f190a9614"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-cross_reference-0008.jsonl.gz",
+      "compressed_sha256": "d13adc6a1e1bded768b6339d22a8f78fe1ca1e2b69140140978c217ac4b2c131",
+      "record_sha256": "f42e221457e66f6c1344c4c94d878cfe24c9df2c6b27abe428728e0e1fdd1e1e"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-pointer_chain-0006.jsonl.gz",
+      "compressed_sha256": "77331231133b678266cdaeae1ff0f8fe67e420a6508609b8cc838f40d944d3a6",
+      "record_sha256": "aae3f231d4a5d1f2dac42b9b30c9fbb23496288d2e05b732f044461014c18aeb"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-update-0004.jsonl.gz",
+      "compressed_sha256": "4821627d8a3a13ce1b3b42ee8aa8aa4c44939376ecfb1a520227d3e86085008d",
+      "record_sha256": "91d529eaf1ec1fe92480463d75538c5dede6906365fd592cea2d307d6e113611"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/chat-long-summary.jsonl.gz",
+      "compressed_sha256": "7cac621f4e49eb95cbb166c26af9c75e7a3fb01f6b7632a25f533f30963f6ec6",
+      "record_sha256": "6904608e57a70d62db9c06e5ee534198e2c8faedc7ce3f35c77944dba4667572"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/chat-reasoning.jsonl.gz",
+      "compressed_sha256": "06c4768260ade46c0a884100b6210b36a66b1cf2756a96607e8ccbbc9db59188",
+      "record_sha256": "4796e531e9bf2c7a446ea412964fac773156ba5b7e514ef5f10901a5da5712fa"
+    },
+    {
+      "source": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/chat-short-factual.jsonl.gz",
+      "compressed_sha256": "0d5b62076ec565ea5f2fa6a8126e9a1d4367151d6cb7e35c6aa94c96894aac8f",
+      "record_sha256": "3e1c8cfc7f4a2476015d77beecfdaf7997e6773bf9e20847a5b0bd31085a0269"
+    }
+  ],
+  "episodes": 13,
+  "mlx_imported": false,
+  "checkpoint_loaded": false,
+  "source_files_unchanged": true
+}
