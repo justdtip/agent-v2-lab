@@ -28,7 +28,7 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--base-eval", type=Path, default=REPO / "outputs/agent-v2/evals/base-test.json")
     ap.add_argument("--limit", type=int, default=8)
-    ap.add_argument("--tokens", type=int, default=12, help="generated tokens to compare per path")
+    ap.add_argument("--tokens", type=int, default=24, help="generated tokens to compare per path")
     ap.add_argument("--model", default="qwen35-4b")
     args = ap.parse_args(); t0 = time.time(); args.out.mkdir(parents=True, exist_ok=True)
     import mlx.core as mx
@@ -41,18 +41,28 @@ def main():
     sampler = make_sampler(0.0)
     base = json.load(open(args.base_eval))["trajectories"][: args.limit]
 
-    def run(prompt_input, prompt_cache=None):
+    upcast = [lambda tokens, logits: logits.astype(mx.float32)]  # the same forward; only the sampler's resolution changes
+
+    def run(prompt_input, prompt_cache=None, *, float32=False):
         rows = []
         kwargs = {} if prompt_cache is None else {"prompt_cache": prompt_cache}
+        if float32:
+            kwargs["logits_processors"] = upcast
         for r in stream_generate(model, tok, prompt=prompt_input, max_tokens=args.tokens, sampler=sampler, **kwargs):
-            lp = np.array(r.logprobs.astype(mx.float32)) if r.logprobs is not None else None
-            rows.append({"token": int(r.token), "logprobs": lp})
+            lp = r.logprobs
+            top2 = np.partition(np.array(lp.astype(mx.float32)), -2)[-2:] if lp is not None else None
+            rows.append({"token": int(r.token), "logprobs": np.array(lp.astype(mx.float32)) if lp is not None else None,
+                         "dtype": str(lp.dtype) if lp is not None else None,
+                         "margin": float(top2[1] - top2[0]) if top2 is not None else None})
         return rows
 
     def compare(a, b):
         first_diff = next((i for i, (x, y) in enumerate(zip(a, b)) if x["token"] != y["token"]), None)
         la, lb = a[0]["logprobs"], b[0]["logprobs"]
-        out = {"first_differing_generated_position": first_diff, "tokens_compared": min(len(a), len(b))}
+        out = {"first_differing_generated_position": first_diff, "tokens_compared": min(len(a), len(b)),
+               "logprobs_dtype": [a[0]["dtype"], b[0]["dtype"]],
+               "margins_first_8": [[round(x["margin"], 5) for x in a[:8]], [round(x["margin"], 5) for x in b[:8]]],
+               "exact_ties_in_a": sum(1 for x in a if x["margin"] == 0.0), "margin_below_0.1_in_a": sum(1 for x in a if x["margin"] is not None and x["margin"] < 0.1)}
         if la is not None and lb is not None:
             def margin(l):
                 t = np.partition(l, -2)[-2:]; return float(t[1] - t[0])
@@ -72,9 +82,13 @@ def main():
         suffix = snap.prepare(ids)
         c = run(mx.array(suffix), snap.cache)
         d = run(prompt)
+        a32 = run(prompt, float32=True)
+        snap32 = SnapshotCache(model, view, prefix_tokens)
+        c32 = run(mx.array(snap32.prepare(ids)), snap32.cache, float32=True)
         case = {"task_id": t["task_id"], "prompt_tokens": len(ids), "prefix_tokens": prefix_tokens,
                 "a_string_vs_b_array": compare(a, b), "a_string_vs_c_snapshot": compare(a, c), "b_array_vs_c_snapshot": compare(b, c),
                 "a_vs_a_repeat": compare(a, d),
+                "float32_sampler_native_vs_snapshot": compare(a32, c32), "native_bf16_vs_native_float32_sampler": compare(a, a32),
                 "tokens": {"a": [x["token"] for x in a], "c": [x["token"] for x in c]},
                 "texts": {"a": tok.decode([x["token"] for x in a]), "c": tok.decode([x["token"] for x in c])}}
         results["cases"].append(case)
