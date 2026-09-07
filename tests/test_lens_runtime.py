@@ -228,6 +228,7 @@ def test_resolve_uses_primary_cache_offline(tmp_path, monkeypatch):
                 "revision": "a" * 40,
                 "local_files_only": True,
                 "cache_dir": str(primary / ".cache/huggingface/hub"),
+                "allow_patterns": list(runtime.SNAPSHOT_ALLOW_PATTERNS),
             },
         )
     ]
@@ -382,3 +383,46 @@ def test_primary_worktree_is_first_git_record(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "run", git)
     assert runtime.primary_worktree() == primary
     assert called[0][-4:] == ["worktree", "list", "--porcelain", "-z"]
+
+
+def test_offline_complete_model_snapshot_does_not_require_hub_docs(tmp_path, monkeypatch):
+    """§4: absent README/.gitattributes must not block complete cached runtime assets."""
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.errors import IncompleteSnapshotError
+
+    runtime = api()
+    root = snapshot(tmp_path)
+    (root / "tokenizer.json").write_text("{}")
+    repo_cache = root.parent.parent
+    tree = repo_cache / "trees" / f"{root.name}.json"
+    tree.parent.mkdir()
+    names = [path.name for path in root.iterdir()] + ["README.md", ".gitattributes"]
+    tree.write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "files": {name: {"size": 1, "blob_id": "b" * 40} for name in names},
+            }
+        )
+    )
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
+    # Exercise the installed Hub offline completeness check against real local cache files.
+    with pytest.raises(IncompleteSnapshotError, match="README.md"):
+        snapshot_download(
+            "example/tiny", revision=root.name, cache_dir=tmp_path, local_files_only=True
+        )
+    identity = runtime.resolve_snapshot(
+        replace(load_model_spec("qwen35-4b"), hf_id="example/tiny"), revision=root.name
+    )
+    assert identity["resolved_revision"] == root.name
+    assert {row["name"] for row in identity["files"]} == set(names) - {
+        "README.md",
+        ".gitattributes",
+    }
+    assert not (root / "README.md").exists()
+    assert not (root / ".gitattributes").exists()
+    (root / "model-00001-of-00002.safetensors").unlink()
+    with pytest.raises(IncompleteSnapshotError, match="model-00001"):
+        runtime.resolve_snapshot(
+            replace(load_model_spec("qwen35-4b"), hf_id="example/tiny"), revision=root.name
+        )

@@ -12,6 +12,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, replace
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,20 @@ from local_llm_lab.pipeline.lens_fitting.corpus import read_corpus
 from local_llm_lab.pipeline.live_lens.instruments import file_sha256
 from local_llm_lab.project import PROJECT_ROOT
 from local_llm_lab.spawn import run
+
+# The installed mlx_lm.utils._download asset classes. Offline completeness must not
+# require unrelated Hub documentation; the same set defines hashed runtime assets.
+SNAPSHOT_ALLOW_PATTERNS = (
+    "*.json",
+    "model*.safetensors",
+    "*.py",
+    "tokenizer.model",
+    "*.tiktoken",
+    "tiktoken.model",
+    "*.txt",
+    "*.jsonl",
+    "*.jinja",
+)
 
 
 def primary_worktree() -> Path:
@@ -74,9 +89,12 @@ def snapshot_identity(directory: Path, *, hf_id: str) -> dict:
     # Include tokenizer, generation settings, quantization overrides and custom model code.
     assets.update(
         path
-        for pattern in ("*.json", "*.py", "*.jinja", "*.model", "*.tiktoken", "*.txt")
-        for path in directory.glob(pattern)
+        for path in directory.rglob("*")
         if path.is_file()
+        and any(
+            fnmatch(path.relative_to(directory).as_posix(), pattern)
+            for pattern in SNAPSHOT_ALLOW_PATTERNS
+        )
     )
     if data.get("model_file"):
         model_file = directory / data["model_file"]
@@ -84,7 +102,11 @@ def snapshot_identity(directory: Path, *, hf_id: str) -> dict:
             raise ValueError("custom model config references a missing/outside model file")
         assets.add(model_file)
     files = [
-        {"name": path.name, "sha256": file_sha256(path), "bytes": path.stat().st_size}
+        {
+            "name": path.relative_to(directory).as_posix(),
+            "sha256": file_sha256(path),
+            "bytes": path.stat().st_size,
+        }
         for path in sorted(assets)
     ]
     digest = hashlib.sha256(
@@ -111,7 +133,11 @@ def resolve_snapshot(spec: ModelSpec, *, revision: str = "main") -> dict:
         cache_dir = Path(os.environ.get("HF_HUB_CACHE", cache_home / "hub"))
         directory = Path(
             snapshot_download(
-                spec.hf_id, revision=revision, local_files_only=True, cache_dir=str(cache_dir)
+                spec.hf_id,
+                revision=revision,
+                local_files_only=True,
+                cache_dir=str(cache_dir),
+                allow_patterns=list(SNAPSHOT_ALLOW_PATTERNS),
             )
         )
     return snapshot_identity(directory, hf_id=spec.hf_id)
