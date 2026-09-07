@@ -1,0 +1,74 @@
+[
+  {
+    "head_dim": 64,
+    "tokens": 1024,
+    "inputs_bytes": 9437264,
+    "forward_peak_bytes": 9437708,
+    "backward_peak_bytes": 118489100,
+    "score_matrix_bytes": 33554432
+  },
+  {
+    "head_dim": 64,
+    "tokens": 2048,
+    "inputs_bytes": 18874448,
+    "forward_peak_bytes": 18874892,
+    "backward_peak_bytes": 448856076,
+    "score_matrix_bytes": 134217728
+  },
+  {
+    "head_dim": 64,
+    "tokens": 4096,
+    "inputs_bytes": 37748816,
+    "forward_peak_bytes": 37749260,
+    "backward_peak_bytes": 1728184332,
+    "score_matrix_bytes": 536870912
+  },
+  {
+    "head_dim": 128,
+    "tokens": 1024,
+    "inputs_bytes": 18874448,
+    "forward_peak_bytes": 18874892,
+    "backward_peak_bytes": 137404434,
+    "score_matrix_bytes": 33554432
+  },
+  {
+    "head_dim": 128,
+    "tokens": 2048,
+    "inputs_bytes": 37748816,
+    "forward_peak_bytes": 37749260,
+    "backward_peak_bytes": 482410508,
+    "score_matrix_bytes": 134217728
+  },
+  {
+    "head_dim": 128,
+    "tokens": 4096,
+    "inputs_bytes": 75497552,
+    "forward_peak_bytes": 75497996,
+    "backward_peak_bytes": 1795293196,
+    "score_matrix_bytes": 536870912
+  },
+  {
+    "head_dim": 256,
+    "tokens": 1024,
+    "inputs_bytes": 37748816,
+    "forward_peak_bytes": 80749072,
+    "backward_peak_bytes": 170958866,
+    "score_matrix_bytes": 33554432
+  },
+  {
+    "head_dim": 256,
+    "tokens": 2048,
+    "inputs_bytes": 75497552,
+    "forward_peak_bytes": 230703632,
+    "backward_peak_bytes": 549519372,
+    "score_matrix_bytes": 134217728
+  },
+  {
+    "head_dim": 256,
+    "tokens": 4096,
+    "inputs_bytes": 150995024,
+    "forward_peak_bytes": 738230800,
+    "backward_peak_bytes": 1929510924,
+    "score_matrix_bytes": 536870912
+  }
+]

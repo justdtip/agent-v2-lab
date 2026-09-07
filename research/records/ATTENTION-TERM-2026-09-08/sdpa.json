@@ -1,0 +1,61 @@
+{
+  "heads_q": 16,
+  "heads_kv": 4,
+  "head_dim": 256,
+  "dtype": "bfloat16",
+  "working_set_bytes": 19069665280,
+  "cap_bytes": 11441799168.0,
+  "rows": [
+    {
+      "tokens": 512,
+      "inputs_bytes": 18874448,
+      "forward_peak_bytes": 31724048,
+      "forward_seconds": 0.07945154200024263,
+      "backward_peak_bytes": 59527186,
+      "backward_seconds": 0.05572491600014473,
+      "score_matrix_bytes": 8388608,
+      "projected_peak_bytes": null
+    },
+    {
+      "tokens": 1024,
+      "inputs_bytes": 37748816,
+      "forward_peak_bytes": 80749072,
+      "forward_seconds": 0.016392042000006768,
+      "backward_peak_bytes": 170958866,
+      "backward_seconds": 0.02151899999989837,
+      "score_matrix_bytes": 33554432,
+      "projected_peak_bytes": null
+    },
+    {
+      "tokens": 2048,
+      "inputs_bytes": 75497552,
+      "forward_peak_bytes": 230703632,
+      "forward_seconds": 0.023641666999537847,
+      "backward_peak_bytes": 549519372,
+      "backward_seconds": 0.04455995799980883,
+      "score_matrix_bytes": 134217728,
+      "projected_peak_bytes": 490984637.90991163
+    },
+    {
+      "tokens": 4096,
+      "inputs_bytes": 150995024,
+      "forward_peak_bytes": 738230800,
+      "forward_seconds": 0.07188091700027144,
+      "backward_peak_bytes": 1929510924,
+      "backward_seconds": 0.17308758299986948,
+      "score_matrix_bytes": 536870912,
+      "projected_peak_bytes": 1766340332.4357238
+    },
+    {
+      "tokens": 8192,
+      "inputs_bytes": 234881032,
+      "forward_peak_bytes": 2583707662,
+      "forward_seconds": 0.28416558299977623,
+      "backward_peak_bytes": 7164133388,
+      "backward_seconds": 0.762211207999826,
+      "score_matrix_bytes": 2147483648,
+      "projected_peak_bytes": 6775033957.920838
+    }
+  ],
+  "stopped": null
+}
