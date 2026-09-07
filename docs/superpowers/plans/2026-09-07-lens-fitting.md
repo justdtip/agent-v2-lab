@@ -49,3 +49,13 @@ Ownership: lens_fitting/profiles.py, scripts/lens_profiles.py, tests/test_lens_p
 Confirm primary cache landing, incorporate its exact commit into this isolated branch, and run the full suite once on this branch's source. Investigate added failures only. Build tokenizer-only corpora and freeze manifests. All checkpoint self-checks/fits/replays require the normal lock, recorded launch/end, R47 declaration where needed, and source/corpus hash freezing. Run serially only when authorised and available; stop for genuine cost/ruling decisions. Preserve evidence before reading profiles. No adapter runs until3.1–3.6 land.
 
 Review each completed piece and the complete branch. Commit records and changes by explicit path throughout, push the branch backup without force, and deliver a patch under design_specifications/pending/LENS-FITTING.patch plus an implementation report listing callers, evidence, remaining gates and all departures. Chief lands the patch; do not alter the shared branch. Keep the persistent worktree intact.
+
+## Resume amendment — sections 12 and 13, 7 September 2026
+
+Task 1 was reviewed and landed in primary at5712131. The isolated branch incorporates that exact tree before further source work. Sequence-level fit/held membership intentionally shares trajectories: held sequences select the ridge alpha; only disjoint pilot episodes assess generalisation. No split reassignment or corpus rewrite.
+
+Task 2 uses section12: penalty alpha * mean_diag(fit_XTX), with fixed alpha grid (0.001,0.01,0.1,1,10). The row solve is (XTX + absolute_penalty I) W = XTY. Record alpha, total mean diagonal, n, absolute penalty, and the equivalent per-position lambda. The earlier unresolved n-factor note is resolved by the Director, not an implementer choice.
+
+Task 4 explicitly replaces the selected spec with cache_strategy='none' before load_policy. Registry history is now the authorised default; capture entry points must not depend on auto or silently disable a turn cache. Fit forwards remain uncached through ArchitectureView.
+
+The Director explicitly authorised GitHub backup pushes. The first push of codex/lens-fitting succeeded; continue ordinary non-force backups after committed pieces. No adapter fits before3.1–3.6 land. Shared checkout remains Chief-owned.
