@@ -311,6 +311,7 @@ class PositionState:
     primal: Any
     prefix_cache: Any
     epsilon: float
+    primal_norm: float
 
 
 def prepare_position(view, ids, layer: int, position: int) -> PositionState:
@@ -345,7 +346,7 @@ def prepare_position(view, ids, layer: int, position: int) -> PositionState:
     for index in range(layer):
         h = view.run_block(index, h, masks, current_cache[index])
     mx.eval(h)
-    return PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon)
+    return PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon, norm)
 
 
 def _directions(state, directions):
@@ -367,7 +368,7 @@ def reference_responses(state, directions, *, epsilon_scale=1.0):
         raise ValueError("positive epsilon scale required")
     responses = []
     for direction, norm in zip(directions, norms, strict=True):
-        eps = state.epsilon * epsilon_scale / float(norm)
+        eps = float(finite_difference_steps(state.primal_norm, np.array([norm]), epsilon_scale)[0])
         tangent = mx.zeros_like(state.full_primal)
         tangent[0, state.position] = mx.array(direction)
         plus = pre_norm_tail(state.view, state.layer, state.full_primal + eps * tangent)
@@ -394,7 +395,9 @@ def cached_responses(state, directions, *, mode, batch_size=8, epsilon_scale=1.0
     results = []
     for start in range(0, len(directions), width):
         d = mx.array(directions[start : start + width])[:, None, :]
-        eps = mx.array(state.epsilon * epsilon_scale / norms[start : start + width])[:, None, None]
+        eps = mx.array(
+            finite_difference_steps(state.primal_norm, norms[start : start + width], epsilon_scale)
+        )[:, None, None]
         primal = mx.broadcast_to(state.primal, d.shape)
         outputs = []
         for sign in (1, -1):
@@ -798,3 +801,19 @@ def run_jacobian_stage(view, rows, plan, *, stage, record_dir, progress=None):
             failure.update(error.report)
         write_record(record_dir / "stop.json", failure)
         raise
+
+
+def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0):
+    """The jlens full-primal rule, with an absolute zero-primal fallback."""
+    norms = np.asarray(tangent_norms, dtype=np.float32)
+    if (
+        not np.isfinite(primal_norm)
+        or primal_norm < 0
+        or not np.isfinite(norms).all()
+        or np.any(norms <= 0)
+        or not np.isfinite(epsilon_scale)
+        or epsilon_scale <= 0
+    ):
+        raise ValueError("finite primal and positive tangent norms/epsilon scale required")
+    steps = 0.01 * primal_norm / norms if primal_norm else np.full_like(norms, 0.01)
+    return steps * epsilon_scale

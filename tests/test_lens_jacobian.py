@@ -408,3 +408,10 @@ def test_benchmark_refuses_falsified_memory_projection_before_next_measurement()
     with pytest.raises(ValueError, match="projection"):
         j.benchmark_plan(plan, proof, measure)
     assert len(calls) == 1
+
+
+def test_zero_primal_step_fallback_does_not_divide_by_tangent_norm():
+    """§3.3/jlens rule: zero primal uses epsilon0.01 even for a nonunit tangent."""
+    j = api()
+    np.testing.assert_allclose(j.finite_difference_steps(0, np.array([2.0])), [0.01])
+    np.testing.assert_allclose(j.finite_difference_steps(5, np.array([2.0])), [0.025])
