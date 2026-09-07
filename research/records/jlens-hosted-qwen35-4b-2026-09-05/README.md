@@ -50,3 +50,19 @@ without being carried in the tree.
 Cosine fields are properties of the **key** head: value head `h` reads key head `h // 2`, so
 consecutive value heads carry identical values. Any count or percentile over them states the
 distinct key-head n.
+
+## Where the lens lives now (2026-09-07)
+
+The float16 `.npz` was regenerated on 2026-09-07 at the Director's instruction ("save the lens persistently"),
+after the scratch copy the WP12 scripts read (`../jlens_hosted/`) was lost with the 06:03 restart. It now
+lives inside the tree, outside version control (`models/` is ignored):
+
+| path | what |
+| --- | --- |
+| `models/jlens/Qwen3.5-4B_jacobian_lens_n1000.npz` | 31 float16 arrays `J0`..`J30`, 2560×2560; sha256 `381c089dcffead8147ee91f944496f468cce2c7d593e0a1b17230745055aea12` |
+| `models/jlens/Qwen3.5-4B_jacobian_lens_n1000.json` | sidecar: source digest, pickle globals, layer convention, per-layer identity distance |
+| `models/jlens/source/` | the original `.pt` (sha256 `1f9a8f8f…8534e`, matching `provenance.json`), `config.yaml`, `CREDIT.md`, the convergence csv |
+
+Regenerate with `scripts/convert_jlens.py` (a runnable converter; it loads no model, so it may run beside
+training or evaluation). The venv has no torch: run it under Homebrew's python3 (torch 2.9.1). The key
+convention is unchanged: `J{L-1}` is repo layer `L`; layer 32 is the identity and is not stored.
