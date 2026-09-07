@@ -225,3 +225,22 @@ def load_runtime(prepared: Any, *, capture: bool = False) -> LoadedRuntime:
         raise ValueError("snapshot changed during loading")
     resolved = replace(resolved, spec=spec, snapshot_revision=identity["resolved_revision"])
     return LoadedRuntime(model, tokenizer, view, resolved, spec, identity, lock_path)
+
+
+def configure_allocator_cache(*, set_limit=None) -> dict:
+    """Match fit and preflight allocation caching; this does not bound live buffers."""
+    if set_limit is None:
+        import mlx.core as mx
+
+        set_limit = mx.set_cache_limit
+    previous = set_limit(0)
+    return {"previous_limit_bytes": previous, "limit_bytes": 0}
+
+
+def resource_snapshot(*, array_api=None) -> dict:
+    """R46 process peak (including load) against the runtime's device working set."""
+    if array_api is None:
+        import mlx.core as array_api
+    peak = array_api.get_peak_memory()
+    working = array_api.device_info()["max_recommended_working_set_size"]
+    return {"peak_memory_gib": peak / 2**30, "working_set_share": peak / working}

@@ -235,7 +235,7 @@ def test_resolve_uses_primary_cache_offline(tmp_path, monkeypatch):
     assert identity["resolved_revision"] == "a" * 40
 
 
-def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monkeypatch):
+def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monkeypatch, capsys):
     """§§3.2/4/12: public CLI publishes reproducible penalties and selection caveats."""
     import runpy
 
@@ -272,6 +272,13 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
         )
 
     monkeypatch.setattr(runtime, "load_runtime", fake_load)
+    policies = []
+
+    def cache_policy():
+        policies.append("configured")
+        return dict(previous_limit_bytes=1024, limit_bytes=0)
+
+    monkeypatch.setattr(runtime, "configure_allocator_cache", cache_policy)
     monkeypatch.setattr(
         regression,
         "fit_regression",
@@ -292,6 +299,18 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
             0.01,
         ),
     )
+    fake_fit = regression.fit_regression
+
+    def fit_with_progress(*args, **kwargs):
+        kwargs["progress"](
+            {"event": "sequence", "counts": {"fit": {"positions": 5}, "held": {"positions": 2}}}
+        )
+        return fake_fit(*args, **kwargs)
+
+    monkeypatch.setattr(regression, "fit_regression", fit_with_progress)
+    monkeypatch.setattr(
+        runtime, "resource_snapshot", lambda: dict(peak_memory_gib=1, working_set_share=0.1)
+    )
     main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/lens_fit.py"))["main"]
     argv = [
         "--kind",
@@ -304,6 +323,11 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
         str(out),
     ]
     assert main(argv) == 0
+    progress_event = json.loads(capsys.readouterr().out.splitlines()[0])
+    assert progress_event["tokens_done"] == 7
+    assert progress_event["elapsed_s"] >= 0
+    assert progress_event["peak_memory_gib"] == 1
+    assert progress_event["working_set_share"] == 0.1
     metadata = json.loads(out.with_suffix(".json").read_bytes())
     assert metadata["lambda_grid"] == [0.001, 0.01, 0.1, 1, 10]
     assert metadata["model"]["hf_id"] == spec.hf_id
@@ -312,6 +336,8 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
     assert "not measured" in metadata["generalisation_evaluation"]
     assert metadata["r2_definition"].startswith("uncentered")
     assert metadata["cache_strategy"] == "history"
+    assert policies == ["configured"]
+    assert metadata["allocator_cache"] == dict(previous_limit_bytes=1024, limit_bytes=0)
     assert metadata["corpus_manifest_sha256"] == runtime.file_sha256(manifest)
     before = out.read_bytes()
     with pytest.raises(SystemExit):
@@ -426,3 +452,28 @@ def test_offline_complete_model_snapshot_does_not_require_hub_docs(tmp_path, mon
         runtime.resolve_snapshot(
             replace(load_model_spec("qwen35-4b"), hf_id="example/tiny"), revision=root.name
         )
+
+
+def test_allocator_cache_policy_preserves_previous_limit():
+    """§7/R47: fit policy bounds unused allocation bytes, not live buffer count."""
+    seen = []
+
+    def setter(value):
+        seen.append(value)
+        return 2048
+
+    result = api().configure_allocator_cache(set_limit=setter)
+    assert seen == [0]
+    assert result["previous_limit_bytes"] == 2048
+    assert result["limit_bytes"] == 0
+
+
+def test_resource_snapshot_reports_device_share_without_native_import():
+    """§7/R46: progress includes measured peak and fraction of device working set."""
+    backend = SimpleNamespace(
+        get_peak_memory=lambda: 2**30,
+        device_info=lambda: {"max_recommended_working_set_size": 4 * 2**30},
+    )
+    assert api().resource_snapshot(array_api=backend) == dict(
+        peak_memory_gib=1, working_set_share=0.25
+    )

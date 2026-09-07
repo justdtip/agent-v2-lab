@@ -1142,15 +1142,15 @@ def test_the_grep_that_this_rule_replaces_is_wrong_in_both_directions() -> None:
     """Why the closure exists, pinned against the rule it replaces.
 
     ``grep -l "import mlx"`` over the named files, the rule proposed after the two crossings of
-    2026-09-07, disagrees with the closure on six of the fifty-one files here. One disagreement
-    is dangerous and five are merely wasteful, and the test asserts both so that neither can
+    2026-09-07, disagrees with the closure on seven files here. One disagreement
+    is dangerous and six are merely wasteful, and the test asserts both so that neither can
     quietly change.
 
     ``test_tuner_data.py`` is the dangerous one: it says ``from mlx_lm.tuner...``, which does not
     contain the substring ``import mlx``, and ``mlx_lm``'s package ``__init__`` loads ``mlx.core``
     through ``mlx_lm.utils``. The grep clears it and pytest loads mlx.
 
-    The five wasteful ones carry an ``import mlx`` inside a function, so the grep holds them and
+    The six wasteful ones carry an ``import mlx`` inside a function, so the grep holds them and
     importing them costs nothing. ``test_preflight.py`` is deliberately *not* among either group:
     it has such a lazy import at line 1996 **and** loads mlx transitively through
     ``local_llm_lab.training.gated_delta_chunked``, so the grep happens to hold it for a reason
@@ -1171,6 +1171,7 @@ def test_the_grep_that_this_rule_replaces_is_wrong_in_both_directions() -> None:
     assert _loads_mlx(tests / "test_tuner_data.py", _IMPORT_ROOTS) == "mlx_lm.tuner.trainer"
     assert held_but_clean == [
         "test_cache_equivalence.py",
+        "test_lens_jacobian.py",
         "test_metal_cache_limit.py",
         "test_repository_rules.py",
         "test_runner.py",

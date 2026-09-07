@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--kind", choices=("regression",), required=True)
+    parser.add_argument("--kind", choices=("regression", "jacobian"), required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--layers", choices=("all",), default="all")
@@ -21,9 +21,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--revision", default="main", help="Existing local Hub revision; offline only"
     )
+    parser.add_argument(
+        "--jacobian-stage", choices=("plan", "check", "benchmark", "fit"), default="fit"
+    )
+    parser.add_argument("--jacobian-plan", type=Path)
+    parser.add_argument(
+        "--plan-config", type=Path, help="Explicit frozen bounds, seeds and memory envelope JSON"
+    )
+    parser.add_argument(
+        "--record-dir", type=Path, help="New directory for append-only Jacobian stage records"
+    )
     args = parser.parse_args(argv)
+    if args.kind == "jacobian":
+        if args.jacobian_plan is None:
+            parser.error("Jacobian stages require --jacobian-plan")
+        if (args.jacobian_stage == "plan") != (args.plan_config is not None):
+            parser.error("only the plan stage requires --plan-config")
+        if args.jacobian_stage != "plan" and args.record_dir is None:
+            parser.error("native Jacobian stages require a new --record-dir")
+    elif args.jacobian_plan or args.plan_config or args.record_dir or args.jacobian_stage != "fit":
+        parser.error("Jacobian stage arguments require --kind jacobian")
     from local_llm_lab.models import load_model_spec
-    from local_llm_lab.pipeline.lens_fitting.runtime import load_runtime, prepare_fit
+    from local_llm_lab.pipeline.lens_fitting.runtime import (
+        configure_allocator_cache,
+        load_runtime,
+        prepare_fit,
+        resource_snapshot,
+    )
 
     started = time.monotonic()
     try:
@@ -36,14 +60,81 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (OSError, ValueError, KeyError) as error:
         parser.error(str(error))
+    plan = None
+    if args.kind == "jacobian":
+        from local_llm_lab.pipeline.lens_fitting.jacobian import (
+            prepare_plan,
+            run_jacobian_stage,
+            write_record,
+        )
+
+        try:
+            plan = prepare_plan(prepared, args.jacobian_plan, config_path=args.plan_config)
+            if args.jacobian_stage == "plan":
+                print(json.dumps({"event": "plan_frozen", "plan_sha256": plan["plan_sha256"]}))
+                return 0
+            args.record_dir.mkdir(parents=True, exist_ok=False)
+            write_record(args.record_dir / "run-plan.json", plan)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
     loaded = load_runtime(prepared)
     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
     from local_llm_lab.pipeline.lens_fitting.regression import ALPHA_GRID, fit_regression
 
     loaded.model.eval()
-    result = fit_regression(
-        loaded.view, prepared.rows, progress=lambda event: print(json.dumps(event), flush=True)
-    )
+    allocator_cache = configure_allocator_cache()
+
+    def enrich(event):
+        counts = event.get("counts", {})
+        tokens = event.get("tokens_done", sum(c.get("positions", 0) for c in counts.values()))
+        return {
+            **event,
+            "elapsed_s": time.monotonic() - started,
+            "tokens_done": tokens,
+            **resource_snapshot(),
+        }
+
+    def progress(event):
+        print(json.dumps(enrich(event)), flush=True)
+
+    validation = None
+    if args.kind == "regression":
+        result = fit_regression(loaded.view, prepared.rows, progress=progress)
+    else:
+        write_record(
+            args.record_dir / "runtime.json",
+            {
+                "snapshot": loaded.snapshot,
+                "model_run_lock": str(loaded.lock_path),
+                "allocator_cache": allocator_cache,
+                "allocator_scope": (
+                    "unused allocation bytes only; does not establish live buffer-count safety"
+                ),
+            },
+        )
+        with (args.record_dir / "progress.jsonl").open("x") as events:
+
+            def progress(event):
+                event = enrich(event)
+                events.write(json.dumps(event, allow_nan=False) + "\n")
+                events.flush()
+                print(json.dumps(event), flush=True)
+
+            try:
+                outcome = run_jacobian_stage(
+                    loaded.view,
+                    prepared.rows,
+                    plan,
+                    stage=args.jacobian_stage,
+                    record_dir=args.record_dir,
+                    progress=progress,
+                )
+            except (ValueError, RuntimeError) as error:
+                print(json.dumps({"event": "stop_required", "reason": str(error)}))
+                return 2
+        if outcome is None:
+            return 0
+        result, validation = outcome
     metadata = {
         "schema_version": 1,
         "kind": args.kind,
@@ -67,7 +158,24 @@ def main(argv: list[str] | None = None) -> int:
         "peak_memory_scope": "MLX process peak, including model loading",
         "model_run_lock": str(loaded.lock_path),
         "cache_strategy": loaded.resolved.cache_strategy,
+        "allocator_cache": allocator_cache,
     }
+    if args.kind == "jacobian":
+        for key in ("lambda_grid", "penalty_rule", "r2_definition"):
+            metadata.pop(key)
+        metadata.update(
+            {
+                "held_split_role": (
+                    "equal-span held mean derivative validation; no held fit positions"
+                ),
+                "seeds": plan["seeds"],
+                "plan_sha256": plan["plan_sha256"],
+                "run_plan": plan,
+                "validation": validation,
+                "record_dir": str(args.record_dir),
+                "orientation": "output-by-input; prediction directions @ J.T",
+            }
+        )
     written = write_lens(
         prepared.output,
         result.maps,
