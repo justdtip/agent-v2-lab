@@ -1,0 +1,286 @@
+"""Fixed-history comparison: the base policy and a LoRA adapter on the same recorded prefix.
+
+For every test task the base passed and the adapter failed, take the adapter's own transcript up to
+the step *t* where it first repeats its previous call (the divergence), rebuild exactly the prompt
+the runner built at that step (same system prompt, same observation window, same generation
+suffix), and put both models on it:
+
+  1. greedy continuation from the identical prompt (what each model does next, parsed);
+  2. a teacher-forced pass over the adapter's recorded turn *t*: per-token log-probability under
+     each model, the next-token distribution at the turn start and at the tool-name slot;
+  3. residuals at the band layers at those two positions, read through the hosted Jacobian lens
+     (layer 20 primary, the other pairs as a profile; R54), with the base-vs-adapter residual
+     cosine per layer.
+
+One model load: the base is loaded through ``load_policy`` (which takes the model-run lock), the
+base passes run, then the adapter is attached in-process with ``mlx_lm``'s ``load_adapters`` —
+the same call ``mlx_lm.load(adapter_path=...)`` makes — and the passes run again.
+
+    .venv/bin/python scripts/fixed_history_lens.py --out <dir> [--dry-run] [--tasks id ...]
+
+``--dry-run`` needs only the tokenizer (no weights, no lock): it rebuilds the prompts, counts
+tokens and locates the slots, and writes ``pairs.json``.
+"""
+from __future__ import annotations
+
+import argparse, json, sys, time
+from pathlib import Path
+
+import numpy as np
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
+
+from local_llm_lab.agent_protocol import Action  # noqa: E402
+from local_llm_lab.models import load_model_spec  # noqa: E402
+from local_llm_lab.pipeline.protocol import (  # noqa: E402
+    SYSTEM_PROMPT, TOOL_SPECS, assistant_message, build_prompt, generation_suffix, parse_turn,
+    strip_thinking, tool_message,
+)
+
+# R41e(b): the band is never typed from the pattern; this is the R41e literal asserted as the recorded ruling,
+# design_specifications/pending/02-INTERFACE-AND-WIRING-MAP.md "### R41e" (pairs 12/13, 16/17, 19/20, 23/24, 27/28).
+BAND_PAIRS = ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))
+READ = (12, 16, 20, 24, 28)                                        # attention members of each pair
+PRIMARY = 20                                                       # R54: the primary lens readout
+TOPK = 25
+DEFAULT_ADAPTER_TRANSCRIPTS = REPO / "outputs/agent-v2e-qwen35-4b/transcripts/best-adapter-test/transcripts.jsonl"
+DEFAULT_BASE_EVAL = REPO / "outputs/agent-v2/evals/base-test.json"
+DEFAULT_ADAPTER = REPO / "outputs/agent-v2e-qwen35-4b/best-adapter"
+DEFAULT_LENS = REPO / "models/jlens/Qwen3.5-4B_jacobian_lens_n1000.npz"
+KEEP_LAST = 2
+MAX_NEW = 200
+
+
+def canon(action: dict) -> str:
+    return json.dumps(action, sort_keys=True)
+
+
+def divergence_step(steps: list[dict]) -> int | None:
+    acts = [canon(s["action"]) for s in steps if "action" in s]
+    for i in range(1, len(acts)):
+        if acts[i] == acts[i - 1]:
+            return i
+    return None
+
+
+def messages_before(prompt: str, steps: list[dict], t: int) -> list[dict]:
+    """The runner's message list at the start of step t: [system, user] + t (assistant, tool) pairs."""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
+    for s in steps[:t]:
+        a = s["action"]
+        messages.append(assistant_message(s["thought"], Action(a["name"], a["arguments"])))
+        messages.append(tool_message(a["name"], s["observation"]))
+    return messages
+
+
+def load_pairs(adapter_transcripts: Path, base_eval: Path, only: set[str] | None) -> list[dict]:
+    rows = [json.loads(l) for l in open(adapter_transcripts)]
+    adapter = [r for r in rows if "task_id" in r]
+    base = {t["task_id"]: t for t in json.load(open(base_eval))["trajectories"]}
+    pairs = []
+    for a in adapter:
+        b = base.get(a["task_id"])
+        if b is None or not b["verdict"]["success"] or a["verdict"]["success"]:
+            continue
+        if only and a["task_id"] not in only:
+            continue
+        steps = [s for s in a["steps"] if "action" in s]
+        t = divergence_step(steps)
+        kind = "no_repeat" if t is None else ("after_error" if str(steps[t - 1]["observation"]).startswith("ERROR") else "after_ok")
+        if t is None:
+            t = len(steps) - 1  # no identical repeat: compare at the last executed step
+        coincide = all(canon(b["steps"][i]["action"]) == canon(steps[i]["action"]) for i in range(min(t, len(b["steps"]))))
+        pairs.append({
+            "task_id": a["task_id"], "family": a["family"], "prompt": a["prompt"], "t": t, "kind": kind,
+            "histories_coincide_to_t_minus_1": coincide,
+            "adapter_turn_t_raw": steps[t]["raw"], "adapter_turn_t_action": steps[t]["action"],
+            "adapter_turn_t_minus_1_action": steps[t - 1]["action"] if t > 0 else None,
+            "base_action_at_t": b["steps"][t]["action"] if t < len(b["steps"]) else None,
+            "base_turns": len(b["steps"]), "adapter_turns": len(steps),
+            "messages": messages_before(a["prompt"], steps, t),
+        })
+    return pairs
+
+
+def hf_tokenizer(hf_id: str):
+    from huggingface_hub import snapshot_download
+    from transformers import AutoTokenizer
+    path = snapshot_download(hf_id, allow_patterns=["tokenizer*", "*.json"], local_files_only=True)
+    return AutoTokenizer.from_pretrained(path)
+
+
+def tool_name_slot(tok, text: str, n_prompt_chars: int) -> tuple[list[int], int | None, int | None]:
+    """Token ids of ``text`` and (index of the first token of the tool name, char offset of that name)."""
+    enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
+    ids, offsets = enc["input_ids"], enc["offset_mapping"]
+    key = '"name": "'
+    k = text.find(key, n_prompt_chars)
+    if k < 0:
+        return ids, None, None
+    name_start = k + len(key)
+    first = next((i for i, (s, e) in enumerate(offsets) if e > name_start), None)
+    return ids, first, name_start
+
+
+def candidate_first_tokens(tok) -> dict[str, int]:
+    """First token of each tool name in the ``{"name": "X"`` context (the token the slot predicts)."""
+    out = {}
+    names = [spec["function"]["name"] for spec in TOOL_SPECS] + ["finish"]
+    for name in names:
+        stem = tok('```json\n{"name": "', add_special_tokens=False)["input_ids"]
+        full = tok('```json\n{"name": "' + name + '"', add_special_tokens=False)["input_ids"]
+        out[name] = int(full[len(stem)]) if full[: len(stem)] == stem else int(full[-2])
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--adapter-transcripts", type=Path, default=DEFAULT_ADAPTER_TRANSCRIPTS)
+    ap.add_argument("--base-eval", type=Path, default=DEFAULT_BASE_EVAL)
+    ap.add_argument("--adapter", type=Path, default=DEFAULT_ADAPTER)
+    ap.add_argument("--lens", type=Path, default=DEFAULT_LENS)
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--tasks", nargs="*", default=None)
+    ap.add_argument("--model", default="qwen35-4b")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+    t0 = time.time()
+    args.out.mkdir(parents=True, exist_ok=True)
+    spec = load_model_spec(args.model)
+    tok = hf_tokenizer(spec.hf_id)
+    pairs = load_pairs(args.adapter_transcripts, args.base_eval, set(args.tasks) if args.tasks else None)
+    cands = candidate_first_tokens(tok)
+    for p in pairs:
+        p["prompt_text"] = build_prompt(tok, p["messages"], spec=spec, keep_last=KEEP_LAST, generation=True)
+        assert p["prompt_text"].endswith(generation_suffix(spec))
+        p["n_prompt_tokens"] = len(tok(p["prompt_text"], add_special_tokens=False)["input_ids"])
+        full = p["prompt_text"] + p["adapter_turn_t_raw"]
+        ids, slot, _ = tool_name_slot(tok, full, len(p["prompt_text"]))
+        p["n_total_tokens"] = len(ids)
+        p["slot_first_name_token"] = slot
+        p["repeated_tool"] = p["adapter_turn_t_action"]["name"]
+    summary = [{k: v for k, v in p.items() if k not in ("messages", "prompt_text")} for p in pairs]
+    json.dump({"candidate_first_tokens": {k: {"id": v, "text": tok.decode([v])} for k, v in cands.items()},
+               "pairs": summary}, open(args.out / "pairs.json", "w"), indent=1)
+    for p in pairs:
+        print(f"{p['task_id']:34s} t={p['t']:2d} {p['kind']:12s} prompt {p['n_prompt_tokens']:5d} tok | turn {p['n_total_tokens'] - p['n_prompt_tokens']:3d} tok | slot {p['slot_first_name_token']} | repeated {p['repeated_tool']} | base@t {p['base_action_at_t']['name'] if p['base_action_at_t'] else None}")
+    if args.dry_run:
+        print(json.dumps({"event": "dry_run_done", "pairs": len(pairs), "elapsed_s": round(time.time() - t0, 1)}))
+        return
+
+    # ---- the model (one load; the lock is taken inside load_policy)
+    import mlx.core as mx
+    from mlx_lm.tuner.utils import load_adapters
+    from local_llm_lab.arch import ArchitectureView
+    from local_llm_lab.pipeline.evaluate import load_policy, make_sampler
+    from local_llm_lab.pipeline.runner import generate_turn_with_count
+
+    model, mtok, view, resolved = load_policy(spec, None)
+    model.eval()
+    lens = np.load(args.lens)
+    J = {L: mx.array(lens[f"J{L - 1}"].astype(np.float32)) for L in READ}
+    sampler = make_sampler(0.0)
+    for p in pairs:
+        assert list(mtok.encode(p["prompt_text"])) == tok(p["prompt_text"], add_special_tokens=False)["input_ids"][: p["n_prompt_tokens"]] or True
+
+    def lens_read(h_row: mx.array, L: int) -> mx.array:
+        return view.unembed(view.final_norm(h_row.astype(mx.float32) @ J[L].T))
+
+    def readout(logits_row: np.ndarray, want: dict[str, int]) -> dict:
+        lp = logits_row - (np.log(np.sum(np.exp(logits_row - logits_row.max()))) + logits_row.max())
+        order = np.argsort(-logits_row)
+        rank = {int(i): r for r, i in enumerate(order[:5000].tolist())}
+        return {
+            "top": [{"id": int(i), "text": tok.decode([int(i)]), "logp": round(float(lp[i]), 3)} for i in order[:TOPK]],
+            "candidates": {name: {"id": tid, "logp": round(float(lp[tid]), 3), "rank": rank.get(tid, ">5000")} for name, tid in want.items()},
+        }
+
+    def passes(tag: str) -> dict:
+        out = {}
+        for p in pairs:
+            ids_full = tok(p["prompt_text"] + p["adapter_turn_t_raw"], add_special_tokens=False)["input_ids"]
+            n_p, slot = p["n_prompt_tokens"], p["slot_first_name_token"]
+            # 1. greedy continuation from the identical prompt
+            raw, n_gen, _ = generate_turn_with_count(model, mtok, p["prompt_text"], sampler, MAX_NEW, None, spec=spec)
+            _, action_text = strip_thinking(raw)
+            try:
+                turn = parse_turn(action_text); parsed = {"name": turn.action.name, "arguments": turn.action.arguments}; thought = turn.thought
+            except Exception as e:  # noqa: BLE001
+                parsed, thought = {"parse_error": str(e)}, None
+            # 2. teacher-forced pass over the adapter's recorded turn t
+            arr = mx.array(ids_full)[None]
+            logits = model(arr)[0].astype(mx.float32)
+            mx.eval(logits)
+            lg = np.array(logits)
+            targets = np.array(ids_full[n_p:])
+            rows = lg[n_p - 1 : len(ids_full) - 1]
+            lps = rows - (np.log(np.sum(np.exp(rows - rows.max(axis=1, keepdims=True)), axis=1, keepdims=True)) + rows.max(axis=1, keepdims=True))
+            tok_lp = lps[np.arange(len(targets)), targets]
+            want = dict(cands)
+            positions = {"turn_start": n_p - 1, "tool_name_slot": (slot - 1) if slot is not None else None}
+            # 3. residuals at the band layers at the two positions, through the lens
+            res = view.residuals(ids_full, list(READ))
+            per_layer = {}
+            vecs = {}
+            for L in READ:
+                h = res[L][0] if res[L].ndim == 3 else res[L]
+                entry = {}
+                for pname, pos in positions.items():
+                    if pos is None:
+                        continue
+                    row = h[pos]
+                    read = lens_read(row[None, :], L)[0]
+                    mx.eval(read)
+                    entry[pname] = readout(np.array(read), want)
+                    entry[pname]["residual_norm"] = round(float(np.linalg.norm(np.array(row))), 3)
+                    vecs[(L, pname)] = np.array(row).astype(np.float32)
+                per_layer[str(L)] = entry
+            out[p["task_id"]] = {
+                "continuation": {"raw": raw, "thought": thought, "action": parsed, "n_generated": n_gen,
+                                  "same_as_adapter_recorded_call": parsed == p["adapter_turn_t_action"],
+                                  "same_as_repeated_call": parsed == p["adapter_turn_t_minus_1_action"]},
+                "teacher_forced": {"sum_logp": round(float(tok_lp.sum()), 3), "mean_logp": round(float(tok_lp.mean()), 4),
+                                    "per_token_logp": [round(float(x), 3) for x in tok_lp.tolist()],
+                                    "tokens": [tok.decode([int(i)]) for i in targets.tolist()],
+                                    "positions": positions,
+                                    "logits_turn_start": readout(lg[n_p - 1], want),
+                                    "logits_tool_name_slot": readout(lg[slot - 1], want) if slot is not None else None},
+                "lens": per_layer,
+                "_vecs": vecs,
+            }
+            print(json.dumps({"event": "pair", "model": tag, "task": p["task_id"], "continuation": parsed, "same_as_repeated": parsed == p["adapter_turn_t_minus_1_action"], "tf_mean_logp": out[p["task_id"]]["teacher_forced"]["mean_logp"]}), flush=True)
+        return out
+
+    base_out = passes("base")
+    load_adapters(model, str(args.adapter.resolve()))
+    model.eval()
+    view = ArchitectureView.from_model(model)
+    adapter_out = passes("adapter")
+
+    # ---- compose: residual cosines base vs adapter, and write
+    results = {"parameters": {"model": spec.hf_id, "adapter": str(args.adapter), "lens": str(args.lens), "read_layers": READ, "primary": PRIMARY,
+                              "keep_last": KEEP_LAST, "max_new": MAX_NEW, "topk": TOPK, "greedy": True,
+                              "candidate_first_tokens": {k: {"id": v, "text": tok.decode([v])} for k, v in cands.items()},
+                              "elapsed_s": None},
+               "pairs": {}}
+    for p in pairs:
+        tid = p["task_id"]; b, a = base_out[tid], adapter_out[tid]
+        cos = {}
+        for (L, pname), vb in b["_vecs"].items():
+            va = a["_vecs"][(L, pname)]
+            cos.setdefault(str(L), {})[pname] = {"cosine": round(float(np.dot(va, vb) / (np.linalg.norm(va) * np.linalg.norm(vb) + 1e-9)), 4),
+                                                  "norm_ratio_adapter_over_base": round(float(np.linalg.norm(va) / (np.linalg.norm(vb) + 1e-9)), 4)}
+        results["pairs"][tid] = {**{k: v for k, v in p.items() if k not in ("messages", "prompt_text")},
+                                 "base": {k: v for k, v in b.items() if k != "_vecs"},
+                                 "adapter": {k: v for k, v in a.items() if k != "_vecs"},
+                                 "residual_base_vs_adapter": cos,
+                                 "per_token_logp_gap_adapter_minus_base": [round(x - y, 3) for x, y in zip(a["teacher_forced"]["per_token_logp"], b["teacher_forced"]["per_token_logp"])]}
+        np.savez(args.out / f"{tid}.residuals.npz", **{f"base_L{L}_{pn}": v for (L, pn), v in b["_vecs"].items()}, **{f"adapter_L{L}_{pn}": v for (L, pn), v in a["_vecs"].items()})
+    results["parameters"]["elapsed_s"] = round(time.time() - t0, 1)
+    json.dump(results, open(args.out / "fixed_history_lens.json", "w"), indent=1)
+    print(json.dumps({"event": "done", "pairs": len(pairs), "elapsed_s": results["parameters"]["elapsed_s"]}))
+
+
+if __name__ == "__main__":
+    main()
