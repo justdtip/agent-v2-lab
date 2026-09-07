@@ -107,3 +107,9 @@ A review fails on: a fit read before its self-check; a lens file that does not l
 ## 9. Delivery
 
 Send the patch as a file under `design_specifications/pending/` with a record directory as the live-lens patch was delivered (`LIVE-LENS.patch` and `research/records/LIVE-LENS-INFRASTRUCTURE-2026-09-07/`), and the implementation report naming every caller touched, every departure from this document, and the numbers from §3's self-checks. The Chief reviews and lands it.
+
+## 10. The Director's answers to §6 (7 September, 17:40)
+
+- **Q1 — prose corpus:** download authorised. Use the wikitext-103-raw-v1 **validation** split from the Hugging Face hub (`Salesforce/wikitext`, config `wikitext-103-raw-v1`, the split the hosted lens was *not* fitted on), chunked to 1,024 tokens; record the dataset revision and the SHA-256 of the chunk manifest. The download happens once, through the corpus builder, and the files stay under `data/` (ignored by git) with their hashes in the manifest.
+- **Q2 — basis:** the full standard basis, 2,560 directions. No subspace estimate.
+- **Q3 — chat domain:** no. Chat was an example in the Director's message, not a requirement. Two domains: `agentic` and `prose`.
