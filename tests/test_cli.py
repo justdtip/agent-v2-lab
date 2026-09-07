@@ -2032,3 +2032,55 @@ def test_a_missing_preflight_artifact_falls_back_and_says_so(monkeypatch, tmp_pa
     truncated.write_text('{"memory": {"budget_g', encoding="utf-8")
     monkeypatch.setattr(cli, "preflight_artifact_path", lambda _spec: truncated)
     assert cli._resolved_memory_budget_gib(spec)[1].startswith("registry declaration")
+
+
+def test_the_adapter_depth_defaults_to_every_layer_and_is_validated(monkeypatch) -> None:
+    """Issue 88's knob. Absent, it is every layer, which is what every run before this did.
+
+    Validated rather than clamped: a depth of 0 or one past the model's layer count is a typo in
+    a recipe, and silently training something other than what the config asked for is worse than
+    refusing before the weights load.
+    """
+    from types import SimpleNamespace
+
+    resolved = SimpleNamespace(num_layers=32)
+    assert cli._adapter_depth({}, resolved) == 32
+    assert cli._adapter_depth({"lora_layers": 8}, resolved) == 8
+    assert cli._adapter_depth({"lora_layers": 32}, resolved) == 32
+
+    for bad in (0, -1, 33):
+        with pytest.raises(SystemExit, match="lora_layers"):
+            cli._adapter_depth({"lora_layers": bad}, resolved)
+
+
+def test_band_coverage_counts_whole_pairs_and_names_a_split_one() -> None:
+    """R41d: a declared pair is one unit, so a split pair is not a covered pair (issue 88).
+
+    This is what stops "the top 16 covers most of the band" from being written down. On the 4B's
+    five pairs, the top 8 covers one, and the top 16 covers three and splits 16/17 with 17 inside
+    and 16 outside.
+    """
+    pairs = [[12, 13], [16, 17], [19, 20], [23, 24], [27, 28]]
+
+    top8 = cli._band_coverage(8, pairs, 32)
+    assert top8["lowest_adapted_layer"] == 25
+    assert top8["pairs_whole"] == [[27, 28]]
+    assert top8["pairs_split"] == []
+    assert top8["summary"].startswith("1 of 5 whole")
+
+    top16 = cli._band_coverage(16, pairs, 32)
+    assert top16["lowest_adapted_layer"] == 17
+    assert top16["pairs_whole"] == [[19, 20], [23, 24], [27, 28]]
+    assert top16["pairs_split"] == [{"pair": [16, 17], "adapted": [17], "outside": [16]}]
+    assert "3 of 5 whole" in top16["summary"] and "1 split" in top16["summary"]
+
+    full = cli._band_coverage(32, pairs, 32)
+    assert full["pairs_whole"] == pairs and full["pairs_split"] == []
+
+
+def test_the_registry_declares_the_band_and_the_spec_carries_it() -> None:
+    """The pairs come from the registry, not from a constant beside the code that reads them."""
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec("qwen35-4b")
+    assert spec.probes.live_lens_pairs == ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))

@@ -60,6 +60,11 @@ class ProbesSpec:
 
     layer_fractions: tuple[float, ...]
     capture_dtype: Literal["native", "float32"]
+    #: The declared residual band, as 1-based layer pairs (R41e). Empty when the registry
+    #: declares none. `live_lens.instruments.read_band` is the *validating* reader, used where
+    #: the installed block kinds are known; this is the declaration itself, for readers that
+    #: only need to say which pairs a thing covers (issue 88).
+    live_lens_pairs: tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -74,6 +79,9 @@ class ModelSpec:
     probe_layer_fractions: tuple[float, ...]
     memory_budget_gib: float
     policies: dict[str, str]
+    #: The declared residual band as 1-based pairs (R41e). Defaulted because every existing
+    #: caller constructs a spec without it and a band is not required of a model.
+    probe_live_lens_pairs: tuple[tuple[int, int], ...] = ()
     cache_equivalence_verified: dict[str, str] | None = None
     # R18: native block execution during capture is the default; the float32 block path is for
     # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
@@ -84,6 +92,7 @@ class ModelSpec:
         """The ``probes:`` block under the specs' own names; a view, not stored state."""
         return ProbesSpec(
             layer_fractions=self.probe_layer_fractions,
+            live_lens_pairs=self.probe_live_lens_pairs,
             capture_dtype=self.probe_capture_dtype,
         )
 
@@ -283,6 +292,9 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
         if cache_equivalence_verified is None
         else dict(cache_equivalence_verified),
         probe_layer_fractions=fractions,
+        probe_live_lens_pairs=tuple(
+            (int(pair[0]), int(pair[1])) for pair in probes.get("live_lens_pairs", ())
+        ),
         probe_capture_dtype=capture_dtype,
         memory_budget_gib=float(memory.get("budget_gib")),
         policies=dict(policies),

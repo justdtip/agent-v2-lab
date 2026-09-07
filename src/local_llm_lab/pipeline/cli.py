@@ -10,7 +10,7 @@ import math
 import shutil
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -215,6 +215,67 @@ def stage_render(*, source: Path, output: Path, model: str, overwrite: bool = Fa
     for role, info in manifest["outputs"].items():
         print(f"{role:5s}: {info['rows']:4d} rows re-rendered")
     print(f"Wrote {output} (source rows carried verbatim from {manifest['source']['directory']})")
+
+
+
+def _adapter_depth(train: Mapping[str, Any], resolved: ResolvedSpec) -> int:
+    """How many of the model's top layers carry adapters (issue 88, R50).
+
+    ``mlx_lm``'s ``linear_to_lora_layers`` adapts the **top** ``n`` layers, so a depth of 8 on a
+    32-layer model means layers 25 to 32 and nothing below. Absent from a config, the depth is
+    every layer, which is what every run before this one did and what R50 requires of any run
+    whose adapter will be read.
+
+    Validated rather than clamped: a depth of 0, a negative, or one past the model's own layer
+    count is a typo in a recipe, and silently training a different model than the config asked
+    for is worse than refusing before the weights load.
+    """
+    declared = train.get("lora_layers")
+    if declared is None:
+        return int(resolved.num_layers)
+    depth = int(declared)
+    if not 1 <= depth <= int(resolved.num_layers):
+        raise SystemExit(
+            f"train.lora_layers is {declared}; this model has {resolved.num_layers} layers and "
+            "the value counts them from the top, so it must be between 1 and that"
+        )
+    return depth
+
+
+def _band_coverage(depth: int, pairs: Sequence[Sequence[int]], num_layers: int) -> dict[str, Any]:
+    """Which declared band pairs an adapter of this depth can be read at (R41d, issue 88).
+
+    The top ``depth`` layers are ``num_layers - depth + 1`` upward, in the 1-based numbering the
+    band ruling uses. **A split pair is not a covered pair**: R41d makes a declared pair one unit
+    whose members carry the same role, so a pair with one member adapted and one not is reported
+    as split rather than counted, and the report says which member fell outside.
+
+    This is what stops "the top 16 covers most of the band" from being written down. It covers
+    three of five, and it splits one.
+    """
+    lowest_adapted = num_layers - depth + 1
+    whole, split, outside = [], [], []
+    for pair in pairs:
+        members = [int(layer) for layer in pair]
+        inside = [layer for layer in members if layer >= lowest_adapted]
+        if len(inside) == len(members):
+            whole.append(members)
+        elif inside:
+            split.append({"pair": members, "adapted": inside,
+                          "outside": [layer for layer in members if layer < lowest_adapted]})
+        else:
+            outside.append(members)
+    return {
+        "lowest_adapted_layer": lowest_adapted,
+        "pairs_whole": whole,
+        "pairs_split": split,
+        "pairs_outside": outside,
+        "summary": (
+            f"{len(whole)} of {len(pairs)} whole"
+            + (f", {len(split)} split" if split else "")
+            + (f", {len(outside)} outside" if outside else "")
+        ),
+    }
 
 
 def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
@@ -514,7 +575,7 @@ def lora_config(
         "optimizer": "adamw",
         "data": str(config["data"]),
         "seed": config["seed"],
-        "num_layers": resolved.num_layers,
+        "num_layers": _adapter_depth(train, resolved),
         "batch_size": train["batch_size"],
         "grad_accumulation_steps": train["grad_accumulation_steps"],
         "iters": train["iters"],
@@ -868,6 +929,11 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 status="ok",
                 fallbacks=_recorded_fallbacks(backbone),
             )
+            coverage = _band_coverage(
+                int(lora["num_layers"]),
+                resolved.spec.probes.live_lens_pairs,
+                int(resolved.num_layers),
+            )
             # R26(f): provenance carries the same health record health.json does, written
             # after on_finish so the verdict recorded there is the final one.
             write_provenance(
@@ -877,9 +943,18 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
                 extra={
                     "stage": "train",
                     "training_config": lora,
+                    # Which band pairs this adapter can be read at (R41d, issue 88). Recorded
+                    # even at full depth, so a reader never has to infer it from num_layers.
+                    "band_coverage": coverage,
                     "health_thresholds": thresholds.as_dict(),
                     "health": summary,
                 },
+            )
+            runlog.info(
+                "adapter depth",
+                layers=lora["num_layers"],
+                band_pairs=coverage["summary"],
+                lowest_adapted_layer=coverage["lowest_adapted_layer"],
             )
             runlog.info(
                 "training finished",

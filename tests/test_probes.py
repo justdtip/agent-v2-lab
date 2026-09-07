@@ -1731,6 +1731,9 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         "cache_strategy",
         "cache_equivalence_verified",
         "probe_layer_fractions",
+        # Added 2026-09-08 (issue 88): the declared residual band, so a run can say which pairs
+        # its adapter depth covers without a second copy of the pairs beside the code.
+        "probe_live_lens_pairs",
         "probe_capture_dtype",
         "memory_budget_gib",
         "policies",
