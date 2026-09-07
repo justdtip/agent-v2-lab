@@ -16,3 +16,6 @@ models/
 
 .codex/coordination/*
 !.codex/coordination/project.yaml
+
+# Live-lens pilot records: the plain JSONL stays local; the gzipped copies are the committed record.
+research/records/LIVE-LENS-PILOT-*/*.jsonl

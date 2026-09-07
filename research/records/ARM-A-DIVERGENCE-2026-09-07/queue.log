@@ -1,3 +1,6 @@
 15:31:03 queue: model free; starting the cache-split isolation
 15:32:25 queue: cache isolation exit 0 
 15:32:25 queue: starting the live-lens pilot
+16:03:21 queue: pilot exit 0
+16:03:34 queue-2: model free; starting the runner-path comparison
+16:04:28 queue-2: runner-path comparison exit 0

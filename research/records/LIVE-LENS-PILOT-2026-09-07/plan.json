@@ -1,0 +1,116 @@
+{
+ "plan": [
+  {
+   "label": "agentic-d0-read-0000",
+   "kind": "agentic",
+   "task_id": "test-read-0000-clean",
+   "difficulty": 0,
+   "family": "read",
+   "horizon": 2,
+   "opening_prompt_tokens": 410
+  },
+  {
+   "label": "agentic-d0-list-0005",
+   "kind": "agentic",
+   "task_id": "test-list-0005-clean",
+   "difficulty": 0,
+   "family": "list",
+   "horizon": 3,
+   "opening_prompt_tokens": 420
+  },
+  {
+   "label": "agentic-d0-pointer_chain-0006",
+   "kind": "agentic",
+   "task_id": "test-pointer_chain-0006-clean",
+   "difficulty": 0,
+   "family": "pointer_chain",
+   "horizon": 6,
+   "opening_prompt_tokens": 440
+  },
+  {
+   "label": "agentic-d1-search-0001",
+   "kind": "agentic",
+   "task_id": "test-search-0001-clean",
+   "difficulty": 1,
+   "family": "search",
+   "horizon": 3,
+   "opening_prompt_tokens": 418
+  },
+  {
+   "label": "agentic-d1-synthesis-0003",
+   "kind": "agentic",
+   "task_id": "test-synthesis-0003-clean",
+   "difficulty": 1,
+   "family": "synthesis",
+   "horizon": 4,
+   "opening_prompt_tokens": 436
+  },
+  {
+   "label": "agentic-d1-batch_update-0010",
+   "kind": "agentic",
+   "task_id": "test-batch_update-0010-clean",
+   "difficulty": 1,
+   "family": "batch_update",
+   "horizon": 11,
+   "opening_prompt_tokens": 452
+  },
+  {
+   "label": "agentic-d2-update-0004",
+   "kind": "agentic",
+   "task_id": "test-update-0004-clean",
+   "difficulty": 2,
+   "family": "update",
+   "horizon": 4,
+   "opening_prompt_tokens": 427
+  },
+  {
+   "label": "agentic-d2-pointer_chain-0006",
+   "kind": "agentic",
+   "task_id": "test-pointer_chain-0006-clean",
+   "difficulty": 2,
+   "family": "pointer_chain",
+   "horizon": 8,
+   "opening_prompt_tokens": 439
+  },
+  {
+   "label": "agentic-d2-cross_reference-0008",
+   "kind": "agentic",
+   "task_id": "test-cross_reference-0008-clean",
+   "difficulty": 2,
+   "family": "cross_reference",
+   "horizon": 11,
+   "opening_prompt_tokens": 444
+  },
+  {
+   "label": "agentic-d2-aggregate_report-0011",
+   "kind": "agentic",
+   "task_id": "test-aggregate_report-0011-clean",
+   "difficulty": 2,
+   "family": "aggregate_report",
+   "horizon": 14,
+   "opening_prompt_tokens": 468
+  },
+  {
+   "label": "chat-short-factual",
+   "kind": "chat",
+   "turns": 2,
+   "opening_prompt_tokens": 31
+  },
+  {
+   "label": "chat-reasoning",
+   "kind": "chat",
+   "turns": 2,
+   "opening_prompt_tokens": 63
+  },
+  {
+   "label": "chat-long-summary",
+   "kind": "chat",
+   "turns": 2,
+   "opening_prompt_tokens": 1681
+  }
+ ],
+ "layers": null,
+ "max_steps": 12,
+ "max_tokens": 200,
+ "seed": 20260902
+}

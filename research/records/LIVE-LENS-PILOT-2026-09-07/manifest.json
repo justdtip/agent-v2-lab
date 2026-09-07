@@ -1,0 +1,944 @@
+{
+ "model": "mlx-community/Qwen3.5-4B-MLX-4bit",
+ "lens_sha256": "381c089dcffead8147ee91f944496f468cce2c7d593e0a1b17230745055aea12",
+ "band": [
+  [
+   12,
+   13
+  ],
+  [
+   16,
+   17
+  ],
+  [
+   19,
+   20
+  ],
+  [
+   23,
+   24
+  ],
+  [
+   27,
+   28
+  ]
+ ],
+ "layers": [
+  12,
+  16,
+  20,
+  24,
+  28,
+  32
+ ],
+ "cache_strategy": "none",
+ "registry_sha256": "32e30da996bf6a25c67d6b7110696808dbc186338c1935d2bd4562bc28f03dac",
+ "top_k": 10,
+ "max_steps": 12,
+ "max_tokens": 200,
+ "chat_tokens": 160,
+ "seed": 20260902,
+ "episodes": [
+  {
+   "label": "agentic-d0-read-0000",
+   "kind": "agentic",
+   "task_id": "test-read-0000-clean",
+   "difficulty": 0,
+   "family": "read",
+   "horizon": 2,
+   "opening_prompt_tokens": 410,
+   "turns": 2,
+   "generated_tokens": 54,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0000/project.md"
+      }
+     },
+     "observation": "Project: Atlas-0\nOwner: owner-7158\ncontext-p-0=historical observation 728189 for unrelated component blue\ncontext-p-1=historical observation 328404 for unrelated component amber\nStatus: active"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "owner-7158"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 28.3,
+   "peak_memory_gib": 3.137,
+   "record": "agentic-d0-read-0000.jsonl",
+   "record_sha256": "4ec19457bd49409c955063169ff79e2cf5c3c33d742701a18038e0cf0f3b7a71",
+   "record_rows": 2069,
+   "rank_rows": 972,
+   "reading_rows": 979
+  },
+  {
+   "label": "agentic-d0-list-0005",
+   "kind": "agentic",
+   "task_id": "test-list-0005-clean",
+   "difficulty": 0,
+   "family": "list",
+   "horizon": 3,
+   "opening_prompt_tokens": 420,
+   "turns": 3,
+   "generated_tokens": 148,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "list_files",
+      "arguments": {
+       "directory": "workspace/test/0005/notes"
+      }
+     },
+     "observation": "FILES: workspace/test/0005/notes/scratch.txt, workspace/test/0005/notes/summary-88.md"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0005/notes/summary-88.md"
+      }
+     },
+     "observation": "milestone-357\nThis is the selected summary."
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "milestone-357"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 42.6,
+   "peak_memory_gib": 3.217,
+   "record": "agentic-d0-list-0005.jsonl",
+   "record_sha256": "a3d206f2cddd661a3e8d0f717dabb3674d08fb94622246326fa043b72651ab14",
+   "record_rows": 4670,
+   "rank_rows": 2664,
+   "reading_rows": 1696
+  },
+  {
+   "label": "agentic-d0-pointer_chain-0006",
+   "kind": "agentic",
+   "task_id": "test-pointer_chain-0006-clean",
+   "difficulty": 0,
+   "family": "pointer_chain",
+   "horizon": 6,
+   "opening_prompt_tokens": 440,
+   "turns": 6,
+   "generated_tokens": 211,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-0-693.txt"
+      }
+     },
+     "observation": "Node: 0\ncontext-node-0-0=historical observation 937566 for unrelated component amber\ncontext-node-0-1=historical observation 426033 for unrelated component blue\ncontext-node-0-2=historical observation"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-1-299.txt"
+      }
+     },
+     "observation": "Node: 1\ncontext-node-1-0=historical observation 749979 for unrelated component blue\ncontext-node-1-1=historical observation 982346 for unrelated component amber\ncontext-node-1-2=historical observation"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-2-664.txt"
+      }
+     },
+     "observation": "Node: 2\ncontext-node-2-0=historical observation 538980 for unrelated component silver\ncontext-node-2-1=historical observation 680421 for unrelated component green\ncontext-node-2-2=historical observati"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-3-358.txt"
+      }
+     },
+     "observation": "Node: 3\ncontext-node-3-0=historical observation 319740 for unrelated component silver\ncontext-node-3-1=historical observation 584711 for unrelated component green\ncontext-node-3-2=historical observati"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-4-652.txt"
+      }
+     },
+     "observation": "Node: final\ncontext-node-4-0=historical observation 501513 for unrelated component green\ncontext-node-4-1=historical observation 456681 for unrelated component green\ncontext-node-4-2=historical observ"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "artifact-62936"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 133.5,
+   "peak_memory_gib": 3.987,
+   "record": "agentic-d0-pointer_chain-0006.jsonl",
+   "record_sha256": "46f2cd2b5f947c59f625c5db185d7aa3f7180e5756eb53d76923c77f3654be4e",
+   "record_rows": 9819,
+   "rank_rows": 3798,
+   "reading_rows": 5573
+  },
+  {
+   "label": "agentic-d1-search-0001",
+   "kind": "agentic",
+   "task_id": "test-search-0001-clean",
+   "difficulty": 1,
+   "family": "search",
+   "horizon": 3,
+   "opening_prompt_tokens": 418,
+   "turns": 3,
+   "generated_tokens": 153,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "search_files",
+      "arguments": {
+       "query": "KEY-TEST-0001-740"
+      }
+     },
+     "observation": "MATCHES: workspace/test/0001/archive/report-88.txt"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0001/archive/report-88.txt"
+      }
+     },
+     "observation": "Identifier: KEY-TEST-0001-740\ncontext-r-0=historical observation 197344 for unrelated component amber\ncontext-r-1=historical observation 305252 for unrelated component blue\ncontext-r-2=historical obse"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "queued"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 43.2,
+   "peak_memory_gib": 3.301,
+   "record": "agentic-d1-search-0001.jsonl",
+   "record_sha256": "e43aa6116a4a4d3680b26585d5972dee827acca96b461e3a002a092297cbbf12",
+   "record_rows": 4833,
+   "rank_rows": 2754,
+   "reading_rows": 1759
+  },
+  {
+   "label": "agentic-d1-synthesis-0003",
+   "kind": "agentic",
+   "task_id": "test-synthesis-0003-clean",
+   "difficulty": 1,
+   "family": "synthesis",
+   "horizon": 4,
+   "opening_prompt_tokens": 436,
+   "turns": 4,
+   "generated_tokens": 110,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0003/billing/rate.txt"
+      }
+     },
+     "observation": "context-a-0=historical observation 210126 for unrelated component blue\nhourly_rate=71\n"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0003/billing/hours.txt"
+      }
+     },
+     "observation": "hours=8\ncontext-b-0=historical observation 408540 for unrelated component amber\n"
+    },
+    {
+     "action": {
+      "name": "calculate",
+      "arguments": {
+       "expression": "71 * 8"
+      }
+     },
+     "observation": "RESULT: 568"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "568"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 55.0,
+   "peak_memory_gib": 3.241,
+   "record": "agentic-d1-synthesis-0003.jsonl",
+   "record_sha256": "cfcb52a94751c30fa0e87601c0832d3437e447e79ff3ebea78b03b5b181de739",
+   "record_rows": 4485,
+   "rank_rows": 1980,
+   "reading_rows": 2267
+  },
+  {
+   "label": "agentic-d1-batch_update-0010",
+   "kind": "agentic",
+   "task_id": "test-batch_update-0010-clean",
+   "difficulty": 1,
+   "family": "batch_update",
+   "horizon": 11,
+   "opening_prompt_tokens": 452,
+   "turns": 11,
+   "generated_tokens": 699,
+   "success": false,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/manifest.txt"
+      }
+     },
+     "observation": "lab/test/0010/deployment/worker-0.ini|mode=observe->mode=strict\nlab/test/0010/deployment/worker-1.ini|mode=fast->mode=audit\nlab/test/0010/deployment/worker-2.ini|mode=safe->mode=observe\n"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-0.ini"
+      }
+     },
+     "observation": "worker=0\ncontext-worker-0-0=historical observation 990345 for unrelated component green\ncontext-worker-0-1=historical observation 495497 for unrelated component amber\ncontext-worker-0-2=historical obs"
+    },
+    {
+     "action": {
+      "name": "replace_text",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-0.ini",
+       "old": "mode=observe",
+       "new": "mode=strict"
+      }
+     },
+     "observation": "UPDATED: lab/test/0010/deployment/worker-0.ini"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-0.ini"
+      }
+     },
+     "observation": "worker=0\ncontext-worker-0-0=historical observation 990345 for unrelated component green\ncontext-worker-0-1=historical observation 495497 for unrelated component amber\ncontext-worker-0-2=historical obs"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-1.ini"
+      }
+     },
+     "observation": "worker=1\ncontext-worker-1-0=historical observation 327238 for unrelated component amber\ncontext-worker-1-1=historical observation 232436 for unrelated component silver\ncontext-worker-1-2=historical ob"
+    },
+    {
+     "action": {
+      "name": "replace_text",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-1.ini",
+       "old": "mode=fast",
+       "new": "mode=strict"
+      }
+     },
+     "observation": "UPDATED: lab/test/0010/deployment/worker-1.ini"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-1.ini"
+      }
+     },
+     "observation": "worker=1\ncontext-worker-1-0=historical observation 327238 for unrelated component amber\ncontext-worker-1-1=historical observation 232436 for unrelated component silver\ncontext-worker-1-2=historical ob"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-2.ini"
+      }
+     },
+     "observation": "worker=2\ncontext-worker-2-0=historical observation 402230 for unrelated component blue\ncontext-worker-2-1=historical observation 687234 for unrelated component amber\ncontext-worker-2-2=historical obse"
+    },
+    {
+     "action": {
+      "name": "replace_text",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-2.ini",
+       "old": "mode=safe",
+       "new": "mode=strict"
+      }
+     },
+     "observation": "UPDATED: lab/test/0010/deployment/worker-2.ini"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0010/deployment/worker-2.ini"
+      }
+     },
+     "observation": "worker=2\ncontext-worker-2-0=historical observation 402230 for unrelated component blue\ncontext-worker-2-1=historical observation 687234 for unrelated component amber\ncontext-worker-2-2=historical obse"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "updated-and-verified=3"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 365.0,
+   "peak_memory_gib": 4.658,
+   "record": "agentic-d1-batch_update-0010.jsonl",
+   "record_sha256": "5cf817d188ae31bcdde1b33fdf86bf5e93371920d56d66870167d19fac8dd697",
+   "record_rows": 29247,
+   "rank_rows": 12582,
+   "reading_rows": 15221
+  },
+  {
+   "label": "agentic-d2-update-0004",
+   "kind": "agentic",
+   "task_id": "test-update-0004-clean",
+   "difficulty": 2,
+   "family": "update",
+   "horizon": 4,
+   "opening_prompt_tokens": 427,
+   "turns": 4,
+   "generated_tokens": 205,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0004/config.ini"
+      }
+     },
+     "observation": "service=worker-4\ncontext-c-0=historical observation 857513 for unrelated component blue\ncontext-c-1=historical observation 657425 for unrelated component silver\ncontext-c-2=historical observation 9069"
+    },
+    {
+     "action": {
+      "name": "replace_text",
+      "arguments": {
+       "path": "workspace/test/0004/config.ini",
+       "old": "mode=safe",
+       "new": "mode=audit"
+      }
+     },
+     "observation": "UPDATED: workspace/test/0004/config.ini"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "workspace/test/0004/config.ini"
+      }
+     },
+     "observation": "service=worker-4\ncontext-c-0=historical observation 857513 for unrelated component blue\ncontext-c-1=historical observation 657425 for unrelated component silver\ncontext-c-2=historical observation 9069"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "mode=audit"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 64.6,
+   "peak_memory_gib": 3.42,
+   "record": "agentic-d2-update-0004.jsonl",
+   "record_sha256": "91d529eaf1ec1fe92480463d75538c5dede6906365fd592cea2d307d6e113611",
+   "record_rows": 6755,
+   "rank_rows": 3690,
+   "reading_rows": 2637
+  },
+  {
+   "label": "agentic-d2-pointer_chain-0006",
+   "kind": "agentic",
+   "task_id": "test-pointer_chain-0006-clean",
+   "difficulty": 2,
+   "family": "pointer_chain",
+   "horizon": 8,
+   "opening_prompt_tokens": 439,
+   "turns": 8,
+   "generated_tokens": 285,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-0-693.txt"
+      }
+     },
+     "observation": "Node: 0\ncontext-node-0-0=historical observation 426033 for unrelated component blue\ncontext-node-0-1=historical observation 332960 for unrelated component blue\ncontext-node-0-2=historical observation "
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-1-299.txt"
+      }
+     },
+     "observation": "Node: 1\ncontext-node-1-0=historical observation 509570 for unrelated component blue\ncontext-node-1-1=historical observation 538980 for unrelated component silver\ncontext-node-1-2=historical observatio"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-2-664.txt"
+      }
+     },
+     "observation": "Node: 2\ncontext-node-2-0=historical observation 810183 for unrelated component blue\ncontext-node-2-1=historical observation 534701 for unrelated component green\ncontext-node-2-2=historical observation"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-3-358.txt"
+      }
+     },
+     "observation": "Node: 3\ncontext-node-3-0=historical observation 497695 for unrelated component amber\ncontext-node-3-1=historical observation 597213 for unrelated component amber\ncontext-node-3-2=historical observatio"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-4-652.txt"
+      }
+     },
+     "observation": "Node: 4\ncontext-node-4-0=historical observation 505552 for unrelated component green\ncontext-node-4-1=historical observation 290047 for unrelated component amber\ncontext-node-4-2=historical observatio"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-5-513.txt"
+      }
+     },
+     "observation": "Node: 5\ncontext-node-5-0=historical observation 737261 for unrelated component amber\ncontext-node-5-1=historical observation 600160 for unrelated component silver\ncontext-node-5-2=historical observati"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0006/chain/node-6-917.txt"
+      }
+     },
+     "observation": "Node: final\ncontext-node-6-0=historical observation 520062 for unrelated component blue\ncontext-node-6-1=historical observation 951796 for unrelated component blue\ncontext-node-6-2=historical observat"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "artifact-12670"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 235.9,
+   "peak_memory_gib": 4.471,
+   "record": "agentic-d2-pointer_chain-0006.jsonl",
+   "record_sha256": "aae3f231d4a5d1f2dac42b9b30c9fbb23496288d2e05b732f044461014c18aeb",
+   "record_rows": 15698,
+   "rank_rows": 5130,
+   "reading_rows": 9964
+  },
+  {
+   "label": "agentic-d2-cross_reference-0008",
+   "kind": "agentic",
+   "task_id": "test-cross_reference-0008-clean",
+   "difficulty": 2,
+   "family": "cross_reference",
+   "horizon": 11,
+   "opening_prompt_tokens": 444,
+   "turns": 11,
+   "generated_tokens": 391,
+   "success": true,
+   "loop_detected": false,
+   "exhausted": false,
+   "steps": [
+    {
+     "action": {
+      "name": "search_files",
+      "arguments": {
+       "query": "REF-TEST-0008-4593-0"
+      }
+     },
+     "observation": "MATCHES: lab/test/0008/records/record-429-0.txt"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0008/records/record-429-0.txt"
+      }
+     },
+     "observation": "Lookup-Key: REF-TEST-0008-4593-0\ncontext-record-0-0=historical observation 467858 for unrelated component amber\ncontext-record-0-1=historical observation 832825 for unrelated component silver\ncontext-"
+    },
+    {
+     "action": {
+      "name": "search_files",
+      "arguments": {
+       "query": "REF-TEST-0008-9496-1"
+      }
+     },
+     "observation": "MATCHES: lab/test/0008/records/record-429-0.txt, lab/test/0008/records/record-791-1.txt"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0008/records/record-791-1.txt"
+      }
+     },
+     "observation": "Lookup-Key: REF-TEST-0008-9496-1\ncontext-record-1-0=historical observation 698374 for unrelated component silver\ncontext-record-1-1=historical observation 172606 for unrelated component green\ncontext-"
+    },
+    {
+     "action": {
+      "name": "search_files",
+      "arguments": {
+       "query": "REF-TEST-0008-4081-2"
+      }
+     },
+     "observation": "MATCHES: lab/test/0008/records/record-206-2.txt, lab/test/0008/records/record-791-1.txt"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0008/records/record-206-2.txt"
+      }
+     },
+     "observation": "Lookup-Key: REF-TEST-0008-4081-2\ncontext-record-2-0=historical observation 396057 for unrelated component blue\ncontext-record-2-1=historical observation 398074 for unrelated component blue\ncontext-rec"
+    },
+    {
+     "action": {
+      "name": "search_files",
+      "arguments": {
+       "query": "REF-TEST-0008-7763-3"
+      }
+     },
+     "observation": "MATCHES: lab/test/0008/records/record-206-2.txt, lab/test/0008/records/record-701-3.txt"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0008/records/record-701-3.txt"
+      }
+     },
+     "observation": "Lookup-Key: REF-TEST-0008-7763-3\ncontext-record-3-0=historical observation 958325 for unrelated component amber\ncontext-record-3-1=historical observation 337998 for unrelated component blue\ncontext-re"
+    },
+    {
+     "action": {
+      "name": "search_files",
+      "arguments": {
+       "query": "REF-TEST-0008-7512-4"
+      }
+     },
+     "observation": "MATCHES: lab/test/0008/records/record-701-3.txt, lab/test/0008/records/record-868-4.txt"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0008/records/record-868-4.txt"
+      }
+     },
+     "observation": "Lookup-Key: REF-TEST-0008-7512-4\ncontext-record-4-0=historical observation 992737 for unrelated component silver\ncontext-record-4-1=historical observation 624430 for unrelated component silver\ncontext"
+    },
+    {
+     "action": {
+      "name": "finish",
+      "arguments": {
+       "answer": "resolution-11202"
+      }
+     },
+     "observation": "FINISHED"
+    }
+   ],
+   "seconds": 318.9,
+   "peak_memory_gib": 4.502,
+   "record": "agentic-d2-cross_reference-0008.jsonl",
+   "record_sha256": "f42e221457e66f6c1344c4c94d878cfe24c9df2c6b27abe428728e0e1fdd1e1e",
+   "record_rows": 21495,
+   "rank_rows": 7038,
+   "reading_rows": 13629
+  },
+  {
+   "label": "agentic-d2-aggregate_report-0011",
+   "kind": "agentic",
+   "task_id": "test-aggregate_report-0011-clean",
+   "difficulty": 2,
+   "family": "aggregate_report",
+   "horizon": 14,
+   "opening_prompt_tokens": 468,
+   "turns": 12,
+   "generated_tokens": 761,
+   "success": false,
+   "loop_detected": false,
+   "exhausted": true,
+   "steps": [
+    {
+     "action": {
+      "name": "list_files",
+      "arguments": {
+       "directory": "lab/test/0011/metrics"
+      }
+     },
+     "observation": "FILES: lab/test/0011/metrics/metric-0.txt, lab/test/0011/metrics/metric-1.txt, lab/test/0011/metrics/metric-2.txt, lab/test/0011/metrics/metric-3.txt, lab/test/0011/metrics/metric-4.txt, lab/test/0011"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/metric-0.txt"
+      }
+     },
+     "observation": "metric=0\ncontext-metric-0-0=historical observation 461226 for unrelated component green\ncontext-metric-0-1=historical observation 661373 for unrelated component green\ncontext-metric-0-2=historical obs"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/metric-1.txt"
+      }
+     },
+     "observation": "metric=1\ncontext-metric-1-0=historical observation 832716 for unrelated component blue\ncontext-metric-1-1=historical observation 512050 for unrelated component amber\ncontext-metric-1-2=historical obse"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/metric-2.txt"
+      }
+     },
+     "observation": "metric=2\ncontext-metric-2-0=historical observation 366929 for unrelated component blue\ncontext-metric-2-1=historical observation 623637 for unrelated component amber\ncontext-metric-2-2=historical obse"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/metric-3.txt"
+      }
+     },
+     "observation": "metric=3\ncontext-metric-3-0=historical observation 182916 for unrelated component green\ncontext-metric-3-1=historical observation 133691 for unrelated component green\ncontext-metric-3-2=historical obs"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/metric-4.txt"
+      }
+     },
+     "observation": "metric=4\ncontext-metric-4-0=historical observation 981515 for unrelated component amber\ncontext-metric-4-1=historical observation 554898 for unrelated component blue\ncontext-metric-4-2=historical obse"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/metric-5.txt"
+      }
+     },
+     "observation": "metric=5\ncontext-metric-5-0=historical observation 647280 for unrelated component blue\ncontext-metric-5-1=historical observation 156691 for unrelated component blue\ncontext-metric-5-2=historical obser"
+    },
+    {
+     "action": {
+      "name": "read_file",
+      "arguments": {
+       "path": "lab/test/0011/metrics/report.txt"
+      }
+     },
+     "observation": "grand_total=PENDING"
+    },
+    {
+     "action": {
+      "name": "calculate",
+      "arguments": {
+       "expression": "18 + 14 + 75"
+      }
+     },
+     "observation": "RESULT: 107"
+    },
+    {
+     "action": {
+      "name": "calculate",
+      "arguments": {
+       "expression": "72 + 18 + 79"
+      }
+     },
+     "observation": "RESULT: 169"
+    },
+    {
+     "action": {
+      "name": "calculate",
+      "arguments": {
+       "expression": "107 + 169"
+      }
+     },
+     "observation": "RESULT: 276"
+    },
+    {
+     "action": {
+      "name": "replace_text",
+      "arguments": {
+       "path": "lab/test/0011/metrics/report.txt",
+       "old": "PENDING",
+       "new": "276"
+      }
+     },
+     "observation": "UPDATED: lab/test/0011/metrics/report.txt"
+    }
+   ],
+   "seconds": 445.3,
+   "peak_memory_gib": 4.746,
+   "record": "agentic-d2-aggregate_report-0011.jsonl",
+   "record_sha256": "e345b0994f528bb596609a12c2336dbfd855c6593ac06cbd39f05c2f190a9614",
+   "record_rows": 33572,
+   "rank_rows": 13698,
+   "reading_rows": 18302
+  },
+  {
+   "label": "chat-short-factual",
+   "kind": "chat",
+   "turns": 2,
+   "opening_prompt_tokens": 31,
+   "replies": [
+    {
+     "turn": 0,
+     "prompt_tokens": 31,
+     "generated_tokens": 109,
+     "text": "Ethanol boils at a lower temperature than water because it has a lower boiling point of approximately 78\u00b0C compared to water's 100\u00b0C. This difference arises from the fact that water molecules form an extensive, strong network of hydrogen bonds due to having two hydrogen atoms and two lone pairs on oxygen, whereas ethanol's larger hydrocarbon chain disrupts this network, resulting in weaker overall intermolecular forces. Consequently, less thermal energy is required to overcome the attraction between ethanol molecules and allow them to transition into the gas phase.<|im_end|>"
+    },
+    {
+     "turn": 1,
+     "prompt_tokens": 165,
+     "generated_tokens": 31,
+     "text": "This comparison assumes both substances are in their pure, standard states at one atmosphere of pressure, as impurities or mixtures would alter their boiling points.<|im_end|>"
+    }
+   ],
+   "generated_tokens": 140,
+   "seconds": 10.1,
+   "peak_memory_gib": 2.704,
+   "record": "chat-short-factual.jsonl",
+   "record_sha256": "3e1c8cfc7f4a2476015d77beecfdaf7997e6773bf9e20847a5b0bd31085a0269",
+   "record_rows": 3146,
+   "rank_rows": 2520,
+   "reading_rows": 336
+  },
+  {
+   "label": "chat-reasoning",
+   "kind": "chat",
+   "turns": 2,
+   "opening_prompt_tokens": 63,
+   "replies": [
+    {
+     "turn": 0,
+     "prompt_tokens": 63,
+     "generated_tokens": 160,
+     "text": "To find the time until the tank is empty, we need to determine the net rate of change for the water level.\n\n**Step 1: Calculate the net rate of draining.**\nThe first pump drains water at $30$ litres/minute.\nThe second pump fills water at $12$ litres/minute.\nSince the pumps run simultaneously, we subtract the filling rate from the draining rate:\n$$ \\text{Net Rate} = 30 - 12 = 18 \\text{ litres per minute} $$\n\n**Step 2: Calculate the time required.**\nThe total volume to be removed is $480$ litres.\nUsing the formula $\\text{Time} = \\frac{\\text{Total Volume}}{\\text{Net"
+    },
+    {
+     "turn": 1,
+     "prompt_tokens": 248,
+     "generated_tokens": 39,
+     "text": "The calculation assumes that the pumps can operate simultaneously without physical constraints like pump capacity limits, flow rate mismatches, or the draining pump becoming ineffective once the water level drops below its intake point.<|im_end|>"
+    }
+   ],
+   "generated_tokens": 199,
+   "seconds": 15.2,
+   "peak_memory_gib": 2.838,
+   "record": "chat-reasoning.jsonl",
+   "record_sha256": "4796e531e9bf2c7a446ea412964fac773156ba5b7e514ef5f10901a5da5712fa",
+   "record_rows": 4500,
+   "rank_rows": 3582,
+   "reading_rows": 510
+  },
+  {
+   "label": "chat-long-summary",
+   "kind": "chat",
+   "turns": 2,
+   "opening_prompt_tokens": 1681,
+   "replies": [
+    {
+     "turn": 0,
+     "prompt_tokens": 1681,
+     "generated_tokens": 160,
+     "text": "The document outlines a revised strategy for training a 3B parameter model to act as an agent, moving away from depth expansion toward making problems small enough for the model's limited capacity. The new paradigm relies on state-carrying notes that serve as working memory, ensuring the model tracks progress and context within a compressed window of approximately 1,100 tokens. By enforcing observation windowing and including specific error perturbations in the training data, the system teaches the model to recover from mistakes rather than failing immediately. A critical technical fix involves abandoning special marker tokens in favor of a plain-text call format to resolve embedding defects that previously caused training failures. Finally, the architecture leverages cross-turn KV cache reuse to maximize efficiency, allowing consecutive steps in a trajectory to share significant portions of their context."
+    },
+    {
+     "turn": 1,
+     "prompt_tokens": 1866,
+     "generated_tokens": 48,
+     "text": "The entire strategy hinges on the assumption that the model's limited capacity is the primary bottleneck, which may be an oversimplification if the agent's failures stem from architectural constraints or data quality issues rather than a lack of raw reasoning power.<|im_end|>"
+    }
+   ],
+   "generated_tokens": 208,
+   "seconds": 94.4,
+   "peak_memory_gib": 4.58,
+   "record": "chat-long-summary.jsonl",
+   "record_sha256": "6904608e57a70d62db9c06e5ee534198e2c8faedc7ce3f35c77944dba4667572",
+   "record_rows": 7925,
+   "rank_rows": 3744,
+   "reading_rows": 3755
+  }
+ ],
+ "elapsed_s": 1856.1
+}
