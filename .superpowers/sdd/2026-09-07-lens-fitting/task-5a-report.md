@@ -67,3 +67,59 @@ proved by the fake ledger/session fixtures. The parent owns integrated checks an
 serialized native acceptance/run queue; Task 5b owns the continuation span summary.
 The intended runtime record directory remains `research/records/LIVE-LENS-PROSE-2026-09-08`.
 No real registration/run was created. Parent owns backup pushes; Chief owns landing.
+
+## Fix round 1 — real opaque cache-blob tokenizer descriptor
+
+Parent's real-input preflight of 793c451 exposed a material gap missed by the original
+synthetic fixture: the frozen descriptor's five files have already been resolved to HF
+blob paths, so their basenames do not retain tokenizer/config roles. The original helper
+incorrectly required a descriptor basename of `tokenizer_config.json` and failed before MLX.
+
+The corrected helper accepts the selected ModelSpec/revision and resolves one exact offline
+snapshot through the existing resolver. It enumerates the corpus's existing tokenizer asset
+patterns in that snapshot, recovers filename roles there, and requires the entire asset set
+to match the frozen descriptor by both resolved path and SHA-256, with no extra/missing assets
+or duplicate role aliases. Only then does AutoTokenizer load locally with remote code off.
+It revalidates snapshot identity after tokenizer loading. Execute uses the plan's pinned
+revision; plan forwards the CLI model/revision. No descriptor mutation, snapshot scanning,
+newest-revision guess, download or checkpoint load was added.
+
+Two new pure regressions construct realistic snapshot symlinks to opaque blob names. The
+positive fixture reproduces the original lookup failure and now succeeds using the exact
+snapshot directory. The negative fixture redirects a snapshot asset to an unbound blob
+with the same bytes and proves refusal before AutoTokenizer. Existing execute-boundary
+fixtures now accept the explicit model/revision arguments.
+
+Fresh command:
+
+```
+PYTHONPATH=src '/Users/daniel.tipton/Desktop/An app/.venv/bin/python' -m pytest -o addopts='' tests/test_lens_prose.py -q --basetemp=/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/prose-fix1-pytest
+```
+
+Result: **28 passed in 8.68s**, exit 0 (the test command itself succeeded; a subsequent
+read-only `ls` in the same shell found the hosted lens absent from this linked worktree,
+so the real check below used the explicitly identified primary-worktree hosted lens).
+Owned-file Ruff check passed. The per-test zero-MLX guard remains active.
+
+The actual CLI was then invoked with `runpy.run_path(..., run_name='__main__')` and:
+
+```
+scripts/lens_prose_capture.py plan
+--out .superpowers/sdd/2026-09-07-lens-fitting/prose-fix1-real-plan
+--corpus data/lens-fitting/qwen35-4b-prose/manifest.json
+--lens /Users/daniel.tipton/Desktop/An app/models/jlens/Qwen3.5-4B_jacobian_lens_n1000.npz
+--lens-sha256 381c089dcffead8147ee91f944496f468cce2c7d593e0a1b17230745055aea12
+```
+
+A builtins import guard rejected `mlx`/`mlx_lm` for the entire process. After the actual CLI
+returned, all 51 planned window indices and prefix IDs were compared directly to the
+frozen held corpus rows, and all prefix lengths were asserted to equal 824. The process
+also asserted that neither package nor their submodules existed in `sys.modules`.
+Result: **51/51 exact prefixes; zero MLX imports; zero checkpoint loads**, exit 0.
+Resolved snapshot: `32f3e8ecf65426fc3306969496342d504bfa13f3`.
+Plan SHA-256: `985b3f1660a57390e4d701edc95ecca65dbc77d2bb28d6144b99d5f49750a9c1`.
+The small check result and offline plan remain in the ignored SDD directory as
+`prose-fix1-real-preflight.json` and `prose-fix1-real-plan/plan.json`; no intended runtime
+record directory was created. This updates the prior report's no-real-registration statement:
+only a tokenizer-only preflight registration was now created, in SDD, not a capture run.
+Native capture/replay acceptance remains outstanding and owned by the parent queue.

@@ -8,6 +8,7 @@ import json
 import sys
 from contextlib import contextmanager
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -347,7 +348,7 @@ def test_section14_partial_output_exclusive_no_resume(prepared):
 
 def test_section14_registration_and_capture_true_precede_loader(prepared, monkeypatch):
     output = prose.register_plan(prepared.root / "run", prepared.plan)
-    monkeypatch.setattr(prose, "corpus_tokenizer", lambda _: prepared.tokenizer)
+    monkeypatch.setattr(prose, "corpus_tokenizer", lambda *a, **k: prepared.tokenizer)
     calls = []
 
     def loader(preflight, *, capture):
@@ -367,7 +368,7 @@ def test_section14_registration_and_capture_true_precede_loader(prepared, monkey
 
 def test_section14_plan_drift_never_reaches_loader(prepared, monkeypatch):
     output = prose.register_plan(prepared.root / "run", prepared.plan)
-    monkeypatch.setattr(prose, "corpus_tokenizer", lambda _: prepared.tokenizer)
+    monkeypatch.setattr(prose, "corpus_tokenizer", lambda *a, **k: prepared.tokenizer)
     monkeypatch.setattr(prose, "load_runtime", lambda *a, **k: pytest.fail("loader reached"))
     prepared.source.write_text("changed")
     with pytest.raises(ValueError):
@@ -433,3 +434,67 @@ def test_section14_runtime_tokenizer_drift_precedes_session(prepared, monkeypatc
             sampler="greedy",
             stream_generate=lambda *a, **k: pytest.fail("stream reached"),
         )
+
+
+@pytest.fixture
+def opaque_descriptor(prepared):
+    """The frozen corpus stores resolved blob paths, losing filename roles."""
+    snapshot = prepared.asset.parent
+    blobs = prepared.root / "blobs"
+    blobs.mkdir()
+    assets = [snapshot / "config.json", prepared.asset]
+    for number, path in enumerate(assets):
+        blob = blobs / (str(number) * 40)
+        path.rename(blob)
+        path.symlink_to(blob)
+    corpus = prepared.root / "opaque-corpus.json"
+    build_prose_corpus(
+        [prepared.source], prepared.tokenizer, prepared.spec, corpus, tokenizer_files=assets
+    )
+    descriptor = json.loads(corpus.read_bytes())["tokenizer"]["files"]
+    assert all(Path(row["path"]).parent == blobs for row in descriptor)
+    return corpus
+
+
+def test_section14_opaque_blob_roles_resolved_from_exact_snapshot(
+    prepared, opaque_descriptor, monkeypatch
+):
+    calls = []
+
+    def load(directory, **kwargs):
+        calls.append((directory, kwargs))
+        return prepared.tokenizer
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(AutoTokenizer=SimpleNamespace(from_pretrained=load)),
+    )
+    assert prose.corpus_tokenizer(opaque_descriptor, prepared.spec) is prepared.tokenizer
+    assert calls == [
+        (
+            str(prepared.asset.parent),
+            {"local_files_only": True, "trust_remote_code": False, "use_fast": True},
+        )
+    ]
+
+
+def test_section14_mismatched_snapshot_asset_refused_before_tokenizer(
+    prepared, opaque_descriptor, monkeypatch
+):
+    # Even equal bytes at a different resolved path are not the bound corpus asset.
+    replacement = prepared.root / "different-blob"
+    replacement.write_bytes(prepared.asset.read_bytes())
+    prepared.asset.unlink()
+    prepared.asset.symlink_to(replacement)
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(
+            AutoTokenizer=SimpleNamespace(
+                from_pretrained=lambda *a, **k: pytest.fail("loader reached")
+            )
+        ),
+    )
+    with pytest.raises(ValueError, match="snapshot tokenizer assets"):
+        prose.corpus_tokenizer(opaque_descriptor, prepared.spec)

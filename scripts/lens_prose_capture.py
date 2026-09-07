@@ -36,7 +36,7 @@ def main():
             spec,
             args.lens,
             lens_sha256=args.lens_sha256,
-            tokenizer=corpus_tokenizer(args.corpus),
+            tokenizer=corpus_tokenizer(args.corpus, spec, revision=args.revision),
             revision=args.revision,
         )
         register_plan(args.out, plan)

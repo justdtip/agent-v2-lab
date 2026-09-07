@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from local_llm_lab.forward import encode_prompt
-from local_llm_lab.pipeline.lens_fitting.corpus import read_corpus
+from local_llm_lab.pipeline.lens_fitting.corpus import TOKENIZER_PATTERNS, read_corpus
 from local_llm_lab.pipeline.lens_fitting.runtime import (
     configure_allocator_cache,
     load_runtime,
@@ -64,21 +64,43 @@ def _write(path, value):
         stream.write(_bytes(value) + b"\n")
 
 
-def corpus_tokenizer(corpus_path):
-    """Use the descriptor's exact local assets; never resolve main or download."""
+def corpus_tokenizer(corpus_path, spec, *, revision="main"):
+    """Recover filename roles from one verified snapshot, including HF blob symlinks.
+
+    Corpus descriptors resolve symlinks to opaque blobs. Every tokenizer/config asset
+    in the selected offline snapshot must map back to exactly one descriptor file by
+    both resolved path and content hash; no newest-snapshot search or download occurs.
+    """
     read_corpus(corpus_path)
     manifest = json.loads(Path(corpus_path).read_bytes())
-    files = manifest["tokenizer"]["files"]
-    config = [
-        Path(row["path"]) for row in files if Path(row["path"]).name == "tokenizer_config.json"
-    ]
-    if len(config) != 1:
-        raise ValueError("corpus must bind exactly one tokenizer_config.json")
+    if manifest["model_hf_id"] != spec.hf_id:
+        raise ValueError("corpus tokenizer model mismatch")
+    snapshot = resolve_snapshot(spec, revision=revision)
+    directory = Path(snapshot["snapshot_path"])
+    files = sorted(
+        {
+            path
+            for pattern in TOKENIZER_PATTERNS
+            for path in directory.glob(pattern)
+            if path.is_file()
+        }
+    )
+    bound = {
+        (str(Path(row["path"]).resolve(strict=True)), row["sha256"])
+        for row in manifest["tokenizer"]["files"]
+    }
+    actual = {(str(path.resolve(strict=True)), file_sha256(path)) for path in files}
+    roles = {path.relative_to(directory).as_posix() for path in files}
+    if actual != bound or len(files) != len(bound) or "tokenizer_config.json" not in roles:
+        raise ValueError("snapshot tokenizer assets do not match frozen corpus descriptor")
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(
-        str(config[0].parent), local_files_only=True, trust_remote_code=False, use_fast=True
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(directory), local_files_only=True, trust_remote_code=False, use_fast=True
     )
+    if snapshot_identity(directory, hf_id=spec.hf_id) != snapshot:
+        raise ValueError("snapshot changed while loading corpus tokenizer")
+    return tokenizer
 
 
 def make_plan(corpus_path, spec, lens_path, *, lens_sha256, tokenizer, revision="main"):
@@ -331,7 +353,9 @@ def execute_plan(output, spec):
     plan = json.loads((output / "plan.json").read_bytes())
     if (output / "README.md").read_text() != README:
         raise ValueError("required prewritten registration changed")
-    tokenizer = corpus_tokenizer(plan["corpus"]["path"])
+    tokenizer = corpus_tokenizer(
+        plan["corpus"]["path"], spec, revision=plan["snapshot"]["resolved_revision"] or "main"
+    )
     validate_plan(plan, spec, tokenizer)
     if set(p.name for p in output.iterdir()) != {"README.md", "plan.json"}:
         raise FileExistsError("execution requires an unused registered plan directory")
