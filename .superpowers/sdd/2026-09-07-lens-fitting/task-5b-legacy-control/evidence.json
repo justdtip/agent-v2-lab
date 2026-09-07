@@ -1,0 +1,97 @@
+{
+  "purpose": "Real thirteen-record legacy summarizer compatibility after prose extension; no native replay, new lens readings or profile acceptance",
+  "exact_decoded_atlas_equality": true,
+  "expected_atlas_sha256": "28f5f4d558bf9a501e1b489419367145b71e904fe8f7450f046bd0e3be3fca41",
+  "actual_atlas_sha256": "28f5f4d558bf9a501e1b489419367145b71e904fe8f7450f046bd0e3be3fca41",
+  "summarizer_sha256": "b0b45b902e990587de0f72d78695b5d9d46237963840316c580979f3c1487156",
+  "tokenizer_snapshot": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3",
+  "tokenizer_assets": [
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/config.json",
+      "sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/model.safetensors.index.json",
+      "sha256": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/preprocessor_config.json",
+      "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/processor_config.json",
+      "sha256": "14932921ca485d458a04dafd8069fbb0a4505622a48208d19ed247115801385b"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/tokenizer.json",
+      "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/tokenizer_config.json",
+      "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/video_preprocessor_config.json",
+      "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+    },
+    {
+      "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/vocab.json",
+      "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+    }
+  ],
+  "tokenizer_lookup": [
+    {
+      "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "allow_patterns": [
+        "tokenizer*",
+        "*.json"
+      ],
+      "local_files_only": true
+    }
+  ],
+  "inputs": {
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/PILOT-ATLAS-CONTROL-16.json": "bc8ff4a55fde0dcefc73d7a1e6ab3f152acf0d5b5df85b95491f60028652b1b3",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/atlas.json": "28f5f4d558bf9a501e1b489419367145b71e904fe8f7450f046bd0e3be3fca41",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/manifest.json": "26d985c7f9c6e860f10fba006f94e352f3191da33fe27f47054ea793d7e593c0",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/manifest.json": "26d985c7f9c6e860f10fba006f94e352f3191da33fe27f47054ea793d7e593c0",
+    "/Users/daniel.tipton/worktrees/lens-fitting/scripts/live_lens_atlas.py": "b0b45b902e990587de0f72d78695b5d9d46237963840316c580979f3c1487156",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/config.json": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/model.safetensors.index.json": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/processor_config.json": "14932921ca485d458a04dafd8069fbb0a4505622a48208d19ed247115801385b",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/tokenizer.json": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/tokenizer_config.json": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/video_preprocessor_config.json": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+    "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots/32f3e8ecf65426fc3306969496342d504bfa13f3/vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d0-read-0000.jsonl": "4ec19457bd49409c955063169ff79e2cf5c3c33d742701a18038e0cf0f3b7a71",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d0-read-0000.jsonl.gz": "ba812bbb4664ad9efe0a6a6ab9fe49bd97a03153b33d791af98d5fd30c88c91c",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d0-list-0005.jsonl": "a3d206f2cddd661a3e8d0f717dabb3674d08fb94622246326fa043b72651ab14",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d0-list-0005.jsonl.gz": "32fbd55b5299f607d0796488dccd56bb1da8661116006ecffbf8ab939979f891",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d0-pointer_chain-0006.jsonl": "46f2cd2b5f947c59f625c5db185d7aa3f7180e5756eb53d76923c77f3654be4e",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d0-pointer_chain-0006.jsonl.gz": "50eb785e3153d3c0f58d35c8ec6089d6b2c53641d29786a5c5b1c34895198b8b",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d1-search-0001.jsonl": "e43aa6116a4a4d3680b26585d5972dee827acca96b461e3a002a092297cbbf12",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d1-search-0001.jsonl.gz": "55e129c6bcbff926ced7610a87927d05fbc86054843dfbe480b6227212553e07",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d1-synthesis-0003.jsonl": "cfcb52a94751c30fa0e87601c0832d3437e447e79ff3ebea78b03b5b181de739",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d1-synthesis-0003.jsonl.gz": "156da021e1655d09cc022800c08870740396a5b83719a5b13d94a7f321678c20",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d1-batch_update-0010.jsonl": "5cf817d188ae31bcdde1b33fdf86bf5e93371920d56d66870167d19fac8dd697",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d1-batch_update-0010.jsonl.gz": "04e61d61d9c7ff459a497568796ba2c328dd14b759367cefa10ceae2ff23c639",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d2-update-0004.jsonl": "91d529eaf1ec1fe92480463d75538c5dede6906365fd592cea2d307d6e113611",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-update-0004.jsonl.gz": "4821627d8a3a13ce1b3b42ee8aa8aa4c44939376ecfb1a520227d3e86085008d",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d2-pointer_chain-0006.jsonl": "aae3f231d4a5d1f2dac42b9b30c9fbb23496288d2e05b732f044461014c18aeb",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-pointer_chain-0006.jsonl.gz": "77331231133b678266cdaeae1ff0f8fe67e420a6508609b8cc838f40d944d3a6",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d2-cross_reference-0008.jsonl": "f42e221457e66f6c1344c4c94d878cfe24c9df2c6b27abe428728e0e1fdd1e1e",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-cross_reference-0008.jsonl.gz": "d13adc6a1e1bded768b6339d22a8f78fe1ca1e2b69140140978c217ac4b2c131",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/agentic-d2-aggregate_report-0011.jsonl": "e345b0994f528bb596609a12c2336dbfd855c6593ac06cbd39f05c2f190a9614",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/agentic-d2-aggregate_report-0011.jsonl.gz": "2d7c832da65971d3aacb638a4a556b2a2f10c942decafc8f822bedf881078472",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/chat-short-factual.jsonl": "3e1c8cfc7f4a2476015d77beecfdaf7997e6773bf9e20847a5b0bd31085a0269",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/chat-short-factual.jsonl.gz": "0d5b62076ec565ea5f2fa6a8126e9a1d4367151d6cb7e35c6aa94c96894aac8f",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/chat-reasoning.jsonl": "4796e531e9bf2c7a446ea412964fac773156ba5b7e514ef5f10901a5da5712fa",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/chat-reasoning.jsonl.gz": "06c4768260ade46c0a884100b6210b36a66b1cf2756a96607e8ccbbc9db59188",
+    "/Users/daniel.tipton/worktrees/lens-fitting/.superpowers/sdd/2026-09-07-lens-fitting/pilot-atlas-control/chat-long-summary.jsonl": "6904608e57a70d62db9c06e5ee534198e2c8faedc7ce3f35c77944dba4667572",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LIVE-LENS-PILOT-2026-09-07/chat-long-summary.jsonl.gz": "7cac621f4e49eb95cbb166c26af9c75e7a3fb01f6b7632a25f533f30963f6ec6"
+  },
+  "episodes": 13,
+  "source_files_unchanged": true,
+  "mlx_imported": false,
+  "checkpoint_loaded": false
+}
