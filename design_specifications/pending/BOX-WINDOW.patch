@@ -1,0 +1,661 @@
+# BOX-WINDOW: issue 95 — the window becomes a file, because the paragraph failed two careful readers
+
+Four launches were refused on 2026-09-08, three of them one seat's, and that seat's calibration
+probe is still unrun. **Two of the refusals came from people who had read the practice and meant
+to follow it**, mine among them.
+
+The diagnosis is precise, and it is the reason a better habit would not have fixed it. The
+heartbeat announcement is the right human record and the wrong enforcement surface: it is prose
+nobody's tooling reads. The R45(b) inventory *is* mechanical and it answers a different question —
+**who is running now**, not **who has been promised the next twenty minutes**. Substituting the
+second for the first is the mistake available to somebody being careful, which is exactly what
+happened twice.
+
+## What lands
+
+`outputs/.box-window.json` beside the lock, written by `announce_window` and removed by
+`end_window`, both in `runlock`. Exclusive create, for the lock's reason: two seats announcing at
+once must not both believe they hold the slot. The nonce is the lock's own guard — a window is
+closed by the seat that opened it, never by whoever runs next.
+
+Three readers, as specified:
+
+**The lock**, in `_acquire`, consults the window **before** the process inventory. That order is
+the point: a seat can hold the next twenty minutes without holding a process this instant, and
+that gap is the whole issue.
+
+**The collector**, `pytest_collection_modifyitems` in `conftest`, marks every item from a file in
+`TESTS_THAT_LOAD_MLX` as skipped while another seat's window is open, with the window quoted in the
+reason. **Skipped rather than refused, deliberately**: a refusal makes the whole suite red for
+somebody who has done nothing wrong, and the natural response to a red suite is to run it again —
+which is the collision. A skip keeps the rest of the suite honest, says whose slot it is, and
+leaves nothing to rerun.
+
+**The launching commands**, through a shell entry point, because the seats that need windows drive
+the box from shells and wrappers rather than from Python:
+
+```
+eval "$(python -m local_llm_lab.runlock announce --seat deputy --purpose '88 block 1' --minutes 100)"
+...the launch...
+python -m local_llm_lab.runlock end
+```
+
+`announce` prints the export line so the token reaches **every child** of the launching command.
+That is what makes the holder's own suite run unskipped and the holder's own launch admitted,
+without a pid tree.
+
+## One list, two enforcers
+
+`TESTS_THAT_LOAD_MLX` moves to `conftest` and `test_repository_rules` binds to it rather than
+keeping a copy — the same shape the fork-site sets already use. The closure check stays where the
+walker is. A file that starts or stops loading MLX cannot now be right in one place and wrong in
+the other, and a test asserts the two are the same object.
+
+## Stale windows
+
+Reported, never removed. `WINDOW_OVERDUE_SECONDS` past its own expected end, the refusal says so
+and says who to ask, and nothing unlinks it. The lock's rule for the lock's reason: a mechanism
+that clears the state it finds inconvenient is not a mechanism.
+
+A truncated window reads as **present with unknown fields**, not as absent. Absent means the box is
+free; a file that will not parse means somebody wrote something and we cannot tell what, and
+reading that as free is how a launch lands in a live slot.
+
+## A gap, stated rather than papered over
+
+The collector is tested by calling the hook with stand-in items, not by nesting a pytest run.
+`default_window_path` derives from `PROJECT_ROOT`, so a nested run would have to write the window
+at the **real** path and would briefly refuse live seats. A test that intermittently blocks other
+seats is the wrong way to test a mechanism built because live seats kept being blocked. What that
+leaves untested is the hook's registration with pytest, and only that; the decision, the file set
+and the reason text are all covered.
+
+## Verification
+
+```
+full suite:                     exit 0
+tests/test_runlock.py:          exit 0, 8 new tests
+tests/test_repository_rules.py: exit 0, the pinned set now bound to conftest's
+ruff:                           clean on all four changed files
+the CLI:                        python -m local_llm_lab.runlock status -> 'no window is open'
+git apply --check against HEAD: 0
+box: R45(b) inventory 0 holders and no window open, both checked before the suite
+```
+
+```diff
+diff --git a/src/local_llm_lab/runlock.py b/src/local_llm_lab/runlock.py
+index c3ca97c..0e0af0a 100644
+--- a/src/local_llm_lab/runlock.py
++++ b/src/local_llm_lab/runlock.py
+@@ -68,6 +68,15 @@ from local_llm_lab.spawn import run as spawn_run
+ 
+ __all__ = [
+     "LOCK_RELATIVE_PATH",
++    "WINDOW_HOLDER_ENV",
++    "WINDOW_OVERDUE_SECONDS",
++    "WINDOW_RELATIVE_PATH",
++    "BoxWindow",
++    "announce_window",
++    "blocking_window",
++    "end_window",
++    "read_window",
++    "refusal_for_window",
+     "MLX_LIBRARY",
+     "MappedProcess",
+     "STALE_AFTER_SECONDS",
+@@ -162,6 +171,182 @@ def _duration(seconds: float | None) -> str:
+     return f"{hours}:{minutes:02d}:{secs:02d}"
+ 
+ 
++# ------------------------------------------------------------------------ the box window
++#
++# The lock answers "is a model resident **now**". A window answers "has a seat been promised the
++# next twenty minutes", and the two are not the same question. On 2026-09-08 four launches were
++# refused, three of them one seat's, and two of the refusals came from people who had read the
++# announcement practice and meant to follow it: each checked the live inventory, which was honest
++# and answered the other question. A practice that fails two careful readers in one evening is
++# the case for a mechanism, and this is it (issue 95).
++#
++# The heartbeat announcement stays as the human record. This file is what tooling reads.
++
++WINDOW_RELATIVE_PATH = Path("outputs/.box-window.json")
++
++#: The announcing command exports this with the window's nonce, and every child inherits it. That
++#: is what separates "the seat that opened the window" from "everybody else" without a pid tree:
++#: a suite the holder starts is theirs, a suite anybody else starts is not.
++WINDOW_HOLDER_ENV = "AGENT_V2_BOX_WINDOW"
++
++#: How far past its own expected end a window may sit before it is called overdue. Reported, never
++#: removed -- the lock's rule, for the lock's reason: a mechanism that clears the state it finds
++#: inconvenient is not a mechanism.
++WINDOW_OVERDUE_SECONDS = 60 * 60
++
++
++def default_window_path() -> Path:
++    return PROJECT_ROOT / WINDOW_RELATIVE_PATH
++
++
++@dataclass(frozen=True)
++class BoxWindow:
++    """One announced slot as it reads on disk."""
++
++    path: Path
++    seat: str
++    purpose: str
++    opened: str
++    expected_end_epoch: float | None
++    nonce: str
++    raw: str
++    age_seconds: float | None
++
++    @property
++    def overdue(self) -> bool:
++        """Past its own expected end by :data:`WINDOW_OVERDUE_SECONDS`."""
++        if self.expected_end_epoch is None:
++            return False
++        return time.time() > self.expected_end_epoch + WINDOW_OVERDUE_SECONDS
++
++    def describe(self) -> str:
++        late = " (overdue)" if self.overdue else ""
++        return f"{self.seat}: {self.purpose}, opened {self.opened}{late}"
++
++
++def read_window(path: Path | None = None, *, now: float | None = None) -> BoxWindow | None:
++    """The announced window, or None. Readable even when the JSON is truncated or foreign."""
++    target = path if path is not None else default_window_path()
++    try:
++        raw = target.read_text(encoding="utf-8")
++    except FileNotFoundError:
++        return None
++    except OSError:
++        return None
++    try:
++        payload = json.loads(raw)
++        if not isinstance(payload, dict):
++            raise ValueError("not an object")
++    except (json.JSONDecodeError, ValueError):
++        payload = {}
++    opened_epoch = payload.get("opened_epoch")
++    moment = time.time() if now is None else now
++    return BoxWindow(
++        path=target,
++        seat=str(payload.get("seat", "unknown seat")),
++        purpose=str(payload.get("purpose", "unstated purpose")),
++        opened=str(payload.get("opened", "an unrecorded time")),
++        expected_end_epoch=(
++            float(payload["expected_end_epoch"])
++            if isinstance(payload.get("expected_end_epoch"), int | float)
++            else None
++        ),
++        nonce=str(payload.get("nonce", "")),
++        raw=raw,
++        age_seconds=(
++            moment - float(opened_epoch)
++            if isinstance(opened_epoch, int | float)
++            else None
++        ),
++    )
++
++
++def announce_window(
++    seat: str, purpose: str, expected_minutes: float, path: Path | None = None
++) -> str:
++    """Open the box window and return its nonce, which the caller exports as the holder token.
++
++    Exclusive create, like the lock and for the same reason: two seats announcing at once must
++    not both believe they hold the slot.
++    """
++    target = path if path is not None else default_window_path()
++    nonce = uuid.uuid4().hex
++    now = time.time()
++    payload = {
++        "seat": seat,
++        "purpose": purpose,
++        "opened": _utc_now(),
++        "opened_epoch": now,
++        "expected_end_epoch": now + expected_minutes * 60.0,
++        "expected_minutes": expected_minutes,
++        "nonce": nonce,
++        "pid": os.getpid(),
++    }
++    try:
++        _write_lock(target, payload)
++    except FileExistsError as error:
++        held = read_window(target)
++        raise RunLockBusy(
++            "refusing to announce a window: one is already open.\n"
++            f"  {held.describe() if held else target}\n"
++            "Wait for its end line, or ask that seat to close it."
++        ) from error
++    return nonce
++
++
++def end_window(nonce: str, path: Path | None = None) -> bool:
++    """Close a window this process opened. Returns False if the file is somebody else's.
++
++    The nonce check is the same guard ``_release`` uses: a window is closed by the seat that
++    opened it, never by whoever happens to run next.
++    """
++    target = path if path is not None else default_window_path()
++    held = read_window(target)
++    if held is None:
++        return False
++    if held.nonce != nonce:
++        return False
++    try:
++        target.unlink()
++    except OSError:
++        return False
++    return True
++
++
++def blocking_window(
++    path: Path | None = None, *, holder: str | None = None
++) -> BoxWindow | None:
++    """The window that blocks **this** process, or None.
++
++    None when no window is open, and None when the open one is ours -- the holder token comes
++    from the environment the announcing command exported, so every child of that command is the
++    holder too and a seat is never blocked by its own slot.
++    """
++    held = read_window(path)
++    if held is None:
++        return None
++    token = os.environ.get(WINDOW_HOLDER_ENV, "") if holder is None else holder
++    if token and token == held.nonce:
++        return None
++    return held
++
++
++def refusal_for_window(window: BoxWindow) -> str:
++    """Why a launch is refused while somebody else holds the slot."""
++    overdue = (
++        "\nThis window is past its expected end. It is reported, not removed: clearing another\n"
++        "seat's state is how a mechanism stops being one. Ask that seat to close it."
++        if window.overdue
++        else ""
++    )
++    return (
++        "refusing to load a model: another seat holds the box window.\n"
++        f"  {window.describe()}\n"
++        "A window is a promise about the next minutes, which the live process inventory cannot\n"
++        f"see. Wait for its end line.{overdue}"
++    )
++
++
+ # --------------------------------------------------------------------------- reading a lock
+ 
+ 
+@@ -534,6 +719,12 @@ def _acquire(
+     process_check = "skipped"
+     if check_processes:
+         _probe_failures.clear()
++        # The window first, because it answers the question the inventory cannot: a seat may hold
++        # the next twenty minutes without holding a process this instant, and a launch into
++        # somebody else's slot is the failure this whole pair exists to prevent (issue 95).
++        window = blocking_window()
++        if window is not None:
++            raise RunLockBusy(refusal_for_window(window))
+         found = running_model_processes()
+         if found:
+             raise RunLockBusy(refusal_for_processes(found))
+@@ -712,3 +903,55 @@ def load_weights(hf_id: str, **kwargs: Any) -> tuple[Any, Any]:
+     from mlx_lm import load
+ 
+     return load(hf_id, **kwargs)
++
++
++def _window_cli(argv: Sequence[str] | None = None) -> int:
++    """``python -m local_llm_lab.runlock announce|end|status`` (issue 95).
++
++    A shell entry point, because the seats that need windows drive the box from shells and
++    wrappers rather than from Python. ``announce`` prints the export line to eval, so the token
++    reaches every child of the launching command and the holder is never blocked by its own slot:
++
++        eval "$(python -m local_llm_lab.runlock announce --seat deputy --purpose '88 block 1' \
++                --minutes 100)"
++        ... the launch ...
++        python -m local_llm_lab.runlock end
++    """
++    import argparse
++
++    parser = argparse.ArgumentParser(prog="runlock", description="the box window")
++    sub = parser.add_subparsers(dest="action", required=True)
++    opening = sub.add_parser("announce")
++    opening.add_argument("--seat", required=True)
++    opening.add_argument("--purpose", required=True)
++    opening.add_argument("--minutes", type=float, required=True)
++    sub.add_parser("end")
++    sub.add_parser("status")
++    args = parser.parse_args(argv)
++
++    if args.action == "announce":
++        nonce = announce_window(args.seat, args.purpose, args.minutes)
++        print(f"export {WINDOW_HOLDER_ENV}={nonce}")
++        return 0
++    if args.action == "end":
++        token = os.environ.get(WINDOW_HOLDER_ENV, "")
++        if not token:
++            print(f"{WINDOW_HOLDER_ENV} is not set; a window is closed by the seat that opened it")
++            return 1
++        if not end_window(token):
++            held = read_window()
++            print(
++                "no window of this seat's to close"
++                if held is None
++                else f"not ours: {held.describe()}"
++            )
++            return 1
++        print("window closed")
++        return 0
++    held = read_window()
++    print("no window is open" if held is None else held.describe())
++    return 0
++
++
++if __name__ == "__main__":  # pragma: no cover - a shell entry point
++    sys.exit(_window_cli())
+diff --git a/tests/conftest.py b/tests/conftest.py
+index c87887b..f3751e4 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -209,3 +209,53 @@ def _forking_is_refused_rather_than_fatal():
+             target = sys.modules[module]
+             patch.setattr(target, attribute, _fork_refusal(getattr(target, attribute)))
+         yield
++
++
++#: Test files whose import loads MLX, so Metal is up for the whole session once any of them is
++#: collected. Pinned rather than computed, and the pin is checked against an AST import closure by
++#: `tests/test_repository_rules.py`, which imports this tuple rather than keeping a second copy:
++#: one list, two enforcers, the same shape as the fork-site sets above.
++TESTS_THAT_LOAD_MLX = (
++    "test_arch.py",
++    "test_capture.py",
++    "test_gated_delta_chunked.py",
++    "test_gated_delta_chunkwise.py",
++    "test_history_cache.py",
++    "test_jlens.py",
++    "test_jspace_sweep.py",
++    "test_live_lens_native.py",
++    "test_patch.py",
++    "test_pipeline.py",
++    "test_preflight.py",
++    "test_probes.py",
++    "test_state_swap.py",
++    "test_tuner_data.py",
++)
++
++
++def pytest_collection_modifyitems(config, items):
++    """Skip the MLX-loading files while another seat holds the box window (issue 95).
++
++    Skipped rather than refused. A refusal makes the whole suite red for somebody who has done
++    nothing wrong, and the natural response to a red suite is to run it again -- which is the
++    collision. A skip keeps the rest of the suite honest, says whose slot this is, and leaves
++    nothing to rerun.
++
++    The holder's own suite is untouched: `blocking_window` returns None when the window's nonce
++    matches the token the announcing command exported, and every child of that command inherits
++    it.
++    """
++    from local_llm_lab.runlock import blocking_window
++
++    window = blocking_window()
++    if window is None:
++        return
++    reason = pytest.mark.skip(
++        reason=(
++            f"the box window is held by {window.describe()}; this file loads MLX and would "
++            "refuse that seat's launch (issue 95). Run it after the end line."
++        )
++    )
++    for item in items:
++        if Path(str(item.fspath)).name in TESTS_THAT_LOAD_MLX:
++            item.add_marker(reason)
+diff --git a/tests/test_repository_rules.py b/tests/test_repository_rules.py
+index d3a4f4e..2a2613c 100644
+--- a/tests/test_repository_rules.py
++++ b/tests/test_repository_rules.py
+@@ -10,7 +10,11 @@ from typing import Any
+ 
+ import pytest
+ import yaml
+-from conftest import PRE_EXISTING_FORK_SITES, SPAWN_SANCTIONED_PATHS
++from conftest import (
++    PRE_EXISTING_FORK_SITES,
++    SPAWN_SANCTIONED_PATHS,
++    TESTS_THAT_LOAD_MLX,
++)
+ 
+ from local_llm_lab import spawn
+ 
+@@ -1016,22 +1020,10 @@ def test_the_process_start_scanner_reports_the_families_and_ignores_lookalikes(t
+ # So the set is pinned here and computed by walking the closure, and the walk crosses into
+ # third-party packages: stopping at them is what misses `test_tuner_data.py`, and a false
+ # negative here is the dangerous direction -- it clears a file to run beside a live model.
+-_TESTS_THAT_LOAD_MLX = (
+-    "test_arch.py",
+-    "test_capture.py",
+-    "test_gated_delta_chunked.py",
+-    "test_gated_delta_chunkwise.py",
+-    "test_history_cache.py",
+-    "test_jlens.py",
+-    "test_jspace_sweep.py",
+-    "test_live_lens_native.py",
+-    "test_patch.py",
+-    "test_pipeline.py",
+-    "test_preflight.py",
+-    "test_probes.py",
+-    "test_state_swap.py",
+-    "test_tuner_data.py",
+-)
++#: Imported from ``conftest`` rather than kept here: the collector that skips these files
++#: while another seat holds the box window reads the same tuple (issue 95), and two copies of
++#: one list is how they drift. The pin's *check* stays here, where the closure walker is.
++_TESTS_THAT_LOAD_MLX = TESTS_THAT_LOAD_MLX
+ 
+ _REPO_ROOT = Path(__file__).resolve().parents[1]
+ 
+diff --git a/tests/test_runlock.py b/tests/test_runlock.py
+index 3b200be..819410a 100644
+--- a/tests/test_runlock.py
++++ b/tests/test_runlock.py
+@@ -916,3 +916,196 @@ def test_a_release_from_a_forked_child_leaves_the_parents_lock(tmp_path) -> None
+     runlock._release(stolen)
+ 
+     assert lock.exists()
++
++
++# ---------------------------------------------------------- the box window (issue 95)
++
++
++def test_a_window_is_announced_exclusively_and_closed_by_the_seat_that_opened_it(
++    tmp_path,
++) -> None:
++    """Two seats announcing at once must not both believe they hold the slot.
++
++    Exclusive create, like the lock, and the nonce is the same guard `_release` uses: a window is
++    closed by whoever opened it, never by whoever happens to run next.
++    """
++    path = tmp_path / "window.json"
++    nonce = runlock.announce_window("deputy", "issue 88 first block", 90.0, path=path)
++    assert path.is_file()
++
++    with pytest.raises(runlock.RunLockBusy, match="already open"):
++        runlock.announce_window("codex", "regression calibration", 20.0, path=path)
++
++    assert runlock.end_window("not-the-nonce", path=path) is False
++    assert path.is_file(), "another seat's window is not closed by the wrong token"
++    assert runlock.end_window(nonce, path=path) is True
++    assert not path.exists()
++
++
++def test_the_holder_is_not_blocked_by_its_own_window(tmp_path) -> None:
++    """A seat is never blocked by the slot it holds, and every child of its command is the seat.
++
++    The token comes from the environment the announcing command exports, so a suite the holder
++    starts is the holder's; a suite anybody else starts is not.
++    """
++    path = tmp_path / "window.json"
++    nonce = runlock.announce_window("codex", "replay checks", 20.0, path=path)
++
++    assert runlock.blocking_window(path, holder=nonce) is None
++    blocked = runlock.blocking_window(path, holder="")
++    assert blocked is not None
++    assert blocked.seat == "codex"
++    assert "replay checks" in blocked.describe()
++
++
++def test_an_overdue_window_is_reported_and_never_removed(tmp_path, monkeypatch) -> None:
++    """The lock's rule, for the lock's reason.
++
++    A mechanism that clears the state it finds inconvenient is not a mechanism. The refusal says
++    the window is overdue and says who to ask; nothing here unlinks it.
++    """
++    path = tmp_path / "window.json"
++    runlock.announce_window("codex", "regression calibration", 20.0, path=path)
++
++    real = time.time
++    monkeypatch.setattr(
++        time, "time", lambda: real() + 20 * 60 + runlock.WINDOW_OVERDUE_SECONDS + 1
++    )
++    window = runlock.read_window(path)
++    assert window is not None and window.overdue is True
++    assert "overdue" in runlock.refusal_for_window(window)
++    assert "not removed" in runlock.refusal_for_window(window)
++    assert path.is_file(), "an overdue window is reported, not cleared"
++
++
++def test_a_truncated_window_still_refuses_rather_than_reading_as_absent(tmp_path) -> None:
++    """A half-written window is the case where guessing is worst.
++
++    Absent means "the box is free". A file that will not parse means somebody wrote something and
++    we cannot tell what, and reading that as free is how a launch lands in a live slot.
++    """
++    path = tmp_path / "window.json"
++    path.write_text('{"seat": "codex", "purp', encoding="utf-8")
++
++    window = runlock.read_window(path)
++    assert window is not None
++    assert window.seat == "unknown seat"
++    assert runlock.blocking_window(path, holder="") is not None
++
++
++def test_the_refusal_says_what_the_inventory_could_not(tmp_path) -> None:
++    """The wording carries the distinction the whole issue turns on.
++
++    Four launches were refused on 2026-09-08 because two people checked the live inventory, which
++    was honest and answered a different question. The refusal says so, so the next reader does not
++    have to rediscover it.
++    """
++    path = tmp_path / "window.json"
++    runlock.announce_window("codex", "regression calibration retry", 20.0, path=path)
++    text = runlock.refusal_for_window(runlock.read_window(path))
++
++    assert "another seat holds the box window" in text
++    assert "codex" in text and "regression calibration retry" in text
++    assert "next minutes" in text and "inventory cannot" in text
++
++
++def test_the_collector_skips_the_mlx_files_under_another_seats_window(monkeypatch) -> None:
++    """The suite's half of the mechanism (issue 95).
++
++    Skipped rather than refused: a refusal makes the whole suite red for somebody who has done
++    nothing wrong, and the natural response to a red suite is to run it again, which is the
++    collision. The reason carries the window so the reader learns whose slot they are in.
++
++    Driven by calling the hook rather than by nesting a pytest run. A nested run would have to
++    write the window at the real path, since `default_window_path` derives from `PROJECT_ROOT`,
++    and a test that briefly refuses live seats is the wrong way to test a mechanism built because
++    live seats kept being refused.
++    """
++    import conftest
++
++    window = runlock.BoxWindow(
++        path=Path("outputs/.box-window.json"),
++        seat="codex",
++        purpose="regression calibration retry",
++        opened="2026-09-08T11:11:02Z",
++        expected_end_epoch=None,
++        nonce="abc",
++        raw="{}",
++        age_seconds=10.0,
++    )
++    monkeypatch.setattr(conftest, "blocking_window", lambda *a, **k: window, raising=False)
++    monkeypatch.setattr(runlock, "blocking_window", lambda *a, **k: window)
++
++    class _Item:
++        def __init__(self, name: str) -> None:
++            self.fspath = Path("/repo/tests") / name
++            self.markers: list = []
++
++        def add_marker(self, marker) -> None:
++            self.markers.append(marker)
++
++    loads_mlx = _Item("test_preflight.py")
++    does_not = _Item("test_runlock.py")
++    conftest.pytest_collection_modifyitems(None, [loads_mlx, does_not])
++
++    assert len(loads_mlx.markers) == 1, "an MLX-loading file is skipped"
++    assert does_not.markers == [], "a file that loads no MLX is untouched"
++    reason = loads_mlx.markers[0].kwargs["reason"]
++    assert "codex" in reason and "regression calibration retry" in reason
++    assert "issue 95" in reason
++
++
++def test_the_collector_leaves_the_holders_own_suite_alone(monkeypatch) -> None:
++    """`blocking_window` returns None for the holder, so the hook is a no-op for that seat."""
++    import conftest
++
++    monkeypatch.setattr(runlock, "blocking_window", lambda *a, **k: None)
++
++    class _Item:
++        fspath = Path("/repo/tests/test_preflight.py")
++        markers: list = []
++
++        def add_marker(self, marker):  # pragma: no cover - must not be reached
++            raise AssertionError("the holder's own suite must not be skipped")
++
++    conftest.pytest_collection_modifyitems(None, [_Item()])
++
++
++def test_the_pinned_mlx_file_list_has_one_home(monkeypatch) -> None:
++    """One list, two enforcers: the collector and the closure rule read the same tuple.
++
++    `tests/test_repository_rules.py` binds `_TESTS_THAT_LOAD_MLX` to `conftest`'s tuple rather
++    than keeping a copy, so a file that starts or stops loading MLX cannot be right in one place
++    and wrong in the other.
++    """
++    import conftest
++    import test_repository_rules
++
++    assert test_repository_rules._TESTS_THAT_LOAD_MLX is conftest.TESTS_THAT_LOAD_MLX
++
++
++def test_the_lock_refuses_a_launch_into_another_seats_window_and_admits_the_holders(
++    monkeypatch, tmp_path
++) -> None:
++    """The lock's half, and the order matters.
++
++    The window is consulted **before** the process inventory, because a seat can hold the next
++    twenty minutes without holding a process this instant. That gap is the whole issue: on
++    2026-09-08 two people checked the live inventory, got an honest answer to a different
++    question, and refused a third seat's launch four times between them.
++    """
++    path = tmp_path / "window.json"
++    nonce = runlock.announce_window("codex", "regression calibration", 20.0, path=path)
++    monkeypatch.setattr(runlock, "default_window_path", lambda: path)
++    monkeypatch.setattr(runlock, "running_model_processes", lambda *a, **k: [])
++    monkeypatch.delenv(runlock.WINDOW_HOLDER_ENV, raising=False)
++
++    with pytest.raises(runlock.RunLockBusy) as refusal:
++        runlock.hold_model_run_lock(path=tmp_path / "run.lock")
++    assert "another seat holds the box window" in str(refusal.value)
++    assert "codex" in str(refusal.value)
++    assert not (tmp_path / "run.lock").exists(), "a refused launch leaves no lock"
++
++    monkeypatch.setenv(runlock.WINDOW_HOLDER_ENV, nonce)
++    held = runlock.hold_model_run_lock(path=tmp_path / "run.lock")
++    assert Path(held).is_file(), "the seat that announced the window may launch into it"
+```
