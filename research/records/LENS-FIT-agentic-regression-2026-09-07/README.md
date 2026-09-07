@@ -1,0 +1,31 @@
+# Base agentic regression — registration before checkpoint work
+
+Registered 7 September 2026 in the persistent codex/lens-fitting worktree. This first stage measures resource use; it is not a fitted lens or a scientific result. No checkpoint run preceded this registration. Later evidence is appended in new files.
+
+## Inputs and authority
+
+Requirements 3.2 and section12 fix all nonfinal-layer float32 sums and the alpha grid (0.001,0.01,0.1,1,10), with penalty alpha * mean_diag(total fit XTX). Frozen agentic manifest: data/lens-fitting/qwen35-4b-agentic/manifest.json, exact file SHA256 e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0. Fit418 sequences/458,191 positions; held100/106,870 positions. Held sequences select alpha and may share trajectories; pilot generalisation remains disjoint and unmeasured.
+
+Model qwen35-4b, mlx-community/Qwen3.5-4B-MLX-4bit, immutable cached revision32f3e8ecf65426fc3306969496342d504bfa13f3. Aggregate runtime-assets SHA256 d8e5ca95bde5faf0c52628b26ae58be3d0439c5d2a4107cb59081e051f5ebd9b. Exact source and registration hashes will be written before loading by the preflight. The launch record names the then-current source commit and confirms no uncommitted relevant source. No downloads, adapter or registry change.
+
+## Resource calibration, before any full fit
+
+Entry point: scripts/lens_regression_preflight.py, reviewed before launch. Planned artifact basename qwen35-4b-base-agentic-regression-2026-09-07.npz, under models/lenses; the preflight does not create it or a sidecar. Exclusive report resource-preflight-01.jsonl in this record directory. Registration is this file. Initial inspected bound is 10.0 GiB; no above-cap window is claimed. The bound must be below0.6 of the device's actual recommended working set on launch, or the script stops before the first forward.
+
+Probe prefixes256,512,1024 and2044 tokens, the last being the frozen corpus maximum. Source index181, train-conditional_update-0021-wrong_path, step23 in base-train.json, a fit sequence of2044 tokens. Two copies populate the fitter's two statistics slots to exercise their simultaneous memory. This is synthetic resource calibration only; no held examples or quality numbers are read, no split membership changes, no map artifact. The script reports cold forward times (no hidden warm-up), measured peaks, and a complete fixed-alpha grid's solve time at one layer. All quality outputs from that timing call are discarded.
+
+The first two sizes are safe by inspection under the following conservative allocation budget, derived from the cached config and source, not from prior lens measurements: checkpoint file bytes2.826 GiB; twice the entire two-split dense-statistic storage6.055 GiB, allowing old/product/new update buffers; all requested residuals at512 tokens0.156 GiB. These sum9.037 GiB, leaving0.963 GiB within the declared10.0 GiB for masks, one block's evaluation intermediates and library workspace. At512 tokens one float32 full-attention score tensor is0.015625 GiB; three MLP intermediate tensors are0.052734 GiB. This is an inspected allowance, not a proven allocator upper bound. Any initial measured peak exceeding the bound stops further sizes. No allocator internals or live-buffer count is inferred from bytes.
+
+Later sizes use measured last-two-row growth before launch, with a fixed resident/statistics floor and a variable term quadratic or steeper if observed. A projection over0.6 of the working set stops and requires the Director's declared window with the projection quoted. A measured breach is recorded as a breach, not called protection. The one-layer solve has its own before-call allowance, active memory plus sixteen dense float32 matrices (inputs, CPU solve work, candidate/best solutions and error products). That allowance is also an estimate; measured solve peak is recorded separately. Allocator cache limit0 is recorded and must also apply to the eventual fit. Peak is MLX process active memory, not OS-wide footprint.
+
+R55: this run has no backward pass, optimizer or training accumulation; eval-mode GatedDeltaNet calls the installed forward kernel. The code evaluates every sequence's updated sums and releases the prior forward graph. Those constructions avoid retaining a training graph over the corpus. They do not supply a Metal buffer counter. Residual allocation accumulation remains unobservable with the installed APIs; byte headroom is not evidence against the count cap.
+
+## Decisions after calibration
+
+Projection includes all518 frozen sequences and every nonfinal layer's complete fixed grid; loading and serialization are listed separately and the estimate cannot satisfy the under-hour acceptance. A successful resource probe authorises no scientific conclusion. Before a full fit, inspect its estimates and peak record, retain the same allocator policy, and announce a separate launch. If an operating limit or scientific rule cannot be satisfied, stop dependent work and ask the Director. Do not reduce corpus, basis or grid on the strength of a cost estimate.
+
+Every checkpoint launch uses the primary checkout's process lock through load_runtime/load_policy, with a fresh primary lock and mapped-MLX inventory. No other process is killed or its lock cleared. Launch/end are appended to the heartbeat. Long runs carry elapsed/token/peak/working-set-share progress and supervision under amended R46: kernel pressure critical on two consecutive30-second samples is the intervention signal; warning and a one-off swap-pool resize do not trigger termination. Any termination can target only a process launched by this task.
+
+## Scientific fit after resource acceptance
+
+One uncached ArchitectureView.residuals forward per retained sequence over all layers, final pre-norm target. No per-position activation artifact. Store J=W.T, finite float32 all-nonfinal-layer keys, exclusive NPZ/JSON, unchanged LensMaps round-trip. Record per-layer alpha,dbar,n,absolute penalty,held relative SSE and explicitly uncentered R², all fixed-grid candidates, corpus/snapshot/file hashes, actual wall time and peak. No profile is read until the later instrument self-check and hosted replay identity gates. No adapter fits before3.1–3.6 land.
