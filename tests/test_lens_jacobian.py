@@ -214,7 +214,7 @@ def test_proof_requires_both_paths_all_layers_and_frozen_plan(tmp_path):
     with pytest.raises(ValueError, match="proof"):
         j.require_self_check(plan, {})
     checks = [
-        dict(layer=layer, mode=m, outcome="pass")
+        dict(layer=layer, mode=m, outcome="pass", actual_batch_sizes=[1] if m == "restore" else [8])
         for layer in (1, 2, 3)
         for m in ("restore", "broadcast")
     ]
@@ -250,7 +250,12 @@ def test_benchmark_projects_before_measure_and_stops_on_cost():
         directions=16,
         batch_size=8,
         checks=[
-            dict(layer=layer, mode=m, outcome="pass")
+            dict(
+                layer=layer,
+                mode=m,
+                outcome="pass",
+                actual_batch_sizes=[1] if m == "restore" else [8],
+            )
             for layer in (1, 2, 3)
             for m in ("restore", "broadcast")
         ],
@@ -392,7 +397,12 @@ def test_benchmark_refuses_falsified_memory_projection_before_next_measurement()
         directions=16,
         batch_size=8,
         checks=[
-            dict(layer=layer, mode=mode, outcome="pass")
+            dict(
+                layer=layer,
+                mode=mode,
+                outcome="pass",
+                actual_batch_sizes=[1] if mode == "restore" else [8],
+            )
             for layer in (1, 2, 3)
             for mode in ("restore", "broadcast")
         ],
@@ -415,3 +425,414 @@ def test_zero_primal_step_fallback_does_not_divide_by_tangent_norm():
     j = api()
     np.testing.assert_allclose(j.finite_difference_steps(0, np.array([2.0])), [0.01])
     np.testing.assert_allclose(j.finite_difference_steps(5, np.array([2.0])), [0.025])
+
+
+def fake_array_backend(monkeypatch):
+    """Pure array/runtime double: importing it never initializes Metal."""
+    import sys
+    from types import ModuleType
+
+    backend = ModuleType("mlx.core")
+    backend.peak = 10
+    backend.get_peak_memory = lambda: backend.peak
+    backend.device_info = lambda: {"max_recommended_working_set_size": 10000}
+    backend.array = np.asarray
+    backend.float32 = np.float32
+    backend.zeros_like = np.zeros_like
+    backend.broadcast_to = np.broadcast_to
+    backend.eval = lambda *args: None
+    backend.linalg = np.linalg
+    package = ModuleType("mlx")
+    package.core = backend
+    monkeypatch.setitem(sys.modules, "mlx", package)
+    monkeypatch.setitem(sys.modules, "mlx.core", backend)
+    return backend
+
+
+def check_plan():
+    return dict(
+        plan_sha256="frozen",
+        self_layers=[1, 2, 3],
+        self_row=0,
+        self_position=0,
+        working_set_bytes=10000,
+        initial_peak_bytes=100,
+        self_bounds=dict(atol=1e-5, rtol=1e-5),
+        stability_bounds=dict(atol=1e-5, rtol=1e-5),
+        seeds=dict(self_directions=7),
+    )
+
+
+@pytest.mark.parametrize("breach_at", ["prepare", "reference", "half", "restore"])
+@pytest.mark.parametrize("peak", [140, 7000])
+def test_self_check_stops_between_internal_workloads(monkeypatch, tmp_path, breach_at, peak):
+    """§3.3/R47 review R1: no later reference/candidate after any breached workload."""
+    import json
+    from types import SimpleNamespace
+
+    j = api()
+    backend = fake_array_backend(monkeypatch)
+    calls = []
+
+    def mark(name):
+        calls.append(name)
+        if name == breach_at:
+            backend.peak = peak
+
+    def prepare(*args, **kwargs):
+        mark("prepare")
+        return SimpleNamespace(epsilon=0.01)
+
+    def reference(state, directions, *, epsilon_scale=1.0, **kwargs):
+        mark("reference" if epsilon_scale == 1 else "half")
+        return directions
+
+    def candidate(state, directions, *, mode, **kwargs):
+        mark(mode)
+        return directions
+
+    monkeypatch.setattr(j, "prepare_position", prepare)
+    monkeypatch.setattr(j, "reference_responses", reference)
+    monkeypatch.setattr(j, "cached_responses", candidate)
+    with pytest.raises(ValueError):
+        j.run_jacobian_stage(
+            SimpleNamespace(hidden_size=2),
+            [dict(ids=[1])],
+            check_plan(),
+            stage="check",
+            record_dir=tmp_path,
+        )
+    expected = ["prepare", "reference", "half", "restore"]
+    assert calls == expected[: expected.index(breach_at) + 1]
+    stopped = json.loads((tmp_path / "stop.json").read_text())
+    assert stopped["peak_bytes"] == peak
+    assert stopped["projected_peak_bytes"] == 100
+    assert stopped["working_set_bytes"] == 10000
+
+
+@pytest.mark.parametrize("breach_at", ["prepare", "candidate"])
+def test_benchmark_checks_first_extreme_before_second_prepare(monkeypatch, breach_at):
+    """§3.3/R47 review R1: internal first-extreme breach prevents second extreme."""
+    from types import SimpleNamespace
+
+    j = api()
+    backend = fake_array_backend(monkeypatch)
+    calls = []
+
+    def prepare(*args, **kwargs):
+        calls.append("prepare")
+        if breach_at == "prepare":
+            backend.peak = 140
+        return None
+
+    def candidate(*args, **kwargs):
+        calls.append("candidate")
+        backend.peak = 140
+        return np.ones((2, 2))
+
+    monkeypatch.setattr(j, "prepare_position", prepare)
+    monkeypatch.setattr(j, "cached_responses", candidate)
+    plan = check_plan() | dict(
+        layers=[1, 2, 3],
+        hidden_size=2,
+        batches=[8],
+        fit_positions=[dict(row=0, position=0)] * 400,
+        held_positions=[dict(row=1, position=1)],
+    )
+    proof = dict(
+        plan_sha256="frozen",
+        directions=16,
+        batch_size=8,
+        checks=[
+            dict(
+                layer=layer,
+                mode=mode,
+                outcome="pass",
+                actual_batch_sizes=[1] if mode == "restore" else [8],
+            )
+            for layer in (1, 2, 3)
+            for mode in ("restore", "broadcast")
+        ],
+    )
+    with pytest.raises(ValueError):
+        j.benchmark(SimpleNamespace(hidden_size=2), [dict(ids=[1]), dict(ids=[1, 2])], plan, proof)
+    assert calls == (["prepare"] if breach_at == "prepare" else ["prepare", "candidate"])
+
+
+@pytest.mark.parametrize("batch_size", [32, 64])
+def test_self_check_exercises_actual_broadcast_width(monkeypatch, batch_size):
+    """§3.3/R52 review R2: 16 unique directions must exercise actual batch32/64 arrays."""
+    from types import SimpleNamespace
+
+    j = api()
+    fake_array_backend(monkeypatch)
+    state = SimpleNamespace(
+        view=SimpleNamespace(hidden_size=2),
+        primal=np.ones((1, 1, 2)),
+        primal_norm=2.0,
+        prefix_cache=[],
+        layer=1,
+        epsilon=0.02,
+    )
+    monkeypatch.setattr(j, "prepare_position", lambda *a, **k: state)
+    reference_rows = []
+
+    def reference(state, directions, **kwargs):
+        reference_rows.append(len(directions))
+        return directions
+
+    monkeypatch.setattr(j, "reference_responses", reference)
+    cache_widths, tail_widths = [], []
+
+    def cache(entries, *, batch_size):
+        cache_widths.append(batch_size)
+        return []
+
+    def tail(view, layer, h, cache):
+        tail_widths.append(h.shape[0])
+        return h
+
+    monkeypatch.setattr(j, "copy_cache", cache)
+    monkeypatch.setattr(j, "pre_norm_tail", tail)
+    proof = j.self_check(
+        SimpleNamespace(hidden_size=2), [dict(ids=[1])], check_plan(), batch_size=batch_size
+    )
+    assert reference_rows == [16] * 6
+    assert max(cache_widths) == batch_size
+    assert max(tail_widths) == batch_size
+    assert proof["directions"] == 16
+    assert {c["candidate_rows"] for c in proof["checks"]} == {batch_size}
+    j.require_self_check(check_plan(), proof, batch_size=batch_size)
+    proof["checks"][-1]["actual_batch_sizes"] = [16]
+    with pytest.raises(ValueError, match="proof"):
+        j.require_self_check(check_plan(), proof, batch_size=batch_size)
+    assert {c["outcome"] for c in proof["checks"]} == {"pass"}
+
+
+@pytest.mark.parametrize("route", ["reference", "cached_copy", "cached_plus"])
+def test_derivative_guard_stops_before_next_sign_or_cache(monkeypatch, route):
+    """§3.3/R47 review R1: the guard also runs inside the FD direction/sign loops."""
+    from types import SimpleNamespace
+
+    j = api()
+    backend = fake_array_backend(monkeypatch)
+    state = SimpleNamespace(
+        view=SimpleNamespace(hidden_size=2),
+        primal=np.ones((1, 1, 2)),
+        full_primal=np.ones((1, 2, 2)),
+        position=0,
+        primal_norm=2.0,
+        prefix_cache=[],
+        layer=1,
+        epsilon=0.02,
+    )
+    calls = []
+
+    def copy(entries, *, batch_size):
+        calls.append("copy")
+        if route == "cached_copy":
+            backend.peak = 140
+        return []
+
+    def tail(view, layer, h, cache=None):
+        calls.append("tail")
+        backend.peak = 140
+        return h
+
+    monkeypatch.setattr(j, "copy_cache", copy)
+    monkeypatch.setattr(j, "pre_norm_tail", tail)
+    guard = j.WorkloadMemoryGuard(100, 10000, backend.get_peak_memory)
+    with pytest.raises(ValueError):
+        if route == "reference":
+            j.reference_responses(state, np.eye(2), guard=guard)
+        else:
+            j.cached_responses(state, np.eye(2), mode="broadcast", guard=guard)
+    assert (
+        calls
+        == {"reference": ["tail"], "cached_copy": ["copy"], "cached_plus": ["copy", "tail"]}[route]
+    )
+
+
+def test_prepare_guard_stops_before_prefix_cache_allocation(monkeypatch):
+    """§3.3/R47 review R1: full-primal breach stops before prefix preparation starts."""
+    from types import SimpleNamespace
+
+    j = api()
+    backend = fake_array_backend(monkeypatch)
+    calls = []
+
+    def block(*args):
+        calls.append("block")
+        backend.peak = 140
+        return np.ones((1, 2, 2))
+
+    def cache():
+        pytest.fail("prefix cache allocated after full-primal breach")
+
+    view = SimpleNamespace(
+        num_layers=3,
+        embed=lambda ids: np.ones((1, len(ids), 2)),
+        masks=lambda *a: {},
+        run_block=block,
+        make_cache=cache,
+    )
+    guard = j.WorkloadMemoryGuard(100, 10000, backend.get_peak_memory)
+    with pytest.raises(ValueError):
+        j.prepare_position(view, [1, 2], 1, 1, guard=guard)
+    assert calls == ["block"]
+
+
+def test_validation_guard_stops_before_half_epsilon_measurement(monkeypatch):
+    """§3.6/R47 review R1: held validation shares the bounded derivative guard."""
+    from types import SimpleNamespace
+
+    j = api()
+    v = importlib.import_module("local_llm_lab.pipeline.lens_fitting.validation")
+    backend = fake_array_backend(monkeypatch)
+    calls = []
+
+    def prepare(*args, **kwargs):
+        calls.append("prepare")
+        return None
+
+    def candidate(*args, **kwargs):
+        calls.append("candidate")
+        backend.peak = 140
+        return np.ones((32, 2))
+
+    monkeypatch.setattr(j, "prepare_position", prepare)
+    monkeypatch.setattr(j, "cached_responses", candidate)
+    choice = dict(
+        layer=1,
+        mode="broadcast",
+        batch_size=8,
+        reference_passed=True,
+        peak_bytes=10,
+        projected_peak_bytes=100,
+        projected_seconds=1,
+    )
+    plan = dict(
+        plan_sha256="frozen",
+        layers=[1],
+        rows_sha256=j.digest(rows()),
+        held_positions=[dict(row=2, split="held", span="task", position=0)],
+        fit_positions=[dict(row=0, split="fit", span="task", position=0)],
+        paths=["restore", "broadcast"],
+        batches=[8],
+        working_set_bytes=10000,
+        seeds=dict(validation_directions=7),
+        response_bounds=dict(atol=0.1, rtol=0.1),
+        stability_bounds=dict(atol=0.1, rtol=0.1),
+    )
+    report = dict(
+        plan_sha256="frozen",
+        status="ready",
+        selected={"1": choice},
+        observations=[choice],
+        projected_positions=400,
+    )
+    with pytest.raises(ValueError, match="projection"):
+        v.validate_maps(SimpleNamespace(hidden_size=2), rows(), {1: np.eye(2)}, plan, report)
+    assert calls == ["prepare", "candidate"]
+
+
+def test_fit_guard_stops_before_first_basis_after_prepare_breach(monkeypatch):
+    """§3.3/R47 review R1: a fit preparation breach cannot launch its basis tail."""
+    from types import SimpleNamespace
+
+    j = api()
+    backend = fake_array_backend(monkeypatch)
+    calls = []
+
+    def prepare(*args, **kwargs):
+        calls.append("prepare")
+        backend.peak = 140
+        return None
+
+    def basis(*args, **kwargs):
+        calls.append("basis")
+        return np.eye(2)
+
+    monkeypatch.setattr(j, "prepare_position", prepare)
+    monkeypatch.setattr(j, "full_jacobian", basis)
+    plan = check_plan() | dict(
+        layers=[1, 2, 3],
+        hidden_size=2,
+        rows_sha256=j.digest(rows()),
+        paths=["restore", "broadcast"],
+        batches=[8],
+        fit_positions=[dict(row=0, position=0, span="task")] * 400,
+    )
+    checks = [
+        dict(
+            layer=layer,
+            mode=mode,
+            outcome="pass",
+            actual_batch_sizes=[1] if mode == "restore" else [8],
+        )
+        for layer in (1, 2, 3)
+        for mode in ("restore", "broadcast")
+    ]
+    proof = dict(plan_sha256="frozen", checks=checks, directions=16, batch_size=8)
+    choices = {
+        str(layer): dict(
+            layer=layer,
+            mode="broadcast",
+            batch_size=8,
+            reference_passed=True,
+            peak_bytes=10,
+            projected_peak_bytes=100,
+            projected_seconds=1,
+        )
+        for layer in (1, 2, 3)
+    }
+    report = dict(
+        plan_sha256="frozen",
+        status="ready",
+        selected=choices,
+        observations=list(choices.values()),
+        projected_positions=400,
+    )
+    with pytest.raises(ValueError, match="projection"):
+        j.fit_jacobian(SimpleNamespace(hidden_size=2, num_layers=4), rows(), plan, proof, report)
+    assert calls == ["prepare"]
+
+
+@pytest.mark.parametrize("batch_size", [32, 64])
+def test_native_self_check_large_batch_dimensions(monkeypatch, batch_size):
+    """§3.3/R52 review R2: actual tiny cache and tail arrays reach batch32/64."""
+    from test_live_lens_native import tiny_model
+
+    from local_llm_lab.arch import ArchitectureView
+
+    j = api()
+    view = ArchitectureView.from_model(tiny_model())
+    plan = check_plan() | dict(
+        working_set_bytes=4 * 2**30,
+        initial_peak_bytes=2**28,
+        self_position=3,
+        self_bounds=dict(atol=3e-3, rtol=3e-2),
+        stability_bounds=dict(atol=3e-3, rtol=3e-2),
+    )
+    original_copy, original_tail = j.copy_cache, j.pre_norm_tail
+    cache_widths, tail_widths = [], []
+
+    def copy(cache, *, batch_size=1):
+        entries = original_copy(cache, batch_size=batch_size)
+        for entry in entries:
+            if getattr(entry, "keys", None) is not None:
+                cache_widths.append(entry.keys.shape[0])
+            elif hasattr(entry, "cache"):
+                cache_widths.extend(a.shape[0] for a in entry.cache if a is not None)
+        return entries
+
+    def tail(view, layer, h, cache=None):
+        tail_widths.append(h.shape[0])
+        return original_tail(view, layer, h, cache)
+
+    monkeypatch.setattr(j, "copy_cache", copy)
+    monkeypatch.setattr(j, "pre_norm_tail", tail)
+    proof = j.self_check(view, [dict(ids=[1, 2, 3, 4])], plan, batch_size=batch_size)
+    j.require_self_check(plan, proof, batch_size=batch_size)
+    assert max(cache_widths) == batch_size
+    assert max(tail_widths) == batch_size

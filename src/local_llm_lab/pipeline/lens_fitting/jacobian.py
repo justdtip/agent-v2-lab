@@ -244,6 +244,58 @@ def time_gate(projected_seconds: dict) -> None:
         raise ValueError("projected cost exceeds 25 minutes/layer; Director choice required")
 
 
+class MemoryStopped(ValueError):
+    """A measured workload invalidated its envelope; retain exact stop evidence."""
+
+    def __init__(self, report):
+        super().__init__(report["reason"])
+        self.report = report
+
+
+@dataclass
+class WorkloadMemoryGuard:
+    projected_bytes: float
+    working_set_bytes: float
+    read_peak: Any
+    context: dict = field(default_factory=dict)
+    recent: list = field(default_factory=list)
+    batch_widths: set = field(default_factory=set)
+
+    def __post_init__(self):
+        memory_gate(self.projected_bytes, self.working_set_bytes)
+
+    def __call__(self, workload, **details):
+        peak = self.read_peak()
+        if "actual_batch_size" in details:
+            self.batch_widths.add(details["actual_batch_size"])
+        observed = dict(
+            workload=workload,
+            **self.context,
+            **details,
+            peak_bytes=float(peak) if np.isfinite(peak) else None,
+            projected_peak_bytes=self.projected_bytes,
+            working_set_bytes=self.working_set_bytes,
+            cap_bytes=0.6 * self.working_set_bytes,
+        )
+        # Keep bounded evidence rather than retaining millions of successful basis calls.
+        self.recent.append(observed)
+        self.recent[:] = self.recent[-8:]
+        reason = None
+        if not np.isfinite(peak) or peak < 0:
+            reason = "nonfinite or negative measured memory peak"
+        elif peak > 0.6 * self.working_set_bytes:
+            reason = "measured memory peak exceeded 0.6 working set"
+        elif peak > self.projected_bytes:
+            reason = "memory projection falsified by measured workload peak"
+        if reason:
+            raise MemoryStopped(dict(reason=reason, **observed, recent_workloads=list(self.recent)))
+
+
+def _check_workload(guard, workload, **details):
+    if guard is not None:
+        guard(workload, **details)
+
+
 def unit_directions(count: int, dimension: int, seed: int) -> np.ndarray:
     directions = np.random.default_rng(seed).normal(size=(count, dimension)).astype(np.float32)
     return directions / np.linalg.norm(directions, axis=1, keepdims=True)
@@ -314,7 +366,7 @@ class PositionState:
     primal_norm: float
 
 
-def prepare_position(view, ids, layer: int, position: int) -> PositionState:
+def prepare_position(view, ids, layer: int, position: int, *, guard=None) -> PositionState:
     """Cache the prefix through *all* blocks, derive current residual on a clone.
 
     The full original sequence (including suffix) defines epsilon. Its residual
@@ -330,6 +382,7 @@ def prepare_position(view, ids, layer: int, position: int) -> PositionState:
         full = view.run_block(index, full, masks, None)
     full = full.astype(mx.float32)
     mx.eval(full)
+    _check_workload(guard, "prepare_full_primal")
     norm = float(mx.linalg.norm(full).item())
     if not np.isfinite(norm):
         raise ValueError("nonfinite full primal")
@@ -337,15 +390,21 @@ def prepare_position(view, ids, layer: int, position: int) -> PositionState:
     cache = view.make_cache()
     if position:
         prefix = view.embed(ids[:position])
-        pre_norm_tail(view, 0, prefix, cache)
+        prefix_output = pre_norm_tail(view, 0, prefix, cache)
+        mx.eval(prefix_output)
+        _check_workload(guard, "prepare_prefix")
+        del prefix_output
         # Materialize and own the complete snapshot, including SSM metadata.
         cache = copy_cache(cache)
+        _check_workload(guard, "prepare_prefix_copy")
     current_cache = copy_cache(cache) if position else view.make_cache()
+    _check_workload(guard, "prepare_current_cache")
     h = view.embed(ids[position : position + 1])
     masks = view.masks(h, current_cache)
     for index in range(layer):
         h = view.run_block(index, h, masks, current_cache[index])
     mx.eval(h)
+    _check_workload(guard, "prepare_current_primal")
     return PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon, norm)
 
 
@@ -359,7 +418,7 @@ def _directions(state, directions):
     return d, norms
 
 
-def reference_responses(state, directions, *, epsilon_scale=1.0):
+def reference_responses(state, directions, *, epsilon_scale=1.0, guard=None):
     """Full-sequence uncached central FD; perturb only the selected source row."""
     import mlx.core as mx
 
@@ -367,18 +426,23 @@ def reference_responses(state, directions, *, epsilon_scale=1.0):
     if not np.isfinite(epsilon_scale) or epsilon_scale <= 0:
         raise ValueError("positive epsilon scale required")
     responses = []
-    for direction, norm in zip(directions, norms, strict=True):
+    for number, (direction, norm) in enumerate(zip(directions, norms, strict=True)):
         eps = float(finite_difference_steps(state.primal_norm, np.array([norm]), epsilon_scale)[0])
         tangent = mx.zeros_like(state.full_primal)
         tangent[0, state.position] = mx.array(direction)
         plus = pre_norm_tail(state.view, state.layer, state.full_primal + eps * tangent)
+        mx.eval(plus)
+        _check_workload(guard, "reference_plus", direction=number)
         minus = pre_norm_tail(state.view, state.layer, state.full_primal - eps * tangent)
+        mx.eval(minus)
+        _check_workload(guard, "reference_minus", direction=number)
         response = (plus[0, state.position] - minus[0, state.position]) / (2 * eps)
         responses.append(np.array(response, dtype=np.float32))
+        _check_workload(guard, "reference_response", direction=number)
     return np.stack(responses)
 
 
-def cached_responses(state, directions, *, mode, batch_size=8, epsilon_scale=1.0):
+def cached_responses(state, directions, *, mode, batch_size=8, epsilon_scale=1.0, guard=None):
     """Each direction uses the reference epsilon, independent of row/batch norm.
 
     Restore is serial per direction; broadcast batches direction rows. Each plus
@@ -402,15 +466,32 @@ def cached_responses(state, directions, *, mode, batch_size=8, epsilon_scale=1.0
         outputs = []
         for sign in (1, -1):
             cache = copy_cache(state.prefix_cache, batch_size=d.shape[0])
+            _check_workload(
+                guard,
+                "candidate_cache_copy",
+                direction_start=start,
+                sign=sign,
+                actual_batch_size=d.shape[0],
+            )
             value = pre_norm_tail(state.view, state.layer, primal + sign * eps * d, cache)
             mx.eval(value)
+            _check_workload(
+                guard,
+                "candidate_tail",
+                direction_start=start,
+                sign=sign,
+                actual_batch_size=d.shape[0],
+            )
             outputs.append(value)
         response = (outputs[0] - outputs[1]) / (2 * eps)
         results.append(np.array(response[:, 0], dtype=np.float32))
+        _check_workload(
+            guard, "candidate_response", direction_start=start, actual_batch_size=d.shape[0]
+        )
     return np.concatenate(results)
 
 
-def full_jacobian(state, *, mode, batch_size=8):
+def full_jacobian(state, *, mode, batch_size=8, guard=None):
     """Measure every basis column; avoid a hidden-size squared device basis."""
     dimension = state.view.hidden_size
     matrix = np.empty((dimension, dimension), dtype=np.float32)
@@ -418,7 +499,9 @@ def full_jacobian(state, *, mode, batch_size=8):
         end = min(start + batch_size, dimension)
         basis = np.zeros((end - start, dimension), dtype=np.float32)
         basis[np.arange(end - start), np.arange(start, end)] = 1
-        matrix[:, start:end] = cached_responses(state, basis, mode=mode, batch_size=batch_size).T
+        matrix[:, start:end] = cached_responses(
+            state, basis, mode=mode, batch_size=batch_size, guard=guard
+        ).T
     return matrix
 
 
@@ -431,24 +514,44 @@ def self_check(view, rows, plan, *, batch_size=8):
     device_working = mx.device_info()["max_recommended_working_set_size"]
     if plan["working_set_bytes"] > device_working:
         raise ValueError("declared working set exceeds actual device working set")
-    if mx.get_peak_memory() > plan["initial_peak_bytes"] * batch_size / 8:
-        raise ValueError("initial memory projection already falsified by process peak")
-    memory_gate(plan["initial_peak_bytes"] * batch_size / 8, plan["working_set_bytes"])
+    guard = WorkloadMemoryGuard(
+        plan["initial_peak_bytes"] * batch_size / 8,
+        plan["working_set_bytes"],
+        mx.get_peak_memory,
+        context=dict(stage="self_check", batch_size=batch_size),
+    )
+    guard("before_self_check")
     directions = unit_directions(16, view.hidden_size, plan["seeds"]["self_directions"])
+    # Preserve the 16 scientific directions, repeat their rows to exercise the
+    # configured candidate width rather than silently testing only batch16.
+    row_indices = np.arange(max(16, batch_size)) % 16
+    candidate_directions = directions[row_indices]
     checks = []
     for layer in plan["self_layers"]:
-        state = prepare_position(view, rows[plan["self_row"]]["ids"], layer, plan["self_position"])
-        reference = reference_responses(state, directions)
-        half = reference_responses(state, directions, epsilon_scale=0.5)
+        guard.context.update(layer=layer, mode="reference", epsilon_scale=1.0)
+        state = prepare_position(
+            view, rows[plan["self_row"]]["ids"], layer, plan["self_position"], guard=guard
+        )
+        guard("self_check_prepared")
+        reference = reference_responses(state, directions, guard=guard)
+        guard("self_check_reference")
+        guard.context["epsilon_scale"] = 0.5
+        half = reference_responses(state, directions, epsilon_scale=0.5, guard=guard)
+        guard("self_check_half_reference")
         stable = response_agreement(reference, half, **plan["stability_bounds"], stable=True)
         for mode in ("restore", "broadcast"):
-            candidate = cached_responses(state, directions, mode=mode, batch_size=batch_size)
-            check = response_agreement(
-                reference, candidate, **plan["self_bounds"], stable=stable["outcome"] == "pass"
+            guard.context.update(mode=mode, epsilon_scale=1.0)
+            guard.batch_widths.clear()
+            candidate = cached_responses(
+                state, candidate_directions, mode=mode, batch_size=batch_size, guard=guard
             )
-            memory_gate(mx.get_peak_memory(), plan["working_set_bytes"])
-            if mx.get_peak_memory() > plan["initial_peak_bytes"] * batch_size / 8:
-                raise ValueError("self-check memory projection falsified by measured peak")
+            guard("self_check_candidate")
+            check = response_agreement(
+                reference[row_indices],
+                candidate,
+                **plan["self_bounds"],
+                stable=stable["outcome"] == "pass",
+            )
             checks.append(
                 dict(
                     layer=layer,
@@ -456,6 +559,8 @@ def self_check(view, rows, plan, *, batch_size=8):
                     **check,
                     epsilon=state.epsilon,
                     reference_stability=stable,
+                    candidate_rows=len(candidate_directions),
+                    actual_batch_sizes=sorted(guard.batch_widths),
                 )
             )
     return dict(
@@ -477,6 +582,10 @@ def require_self_check(plan, proof, *, batch_size=8):
         or len(checks) != len(expected)
         or {(c.get("layer"), c.get("mode")) for c in checks} != expected
         or any(c.get("outcome") != "pass" for c in checks)
+        or any(
+            c.get("actual_batch_sizes") != ([1] if c.get("mode") == "restore" else [batch_size])
+            for c in checks
+        )
     ):
         raise ValueError("missing or failed cached/reference self-check proof")
 
@@ -595,16 +704,28 @@ def benchmark(view, rows, plan, proof, *, progress=None):
             plan["fit_positions"] + plan["held_positions"], key=lambda s: len(rows[s["row"]]["ids"])
         )
         by_prefix = max(plan["fit_positions"] + plan["held_positions"], key=lambda s: s["position"])
+        guard = WorkloadMemoryGuard(
+            plan["initial_peak_bytes"] * batch / 8,
+            plan["working_set_bytes"],
+            mx.get_peak_memory,
+            context=dict(stage="benchmark", layer=layer, mode=mode, batch_size=batch),
+        )
+        guard("before_benchmark_candidate")
         observations = []
-        for sample in (by_length, by_prefix):
+        for extreme, sample in enumerate((by_length, by_prefix)):
+            guard.context.update(extreme=extreme, sample=sample)
             started = time.monotonic()
-            state = prepare_position(view, rows[sample["row"]]["ids"], layer, sample["position"])
+            state = prepare_position(
+                view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
+            )
+            guard("benchmark_prepared")
             preparation_s = time.monotonic() - started
             width = min(batch, view.hidden_size)
             directions = np.zeros((width, view.hidden_size), dtype=np.float32)
             directions[np.arange(width), np.arange(width)] = 1
             started = time.monotonic()
-            cached_responses(state, directions, mode=mode, batch_size=batch)
+            cached_responses(state, directions, mode=mode, batch_size=batch, guard=guard)
+            guard("benchmark_derivative")
             observations.append(
                 dict(
                     elapsed_s=time.monotonic() - started, preparation_s=preparation_s, sample=sample
@@ -669,12 +790,29 @@ def fit_jacobian(view, rows, plan, proof, benchmark_report, *, progress=None):
     for layer in plan["layers"]:
         layer_start = time.monotonic()
         candidate = benchmark_report["selected"][str(layer)]
+        guard = WorkloadMemoryGuard(
+            max(
+                candidate["projected_peak_bytes"],
+                max(o["peak_bytes"] for o in benchmark_report["observations"]),
+            ),
+            plan["working_set_bytes"],
+            mx.get_peak_memory,
+            context=dict(
+                stage="fit", layer=layer, mode=candidate["mode"], batch_size=candidate["batch_size"]
+            ),
+        )
+        guard("before_fit_layer")
         c = Convergence()
         for sample in plan["fit_positions"]:
-            state = prepare_position(view, rows[sample["row"]]["ids"], layer, sample["position"])
-            matrix = full_jacobian(
-                state, mode=candidate["mode"], batch_size=candidate["batch_size"]
+            guard.context["sample"] = sample
+            state = prepare_position(
+                view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
             )
+            guard("fit_prepared")
+            matrix = full_jacobian(
+                state, mode=candidate["mode"], batch_size=candidate["batch_size"], guard=guard
+            )
+            guard("fit_basis")
             c.add(matrix, span=sample["span"])
             tokens_done += len(rows[sample["row"]]["ids"])
             del state, matrix
@@ -797,7 +935,7 @@ def run_jacobian_stage(view, rows, plan, *, stage, record_dir, progress=None):
         return result, validation
     except (ValueError, RuntimeError) as error:
         failure = dict(plan_sha256=plan["plan_sha256"], status="stop_required", reason=str(error))
-        if isinstance(error, FitStopped):
+        if isinstance(error, (FitStopped, MemoryStopped)):
             failure.update(error.report)
         write_record(record_dir / "stop.json", failure)
         raise

@@ -53,7 +53,10 @@ def validate_layer(matrix, samples, directions, measure, *, response_bounds, sta
 
 def validate_maps(view, rows, maps, plan, benchmark_report, *, progress=None):
     """32 common random unit directions; held means share fitting's span weights."""
+    import mlx.core as mx
+
     from local_llm_lab.pipeline.lens_fitting.jacobian import (
+        WorkloadMemoryGuard,
         cached_responses,
         digest,
         prepare_position,
@@ -73,23 +76,43 @@ def validate_maps(view, rows, maps, plan, benchmark_report, *, progress=None):
     results = {}
     for layer in plan["layers"]:
         selected = benchmark_report["selected"][str(layer)]
+        guard = WorkloadMemoryGuard(
+            max(
+                selected["projected_peak_bytes"],
+                max(o["peak_bytes"] for o in benchmark_report["observations"]),
+            ),
+            plan["working_set_bytes"],
+            mx.get_peak_memory,
+            context=dict(
+                stage="validation",
+                layer=layer,
+                mode=selected["mode"],
+                batch_size=selected["batch_size"],
+            ),
+        )
+        guard("before_validation_layer")
         # Preserve only one prepared prompt between epsilon and half-epsilon calls.
         current, state = None, None
 
-        def measure(sample, directions, scale, *, layer=layer, selected=selected):
+        def measure(sample, directions, scale, *, layer=layer, selected=selected, guard=guard):
             nonlocal current, state
+            guard.context.update(sample=sample, epsilon_scale=scale)
             if current != sample:
                 state = prepare_position(
-                    view, rows[sample["row"]]["ids"], layer, sample["position"]
+                    view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
                 )
+                guard("validation_prepared")
                 current = sample
-            return cached_responses(
+            response = cached_responses(
                 state,
                 directions,
                 mode=selected["mode"],
                 batch_size=selected["batch_size"],
                 epsilon_scale=scale,
+                guard=guard,
             )
+            guard("validation_response")
+            return response
 
         results[str(layer)] = validate_layer(
             maps[layer],
