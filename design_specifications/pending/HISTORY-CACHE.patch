@@ -1,0 +1,2011 @@
+diff --git a/research/cache_equivalence.py b/research/cache_equivalence.py
+index 204fea2..eb08962 100644
+--- a/research/cache_equivalence.py
++++ b/research/cache_equivalence.py
+@@ -5,34 +5,453 @@ optimisation, so every trajectory must be bit-identical to one produced without
+ misaligned cache would not raise; it would silently attend to the wrong keys and produce plausible
+ but different actions, which is exactly the kind of bug that survives a green test suite.
+ 
+-So this compares cached and uncached runs of the same tasks under greedy decoding and reports any
+-divergence, plus the measured speedup.
++The history strategy requires two fixed-token checks: reuse versus same-schedule recomputation,
++and the candidate versus the installed native generator's ordinary schedule. Both decision
++logits and complete logical cache state must be bit-identical, with actual reuse exercised.
++
++The legacy trim/snapshot modes compare greedy trajectories. Their elapsed times are descriptive;
++different trajectories are different workloads and cannot establish a cache speedup.
+ 
+ Run with: uv run python research/cache_equivalence.py --model qwen35-4b --strategy snapshot
++Fixed history: --model qwen35-4b --strategy history --fixed-history corpus.json --report result.json
+ """
+ 
+ from __future__ import annotations
+ 
+ import argparse
++import hashlib
++import json
+ import time
+ from collections.abc import Sequence
+ from dataclasses import replace
++from pathlib import Path
+ 
+ TASKS = 6
+ MAX_STEPS = 24
+ MAX_TOKENS = 200
+ 
+ 
++def _array_bits(value):
++    import mlx.core as mx
++    import numpy as np
++
++    return np.array(mx.contiguous(value).view(mx.uint8)).tobytes()
++
++
++def compare_logits(candidate, reference):
++    """Bit equality is the gate; errors, argmax and margins are descriptive only."""
++    import mlx.core as mx
++    import numpy as np
++
++    same_shape = candidate.shape == reference.shape
++    finite = bool(mx.all(mx.isfinite(candidate))) and bool(mx.all(mx.isfinite(reference)))
++    a = np.array(candidate.astype(mx.float32))
++    b = np.array(reference.astype(mx.float32))
++
++    def margin(row):
++        top = np.sort(row.reshape(-1, row.shape[-1])[-1])[-2:]
++        return float(top[-1] - top[-2]) if len(top) == 2 and finite else None
++
++    return {
++        "bit_identical": bool(
++            same_shape
++            and finite
++            and candidate.dtype == reference.dtype
++            and _array_bits(candidate) == _array_bits(reference)
++        ),
++        "argmax_equal": bool(same_shape and finite and np.array_equal(a.argmax(-1), b.argmax(-1))),
++        "max_abs_error": float(np.max(np.abs(a - b))) if same_shape and finite else None,
++        "winning_margin": [margin(a), margin(b)],
++        "finite": finite,
++        "candidate_sha256": hashlib.sha256(_array_bits(candidate)).hexdigest(),
++        "reference_sha256": hashlib.sha256(_array_bits(reference)).hexdigest(),
++        "candidate_dtype": str(candidate.dtype),
++        "reference_dtype": str(reference.dtype),
++    }
++
++
++def _cache_fingerprint(cache):
++    """Logical state plus metadata, excluding unused KV allocation capacity."""
++    import mlx.core as mx
++
++    finite = True
++
++    def encode(value):
++        nonlocal finite
++        if isinstance(value, mx.array):
++            finite &= bool(mx.all(mx.isfinite(value)))
++            return {
++                "shape": list(value.shape),
++                "dtype": str(value.dtype),
++                "sha256": hashlib.sha256(_array_bits(value)).hexdigest(),
++            }
++        if isinstance(value, (list, tuple)):
++            return [encode(item) for item in value]
++        if isinstance(value, dict):
++            return {str(key): encode(item) for key, item in value.items()}
++        if value is None or isinstance(value, (int, float, str, bool)):
++            return value
++        raise TypeError(f"unsupported native cache metadata: {type(value).__name__}")
++
++    layers = []
++    for entry in cache:
++        layers.append(
++            {
++                "class": type(entry).__module__ + "." + type(entry).__name__,
++                "state": encode(entry.state),
++                "meta_state": encode(entry.meta_state),
++                "offset": getattr(entry, "offset", None),
++                "lengths": encode(getattr(entry, "lengths", None)),
++                "left_padding": encode(getattr(entry, "left_padding", None)),
++            }
++        )
++    return {"finite": finite, "layers": layers}
++
++
++class _ForwardTrace:
++    """Observe native calls, using the same ledger as production cache/capture."""
++
++    def __init__(self, model, ledger, *, records_inputs=True):
++        self.model, self.ledger = model, ledger
++        self.records_inputs = records_inputs
++        self.rows = []
++
++    def __getattr__(self, name):
++        return getattr(self.model, name)
++
++    def __call__(self, ids, *, cache):
++        import mlx.core as mx
++
++        offset = self.ledger.offset
++        logits = self.model(ids, cache=cache)
++        inputs = ids[0].tolist()
++        if self.records_inputs:
++            self.ledger.record(offset, inputs)
++        elif self.ledger.offset != offset + len(inputs):
++            raise ValueError("production cache failed to account for a forward")
++        # Only the last query is required at each boundary. Do not materialize the
++        # whole prefill x vocabulary matrix merely to diagnose reuse.
++        last = logits[:, -1, :]
++        mx.eval(last)
++        self.rows.append({"offset": offset, "input_ids": inputs, "logits": last})
++        return logits
++
++
++def _generate_fixed(trace, prompt, continuation, cache, *, step_size=None):
++    import mlx.core as mx
++    from mlx_lm.generate import generate_step
++
++    index = 0
++
++    def force(_logprobs):
++        nonlocal index
++        # The library predicts one lookahead beyond the last yielded token.
++        token = continuation[index] if index < len(continuation) else 0
++        index += 1
++        return mx.array([token])
++
++    options = {} if step_size is None else {"prefill_step_size": step_size}
++    emitted = []
++    for token, _ in generate_step(
++        mx.array(prompt),
++        trace,
++        prompt_cache=cache,
++        sampler=force,
++        max_tokens=len(continuation),
++        **options,
++    ):
++        emitted.append(token)
++        trace.ledger.emitted(token)
++    if emitted != continuation:
++        raise ValueError("fixed continuation was not consumed exactly")
++
++
++def _compare_traces(candidate, reference, candidate_state, reference_state, prompt_length):
++    by_position = {row["offset"] + len(row["input_ids"]): row for row in reference}
++    first_difference = None
++    first_greedy = None
++    max_error = 0.0
++    for row in candidate:
++        end = row["offset"] + len(row["input_ids"])
++        other = by_position.get(end)
++        if other is None:
++            first_difference = first_difference or {
++                "position": end - 1,
++                "reason": "missing forward",
++            }
++            continue
++        comparison = compare_logits(row["logits"], other["logits"])
++        max_error = max(max_error, comparison["max_abs_error"] or 0.0)
++        if not comparison["bit_identical"] and first_difference is None:
++            first_difference = {"position": end - 1, **comparison}
++        if not comparison["argmax_equal"] and end >= prompt_length and first_greedy is None:
++            first_greedy = end - prompt_length
++    state_equal = bool(
++        candidate_state["finite"]
++        and reference_state["finite"]
++        and candidate_state == reference_state
++    )
++    first_layer = next(
++        (
++            index
++            for index, (a, b) in enumerate(
++                zip(candidate_state["layers"], reference_state["layers"], strict=True)
++            )
++            if a != b
++        ),
++        None,
++    )
++    return {
++        "status": "passed" if candidate and first_difference is None and state_equal else "failed",
++        "positions_compared": len(candidate),
++        "max_abs_error": max_error,
++        "first_difference": first_difference,
++        "first_differing_greedy_position": first_greedy,
++        "state_bit_identical": state_equal,
++        "first_differing_state_layer": first_layer,
++    }
++
++
++def check_fixed_history(model, view, cases, *, prefill_step_size=2048):
++    """Two independent gates on fixed IDs, with actual cross-turn reuse required.
++
++    A: rebuild the candidate's recorded native partition from scratch.
++    B: the installed generator's existing default schedule, always from the full prompt.
++    No tolerance, greedy-only escape, checkpoint load, lock, or registry mutation occurs here.
++    Tiny random models can exercise this function but cannot certify checkpoint equivalence.
++    """
++    import mlx.core as mx
++    from mlx_lm.generate import generation_stream
++
++    from local_llm_lab.forward import ForwardLedger
++    from local_llm_lab.pipeline.runner import HistoryCache
++
++    if not cases:
++        raise ValueError("fixed history needs at least one turn")
++    for case in cases:
++        prompt = list(case["prompt_ids"])
++        continuation = list(case["continuation_ids"])
++        ForwardLedger(prompt + continuation)
++        if not prompt or any(token >= view.vocab_size for token in prompt + continuation):
++            raise ValueError("fixed token IDs outside model vocabulary")
++    history = HistoryCache(model, view, prefill_step_size=prefill_step_size)
++    turns = []
++    with mx.stream(generation_stream):
++        for index, case in enumerate(cases):
++            prompt, continuation = list(case["prompt_ids"]), list(case["continuation_ids"])
++            suffix = history.prepare(prompt)
++            restored = history.ledger.offset
++            candidate = _ForwardTrace(
++                history.generation_model, history.ledger, records_inputs=False
++            )
++            _generate_fixed(
++                candidate, suffix, continuation, history.cache, step_size=prefill_step_size
++            )
++            history.commit(prompt, continuation)
++            candidate_state = _cache_fingerprint(history.cache)
++
++            # Gate A replays exact recorded chunks through the native model, including
++            # the saved prefix, independently of the candidate's restore implementation.
++            fresh_cache = view.make_cache()
++            same = _ForwardTrace(model, ForwardLedger(prompt))
++            for row in history.ledger.passes:
++                same(mx.array([row.input_ids]), cache=fresh_cache)
++            a = _compare_traces(
++                candidate.rows,
++                same.rows,
++                candidate_state,
++                _cache_fingerprint(fresh_cache),
++                len(prompt),
++            )
++            del same, fresh_cache
++
++            # Gate B never adopts the candidate cadence. Let the installed generator
++            # choose its default prefill partition, as the current runner does.
++            fresh_cache = view.make_cache()
++            legacy = _ForwardTrace(model, ForwardLedger(prompt))
++            _generate_fixed(legacy, prompt, continuation, fresh_cache)
++            candidate_decisions = [
++                r for r in candidate.rows if r["offset"] + len(r["input_ids"]) >= len(prompt)
++            ]
++            legacy_decisions = [
++                r for r in legacy.rows if r["offset"] + len(r["input_ids"]) >= len(prompt)
++            ]
++            b = _compare_traces(
++                candidate_decisions,
++                legacy_decisions,
++                candidate_state,
++                _cache_fingerprint(fresh_cache),
++                len(prompt),
++            )
++            partitions = {
++                "candidate": [
++                    {"offset": row.offset, "input_ids": list(row.input_ids)}
++                    for row in history.ledger.passes
++                ],
++                "legacy": [
++                    {"offset": row.offset, "input_ids": list(row.input_ids)}
++                    for row in legacy.ledger.passes
++                ],
++            }
++            turns.append(
++                {
++                    "turn": index,
++                    "reused_tokens": restored,
++                    "gate_a": a,
++                    "gate_b": b,
++                    "prompt_tokens": len(prompt),
++                    "continuation_tokens": len(continuation),
++                    "forwarded_tokens": history.ledger.offset,
++                    "partitions": partitions,
++                    "prompt_sha256": hashlib.sha256(json.dumps(prompt).encode()).hexdigest(),
++                    "continuation_sha256": hashlib.sha256(
++                        json.dumps(continuation).encode()
++                    ).hexdigest(),
++                }
++            )
++            del legacy, fresh_cache, candidate, candidate_state
++    a_status = (
++        "failed"
++        if any(t["gate_a"]["status"] == "failed" for t in turns)
++        else ("passed" if history.reused_tokens else "inconclusive")
++    )
++    b_status = "passed" if all(t["gate_b"]["status"] == "passed" for t in turns) else "failed"
++    return {
++        "schema_version": 1,
++        "gate_a": {"status": a_status},
++        "gate_b": {"status": b_status},
++        "accepted": a_status == b_status == "passed",
++        "checkpoint_certified": False,
++        "reused_tokens": history.reused_tokens,
++        "encoded_tokens": history.encoded_tokens,
++        "snapshot_bytes": history.snapshot_bytes,
++        "turns": turns,
++        "candidate_prefill_step_size": prefill_step_size,
++        "reference": "installed mlx_lm.generate.generate_step default schedule; native model",
++    }
++
++
+ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+     parser = argparse.ArgumentParser(description=__doc__)
+     parser.add_argument("--model", default="qwen25-coder-3b", help="registered model name or HF id")
+     parser.add_argument(
+         "--strategy",
+         required=True,
+-        choices=("trim", "snapshot"),
++        choices=("trim", "snapshot", "history"),
+         help="explicit non-disabled cache strategy to attest",
+     )
+-    return parser.parse_args(argv)
++    parser.add_argument(
++        "--fixed-history", type=Path, help="JSON episodes with fixed prompt/continuation IDs"
++    )
++    parser.add_argument("--report", type=Path, help="new JSON result file; never updates registry")
++    parser.add_argument("--adapter", type=Path)
++    parser.add_argument(
++        "--prefill-step-size", type=int, default=2048, help="candidate only; reference stays native"
++    )
++    args = parser.parse_args(argv)
++    if args.strategy == "history" and (args.fixed_history is None or args.report is None):
++        parser.error("history requires --fixed-history and --report for both acceptance checks")
++    if args.fixed_history is not None and args.strategy != "history":
++        parser.error("fixed-history checks require the history strategy")
++    if args.prefill_step_size < 1:
++        parser.error("prefill step size must be positive")
++    return args
++
++
++def _read_corpus(path):
++    from local_llm_lab.forward import ForwardLedger
++
++    source = path.read_bytes()
++    corpus = json.loads(source)
++    if corpus.get("schema_version") != 1 or not corpus.get("episodes"):
++        raise ValueError("fixed history requires schema_version 1 and nonempty episodes")
++    for episode in corpus["episodes"]:
++        if not isinstance(episode.get("id"), str) or not episode.get("turns"):
++            raise ValueError("each episode requires an ID and nonempty turns")
++        for turn in episode["turns"]:
++            prompt, continuation = turn["prompt_ids"], turn["continuation_ids"]
++            if not isinstance(prompt, list) or not isinstance(continuation, list):
++                raise ValueError("fixed token IDs must be lists")
++            ForwardLedger(prompt)
++            ForwardLedger(prompt + continuation)
++    return corpus, hashlib.sha256(source).hexdigest()
++
++
++def _fixed_main(args, model, view, resolved, corpus, corpus_hash):
++    from importlib.metadata import version
++
++    import mlx.core as mx
++    import mlx_lm
++
++    from local_llm_lab.provenance import _sha256, source_tree_hashes
++
++    # Installed model implementations can be locally patched without changing package
++    # versions. Freeze their source and the compiled MLX runtime before the comparisons.
++    library = Path(mlx_lm.__file__).parent
++    runtime_sources = {
++        "mlx_lm/" + str(path.relative_to(library)): _sha256(path)
++        for path in sorted(library.rglob("*.py"))
++    }
++    runtime = Path(mx.__file__).parent
++    for path in sorted([*runtime.glob("*.so"), *runtime.glob("lib/*.dylib")]):
++        runtime_sources["mlx/" + str(path.relative_to(runtime))] = _sha256(path)
++    source_hashes = source_tree_hashes(Path(__file__).resolve().parents[1])
++    adapter = (
++        None
++        if args.adapter is None
++        else {
++            "path": str(args.adapter.resolve()),
++            "files": {
++                str(path.relative_to(args.adapter)): _sha256(path)
++                for path in sorted(args.adapter.rglob("*"))
++                if path.is_file()
++            },
++        }
++    )
++    episodes = [
++        {
++            "id": episode["id"],
++            **check_fixed_history(
++                model, view, episode["turns"], prefill_step_size=args.prefill_step_size
++            ),
++        }
++        for episode in corpus["episodes"]
++    ]
++    # A control episode may offer no matching prefix. It must still have zero numerical
++    # mismatches; require positive reuse across the corpus to avoid a vacuous certificate.
++    a_status = (
++        "failed"
++        if any(e["gate_a"]["status"] == "failed" for e in episodes)
++        else ("passed" if any(e["reused_tokens"] > 0 for e in episodes) else "inconclusive")
++    )
++    b_status = "passed" if all(e["gate_b"]["status"] == "passed" for e in episodes) else "failed"
++    report = {
++        "schema_version": 1,
++        "scope": "loaded checkpoint, fixed corpus only",
++        "accepted": a_status == b_status == "passed",
++        "gate_a": {"status": a_status},
++        "gate_b": {"status": b_status},
++        "registry_updated": False,
++        "model": resolved.as_dict(),
++        "corpus_path": str(args.fixed_history.resolve()),
++        "corpus_sha256": corpus_hash,
++        "episodes": episodes,
++        "packages": {name: version(name) for name in ("mlx", "mlx-lm", "numpy")},
++        "source_hashes": source_hashes,
++        "runtime_sources": runtime_sources,
++        "harness_sha256": _sha256(Path(__file__)),
++        "adapter": adapter,
++    }
++    with args.report.open("x", encoding="utf-8") as target:
++        json.dump(report, target, indent=2, allow_nan=False)
++        target.write("\n")
++    print(
++        json.dumps(
++            {"accepted": report["accepted"], "report": str(args.report), "registry_updated": False}
++        )
++    )
++    if not report["accepted"]:
++        raise SystemExit("Both fixed-history acceptance checks must pass; keep reuse disabled")
+ 
+ 
+ def main(argv: Sequence[str] | None = None) -> None:
+@@ -44,9 +463,14 @@ def main(argv: Sequence[str] | None = None) -> None:
+     from local_llm_lab.pipeline.tasks import make_tasks
+ 
+     args = _parse_args(argv)
++    corpus, corpus_hash = (
++        (None, None) if args.fixed_history is None else _read_corpus(args.fixed_history)
++    )
++    if args.report is not None and args.report.exists():
++        raise SystemExit("report already exists; choose a new path")
+     spec = load_model_spec(args.model)
+     spec = replace(spec, cache_strategy=args.strategy)
+-    model, tokenizer, view, resolved = load_policy(spec, None)
++    model, tokenizer, view, resolved = load_policy(spec, args.adapter)
+     if resolved.cache_strategy == "none":
+         raise SystemExit("cache equivalence requires a non-disabled resolved strategy")
+     print(
+@@ -54,6 +478,9 @@ def main(argv: Sequence[str] | None = None) -> None:
+         f"hf_id={spec.hf_id} selected_strategy={args.strategy} "
+         f"resolved_strategy={resolved.cache_strategy} reason={resolved.cache_strategy_reason}"
+     )
++    if corpus is not None:
++        _fixed_main(args, model, view, resolved, corpus, corpus_hash)
++        return
+     # Cover the long, listing-heavy families where prompts grow most, plus a couple of short ones.
+     families = ("ledger_reconcile", "batch_update", "aggregate_report", "read", "search", "update")
+     tasks = []
+diff --git a/src/local_llm_lab/models.py b/src/local_llm_lab/models.py
+index 75d1d29..7e79070 100644
+--- a/src/local_llm_lab/models.py
++++ b/src/local_llm_lab/models.py
+@@ -20,7 +20,7 @@ __all__ = [
+ ]
+ 
+ _THINKING_MODES = frozenset({"unsupported", "off", "inference", "trained"})
+-_CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "none"})
++_CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "history", "none"})
+ _CAPTURE_DTYPES = frozenset({"native", "float32"})
+ _DEFAULT_PROBE_FRACTIONS = (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
+ _REGISTRY_DIR = Path(__file__).resolve().parents[2] / "configs" / "models"
+@@ -65,7 +65,7 @@ class ModelSpec:
+     chat: ChatSpec
+     lora: LoraSpec
+     train: dict[str, Any]
+-    cache_strategy: Literal["auto", "trim", "snapshot", "none"]
++    cache_strategy: Literal["auto", "trim", "snapshot", "history", "none"]
+     probe_layer_fractions: tuple[float, ...]
+     memory_budget_gib: float
+     policies: dict[str, str]
+@@ -93,7 +93,7 @@ class ModelSpec:
+         view = ArchitectureView.from_model(model)
+         layer_types = tuple(view.layer_kind(index) for index in range(view.num_layers))
+         lora_keys = view.lora_targets(self.lora.keys)
+-        cache_strategy: Literal["trim", "snapshot", "none"]
++        cache_strategy: Literal["trim", "snapshot", "history", "none"]
+         if self.cache_strategy == "auto":
+             if view.cache_trimmable:
+                 cache_strategy = "trim"
+@@ -138,7 +138,7 @@ class ResolvedSpec:
+     lora_keys: tuple[str, ...]
+     trainable_parameters: int
+     probe_layers: tuple[int, ...]
+-    cache_strategy: Literal["trim", "snapshot", "none"]
++    cache_strategy: Literal["trim", "snapshot", "history", "none"]
+     cache_strategy_reason: str
+     snapshot_revision: str | None
+     jvp_method: Literal["forward", "finite_difference", "untested"]
+diff --git a/src/local_llm_lab/pipeline/live_lens/session.py b/src/local_llm_lab/pipeline/live_lens/session.py
+index ad9969f..45b2096 100644
+--- a/src/local_llm_lab/pipeline/live_lens/session.py
++++ b/src/local_llm_lab/pipeline/live_lens/session.py
+@@ -15,6 +15,7 @@ from pathlib import Path
+ import numpy as np
+ 
+ from local_llm_lab.arch import NativeCapture
++from local_llm_lab.forward import ForwardLedger, encode_prompt
+ from local_llm_lab.pipeline.live_lens.records import FutureRanks, transport_overlap
+ 
+ 
+@@ -159,19 +160,14 @@ class CaptureSession:
+             raise ValueError("capture must use its own model and a single active turn")
+         if turn_cache is not None:
+             raise ValueError("capture requires the resolved no-reuse cache strategy")
+-        bos = tokenizer.bos_token
+-        prompt_ids = list(
+-            tokenizer.encode(prompt, add_special_tokens=bos is None or not prompt.startswith(bos))
+-        )
+-        if not prompt_ids or len(prompt_ids) > 65536:
+-            raise ValueError("prompt must contain 1 to 65536 tokens")
++        prompt_ids = encode_prompt(tokenizer, prompt)
++        self.ledger = ForwardLedger(prompt_ids)
+         self.turn += 1
+         self.ranks.reset()
+         self.prompt_ids = prompt_ids
+-        self.generated = []
++        self.generated = self.ledger.generated
+         self._residuals = {}
+         self._sources = {block: {} for block in self.attention_blocks}
+-        self._next_offset = 0
+         self._active = True
+         self._write(
+             "begin_turn",
+@@ -198,7 +194,7 @@ class CaptureSession:
+             self._write(
+                 "end_turn",
+                 emitted_count=len(self.generated),
+-                forwarded_count=self._next_offset,
++                forwarded_count=self.ledger.offset,
+                 status="complete" if completed else "aborted",
+                 unresolved_futures="censored at turn boundary",
+             )
+@@ -251,13 +247,9 @@ class CaptureSession:
+     def output(self, offset, ids, logits):
+         import mlx.core as mx
+ 
+-        if offset != self._next_offset or offset + len(ids) > 65536:
+-            raise ValueError("non-contiguous forward or context exceeds 65536 tokens")
++        self.ledger.validate(offset, ids)
+         if set(self._residuals) != set(self.layers):
+             raise ValueError("native path did not capture every requested layer")
+-        prompt_end = min(len(self.prompt_ids), offset + len(ids))
+-        if ids[: prompt_end - offset] != self.prompt_ids[offset:prompt_end] and offset < prompt_end:
+-            raise ValueError("captured tokens disagree with the rendered prompt")
+         # The next forward can precede the yield. Score only tokens actually yielded, below.
+         for local in range(len(ids)):
+             position = offset + local
+@@ -283,14 +275,14 @@ class CaptureSession:
+         if self.retain_logits:
+             record["logits"] = np.array(logits.astype(mx.float32)).tolist()
+         self._write("forward", offset=offset, input_ids=ids, **record)
+-        self._next_offset = offset + len(ids)
++        self.ledger.record(offset, ids)
+         self._residuals.clear()
+ 
+     def emitted(self, token_id):
+         if not self._active:
+             raise RuntimeError("token emitted outside capture context")
+         position = len(self.prompt_ids) + len(self.generated)
+-        self.generated.append(int(token_id))
++        self.ledger.emitted(int(token_id))
+         self._write("emitted", position=position, token_id=int(token_id))
+         for row in self.ranks.observe(position, int(token_id)):
+             self._write("rank", **row)
+diff --git a/src/local_llm_lab/pipeline/runner.py b/src/local_llm_lab/pipeline/runner.py
+index cb87b1e..f0c58c1 100644
+--- a/src/local_llm_lab/pipeline/runner.py
++++ b/src/local_llm_lab/pipeline/runner.py
+@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, field
+ from typing import TYPE_CHECKING, Any, Protocol
+ 
+ from local_llm_lab.agent_protocol import ActionParseError
++from local_llm_lab.forward import ForwardLedger, ForwardPass, encode_prompt, prefill_passes
+ from local_llm_lab.pipeline.env import Fault, Simulator
+ from local_llm_lab.pipeline.protocol import (
+     DEFAULT_KEEP_LAST,
+@@ -198,6 +199,182 @@ def _copy_cache_state(value: Any) -> Any:
+     return copy.deepcopy(value)
+ 
+ 
++def clone_prompt_cache(cache: list[Any]) -> list[Any]:
++    """Clone complete native objects, including offsets and offset-less mask metadata."""
++    import mlx.core as mx
++
++    def evaluate(entries):
++        mx.eval([entry.state for entry in entries])
++        for entry in entries:
++            for name in ("lengths", "left_padding"):
++                value = getattr(entry, name, None)
++                if value is not None:
++                    mx.eval(value)
++
++    evaluate(cache)
++    cloned = copy.deepcopy(cache)
++    evaluate(cloned)
++    return cloned
++
++
++@dataclass(frozen=True)
++class _HistorySnapshot:
++    passes: tuple[ForwardPass, ...]
++    cache: list[Any]
++    nbytes: int
++
++    @property
++    def offset(self) -> int:
++        last = self.passes[-1]
++        return last.offset + len(last.input_ids)
++
++
++class _HistoryModel:
++    """Delegate native arithmetic; observe actual inputs, never generated text."""
++
++    def __init__(self, owner):
++        self.owner = owner
++
++    def __getattr__(self, name):
++        return getattr(self.owner.model, name)
++
++    def __call__(self, ids, *, cache, **kwargs):
++        owner = self.owner
++        if cache is not owner.cache or owner.ledger is None:
++            raise ValueError("history forward must use its prepared cache")
++        if ids.ndim != 2 or ids.shape[0] != 1 or kwargs.get("input_embeddings") is not None:
++            raise ValueError("history cache supports single-sequence token inputs only")
++        tokens = ids[0].tolist()
++        offset = owner.ledger.offset
++        owner.ledger.validate(offset, tokens)
++        owner._check_offsets(offset)
++        try:
++            logits = owner.model(ids, cache=cache, **kwargs)
++            owner._check_offsets(offset + len(tokens))
++            owner.ledger.record(offset, tokens)
++        except BaseException:
++            # A partly advanced hybrid state cannot be rolled back by adjusting an offset.
++            owner.cache = None
++            owner.ledger = None
++            raise
++        owner.encoded_tokens += len(tokens)
++        if owner.ledger.offset < len(owner.ledger.prompt_ids):
++            owner._save()
++        return logits
++
++
++class HistoryCache:
++    """Bounded, episode-local hybrid snapshots at existing native forward boundaries.
++
++    Exact token AND partition prefixes are required for reuse. A partial prefill or a
++    token-by-token generated suffix cannot silently substitute for a differently shaped
++    prefill. Rewritten observations invalidate all dependent state. This strategy is
++    explicit-only until real-checkpoint acceptance; no registry is updated by this class.
++
++    Model weights must remain immutable for this object's lifetime (one run_task).
++    """
++
++    def __init__(
++        self,
++        model: Any,
++        view: ArchitectureView,
++        *,
++        prefill_step_size: int = 2048,
++        max_checkpoints: int = 4,
++        max_bytes: int = 512 * 1024 * 1024,
++    ):
++        if any(
++            type(value) is not int or value < 1
++            for value in (prefill_step_size, max_checkpoints, max_bytes)
++        ):
++            raise ValueError("cache cadence and budgets must be positive integers")
++        if model is not view.model:
++            raise ValueError("history cache view must belong to its model")
++        self.model, self.view = model, view
++        self.prefill_step_size = prefill_step_size
++        self.max_checkpoints, self.max_bytes = max_checkpoints, max_bytes
++        self.cache: Any = None
++        self.ledger: ForwardLedger | None = None
++        self.reused_tokens = 0
++        self.encoded_tokens = 0
++        self._snapshots: list[_HistorySnapshot] = []
++        self.generation_model = _HistoryModel(self)
++
++    @property
++    def snapshot_bytes(self) -> int:
++        return sum(snapshot.nbytes for snapshot in self._snapshots)
++
++    def _check_offsets(self, expected: int) -> None:
++        for entry in self.cache:
++            if hasattr(entry, "offset") and entry.offset != expected:
++                raise ValueError(
++                    f"native cache offset {entry.offset} disagrees with ledger {expected}"
++                )
++
++    def _save(self) -> None:
++        assert self.ledger is not None
++        nbytes = sum(entry.nbytes for entry in self.cache)
++        nbytes += sum(
++            getattr(getattr(entry, name, None), "nbytes", 0)
++            for entry in self.cache
++            for name in ("lengths", "left_padding")
++        )
++        if nbytes > self.max_bytes:
++            return
++        self._snapshots = [s for s in self._snapshots if s.offset != self.ledger.offset]
++        # Evict before allocation so adding a new snapshot cannot double the stored budget.
++        while self._snapshots and (
++            len(self._snapshots) >= self.max_checkpoints
++            or self.snapshot_bytes + nbytes > self.max_bytes
++        ):
++            # Keep the earliest surviving boundary as a rollback anchor when possible;
++            # the remaining slots rotate through recent history.
++            self._snapshots.pop(1 if len(self._snapshots) > 1 else 0)
++        self._snapshots.append(
++            _HistorySnapshot(tuple(self.ledger.passes), clone_prompt_cache(self.cache), nbytes)
++        )
++
++    def prepare(self, token_ids: list[int]) -> list[int]:
++        # Validate before touching existing state, including the context bound.
++        ledger = ForwardLedger(token_ids)
++        planned = prefill_passes(token_ids, self.prefill_step_size)
++        self._snapshots = [
++            s
++            for s in self._snapshots
++            if s.offset < len(token_ids)
++            and all(
++                tuple(token_ids[p.offset : p.offset + len(p.input_ids)]) == p.input_ids
++                for p in s.passes
++            )
++        ]
++        eligible = [s for s in self._snapshots if s.passes == tuple(planned[: len(s.passes)])]
++        if eligible:
++            chosen = max(eligible, key=lambda s: s.offset)
++            self.cache = clone_prompt_cache(chosen.cache)
++            ledger = ForwardLedger(token_ids, restored_passes=chosen.passes)
++        else:
++            self.cache = self.view.make_cache()
++        self.ledger = ledger
++        self._check_offsets(ledger.offset)
++        self.reused_tokens += ledger.offset
++        return list(token_ids[ledger.offset :])
++
++    def emitted(self, token_id: int) -> None:
++        if self.ledger is None:
++            raise ValueError("emission requires a prepared history cache")
++        self.ledger.emitted(token_id)
++
++    def commit(self, token_ids: list[int], generated: list[int]) -> None:
++        # Display text and synthetic thinking delimiters are never a source of cache IDs.
++        del generated
++        if self.ledger is None or self.ledger.prompt_ids != list(token_ids):
++            raise ValueError("history commit disagrees with the prepared prompt")
++        if self.ledger.offset < len(token_ids):
++            raise ValueError("history commit before the prompt was fully forwarded")
++        self._check_offsets(self.ledger.offset)
++        self._save()
++
++
+ def make_turn_cache(
+     model: Any,
+     view: ArchitectureView,
+@@ -209,6 +386,8 @@ def make_turn_cache(
+         return TrimCache(model)
+     if resolved.cache_strategy == "snapshot":
+         return SnapshotCache(model, view, prefix_tokens)
++    if resolved.cache_strategy == "history":
++        return HistoryCache(model, view)
+     if resolved.cache_strategy == "none":
+         hybrid = any(layer_type == "linear_attention" for layer_type in resolved.layer_types)
+         if hybrid and resolved.cache_strategy_reason == "auto:equivalence_unverified":
+@@ -289,11 +468,19 @@ def generate_turn_with_count(
+     prompt_input: Any = prompt
+     prompt_ids: list[int] = []
+     if capture is not None and turn_cache is not None:
+-        raise ValueError('capture requires the resolved no-reuse cache strategy')
++        raise ValueError("capture requires the resolved no-reuse cache strategy")
+     if turn_cache is not None:
+-        prompt_ids = list(tokenizer.encode(prompt))
++        prompt_ids = (
++            encode_prompt(tokenizer, prompt)
++            if isinstance(turn_cache, HistoryCache)
++            else list(tokenizer.encode(prompt))
++        )
+         prompt_input = mx.array(turn_cache.prepare(prompt_ids))
+         kwargs["prompt_cache"] = turn_cache.cache
++    if isinstance(turn_cache, HistoryCache):
++        if turn_cache.model is not model:
++            raise ValueError("history cache belongs to a different model")
++        kwargs["prefill_step_size"] = turn_cache.prefill_step_size
+ 
+     ids: list[int] = []
+     thinking = _ThinkingTracker(
+@@ -303,18 +490,27 @@ def generate_turn_with_count(
+ 
+     context = (
+         capture.generation(model, tokenizer, prompt, turn_cache=turn_cache)
+-        if capture is not None else contextlib.nullcontext(model)
++        if capture is not None
++        else contextlib.nullcontext(
++            turn_cache.generation_model if isinstance(turn_cache, HistoryCache) else model
++        )
+     )
+     with context as generation_model:
+         stream = stream_generate(
+-            generation_model, tokenizer, prompt=prompt_input,
+-            max_tokens=max_tokens, sampler=sampler, **kwargs
++            generation_model,
++            tokenizer,
++            prompt=prompt_input,
++            max_tokens=max_tokens,
++            sampler=sampler,
++            **kwargs,
+         )
+         try:
+             for response in stream:
+                 ids.append(response.token)
+                 if capture is not None:
+                     capture.emitted(response.token)
++                if isinstance(turn_cache, HistoryCache):
++                    turn_cache.emitted(response.token)
+                 decoded = tokenizer.decode(ids)
+                 thinking.update(ids, decoded, tokenizer)
+                 if response.token in stop_ids:
+@@ -325,7 +521,9 @@ def generate_turn_with_count(
+                 ):
+                     break
+         finally:
+-            if capture is not None and callable(getattr(stream, 'close', None)):
++            if (capture is not None or isinstance(turn_cache, HistoryCache)) and callable(
++                getattr(stream, "close", None)
++            ):
+                 stream.close()
+     if turn_cache is not None:
+         turn_cache.commit(prompt_ids, ids)
+diff --git a/tests/test_cache_equivalence.py b/tests/test_cache_equivalence.py
+index 07fb609..af6de08 100644
+--- a/tests/test_cache_equivalence.py
++++ b/tests/test_cache_equivalence.py
+@@ -54,9 +54,7 @@ def test_cli_rejects_unattestable_cache_strategy(argv) -> None:
+         cache_equivalence._parse_args(argv)
+ 
+ 
+-def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(
+-    monkeypatch, capsys
+-) -> None:
++def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(monkeypatch, capsys) -> None:
+     """A hard-coded model or omitted runner metadata makes equivalence evidence unauditable."""
+     from local_llm_lab.pipeline import evaluate, runner, tasks
+ 
+@@ -122,3 +120,222 @@ def test_main_resolves_requested_model_and_strategy_at_fake_boundaries(
+         assert kwargs["resolved"].cache_strategy == "snapshot"
+         assert kwargs["resolved"].cache_strategy_reason == "explicit:snapshot"
+         assert kwargs["use_cache"] is bool(index % 2)
++
++
++def test_fixed_history_requires_two_bitwise_gates_and_real_reuse():
++    from test_live_lens_native import tiny_model
++
++    module = _load_cache_equivalence_module()
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    prompt = [1, 2, 3, 4, 5, 6, 7, 8, 9]
++    cases = [dict(prompt_ids=prompt, continuation_ids=[10, 11])] * 2
++    report = module.check_fixed_history(model, view, cases)
++    assert report["gate_a"]["status"] == "passed"
++    assert report["gate_b"]["status"] == "passed"
++    assert report["accepted"] is True
++    assert report["reused_tokens"] > 0
++    assert report["checkpoint_certified"] is False
++
++    no_reuse = module.check_fixed_history(model, view, cases[:1])
++    assert no_reuse["gate_a"]["status"] == "inconclusive"
++    assert no_reuse["accepted"] is False
++
++
++def test_logit_check_rejects_one_bit_difference_even_with_identical_greedy_tokens():
++    import mlx.core as mx
++    import numpy as np
++
++    module = _load_cache_equivalence_module()
++    a = np.array([[1.0, 2.0, 4.0]], dtype=np.float32)
++    b = a.copy()
++    b[0, 0] = np.nextafter(b[0, 0], np.float32(2.0))
++    result = module.compare_logits(mx.array(a), mx.array(b))
++    assert result["bit_identical"] is False
++    assert result["argmax_equal"] is True
++    assert result["max_abs_error"] > 0
++    assert result["winning_margin"] == [2.0, 2.0]
++
++
++def test_fixed_history_rejects_a_new_schedule_that_changes_only_nonwinning_logits():
++    import mlx.core as mx
++    from test_live_lens_native import tiny_model
++
++    module = _load_cache_equivalence_module()
++    base = tiny_model()
++
++    class ShapeSensitiveModel:
++        def __getattr__(self, name):
++            return getattr(base, name)
++
++        def __call__(self, ids, *, cache):
++            logits = base(ids, cache=cache)
++            # Controlled shape dependence at a prefill boundary, passed into future state.
++            if ids.shape[1] == 4:
++                cache[0].state[1] = cache[0].state[1] + mx.array(0.001)
++            return logits
++
++    model = ShapeSensitiveModel()
++    view = ArchitectureView.from_model(model)
++    prompt = [1, 2, 3, 4, 5, 6, 7, 8, 9]
++    cases = [dict(prompt_ids=prompt, continuation_ids=[10])] * 2
++    report = module.check_fixed_history(model, view, cases, prefill_step_size=4)
++    assert report["gate_a"]["status"] == "passed"
++    assert report["gate_b"]["status"] == "failed"
++    assert report["accepted"] is False
++
++
++def test_fixed_history_cli_rejects_missing_report_and_legacy_strategy_before_load():
++    module = _load_cache_equivalence_module()
++    for argv in (
++        ["--strategy", "history"],
++        ["--strategy", "history", "--fixed-history", "fixture.json"],
++        ["--strategy", "snapshot", "--fixed-history", "fixture.json", "--report", "out.json"],
++    ):
++        with pytest.raises(SystemExit):
++            module._parse_args(argv)
++
++
++def test_fixed_history_gate_detects_a_corrupted_snapshot(monkeypatch):
++    from test_live_lens_native import tiny_model
++
++    from local_llm_lab.pipeline import runner
++
++    module = _load_cache_equivalence_module()
++    original = runner.clone_prompt_cache
++
++    def corrupt(cache):
++        result = original(cache)
++        result[0].state[1] = result[0].state[1] + 0.001
++        return result
++
++    monkeypatch.setattr(runner, "clone_prompt_cache", corrupt)
++    model = tiny_model()
++    cases = [dict(prompt_ids=[1, 2, 3, 4, 5], continuation_ids=[6])] * 2
++    report = module.check_fixed_history(model, ArchitectureView.from_model(model), cases)
++    assert report["gate_a"]["status"] == "failed"
++    assert report["accepted"] is False
++
++
++@pytest.mark.parametrize("precision", ["float32", "bfloat16", "4bit"])
++def test_fixed_history_with_growing_conversation_and_native_prefill_cadence(precision):
++    import mlx.core as mx
++    import mlx.nn as nn
++    from test_live_lens_native import tiny_model
++
++    module = _load_cache_equivalence_module()
++    model = tiny_model()
++    if precision != "float32":
++        model.set_dtype(mx.bfloat16)
++    if precision == "4bit":
++        nn.quantize(model, group_size=64, bits=4)
++    prompt = [i % 24 for i in range(2050)]
++    cases = [
++        dict(prompt_ids=prompt, continuation_ids=[3, 4]),
++        dict(prompt_ids=prompt + [3, 4, 5, 6], continuation_ids=[7, 8]),
++    ]
++    report = module.check_fixed_history(model, ArchitectureView.from_model(model), cases)
++    assert report["accepted"] is True
++    assert report["turns"][1]["reused_tokens"] == 2048
++    assert report["turns"][1]["gate_a"]["state_bit_identical"]
++    assert report["turns"][1]["gate_b"]["state_bit_identical"]
++
++
++def test_fixed_cli_writes_reviewable_report_without_changing_registry(tmp_path, monkeypatch):
++    import hashlib
++    import json
++
++    from test_live_lens_native import tiny_model
++
++    from local_llm_lab.pipeline import evaluate
++
++    module = _load_cache_equivalence_module()
++    model = tiny_model()
++    tokenizer = SimpleNamespace(snapshot_revision="tiny-random-weights")
++    calls = []
++
++    def load(spec, adapter):
++        calls.append((spec.name, adapter))
++        return model, tokenizer, ArchitectureView.from_model(model), spec.resolve(model, tokenizer)
++
++    monkeypatch.setattr(evaluate, "load_policy", load)
++    registry = PROJECT_ROOT / "configs/models/qwen35-4b.yaml"
++    before = hashlib.sha256(registry.read_bytes()).hexdigest()
++    corpus = tmp_path / "history.json"
++    report = tmp_path / "report.json"
++    corpus.write_text(
++        json.dumps(
++            {
++                "schema_version": 1,
++                "episodes": [
++                    {
++                        "id": "tiny-fixture",
++                        "turns": [dict(prompt_ids=[1, 2, 3, 4, 5], continuation_ids=[6])] * 2,
++                    },
++                    {
++                        "id": "no-reuse-control",
++                        "turns": [dict(prompt_ids=[1, 2, 3], continuation_ids=[4])],
++                    },
++                ],
++            }
++        )
++    )
++    argv = [
++        "--model",
++        "qwen35-4b",
++        "--strategy",
++        "history",
++        "--fixed-history",
++        str(corpus),
++        "--report",
++        str(report),
++    ]
++    module.main(argv)
++    result = json.loads(report.read_text())
++    assert result["accepted"] is True
++    assert result["gate_a"]["status"] == result["gate_b"]["status"] == "passed"
++    assert result["registry_updated"] is False
++    assert result["corpus_sha256"] == hashlib.sha256(corpus.read_bytes()).hexdigest()
++    assert result["model"]["spec"]["cache_equivalence_verified"] is None
++    assert result["source_hashes"]["src/local_llm_lab/forward.py"]
++    assert result["runtime_sources"]["mlx_lm/models/gated_delta.py"]
++    assert before == hashlib.sha256(registry.read_bytes()).hexdigest()
++    assert calls == [("qwen35-4b", None)]
++    with pytest.raises(SystemExit, match="already exists"):
++        module.main(argv)
++    assert len(calls) == 1  # refusal occurs before attempting another load
++
++
++def test_fixed_cli_rejects_invalid_corpus_before_loading_weights(tmp_path, monkeypatch):
++    import json
++
++    from local_llm_lab.pipeline import evaluate
++
++    module = _load_cache_equivalence_module()
++
++    def forbidden(*args):
++        pytest.fail("invalid fixed history must not reach the loader")
++
++    monkeypatch.setattr(evaluate, "load_policy", forbidden)
++    corpus = tmp_path / "bad.json"
++    corpus.write_text(
++        json.dumps(
++            {
++                "schema_version": 1,
++                "episodes": [
++                    {"id": "bad", "turns": [dict(prompt_ids=[True], continuation_ids=[])]}
++                ],
++            }
++        )
++    )
++    with pytest.raises(ValueError, match="integer token"):
++        module.main(
++            [
++                "--strategy",
++                "history",
++                "--fixed-history",
++                str(corpus),
++                "--report",
++                str(tmp_path / "out.json"),
++            ]
++        )
+diff --git a/tests/test_live_lens_native.py b/tests/test_live_lens_native.py
+index 6ec9b9a..e951f07 100644
+--- a/tests/test_live_lens_native.py
++++ b/tests/test_live_lens_native.py
+@@ -192,6 +192,34 @@ def test_two_capture_owners_cannot_wrap_the_same_model():
+         wrapped(mx.array([[1]]))
+ 
+ 
++def test_capture_uses_the_shared_forward_ledger_and_keeps_reuse_forbidden():
++    from types import SimpleNamespace
++
++    from local_llm_lab.forward import ForwardLedger
++    from local_llm_lab.pipeline.live_lens.session import CaptureSession
++
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    rows = []
++    session = CaptureSession(view, None, rows.append, layers=(4,), top_k=3)
++    tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kw: [1, 2])
++    with session.generation(model, tokenizer, "fixture", turn_cache=None) as captured:
++        assert isinstance(session.ledger, ForwardLedger)
++        cache = model.make_cache()
++        captured(mx.array([[1, 2]]), cache=cache)
++        captured(mx.array([[3]]), cache=cache)
++        assert session.ledger.offset == 3
++        session.emitted(3)
++        assert session.ledger.offset == 3
++    assert rows[-1]["forwarded_count"] == 3
++    assert rows[-1]["emitted_count"] == 1
++    with (
++        pytest.raises(ValueError, match="no-reuse"),
++        session.generation(model, tokenizer, "fixture", turn_cache=object()),
++    ):
++        pass
++
++
+ def test_injection_rejects_an_already_cached_source_and_accepts_rebuilt_state():
+     model = tiny_model()
+     view = ArchitectureView.from_model(model)
+diff --git a/tests/test_models.py b/tests/test_models.py
+index cbb2393..ade458e 100644
+--- a/tests/test_models.py
++++ b/tests/test_models.py
+@@ -295,6 +295,19 @@ def test_explicit_cache_resolution_records_declared_strategy(monkeypatch, strate
+     )
+ 
+ 
++def test_history_strategy_is_explicit_only_and_does_not_certify_a_checkpoint(monkeypatch):
++    _install_view(monkeypatch, False, ("linear_attention",) * 3 + ("attention",))
++    raw = _registry_mapping(None)
++    raw["cache"]["strategy"] = "history"
++    raw["lora"]["keys"] = "auto"
++    spec = models._model_spec_from_mapping(raw, source="fixture")
++    resolved = spec.resolve(object(), SimpleNamespace())
++    assert resolved.cache_strategy == "history"
++    assert spec.cache_equivalence_verified is None
++    auto = replace(spec, cache_strategy="auto").resolve(object(), SimpleNamespace())
++    assert auto.cache_strategy == "none"
++
++
+ @pytest.mark.parametrize("name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"])
+ def test_registry_budget_stays_the_declared_cap_the_device_resolves(name: str) -> None:
+     """R32(b): the minimum is resolved at preflight, so the registry keeps its declared intent.
+diff --git a/src/local_llm_lab/forward.py b/src/local_llm_lab/forward.py
+new file mode 100644
+index 0000000..583d6c2
+--- /dev/null
++++ b/src/local_llm_lab/forward.py
+@@ -0,0 +1,99 @@
++"""Exact forward inputs, independent of text rendering and generation yield timing."""
++
++from __future__ import annotations
++
++from collections.abc import Sequence
++from dataclasses import dataclass
++
++
++@dataclass(frozen=True)
++class ForwardPass:
++    offset: int
++    input_ids: tuple[int, ...]
++
++
++class ForwardLedger:
++    """One logical sequence, including restored prefixes and un-emitted lookahead.
++
++    Record only successful native forward calls. Emissions may precede or follow their
++    consuming forward, but they never advance its cursor. Restored passes are validated
++    against the new prompt before they can establish a starting position.
++    """
++
++    def __init__(
++        self,
++        prompt_ids: Sequence[int],
++        *,
++        restored_passes: Sequence[ForwardPass] = (),
++        max_tokens: int = 65536,
++    ):
++        self.prompt_ids = list(prompt_ids)
++        self.max_tokens = max_tokens
++        if not self.prompt_ids or not 0 < len(self.prompt_ids) <= max_tokens:
++            raise ValueError("prompt is empty or exceeds context limit")
++        self._validate_ids(self.prompt_ids)
++        self.tokens: list[int] = []
++        self.generated: list[int] = []
++        self.passes: list[ForwardPass] = []
++        for row in restored_passes:
++            if row.offset + len(row.input_ids) > len(self.prompt_ids):
++                raise ValueError("restored prefix exceeds prompt")
++            self.record(row.offset, row.input_ids)
++
++    @property
++    def offset(self) -> int:
++        return len(self.tokens)
++
++    @staticmethod
++    def _validate_ids(ids: Sequence[int]) -> None:
++        if not ids or any(type(token) is not int or token < 0 for token in ids):
++            raise ValueError("forward input must contain nonnegative integer token IDs")
++
++    def validate(self, offset: int, ids: Sequence[int]) -> None:
++        self._validate_ids(ids)
++        if offset != self.offset:
++            raise ValueError("non-contiguous forward offset")
++        if offset + len(ids) > self.max_tokens:
++            raise ValueError("forward exceeds context limit")
++        expected = self.prompt_ids + self.generated
++        for local, token in enumerate(ids):
++            position = offset + local
++            if position < len(expected) and token != expected[position]:
++                kind = "prompt" if position < len(self.prompt_ids) else "emitted continuation"
++                raise ValueError(f"forward tokens disagree with {kind} at position {position}")
++
++    def record(self, offset: int, ids: Sequence[int]) -> None:
++        self.validate(offset, ids)
++        self.passes.append(ForwardPass(offset, tuple(ids)))
++        self.tokens.extend(ids)
++
++    def emitted(self, token_id: int) -> None:
++        self._validate_ids([token_id])
++        position = len(self.prompt_ids) + len(self.generated)
++        if position >= self.max_tokens:
++            raise ValueError("emission exceeds context limit")
++        if position < self.offset and self.tokens[position] != token_id:
++            raise ValueError(f"emitted token disagrees with forward at position {position}")
++        self.generated.append(token_id)
++
++
++def encode_prompt(tokenizer, prompt: str) -> list[int]:
++    """Match the installed generator's string encoding in every consumer."""
++    bos = tokenizer.bos_token
++    return list(
++        tokenizer.encode(prompt, add_special_tokens=bos is None or not prompt.startswith(bos))
++    )
++
++
++def prefill_passes(prompt_ids: Sequence[int], step_size: int = 2048) -> list[ForwardPass]:
++    """Native prefill partitions, with the final prompt token always separate."""
++    if type(step_size) is not int or step_size < 1 or not prompt_ids:
++        raise ValueError("prefill requires tokens and a positive integer step size")
++    result = []
++    offset = 0
++    while offset < len(prompt_ids) - 1:
++        end = min(offset + step_size, len(prompt_ids) - 1)
++        result.append(ForwardPass(offset, tuple(prompt_ids[offset:end])))
++        offset = end
++    result.append(ForwardPass(offset, (prompt_ids[-1],)))
++    return result
+diff --git a/tests/test_history_cache.py b/tests/test_history_cache.py
+new file mode 100644
+index 0000000..38d7170
+--- /dev/null
++++ b/tests/test_history_cache.py
+@@ -0,0 +1,243 @@
++"""Cache contracts on fixed tokens and a tiny installed model; no checkpoint loads."""
++
++import copy
++
++import mlx.core as mx
++import numpy as np
++import pytest
++
++from local_llm_lab.arch import ArchitectureView
++
++
++def test_forward_ledger_counts_lookahead_not_emissions():
++    from local_llm_lab.forward import ForwardLedger
++
++    ledger = ForwardLedger([1, 2, 3])
++    ledger.record(0, [1, 2])
++    ledger.record(2, [3])
++    ledger.record(3, [4])  # generator lookahead happens before yield
++    ledger.emitted(4)
++    ledger.emitted(5)  # emission itself never advances the model cursor
++    assert ledger.offset == 4
++    assert ledger.tokens == [1, 2, 3, 4]
++    assert ledger.generated == [4, 5]
++    ledger.record(4, [5])
++    assert [(p.offset, p.input_ids) for p in ledger.passes] == [
++        (0, (1, 2)),
++        (2, (3,)),
++        (3, (4,)),
++        (4, (5,)),
++    ]
++
++
++@pytest.mark.parametrize("offset, ids", [(1, [1]), (0, [9]), (0, []), (0, [True])])
++def test_forward_ledger_rejects_invalid_forward_without_advancing(offset, ids):
++    from local_llm_lab.forward import ForwardLedger
++
++    ledger = ForwardLedger([1, 2])
++    with pytest.raises(ValueError):
++        ledger.record(offset, ids)
++    assert ledger.offset == 0
++
++
++def test_forward_ledger_detects_a_different_consumed_or_emitted_continuation():
++    from local_llm_lab.forward import ForwardLedger
++
++    ledger = ForwardLedger([1])
++    ledger.record(0, [1, 2])
++    with pytest.raises(ValueError, match="emitted"):
++        ledger.emitted(3)
++    assert ledger.generated == []
++    ledger.emitted(2)
++    ledger.emitted(4)
++    with pytest.raises(ValueError, match="emitted"):
++        ledger.record(2, [5])
++    assert ledger.tokens == [1, 2]
++
++
++def test_forward_ledger_validates_restored_prefix_and_bounds():
++    from local_llm_lab.forward import ForwardLedger, ForwardPass
++
++    saved = (ForwardPass(0, (1, 2)),)
++    ledger = ForwardLedger([1, 2, 3], restored_passes=saved)
++    ledger.record(2, [3])
++    assert ledger.offset == 3
++    with pytest.raises(ValueError, match="prompt"):
++        ForwardLedger([1, 9, 3], restored_passes=saved)
++    with pytest.raises(ValueError, match="context"):
++        ForwardLedger([1, 2, 3], max_tokens=2)
++
++
++def _history(**kwargs):
++    from test_live_lens_native import tiny_model
++
++    from local_llm_lab.pipeline.runner import HistoryCache
++
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    return model, HistoryCache(model, view, prefill_step_size=4, **kwargs)
++
++
++def _forward(cache, ids):
++    result = cache.generation_model(mx.array([ids]), cache=cache.cache)
++    mx.eval(result)
++    return np.array(result)
++
++
++def test_history_reuses_intermediate_state_and_replays_a_rewritten_observation_exactly():
++    model, cache = _history()
++    prompt = [1, 2, 3, 4, 5, 6, 7, 8, 9]
++    assert cache.prepare(prompt) == prompt
++    _forward(cache, prompt[:4])
++    _forward(cache, prompt[4:8])
++    _forward(cache, prompt[8:])
++    _forward(cache, [10])
++    cache.emitted(10)
++    cache.commit(prompt, [10])
++    assert cache.ledger.offset == 10
++
++    # The first eight tokens include intermediate history; the opening was only four.
++    extended = prompt + [10, 11, 12, 13]
++    assert cache.prepare(extended) == [9, 10, 11, 12, 13]
++    assert cache.ledger.offset == 8
++    assert cache.reused_tokens == 8
++    _forward(cache, [9, 10, 11, 12])
++    _forward(cache, [13])
++    cache.commit(extended, [])
++
++    # An expired tool result changes token 4. All later recurrence must be rebuilt.
++    changed = [1, 2, 3, 4, 20, 6, 7, 8, 9]
++    assert cache.prepare(changed) == [20, 6, 7, 8, 9]
++    assert cache.ledger.offset == 4
++    actual = [_forward(cache, changed[4:8]), _forward(cache, changed[8:])]
++    fresh = model.make_cache()
++    model(mx.array([changed[:4]]), cache=fresh)
++    expected = [
++        np.array(model(mx.array([chunk]), cache=fresh)) for chunk in (changed[4:8], changed[8:])
++    ]
++    for a, b in zip(actual, expected, strict=True):
++        np.testing.assert_array_equal(a, b)
++    assert all(entry.offset == 9 for entry in cache.cache if hasattr(entry, "offset"))
++
++
++def test_history_does_not_reuse_a_token_match_from_a_different_forward_partition():
++    _, cache = _history()
++    # A three-token partial prefill cannot substitute for the next four-token prefill.
++    cache.prepare([1, 2, 3, 4])
++    _forward(cache, [1, 2, 3])
++    _forward(cache, [4])
++    _forward(cache, [5])
++    cache.commit([1, 2, 3, 4], [5])
++    assert cache.prepare([1, 2, 3, 4, 5, 6]) == [1, 2, 3, 4, 5, 6]
++    assert cache.reused_tokens == 0
++
++
++def test_history_restores_isolated_full_native_cache_after_repeated_advancement():
++    _, cache = _history()
++    prompt = [1, 2, 3, 4, 5, 6]
++    cache.prepare(prompt)
++    _forward(cache, prompt[:4])
++    _forward(cache, [5])
++    first = _forward(cache, [6])
++    cache.commit(prompt, [])
++    for _ in range(2):
++        assert cache.prepare(prompt) == [6]
++        np.testing.assert_array_equal(_forward(cache, [6]), first)
++        cache.commit(prompt, [])
++
++
++def test_history_checkpoint_budget_falls_back_to_recomputation():
++    _, cache = _history(max_bytes=1)
++    prompt = [1, 2, 3, 4, 5]
++    cache.prepare(prompt)
++    _forward(cache, prompt[:4])
++    _forward(cache, [5])
++    cache.commit(prompt, [])
++    assert cache.snapshot_bytes <= 1
++    assert cache.prepare(prompt + [6]) == prompt + [6]
++    assert cache.reused_tokens == 0
++
++
++def test_history_rejects_foreign_or_misaligned_cache_before_forward():
++    model, cache = _history()
++    cache.prepare([1, 2, 3])
++    with pytest.raises(ValueError, match="cache"):
++        cache.generation_model(mx.array([[1]]), cache=model.make_cache())
++    _forward(cache, [1, 2])
++    attention = next(entry for entry in cache.cache if hasattr(entry, "offset"))
++    attention.offset = 1
++    with pytest.raises(ValueError, match="offset"):
++        _forward(cache, [3])
++
++
++def test_snapshot_copy_preserves_offsetless_cache_metadata():
++    from mlx_lm.models.cache import ArraysCache
++
++    from local_llm_lab.pipeline.runner import clone_prompt_cache
++
++    entry = ArraysCache(2)
++    entry.state = [mx.array([1.0]), mx.array([2.0])]
++    entry.lengths = mx.array([7])
++    entry.left_padding = mx.array([2])
++    saved = clone_prompt_cache([entry])
++    entry.lengths = mx.array([99])
++    entry.state[0] = mx.array([99.0])
++    assert saved[0].lengths.tolist() == [7]
++    assert saved[0].left_padding.tolist() == [2]
++    restored = copy.deepcopy(saved)
++    restored[0].state[0] = mx.array([42.0])
++    assert saved[0].state[0].tolist() == [1.0]
++
++
++def test_native_runner_uses_history_ledger_through_early_tool_stop_and_next_turn():
++    from tokenizers import Tokenizer
++    from tokenizers.models import WordLevel
++    from tokenizers.pre_tokenizers import WhitespaceSplit
++    from transformers import PreTrainedTokenizerFast
++
++    from local_llm_lab.models import load_model_spec
++    from local_llm_lab.pipeline.runner import generate_turn_with_count
++
++    model, cache = _history()
++    raw = '```json\n{"name": "finish", "arguments": {"answer": "ok"}}\n```'
++    backend = Tokenizer(WordLevel({"[UNK]": 0, "prompt": 1, raw: 2, "[EOS]": 3}, unk_token="[UNK]"))
++    backend.pre_tokenizer = WhitespaceSplit()
++    tokenizer = PreTrainedTokenizerFast(
++        tokenizer_object=backend,
++        unk_token="[UNK]",
++        eos_token="[EOS]",
++        clean_up_tokenization_spaces=False,
++    )
++    prompt = " ".join(["prompt"] * 9)
++    spec = load_model_spec("qwen25-coder-3b")
++
++    def sampler(logprobs):
++        return mx.array([2])
++
++    expected = generate_turn_with_count(model, tokenizer, prompt, sampler, 5, spec=spec)
++    for _ in range(2):
++        actual = generate_turn_with_count(model, tokenizer, prompt, sampler, 5, cache, spec=spec)
++        assert actual == expected == (raw, 1, 0)
++        assert cache.ledger.tokens == [1] * 9 + [2]
++        assert cache.ledger.generated == [2]
++        assert cache.ledger.offset == 10
++    assert cache.reused_tokens == 8
++
++
++def test_partial_forward_failure_cannot_leave_live_state_reusable():
++    model, cache = _history()
++    cache.prepare([1, 2, 3, 4, 5])
++    original = cache.model
++
++    class Broken:
++        def __call__(self, ids, **kwargs):
++            original(ids, **kwargs)
++            raise RuntimeError("failed after advancing cache")
++
++    cache.model = Broken()
++    with pytest.raises(RuntimeError, match="after advancing"):
++        _forward(cache, [1, 2, 3, 4])
++    assert cache.ledger is None
++    assert cache.cache is None
++    cache.model = model
++    assert cache.prepare([1, 2, 3, 4, 5]) == [1, 2, 3, 4, 5]
+diff --git a/docs/superpowers/plans/2026-09-07-history-cache.md b/docs/superpowers/plans/2026-09-07-history-cache.md
+new file mode 100644
+index 0000000..4e16b86
+--- /dev/null
++++ b/docs/superpowers/plans/2026-09-07-history-cache.md
+@@ -0,0 +1,61 @@
++# Conversation cache implementation plan
++
++**Goal:** Retain intermediate conversation state without changing visible history or silently changing native arithmetic.
++
++**Architecture:** A shared forward-pass ledger records actual model inputs for both live-lens capture and an explicit experimental `history` cache. Bounded complete hybrid snapshots can be reused only at exact token and forward-partition prefixes of the next native prefill. Fixed-token acceptance independently checks restoration and preservation of the existing generator's computation.
++
++**Spec:** User rulings of 2026-09-07; design below is the implementation contract.
++
++## Constraints
++
++- Work only in `/private/tmp/codex-history-cache-01a079ee`, based on `3922b0ba5a59ed9681d1b47e1590e387d7eacfed`.
++- Never load checkpoint weights while Claude's queue owns the machine. Never clear its lock or stop its processes. Tiny randomly initialized installed Qwen3.5 models require neither a checkpoint nor a lock.
++- Registry YAML verification fields remain null; Qwen3.5 `auto` remains `none`. `history` is explicit and experimental.
++- Capture remains no-reuse. Actual forward inputs, including lookahead, are the position authority; emitted tokens are a separate ledger.
++- Preserve canonical assistant rendering and the two-observation window. Roll back all dependent state when tokens change.
++- No source commit, integration, or default enablement is implied by this plan. Real-checkpoint acceptance remains pending until it can run normally under the repository lock; completed queue steps do not authorize interrupting a subsequent lock holder.
++
++## 1. Shared forward accounting
++
++Files: `src/local_llm_lab/forward.py`, `src/local_llm_lab/pipeline/live_lens/session.py`, `tests/test_history_cache.py`, `tests/test_live_lens_native.py`.
++
++- [x] Write failing tests for `ForwardLedger(prompt_ids)` with `record(offset, ids)` and `emitted(token_id)`: lookahead may precede emission, neither emission nor display formatting advances the forward cursor, discontinuities and conflicting tokens fail.
++- [x] Implement `ForwardPass(offset, input_ids)` and ledger validation, with a maximum context of 65536 and explicitly validated restored prefixes.
++- [x] Replace CaptureSession's independent forward counter and emitted list with the shared ledger; keep its record format and no-reuse guard.
++- [x] Run ledger and native capture/replay tests; retained records must still replay exactly.
++
++## 2. Bounded history snapshots
++
++Files: `src/local_llm_lab/pipeline/runner.py`, `tests/test_history_cache.py`, `tests/test_runner.py`, `src/local_llm_lab/models.py`, `tests/test_models.py`.
++
++- [x] Write failing tiny-model tests covering exact same-schedule restore after advance, a rewritten old observation, changed canonical assistant tokens, full native cache offsets and recurrence, budget eviction, and incompatible partitions.
++- [x] Add `HistoryCache(model, view, prefill_step_size=2048, max_checkpoints=4, max_bytes=536870912)` with `prepare`, `generation_model`, and `commit` at existing runner seams.
++- [x] Observe native calls through a delegating wrapper; evaluate and clone complete cache objects at prefill boundaries and turn completion. Do not inject a forward split solely to take a snapshot.
++- [x] Require exact saved token prefix and forward partition compatibility with the native prefill schedule. On any rewrite, discard dependent snapshots and restore an eligible preceding snapshot or start fresh. Verify every offset-bearing cache against the ledger.
++- [x] Add only explicit `history` strategy support; preserve all registry files and existing auto decisions. Keep capture incompatible with reuse.
++- [x] Run focused runner, registry, cache, and live-lens tests.
++
++## 3. Two fixed-history acceptance checks
++
++Files: `research/cache_equivalence.py`, `tests/test_cache_equivalence.py`.
++
++- [x] Add failing tests requiring both checks, bitwise logit/state comparison, rejection even when greedy winners agree, and an inconclusive result when no state was reused.
++- [x] Implement `check_fixed_history(model, view, cases, ...)` consuming fixed `prompt_ids` and `continuation_ids`. The candidate uses the production cache and installed native generator with teacher-forced sampling.
++- [x] Check A rebuilds the recorded candidate forward schedule with fresh native state and compares the last-query logits at each newly executed boundary plus final state. Check B runs the installed generator from the full prompt with fresh state and compares all generation-decision logits and final state. Include first divergence, logit gap, winning margin, token/partition hashes, and reuse counters. Discarded prefill logits are not materialized: the existing runner evaluates prefill cache state and does not execute that full vocabulary projection.
++- [x] Add CLI input/output options, adapter selection through the existing locked loader, model/corpus/source provenance, and fail-closed exit status. Never write registry evidence automatically. Keep the legacy trajectory check explicitly separate.
++- [x] Run tiny-model acceptance and negative controls. Do not treat tiny-model results as checkpoint certification.
++
++## 4. Review and handoff
++
++- [x] Inspect Claude's isolation artifact read-only when it becomes available; distinguish native execution from the manual float32 diagnostic path.
++- [x] Run relevant checkpoint-free regression tests and changed-file static checks; inspect the final diff.
++- [x] Write `design_specifications/pending/HISTORY-CACHE.md` with implementation, exact evidence and remaining checkpoint gates, including the reuse limitation imposed by native partition compatibility.
++- [x] Produce a reviewable isolated patch and handoff. Real checkpoint checks wait for the completed queue and normal lock acquisition.
++
++## Numerical policy
++
++The initial candidate retains the existing 2048-token native prefill cadence, including the final prompt token in a separate call. This is an execution-preserving candidate, not a claim that arbitrary splits are equivalent. Generated states are recorded as they happen, but a later bulk prefill may be unable to reuse a token-by-token suffix without changing arithmetic. Such states remain ineligible. A different cadence or kernel requires its own comparison against the existing runner, not merely cached/recomputed agreement under the new cadence.
++
++## Handoff status
++
++Source implementation, tiny-model tests, GPT-6 Astra review, frozen inputs and the isolated patch are complete. Final regression: 191 passed; changed-file lint and diff checks passed. The fixed corpus has 19 episodes / 76 turns and includes actual native-chunk reuse opportunities. Real-checkpoint gates remain pending: a subsequent evaluation acquired the primary model lock after the original queue completed. `design_specifications/pending/HISTORY-CACHE.md` records the diagnosis, limitations and exact guarded command. No checkpoint has been loaded for this patch.
+diff --git a/design_specifications/pending/HISTORY-CACHE.md b/design_specifications/pending/HISTORY-CACHE.md
+new file mode 100644
+index 0000000..672c06c
+--- /dev/null
++++ b/design_specifications/pending/HISTORY-CACHE.md
+@@ -0,0 +1,116 @@
++# Conversation-history cache: implementation and evidence
++
++The isolated patch adds an explicit `history` strategy that can retain intermediate conversation state while preserving the ordinary runner's forward schedule. It remains experimental. Qwen3.5 `auto` still resolves to `none`, and the registry's equivalence field remains null. Real-checkpoint acceptance is pending normal access to the model lock.
++
++Worktree: `/private/tmp/codex-history-cache-01a079ee`  
++Branch: `codex/history-cache-equivalence`  
++Base: `3922b0ba5a59ed9681d1b47e1590e387d7eacfed`  
++No integration into the primary checkout is part of this patch.
++
++## Why the existing snapshot strategy diverges
++
++`SnapshotCache.prepare()` computes the system/task prefix in a separate model call, then gives the suffix to the generator. This changes execution even on turn zero, before any snapshot restoration. Its `commit()` does nothing, so intermediate assistant/tool history is never promoted to the saved prefix.
++
++Claude's completed native comparison is at:
++
++- `/Users/daniel.tipton/Desktop/An app/research/records/ARM-A-DIVERGENCE-2026-09-07/cache/cache_runner_paths.json`
++- Its driver: `scripts/cache_runner_paths.py` in that checkout.
++
++Across eight step-zero prompts, ordinary string input and ordinary token-array input give identical generated tokens and initial log probabilities. Repeating the ordinary call is also identical. Splitting at the snapshot prefix changes initial log probabilities in all eight cases, by a maximum absolute 0.375–0.875. Within the first 24 tokens, search first diverges at position 22, list at position 4, and ledger at position 0. Ledger's ordinary first-token winning margin is zero; the split run's margin is 0.125. Converting the sampling logits to float32 does not remove those divergences.
++
++This supports a native schedule problem, rather than a tokenizer-input or sampler-precision problem. It does not locate the first differing native layer or prove restoration correct. The earlier `cache_split_diagnostic.json` runs through manual architecture-view operations in float32, so its small differences and zero reported restore error do not certify the ordinary native path.
++
++The model has both attention KV state and recurrent convolution/matrix state. A correct mathematical split can still change finite-precision arithmetic when input shapes and kernels change. The KV state setter already reconstructs its offset; a missing KV offset has not been established as the existing bug.
++
++## Design
++
++### One authority for actual model inputs
++
++`forward.py` introduces `ForwardLedger` and immutable `ForwardPass` entries. The ledger records the exact input IDs, absolute offset and partition of every actual model call. Emitted tokens have a separate list and never advance the forward cursor. This includes MLX's decode lookahead, where a token can be forwarded before it is yielded.
++
++Both `HistoryCache` and live-lens `CaptureSession` use this authority. Capture retains its no-reuse requirement, existing record schema and replay behavior. The cache checks all native attention offsets against the ledger before and after each call. Conflicting IDs, discontinuous positions, foreign cache objects and context overruns fail explicitly.
++
++### Save complete native state at existing boundaries
++
++The cache observes the native model through a delegating wrapper. It saves snapshots at prefill boundaries and at turn completion, without adding a forward split merely to obtain a snapshot. Snapshots contain complete, evaluated native cache objects, including recurrent matrices, convolution history, attention K/V, offsets and padding metadata. Restoring a snapshot clones it again so later mutation cannot corrupt the saved state.
++
++Retention is episode-local and bounded to four snapshots and 512 MiB of stored cache state by default. Budget eviction retains an early rollback anchor where possible and rotates the other slots. A state larger than the budget is not retained. This bound excludes the live working cache, temporary restore copy and Python bookkeeping. Weights and adapters must remain unchanged for the lifetime of an episode cache.
++
++### Reuse requires matching tokens AND matching computation
++
++On each turn, the existing renderer produces the canonical prompt. `prepare()` discards snapshots whose token prefix no longer matches, then selects the latest snapshot whose entire saved forward partition is an exact prefix of the next ordinary native prefill partition. If none qualifies, it recomputes.
++
++The default partition is the installed generator's 2,048-token prefill chunks, with the final prompt token reserved for a separate call. The strict comparison harness leaves the reference generator on its installed default, so changing that library default cannot silently certify our constant.
++
++```mermaid
++flowchart LR
++    A[Render canonical windowed history] --> B[Tokenize once]
++    B --> C{Exact token and forward-partition prefix?}
++    C -->|yes| D[Clone latest eligible full-state snapshot]
++    C -->|no| E[Fresh native cache]
++    D --> F[Run remaining native calls]
++    E --> F
++    F --> G[Record actual input IDs in shared ledger]
++    G --> H[Save bounded state at existing boundaries]
++```
++
++This matters because assistant history is re-rendered from parsed notes/actions, and old tool observations are replaced by hidden-result stubs. Raw generated IDs cannot be assumed to equal the next canonical prompt. When a past observation changes, every state depending on it must be discarded; retaining that state would make hidden information available to the model.
++
++### Practical limitation: short growing conversations may gain nothing
++
++Retaining a generation-end state does not make it eligible for the next bulk prefill. A token-by-token generated suffix generally has a different forward partition from a later bulk prompt. Under the user's bit-identical requirement, this patch does not substitute one for the other.
++
++All 64 captured agentic pilot turns have prompts shorter than 2,048 tokens. They therefore provide useful native recomputation controls but no guaranteed cross-turn reuse for growing prompts. The long ledger fixture has four later prompts of 2,269, 2,362, 2,455 and 2,548 tokens that share a complete native chunk. That provides real conversation-history reuse coverage.
++
++A smaller fixed prefill cadence or a fully incremental transcript could offer more reuse. Both change the numerical baseline, and changing the transcript also changes the task's observation-hiding semantics. Neither is silently introduced here. A different cadence must independently pass check B against the existing runner; agreement between cached and uncached execution under the new cadence is insufficient.
++
++## Acceptance checks
++
++The harness consumes frozen prompt and continuation token IDs. It teacher-forces the continuation, so both arms encounter exactly the same history even when their greedy predictions would differ.
++
++| Check | Reference | Pass condition |
++| --- | --- | --- |
++| A: restoration | Fresh native state replaying the candidate's exact recorded forward partition | Bit-identical boundary-last logits for newly executed calls and complete final logical state; actual reuse must occur somewhere in the corpus |
++| B: baseline preservation | Installed native generator from the full prompt using its ordinary default cadence | Bit-identical logits at every generation decision and complete final logical state |
++
++Finite values, shape, dtype and byte identity are required. Argmax agreement, numerical tolerance, rounded errors and task success cannot override a failure. A corpus with no actual reuse is inconclusive for A. Every control episode must still have zero numerical discrepancies.
++
++Unused KV allocation capacity is excluded from logical-state comparison. The ordinary prefill does not evaluate the full vocabulary projection for every prompt token, so the harness does not materialize that discarded matrix. Check A observes the last query at each executed boundary; B covers all actual generation decisions. No attestation of every discarded prefill logit is claimed.
++
++Reports retain exact partitions, token/corpus hashes, errors, first differing greedy positions, winning margins, logical state hashes, model/adapter declarations, source hashes and hashes of installed MLX-LM sources and MLX binaries. The CLI exits unsuccessfully if either gate is not passed and never edits registry verification fields.
++
++## Verification and frozen inputs
++
++Tiny tests use the installed Qwen3.5 implementation with small randomly initialized weights, including float32, bfloat16 and 4-bit variants. Negative controls corrupt a snapshot, introduce a shape-dependent state change, and change a nonwinning logit by one bit. Tests also cover rewritten observations, exact forward accounting, native streaming and early stopping, metadata isolation, offsets, memory limits, explicit strategy resolution and capture's no-reuse rule. Tiny-model results are not checkpoint certification.
++
++Final regression result: **191 passed in 5.07s**. Changed-file Ruff checks and `git diff --check` pass. The recorded test and lint output is in `research/records/HISTORY-CACHE-2026-09-07/`.
++
++A GPT-6 Astra source reviewer found no material correctness defect in the implementation. Its request to clarify the discarded-prefill-logit boundary is incorporated above.
++
++The fixed corpus is:
++
++`research/records/HISTORY-CACHE-2026-09-07/fixed-history-native-reuse.json`
++
++SHA-256: `1b79bf538755aacb91b9f8bf9459ee22bdc8f4423319949f3920a026ddafa2ca`
++
++It contains 19 episodes and 76 turns: all completed agentic pilot turns, all eight supplied native step-zero controls, and four later ledger turns selected by shared-token structure before this patch's model comparisons. Pilot emissions retain their recorded token IDs. The later ledger continuations are explicitly declared teacher-forcing IDs obtained by locally retokenizing the first 24 tokens of existing raw output; they are not presented as the original generator's token segmentation. Source hashes and selection rules are embedded in the corpus. Preparation loads tokenizer assets only.
++
++## Checkpoint handoff
++
++The queue log records successful pilot and native-comparison exits, ending at 16:04:28 Melbourne time. A subsequent base evaluation acquired the primary model lock at 16:21:04 (PID 10458). No checkpoint has been loaded for this patch while that evaluation owns the lock, and no lock or process has been removed or stopped.
++
++`run_acceptance.py` routes the unchanged repository model-lock mechanism to the primary checkout's lock path. This is necessary because an isolated worktree otherwise derives a different lock path. It retains normal acquisition, process checks, refusal and process-lifetime release. It uses the installed local checkpoint cache offline and writes results only in this worktree.
++
++Once the machine is available, run from the isolated worktree:
++
++```sh
++PYTHONPATH=src '/Users/daniel.tipton/Desktop/An app/.venv/bin/python' \
++  research/records/HISTORY-CACHE-2026-09-07/run_acceptance.py \
++  --model qwen35-4b --strategy history \
++  --fixed-history research/records/HISTORY-CACHE-2026-09-07/fixed-history-native-reuse.json \
++  --report research/records/HISTORY-CACHE-2026-09-07/base-acceptance.json
++```
++
++An adapter check must run serially in a separate process, adding `--adapter '/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/best-adapter'` and using a distinct report path. Do not clear a lock to make either command run. Passing is evidence for the loaded weights, installed runtime and fixed corpus only. Any registry/default change remains a separate decision after reviewing real-checkpoint evidence.
++
++Speed has not been established. Snapshot copying can outweigh saved prefill, and the original divergent trajectories were different workloads. Evaluate performance only after correctness, on identical fixed inputs with reuse and snapshot costs included.
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py b/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py
+new file mode 100644
+index 0000000..48d6873
+--- /dev/null
++++ b/research/records/HISTORY-CACHE-2026-09-07/prepare_corpus.py
+@@ -0,0 +1,126 @@
++"""Freeze completed pilot histories and the eight native step-0 controls, without weights."""
++
++import hashlib
++import json
++from pathlib import Path
++
++from local_llm_lab.forward import encode_prompt
++from local_llm_lab.models import load_model_spec
++from local_llm_lab.pipeline.live_lens.session import read_record
++from local_llm_lab.pipeline.protocol import SYSTEM_PROMPT, build_prompt
++
++PRIMARY = Path("/Users/daniel.tipton/Desktop/An app")
++OUT = Path(__file__).resolve().parent
++PILOT = PRIMARY / "research/records/LIVE-LENS-PILOT-2026-09-07"
++TOKENIZER = (
++    PRIMARY
++    / ".cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/snapshots"
++    / "32f3e8ecf65426fc3306969496342d504bfa13f3"
++)
++
++
++def main():
++    manifest_path = PILOT / "manifest.json"
++    manifest = json.loads(manifest_path.read_text())
++    sources = {str(manifest_path): hashlib.sha256(manifest_path.read_bytes()).hexdigest()}
++    episodes = []
++    for item in manifest["episodes"]:
++        if item["kind"] != "agentic":
++            continue
++        path = PILOT / item["record"]
++        digest = hashlib.sha256(path.read_bytes()).hexdigest()
++        if digest != item["record_sha256"]:
++            raise ValueError(f"pilot record changed: {path}")
++        sources[str(path)] = digest
++        turns = []
++        current = None
++        for row in read_record(path):
++            if row["kind"] == "begin_turn":
++                current = dict(prompt_ids=row["prompt_ids"], continuation_ids=[])
++            elif row["kind"] == "emitted":
++                if current is None:
++                    raise ValueError("emission without prompt")
++                current["continuation_ids"].append(row["token_id"])
++            elif row["kind"] == "end_turn":
++                if row["status"] != "complete" or current is None:
++                    raise ValueError("incomplete pilot turn")
++                if len(current["continuation_ids"]) != row["emitted_count"]:
++                    raise ValueError("pilot emitted count differs")
++                turns.append(current)
++                current = None
++        if current is not None:
++            raise ValueError("unterminated pilot turn")
++        episodes.append(dict(id=item["label"], turns=turns))
++        print(
++            json.dumps(
++                {
++                    "episode": item["label"],
++                    "prompt_lengths": [len(t["prompt_ids"]) for t in turns],
++                    "continuations": [len(t["continuation_ids"]) for t in turns],
++                }
++            ),
++            flush=True,
++        )
++
++    # Local tokenizer assets only. No model loader, checkpoint weights or lock is used.
++    from mlx_lm.tokenizer_utils import load as load_tokenizer
++
++    tokenizer = load_tokenizer(TOKENIZER)
++    spec = load_model_spec("qwen35-4b")
++    native_path = (
++        PRIMARY / "research/records/ARM-A-DIVERGENCE-2026-09-07/cache/cache_runner_paths.json"
++    )
++    base_path = PRIMARY / "outputs/agent-v2/evals/base-test.json"
++    native = json.loads(native_path.read_text())
++    base = {t["task_id"]: t for t in json.loads(base_path.read_text())["trajectories"]}
++    for path in (native_path, base_path):
++        sources[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
++    for case in native["cases"]:
++        task = base[case["task_id"]]
++        prompt = build_prompt(
++            tokenizer,
++            [dict(role="system", content=SYSTEM_PROMPT), dict(role="user", content=task["prompt"])],
++            spec=spec,
++            generation=True,
++        )
++        ids = encode_prompt(tokenizer, prompt)
++        if len(ids) != case["prompt_tokens"]:
++            raise ValueError("native control prompt token count changed")
++        episodes.append(
++            dict(
++                id="step0-" + case["task_id"],
++                turns=[dict(prompt_ids=ids, continuation_ids=case["tokens"]["a"])],
++            )
++        )
++    result = dict(
++        schema_version=1,
++        model=spec.hf_id,
++        source_hashes=sources,
++        episodes=episodes,
++        selection=(
++            "All completed agentic pilot turns, plus all eight native step-0 controls; "
++            "full recorded continuations"
++        ),
++    )
++    target = OUT / "fixed-history.json"
++    with target.open("x") as stream:
++        json.dump(result, stream, separators=(",", ":"))
++        stream.write("\n")
++    print(
++        json.dumps(
++            {
++                "corpus": str(target),
++                "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
++                "episodes": len(episodes),
++                "turns": sum(len(e["turns"]) for e in episodes),
++                "continuation_tokens": sum(
++                    len(t["continuation_ids"]) for e in episodes for t in e["turns"]
++                ),
++            }
++        ),
++        flush=True,
++    )
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py b/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py
+new file mode 100644
+index 0000000..6f54da1
+--- /dev/null
++++ b/research/records/HISTORY-CACHE-2026-09-07/prepare_reuse_corpus.py
+@@ -0,0 +1,113 @@
++"""Add deterministic long-history cases using token structure, before model comparisons."""
++
++import hashlib
++import json
++
++from prepare_corpus import OUT, PRIMARY, TOKENIZER
++
++from local_llm_lab.agent_protocol import Action
++from local_llm_lab.forward import encode_prompt
++from local_llm_lab.models import load_model_spec
++from local_llm_lab.pipeline.protocol import (
++    SYSTEM_PROMPT,
++    assistant_message,
++    build_prompt,
++    tool_message,
++)
++
++
++def main():
++    # Tokenizer assets only: this does not load the checkpoint.
++    from mlx_lm.tokenizer_utils import load as load_tokenizer
++
++    tokenizer = load_tokenizer(TOKENIZER)
++    spec = load_model_spec("qwen35-4b")
++    source = PRIMARY / "outputs/agent-v2/evals/base-test.json"
++    trajectories = json.loads(source.read_text())["trajectories"]
++    original = OUT / "fixed-history.json"
++    corpus = json.loads(original.read_text())
++    corpus["source_hashes"][str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
++    if hashlib.sha256(source.read_bytes()).hexdigest() != corpus["source_hashes"][str(source)]:
++        raise ValueError("source trajectories changed after the first corpus was frozen")
++
++    selected = []
++    for family in ("ledger_reconcile", "batch_update", "aggregate_report"):
++        for task in sorted(trajectories, key=lambda task: task["task_id"]):
++            if task["family"] != family or task["variant"] != "clean":
++                continue
++            messages = [
++                dict(role="system", content=SYSTEM_PROMPT),
++                dict(role="user", content=task["prompt"]),
++            ]
++            turns = []
++            for step in task["steps"]:
++                if "action" not in step:
++                    break
++                ids = encode_prompt(tokenizer, build_prompt(tokenizer, messages, spec=spec))
++                # These are declared teacher-forcing IDs retokenized from existing text,
++                # not a claim about the original generator's exact token segmentation.
++                continuation = tokenizer.encode(step["raw"], add_special_tokens=False)[:24]
++                turns.append(dict(prompt_ids=ids, continuation_ids=continuation))
++                action = Action(step["action"]["name"], step["action"]["arguments"])
++                messages.append(assistant_message(step["thought"], action))
++                if action.name == "finish":
++                    break
++                messages.append(tool_message(action.name, step["observation"]))
++
++            eligible = next(
++                (
++                    i
++                    for i in range(1, len(turns))
++                    if len(turns[i - 1]["prompt_ids"]) > 2048
++                    and len(turns[i]["prompt_ids"]) > 2048
++                    and turns[i - 1]["prompt_ids"][:2048] == turns[i]["prompt_ids"][:2048]
++                ),
++                None,
++            )
++            if eligible is None:
++                continue
++            start, stop = eligible - 1, min(eligible + 3, len(turns))
++            item = dict(
++                id="long-" + task["task_id"],
++                turns=turns[start:stop],
++                original_turn_indices=list(range(start, stop)),
++                continuation_source="retokenized recorded raw text, first 24 IDs",
++            )
++            corpus["episodes"].append(item)
++            selected.append(
++                dict(
++                    id=item["id"],
++                    original_turn_indices=item["original_turn_indices"],
++                    prompt_lengths=[len(t["prompt_ids"]) for t in item["turns"]],
++                )
++            )
++            break
++    if not selected:
++        raise ValueError("no real conversation history offers a native 2048-token reuse boundary")
++    corpus["selection"] += (
++        "; plus the first clean task by task ID in each of ledger_reconcile, batch_update, "
++        "aggregate_report with adjacent prompts sharing a full native 2048-token chunk. "
++        "Keep four turns starting just before the first eligible transition (or the remaining "
++        "turns if shorter), and force the first 24 locally retokenized raw-text IDs. "
++        "Selection uses input structure only, before this patch's model comparisons."
++    )
++    target = OUT / "fixed-history-native-reuse.json"
++    with target.open("x") as stream:
++        json.dump(corpus, stream, separators=(",", ":"))
++        stream.write("\n")
++    print(
++        json.dumps(
++            dict(
++                selected=selected,
++                corpus=str(target),
++                sha256=hashlib.sha256(target.read_bytes()).hexdigest(),
++                episodes=len(corpus["episodes"]),
++                turns=sum(len(e["turns"]) for e in corpus["episodes"]),
++            ),
++            indent=2,
++        )
++    )
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/run_acceptance.py b/research/records/HISTORY-CACHE-2026-09-07/run_acceptance.py
+new file mode 100644
+index 0000000..ff9433d
+--- /dev/null
++++ b/research/records/HISTORY-CACHE-2026-09-07/run_acceptance.py
+@@ -0,0 +1,21 @@
++"""Run isolated source with the primary checkout's existing process-scoped model lock.
++
++This changes only the root used by the normal guard, not its acquisition, process checks,
++refusal, or release behavior. All results stay in this worktree. Requires the queue to have
++finished before invocation; never removes another holder's lock or stops any process.
++"""
++
++import os
++import runpy
++from pathlib import Path
++
++from local_llm_lab import runlock
++
++PRIMARY = Path("/Users/daniel.tipton/Desktop/An app")
++runlock.PROJECT_ROOT = PRIMARY
++os.environ["HF_HOME"] = str(PRIMARY / ".cache/huggingface")
++os.environ["HF_HUB_OFFLINE"] = "1"
++os.environ["MODEL_RUN_SESSION"] = "codex-history-cache-acceptance"
++runpy.run_path(
++    str(Path(__file__).resolve().parents[2] / "cache_equivalence.py"), run_name="__main__"
++)
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/tiny-tests.txt b/research/records/HISTORY-CACHE-2026-09-07/tiny-tests.txt
+new file mode 100644
+index 0000000..5a554b3
+--- /dev/null
++++ b/research/records/HISTORY-CACHE-2026-09-07/tiny-tests.txt
+@@ -0,0 +1,4 @@
++........................................................................ [ 37%]
++........................................................................ [ 75%]
++...............................................                          [100%]
++191 passed in 5.07s
+diff --git a/research/records/HISTORY-CACHE-2026-09-07/lint.txt b/research/records/HISTORY-CACHE-2026-09-07/lint.txt
+new file mode 100644
+index 0000000..1f5f344
+--- /dev/null
++++ b/research/records/HISTORY-CACHE-2026-09-07/lint.txt
+@@ -0,0 +1 @@
++All checks passed!
