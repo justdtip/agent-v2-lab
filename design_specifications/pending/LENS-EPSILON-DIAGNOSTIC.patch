@@ -1,0 +1,695 @@
+diff --git a/scripts/lens_epsilon_diagnostic.py b/scripts/lens_epsilon_diagnostic.py
+new file mode 100644
+index 0000000..33bccf1
+--- /dev/null
++++ b/scripts/lens_epsilon_diagnostic.py
+@@ -0,0 +1,133 @@
++"""Run only the approved original-full-primal four-scale epsilon diagnostic."""
++
++from __future__ import annotations
++
++import argparse
++import json
++import sys
++import time
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++
++
++def main(argv=None):
++    started = time.monotonic()
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--model", required=True)
++    parser.add_argument("--corpus", required=True, type=Path)
++    parser.add_argument("--plan", required=True, type=Path)
++    parser.add_argument("--revision", required=True)
++    parser.add_argument("--record-dir", required=True, type=Path)
++    args = parser.parse_args(argv)
++    from local_llm_lab.models import load_model_spec
++    from local_llm_lab.pipeline.lens_fitting.epsilon_diagnostic import (
++        DeadlineExceeded,
++        atomic_record,
++        run_diagnostic,
++        validate_scope,
++    )
++    from local_llm_lab.pipeline.lens_fitting.jacobian import (
++        WorkloadMemoryGuard,
++        memory_gate,
++        prepare_plan,
++    )
++    from local_llm_lab.pipeline.lens_fitting.runtime import (
++        configure_allocator_cache,
++        load_runtime,
++        prepare_fit,
++    )
++    from local_llm_lab.pipeline.live_lens.instruments import file_sha256
++
++    args.record_dir.mkdir(parents=True, exist_ok=False)
++
++    def progress(event):
++        event = dict(event, elapsed_s=time.monotonic() - started)
++        with (args.record_dir / "progress.jsonl").open("a") as stream:
++            stream.write(json.dumps(event, allow_nan=False) + "\n")
++            stream.flush()
++            import os
++
++            os.fsync(stream.fileno())
++        print(json.dumps(event, allow_nan=False), flush=True)
++
++    try:
++        progress(dict(event="preflight_started"))
++        spec = load_model_spec(args.model)
++        manifest = json.loads(args.corpus.read_text())
++        # prepare_fit validates this unused sentinel path; no lens is ever written.
++        sentinel = (
++            args.record_dir
++            / f"{spec.name.replace('/', '--')}-{manifest['domain']}-jacobian-unused.npz"
++        )
++        prepared = prepare_fit(args.corpus, spec, sentinel, kind="jacobian", revision=args.revision)
++        plan = prepare_plan(prepared, args.plan)
++        validate_scope(prepared.rows, plan)
++        memory_gate(8 * 2**30, plan["working_set_bytes"])
++        root = Path(__file__).resolve().parents[1]
++        source_paths = [
++            Path(__file__).resolve(),
++            *sorted((root / "src/local_llm_lab/pipeline/lens_fitting").glob("*.py")),
++            root / "src/local_llm_lab/arch.py",
++            root / "src/local_llm_lab/pipeline/evaluate.py",
++        ]
++        provenance = dict(
++            snapshot=prepared.snapshot,
++            plan_file_sha256=file_sha256(args.plan),
++            corpus_manifest_sha256=prepared.corpus_manifest_sha256,
++            source_sha256={str(p.relative_to(root)): file_sha256(p) for p in source_paths},
++        )
++        atomic_record(args.record_dir / "provenance.json", provenance)
++        if time.monotonic() - started >= 480:
++            raise DeadlineExceeded("CLI budget exhausted before load")
++        progress(dict(event="load_started"))
++        loaded = load_runtime(prepared)
++        import mlx.core as mx
++
++        loaded.model.eval()
++        allocator = configure_allocator_cache()
++        working = mx.device_info()["max_recommended_working_set_size"]
++        guard = WorkloadMemoryGuard(8 * 2**30, working, mx.get_peak_memory)
++        guard("after_load")
++        provenance.update(
++            model_run_lock=str(loaded.lock_path),
++            allocator=allocator,
++            actual_working_set_bytes=working,
++            peak_limit_bytes=8 * 2**30,
++        )
++        atomic_record(args.record_dir / "provenance.json", provenance)
++        report = run_diagnostic(
++            loaded.view,
++            prepared.rows,
++            plan,
++            args.record_dir,
++            started=started,
++            guard=guard,
++            provenance=provenance,
++            progress=progress,
++        )
++        peak = float(mx.get_peak_memory())
++        import math
++
++        report["peak_memory_bytes"] = peak if math.isfinite(peak) else None
++        report["peak_memory_scope"] = "actual MLX process peak including load"
++        atomic_record(args.record_dir / "diagnostic.json", report)
++        return 0 if report["status"] == "completed" else 2
++    except BaseException as error:
++        record = dict(
++            status="incomplete",
++            diagnostic_only=True,
++            production_acceptance=False,
++            error_type=type(error).__name__,
++            error=str(error),
++            elapsed_s=time.monotonic() - started,
++        )
++        if hasattr(error, "report"):
++            record["stop_details"] = error.report
++        atomic_record(args.record_dir / "stop.json", record)
++        progress(dict(event="stop", **record))
++        return 2
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py b/src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py
+new file mode 100644
+index 0000000..24c7056
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py
+@@ -0,0 +1,335 @@
++"""Approved four-scale descriptive diagnostic; never a production self-check proof."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import time
++from pathlib import Path
++
++import numpy as np
++
++from .jacobian import (
++    cached_responses,
++    digest,
++    finite_difference_steps,
++    prepare_position,
++    reference_responses,
++    unit_directions,
++)
++
++SCALES = (0.125, 0.25, 0.5, 1.0)
++ENDPOINTS = (0.125, 1.0)
++
++
++def atomic_record(path, record):
++    path = Path(path)
++    temporary = path.with_suffix(path.suffix + ".tmp")
++    with temporary.open("w") as stream:
++        json.dump(record, stream, indent=2, sort_keys=True, allow_nan=False)
++        stream.write("\n")
++        stream.flush()
++        os.fsync(stream.fileno())
++    os.replace(temporary, path)
++
++
++def compare(reference, candidate, *, atol, rtol):
++    """The first argument supplies the tolerance denominator, including stability."""
++    a, b = np.asarray(reference, dtype=np.float64), np.asarray(candidate, dtype=np.float64)
++    if a.shape != b.shape or a.ndim != 2:
++        raise ValueError("matching direction-by-coordinate responses required")
++    finite = np.isfinite(a) & np.isfinite(b)
++    with np.errstate(invalid="ignore", over="ignore"):
++        error = np.abs(a - b)
++        failed = ~finite | (error > atol + rtol * np.abs(a))
++
++    def metrics(e, f, valid):
++        return dict(
++            max_error=float(e.max()) if valid.all() else None,
++            rms_error=float(np.sqrt(np.mean(e**2))) if valid.all() else None,
++            failed_coordinates=int(f.sum()),
++            total_coordinates=int(f.size),
++            nonfinite_coordinates=int((~valid).sum()),
++        )
++
++    return dict(
++        atol=atol,
++        rtol=rtol,
++        denominator="first/reference response",
++        **metrics(error, failed, finite),
++        per_direction=[metrics(e, f, v) for e, f, v in zip(error, failed, finite, strict=True)],
++    )
++
++
++class DeadlineExceeded(RuntimeError):
++    pass
++
++
++class BlockLedger:
++    """Single wrapper around actual run_block calls; records partial-block work."""
++
++    def __init__(self, view, emit, *, started, clock=time.monotonic, budget=480):
++        self.view, self.emit, self.started, self.clock, self.budget = (
++            view,
++            emit,
++            started,
++            clock,
++            budget,
++        )
++        self.phase = {}
++        self.head = "0" * 64
++        self.calls = self.block_tokens = 0
++        self.attempts = 0
++        self.pending = []
++        self.confirmed_tokens = 0
++
++    def __getattr__(self, name):
++        return getattr(self.view, name)
++
++    def check(self):
++        if self.clock() - self.started >= self.budget:
++            raise DeadlineExceeded("480-second CLI budget exhausted before next native block call")
++
++    def run_block(self, index, h, *args, **kwargs):
++        self.check()
++        self.attempts += 1
++        fields = dict(
++            call=self.attempts,
++            block_index=int(index),
++            batch=int(h.shape[0]),
++            sequence=int(h.shape[1]),
++            block_tokens=int(h.shape[0] * h.shape[1]),
++            phase=dict(self.phase),
++        )
++        self._record(dict(event="block_started", **fields))
++        try:
++            result = self.view.run_block(index, h, *args, **kwargs)
++        except BaseException as error:
++            self._record(dict(event="block_failed", error=type(error).__name__, **fields))
++            raise
++        self.calls += 1
++        self.block_tokens += fields["block_tokens"]
++        self.pending.append(fields)
++        self._record(dict(event="block_returned", **fields))
++        return result
++
++    def _record(self, event):
++        event = dict(event, previous_sha256=self.head)
++        self.head = digest(event)
++        self.emit(dict(event, sha256=self.head))
++
++    def confirm(self, workload):
++        if self.pending:
++            self.confirmed_tokens += sum(e["block_tokens"] for e in self.pending)
++            self._record(
++                dict(
++                    event="materialized_workload",
++                    workload=workload,
++                    calls=[e["call"] for e in self.pending],
++                )
++            )
++            self.pending.clear()
++
++    def summary(self):
++        return dict(
++            attempted_block_calls=self.attempts,
++            returned_block_calls=self.calls,
++            scheduled_block_tokens=self.block_tokens,
++            materialized_block_tokens=self.confirmed_tokens,
++            pending_block_calls=len(self.pending),
++            ledger_sha256=self.head,
++            accounting="batch * sequence per actual run_block; partial-block computations; "
++            "returned calls may be lazily evaluated; workload guards follow materialization",
++        )
++
++
++def validate_scope(rows, plan):
++    if (
++        plan["self_row"],
++        plan["self_position"],
++        plan["self_layers"],
++        plan["seeds"]["self_directions"],
++    ) != (0, 438, [1, 16, 31], 20260904):
++        raise ValueError("diagnostic requires the original frozen row/position/layers/seed")
++    if len(rows[0]["ids"]) != 439 or digest(rows) != plan["rows_sha256"]:
++        raise ValueError("diagnostic requires the original frozen 439-token input")
++    if plan["self_bounds"] != dict(atol=0.0003, rtol=0.003) or plan["stability_bounds"] != dict(
++        atol=0.003, rtol=0.03
++    ):
++        raise ValueError("original diagnostic tolerances required")
++
++
++def run_diagnostic(
++    view,
++    rows,
++    plan,
++    directory,
++    *,
++    started,
++    guard,
++    provenance,
++    clock=time.monotonic,
++    prepare=prepare_position,
++    reference=reference_responses,
++    cached=cached_responses,
++    progress=None,
++):
++    """Injected numerical callbacks keep schedule/accounting tests entirely CPU-only."""
++    directory = Path(directory)
++    validate_scope(rows, plan)
++    directions = unit_directions(16, plan["hidden_size"], 20260904)
++    np.save(directory / "directions.npy", directions, allow_pickle=False)
++    report = dict(
++        status="incomplete",
++        diagnostic_only=True,
++        production_acceptance=False,
++        provenance=provenance,
++        plan_sha256=plan["plan_sha256"],
++        snapshot_sha256=plan["snapshot_sha256"],
++        input_ids=rows[0]["ids"],
++        input_ids_sha256=digest(rows[0]["ids"]),
++        direction_sha256=hashlib.sha256(directions.tobytes()).hexdigest(),
++        direction_dtype=str(directions.dtype),
++        direction_shape=list(directions.shape),
++        direction_seed=20260904,
++        scales=list(SCALES),
++        endpoints=list(ENDPOINTS),
++        row=0,
++        position=438,
++        layers=[1, 16, 31],
++        batch_size=8,
++        budget_seconds=480,
++        primals=[],
++        measurements=[],
++        comparisons=[],
++    )
++    with (directory / "block-ledger.jsonl").open("x") as ledger_stream:
++
++        def emit(event):
++            ledger_stream.write(json.dumps(event, sort_keys=True, allow_nan=False) + "\n")
++            ledger_stream.flush()
++            if event["event"] == "materialized_workload":
++                os.fsync(ledger_stream.fileno())
++
++        wrapped = BlockLedger(view, emit, started=started, clock=clock)
++
++        def measured_guard(workload, **details):
++            wrapped.confirm(workload)
++            guard(workload, **details)
++
++        def checkpoint(event):
++            if getattr(guard, "recent", None):
++                event = dict(event, peak_memory_bytes=guard.recent[-1]["peak_bytes"])
++                report["peak_memory_bytes"] = guard.recent[-1]["peak_bytes"]
++            ledger_stream.flush()
++            os.fsync(ledger_stream.fileno())
++            report.update(
++                elapsed_s=clock() - started, block_accounting=wrapped.summary(), progress=event
++            )
++            atomic_record(directory / "diagnostic.json", report)
++            if progress:
++                progress(event)
++
++        try:
++            checkpoint(dict(event="diagnostic_started"))
++            for layer in (1, 16, 31):
++                wrapped.check()
++                wrapped.phase = dict(layer=layer, operation="prepare")
++                checkpoint(wrapped.phase)
++                state = prepare(wrapped, rows[0]["ids"], layer, 438, guard=measured_guard)
++                primal_info = dict(layer=layer, full_primal_norm=float(state.primal_norm))
++                if hasattr(state, "full_primal"):
++                    selected = np.asarray(state.full_primal[0, 438], dtype=np.float32)
++                    primal_info["selected_position_norm"] = (
++                        float(np.linalg.norm(selected.astype(np.float64)))
++                        if np.isfinite(selected).all()
++                        else None
++                    )
++                report["primals"].append(primal_info)
++                previous = None
++                for scale in SCALES:
++                    modes = (
++                        ("reference", "restore", "broadcast")
++                        if scale in ENDPOINTS
++                        else ("reference",)
++                    )
++                    ref = None
++                    for mode in modes:
++                        wrapped.check()
++                        wrapped.phase = dict(layer=layer, scale=scale, operation=mode)
++                        checkpoint(wrapped.phase)
++                        kwargs = dict(epsilon_scale=scale, guard=measured_guard)
++                        response = (
++                            reference(state, directions, **kwargs)
++                            if mode == "reference"
++                            else cached(state, directions, mode=mode, batch_size=8, **kwargs)
++                        )
++                        response = np.asarray(response, dtype=np.float32)
++                        measured_guard("diagnostic_response", layer=layer, scale=scale, mode=mode)
++                        if response.shape != directions.shape:
++                            raise ValueError("response shape differs from direction grid")
++                        filename = f"layer-{layer}-scale-{scale:g}-{mode}.npy"
++                        np.save(directory / filename, response, allow_pickle=False)
++                        norms = [
++                            float(np.linalg.norm(row.astype(np.float64)))
++                            if np.isfinite(row).all()
++                            else None
++                            for row in response
++                        ]
++                        report["measurements"].append(
++                            dict(
++                                layer=layer,
++                                scale=scale,
++                                mode=mode,
++                                epsilon=finite_difference_steps(
++                                    state.primal_norm, np.linalg.norm(directions, axis=1), scale
++                                ).tolist(),
++                                response_norms=norms,
++                                nonfinite_coordinates=int((~np.isfinite(response)).sum()),
++                                file=filename,
++                                file_sha256=hashlib.sha256(
++                                    (directory / filename).read_bytes()
++                                ).hexdigest(),
++                            )
++                        )
++                        if mode == "reference":
++                            ref = response
++                            if previous is not None:
++                                report["comparisons"].append(
++                                    dict(
++                                        kind="adjacent_stability",
++                                        layer=layer,
++                                        reference_scale=scale,
++                                        candidate_scale=scale / 2,
++                                        **compare(ref, previous, atol=0.003, rtol=0.03),
++                                    )
++                                )
++                        else:
++                            report["comparisons"].append(
++                                dict(
++                                    kind="cache_reference",
++                                    layer=layer,
++                                    scale=scale,
++                                    mode=mode,
++                                    **compare(ref, response, atol=0.0003, rtol=0.003),
++                                )
++                            )
++                        checkpoint(dict(event="measurement_completed", **wrapped.phase))
++                    previous = ref
++                del state, previous, ref, response
++            wrapped.check()
++            if wrapped.pending:
++                raise RuntimeError("unconfirmed block calls at diagnostic end")
++            report["status"] = (
++                "completed_with_nonfinite_failures"
++                if any(m["nonfinite_coordinates"] for m in report["measurements"])
++                else "completed"
++            )
++        except BaseException as error:
++            report.update(status="incomplete", error_type=type(error).__name__, error=str(error))
++            if hasattr(error, "report"):
++                report["stop_details"] = error.report
++        finally:
++            checkpoint(dict(event="diagnostic_finished", status=report["status"]))
++    return report
+diff --git a/tests/test_lens_epsilon_diagnostic.py b/tests/test_lens_epsilon_diagnostic.py
+new file mode 100644
+index 0000000..29ca13e
+--- /dev/null
++++ b/tests/test_lens_epsilon_diagnostic.py
+@@ -0,0 +1,209 @@
++import json
++from types import SimpleNamespace
++
++import numpy as np
++import pytest
++
++from local_llm_lab.pipeline.lens_fitting.epsilon_diagnostic import (
++    BlockLedger,
++    DeadlineExceeded,
++    compare,
++    run_diagnostic,
++)
++from local_llm_lab.pipeline.lens_fitting.jacobian import digest
++
++
++def test_denominator_is_larger_scale_reference():
++    # .003 + .03*100=3.003; using 97 instead incorrectly rejects error=3.
++    result = compare([[100.0]], [[97.0]], atol=0.003, rtol=0.03)
++    assert result["failed_coordinates"] == 0
++    assert result["total_coordinates"] == 1
++    assert result["max_error"] == 3
++    assert result["rms_error"] == 3
++    assert compare([[97.0]], [[100.0]], atol=0.003, rtol=0.03)["failed_coordinates"] == 1
++
++
++def test_nonfinite_is_failure_and_json_null():
++    result = compare([[np.nan, 1], [2, np.inf]], [[0, 1], [3, np.inf]], atol=0, rtol=0)
++    assert result["failed_coordinates"] == 3
++    assert result["nonfinite_coordinates"] == 2
++    assert result["total_coordinates"] == 4
++    assert result["max_error"] is None
++    assert result["per_direction"][0]["rms_error"] is None
++    json.dumps(result, allow_nan=False)
++
++
++class View:
++    hidden_size = 3
++
++    def run_block(self, index, h, *args):
++        return h
++
++
++def test_ledger_deadline_counts_and_materialization():
++    now = [0.0]
++    events = []
++    view = BlockLedger(View(), events.append, started=0, clock=lambda: now[0])
++    view.phase = {"operation": "broadcast"}
++    view.run_block(16, np.zeros((8, 1, 3)))
++    view.run_block(17, np.zeros((1, 439, 3)))
++    assert view.summary()["scheduled_block_tokens"] == 447
++    assert view.summary()["materialized_block_tokens"] == 0
++    view.confirm("after_eval")
++    assert view.summary()["materialized_block_tokens"] == 447
++    assert view.summary()["pending_block_calls"] == 0
++    previous = "0" * 64
++    for event in events:
++        assert event["previous_sha256"] == previous
++        previous = digest({k: v for k, v in event.items() if k != "sha256"})
++        assert previous == event["sha256"]
++    now[0] = 480
++    with pytest.raises(DeadlineExceeded):
++        view.run_block(18, np.zeros((8, 1, 3)))
++    assert view.attempts == 2
++
++
++def inputs():
++    rows = [dict(ids=list(range(439)))]
++    plan = dict(
++        self_row=0,
++        self_position=438,
++        self_layers=[1, 16, 31],
++        seeds=dict(self_directions=20260904),
++        rows_sha256=digest(rows),
++        hidden_size=3,
++        plan_sha256="plan",
++        snapshot_sha256="snapshot",
++        self_bounds=dict(atol=0.0003, rtol=0.003),
++        stability_bounds=dict(atol=0.003, rtol=0.03),
++    )
++    return rows, plan
++
++
++def test_exact_schedule_and_independent_cache_checks(tmp_path):
++    rows, plan = inputs()
++    schedule = []
++
++    def prepare(view, ids, layer, position, guard):
++        assert position == 438 and len(ids) == 439
++        return SimpleNamespace(view=view, layer=layer, primal_norm=100.0)
++
++    def response(state, directions, *, epsilon_scale, guard, mode="reference", batch_size=None):
++        schedule.append((state.layer, epsilon_scale, mode))
++        assert directions.shape == (16, 3)
++        if mode != "reference":
++            assert batch_size == 8
++        state.view.run_block(state.layer, np.zeros((1, 439 if mode == "reference" else 1, 3)))
++        guard("fake_after_eval")
++        return directions * epsilon_scale  # Deliberately unstable across scales; cache matches.
++
++    result = run_diagnostic(
++        View(),
++        rows,
++        plan,
++        tmp_path,
++        started=0,
++        clock=lambda: 0,
++        prepare=prepare,
++        reference=response,
++        cached=response,
++        guard=lambda *a, **k: None,
++        provenance={},
++    )
++    expected_layer = [
++        (s, m)
++        for s, modes in [
++            (0.125, ["reference", "restore", "broadcast"]),
++            (0.25, ["reference"]),
++            (0.5, ["reference"]),
++            (1.0, ["reference", "restore", "broadcast"]),
++        ]
++        for m in modes
++    ]
++    assert schedule == [(layer, s, m) for layer in [1, 16, 31] for s, m in expected_layer]
++    assert result["status"] == "completed"
++    assert len(result["measurements"]) == 24
++    assert len(result["comparisons"]) == 21
++    assert all(
++        c["failed_coordinates"] == 0
++        for c in result["comparisons"]
++        if c["kind"] == "cache_reference"
++    )
++    assert any(
++        c["failed_coordinates"] > 0
++        for c in result["comparisons"]
++        if c["kind"] == "adjacent_stability"
++    )
++    assert result["block_accounting"]["materialized_block_tokens"] == 3 * (4 * 439 + 4)
++    assert result["block_accounting"]["pending_block_calls"] == 0
++    assert len(result["measurements"][0]["epsilon"]) == 16
++    np.testing.assert_allclose(result["measurements"][0]["epsilon"], 0.125, atol=1e-7)
++    assert len(list(tmp_path.glob("layer-*.npy"))) == 24
++    assert not list(tmp_path.glob("*.npz"))
++
++
++def test_timeout_preserves_completed_scale_and_partial_ledger(tmp_path):
++    rows, plan = inputs()
++    now = [0.0]
++
++    def prepare(view, *args, **kwargs):
++        return SimpleNamespace(view=view, layer=1, primal_norm=1.0)
++
++    def reference(state, directions, **kwargs):
++        now[0] = 480
++        return directions
++
++    result = run_diagnostic(
++        View(),
++        rows,
++        plan,
++        tmp_path,
++        started=0,
++        clock=lambda: now[0],
++        prepare=prepare,
++        reference=reference,
++        guard=lambda *a, **k: None,
++        provenance={},
++    )
++    assert result["status"] == "incomplete"
++    assert result["error_type"] == "DeadlineExceeded"
++    assert len(result["measurements"]) == 1
++    assert json.loads((tmp_path / "diagnostic.json").read_text()) == result
++
++
++def test_failed_native_call_is_not_materialized():
++    class Broken(View):
++        def run_block(self, *args):
++            raise RuntimeError("native failure")
++
++    events = []
++    view = BlockLedger(Broken(), events.append, started=0, clock=lambda: 0)
++    with pytest.raises(RuntimeError, match="native failure"):
++        view.run_block(1, np.zeros((8, 1, 3)))
++    assert view.summary()["attempted_block_calls"] == 1
++    assert view.summary()["scheduled_block_tokens"] == 0
++    assert view.summary()["materialized_block_tokens"] == 0
++    assert events[-1]["event"] == "block_failed"
++
++
++def test_memory_stop_is_partial_with_durable_reason(tmp_path):
++    rows, plan = inputs()
++
++    def prepare(*args, **kwargs):
++        raise ValueError("measured peak exceeds bound")
++
++    result = run_diagnostic(
++        View(),
++        rows,
++        plan,
++        tmp_path,
++        started=0,
++        clock=lambda: 0,
++        prepare=prepare,
++        guard=lambda *a, **k: None,
++        provenance={},
++    )
++    assert result["status"] == "incomplete"
++    assert result["measurements"] == []
++    assert result["error"] == "measured peak exceeds bound"
++    assert json.loads((tmp_path / "diagnostic.json").read_text()) == result

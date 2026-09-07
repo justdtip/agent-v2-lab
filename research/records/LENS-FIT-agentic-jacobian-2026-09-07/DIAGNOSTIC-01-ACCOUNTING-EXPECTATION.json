@@ -1,0 +1,17 @@
+{
+  "purpose": "independent before-run accounting expectation, not runtime authority",
+  "depth": 32,
+  "layers": [
+    1,
+    16,
+    31
+  ],
+  "prepare_block_tokens": 63168,
+  "reference_block_tokens": 2697216,
+  "cached_block_tokens": 6144,
+  "expected_materialized_block_tokens": 2766528,
+  "expected_block_calls": 9792,
+  "expected_measurements": 24,
+  "expected_comparisons": 21,
+  "runtime_authority": "hash-chained observed BlockLedger; discrepancy fails this accounting audit"
+}

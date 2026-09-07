@@ -1,0 +1,32 @@
+{
+  "recorded_utc": "2026-09-07T12:22:38.003099+00:00",
+  "attempt": "approved launcher invoked after Director said Just run it",
+  "exit_code": 1,
+  "stage": "refused before announcement",
+  "window": {
+    "expected_end_epoch": 1788789423.979131,
+    "expected_minutes": 100.0,
+    "nonce": "16aa2c6f641d4a3f868a424a3773bc55",
+    "opened": "2026-09-07T12:17:03.979132Z",
+    "opened_epoch": 1788783423.979131,
+    "pid": 20550,
+    "purpose": "88 block 1: top-8 depth arm",
+    "seat": "deputy"
+  },
+  "lock": {
+    "command": ".venv/bin/agent-pipeline --config configs/agent_v2e_qwen35_4b_top8.yaml train",
+    "nonce": "55efee3326ed4e5088ea172bc114fe34",
+    "pid": 20551,
+    "process_check": "ok",
+    "session": "unnamed",
+    "started": "2026-09-07T12:17:05.042318Z",
+    "started_epoch": 1788783425.042304
+  },
+  "mapped_pids_observed_by_launch_inventory": [
+    20551
+  ],
+  "wrapper_sha256": "f99254751dfa01adddb101cd1784d324375c6020d25089236fc388be02554441",
+  "checkpoint_loaded_by_this_task": false,
+  "foreign_state_modified": false,
+  "diagnostic_directory_exists": false
+}
