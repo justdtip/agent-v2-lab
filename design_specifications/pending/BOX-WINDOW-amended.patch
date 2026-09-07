@@ -1,3 +1,77 @@
+# BOX-WINDOW-amended: issue 95 — the window becomes a file, and the collector needs the any-scope list
+
+Supersedes `BOX-WINDOW.patch`. Apply this one; it is the whole change, not a delta.
+
+Four launches were refused on 2026-09-08, three of them one seat's, and that seat's calibration
+probe is still unrun. **Two of the refusals came from people who had read the practice and meant
+to follow it**, mine among them.
+
+The diagnosis is precise, and it is the reason a better habit would not have fixed it. The
+heartbeat announcement is the right human record and the wrong enforcement surface: it is prose
+nobody's tooling reads. The R45(b) inventory *is* mechanical and it answers a different question —
+**who is running now**, not **who has been promised the next twenty minutes**. Substituting the
+second for the first is the mistake available to somebody being careful, which is exactly what
+happened twice.
+
+## What lands
+
+`outputs/.box-window.json` beside the lock, written by `announce_window` and removed by
+`end_window`, both in `runlock`. Exclusive create, for the lock's reason: two seats announcing at
+once must not both believe they hold the slot. The nonce is the lock's own guard — a window is
+closed by the seat that opened it, never by whoever runs next.
+
+Three readers, as specified:
+
+**The lock**, in `_acquire`, consults the window **before** the process inventory. That order is
+the point: a seat can hold the next twenty minutes without holding a process this instant, and
+that gap is the whole issue.
+
+**The collector**, `pytest_collection_modifyitems` in `conftest`, marks every item from a file in
+`TESTS_THAT_LOAD_MLX` as skipped while another seat's window is open, with the window quoted in the
+reason. **Skipped rather than refused, deliberately**: a refusal makes the whole suite red for
+somebody who has done nothing wrong, and the natural response to a red suite is to run it again —
+which is the collision. A skip keeps the rest of the suite honest, says whose slot it is, and
+leaves nothing to rerun.
+
+**The launching commands**, through a shell entry point, because the seats that need windows drive
+the box from shells and wrappers rather than from Python:
+
+```
+eval "$(python -m local_llm_lab.runlock announce --seat deputy --purpose '88 block 1' --minutes 100)"
+...the launch...
+python -m local_llm_lab.runlock end
+```
+
+`announce` prints the export line so the token reaches **every child** of the launching command.
+That is what makes the holder's own suite run unskipped and the holder's own launch admitted,
+without a pid tree.
+
+## One list, two enforcers
+
+`TESTS_THAT_LOAD_MLX` moves to `conftest` and `test_repository_rules` binds to it rather than
+keeping a copy — the same shape the fork-site sets already use. The closure check stays where the
+walker is. A file that starts or stops loading MLX cannot now be right in one place and wrong in
+the other, and a test asserts the two are the same object.
+
+## Stale windows
+
+Reported, never removed. `WINDOW_OVERDUE_SECONDS` past its own expected end, the refusal says so
+and says who to ask, and nothing unlinks it. The lock's rule for the lock's reason: a mechanism
+that clears the state it finds inconvenient is not a mechanism.
+
+A truncated window reads as **present with unknown fields**, not as absent. Absent means the box is
+free; a file that will not parse means somebody wrote something and we cannot tell what, and
+reading that as free is how a launch lands in a live slot.
+
+## A gap, stated rather than papered over
+
+The collector is tested by calling the hook with stand-in items, not by nesting a pytest run.
+`default_window_path` derives from `PROJECT_ROOT`, so a nested run would have to write the window
+at the **real** path and would briefly refuse live seats. A test that intermittently blocks other
+seats is the wrong way to test a mechanism built because live seats kept being blocked. What that
+leaves untested is the hook's registration with pytest, and only that; the decision, the file set
+and the reason text are all covered.
+
 ## Amendment, after the exclusive-handoff terms: the collector needed a wider list
 
 The terms recorded for Codex's handoff say **"any file that reaches `mlx` or `mlx_lm` at any
@@ -37,28 +111,18 @@ documents is stronger than before rather than weaker.
 
 ## Verification
 
-
-```
-full suite:                     exit 0
-tests/test_runlock.py:          exit 0, 8 new tests
-tests/test_repository_rules.py: exit 0, the pinned set now bound to conftest's
-ruff:                           clean on all four changed files
-the CLI:                        python -m local_llm_lab.runlock status -> 'no window is open'
-git apply --check against HEAD: 0
-box: R45(b) inventory 0 holders and no window open, both checked before the suite
-```
-
 ```
 tests/test_runlock.py, tests/test_repository_rules.py: exit 0, 9 new tests
 ruff:                           clean on all four changed files
+the CLI:                        python -m local_llm_lab.runlock status -> 'no window is open'
 git apply --check against HEAD: 0
 ```
 
-**Re-verified under stub `mlx` and `mlx_lm` packages on the path**, per the handoff terms:
-Codex's window is open, so no suite of mine may touch a file that reaches MLX at any scope.
-The stubs raise on import, so anything that reached the real library would fail loudly instead
-of mapping it; the stub message was confirmed to fire. The full suite is **not** run here and
-runs at Codex's end line, before this lands.
+**Re-verified under stub `mlx` and `mlx_lm` packages on the path**, per the handoff terms: Codex's
+window is open, so no suite of mine may touch a file that reaches MLX at any scope. The stubs raise
+on import, so anything reaching the real library would fail loudly instead of mapping it, and the
+stub's message was confirmed to fire. **The full suite is not run here** and runs at Codex's end
+line, before this lands.
 
 ```diff
 diff --git a/src/local_llm_lab/runlock.py b/src/local_llm_lab/runlock.py
