@@ -53,6 +53,9 @@ def validate_events(events: list[dict]) -> None:
     turn = -1
     reading_positions = []
     rank_queue = []
+    attention_rows = []
+    top_ids = []
+    vocab = None
     for row in events[1:-1]:
         kind = row["kind"]
         if rank_queue and kind != "rank":
@@ -64,6 +67,8 @@ def validate_events(events: list[dict]) -> None:
             ledger = ForwardLedger(row["prompt_ids"])
             reading_positions = []
             rank_queue = []
+            attention_rows = []
+            top_ids = []
             if not isinstance(row["prompt"], str) or not isinstance(row["context"], dict):
                 raise ValueError("invalid prompt/context")
             layers = row["layers"]
@@ -73,7 +78,16 @@ def validate_events(events: list[dict]) -> None:
                 or any(type(x) is not int or x < 1 for x in layers)
             ):
                 raise ValueError("invalid capture layers")
-            if row["top_k"] < 1 or row["audit_modulus"] < 1:
+            blocks = row["attention_blocks"]
+            top_k = row["top_k"]
+            if blocks != sorted(set(blocks)) or any(type(x) is not int or x < 0 for x in blocks):
+                raise ValueError("invalid attention blocks")
+            if (
+                type(top_k) is not int
+                or type(row["audit_modulus"]) is not int
+                or top_k < 1
+                or row["audit_modulus"] < 1
+            ):
                 raise ValueError("invalid capture policy")
             if row["rank_horizons"] != [1, 4, 8] or row["distribution_capacity"] != 16:
                 raise ValueError("unsupported rank capture policy")
@@ -85,6 +99,14 @@ def validate_events(events: list[dict]) -> None:
                 raise ValueError("non-contiguous reading positions")
             if set(row["top"]) != {str(x) for x in layers}:
                 raise ValueError("reading layers disagree with capture policy")
+            for top in row["top"].values():
+                if (
+                    len(top) != top_k
+                    or len(set(top)) != top_k
+                    or any(type(x) is not int or x < 0 for x in top)
+                ):
+                    raise ValueError("invalid reading top-k")
+                top_ids.extend(top)
             reading_positions.append(row["position"])
         elif kind == "forward":
             ids = row["input_ids"]
@@ -92,6 +114,38 @@ def validate_events(events: list[dict]) -> None:
             if len(reading_positions) != len(ids):
                 raise ValueError("reading/forward partition mismatch")
             reading_positions = []
+            attention_index = 0
+            for block in blocks:
+                for position in range(row["offset"], ledger.offset):
+                    if attention_index >= len(attention_rows):
+                        raise ValueError("missing attention source")
+                    source = attention_rows[attention_index]
+                    if (source["kind"], source.get("layer"), source["position"]) != (
+                        "source",
+                        block,
+                        position,
+                    ):
+                        raise ValueError("invalid attention source order")
+                    attention_index += 1
+                head = 0
+                while (
+                    attention_index < len(attention_rows)
+                    and attention_rows[attention_index]["kind"] == "head"
+                ):
+                    observed = attention_rows[attention_index]
+                    if (observed["block"], observed["head"], observed["position"]) != (
+                        block,
+                        head,
+                        ledger.offset - 1,
+                    ):
+                        raise ValueError("invalid attention head order")
+                    head += 1
+                    attention_index += 1
+                if not head:
+                    raise ValueError("missing attention heads")
+            if attention_index != len(attention_rows):
+                raise ValueError("unexpected attention events")
+            attention_rows = []
             shape = row["logits_shape"]
             if (
                 len(shape) != 3
@@ -100,6 +154,12 @@ def validate_events(events: list[dict]) -> None:
                 or shape[2] < 1
             ):
                 raise ValueError("invalid native logits shape")
+            if vocab is not None and shape[2] != vocab:
+                raise ValueError("native vocabulary changed within record")
+            vocab = shape[2]
+            if top_k > vocab or any(x >= vocab for x in ids + top_ids):
+                raise ValueError("token outside native vocabulary")
+            top_ids = []
             if len(row["argmax"]) != 1 or len(row["argmax"][0]) != len(ids):
                 raise ValueError("invalid native argmax shape")
             if any(type(x) is not int or not 0 <= x < shape[2] for x in row["argmax"][0]):
@@ -107,10 +167,12 @@ def validate_events(events: list[dict]) -> None:
             if not re.fullmatch("[0-9a-f]{64}", row["logits_sha256"]):
                 raise ValueError("invalid native logit hash")
         elif kind == "emitted":
-            if reading_positions or ledger.offset < len(ledger.prompt_ids):
+            if reading_positions or attention_rows or ledger.offset < len(ledger.prompt_ids):
                 raise ValueError("emission before complete forward")
             if row["position"] != len(ledger.prompt_ids) + len(ledger.generated):
                 raise ValueError("non-contiguous emission position")
+            if type(row["token_id"]) is not int or not 0 <= row["token_id"] < vocab:
+                raise ValueError("emitted token outside native vocabulary")
             ledger.emitted(row["token_id"])
             rank_queue = [
                 (row["position"] - horizon, layer, horizon, row["token_id"])
@@ -128,13 +190,18 @@ def validate_events(events: list[dict]) -> None:
             if (
                 row["status"] != "complete"
                 or reading_positions
+                or attention_rows
                 or ledger.offset < len(ledger.prompt_ids)
                 or row["forwarded_count"] != ledger.offset
                 or row["emitted_count"] != len(ledger.generated)
             ):
                 raise ValueError("incomplete or inconsistent end turn")
             ledger = None
-        elif kind not in {"source", "head"}:
+        elif kind in {"source", "head"}:
+            if reading_positions or not blocks:
+                raise ValueError("unexpected attention event order")
+            attention_rows.append(row)
+        else:
             raise ValueError(f"unsupported event kind: {kind}")
     if ledger is not None or turn < 0:
         raise ValueError("record requires complete turns")
@@ -246,7 +313,16 @@ def prepare_replay(
             raise ValueError("capture policy changed within record")
         if any(r["layers"] != manifest["layers"] for r in events if r["kind"] == "begin_turn"):
             raise ValueError("source layers differ from manifest")
-        identities.append({"label": label, "identity": identity})
+        native_vocabs = {r["logits_shape"][2] for r in events if r["kind"] == "forward"}
+        identities.append(
+            {
+                "label": label,
+                "identity": identity,
+                "capture_policy": policies[0],
+                "vocab_size": next(iter(native_vocabs)),
+            }
+        )
+        del events
     if not identities:
         raise ValueError("source set is empty")
     known = {Path(r["identity"]["path"]).name for r in identities}
@@ -257,6 +333,13 @@ def prepare_replay(
     config = json.loads((Path(snapshot["snapshot_path"]) / "config.json").read_bytes())
     config = config.get("text_config", config)
     hidden, count = config["hidden_size"], config["num_hidden_layers"]
+    if any(type(layer) is not int or not 1 <= layer <= count for layer in manifest["layers"]):
+        raise ValueError("source layers outside snapshot architecture")
+    for record in identities:
+        if config.get("vocab_size", record["vocab_size"]) != record["vocab_size"]:
+            raise ValueError("source vocabulary differs from snapshot")
+        if any(block >= count for block in record["capture_policy"]["attention_blocks"]):
+            raise ValueError("attention block outside snapshot architecture")
     selected = (
         tuple(range(1, count + 1))
         if layers == "all"
@@ -316,16 +399,22 @@ def replay_record(
     validate_events(events)
     if array_api is None:
         import mlx.core as array_api
-    controls = [r for r in events if r["kind"] in {"begin_turn", "forward", "emitted", "end_turn"}]
+    controls = [
+        r
+        for r in events
+        if r["kind"] in {"begin_turn", "forward", "emitted", "end_turn", "source", "head"}
+    ]
     cursor = 0
     tokens = 0
 
     def checked_emit(row):
         nonlocal cursor, tokens
-        if row["kind"] in {"begin_turn", "forward", "emitted", "end_turn"}:
+        if row["kind"] in {"begin_turn", "forward", "emitted", "end_turn", "source", "head"}:
             expected = controls[cursor]
             keys = {
                 "begin_turn": ("kind", "turn", "prompt", "prompt_ids", "context"),
+                "source": ("kind", "turn", "layer", "position"),
+                "head": ("kind", "turn", "block", "head", "position"),
                 "forward": (
                     "kind",
                     "turn",
@@ -409,18 +498,19 @@ def legacy_identity(
     model: str,
     snapshot: Path,
     expected_atlas_sha256: str,
-    script: Path | None = None,
 ) -> dict:
     """Execute the actual legacy summarizer, then compare exact decoded JSON objects."""
     import huggingface_hub
 
-    script = script or PROJECT_ROOT / "scripts/live_lens_atlas.py"
+    script = PROJECT_ROOT / "scripts/live_lens_atlas.py"
     script_sha = file_sha256(script)
     if file_sha256(source_atlas) != expected_atlas_sha256:
         raise ValueError("source atlas changed")
     output = records / "atlas.json"
     if output.exists():
         raise FileExistsError(output)
+    record_hashes = {path.name: file_sha256(path) for path in sorted(records.glob("*.jsonl"))}
+    manifest_hash = file_sha256(records / "manifest.json")
     original_download, original_argv = huggingface_hub.snapshot_download, sys.argv
 
     def pinned(hf_id, **kwargs):
@@ -436,6 +526,10 @@ def legacy_identity(
         huggingface_hub.snapshot_download, sys.argv = original_download, original_argv
     if file_sha256(script) != script_sha or file_sha256(source_atlas) != expected_atlas_sha256:
         raise ValueError("identity reference changed during summarization")
+    if record_hashes != {
+        path.name: file_sha256(path) for path in records.glob("*.jsonl")
+    } or manifest_hash != file_sha256(records / "manifest.json"):
+        raise ValueError("replay inputs changed during summarization")
     difference = first_difference(
         json.loads(source_atlas.read_bytes()), json.loads(output.read_bytes())
     )
@@ -443,6 +537,13 @@ def legacy_identity(
         "source_atlas_sha256": expected_atlas_sha256,
         "output_atlas_sha256": file_sha256(output),
         "summarizer_sha256": script_sha,
+        "output_records": record_hashes,
+        "legacy_manifest_sha256": manifest_hash,
+        "replay_manifest_sha256": (
+            file_sha256(records / "replay-manifest.json")
+            if (records / "replay-manifest.json").exists()
+            else None
+        ),
         "exact_json_equal": difference is None,
         "first_difference": difference,
     }
@@ -501,11 +602,17 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
     }
     write_json(prepared.output / "replay-manifest.json", provenance)
     outputs = []
+    total_tokens = 0
     for record in prepared.records:
         events, identity = read_source(
             Path(record["identity"]["path"]), expected=record["identity"]
         )
         path = prepared.output / (record["label"] + ".jsonl")
+
+        def episode_progress(event, label=record["label"], before=total_tokens):
+            if progress:
+                progress(event | {"label": label, "tokens_done": before + event["tokens_done"]})
+
         with RecordWriter(path, provenance | {"episode": record["label"]}) as writer:
             counts = replay_record(
                 loaded.view,
@@ -514,10 +621,11 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
                 events,
                 writer,
                 layers=prepared.layers,
-                progress=progress,
+                progress=episode_progress,
             )
         read_source(path)
         outputs.append({"label": record["label"], "sha256": file_sha256(path), **counts})
+        total_tokens += counts["tokens"]
         del events
     del lens
     if file_sha256(prepared.source / "manifest.json") != prepared.manifest_sha256:

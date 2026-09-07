@@ -131,7 +131,10 @@ def test_identity_comparison_reports_first_specific_field():
     assert api().first_difference(expected, changed) == "$.episodes[0].seconds: 1.5 != 2"
 
 
-def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache():
+@pytest.mark.parametrize(
+    "corrupt", [None, "logits_sha256", "logits_shape", "argmax", "offset", "input_ids"]
+)
+def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache(corrupt):
     """A fake public session checks orchestration without substituting native evidence."""
     from contextlib import contextmanager
     from types import SimpleNamespace
@@ -175,6 +178,8 @@ def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache():
                 calls.append(("forward", ids.tolist()))
                 row = rows()[3 if self.offset == 0 else 5] | {"turn": self.turn}
                 self.offset += len(row["input_ids"])
+                if corrupt:
+                    row[corrupt] = "changed"
                 self.emit(row)
 
             yield captured
@@ -184,6 +189,19 @@ def test_public_capture_driver_preserves_lookahead_and_fresh_turn_cache():
             calls.append(("emitted", token))
             self.emit(rows()[6] | {"turn": self.turn})
 
+    if corrupt:
+        with pytest.raises(ValueError, match="native replay"):
+            module.replay_record(
+                view,
+                tok,
+                None,
+                events,
+                written.append,
+                layers=[1, 2],
+                array_api=np,
+                session_factory=Session,
+            )
+        return
     result = module.replay_record(
         view,
         tok,
@@ -421,3 +439,22 @@ def test_manifest_mutation_refused_before_output(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="manifest changed"):
         module.run_replay(prepared, loaded)
     assert not prepared.output.exists()
+
+
+@pytest.mark.parametrize("change", ["rank_order", "top_k", "source_event", "token_vocab"])
+def test_additional_structural_refusals(tmp_path, change):
+    events = rows()
+    if change == "rank_order":
+        events[7], events[8] = events[8], events[7]
+    elif change == "top_k":
+        events[1]["top"]["1"] = []
+    elif change == "source_event":
+        events.insert(1, dict(kind="source", turn=0, layer=9, position=0, top=[1]))
+    else:
+        events[5]["input_ids"] = [8]
+        events[6]["token_id"] = 8
+        events[7]["token_id"] = events[8]["token_id"] = 8
+    path = tmp_path / "ep.jsonl"
+    write(path, events)
+    with pytest.raises(ValueError):
+        api().read_source(path)
