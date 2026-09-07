@@ -6,7 +6,8 @@ Implemented source/tests for requirements §§2, 3.3 and 3.6 under task-3-brief.
 
 - `d93c636` — frozen full-basis Jacobian fitting, validation, fit CLI extension, bounded runtime allocator/progress helpers, focused Jacobian/runtime tests, and the one empirical `held_but_clean` filename/count update in repository rules. No guard algorithm or native import filename pin changed. No top-level native imports were added.
 - `3dc8b10` — separately authorized parent preflight review fixes in scripts/lens_regression_preflight.py and tests/test_lens_regression_preflight.py only.
-- The final report commit also contains the exact zero-primal finite-difference step helper/test follow-up. See Git history for its immutable hash.
+- `fc110b8` — exact zero-primal finite-difference step helper/test follow-up.
+- `7375f9f` — this implementation report (separately committed because its parent directory is normally ignored).
 
 ## APIs and measurement contracts
 
