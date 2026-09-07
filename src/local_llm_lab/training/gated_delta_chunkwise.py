@@ -107,6 +107,8 @@ import importlib
 from collections.abc import Callable, Iterator
 from typing import Any, Optional
 
+import functools
+
 import mlx.core as mx
 
 from local_llm_lab.training.gated_delta_chunked import gated_delta_chunked_ops
@@ -147,13 +149,32 @@ def _validated_chunk(chunk: int) -> int:
     return chunk
 
 
+@functools.lru_cache(maxsize=None)
 def _causal_masks(chunk: int) -> tuple[mx.array, mx.array]:
-    """``i >= j`` and ``i > j`` over a chunk, as constants of the chunk length alone."""
+    """``i >= j`` and ``i > j`` over a chunk, as constants of the chunk length alone.
+
+    Cached and materialised once per chunk length: these are constants, and rebuilding them
+    for every chunk of every layer of every micro-step allocated thousands of small Metal
+    buffers per step. On 2026-09-06 the unified run died at iteration 51 with
+    ``[metal::malloc] Resource limit (499000) exceeded``, Metal's cap on the number of live
+    buffers rather than on bytes, raised inside ``_doubling_masks`` on a long row.
+    """
     index = mx.arange(chunk)
-    return index[:, None] >= index[None, :], index[:, None] > index[None, :]
+    masks = (index[:, None] >= index[None, :], index[:, None] > index[None, :])
+    mx.eval(*masks)
+    return masks
 
 
-def _doubling_masks(chunk: int) -> list[mx.array]:
+@functools.lru_cache(maxsize=None)
+def _identity(chunk: int, dtype: mx.Dtype) -> mx.array:
+    """``mx.eye(chunk, dtype)`` as a cached constant (same reason as ``_causal_masks``)."""
+    identity = mx.eye(chunk, dtype=dtype)
+    mx.eval(identity)
+    return identity
+
+
+@functools.lru_cache(maxsize=None)
+def _doubling_masks(chunk: int) -> tuple[mx.array, ...]:
     """One mask per level of the blockwise forward substitution (module docstring).
 
     Level ``s`` selects, inside each block of ``2s`` rows, the lower-left ``s x s`` sub-block:
@@ -171,12 +192,13 @@ def _doubling_masks(chunk: int) -> list[mx.array]:
             & (index[:, None] // size == index[None, :] // size + 1)
         )
         size = pair
-    return masks
+    mx.eval(*masks)
+    return tuple(masks)
 
 
 def _unit_lower_inverse(strict_lower: mx.array, chunk: int) -> mx.array:
     """Invert ``I + strict_lower`` by blockwise forward substitution; ``ceil(log2 C)`` levels."""
-    identity = mx.eye(chunk, dtype=strict_lower.dtype)
+    identity = _identity(chunk, strict_lower.dtype)
     lower = strict_lower + identity
     inverse = mx.broadcast_to(identity, strict_lower.shape)
     for mask in _doubling_masks(chunk):
