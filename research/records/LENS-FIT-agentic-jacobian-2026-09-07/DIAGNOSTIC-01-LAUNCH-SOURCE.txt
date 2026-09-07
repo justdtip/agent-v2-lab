@@ -1,0 +1,114 @@
+"""One owned diagnostic launch; uses the landed primary window API, no native imports."""
+import datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+
+PRIMARY = Path('/Users/daniel.tipton/Desktop/An app')
+WORKTREE = Path('/Users/daniel.tipton/worktrees/lens-fitting')
+RECORD = WORKTREE / 'research/records/LENS-FIT-agentic-jacobian-2026-09-07'
+sys.path.insert(0, str(PRIMARY / 'src'))
+from local_llm_lab import runlock
+from local_llm_lab.spawn import popen, run
+
+
+def now():
+    return datetime.datetime.now(datetime.UTC).isoformat()
+
+
+def sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def save(path, data):
+    with path.open('x') as stream:
+        json.dump(data, stream, indent=2, allow_nan=False)
+        stream.write('\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def git(root, *args):
+    return run(['git', '-C', str(root), *args], capture_output=True, text=True, check=True).stdout.strip()
+
+
+heartbeat = PRIMARY / 'design_specifications/live/HEARTBEAT-LOG-2026-09-04.md'
+heartbeat_text = heartbeat.read_text()
+print('Latest heartbeat entry:', heartbeat_text.rsplit('\n- ', 1)[-1], flush=True)
+window = runlock.read_window()
+lock = runlock.read_lock()
+processes = runlock.running_model_processes()
+if window or lock or processes:
+    raise SystemExit(f'Refused before announcement: window={window}; lock={lock}; mapped={processes}')
+if (RECORD / 'diagnostic-01').exists():
+    raise SystemExit('diagnostic-01 already exists; no overwrite')
+source = git(WORKTREE, 'rev-parse', 'HEAD')
+primary_source = git(PRIMARY, 'rev-parse', 'HEAD')
+owned_paths = ['scripts/lens_epsilon_diagnostic.py', 'src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py', 'src/local_llm_lab/pipeline/lens_fitting/jacobian.py']
+if git(WORKTREE, 'status', '--porcelain', '--', *owned_paths):
+    raise SystemExit('diagnostic source is dirty; freeze before launch')
+nonce = runlock.announce_window('Codex GPT-6 Astra', 'Approved original-scale epsilon diagnostic01; no other native suites or checkpoint launches', 8)
+env = os.environ.copy()
+env.update(PYTHONPATH=str(WORKTREE / 'src'), HF_HOME=str(PRIMARY / '.cache/huggingface'), HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1')
+env[runlock.WINDOW_HOLDER_ENV] = nonce
+command = [str(PRIMARY / '.venv/bin/python'), str(WORKTREE / 'scripts/lens_epsilon_diagnostic.py'), '--model', 'qwen35-4b', '--corpus', str(WORKTREE / 'data/lens-fitting/qwen35-4b-agentic/manifest.json'), '--plan', str(RECORD / 'plan.json'), '--revision', '32f3e8ecf65426fc3306969496342d504bfa13f3', '--record-dir', str(RECORD / 'diagnostic-01')]
+started = time.monotonic()
+child = None
+exit_code = None
+pressure_streak = 0
+intervention = None
+try:
+    with heartbeat.open('a') as stream:
+        stream.write(f'\n- {now()} (**window open: Codex approved epsilon diagnostic01**). Primary issue95 window acquired by launcher PID{os.getpid()}, source{source[:7]}, primary window API{primary_source[:7]}; launching inventory and primary lock clear. Registration `{RECORD.relative_to(WORKTREE)}/DIAGNOSTIC-01-REGISTRATION.md` committed before measurements. Original full-primal multipliers1/8,1/4,1/2,1; both cache modes only at1/8 and1; same row/layers/16 directions and thresholds. Diagnostic only, no production step selection or fit.8-minute CLI execution budget with orderly stops between calls,8GiB envelope and0.6working-set cap, allocator cache0, R46 pressure supervision. No other checkpoint launch or test reaching MLX at any scope until this end line.\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    with (RECORD / 'diagnostic-01.log').open('x') as output, (RECORD / 'diagnostic-01-supervision.jsonl').open('x') as supervision:
+        child = popen(command, env=env, stdout=output, stderr=subprocess.STDOUT)
+        save(RECORD / 'diagnostic-01-launch.json', dict(started_utc=now(), owned_pid=child.pid, wrapper_pid=os.getpid(), source_commit=source, primary_window_source_commit=primary_source, primary_runlock_sha256=sha(PRIMARY/'src/local_llm_lab/runlock.py'), wrapper_sha256=sha(Path(__file__)), command=command, registration_sha256=sha(RECORD/'DIAGNOSTIC-01-REGISTRATION.md'), source_hashes={p:sha(WORKTREE/p) for p in owned_paths}, window_path=str(runlock.default_window_path()), window_nonce=nonce, budget_seconds=480, diagnostic_only=True))
+        while True:
+            result = run(['/usr/sbin/sysctl', 'kern.memorystatus_vm_pressure_level', 'vm.swapusage'], capture_output=True, text=True)
+            match = re.search(r'kern.memorystatus_vm_pressure_level:\s*(\d+)', result.stdout)
+            level = int(match.group(1)) if match else None
+            sample = dict(time_utc=now(), elapsed_s=time.monotonic()-started, owned_pid=child.pid, kernel_pressure=level, sysctl_exit=result.returncode, observation=result.stdout.strip(), child_exit=child.poll())
+            supervision.write(json.dumps(sample)+'\n'); supervision.flush(); os.fsync(supervision.fileno())
+            print(json.dumps(sample), flush=True)
+            if child.poll() is not None:
+                break
+            if level is None:
+                intervention = 'pressure supervision unavailable; stopping owned child'
+            pressure_streak = pressure_streak+1 if level == 4 else 0
+            if pressure_streak >= 2:
+                intervention = 'R46: critical kernel pressure on two consecutive 30-second samples'
+            if intervention:
+                child.send_signal(signal.SIGTERM)
+                try:
+                    child.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    child.kill(); child.wait(timeout=30)
+                break
+            try:
+                child.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                pass
+        exit_code = child.wait()
+finally:
+    if child is not None and child.poll() is None:
+        child.terminate()
+        try:
+            child.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            child.kill(); child.wait(timeout=30)
+    closed = runlock.end_window(nonce)
+    ended = dict(ended_utc=now(), exit_code=exit_code, elapsed_s=time.monotonic()-started, window_closed=closed, intervention=intervention, child_exited=child is None or child.poll() is not None, primary_lock_absent=runlock.read_lock() is None)
+    save(RECORD / 'diagnostic-01-end.json', ended)
+    with heartbeat.open('a') as stream:
+        stream.write(f'\n- {now()} (**end line: Codex epsilon diagnostic01 process finished**). Exit{exit_code}; owned child exited, issue95 window closed={closed}, primary lock absent={ended["primary_lock_absent"]}. Outcome retained under `{RECORD.relative_to(WORKTREE)}/diagnostic-01`; numerical interpretation follows from saved records. Intervention: {intervention or "none"}. No fit or production step selection followed. This single diagnostic window is released; issue88 may take the next available block.\n')
+        stream.flush(); os.fsync(stream.fileno())
+    print(json.dumps(ended), flush=True)
+raise SystemExit(exit_code if exit_code is not None else 2)

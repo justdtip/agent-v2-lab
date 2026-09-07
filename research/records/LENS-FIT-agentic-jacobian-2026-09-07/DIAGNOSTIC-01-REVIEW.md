@@ -1,0 +1,5 @@
+# Diagnostic01 source review before checkpoint execution
+
+GPT-6 Astra independently reviewed387f702..0725738 against the approved proposal and registration, the seven-test guarded evidence and the unchanged derivative/runtime integration. Specification and engineering review pass by inspection; no blocking findings. It confirmed the D(s) denominator, independent cache comparisons despite unstable references, unchanged numerical functions/evaluation boundaries, materialized-versus-scheduled block accounting, original8GiB/0.6cap, and480-second budget with preserved partial records. It performed no native imports/tests and changed no source.
+
+The reviewer explicitly leaves actual runtime, measured peak, numerical results and launcher supervision unverified until the supervised diagnostic. This is source readiness, not a production acceptance result. Parent additionally ran repository static rules under a finder refusing mlx/mlx_lm; exit0 with no native modules. Source hash evidence is in DIAGNOSTIC-01-STATIC-CHECK.json.

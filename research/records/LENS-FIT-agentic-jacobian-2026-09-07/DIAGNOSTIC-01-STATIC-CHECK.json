@@ -1,0 +1,12 @@
+{
+  "checked_utc": "2026-09-07T12:12:16.184533+00:00",
+  "command": "PYTHONPATH=src primary/.venv/bin/python with MetaPathFinder refusing mlx and mlx_lm; pytest.main([\"-q\", \"tests/test_repository_rules.py\"])",
+  "exit_code": 0,
+  "native_modules_after": [],
+  "source_hashes": {
+    "scripts/lens_epsilon_diagnostic.py": "847c2129dab3256af1a8ea4a2230620faba291bc7fbb5e25f3d73d3c52614aa1",
+    "src/local_llm_lab/pipeline/lens_fitting/epsilon_diagnostic.py": "4cf6e9630ecc01f3e65639f2941cd9b27a1828934cddd47ded63229acc054647",
+    "tests/test_lens_epsilon_diagnostic.py": "8f21c812a1920ea602020318ed3f86e57e033580837518b15d983d715e0be19e"
+  },
+  "scope": "repository static rules; no checkpoint or native tests"
+}
