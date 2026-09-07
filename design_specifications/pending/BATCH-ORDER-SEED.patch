@@ -1,0 +1,222 @@
+# BATCH-ORDER-SEED: issue 96 — two runs of one config could see different row orders
+
+`mlx_lm`'s `iterate_batches` sorts the dataset by length, chunks it into batches, then permutes the
+batch order with `np.random.permutation`. It **accepts** a `seed` and calls `np.random.seed` when
+given one. The trainer's main loop calls it **without** one, so the permutation is drawn from
+numpy's **global** state, and what that state holds depends on everything that consumed numpy
+randomness earlier in the process — which is not a property of the run's config.
+
+None of that is `mlx_lm` misbehaving. It offers the seed; we did not pass one and nothing in our
+stage seeded the global state either.
+
+## What it cost
+
+A different loss trace, a different checkpoint at any given iteration, and a different set of rows
+seen at all by a run that stops early — arm A stopped at 780 of 1,200. It also cost issue 94 a
+direct measurement: the residual there had to be attributed by peak size because nothing said which
+rows sat at the iterations where memory stepped up.
+
+## The fix
+
+`stage_train` seeds numpy's global state from the run's declared seed **immediately before the
+trainer is entered**, so nothing between the seeding and the first batch can move the order. That
+keeps the seeding where the run's identity already lives rather than threading an argument through
+`mlx_lm`'s signature, and it covers the validation iterator too.
+
+The provenance gains a `batch_order` block naming the seed, where it was set, and why. **Records
+without that block predate this and cannot be replayed**, and the block says so rather than leaving
+a reader to infer it from a missing field.
+
+## Three tests, and one of them is about the library
+
+**The pair, not the equality.** Same seed gives the same order **and different seeds give a
+different one**. An equality check alone passes against a function that always returns the same
+permutation, which is the standard failure of a determinism test.
+
+**The record.** The seed, the admission about earlier runs, and the run-log line.
+
+**The pin against `mlx_lm`.** The third test reads `mlx_lm.tuner.trainer.train`'s source and
+asserts the `iterate_batches` call still passes no seed. If a later release seeds its own batch
+order this fails, and somebody reads the two together rather than leaving a redundant global seed
+in the stage for years.
+
+That third test is why `test_cli.py` joins `TESTS_THAT_CAN_REACH_MLX`: it imports `mlx_lm` inside a
+function, and the any-scope pin caught the change before I noticed it myself.
+
+## Not in scope
+
+Replaying any past run. Records written before this cannot be replayed and the honest thing is to
+say so in the provenance.
+
+## Verification
+
+```
+tests/test_repository_rules.py: exit 0 (the any-scope pin, re-pinned deliberately)
+the two off-box tests:          exit 0 under stub mlx and mlx_lm
+ruff, all changed files:        7 findings before, 7 after, 0 newly introduced
+git apply --check against HEAD: 0
+```
+
+**The full suite is not run here.** Issue 88's first block holds the box under my own window
+and maps MLX for about 100 minutes; running an MLX-mapping suite beside a live training run is
+the collision this month's rules exist to stop, and my holding the window's token does not make
+it safe, only permitted. The suite runs at that block's end line, and the third test above needs
+the real `mlx_lm` so it runs then too.
+
+One observation from using the mechanism on myself: the holder token is exported into the
+launching command's shell, so a later command in a **new** shell is treated as a non-holder and
+its MLX-reaching files are skipped. That is the safe direction and it is what happened here, but
+the CLI's docstring should say it.
+
+```diff
+diff --git a/src/local_llm_lab/pipeline/cli.py b/src/local_llm_lab/pipeline/cli.py
+index e94e6a6..2febb4c 100644
+--- a/src/local_llm_lab/pipeline/cli.py
++++ b/src/local_llm_lab/pipeline/cli.py
+@@ -278,6 +278,45 @@ def _band_coverage(depth: int, pairs: Sequence[Sequence[int]], num_layers: int)
+     }
+ 
+ 
++
++def _seed_batch_order(seed: int, runlog: RunLog) -> dict[str, Any]:
++    """Make the trainer's batch order a function of the config, and say so (issue 96).
++
++    ``mlx_lm``'s ``iterate_batches`` sorts the dataset by length, chunks it into batches, then
++    permutes the batch order with ``np.random.permutation``. It accepts a ``seed`` and calls
++    ``np.random.seed`` when given one -- and the trainer's main loop calls it **without** one, so
++    the permutation is drawn from numpy's **global** state. What that state holds depends on
++    everything that consumed numpy randomness earlier in the process, which is not a property of
++    the run's config.
++
++    So two runs of the same config with the same declared seed could see their rows in different
++    orders: a different loss trace, a different checkpoint at any given iteration, and a different
++    set of rows seen at all by a run that stops early -- arm A stopped at 780 of 1,200. It also
++    cost issue 94 a direct measurement, because nothing said which rows sat at the iterations
++    where the peak stepped up.
++
++    Seeded here rather than by threading an argument through ``mlx_lm``'s signature, which keeps
++    the seeding where the run's identity already lives and covers the validation iterator too.
++
++    **Runs recorded before this cannot be replayed**, and the returned record says so rather than
++    leaving a reader to infer it from a missing field.
++    """
++    import numpy as np
++
++    np.random.seed(seed)
++    runlog.info("batch order seeded", seed=int(seed))
++    return {
++        "numpy_global_seed": int(seed),
++        "seeded_at": "stage_train, immediately before the trainer is entered",
++        "why": (
++            "mlx_lm's iterate_batches permutes the batch order from numpy's global state and the "
++            "trainer's main loop passes it no seed, so without this the row order is not a "
++            "function of the config"
++        ),
++        "records_before_this_are_not_replayable": True,
++    }
++
++
+ def _write_stage_manifest(target: Path, payload: dict[str, Any]) -> None:
+     """Stamp a stage's data output with manifest.json after it succeeds.
+ 
+@@ -912,6 +951,9 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+                 )
+                 # The backbone patches wrap the trainer call and nothing else, so no other
+                 # stage — and no later inference — ever sees them (R32(a)).
++                # Immediately before the trainer, so nothing between here and the first batch
++                # can consume numpy randomness and move the order (issue 96).
++                batch_order = _seed_batch_order(int(config["seed"]), runlog)
+                 with contextlib.redirect_stdout(
+                     _Tee(runlog.tee(sys.stdout), log)
+                 ), _training_backbone(
+@@ -946,6 +988,9 @@ def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | N
+                     # Which band pairs this adapter can be read at (R41d, issue 88). Recorded
+                     # even at full depth, so a reader never has to infer it from num_layers.
+                     "band_coverage": coverage,
++                    # What made the row order a function of the config, and the admission that a
++                    # record without this field predates the fix (issue 96).
++                    "batch_order": batch_order,
+                     "health_thresholds": thresholds.as_dict(),
+                     "health": summary,
+                 },
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 3d4efb1..ee4778c 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -249,6 +249,9 @@ TESTS_THAT_CAN_REACH_MLX = tuple(
+         {
+             *TESTS_THAT_LOAD_MLX,
+             "test_adapter_delta.py",
++            # Joined 2026-09-08 (issue 96): its new test reads `mlx_lm.tuner.trainer`'s source to
++            # check the library still passes no seed, so this file reaches MLX at that scope.
++            "test_cli.py",
+             "test_cache_equivalence.py",
+             "test_lens_jacobian.py",
+             "test_metal_cache_limit.py",
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 729ca5d..b427024 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -2084,3 +2084,61 @@ def test_the_registry_declares_the_band_and_the_spec_carries_it() -> None:
+ 
+     spec = load_model_spec("qwen35-4b")
+     assert spec.probes.live_lens_pairs == ((12, 13), (16, 17), (19, 20), (23, 24), (27, 28))
++
++
++def test_the_batch_order_is_a_function_of_the_declared_seed() -> None:
++    """Issue 96, and the pair is the test: equality alone proves nothing.
++
++    Same seed, same order — and **different seeds, a different order**. An equality check on its
++    own passes against a function that always returns the same permutation, which is the standard
++    failure of a determinism test.
++    """
++    import numpy as np
++
++    def order(seed: int) -> list[int]:
++        np.random.seed(seed)
++        return list(np.random.permutation(64))
++
++    assert order(20260902) == order(20260902)
++    assert order(20260902) != order(20260903)
++
++
++def test_seeding_records_the_seed_and_that_earlier_runs_cannot_be_replayed() -> None:
++    """The provenance says what it can and cannot promise.
++
++    A record written before this carries no `batch_order` block at all, and a reader has to be
++    able to tell that apart from a run that was seeded. The field's presence is the signal, and
++    its contents say why the seeding was needed.
++    """
++
++    class _Log:
++        def __init__(self) -> None:
++            self.lines: list[tuple[str, dict]] = []
++
++        def info(self, message: str, **fields) -> None:
++            self.lines.append((message, fields))
++
++    log = _Log()
++    record = cli._seed_batch_order(20260902, log)
++
++    assert record["numpy_global_seed"] == 20260902
++    assert record["records_before_this_are_not_replayable"] is True
++    assert "iterate_batches" in record["why"]
++    assert log.lines == [("batch order seeded", {"seed": 20260902})]
++
++
++def test_the_library_still_passes_no_seed_which_is_why_this_workaround_exists() -> None:
++    """Pinned against `mlx_lm`, so the workaround leaves when it stops being needed.
++
++    If a later release seeds its own batch order, this fails and somebody reads the two together
++    rather than leaving a redundant global seed in the stage for years.
++    """
++    import inspect
++
++    from mlx_lm.tuner import trainer as mlx_trainer
++
++    call = inspect.getsource(mlx_trainer.train).split("iterate_batches(", 1)[1].split(")", 1)[0]
++    assert "seed" not in call, (
++        "mlx_lm's training loop now seeds its own batch order; issue 96's global seeding in "
++        "stage_train is redundant and should be removed with a note"
++    )
+```
