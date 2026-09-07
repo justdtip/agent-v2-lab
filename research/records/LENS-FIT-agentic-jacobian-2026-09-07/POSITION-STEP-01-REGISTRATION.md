@@ -1,0 +1,17 @@
+# Position-local step diagnostic 01 — registered before model execution
+
+8 September 2026. Director-authorized concurrent load: the Director explicitly authorized bypassing the one-model-load rule for another lens attempt, then clarified the sequence: diagnose the failed fit first, retry once the cause is known. This registration applies that exception to one diagnostic process, with a separate process-local lock. The existing evaluation process, primary lock and primary window are preserved. No standing concurrency default changes.
+
+Hypothesis: the inherited finite-difference step is outside the locally linear regime because its norm includes every sequence position, although only one position is perturbed. Diagnostic01 supported this with approximately quadratic error reduction under halving, and all 12 cache/reference comparisons passed. §15 now supplies the position-local test.
+
+Frozen input: existing plan.json, row 0, 439 tokens, position 438, layers 1/16/31, 16 random unit directions with the original seed 20260904. Both primals and caches remain unchanged. The only numerical change is epsilon = c * float32 norm(h_t) / norm(direction), where h_t is the selected position of the full-sequence residual. Zero/nonfinite norm stops; no absolute fallback.
+
+For each layer evaluate uncached full-sequence central differences at c and c/2 for every c in {1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2}, in ascending order. The original stability bound is unchanged: every response coordinate must satisfy |D(c)-D(c/2)| <= 0.003 + 0.03*|D(c)|, and all must be finite. An eligible c passes at itself AND the next smaller grid point. Report the largest eligible c for each layer; choose the largest common eligible c for a common production rule only if one exists. Missing plateau at any layer means instrument-limited; do not loosen the bound or fit it.
+
+If a common c exists, re-run the original self-check: fresh uncached responses at c and c/2, plus restore and batch-8 broadcast responses at c, all three layers. Stability retains the bound above; both cached paths must satisfy 0.0003 + 0.003*|reference| in every coordinate. These comparisons are additional fresh measurements, never replacements for sweep measurements. No production plan or fitter changes in this diagnostic. A passing result permits preparing the production rule, original fit gates and benchmark; it does not certify a fitted lens.
+
+Record all raw response arrays, direction array, immutable filenames, SHA-256s, source and input provenance, all failures and per-coordinate comparison summaries. The actual block-call ledger remains the sole native-work counter, with materialization confirmations and a hash chain.
+
+Resources: 6 GiB MLX allocation limit set before model load, allocator cache 0, checked actual peak after materialized workloads; 1,200-second block-call deadline. Expected several minutes, with concurrent timing descriptive only. External supervision samples kernel memory pressure and swap every 30 seconds; terminate only this diagnostic on two consecutive critical samples, unavailable pressure supervision, or 1,260 seconds elapsed. No foreign process receives a signal. The production benchmark's 25-minute-per-layer rule remains unchanged.
+
+The inherited whole-sequence finite-difference rule was this repository's approximation. The hosted/upstream fitter used automatic differentiation, as recorded in STEP-RULE-PROVENANCE.md; no claim is made that it used this failed numerical rule.
