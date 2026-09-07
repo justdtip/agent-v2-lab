@@ -1,0 +1,27 @@
+# Base agentic Jacobian — registration before the checkpoint self-check
+
+7 September 2026. Source39d4de3 (Jacobian implementation1534a9f); persistent codex/lens-fitting worktree. Director grants serial exclusive checkpoint windows under primary5a17860, excluding every other MLX-reaching test at any import scope. Registration precedes every Jacobian measurement. No Jacobian output was read to choose these thresholds or samples. Regression resource calibration04 is available and informs memory only.
+
+## Frozen input and sampling
+
+Model qwen35-4b; immutable cached revision32f3e8ecf65426fc3306969496342d504bfa13f3, snapshot SHA256d8e5ca95bde5faf0c52628b26ae58be3d0439c5d2a4107cb59081e051f5ebd9b. Frozen agentic manifest exact SHA256e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0. Every nonfinal layer is included; final target is the model's pre-norm residual. Standard basis is complete. No adapter.
+
+The plan config is saved beside this README. Position seed20260902, held20260903, self directions20260904, held validation directions20260905. Four hundred planned fit draws and150 held draws, equal-span conditional sampling with replacement. Six spans call/note/observation/system/task/template; held150 gives25 draws per span, not150 independent sequences. The generated plan freezes exact row/position identities and hashes. At this seed the self-check selects shortest sampled row0/source index0, train-read-0000-clean,439 tokens, position438. Self layers1/16/31, target32. Six comparisons:16 fixed random unit directions through restore and batch8 broadcast, each against an independent uncached full-sequence finite difference. Epsilon is the existing0.01*norm(full sequence primal)/norm(tangent), with reference epsilon/2 stability.
+
+## Numerical acceptance fixed before data
+
+Existing response_agreement compares every coordinate with `abs(measured-predicted) <= atol + rtol*abs(measured)` in final pre-norm response units. Self-check atol0.0003/rtol0.003; reference epsilon stability atol0.003/rtol0.03. These have tiny-model test precedent; they are engineering thresholds, not checkpoint-validated tolerances. Failure/inconclusive blocks benchmark and fit.
+
+The later held-map bound is atol0.01/rtol0.1. It permits at most a0.01 absolute floor plus10percent of each measured coordinate, across32 fixed random unit directions and the equal-span held mean. This is the implementer's preregistered accuracy criterion under section3.6's requirement to state atol/rtol before checking; it is not a previously ratified Director number or an empirical uncertainty interval. The independent prelaunch reviewer recommended confirming the criterion before freezing the full plan; the implementer adopts it here as the stated criterion, with no observed map output used. Epsilon instability is inconclusive under the existing function, and only failed map agreement can request a refit under layer_verdict. No bound is widened after a failed result. Concept and output-divergence hooks remain pending their own design.
+
+## Inspected batch8 envelope and stages
+
+Working set19069665280bytes; normal0.6cap11441799168bytes. Initial bound8589934592bytes (8GiB), below the cap. Inspected float32 hybrid snapshot at KV capacity2048:134217728bytes KV across eight attention blocks,50331648bytes recurrent states,2359296bytes convolution histories, total186908672bytes. Two batch8 copies and the retained snapshot are3177447424bytes. Calibration04 peak7330967572 less3250585600bytes of ridge statistics gives4080381972bytes as a conservative forward-workspace proxy. Together7257829396bytes (6.76GiB), leaving1332105196bytes (1.24GiB) under8GiB. This is an inspected estimate to be tested, not a proven allocation bound or Metal buffer-count measurement. The actual sampled extremes are2034 tokens and prefix position2022.
+
+The runtime view's embed and every block output are explicitly float32. Inspection ruled out a suspected dtype mismatch between full-primal and cached-prefix paths; the prefix tail's initial cast is redundant.
+
+Stagecheck-01 runs first, about a few minutes: short reference responses, epsilon/half-epsilon and both cache paths. It creates run-plan/runtime/self-check or stop records; no lens artifact. A separate announced benchmark follows only if all comparisons pass. Benchmark starts at8, covers every nonfinal layer in restore and broadcast modes and both sampled extrema, and projects the full400-position basis workload per layer. Current whole-bound scaling projects batch16 at16GiB, so16/32/64 are skipped by the normal cap. The bound is not lowered to make those widths eligible. If no permitted candidate meets25minutes per layer, stop for the Director's choice before any fit.
+
+No full fit is launched by this registration. An authorised later fit repeats fresh self-check/benchmark in its own process, keeps the150-position minimum,400 ceiling and two consecutive0.002 convergence changes, then performs held validation before writing artifacts. It stops on a falsified envelope,0.6cap breach or cost gate, without shrinking basis/corpus.
+
+Every native stage uses the normal primary model lock and separate launch/end announcements. Allocator cache0. Kernel critical pressure across two30-second samples is the intervention signal; only a process launched by this task can be stopped. Per-workload internal memory checks preserve stop context. No per-position activation dataset is stored.
