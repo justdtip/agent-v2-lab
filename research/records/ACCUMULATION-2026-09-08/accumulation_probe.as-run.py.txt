@@ -1,0 +1,208 @@
+"""Does gradient accumulation carry the 0.089 GiB the envelope is under by? (issue 94)
+
+The envelope reads 9.637 GiB at 2,688 tokens; arm A's own run reached 9.726. Every calibration
+point was one row and one optimiser step, and arm A trains at ``grad_accumulation_steps: 4``, so
+accumulation is the obvious candidate. It is not the only one -- a long run's allocator state is
+another -- and the two launch-night diagnostics that would have separated them died with no peak
+recorded.
+
+Two arms, identical but for accumulation: ten optimiser steps each at 2,688 tokens, chunkwise
+recurrence at chunk 256, batch 1, gradient checkpointing on, LoRA rank 16 scale 32 on the resolved
+keys at full depth, AdamW. Arm 1 does ten micro-batches, arm 4 does forty.
+
+**Reading, pre-registered.** If arm 4's peak exceeds arm 1's by about 0.089 GiB, accumulation
+carries the difference and the departure text says by how much. If the two agree, accumulation
+does not carry it, that is the finding, and the allocator hypothesis stays named and unresolved.
+
+R47(b): the first arm is safe by inspection -- arm A ran this exact shape and peaked at 9.726 GiB,
+0.548 of the working set -- and the second arm is projected from the first before it runs.
+"""
+
+# RECORD, NOT A LAUNCHER (2026-09-08, issue 89). This file loads the checkpoint and takes the
+# model-run lock through load_policy. Runs go through the package entry points under R47 and R48,
+# in a window the Director declares, and take the model-run lock of issue 83.
+import sys as _sys
+
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is a record of the 2026-09-08 accumulation probe, not a "
+        "launcher; runs go through the package entry points under R47 and R48, in a window the "
+        "Director declares, and take the model-run lock of issue 83"
+    )
+
+import argparse
+import json
+import pathlib
+import time
+from contextlib import ExitStack
+
+import mlx.core as mx
+import mlx.nn as nn
+import mlx.utils as mu
+import mlx.optimizers as optim
+from mlx_lm.tuner.trainer import default_loss, grad_checkpoint
+from mlx_lm.tuner.utils import linear_to_lora_layers
+
+from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.evaluate import load_policy
+from local_llm_lab.training import install_chunkwise_gated_delta
+
+GIB = 1024**3
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--i-am-a-record", action="store_true")
+    parser.add_argument("--tokens", type=int, default=2688)
+    parser.add_argument("--steps", type=int, default=10)
+    parser.add_argument("--out", default="accumulation.json")
+    parser.add_argument("--arms", default="1,4")
+    args = parser.parse_args()
+
+    spec = load_model_spec("qwen35-4b")
+    # The recipe that matters is arm A's, not the registry's defaults: the arm config carries
+    # gated_delta_chunk, gated_delta_mode and max_seq_length, and the registry does not.
+    import yaml
+
+    arm = yaml.safe_load(
+        pathlib.Path("/Users/daniel.tipton/Desktop/An app/configs/agent_v2e_qwen35_4b.yaml")
+        .read_text(encoding="utf-8")
+    )
+    train = {**dict(spec.train), **arm["train"]}
+    ws = mx.device_info()["max_recommended_working_set_size"]
+    cap = 0.60 * ws
+
+    rows: list[dict] = []
+    # One float32 copy of the trainable parameters, from the preflight artifact, so the
+    # projection below is derived rather than assumed.
+    trainable = int(
+        json.loads(
+            pathlib.Path(
+                "/Users/daniel.tipton/Desktop/An app/outputs/preflight/qwen35-4b.json"
+            ).read_text(encoding="utf-8")
+        )["lora"]["trainable_parameters"]
+    )
+    arms = tuple(int(a) for a in args.arms.split(","))
+    for accumulation in arms:
+        if rows and "peak_gib" in rows[-1]:
+            # R47(b): project the next arm from the one measured, before it runs, and derive the
+            # bound rather than pick a multiple. Accumulation cannot lower a peak, and what it
+            # adds is bounded by the gradient tree it holds: one accumulator plus the incoming
+            # gradient, each one float32 copy of the trainable parameters. A first attempt used
+            # a flat 1.25x, which refused a run this bound shows is safe by a gibibyte -- a
+            # projection loose enough to refuse anything is not a projection.
+            grad_tree_gib = trainable * 4 / GIB
+            projected = rows[-1]["peak_gib"] + 2 * grad_tree_gib
+            if projected * GIB > cap:
+                rows.append(
+                    {
+                        "accumulation": accumulation,
+                        "stopped": f"projected {projected:.3f} GiB over the {cap / GIB:.3f} GiB cap",
+                        "projection": "previous peak + 2 gradient trees",
+                    }
+                )
+                break
+
+        with ExitStack() as stack:
+            stack.enter_context(install_chunkwise_gated_delta(int(train["gated_delta_chunk"])))
+            mx.clear_cache()
+            mx.reset_peak_memory()
+            started = time.perf_counter()
+            model, _tokenizer, view, resolved = load_policy(spec, adapter=None)
+            load_peak = mx.get_peak_memory()
+
+            model.freeze()
+            linear_to_lora_layers(
+                model,
+                resolved.num_layers,
+                {
+                    "keys": list(resolved.lora_keys),
+                    "rank": train["rank"],
+                    "scale": train["scale"],
+                    "dropout": train.get("dropout", 0.0),
+                },
+            )
+            model.train()
+            grad_checkpoint(model.layers[0])
+            optimizer = optim.AdamW(learning_rate=train["learning_rate"])
+            mx.set_wired_limit(ws)
+
+            vocab = int(view.vocab_size)
+            mx.random.seed(0)
+            batch = mx.random.randint(0, vocab, (1, args.tokens + 1))
+            lengths = mx.array([[0, args.tokens]])
+            value_and_grad = nn.value_and_grad(model, default_loss)
+
+            # The peak that matters is the steady state, so the load's own peak is excluded by
+            # resetting after the first step has warmed the allocator.
+            mx.reset_peak_memory()
+            step_times = []
+            for step in range(args.steps):
+                if step == 1:
+                    mx.reset_peak_memory()
+                begin = time.perf_counter()
+                accumulated = None
+                for _ in range(accumulation):
+                    (value, _ntoks), grad = value_and_grad(model, batch, lengths)
+                    if accumulated is None:
+                        accumulated = grad
+                    else:
+                        accumulated = mu.tree_map(lambda a, b: a + b, accumulated, grad)
+                    mx.eval(accumulated, value)
+                if accumulation > 1:
+                    accumulated = mu.tree_map(lambda g: g / accumulation, accumulated)
+                optimizer.update(model, accumulated)
+                mx.eval(model.parameters(), optimizer.state)
+                step_times.append(time.perf_counter() - begin)
+
+            peak = mx.get_peak_memory()
+            row = {
+                "accumulation": accumulation,
+                "tokens": args.tokens,
+                "steps": args.steps,
+                "peak_bytes": peak,
+                "peak_gib": peak / GIB,
+                "working_set_share": peak / ws,
+                "load_peak_gib": load_peak / GIB,
+                "median_step_seconds": sorted(step_times)[len(step_times) // 2],
+                "elapsed_seconds": time.perf_counter() - started,
+            }
+            rows.append(row)
+            print(
+                f"  accumulation {accumulation}: peak {row['peak_gib']:.3f} GiB "
+                f"({row['working_set_share']:.3f} of the working set), "
+                f"median step {row['median_step_seconds']:.2f} s",
+                flush=True,
+            )
+            del model, optimizer, value_and_grad, batch, accumulated
+            mx.clear_cache()
+
+    measured = [r for r in rows if "peak_gib" in r]
+    report = {
+        "working_set_bytes": ws,
+        "cap_bytes": cap,
+        "recipe": {
+            "rank": train["rank"],
+            "scale": train["scale"],
+            "gated_delta_mode": train.get("gated_delta_mode"),
+            "gated_delta_chunk": train.get("gated_delta_chunk"),
+            "grad_checkpoint": True,
+            "batch_size": 1,
+        },
+        "rows": rows,
+        "difference_gib": (
+            measured[-1]["peak_gib"] - measured[0]["peak_gib"] if len(measured) == 2 else None
+        ),
+        "envelope_gap_gib": 0.089,
+        "trainable_parameters": trainable,
+        "gradient_tree_gib": trainable * 4 / GIB,
+    }
+    with open(args.out, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+    if report["difference_gib"] is not None:
+        print(f"  difference: {report['difference_gib']:+.4f} GiB against an envelope gap of 0.089")
+    return 0
+
+
+if __name__ == "__main__":
+    _sys.exit(main())

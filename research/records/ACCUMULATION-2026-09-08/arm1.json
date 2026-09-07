@@ -1,0 +1,31 @@
+{
+  "working_set_bytes": 19069665280,
+  "cap_bytes": 11441799168.0,
+  "recipe": {
+    "rank": 16,
+    "scale": 32.0,
+    "gated_delta_mode": "chunkwise",
+    "gated_delta_chunk": 256,
+    "grad_checkpoint": true,
+    "batch_size": 1
+  },
+  "rows": [
+    {
+      "accumulation": 1,
+      "tokens": 2688,
+      "steps": 10,
+      "peak_bytes": 10074094408,
+      "peak_gib": 9.382231540977955,
+      "working_set_share": 0.5282785125004564,
+      "load_peak_gib": 2.2049326971173286,
+      "median_step_seconds": 30.415567166999608,
+      "elapsed_seconds": 305.4244799999997
+    },
+    {
+      "accumulation": 4,
+      "stopped": "projected 11.73 GiB over the cap"
+    }
+  ],
+  "difference_gib": null,
+  "envelope_gap_gib": 0.089
+}
