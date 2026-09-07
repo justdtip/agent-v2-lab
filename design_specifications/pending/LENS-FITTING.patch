@@ -1,0 +1,2581 @@
+diff --git a/design_specifications/pending/LENS-FITTING-IMPLEMENTATION-2026-09-07.md b/design_specifications/pending/LENS-FITTING-IMPLEMENTATION-2026-09-07.md
+new file mode 100644
+index 0000000..227e97c
+--- /dev/null
++++ b/design_specifications/pending/LENS-FITTING-IMPLEMENTATION-2026-09-07.md
+@@ -0,0 +1,61 @@
++# Lens fitting implementation — corpus slice
++
++This delivery covers requirements §3.1 and §10: immutable training-only agentic corpora and the authorised Wikitext validation corpus, with token spans, a fixed sequence split and hash-bound provenance. Regression fitting, Jacobian measurement, replay, profiles and validation have not been implemented or run in this slice. The regression scaling ruling is pending.
++
++Persistent worktree: `/Users/daniel.tipton/worktrees/lens-fitting`
++
++Branch: `codex/lens-fitting`
++
++Primary cache/rules incorporated through `ac1b700` (cache landing `618d41a`), isolated merge `53343a3`. The shared checkout is unchanged by this task.
++
++## Implemented surface
++
++- `src/local_llm_lab/pipeline/lens_fitting/corpus.py`: agentic/prose builders, verified corpus reader, pinned validation-only download and tokenizer-only loading.
++- `src/local_llm_lab/pipeline/lens_fitting/__init__.py`: package marker.
++- `scripts/lens_corpus.py`: standalone entry point; no pipeline CLI or model-loading caller changed.
++- `tests/test_lens_corpus.py`: reconstruction, alignment, split/leakage/provenance and download-boundary tests.
++
++The builder assigns source-step indices before dropping over-cap sequences; one-based sequences 5, 10, ... are held out. It reconstructs prior messages exactly as the runner does, with windowed observations and canonical prior actions, then preserves the current raw completion. Whole-text tokenization avoids assuming that separately tokenized prompt and completion concatenate unchanged. Every token receives one span; boundary-straddling and zero-width special tokens are template spans.
++
++The downloader resolves an immutable dataset revision, enumerates only authorised validation Parquet filenames and reads those local files. It does not use a whole-dataset preparation call with a subsequent split selection. The downloaded source text and immutable descriptor stay under `data/lens-fitting/`; the HF cache retains the original downloaded shard. Subsequent builder calls reuse the verified download. No training/test Wikitext shards were requested.
++
++## Concrete corpus builds
++
++| Domain | Fit sequences / tokens | Held sequences / tokens | Excluded |
++|---|---:|---:|---|
++| Agentic |418 /458,191|100 /106,870|82 of 600 source steps exceed the corpus cap|
++| Prose |204 /208,896|51 /52,224|164 trailing tokens after fixed windows|
++
++Agentic source: all 72 base-policy training trajectories from the three specified evaluation reports. Exact task listings and source hashes are in `research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/source-inspection.json`.
++
++Prose source: `Salesforce/wikitext`, `wikitext-103-raw-v1`, validation, revision `b08601e04326c79dfdd32d625aee71d232d685c3`. Exactly one validation shard was requested; its SHA256 is `204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c`. The download descriptor is preserved in the record.
++
++Live manifests:
++
++- `/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json`
++- `/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.json`
++
++`CORPUS-BUILD-01.json` records exact manifest-file and sequence-file hashes. The manifest's own `manifest_sha256` field is a separate canonical-payload digest excluding itself, not the exact-file digest used by a future fitter. Source and tokenizer paths are absolute and must remain available for reader verification. No activations are stored.
++
++## Verification and limits
++
++The related pre-change baseline passed 84 tests. Final verification on source commit `016c5f6` passed **81 focused tests in 4.33s** (56 corpus and 25 repository-rule tests), Ruff, and the diff check. `CORPUS-VERIFY-02.json` and its three logs preserve the fresh results. Both frozen corpora passed the final reader with unchanged manifest hashes. The actual 600-step input build and real pinned prose download both exited successfully without weights. Transformers' PyTorch-absent notice is expected for tokenizer/file-only work; the unauthenticated HF rate-limit notice did not prevent the download. Full logs are preserved.
++
++Independent GPT-6 Astra review found two format-validation gaps: stored offsets lacked the fresh-tokenization checks, and prose chunk identities/counts/tails needed reconciliation against the declared sources. Commit `016c5f6` resolves both with targeted regressions. Scoped re-review passed with no remaining findings. The task-ID exclusion rule now declares its agentic scope; exact legacy-rule compatibility preserves the already frozen corpora. `CORPUS-REVIEW-02.md` records the findings, fixes and review limits.
++
++No checkpoint was loaded for this task. The one-MLX-import-process rule recorded during the task is respected for subsequent tests: corpus/rules tests have a checked top-level import closure with no MLX. Only that pure subset was run for final verification; no native/tiny-model suite or model fitting was launched. The old ten broad-suite failures were repaired on the incorporated primary branch; this task did not fix them.
++
++## Required regression ruling
++
++The unrun prototype and the mathematical requirement differ:
++
++| Interpretation | Raw sufficient-statistics solve |
++|---|---|
++| Literal §3.2 with summed reconstruction loss |`(XTX + lambda I) W = XTY`|
++| Prototype with mean reconstruction loss |`(XTX + n * lambda I) W = XTY`|
++
++Both use `lambda = grid_multiple * mean_diag(XTX) / n`. The extra factor changes the regularisation substantially and can determine whether the smallest penalties survive float32 rounding. Neither convention has been selected or implemented in this slice. The fixed grid itself is unchanged.
++
++## Durable delivery
++
++Local commits preserve the plan, source-inspection notes, corpus implementation, actual corpus manifests, tests and review evidence. `design_specifications/pending/LENS-FITTING.patch` is the corpus-slice delivery, based on incorporated primary commit `ac1b700`; it excludes its own file and does not carry already-landed cache/debt changes. The patch has not been applied to the shared checkout. Large sequence/source data remain under the persistent worktree's ignored `data/` directory, with exact hashes committed in the record. Automatic approval review rejected the remote backup push to `https://github.com/justdtip/agent-v2-lab.git`, requiring direct authorisation for research-material egress. No push retry or alternative upload was attempted. Chief review and integration remain separate from local branch commits.
+diff --git a/docs/superpowers/plans/2026-09-07-lens-fitting.md b/docs/superpowers/plans/2026-09-07-lens-fitting.md
+new file mode 100644
+index 0000000..c75fcec
+--- /dev/null
++++ b/docs/superpowers/plans/2026-09-07-lens-fitting.md
+@@ -0,0 +1,51 @@
++# Domain lens fitting implementation plan
++
++Spec: design_specifications/pending/LENS-FITTING-REQUIREMENTS-2026-09-07.md (sections 10 and 11 included).
++
++## Global constraints
++
++Work only in /Users/daniel.tipton/worktrees/lens-fitting on codex/lens-fitting. Commit each completed piece and preserve records in git; no temporary-directory deliverables. Chief reviews and lands the eventual patch; do not merge into the shared branch. Base replay integration on the announced amended history-cache landing. All checkpoint loads use load_policy and the primary checkout model lock; no competing checkpoint load, lock deletion, or process termination. Tests use small initialized models only. Existing unrelated test failures remain outside scope. New scripts are the public entry points; no pipeline CLI migrations. Model dimensions/layers come from ArchitectureView. LensMaps.load and existing capture/validation semantics remain unchanged. No model-fitting runs while the cache acceptance holds the lock.
++
++Two domains only: agentic and prose. The authorised prose dataset is Salesforce/wikitext, wikitext-103-raw-v1, validation. Never use test-split agentic rollouts or pilot records in fitting. Preserve source hashes, exact split membership and every dropped sequence. Full standard basis for Jacobian fits. Any unresolved scientific convention must be raised before dependent implementation.
++
++## Task 1: Corpus builder (requirements 3.1 and 10)
++
++Ownership: src/local_llm_lab/pipeline/lens_fitting/__init__.py, corpus.py, scripts/lens_corpus.py, tests/test_lens_corpus.py. Do not change the prototype fitter, the runner, live_lens files or the registry.
++
++Build an immutable, hash-bound corpus manifest plus a sequence JSONL artifact. The shared interface is read_corpus(manifest_path), yielding sequence dictionaries with index, source, task_id (where applicable), step_index, split ('fit' or 'held'), ids (list[int]), spans (one string per ID), n_prompt, and domain. Include rendered prompt/text in the JSONL if useful to audit alignment; never store model activations. A manifest includes schema_version, domain, model hf ID, source paths and SHA256s, tokenizer/template identity, sequences path and SHA256, sequence counts and tokens by split/span, dropped rows, and fixed held-out/pilot-exclusion rules. read_corpus validates the hash and row invariants before returning records.
++
++Agentic inputs are evaluation JSON files from train/train1/train2 only. Every step (including a final unparsed raw step) becomes the runner prompt plus that step's raw output. Render using SYSTEM_PROMPT, canonical assistant_message/tool_message, build_prompt with DEFAULT_KEEP_LAST (two), and the generation suffix. Append valid prior actions/observations exactly as run_task does and stop at finish or parse failure. Preserve the model's own raw completion in the current sequence. Assign a global source-step index in source/trajectory/step order BEFORE length filtering, with every fifth index (one-based 5,10,...) held out. Drop over-cap sequences and keep their index/source/count in the manifest so dropping cannot move membership. The API takes max_tokens explicitly; the script supplies the specification's 2048-token corpus cap (a data-budget constant, not an architecture dimension).
++
++Tokenize the entire prompt-plus-raw text once with the model tokenizer's BOS policy. Tokenization offsets must partition every token into exactly one span: system, task, observation, note, call, template, chat; prose uses chat as the shared prose-content span with domain='prose'. Reuse the existing atlas span-labelling semantics for canonical messages, but do not import scripts that mutate sys.path. Token labels straddling semantic boundaries become template. A raw output's fenced call is call; preceding material is note. Fail if alignment cannot be established. Preserve actual windowed messages, not unwindowed tool results, when locating prompt spans.
++
++Require source trajectory IDs to be training-split IDs; fail closed on test/validation/pilot IDs or mixed model declarations. The pilot exclusion must be testable, not just descriptive. Record source content hashes; reject duplicate source paths or duplicate trajectory identities across inputs. Keep source ordering explicit in manifest. Synthetic tests can supply minimal matching training IDs and a fake offset tokenizer.
++
++Prose inputs are text files chunked into nonoverlapping 1024-token windows, with discarded trailing tokens counted and the same every-fifth-sequence split. A CLI option downloads the authorised Hugging Face dataset once, pinned to a resolved dataset revision, stores validation text and a download descriptor under a caller-provided data directory, and then builds the ordinary text corpus. Reuse only a hash-verified existing download. Never fetch train or test splits. Tokenizer loading fetches only tokenizer/config assets, never checkpoint weights or load_policy. Record local tokenizer-file hashes and template identity. Do not execute any network download during unit tests.
++
++Use exclusive creation/immutable outputs and allow_pickle=False where applicable. Tests name requirements sections in docstrings, first demonstrate the missing behavior, then verify: prompt equality against build_prompt; exact span coverage; hidden-observation labels; raw completion boundary/BOS handling; fifth-step membership unaffected by a dropped row; no pilot/test leakage; input or sequence corruption; prose chunk/tail accounting; download boundary restricted to authorised configuration/split and revision. Run focused tests and repository rules with PYTHONPATH=src using the existing .venv. Commit explicit owned files after self-review. Do not spawn subagents or load a checkpoint.
++
++## Task 2: Regression fitter and runtime/provenance entry point (3.2)
++
++Ownership: lens_fitting/regression.py, runtime.py, artifacts.py, scripts/lens_fit.py, tests/test_lens_regression.py, tests/test_lens_runtime.py. Consume Task 1's verified manifest/rows. One ArchitectureView.residuals forward per retained sequence over all residual layers including the final pre-norm target. Float32 sufficient statistics only: XTX, XTY, trace(YTY), n, per layer and split, evaluated each sequence. No activation dataset.
++
++Solve row-oriented X W = Y; store J = W.T and prove h @ J.T equals h @ W via non-symmetric known maps. Fixed ridge multiples from the specification; resolve the prototype's extra factor of n versus the literal specification before implementing selection. Compute held-out squared error from sufficient statistics and confirm it against direct error. State whether R2 is uncentered. Emit all nonfinal layers, float32 finite NPZ, strict LensMaps.load round-trip, per-layer penalties/errors/counts and required hashes/timing/memory. Standalone CLI rejects bad corpus/out paths before loading; loads through load_policy with the actual primary checkout lock and records snapshot file hashes. Adapter fitting remains disabled until 3.1–3.6 land. Runtime code has no implicit lock clearing or process termination.
++
++## Task 3: Jacobian measurement and map validation (3.3, 3.6)
++
++Ownership: lens_fitting/jacobian.py, validation.py, tests/test_lens_jacobian.py; extend only own fit CLI after Task 2. Build a pre-norm tail from view blocks, never ArchitectureView.tail. Full basis, float32 central finite differences, cached native prefix states cloned or batch-broadcast without mutation. Validate cached single-position derivatives against full-sequence uncached finite differences on 16 directions at three layers before fitting. Derivative direction/batch and epsilon conventions must be explicit and equal between the reference and candidate. Tiny linear tails provide independent analytic Jacobians.
++
++Sample fit positions deterministically by span with equal allocation, persist seeds and selected source/position identities before execution. At least 150 per layer; convergence diagnostics every ten samples, two consecutive relative Frobenius changes below 0.002, no decision below 100 and no accepted fit below 150, ceiling 400. Record complete curves and reasons. Benchmark batch8 first, then cloned/broadcast choices up to64 under declared memory limits. Before every long fit, measure projected time per layer; a cost above25 minutes requires the Director's choice before all-layer execution. Do not substitute fewer basis directions. Validation uses held-out positions and32 random unit directions with predeclared bounds; existing response_agreement and layer_verdict own verdicts. Concept/output hooks cannot request refits.
++
++## Task 4: Replay reader after amended cache landing (3.4)
++
++Ownership: lens_fitting/replay.py, scripts/lens_replay.py, tests/test_lens_replay.py. Do not start against the old CaptureSession internals. Validate source record hashes/chains, use fresh state per turn, replay exact recorded forward inputs and emitted rows in order through a new CaptureSession carrying new LensReadout. Assert native forward hashes unchanged. New output directories/records named for model/domain/kind, own manifest and verified hash chain. Support compressed source records. Identity mode reproduces hosted pilot atlas values exactly using the legacy summariser as its reference before any new profiles are read.
++
++## Task 5: Profiles and specificity (3.5)
++
++Ownership: lens_fitting/profiles.py, scripts/lens_profiles.py, tests/test_lens_profiles.py. Per episode/layer/span/kind summaries with n, horizons1/4/8, matching final-distribution base rates on each row, prompt agreement, explicitly biased regression-h1 rows, no primary layer. Preserve legacy token-pooled atlas only for the demanded identity check; scientific profiles remain episode-separated so they do not silently adopt its pooling. Cross-read both lens domains against agentic and held-out prose. Durable JSON and a standalone HTML layer-profile page with span controls and base-rate lines. Identity and self-check evidence required before profile execution; no forged evidence/automatic success.
++
++## Task 6: Integration, runtime evidence and handoff
++
++Confirm primary cache landing, incorporate its exact commit into this isolated branch, and run the full suite once on this branch's source. Investigate added failures only. Build tokenizer-only corpora and freeze manifests. All checkpoint self-checks/fits/replays require the normal lock, recorded launch/end, R47 declaration where needed, and source/corpus hash freezing. Run serially only when authorised and available; stop for genuine cost/ruling decisions. Preserve evidence before reading profiles. No adapter runs until3.1–3.6 land.
++
++Review each completed piece and the complete branch. Commit records and changes by explicit path throughout, push the branch backup without force, and deliver a patch under design_specifications/pending/LENS-FITTING.patch plus an implementation report listing callers, evidence, remaining gates and all departures. Chief lands the patch; do not alter the shared branch. Keep the persistent worktree intact.
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-BUILD-01.json b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-BUILD-01.json
+new file mode 100644
+index 0000000..e57ff01
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-BUILD-01.json
+@@ -0,0 +1,90 @@
++{
++  "builder_commit": "31ec13ceaa6e6c6ff93164b4955569b60c6ebf3f",
++  "branch_commit": "53343a3",
++  "checkpoint_loaded": false,
++  "corpora": [
++    {
++      "domain": "agentic",
++      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json",
++      "file_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
++      "canonical_payload_sha256": "b6f9e0e284132f6861442ff362e8d2217eae8621b8449218afc1617cfca14885",
++      "sequences_sha256": "d3b5911bef2b55513927b4720f7d7fee34f19a1bb870ef50a6d0d922b93660ab",
++      "counts": {
++        "fit": {
++          "sequences": 418,
++          "spans": {
++            "call": 88213,
++            "chat": 0,
++            "note": 13452,
++            "observation": 128819,
++            "system": 157168,
++            "task": 24417,
++            "template": 46122
++          },
++          "tokens": 458191
++        },
++        "held": {
++          "sequences": 100,
++          "spans": {
++            "call": 19564,
++            "chat": 0,
++            "note": 3988,
++            "observation": 29565,
++            "system": 37600,
++            "task": 5904,
++            "template": 10249
++          },
++          "tokens": 106870
++        }
++      },
++      "source_sequences": 600,
++      "dropped": 82,
++      "discarded_trailing_tokens": 0
++    },
++    {
++      "domain": "prose",
++      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.json",
++      "file_sha256": "02f7f818ce3aba2c57a229cde28e92f8a9375b9bdbe0c6db401be3b3105477b4",
++      "canonical_payload_sha256": "b4d13f930acab27d5f27886086c9c0802e4024a685d6a5a91361734550e126c4",
++      "sequences_sha256": "261cd05fa62b2ae15ce9ecca8ae0d685e3ed2a14790e76a2e11848163c175266",
++      "counts": {
++        "fit": {
++          "sequences": 204,
++          "spans": {
++            "call": 0,
++            "chat": 208896,
++            "note": 0,
++            "observation": 0,
++            "system": 0,
++            "task": 0,
++            "template": 0
++          },
++          "tokens": 208896
++        },
++        "held": {
++          "sequences": 51,
++          "spans": {
++            "call": 0,
++            "chat": 52224,
++            "note": 0,
++            "observation": 0,
++            "system": 0,
++            "task": 0,
++            "template": 0
++          },
++          "tokens": 52224
++        }
++      },
++      "source_sequences": 255,
++      "dropped": 0,
++      "discarded_trailing_tokens": 164
++    }
++  ],
++  "download_descriptor_sha256": "864cfaf8001a89a33912693a19fd86704be14756a11d5c4c5320aa6afb17279f",
++  "notices": [
++    "Transformers reports PyTorch absent; tokenizer/file utilities operate successfully.",
++    "HF download used unauthenticated requests; completed at pinned revision."
++  ],
++  "review_status": "two reader invariant fixes pending; built records remain immutable",
++  "ridge_scaling": "awaiting Director ruling"
++}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-IMPLEMENTER-02.md b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-IMPLEMENTER-02.md
+new file mode 100644
+index 0000000..9a86954
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-IMPLEMENTER-02.md
+@@ -0,0 +1,92 @@
++# Task 1 corpus-builder implementation report
++
++Status: implemented and verified; ready for controller review. This task changed only the four assigned implementation/test files and this requested local report. No checkpoint was loaded, no remote push or network download was performed, and no lock, registry, prototype fitter, runner, or live-lens file was changed.
++
++## Public contract
++
++- `build_agentic_corpus(sources, tokenizer, spec, manifest_path, *, max_tokens, tokenizer_files)` writes an exclusive JSON manifest and sibling `.jsonl`, returning manifest metadata.
++- `build_prose_corpus(sources, tokenizer, spec, manifest_path, *, tokenizer_files, download_descriptor=None)` uses fixed nonoverlapping 1024-token windows.
++- `read_corpus(manifest_path)` validates all bound inputs/assets/sequence bytes and source-step identities, then returns a list of sequence dictionaries. Returning the whole validated list ensures no earlier rows escape before later corruption is detected.
++- `load_corpus_tokenizer(spec, *, local_files_only=False)` returns the tokenizer and explicit local asset paths. Exact tokenizer/config allow-patterns exclude checkpoint weights and weight-index files; `AutoTokenizer` uses local files, fast tokenization and `trust_remote_code=False`.
++- `download_prose(data_dir, *, revision='main')` returns `(text_path, descriptor_path)`. Existing verified descriptors are reused offline; unresolved revisions, changed identity, corrupt text and partial outputs fail closed.
++- CLI: `PYTHONPATH=src .venv/bin/python scripts/lens_corpus.py --corpus agentic --evals <paths...> --out <manifest.json>` or `--corpus prose --files <paths...>` / `--download-prose --data-dir <dir>`. Optional `--dataset-revision`, `--model`, and `--local-files-only`. Agentic CLI cap is the specified 2048-token data budget; it is not an architecture dimension.
++
++Indices and step indices are zero-based. Held membership is `index % 5 == 4`; the index is assigned in explicit source/trajectory/step order before length filtering. Kept and dropped indices together cover every reached source step. `source` is the resolved input path. Each sequence carries domain, split, IDs, spans and n_prompt; agentic rows also retain prompt/text/offsets for audit. A prompt/completion-straddling token is labelled template and is excluded from n_prompt; the prompt is never independently tokenized. Zero-width BOS tokens receive template labels.
++
++Manifest fields include schema_version, model_hf_id, sources in caller order, tokenizer/template identity and file hashes, sequence path/hash, counts by fit/held and all seven spans, dropped_rows, source_sequence_count, fixed split/pilot rules and domain-specific budget/window/tail metadata. `manifest_sha256` is the SHA256 of canonical JSON excluding that field. Other hashes use exact bytes. Hashes detect corruption; these are not signatures.
++
++## Requirements and evidence
++
++| Requirement | Implementation and exercised behavior |
++|---|---|
++| §3.1 runner-equivalent agentic sequences | Uses SYSTEM_PROMPT, build_prompt with DEFAULT_KEEP_LAST and generation suffix; canonical prior actions and observations; raw completion retained. Tests compare prompt equality and check hidden observation labels. |
++| §3.1 terminal behavior | Includes final unparsed raw step and stops on parse failure or finish. Current raw is reparsed; contradictory recorded action/note metadata is rejected. |
++| §3.1 token alignment | Single whole-text call using MLX generation's BOS policy; offsets are mandatory, typed, bounded and monotonic. Missing message content and all-zero offsets fail. Exact token label coverage, leading/existing BOS and boundary-crossing tokens tested. |
++| §3.1 stable holdout | Fifth source-step held before drops; multi-source ordering, dropped first step and held membership tested. |
++| §3.1/§10 leakage controls | IDs must have train/train1/train2 split, registered family, numeric ordinal and registered variant. Test/valid/validation/pilot and lookalikes fail. Summary split/keep_last and every available source-model declaration checked against ModelSpec. Missing model provenance fails. Duplicate resolved sources and trajectory identities fail. |
++| §3.1 prose | Per-file tokenization, fixed windows, no overlaps, tail accounting and chat/template spans; five windows and the exact hand-derived remainder tested. |
++| §3.1/§10 authorised download | Resolves Salesforce/wikitext to immutable SHA; lists names at that revision; downloads only wikitext-103-raw-v1/validation-N-of-N.parquet; reads local Parquet with PyArrow. Descriptor binds dataset/config/split/revision, actual shard names/hashes and text hash. |
++| §10 immutable provenance | Exclusive creation for corpus JSONL/manifest and downloaded text/descriptor; corruption of inputs, tokenizer assets, JSONL, manifest or descriptor is rejected. Reader independently checks typed rows, split/order, source-step identities and summary counts even with a recomputed file hash. No pickle or activation artifact is written. |
++
++## TDD record
++
++1. Initial corpus tests: 19 failures because the required module/public implementation was absent. After the agentic/prose implementation: 19 passed.
++2. Downloader/tokenizer-loading tests: three expected failures for absent public functions; after implementation these passed. The CLI cap fixture initially assumed a character-tokenized first prompt exceeded the cap; measured length was 1857, so its task text was extended explicitly to exercise dropping. This was a fixture correction, not a product change.
++3. Added all-zero offset regression: failed because every token was silently labelled template. Added fail-closed validation; regression passed.
++4. Added rehashed wrong-source-step regression: failed because typed/nonnegative step_index alone did not bind the source step. Reader now reconstructs source-step identities from input reports; regression passed.
++5. Final source review found that installed `datasets.load_dataset` invokes `download_and_prepare` before `as_dataset(split=...)`, so selecting validation alone could fetch excluded data. Replaced permissive dataset-builder testing with a fake remote containing train/test/other-config filenames and a real local Parquet fixture. Three download tests then failed on the forbidden general builder. Implemented validation-only `hf_hub_download` calls and local Parquet reading; those tests passed. All unit tests remain network-free.
++
++Some additional edge-case checks passed immediately against the first coherent implementation; they are regression coverage, not claimed independent red/green feature increments.
++
++## Fresh verification
++
++Working directory: `/Users/daniel.tipton/worktrees/lens-fitting`.
++
++- `PYTHONPATH=src '/Users/daniel.tipton/Desktop/An app/.venv/bin/python' -m pytest tests/test_lens_corpus.py tests/test_repository_rules.py --tb=short` — exit 0, **65 passed in 3.84s** after the final downloader correction (40 corpus tests + 25 repository-rule tests).
++- `'/Users/daniel.tipton/Desktop/An app/.venv/bin/ruff' check src/local_llm_lab/pipeline/lens_fitting/__init__.py src/local_llm_lab/pipeline/lens_fitting/corpus.py scripts/lens_corpus.py tests/test_lens_corpus.py` — exit 0, all checks passed.
++- Ruff formatted only the four owned files.
++- Offline real cached tokenizer smoke: loaded five tokenizer/config assets using local_files_only=True; no weights/network. Five synthetic training steps rendered and read successfully with the actual Qwen tokenizer. Four fit sequences contained 1977 tokens total; fifth held sequence contained 637 tokens (615 prompt tokens). All span counts summed correctly.
++- Following the controller's held-lock notice, resolved the top-level import closure of corpus tests, repository-rule tests, conftest and corpus recursively before subsequent pytest runs. Local closure: agent_protocol, agent_tasks, models, pipeline.env/protocol/tasks, project, runlock, spawn and package initializers. External top-level roots: standard library, pytest and yaml. No MLX/mlx_lm/mlx_tune imports. Downloader tests import PyArrow/Hugging Face helpers only inside their test bodies and mock the remote boundary. No tiny-model tests ran.
++- The full suite was deliberately left to the controller, per assignment; known unrelated broad-suite failures were not revisited.
++
++## Review concerns and limits
++
++- Real 600-step training reports and an actual remote prose download were not processed by this worker. Controller integration should exercise the concrete source reports and selected live dataset revision after review. The cached real-tokenizer smoke covers renderer/offset compatibility without checkpoint execution.
++- The downloader intentionally fails if the pinned repository no longer exposes the expected authorised validation-Parquet layout. It never falls back to a whole-dataset builder or broader download pattern.
++- Outputs use absolute source and tokenizer-asset paths and require those bytes to remain available for read verification. Move/copy workflows need an explicit future rebinding operation; this task does not silently rewrite provenance.
++- Two-file publication uses exclusive opens, so a crash may leave an orphan JSONL or download text. Such outputs are never silently reused or overwritten; select a fresh output location after investigating the incomplete artifact.
++- This worker did not change the base, merge primary cache changes, or integrate other task files. The parent's existing task-boundary claim covered the assigned paths.
++
++## Commit
++
++`31ec13ceaa6e6c6ff93164b4955569b60c6ebf3f` — `Add immutable source-bound domain lens corpora`.
++
++The staged diff passed `git diff --cached --check`; the commit contains exactly the four assigned files. Post-commit `git status --short` was empty. This ignored local report remains available at the requested path.
++
++## Review fix round 1
++
++Implemented the two requested reader invariant fixes after merge `53343a3`, preserving the merged cache/rule changes and the controller's untracked build logs.
++
++- Prose validation now constructs the expected ordered `(source, step_index, token_start)` tuples from each source's declared token budget. It validates typed nonnegative token counts, typed tails in `[0, 1024)`, exact per-source division/remainder, the global trailing-token total, the fixed chunk size, and global source-sequence count. Every row must match its expected source/chunk identity. A row rehashed as step 999 with token_start 1022976 is rejected.
++- Extracted `_validate_offsets` and call it from both `_encode` and `read_corpus`. It checks the offset container, pair shape, strict integer types, bounds within the text, monotonic nonzero ranges, and presence of nonempty alignment. Negative BOS positions, reversed/out-of-text ranges, boolean positions and malformed pairs fail with an alignment error before prompt counting.
++- New `pilot_exclusion` metadata adds `applies_to: agentic_task_ids`. The reader also accepts the exact prior schema-1 rule without that field, interpreting it as the historical agentic task-ID rule. Authorised WikiText validation remains permitted. Neither previously built corpus was overwritten or rebound.
++
++Covering tests:
++
++- `test_reader_rejects_rehashed_wrong_prose_step`
++- `test_reader_reconciles_prose_sources_chunks_and_tails` — source order, token budget, source tail, global tail, sequence total, chunk size, typed tail.
++- `test_reader_rejects_rehashed_invalid_offsets` — negative, reversed, out-of-text, nonmonotonic, boolean and wrong-shape offsets.
++- `test_pilot_rule_scope_and_legacy_manifest_compatibility` — both agentic and prose metadata and old-rule readability.
++
++TDD: the targeted 16-case run initially reported **15 failed, 1 passed**. The global sequence-count case was already protected. During implementation the nonmonotonic fixture was corrected from a duplicate range (legitimate for some tokenizers) to a range that actually goes backwards; the shared validator intentionally retains legitimate duplicate offsets.
++
++Fresh final verification:
++
++- Re-resolved the post-merge transitive top-level import closure of corpus tests, repository-rule tests, conftest and corpus before pytest. The closure remains stdlib/pytest/yaml plus the same local pure-Python modules listed above; no MLX/mlx_lm/mlx_tune imports.
++- `PYTHONPATH=src '/Users/daniel.tipton/Desktop/An app/.venv/bin/python' -m pytest tests/test_lens_corpus.py tests/test_repository_rules.py --tb=short` — exit 0, **81 passed in 4.74s** (56 corpus + 25 repository-rule tests).
++- `'/Users/daniel.tipton/Desktop/An app/.venv/bin/ruff' check src/local_llm_lab/pipeline/lens_fitting/corpus.py tests/test_lens_corpus.py` — exit 0, all checks passed. `git diff --check` passed.
++- Read-only compatibility checks of the two existing immutable manifests passed: agentic 518 rows (418 fit, 100 held), 82 dropped; prose 255 rows (204 fit, 51 held), 164 discarded tail tokens. The manifest SHA256s were unchanged before/after reading. No model or network operation was used.
++
++No remaining concerns for these bounded review requests. General artifact portability and crash-recovery limits from the original report remain unchanged.
++
++Review-fix commit: `016c5f640fc89b2e5b27ef81f5663047e8f9a15f` — `Validate prose chunk identities and corpus offsets on read`. It contains only corpus.py and test_lens_corpus.py. Post-commit working-tree status was clean.
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-REVIEW-02.md b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-REVIEW-02.md
+new file mode 100644
+index 0000000..0807d6a
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-REVIEW-02.md
+@@ -0,0 +1,16 @@
++# Corpus review and final verification — 7 September 2026
++
++Scope: requirements §3.1/§10 only. Implementation commit `31ec13c`, review fix `016c5f6`; primary cache/rules incorporated at merge `53343a3` through `ac1b700`.
++
++Independent GPT-6 Astra review requested two bounded changes, both medium priority/high confidence:
++
++1. The prose reader accepted a rehashed second chunk labelled step 999 because token_start was only checked against step_index. It now reconstructs ordered source/chunk identities from declared per-source token counts, validates the corresponding division/remainder and reconciles global tails and sequence counts. This validates format/accounting without claiming that hashes are signatures or retokenizing sources in the reader.
++2. Stored offsets lacked the typed/bounded/monotonic validation used for fresh tokenization. Encoding and reading now share `_validate_offsets`; negative, reversed, out-of-text, boolean and malformed offsets are covered by regressions. Legitimate duplicate offsets remain permitted.
++
++The fix also makes `pilot_exclusion.applies_to = agentic_task_ids` explicit, so authorised WikiText validation is not described as excluded. The exact historical schema-1 rule remains readable; no frozen manifest was rewritten.
++
++Scoped re-review of `5945118..016c5f6`: **pass**, both findings resolved, no new breakage identified. Reviewer inspected source, tests and the implementation report; execution below is the controller's separate fresh evidence.
++
++Final checks on `016c5f6`: **81 tests passed in 4.33s**, Ruff clean, `git diff --check` clean. Both real corpora were read successfully with the exact before/after manifest file hashes unchanged. See `CORPUS-VERIFY-02.json` and `corpus-final-check-01.log` through `03.log`. The named tests' transitive top-level import closure was inspected before execution and contains no MLX; the corpus-read process also asserted that no MLX package was imported. No checkpoint or new corpus download was involved in final verification.
++
++No regression solve, Jacobian fit, native self-check, replay identity check or scientific profile is claimed. The ridge scaling ruling and direct authorisation for the rejected GitHub backup push remain pending. The earlier README and build record are retained unchanged as dated history; cache integration is now satisfied for future replay source work.
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-VERIFY-02.json b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-VERIFY-02.json
+new file mode 100644
+index 0000000..5c12175
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-VERIFY-02.json
+@@ -0,0 +1,141 @@
++{
++  "source_commit": "016c5f640fc89b2e5b27ef81f5663047e8f9a15f",
++  "utc": "2026-09-07T08:01:57.122159+00:00",
++  "checks": [
++    {
++      "argv": [
++        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
++        "-m",
++        "pytest",
++        "tests/test_lens_corpus.py",
++        "tests/test_repository_rules.py",
++        "--tb=short"
++      ],
++      "returncode": 0,
++      "log": "corpus-final-check-01.log"
++    },
++    {
++      "argv": [
++        "/Users/daniel.tipton/Desktop/An app/.venv/bin/ruff",
++        "check",
++        "src/local_llm_lab/pipeline/lens_fitting/__init__.py",
++        "src/local_llm_lab/pipeline/lens_fitting/corpus.py",
++        "scripts/lens_corpus.py",
++        "tests/test_lens_corpus.py"
++      ],
++      "returncode": 0,
++      "log": "corpus-final-check-02.log"
++    },
++    {
++      "argv": [
++        "git",
++        "diff",
++        "--check"
++      ],
++      "returncode": 0,
++      "log": "corpus-final-check-03.log"
++    }
++  ],
++  "corpora": [
++    {
++      "domain": "agentic",
++      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json",
++      "manifest_file_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
++      "rows": 518,
++      "split_sequences": {
++        "fit": 418,
++        "held": 100
++      },
++      "counts": {
++        "fit": {
++          "sequences": 418,
++          "spans": {
++            "call": 88213,
++            "chat": 0,
++            "note": 13452,
++            "observation": 128819,
++            "system": 157168,
++            "task": 24417,
++            "template": 46122
++          },
++          "tokens": 458191
++        },
++        "held": {
++          "sequences": 100,
++          "spans": {
++            "call": 19564,
++            "chat": 0,
++            "note": 3988,
++            "observation": 29565,
++            "system": 37600,
++            "task": 5904,
++            "template": 10249
++          },
++          "tokens": 106870
++        }
++      },
++      "unchanged": true
++    },
++    {
++      "domain": "prose",
++      "manifest_path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.json",
++      "manifest_file_sha256": "02f7f818ce3aba2c57a229cde28e92f8a9375b9bdbe0c6db401be3b3105477b4",
++      "rows": 255,
++      "split_sequences": {
++        "fit": 204,
++        "held": 51
++      },
++      "counts": {
++        "fit": {
++          "sequences": 204,
++          "spans": {
++            "call": 0,
++            "chat": 208896,
++            "note": 0,
++            "observation": 0,
++            "system": 0,
++            "task": 0,
++            "template": 0
++          },
++          "tokens": 208896
++        },
++        "held": {
++          "sequences": 51,
++          "spans": {
++            "call": 0,
++            "chat": 52224,
++            "note": 0,
++            "observation": 0,
++            "system": 0,
++            "task": 0,
++            "template": 0
++          },
++          "tokens": 52224
++        }
++      },
++      "unchanged": true
++    }
++  ],
++  "checkpoint_loaded": false,
++  "corpus_read_process_mlx_imported": false,
++  "pytest_import_closure": {
++    "inspection": "Worker recursively resolved named corpus/rules tests and conftest before run; no MLX in top-level closure",
++    "local_modules": [
++      "agent_protocol",
++      "agent_tasks",
++      "models",
++      "pipeline.env",
++      "pipeline.protocol",
++      "pipeline.tasks",
++      "project",
++      "runlock",
++      "spawn",
++      "package initializers"
++    ],
++    "external_roots": [
++      "stdlib",
++      "pytest",
++      "yaml"
++    ]
++  }
++}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-agentic-01.json b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-agentic-01.json
+new file mode 100644
+index 0000000..77c192f
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-agentic-01.json
+@@ -0,0 +1 @@
++{"counts":{"fit":{"sequences":418,"spans":{"call":88213,"chat":0,"note":13452,"observation":128819,"system":157168,"task":24417,"template":46122},"tokens":458191},"held":{"sequences":100,"spans":{"call":19564,"chat":0,"note":3988,"observation":29565,"system":37600,"task":5904,"template":10249},"tokens":106870}},"discarded_trailing_tokens":0,"domain":"agentic","dropped_rows":[{"domain":"agentic","index":39,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"held","step_index":15,"task_id":"train-ledger_reconcile-0007-clean","tokens":2114},{"domain":"agentic","index":42,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":18,"task_id":"train-ledger_reconcile-0007-clean","tokens":2125},{"domain":"agentic","index":43,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":19,"task_id":"train-ledger_reconcile-0007-clean","tokens":2399},{"domain":"agentic","index":44,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"held","step_index":20,"task_id":"train-ledger_reconcile-0007-clean","tokens":2198},{"domain":"agentic","index":45,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":21,"task_id":"train-ledger_reconcile-0007-clean","tokens":2071},{"domain":"agentic","index":46,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":22,"task_id":"train-ledger_reconcile-0007-clean","tokens":2410},{"domain":"agentic","index":47,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":23,"task_id":"train-ledger_reconcile-0007-clean","tokens":2684},{"domain":"agentic","index":74,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"held","step_index":17,"task_id":"train-conditional_update-0009-clean","tokens":2152},{"domain":"agentic","index":75,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":18,"task_id":"train-conditional_update-0009-clean","tokens":2220},{"domain":"agentic","index":79,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"held","step_index":22,"task_id":"train-conditional_update-0009-clean","tokens":2218},{"domain":"agentic","index":80,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":23,"task_id":"train-conditional_update-0009-clean","tokens":2552},{"domain":"agentic","index":140,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":15,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2115},{"domain":"agentic","index":143,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":18,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2126},{"domain":"agentic","index":144,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"held","step_index":19,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2400},{"domain":"agentic","index":145,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":20,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2198},{"domain":"agentic","index":146,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":21,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2071},{"domain":"agentic","index":147,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":22,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2411},{"domain":"agentic","index":148,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":23,"task_id":"train-ledger_reconcile-0019-wrong_path","tokens":2685},{"domain":"agentic","index":176,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":18,"task_id":"train-conditional_update-0021-wrong_path","tokens":2206},{"domain":"agentic","index":177,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":19,"task_id":"train-conditional_update-0021-wrong_path","tokens":2274},{"domain":"agentic","index":178,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","split":"fit","step_index":20,"task_id":"train-conditional_update-0021-wrong_path","tokens":2080},{"domain":"agentic","index":241,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":18,"task_id":"train1-ledger_reconcile-0007-clean","tokens":2256},{"domain":"agentic","index":242,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":19,"task_id":"train1-ledger_reconcile-0007-clean","tokens":2602},{"domain":"agentic","index":243,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":20,"task_id":"train1-ledger_reconcile-0007-clean","tokens":2676},{"domain":"agentic","index":244,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":21,"task_id":"train1-ledger_reconcile-0007-clean","tokens":2380},{"domain":"agentic","index":245,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":22,"task_id":"train1-ledger_reconcile-0007-clean","tokens":2184},{"domain":"agentic","index":246,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":23,"task_id":"train1-ledger_reconcile-0007-clean","tokens":2620},{"domain":"agentic","index":269,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":13,"task_id":"train1-conditional_update-0009-clean","tokens":2082},{"domain":"agentic","index":270,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":14,"task_id":"train1-conditional_update-0009-clean","tokens":2151},{"domain":"agentic","index":274,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":18,"task_id":"train1-conditional_update-0009-clean","tokens":2061},{"domain":"agentic","index":275,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":19,"task_id":"train1-conditional_update-0009-clean","tokens":2488},{"domain":"agentic","index":276,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":20,"task_id":"train1-conditional_update-0009-clean","tokens":2557},{"domain":"agentic","index":277,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":21,"task_id":"train1-conditional_update-0009-clean","tokens":2626},{"domain":"agentic","index":278,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":22,"task_id":"train1-conditional_update-0009-clean","tokens":2338},{"domain":"agentic","index":279,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":23,"task_id":"train1-conditional_update-0009-clean","tokens":2104},{"domain":"agentic","index":336,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":12,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2109},{"domain":"agentic","index":339,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":15,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2053},{"domain":"agentic","index":340,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":16,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2398},{"domain":"agentic","index":341,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":17,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2103},{"domain":"agentic","index":343,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":19,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2343},{"domain":"agentic","index":344,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":20,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2688},{"domain":"agentic","index":345,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":21,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2762},{"domain":"agentic","index":346,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":22,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2467},{"domain":"agentic","index":347,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":23,"task_id":"train1-ledger_reconcile-0019-wrong_path","tokens":2271},{"domain":"agentic","index":371,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":13,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2082},{"domain":"agentic","index":372,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":14,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2151},{"domain":"agentic","index":377,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":19,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2120},{"domain":"agentic","index":378,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":20,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2547},{"domain":"agentic","index":379,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"held","step_index":21,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2616},{"domain":"agentic","index":380,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":22,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2685},{"domain":"agentic","index":381,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","split":"fit","step_index":23,"task_id":"train1-conditional_update-0021-wrong_path","tokens":2392},{"domain":"agentic","index":436,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":12,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2110},{"domain":"agentic","index":439,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":15,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2054},{"domain":"agentic","index":440,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":16,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2399},{"domain":"agentic","index":441,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":17,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2103},{"domain":"agentic","index":443,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":19,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2343},{"domain":"agentic","index":444,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":20,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2688},{"domain":"agentic","index":445,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":21,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2392},{"domain":"agentic","index":446,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":22,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2196},{"domain":"agentic","index":447,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":23,"task_id":"train2-ledger_reconcile-0007-clean","tokens":2632},{"domain":"agentic","index":471,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":13,"task_id":"train2-conditional_update-0009-clean","tokens":2081},{"domain":"agentic","index":476,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":18,"task_id":"train2-conditional_update-0009-clean","tokens":2418},{"domain":"agentic","index":477,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":19,"task_id":"train2-conditional_update-0009-clean","tokens":2487},{"domain":"agentic","index":478,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":20,"task_id":"train2-conditional_update-0009-clean","tokens":2556},{"domain":"agentic","index":479,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":21,"task_id":"train2-conditional_update-0009-clean","tokens":2268},{"domain":"agentic","index":481,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":23,"task_id":"train2-conditional_update-0009-clean","tokens":2096},{"domain":"agentic","index":539,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":12,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2110},{"domain":"agentic","index":542,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":15,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2053},{"domain":"agentic","index":543,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":16,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2399},{"domain":"agentic","index":544,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":17,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2104},{"domain":"agentic","index":546,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":19,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2342},{"domain":"agentic","index":547,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":20,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2688},{"domain":"agentic","index":548,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":21,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2393},{"domain":"agentic","index":549,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":22,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2196},{"domain":"agentic","index":550,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":23,"task_id":"train2-ledger_reconcile-0019-wrong_path","tokens":2631},{"domain":"agentic","index":573,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":13,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2082},{"domain":"agentic","index":574,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":14,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2151},{"domain":"agentic","index":579,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"held","step_index":19,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2120},{"domain":"agentic","index":580,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":20,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2547},{"domain":"agentic","index":581,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":21,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2616},{"domain":"agentic","index":582,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":22,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2685},{"domain":"agentic","index":583,"reason":"over_max_tokens","source":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","split":"fit","step_index":23,"task_id":"train2-conditional_update-0021-wrong_path","tokens":2392}],"keep_last":2,"manifest_sha256":"b6f9e0e284132f6861442ff362e8d2217eae8621b8449218afc1617cfca14885","max_tokens":2048,"model_hf_id":"mlx-community/Qwen3.5-4B-MLX-4bit","pilot_exclusion":{"allowed_splits":["train","train1","train2"],"excluded_splits":["test","valid","validation","pilot"],"task_id_validation":"training split + registered family + numeric index + variant"},"schema_version":1,"sequences":{"path":"/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.jsonl","sha256":"d3b5911bef2b55513927b4720f7d7fee34f19a1bb870ef50a6d0d922b93660ab"},"source_sequence_count":600,"sources":[{"path":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json","sha256":"c456dccb04b6494f0671c4b02ee264fe51330042034a36616dfd8457b1428c61","source_steps":200,"task_ids":["train-read-0000-clean","train-search-0001-clean","train-calculate-0002-clean","train-synthesis-0003-clean","train-update-0004-clean","train-list-0005-clean","train-pointer_chain-0006-clean","train-ledger_reconcile-0007-clean","train-cross_reference-0008-clean","train-conditional_update-0009-clean","train-batch_update-0010-clean","train-aggregate_report-0011-clean","train-read-0012-transient","train-search-0013-wrong_path","train-calculate-0014-transient","train-synthesis-0015-wrong_path","train-update-0016-wrong_path","train-list-0017-wrong_path","train-pointer_chain-0018-wrong_path","train-ledger_reconcile-0019-wrong_path","train-cross_reference-0020-wrong_path","train-conditional_update-0021-wrong_path","train-batch_update-0022-wrong_path","train-aggregate_report-0023-wrong_path"]},{"path":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json","sha256":"0c605fc61d45529927253f466def8c7d62ee40b17061e66aa36474912d5eb608","source_steps":201,"task_ids":["train1-read-0000-clean","train1-search-0001-clean","train1-calculate-0002-clean","train1-synthesis-0003-clean","train1-update-0004-clean","train1-list-0005-clean","train1-pointer_chain-0006-clean","train1-ledger_reconcile-0007-clean","train1-cross_reference-0008-clean","train1-conditional_update-0009-clean","train1-batch_update-0010-clean","train1-aggregate_report-0011-clean","train1-read-0012-transient","train1-search-0013-wrong_path","train1-calculate-0014-transient","train1-synthesis-0015-wrong_path","train1-update-0016-wrong_path","train1-list-0017-wrong_path","train1-pointer_chain-0018-wrong_path","train1-ledger_reconcile-0019-wrong_path","train1-cross_reference-0020-wrong_path","train1-conditional_update-0021-wrong_path","train1-batch_update-0022-wrong_path","train1-aggregate_report-0023-wrong_path"]},{"path":"/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json","sha256":"44722a553f26b3843007f86b40e94939bbf75ec634b3dbae787261eba45bfa03","source_steps":199,"task_ids":["train2-read-0000-clean","train2-search-0001-clean","train2-calculate-0002-clean","train2-synthesis-0003-clean","train2-update-0004-clean","train2-list-0005-clean","train2-pointer_chain-0006-clean","train2-ledger_reconcile-0007-clean","train2-cross_reference-0008-clean","train2-conditional_update-0009-clean","train2-batch_update-0010-clean","train2-aggregate_report-0011-clean","train2-read-0012-transient","train2-search-0013-wrong_path","train2-calculate-0014-transient","train2-synthesis-0015-wrong_path","train2-update-0016-wrong_path","train2-list-0017-wrong_path","train2-pointer_chain-0018-wrong_path","train2-ledger_reconcile-0019-wrong_path","train2-cross_reference-0020-wrong_path","train2-conditional_update-0021-wrong_path","train2-batch_update-0022-wrong_path","train2-aggregate_report-0023-wrong_path"]}],"split_rule":{"before_length_filter":true,"every":5,"held_remainder":4,"index_base":0},"system_prompt_sha256":"9a668744a368f11f1a4026286d1718a8c9a1221504e54b3185597a21a4be459f","tokenizer":{"bos_policy":"add specials unless text already starts with tokenizer.bos_token","bos_token":null,"chat_template_sha256":"12de9034d5269e8b1fe6012b3538374fcb3941bf93c95fc81b0cf5acf3f08ce4","class":"transformers.tokenization_utils_tokenizers.TokenizersBackend","files":[{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/a585dec894e63da457d9440ec6aa7caa16d20860","sha256":"a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/cb3e1a878a5c4a0505e0c9967da45820b2ca6bd3","sha256":"f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4","sha256":"87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/a068e2468cff426a9b105006e74e044030a6faf4","sha256":"e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/0aa0ce0658d60ac4a5d609f4eadb0e8e43514176","sha256":"ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"}],"generation_suffix":"<|im_start|>assistant\n<think>\n\n</think>\n\n","model_hf_id":"mlx-community/Qwen3.5-4B-MLX-4bit","template_kwargs":{"enable_thinking":false}}}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-prose-01.json b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-prose-01.json
+new file mode 100644
+index 0000000..3868db6
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/CORPUS-prose-01.json
+@@ -0,0 +1 @@
++{"chunk_tokens":1024,"counts":{"fit":{"sequences":204,"spans":{"call":0,"chat":208896,"note":0,"observation":0,"system":0,"task":0,"template":0},"tokens":208896},"held":{"sequences":51,"spans":{"call":0,"chat":52224,"note":0,"observation":0,"system":0,"task":0,"template":0},"tokens":52224}},"discarded_trailing_tokens":164,"domain":"prose","download_descriptor":{"path":"/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/wikitext-validation/wikitext-103-raw-v1.validation.download.json","sha256":"864cfaf8001a89a33912693a19fd86704be14756a11d5c4c5320aa6afb17279f"},"dropped_rows":[],"manifest_sha256":"b4d13f930acab27d5f27886086c9c0802e4024a685d6a5a91361734550e126c4","model_hf_id":"mlx-community/Qwen3.5-4B-MLX-4bit","pilot_exclusion":{"allowed_splits":["train","train1","train2"],"excluded_splits":["test","valid","validation","pilot"],"task_id_validation":"training split + registered family + numeric index + variant"},"schema_version":1,"sequences":{"path":"/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.jsonl","sha256":"261cd05fa62b2ae15ce9ecca8ae0d685e3ed2a14790e76a2e11848163c175266"},"source_sequence_count":255,"sources":[{"discarded_trailing_tokens":164,"path":"/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/wikitext-validation/wikitext-103-raw-v1.validation.txt","sha256":"a42356f6a8ff1d25daf25ec9db49e10a537c265581b61c74604bb63231dee719","tokens":261284}],"split_rule":{"before_length_filter":true,"every":5,"held_remainder":4,"index_base":0},"tokenizer":{"bos_policy":"add specials unless text already starts with tokenizer.bos_token","bos_token":null,"chat_template_sha256":"12de9034d5269e8b1fe6012b3538374fcb3941bf93c95fc81b0cf5acf3f08ce4","class":"transformers.tokenization_utils_tokenizers.TokenizersBackend","files":[{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/a585dec894e63da457d9440ec6aa7caa16d20860","sha256":"a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/cb3e1a878a5c4a0505e0c9967da45820b2ca6bd3","sha256":"f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4","sha256":"87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/a068e2468cff426a9b105006e74e044030a6faf4","sha256":"e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"},{"path":"/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit/blobs/0aa0ce0658d60ac4a5d609f4eadb0e8e43514176","sha256":"ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"}],"generation_suffix":"<|im_start|>assistant\n<think>\n\n</think>\n\n","model_hf_id":"mlx-community/Qwen3.5-4B-MLX-4bit","template_kwargs":{"enable_thinking":false}}}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/PROSE-DOWNLOAD-01.json b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/PROSE-DOWNLOAD-01.json
+new file mode 100644
+index 0000000..f1cd541
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/PROSE-DOWNLOAD-01.json
+@@ -0,0 +1 @@
++{"config":"wikitext-103-raw-v1","dataset":"Salesforce/wikitext","descriptor_sha256":"d28f7aee39aa9fa09c4aefe355867aa637603b7527ebf84358f5c2c89430494a","files":[{"repo_path":"wikitext-103-raw-v1/validation-00000-of-00001.parquet","sha256":"204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c"}],"requested_revision":"main","revision":"b08601e04326c79dfdd32d625aee71d232d685c3","rows":3760,"schema_version":1,"split":"validation","text":{"path":"/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/wikitext-validation/wikitext-103-raw-v1.validation.txt","sha256":"a42356f6a8ff1d25daf25ec9db49e10a537c265581b61c74604bb63231dee719"}}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/README.md b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/README.md
+new file mode 100644
+index 0000000..f1bbf44
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/README.md
+@@ -0,0 +1,9 @@
++# Lens fitting implementation record — 7 September 2026
++
++Authority: design_specifications/pending/LENS-FITTING-REQUIREMENTS-2026-09-07.md, including sections10–11. Persistent worktree: /Users/daniel.tipton/worktrees/lens-fitting; branch codex/lens-fitting. Starting tree feb118a. This record covers implementation and checkpoint-free verification. No fit has been run or read here.
++
++Source checkpoints will be committed piece by piece. Runtime fitting records require separate pre-run declarations, normal access to the primary checkout model lock, self-checks before readings, and the exact frozen corpus/weights/source identities. Cache acceptance currently owns checkpoint execution. Replay integration waits for the amended cache patch landing. Adapter fitting waits for3.1–3.6 to land.
++
++Scientific conventions to resolve before dependent work: the prototype adds ridge_multiple * mean_diagonal(XTX)/n * n to XTX, while the literal fixed grid in3.2 gives ridge_multiple * mean_diagonal(XTX)/n. The implementation must not silently choose between those objectives. Code inspection also confirms that legacy atlas statistics pool tokens; exact identity reproduction and the new episode-separated profiles need distinct output scopes.
++
++The plan records source-step indices before dropping long sequences (fifth means one-based5,10,...), stores row-solve matrices transposed for LensMaps, and distinguishes uncentered reconstruction R2. These conventions remain visible to review.
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/SOURCE-NOTES-01.md b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/SOURCE-NOTES-01.md
+new file mode 100644
+index 0000000..4f24094
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/SOURCE-NOTES-01.md
+@@ -0,0 +1,13 @@
++# Source inspection before lens fitting
++
++The three training-split JSONs contain 72 trajectories and600 steps (200/201/199). Their summary fields declare split, model, keep_last, adapter and generator metadata; source-inspection.json preserves exact task listings and hashes. No fitting weights were loaded.
++
++ArchitectureView.embed and run_block promote to float32. residuals captures post-block residuals and leaves the final norm out, as required for regression. ArchitectureView.tail includes the norm and cannot be used unchanged for this Jacobian. jacobian_vector_product accepts a view-like object exposing residuals and tail, so a small pre-norm-tail adapter can reuse the existing finite-difference step rule without changing the probe module. Its epsilon is derived from the entire primal tensor; the cached/full-sequence self-check must deliberately use identical perturbation sizes rather than obtaining different epsilons from tensors of different lengths.
++
++response_agreement explicitly requires the same source/target averaging as the fitted map. A mean Jacobian must therefore be validated against the mean of held-out derivative responses under the same span weighting, not independently against every local Jacobian. All32 random directions can be fixed once and used on each sampled context before averaging; the record must state this. Only layer_verdict's map failure can request refitting.
++
++The installed native caches retain batch dimensions in their tensor state, while offsets and mask metadata have different representations. A batched Jacobian tail must copy/broadcast both cache state and metadata and prove that sources remain unmodified. Merely repeating K/V does not suffice for the recurrent blocks. Full-cache cloning from the amended history patch should be reused after it lands if its interface remains suitable.
++
++The original pilot atlas aggregates token rows. Its exact identity output is required as a compatibility check, but the new scientific profiles must carry separate episode-level counts and rates, with matched final-distribution base rates. The two outputs need explicit scope labels.
++
++Ridge scaling remains unresolved: literal3.2 adds the stated lambda directly to raw XTX; the unrun prototype multiplies it by n. No regression solve has been implemented pending the Director's ruling. No final scientific reading, cached-Jacobian equivalence, runtime-cost claim or checkpoint acceptance is asserted by these source notes.
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/SOURCE-NOTES-02.md b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/SOURCE-NOTES-02.md
+new file mode 100644
+index 0000000..74e99fe
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/SOURCE-NOTES-02.md
+@@ -0,0 +1,13 @@
++# Cached-tail construction cautions
++
++Source-only analysis, before any Jacobian fit or checkpoint self-check.
++
++At residual layer L, the tail begins at block index L. The cached state used for a perturbation at position t must describe positions strictly before t at every tail block. Obtaining the current primal through the first L blocks advances those early cache entries; reusing that partly advanced cache to build masks is unsafe because ArchitectureView.masks obtains offsets from the first matching attention/recurrent entry in the full list, which may be an early block outside the tail. Keep an untouched full prefix snapshot for each perturbation, and obtain the layer-L primal through a separate clone. Every perturbation arm, including plus/minus and batch-size comparisons, starts from the same full prefix state.
++
++For a batch of standard basis vectors, finite-difference output row i is the response to input basis i, so it is a COLUMN of the conventional Jacobian. Transpose the stacked responses when writing J. This is the same orientation as a row-oriented regression solve X W = Y followed by J = W.T; a nonsymmetric linear stand-in is required to catch a double transpose.
++
++The existing finite-difference helper scales epsilon by the norm of the entire primal tensor. A source-position perturbation in a full sequence and the same perturbation in a one-token cached tail must use the same explicitly computed epsilon for the self-check. Independently invoking the step rule on differently shaped primals compares different finite differences, even in exact arithmetic.
++
++Cache broadcast needs the batch axis of recurrent state, convolution history and KV tensors, plus lengths/left-padding metadata. Attention offsets are sequence positions and must not be multiplied by batch size. Compare the broadcast and restored-per-call methods on equal inputs and against the full-sequence reference before timing can choose either. A method that is faster but fails the reference check is ineligible.
++
++No choice about ridge scaling or numerical self-check bounds has been made in this note. Its statements are construction invariants to turn into tests, not evidence that the real cached derivative is equivalent.
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/agentic-build.log b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/agentic-build.log
+new file mode 100644
+index 0000000..355d59b
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/agentic-build.log
+@@ -0,0 +1,2 @@
++[transformers] PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
++{"manifest": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json", "domain": "agentic", "counts": {"fit": {"sequences": 418, "tokens": 458191, "spans": {"system": 157168, "task": 24417, "observation": 128819, "note": 13452, "call": 88213, "template": 46122, "chat": 0}}, "held": {"sequences": 100, "tokens": 106870, "spans": {"system": 37600, "task": 5904, "observation": 29565, "note": 3988, "call": 19564, "template": 10249, "chat": 0}}}, "dropped": 82}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-01.log b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-01.log
+new file mode 100644
+index 0000000..a15c7cf
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-01.log
+@@ -0,0 +1,3 @@
++........................................................................ [ 88%]
++.........                                                                [100%]
++81 passed in 4.33s
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-02.log b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-02.log
+new file mode 100644
+index 0000000..1f5f344
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-02.log
+@@ -0,0 +1 @@
++All checks passed!
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-03.log b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/corpus-final-check-03.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/prose-build.log b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/prose-build.log
+new file mode 100644
+index 0000000..da6f13b
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/prose-build.log
+@@ -0,0 +1,3 @@
++[transformers] PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
++Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
++{"manifest": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-prose/manifest.json", "domain": "prose", "counts": {"fit": {"sequences": 204, "tokens": 208896, "spans": {"system": 0, "task": 0, "observation": 0, "note": 0, "call": 0, "template": 0, "chat": 208896}}, "held": {"sequences": 51, "tokens": 52224, "spans": {"system": 0, "task": 0, "observation": 0, "note": 0, "call": 0, "template": 0, "chat": 52224}}}, "dropped": 0}
+diff --git a/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/source-inspection.json b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/source-inspection.json
+new file mode 100644
+index 0000000..a0a1127
+--- /dev/null
++++ b/research/records/LENS-FITTING-IMPLEMENTATION-2026-09-07/source-inspection.json
+@@ -0,0 +1,463 @@
++{
++  "inspected_utc": "2026-09-07T07:31:30.426287+00:00",
++  "sources": [
++    {
++      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train.json",
++      "sha256": "c456dccb04b6494f0671c4b02ee264fe51330042034a36616dfd8457b1428c61",
++      "split": "train",
++      "keep_last": 2,
++      "trajectories": 24,
++      "steps": 200,
++      "task_ids": [
++        "train-read-0000-clean",
++        "train-search-0001-clean",
++        "train-calculate-0002-clean",
++        "train-synthesis-0003-clean",
++        "train-update-0004-clean",
++        "train-list-0005-clean",
++        "train-pointer_chain-0006-clean",
++        "train-ledger_reconcile-0007-clean",
++        "train-cross_reference-0008-clean",
++        "train-conditional_update-0009-clean",
++        "train-batch_update-0010-clean",
++        "train-aggregate_report-0011-clean",
++        "train-read-0012-transient",
++        "train-search-0013-wrong_path",
++        "train-calculate-0014-transient",
++        "train-synthesis-0015-wrong_path",
++        "train-update-0016-wrong_path",
++        "train-list-0017-wrong_path",
++        "train-pointer_chain-0018-wrong_path",
++        "train-ledger_reconcile-0019-wrong_path",
++        "train-cross_reference-0020-wrong_path",
++        "train-conditional_update-0021-wrong_path",
++        "train-batch_update-0022-wrong_path",
++        "train-aggregate_report-0023-wrong_path"
++      ],
++      "model": {
++        "spec": {
++          "name": "qwen35-4b",
++          "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
++          "family": "qwen3_5",
++          "chat": {
++            "thinking": "off",
++            "template_kwargs": {
++              "enable_thinking": false
++            },
++            "end_of_turn": "<|im_end|>",
++            "extra_stop_tokens": [
++              "<|endoftext|>"
++            ],
++            "max_think_tokens": 512
++          },
++          "lora": {
++            "keys": "auto",
++            "rank": 16,
++            "scale": 32.0,
++            "dropout": 0.0
++          },
++          "train": {
++            "launch_preflight": {
++              "chunk_size": 256,
++              "max_row_tokens": 2688,
++              "max_batch_size": 1,
++              "max_metal_cache_gib": 2.0
++            },
++            "max_seq_length": 2688,
++            "batch_size": 2,
++            "grad_accumulation_steps": 2,
++            "learning_rate": 3e-05,
++            "grad_checkpoint": true
++          },
++          "cache_strategy": "auto",
++          "probe_layer_fractions": [
++            0.167,
++            0.333,
++            0.5,
++            0.667,
++            0.833,
++            1.0
++          ],
++          "memory_budget_gib": 22.0,
++          "policies": {},
++          "cache_equivalence_verified": null,
++          "probe_capture_dtype": "native"
++        },
++        "num_layers": 32,
++        "hidden_size": 2560,
++        "vocab_size": 248320,
++        "tie_word_embeddings": true,
++        "layer_types": [
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention"
++        ],
++        "lora_keys": [
++          "self_attn.q_proj",
++          "self_attn.k_proj",
++          "self_attn.v_proj",
++          "self_attn.o_proj",
++          "mlp.gate_proj",
++          "mlp.up_proj",
++          "mlp.down_proj",
++          "linear_attn.in_proj_qkv",
++          "linear_attn.in_proj_z",
++          "linear_attn.in_proj_b",
++          "linear_attn.in_proj_a",
++          "linear_attn.out_proj"
++        ],
++        "trainable_parameters": 32464896,
++        "probe_layers": [
++          5,
++          11,
++          16,
++          21,
++          27,
++          32
++        ],
++        "cache_strategy": "none",
++        "cache_strategy_reason": "auto:equivalence_unverified",
++        "snapshot_revision": null,
++        "jvp_method": "untested"
++      }
++    },
++    {
++      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train1.json",
++      "sha256": "0c605fc61d45529927253f466def8c7d62ee40b17061e66aa36474912d5eb608",
++      "split": "train1",
++      "keep_last": 2,
++      "trajectories": 24,
++      "steps": 201,
++      "task_ids": [
++        "train1-read-0000-clean",
++        "train1-search-0001-clean",
++        "train1-calculate-0002-clean",
++        "train1-synthesis-0003-clean",
++        "train1-update-0004-clean",
++        "train1-list-0005-clean",
++        "train1-pointer_chain-0006-clean",
++        "train1-ledger_reconcile-0007-clean",
++        "train1-cross_reference-0008-clean",
++        "train1-conditional_update-0009-clean",
++        "train1-batch_update-0010-clean",
++        "train1-aggregate_report-0011-clean",
++        "train1-read-0012-transient",
++        "train1-search-0013-wrong_path",
++        "train1-calculate-0014-transient",
++        "train1-synthesis-0015-wrong_path",
++        "train1-update-0016-wrong_path",
++        "train1-list-0017-wrong_path",
++        "train1-pointer_chain-0018-wrong_path",
++        "train1-ledger_reconcile-0019-wrong_path",
++        "train1-cross_reference-0020-wrong_path",
++        "train1-conditional_update-0021-wrong_path",
++        "train1-batch_update-0022-wrong_path",
++        "train1-aggregate_report-0023-wrong_path"
++      ],
++      "model": {
++        "spec": {
++          "name": "qwen35-4b",
++          "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
++          "family": "qwen3_5",
++          "chat": {
++            "thinking": "off",
++            "template_kwargs": {
++              "enable_thinking": false
++            },
++            "end_of_turn": "<|im_end|>",
++            "extra_stop_tokens": [
++              "<|endoftext|>"
++            ],
++            "max_think_tokens": 512
++          },
++          "lora": {
++            "keys": "auto",
++            "rank": 16,
++            "scale": 32.0,
++            "dropout": 0.0
++          },
++          "train": {
++            "launch_preflight": {
++              "chunk_size": 256,
++              "max_row_tokens": 2688,
++              "max_batch_size": 1,
++              "max_metal_cache_gib": 2.0
++            },
++            "max_seq_length": 2688,
++            "batch_size": 2,
++            "grad_accumulation_steps": 2,
++            "learning_rate": 3e-05,
++            "grad_checkpoint": true
++          },
++          "cache_strategy": "auto",
++          "probe_layer_fractions": [
++            0.167,
++            0.333,
++            0.5,
++            0.667,
++            0.833,
++            1.0
++          ],
++          "memory_budget_gib": 22.0,
++          "policies": {},
++          "cache_equivalence_verified": null,
++          "probe_capture_dtype": "native"
++        },
++        "num_layers": 32,
++        "hidden_size": 2560,
++        "vocab_size": 248320,
++        "tie_word_embeddings": true,
++        "layer_types": [
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention"
++        ],
++        "lora_keys": [
++          "self_attn.q_proj",
++          "self_attn.k_proj",
++          "self_attn.v_proj",
++          "self_attn.o_proj",
++          "mlp.gate_proj",
++          "mlp.up_proj",
++          "mlp.down_proj",
++          "linear_attn.in_proj_qkv",
++          "linear_attn.in_proj_z",
++          "linear_attn.in_proj_b",
++          "linear_attn.in_proj_a",
++          "linear_attn.out_proj"
++        ],
++        "trainable_parameters": 32464896,
++        "probe_layers": [
++          5,
++          11,
++          16,
++          21,
++          27,
++          32
++        ],
++        "cache_strategy": "none",
++        "cache_strategy_reason": "auto:equivalence_unverified",
++        "snapshot_revision": null,
++        "jvp_method": "untested"
++      }
++    },
++    {
++      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agent-v2e-qwen35-4b/evals/base-train2.json",
++      "sha256": "44722a553f26b3843007f86b40e94939bbf75ec634b3dbae787261eba45bfa03",
++      "split": "train2",
++      "keep_last": 2,
++      "trajectories": 24,
++      "steps": 199,
++      "task_ids": [
++        "train2-read-0000-clean",
++        "train2-search-0001-clean",
++        "train2-calculate-0002-clean",
++        "train2-synthesis-0003-clean",
++        "train2-update-0004-clean",
++        "train2-list-0005-clean",
++        "train2-pointer_chain-0006-clean",
++        "train2-ledger_reconcile-0007-clean",
++        "train2-cross_reference-0008-clean",
++        "train2-conditional_update-0009-clean",
++        "train2-batch_update-0010-clean",
++        "train2-aggregate_report-0011-clean",
++        "train2-read-0012-transient",
++        "train2-search-0013-wrong_path",
++        "train2-calculate-0014-transient",
++        "train2-synthesis-0015-wrong_path",
++        "train2-update-0016-wrong_path",
++        "train2-list-0017-wrong_path",
++        "train2-pointer_chain-0018-wrong_path",
++        "train2-ledger_reconcile-0019-wrong_path",
++        "train2-cross_reference-0020-wrong_path",
++        "train2-conditional_update-0021-wrong_path",
++        "train2-batch_update-0022-wrong_path",
++        "train2-aggregate_report-0023-wrong_path"
++      ],
++      "model": {
++        "spec": {
++          "name": "qwen35-4b",
++          "hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
++          "family": "qwen3_5",
++          "chat": {
++            "thinking": "off",
++            "template_kwargs": {
++              "enable_thinking": false
++            },
++            "end_of_turn": "<|im_end|>",
++            "extra_stop_tokens": [
++              "<|endoftext|>"
++            ],
++            "max_think_tokens": 512
++          },
++          "lora": {
++            "keys": "auto",
++            "rank": 16,
++            "scale": 32.0,
++            "dropout": 0.0
++          },
++          "train": {
++            "launch_preflight": {
++              "chunk_size": 256,
++              "max_row_tokens": 2688,
++              "max_batch_size": 1,
++              "max_metal_cache_gib": 2.0
++            },
++            "max_seq_length": 2688,
++            "batch_size": 2,
++            "grad_accumulation_steps": 2,
++            "learning_rate": 3e-05,
++            "grad_checkpoint": true
++          },
++          "cache_strategy": "auto",
++          "probe_layer_fractions": [
++            0.167,
++            0.333,
++            0.5,
++            0.667,
++            0.833,
++            1.0
++          ],
++          "memory_budget_gib": 22.0,
++          "policies": {},
++          "cache_equivalence_verified": null,
++          "probe_capture_dtype": "native"
++        },
++        "num_layers": 32,
++        "hidden_size": 2560,
++        "vocab_size": 248320,
++        "tie_word_embeddings": true,
++        "layer_types": [
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention",
++          "linear_attention",
++          "linear_attention",
++          "linear_attention",
++          "attention"
++        ],
++        "lora_keys": [
++          "self_attn.q_proj",
++          "self_attn.k_proj",
++          "self_attn.v_proj",
++          "self_attn.o_proj",
++          "mlp.gate_proj",
++          "mlp.up_proj",
++          "mlp.down_proj",
++          "linear_attn.in_proj_qkv",
++          "linear_attn.in_proj_z",
++          "linear_attn.in_proj_b",
++          "linear_attn.in_proj_a",
++          "linear_attn.out_proj"
++        ],
++        "trainable_parameters": 32464896,
++        "probe_layers": [
++          5,
++          11,
++          16,
++          21,
++          27,
++          32
++        ],
++        "cache_strategy": "none",
++        "cache_strategy_reason": "auto:equivalence_unverified",
++        "snapshot_revision": null,
++        "jvp_method": "untested"
++      }
++    }
++  ],
++  "checkpoint_loaded": false,
++  "baseline": {
++    "command": "PYTHONPATH=src /Users/daniel.tipton/Desktop/An app/.venv/bin/python -m pytest tests/test_live_lens.py tests/test_live_lens_native.py tests/test_jlens.py tests/test_repository_rules.py -ra",
++    "result": "84 passed in 5.52s"
++  },
++  "remote_backup": {
++    "status": "blocked_by_automatic_approval_review",
++    "branch": "codex/lens-fitting",
++    "remote": "https://github.com/justdtip/agent-v2-lab.git",
++    "reason": "requires direct authorisation for research-material egress"
++  }
++}
+diff --git a/scripts/lens_corpus.py b/scripts/lens_corpus.py
+new file mode 100644
+index 0000000..56a44ea
+--- /dev/null
++++ b/scripts/lens_corpus.py
+@@ -0,0 +1,85 @@
++"""Build immutable fitting corpora without loading checkpoint weights.
++
++Run with PYTHONPATH=src, for example:
++  python scripts/lens_corpus.py --corpus agentic --evals eval.json --out corpus.json
++  python scripts/lens_corpus.py --corpus prose --download-prose --data-dir data/lens \
++      --out prose.json
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++from pathlib import Path
++
++from local_llm_lab.models import load_model_spec
++from local_llm_lab.pipeline.lens_fitting.corpus import (
++    build_agentic_corpus,
++    build_prose_corpus,
++    download_prose,
++    load_corpus_tokenizer,
++)
++
++# Requirement §3.1 corpus data budget; this does not describe a model dimension.
++CORPUS_MAX_TOKENS = 2048
++
++
++def main(argv: list[str] | None = None) -> None:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--corpus", choices=("agentic", "prose"), required=True)
++    parser.add_argument("--evals", nargs="+", type=Path, default=[])
++    parser.add_argument("--files", nargs="+", type=Path, default=[])
++    parser.add_argument("--out", type=Path, required=True, help="immutable JSON manifest path")
++    parser.add_argument("--model", default="qwen35-4b")
++    parser.add_argument("--local-files-only", action="store_true", help="use cached tokenizer only")
++    parser.add_argument("--download-prose", action="store_true")
++    parser.add_argument("--data-dir", type=Path)
++    parser.add_argument("--dataset-revision", default="main")
++    args = parser.parse_args(argv)
++    if args.corpus == "agentic":
++        if not args.evals or args.files or args.download_prose:
++            parser.error("agentic requires --evals and does not accept prose inputs")
++    elif args.evals or not (args.files or args.download_prose):
++        parser.error("prose requires --files or --download-prose and does not accept --evals")
++    if args.download_prose and args.data_dir is None:
++        parser.error("--download-prose requires --data-dir")
++    if args.out.exists() or args.out.with_suffix(".jsonl").exists():
++        raise FileExistsError("immutable corpus output already exists")
++    spec = load_model_spec(args.model)
++    tokenizer, files = load_corpus_tokenizer(spec, local_files_only=args.local_files_only)
++    if args.corpus == "agentic":
++        manifest = build_agentic_corpus(
++            args.evals,
++            tokenizer,
++            spec,
++            args.out,
++            max_tokens=CORPUS_MAX_TOKENS,
++            tokenizer_files=files,
++        )
++    else:
++        descriptor = None
++        if args.download_prose:
++            downloaded, descriptor = download_prose(args.data_dir, revision=args.dataset_revision)
++            args.files.append(downloaded)
++        manifest = build_prose_corpus(
++            args.files,
++            tokenizer,
++            spec,
++            args.out,
++            tokenizer_files=files,
++            download_descriptor=descriptor,
++        )
++    print(
++        json.dumps(
++            {
++                "manifest": str(args.out.absolute()),
++                "domain": manifest["domain"],
++                "counts": manifest["counts"],
++                "dropped": len(manifest["dropped_rows"]),
++            }
++        )
++    )
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/__init__.py b/src/local_llm_lab/pipeline/lens_fitting/__init__.py
+new file mode 100644
+index 0000000..85106f4
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/lens_fitting/__init__.py
+@@ -0,0 +1 @@
++"""Auditable domain corpora and fitted lenses."""
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/corpus.py b/src/local_llm_lab/pipeline/lens_fitting/corpus.py
+new file mode 100644
+index 0000000..af9c847
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/lens_fitting/corpus.py
+@@ -0,0 +1,718 @@
++"""Immutable token corpora for requirements §3.1 and §10; no model execution.
++
++Indices are zero-based source-step ordinals. Every fifth *one-based* ordinal is
++held out before filtering. All hashes use the exact file bytes, except the
++manifest's self-digest, which uses canonical JSON without its digest field.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import re
++from collections import Counter
++from pathlib import Path
++from typing import Any
++
++from local_llm_lab.agent_protocol import ActionParseError
++from local_llm_lab.models import ModelSpec
++from local_llm_lab.pipeline.protocol import (
++    DEFAULT_KEEP_LAST,
++    SYSTEM_PROMPT,
++    assistant_message,
++    build_prompt,
++    generation_suffix,
++    parse_turn,
++    strip_thinking,
++    tool_message,
++    window_messages,
++)
++from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS
++
++SPANS = ("system", "task", "observation", "note", "call", "template", "chat")
++PROSE_CHUNK_TOKENS = 1024
++TRAINING_SPLITS = ("train", "train1", "train2")
++SPLIT_RULE = {"every": 5, "index_base": 0, "held_remainder": 4, "before_length_filter": True}
++_LEGACY_PILOT_RULE = {
++    "allowed_splits": list(TRAINING_SPLITS),
++    "excluded_splits": ["test", "valid", "validation", "pilot"],
++    "task_id_validation": "training split + registered family + numeric index + variant",
++}
++
++# Legacy schema-1 artifacts omitted the scope; their exclusion always applied to task IDs.
++PILOT_RULE = {**_LEGACY_PILOT_RULE, "applies_to": "agentic_task_ids"}
++
++
++def _json_bytes(value: Any) -> bytes:
++    return json.dumps(
++        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
++    ).encode("utf-8")
++
++
++def _sha(data: bytes) -> str:
++    return hashlib.sha256(data).hexdigest()
++
++
++def _file_record(path: Path) -> dict:
++    path = Path(path).resolve(strict=True)
++    return {"path": str(path), "sha256": _sha(path.read_bytes())}
++
++
++def _verify_file(record: dict) -> bytes:
++    data = Path(record["path"]).read_bytes()
++    if _sha(data) != record["sha256"]:
++        raise ValueError(f"SHA256 hash mismatch: {record['path']}")
++    return data
++
++
++def _sources(paths: list[Path]) -> list[dict]:
++    records = [_file_record(path) for path in paths]
++    if not records:
++        raise ValueError("at least one source is required")
++    if len({r["path"] for r in records}) != len(records):
++        raise ValueError("duplicate source paths")
++    return records
++
++
++def _training_id(task_id: str) -> str:
++    if not isinstance(task_id, str):
++        raise ValueError("training task ID must be a string")
++    fields = task_id.split("-")
++    if (
++        len(fields) != 4
++        or fields[0] not in TRAINING_SPLITS
++        or fields[1] not in FAMILIES
++        or not fields[2].isdigit()
++        or fields[3] not in VARIANTS
++    ):
++        raise ValueError(f"non-training or pilot task ID: {task_id}")
++    return fields[0]
++
++
++def _model_ids(declaration: Any) -> list[str]:
++    if isinstance(declaration, str):
++        return [declaration]
++    if not isinstance(declaration, dict):
++        raise ValueError("invalid source model declaration")
++    ids = []
++    if "hf_id" in declaration:
++        ids.append(declaration["hf_id"])
++    if "spec" in declaration:
++        ids.extend(_model_ids(declaration["spec"]))
++    if not ids:
++        raise ValueError("source model declaration has no hf_id")
++    return ids
++
++
++def _validate_evaluation(payload: dict, model_hf_id: str, seen: set[str]) -> None:
++    summary = payload.get("summary", {})
++    if not isinstance(summary, dict):
++        raise ValueError("invalid evaluation summary")
++    declared = _model_ids(summary["model"]) if "model" in summary else []
++    if "split" in summary and summary["split"] not in TRAINING_SPLITS:
++        raise ValueError("source split must be training; pilot/test/validation are excluded")
++    if "keep_last" in summary and summary["keep_last"] != DEFAULT_KEEP_LAST:
++        raise ValueError("source keep_last disagrees with runner window policy")
++    trajectories = payload.get("trajectories")
++    if not isinstance(trajectories, list) or not trajectories:
++        raise ValueError("evaluation requires trajectories")
++    for trajectory in trajectories:
++        task_id = trajectory.get("task_id")
++        split = _training_id(task_id)
++        if "split" in summary and summary["split"] != split:
++            raise ValueError("trajectory and source split disagree")
++        if task_id in seen:
++            raise ValueError(f"duplicate trajectory identity: {task_id}")
++        seen.add(task_id)
++        ids = declared + (_model_ids(trajectory["model"]) if "model" in trajectory else [])
++        if not ids or any(hf_id != model_hf_id for hf_id in ids):
++            raise ValueError("missing or mixed source model hf_id")
++        if not isinstance(trajectory.get("prompt"), str):
++            raise ValueError("trajectory requires a prompt string")
++        if not isinstance(trajectory.get("steps"), list):
++            raise ValueError("trajectory requires steps")
++
++
++def _tokenizer_identity(tokenizer: Any, spec: ModelSpec, files: list[Path]) -> dict:
++    records = _sources(files)
++    template = getattr(tokenizer, "chat_template", None)
++    if not template:
++        raise ValueError("tokenizer chat template identity is required")
++    return {
++        "model_hf_id": spec.hf_id,
++        "files": records,
++        "class": f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}",
++        "chat_template_sha256": _sha(_json_bytes(template)),
++        "template_kwargs": spec.chat.template_kwargs,
++        "generation_suffix": generation_suffix(spec),
++        "bos_policy": "add specials unless text already starts with tokenizer.bos_token",
++        "bos_token": getattr(tokenizer, "bos_token", None),
++    }
++
++
++def _encode(tokenizer: Any, text: str) -> tuple[list[int], list[list[int]]]:
++    bos = getattr(tokenizer, "bos_token", None)
++    encoded = tokenizer(
++        text, add_special_tokens=not (bos and text.startswith(bos)), return_offsets_mapping=True
++    )
++    ids = list(encoded["input_ids"])
++    offsets = [list(pair) for pair in encoded.get("offset_mapping", [])]
++    if not ids or any(type(token) is not int or token < 0 for token in ids):
++        raise ValueError("token IDs must be nonempty nonnegative integers")
++    _validate_offsets(offsets, text_length=len(text), token_count=len(ids))
++    return ids, offsets
++
++
++def _validate_offsets(offsets: Any, *, text_length: int, token_count: int) -> None:
++    """Enforce the same offset format during tokenization and immutable-corpus reads."""
++    if not isinstance(offsets, list) or len(offsets) != token_count:
++        raise ValueError("token alignment requires one offset per token")
++    previous = (0, 0)
++    for pair in offsets:
++        if (
++            not isinstance(pair, list)
++            or len(pair) != 2
++            or any(type(n) is not int for n in pair)
++            or not 0 <= pair[0] <= pair[1] <= text_length
++        ):
++            raise ValueError("invalid token alignment offsets")
++        if pair != [0, 0]:
++            if pair[0] == pair[1] or pair[0] < previous[0] or pair[1] < previous[1]:
++                raise ValueError("nonmonotonic token alignment offsets")
++            previous = tuple(pair)
++    if text_length and previous == (0, 0):
++        raise ValueError("token alignment has no nonempty offsets")
++
++
++def _content_ranges(prompt: str, messages: list[dict], raw: str) -> list[tuple[int, int, str]]:
++    ranges = []
++    cursor = 0
++    for message in messages:
++        content = message["content"]
++        if not content:
++            continue
++        start = prompt.find(content, cursor)
++        if start < 0:
++            raise ValueError("cannot establish message/template span alignment")
++        end = start + len(content)
++        role = message["role"]
++        if role == "assistant":
++            ranges.extend(_assistant_ranges(content, start))
++        else:
++            label = {"system": "system", "user": "task", "tool": "observation"}[role]
++            ranges.append((start, end, label))
++        cursor = end
++    ranges.extend(_assistant_ranges(raw, len(prompt)))
++    return ranges
++
++
++def _assistant_ranges(content: str, start: int) -> list[tuple[int, int, str]]:
++    # The atlas uses the fenced call as the note/call boundary. Raw completions
++    # retain their own spacing/thinking; only prior turns are canonicalised.
++    match = re.search(r"```(?:[A-Za-z]*)[ \t]*\r?\n?", content)
++    fence = match.start() if match else len(content)
++    return [(start, start + fence, "note"), (start + fence, start + len(content), "call")]
++
++
++def _labels(offsets: list[list[int]], ranges: list[tuple[int, int, str]]) -> list[str]:
++    return [
++        next((label for a, b, label in ranges if a <= s < e <= b), "template") for s, e in offsets
++    ]
++
++
++def _prompt_count(offsets: list[list[int]], boundary: int) -> int:
++    # A token crossing the raw boundary belongs to the completion, labelled template.
++    # Leading zero-width BOS tokens count as prompt; no independently encoded prefix.
++    for index, (start, end) in enumerate(offsets):
++        if end > boundary or (start >= boundary and end > start):
++            return index
++    return len(offsets)
++
++
++def _split(index: int) -> str:
++    return "held" if index % SPLIT_RULE["every"] == SPLIT_RULE["held_remainder"] else "fit"
++
++
++def _counts(rows: list[dict]) -> dict:
++    counts = {
++        split: {"sequences": 0, "tokens": 0, "spans": dict.fromkeys(SPANS, 0)}
++        for split in ("fit", "held")
++    }
++    for row in rows:
++        group = counts[row["split"]]
++        group["sequences"] += 1
++        group["tokens"] += len(row["ids"])
++        for span, count in Counter(row["spans"]).items():
++            group["spans"][span] += count
++    return counts
++
++
++def _write_corpus(manifest_path: Path, rows: list[dict], metadata: dict) -> dict:
++    manifest_path = Path(manifest_path).absolute()
++    sequences_path = manifest_path.with_suffix(".jsonl")
++    if manifest_path == sequences_path:
++        raise ValueError("manifest must have an extension other than .jsonl")
++    if manifest_path.exists() or sequences_path.exists():
++        raise FileExistsError("immutable corpus output already exists")
++    manifest_path.parent.mkdir(parents=True, exist_ok=True)
++    data = b"".join(_json_bytes(row) + b"\n" for row in rows)
++    metadata.update(
++        schema_version=1,
++        split_rule=dict(SPLIT_RULE),
++        pilot_exclusion=dict(PILOT_RULE),
++        sequences={"path": str(sequences_path), "sha256": _sha(data)},
++        counts=_counts(rows),
++    )
++    # Recheck source/asset bytes immediately before publishing their bound outputs.
++    for record in [*metadata["sources"], *metadata["tokenizer"]["files"]]:
++        _verify_file(record)
++    if metadata.get("download_descriptor"):
++        _verify_file(metadata["download_descriptor"])
++    metadata["manifest_sha256"] = _sha(_json_bytes(metadata))
++    # Exclusive opens protect against racing builders. A crash can leave an orphan
++    # JSONL, which deliberately prevents silent reuse or overwrite.
++    with sequences_path.open("xb") as stream:
++        stream.write(data)
++    with manifest_path.open("xb") as stream:
++        stream.write(_json_bytes(metadata) + b"\n")
++    return metadata
++
++
++def build_agentic_corpus(
++    sources: list[Path],
++    tokenizer: Any,
++    spec: ModelSpec,
++    manifest_path: Path,
++    *,
++    max_tokens: int,
++    tokenizer_files: list[Path],
++) -> dict:
++    """Render every training trajectory step, then publish its immutable corpus."""
++    if type(max_tokens) is not int or max_tokens <= 0:
++        raise ValueError("max_tokens must be positive")
++    records = _sources(sources)
++    identity = _tokenizer_identity(tokenizer, spec, tokenizer_files)
++    seen: set[str] = set()
++    payloads = [json.loads(_verify_file(record)) for record in records]
++    for payload in payloads:
++        _validate_evaluation(payload, spec.hf_id, seen)
++    rows, dropped = [], []
++    index = 0
++    for source, payload in zip(records, payloads, strict=True):
++        source["task_ids"] = [t["task_id"] for t in payload["trajectories"]]
++        source["source_steps"] = 0
++        for trajectory in payload["trajectories"]:
++            messages = [
++                {"role": "system", "content": SYSTEM_PROMPT},
++                {"role": "user", "content": trajectory["prompt"]},
++            ]
++            for step_index, step in enumerate(trajectory["steps"]):
++                if step.get("index", step_index) != step_index:
++                    raise ValueError("recorded step index does not match trajectory order")
++                raw = step.get("raw")
++                if not isinstance(raw, str):
++                    raise ValueError("every source step must contain its raw completion")
++                prompt = build_prompt(
++                    tokenizer, messages, spec=spec, keep_last=DEFAULT_KEEP_LAST, generation=True
++                )
++                text = prompt + raw
++                ids, offsets = _encode(tokenizer, text)
++                ranges = _content_ranges(prompt, window_messages(messages, DEFAULT_KEEP_LAST), raw)
++                base = {
++                    "index": index,
++                    "source": source["path"],
++                    "task_id": trajectory["task_id"],
++                    "step_index": step_index,
++                    "split": _split(index),
++                    "domain": "agentic",
++                }
++                if len(ids) > max_tokens:
++                    dropped.append({**base, "tokens": len(ids), "reason": "over_max_tokens"})
++                else:
++                    rows.append(
++                        {
++                            **base,
++                            "ids": ids,
++                            "spans": _labels(offsets, ranges),
++                            "n_prompt": _prompt_count(offsets, len(prompt)),
++                            "prompt": prompt,
++                            "text": text,
++                            "offsets": offsets,
++                        }
++                    )
++                index += 1
++                source["source_steps"] += 1
++                _, action_text = strip_thinking(raw)
++                try:
++                    turn = parse_turn(action_text)
++                except ActionParseError:
++                    break
++                if step.get("parse_error"):
++                    raise ValueError("recorded parse failure contradicts raw completion")
++                action = {"name": turn.action.name, "arguments": turn.action.arguments}
++                if step.get("action") != action or step.get("thought") != turn.thought:
++                    raise ValueError("recorded action/note contradicts raw completion")
++                if turn.action.name == "finish":
++                    break
++                observation = step.get("observation")
++                if not isinstance(observation, str):
++                    raise ValueError("valid nonterminal step requires an observation")
++                messages += [
++                    assistant_message(turn.thought, turn.action),
++                    tool_message(turn.action.name, observation),
++                ]
++    return _write_corpus(
++        manifest_path,
++        rows,
++        {
++            "domain": "agentic",
++            "model_hf_id": spec.hf_id,
++            "sources": records,
++            "tokenizer": identity,
++            "source_sequence_count": index,
++            "max_tokens": max_tokens,
++            "keep_last": DEFAULT_KEEP_LAST,
++            "system_prompt_sha256": _sha(SYSTEM_PROMPT.encode()),
++            "dropped_rows": dropped,
++            "discarded_trailing_tokens": 0,
++        },
++    )
++
++
++def build_prose_corpus(
++    sources: list[Path],
++    tokenizer: Any,
++    spec: ModelSpec,
++    manifest_path: Path,
++    *,
++    tokenizer_files: list[Path],
++    download_descriptor: Path | None = None,
++) -> dict:
++    """Chunk each text source once into nonoverlapping fixed-size token windows."""
++    records = _sources(sources)
++    identity = _tokenizer_identity(tokenizer, spec, tokenizer_files)
++    rows, trailing = [], 0
++    for source in records:
++        text = _verify_file(source).decode("utf-8")
++        ids, offsets = _encode(tokenizer, text)
++        tail = len(ids) % PROSE_CHUNK_TOKENS
++        source.update(tokens=len(ids), discarded_trailing_tokens=tail)
++        trailing += tail
++        for step, start in enumerate(
++            range(0, len(ids) - PROSE_CHUNK_TOKENS + 1, PROSE_CHUNK_TOKENS)
++        ):
++            end = start + PROSE_CHUNK_TOKENS
++            chunk_offsets = offsets[start:end]
++            rows.append(
++                {
++                    "index": len(rows),
++                    "source": source["path"],
++                    "step_index": step,
++                    "split": _split(len(rows)),
++                    "domain": "prose",
++                    "n_prompt": 0,
++                    "ids": ids[start:end],
++                    "spans": _labels(chunk_offsets, [(0, len(text), "chat")]),
++                    "token_start": start,
++                }
++            )
++    descriptor = _file_record(download_descriptor) if download_descriptor else None
++    if descriptor:
++        download = json.loads(_verify_file(descriptor))
++        _validate_download(download)
++        if download["text"] not in [{k: r[k] for k in ("path", "sha256")} for r in records]:
++            raise ValueError("download descriptor does not identify a prose source")
++    return _write_corpus(
++        manifest_path,
++        rows,
++        {
++            "domain": "prose",
++            "model_hf_id": spec.hf_id,
++            "sources": records,
++            "tokenizer": identity,
++            "source_sequence_count": len(rows),
++            "chunk_tokens": PROSE_CHUNK_TOKENS,
++            "dropped_rows": [],
++            "discarded_trailing_tokens": trailing,
++            "download_descriptor": descriptor,
++        },
++    )
++
++
++def read_corpus(manifest_path: Path) -> list[dict]:
++    """Validate all bound bytes and row invariants before exposing any sequence."""
++    manifest = json.loads(Path(manifest_path).read_bytes())
++    digest = manifest.pop("manifest_sha256", None)
++    if digest != _sha(_json_bytes(manifest)):
++        raise ValueError("manifest hash mismatch")
++    if (
++        manifest.get("schema_version") != 1
++        or manifest.get("domain") not in ("agentic", "prose")
++        or manifest.get("split_rule") != SPLIT_RULE
++        or manifest.get("pilot_exclusion") not in (PILOT_RULE, _LEGACY_PILOT_RULE)
++    ):
++        raise ValueError("unsupported corpus schema or split/exclusion rules")
++    sources = manifest["sources"]
++    paths = {source["path"] for source in sources}
++    if not paths or len(paths) != len(sources):
++        raise ValueError("duplicate or empty sources")
++    seen: set[str] = set()
++    expected_identities = []
++    trailing = 0
++    if manifest["domain"] == "prose" and manifest.get("chunk_tokens") != PROSE_CHUNK_TOKENS:
++        raise ValueError("unsupported prose chunk size")
++    for source in sources:
++        data = _verify_file(source)
++        if manifest["domain"] == "agentic":
++            payload = json.loads(data)
++            _validate_evaluation(payload, manifest["model_hf_id"], seen)
++            if source["task_ids"] != [t["task_id"] for t in payload["trajectories"]]:
++                raise ValueError("source trajectory identity mismatch")
++            before = len(expected_identities)
++            for trajectory in payload["trajectories"]:
++                for step_index, step in enumerate(trajectory["steps"]):
++                    expected_identities.append((source["path"], trajectory["task_id"], step_index))
++                    _, action_text = strip_thinking(step["raw"])
++                    try:
++                        turn = parse_turn(action_text)
++                    except ActionParseError:
++                        break
++                    if turn.action.name == "finish":
++                        break
++            if source["source_steps"] != len(expected_identities) - before:
++                raise ValueError("source step count mismatch")
++        else:
++            tokens, tail = source.get("tokens"), source.get("discarded_trailing_tokens")
++            if (
++                type(tokens) is not int
++                or tokens < 0
++                or type(tail) is not int
++                or not 0 <= tail < PROSE_CHUNK_TOKENS
++                or tokens % PROSE_CHUNK_TOKENS != tail
++            ):
++                raise ValueError("invalid prose source token/tail counts")
++            trailing += tail
++            expected_identities.extend(
++                (source["path"], step, step * PROSE_CHUNK_TOKENS)
++                for step in range(tokens // PROSE_CHUNK_TOKENS)
++            )
++    if manifest["domain"] == "prose" and (
++        type(manifest.get("discarded_trailing_tokens")) is not int
++        or manifest["discarded_trailing_tokens"] != trailing
++    ):
++        raise ValueError("prose discarded tail count mismatch")
++    for asset in manifest["tokenizer"]["files"]:
++        _verify_file(asset)
++    if manifest.get("download_descriptor"):
++        _validate_download(json.loads(_verify_file(manifest["download_descriptor"])))
++    rows = [json.loads(line) for line in _verify_file(manifest["sequences"]).splitlines()]
++    previous = -1
++    for row in rows:
++        index = row["index"]
++        if (
++            type(index) is not int
++            or index <= previous
++            or row["split"] != _split(index)
++            or row["domain"] != manifest["domain"]
++            or row["source"] not in paths
++            or type(row["step_index"]) is not int
++            or row["step_index"] < 0
++        ):
++            raise ValueError("invalid sequence identity/order/split")
++        previous = index
++        ids, spans = row["ids"], row["spans"]
++        if (
++            not isinstance(ids, list)
++            or not ids
++            or len(ids) != len(spans)
++            or any(type(token) is not int or token < 0 for token in ids)
++            or any(span not in SPANS for span in spans)
++            or type(row["n_prompt"]) is not int
++            or not 0 <= row["n_prompt"] <= len(ids)
++        ):
++            raise ValueError("invalid token/span row invariants")
++        if row["domain"] == "agentic":
++            _training_id(row["task_id"])
++            source = next(s for s in sources if s["path"] == row["source"])
++            if row["task_id"] not in source["task_ids"] or len(ids) > manifest["max_tokens"]:
++                raise ValueError("invalid agentic source/length")
++            _validate_offsets(row["offsets"], text_length=len(row["text"]), token_count=len(ids))
++            if not row["text"].startswith(row["prompt"]) or row["n_prompt"] != _prompt_count(
++                row["offsets"], len(row["prompt"])
++            ):
++                raise ValueError("invalid prompt alignment")
++        elif (
++            len(ids) != PROSE_CHUNK_TOKENS
++            or row["n_prompt"] != 0
++            or set(spans) - {"chat", "template"}
++            or type(row["token_start"]) is not int
++            or row["token_start"] != row["step_index"] * PROSE_CHUNK_TOKENS
++        ):
++            raise ValueError("invalid prose chunk")
++    dropped = manifest["dropped_rows"]
++    for row in dropped:
++        if (
++            row["source"] not in paths
++            or row["split"] != _split(row["index"])
++            or manifest["domain"] != "agentic"
++            or row["tokens"] <= manifest["max_tokens"]
++        ):
++            raise ValueError("invalid dropped row")
++        _training_id(row["task_id"])
++    if (
++        type(manifest["source_sequence_count"]) is not int
++        or len(expected_identities) != manifest["source_sequence_count"]
++    ):
++        raise ValueError("source sequence count mismatch")
++    for row in [*rows, *dropped]:
++        identity = (
++            (row["source"], row["task_id"], row["step_index"])
++            if manifest["domain"] == "agentic"
++            else (row["source"], row["step_index"], row["token_start"])
++        )
++        index = row["index"]
++        if not 0 <= index < len(expected_identities) or identity != expected_identities[index]:
++            raise ValueError("source step identity mismatch")
++    indices = [row["index"] for row in [*rows, *dropped]]
++    if sorted(indices) != list(range(manifest["source_sequence_count"])):
++        raise ValueError("source-step coverage mismatch")
++    if _counts(rows) != manifest["counts"]:
++        raise ValueError("corpus count mismatch")
++    return rows
++
++
++DATASET_ID = "Salesforce/wikitext"
++DATASET_CONFIG = "wikitext-103-raw-v1"
++DATASET_SPLIT = "validation"
++_VALIDATION_SHARD = re.compile(re.escape(DATASET_CONFIG) + r"/validation-\d+-of-\d+\.parquet")
++TOKENIZER_PATTERNS = (
++    "tokenizer.json",
++    "tokenizer_config.json",
++    "special_tokens_map.json",
++    "added_tokens.json",
++    "vocab.json",
++    "vocab.txt",
++    "merges.txt",
++    "tokenizer.model",
++    "config.json",
++    "chat_template.jinja",
++    "chat_templates/*.jinja",
++)
++
++
++def _validate_download(record: dict) -> None:
++    content = {key: value for key, value in record.items() if key != "descriptor_sha256"}
++    if record.get("descriptor_sha256") != _sha(_json_bytes(content)):
++        raise ValueError("download descriptor hash mismatch")
++    if (
++        record.get("schema_version") != 1
++        or record.get("dataset") != DATASET_ID
++        or record.get("config") != DATASET_CONFIG
++        or record.get("split") != DATASET_SPLIT
++        or not re.fullmatch(r"[0-9a-f]{40,64}", record.get("revision", ""))
++    ):
++        raise ValueError("unauthorised dataset configuration/split or unresolved revision")
++    files = record.get("files", [])
++    if (
++        not files
++        or len({f["repo_path"] for f in files}) != len(files)
++        or any(not _VALIDATION_SHARD.fullmatch(f["repo_path"]) for f in files)
++    ):
++        raise ValueError("download descriptor includes unauthorised split/configuration files")
++    _verify_file(record["text"])
++
++
++def download_prose(data_dir: Path, *, revision: str = "main") -> tuple[Path, Path]:
++    """Download only authorised WikiText validation, resolving and recording its commit.
++
++    An existing descriptor is reused offline only when its fixed identity, requested
++    revision and exact text hash verify. Partial or corrupt outputs require a fresh
++    caller-selected directory; this function never silently repairs/overwrites them.
++    """
++    data_dir = Path(data_dir).absolute()
++    text_path = data_dir / "wikitext-103-raw-v1.validation.txt"
++    descriptor_path = data_dir / "wikitext-103-raw-v1.validation.download.json"
++    if descriptor_path.exists():
++        record = json.loads(descriptor_path.read_bytes())
++        _validate_download(record)
++        if record["requested_revision"] != revision and record["revision"] != revision:
++            raise ValueError("existing download revision differs from requested revision")
++        if Path(record["text"]["path"]) != text_path:
++            raise ValueError("existing download text is outside the selected data directory")
++        return text_path, descriptor_path
++    if text_path.exists():
++        raise FileExistsError("download text exists without a verified descriptor")
++    from huggingface_hub import HfApi, hf_hub_download
++    from pyarrow import parquet
++
++    hub = HfApi()
++    resolved = hub.dataset_info(DATASET_ID, revision=revision).sha
++    if not isinstance(resolved, str) or not re.fullmatch(r"[0-9a-f]{40,64}", resolved):
++        raise ValueError("dataset revision must resolve to an immutable commit")
++    # load_dataset(split=...) can prepare *all* splits before selecting one.
++    # Restrict the actual file-download boundary, then read only local Parquet.
++    filenames = sorted(
++        name
++        for name in hub.list_repo_files(DATASET_ID, repo_type="dataset", revision=resolved)
++        if _VALIDATION_SHARD.fullmatch(name)
++    )
++    if not filenames:
++        raise ValueError("pinned dataset revision contains no authorised validation shards")
++    pieces, downloaded_files = [], []
++    for name in filenames:
++        path = Path(hf_hub_download(DATASET_ID, name, repo_type="dataset", revision=resolved))
++        downloaded_files.append({"repo_path": name, "sha256": _sha(path.read_bytes())})
++        texts = parquet.read_table(path, columns=["text"]).column("text").to_pylist()
++        for text in texts:
++            if not isinstance(text, str):
++                raise ValueError("downloaded validation row has no text")
++            pieces.append(text + "\n")
++    data = "".join(pieces).encode("utf-8")
++    record = {
++        "schema_version": 1,
++        "dataset": DATASET_ID,
++        "config": DATASET_CONFIG,
++        "split": DATASET_SPLIT,
++        "requested_revision": revision,
++        "revision": resolved,
++        "rows": len(pieces),
++        "files": downloaded_files,
++        "text": {"path": str(text_path), "sha256": _sha(data)},
++    }
++    record["descriptor_sha256"] = _sha(_json_bytes(record))
++    data_dir.mkdir(parents=True, exist_ok=True)
++    with text_path.open("xb") as stream:
++        stream.write(data)
++    with descriptor_path.open("xb") as stream:
++        stream.write(_json_bytes(record) + b"\n")
++    return text_path, descriptor_path
++
++
++def load_corpus_tokenizer(
++    spec: ModelSpec,
++    *,
++    local_files_only: bool = False,
++) -> tuple[Any, list[Path]]:
++    """Load only fast tokenizer/config assets, with remote code and weights excluded."""
++    from huggingface_hub import snapshot_download
++    from transformers import AutoTokenizer
++
++    directory = Path(
++        snapshot_download(
++            spec.hf_id, allow_patterns=list(TOKENIZER_PATTERNS), local_files_only=local_files_only
++        )
++    )
++    tokenizer = AutoTokenizer.from_pretrained(
++        str(directory), local_files_only=True, trust_remote_code=False, use_fast=True
++    )
++    files = sorted(
++        {
++            path
++            for pattern in TOKENIZER_PATTERNS
++            for path in directory.glob(pattern)
++            if path.is_file()
++        }
++    )
++    if not files:
++        raise ValueError("tokenizer snapshot contains no tokenizer/config assets")
++    return tokenizer, files
+diff --git a/tests/test_lens_corpus.py b/tests/test_lens_corpus.py
+new file mode 100644
+index 0000000..76127e6
+--- /dev/null
++++ b/tests/test_lens_corpus.py
+@@ -0,0 +1,687 @@
++"""Requirements §3.1 and §10: immutable, leakage-free fitting corpora."""
++
++from __future__ import annotations
++
++import hashlib
++import importlib
++import json
++from pathlib import Path
++
++import pytest
++
++from local_llm_lab.agent_protocol import Action
++from local_llm_lab.models import load_model_spec
++from local_llm_lab.pipeline.protocol import (
++    SYSTEM_PROMPT,
++    assistant_message,
++    build_prompt,
++    generation_suffix,
++    tool_message,
++)
++
++
++class OffsetTokenizer:
++    bos_token = None
++    chat_template = "synthetic canonical chat v1"
++
++    def __init__(self):
++        self.calls = []
++
++    def apply_chat_template(self, messages, *, add_generation_prompt, tokenize, **kwargs):
++        body = "".join(f"<{m['role']}>\n{m['content']}\n</{m['role']}>\n" for m in messages)
++        return body + (
++            generation_suffix(load_model_spec("qwen35-4b")) if add_generation_prompt else ""
++        )
++
++    def __call__(self, text, *, add_special_tokens, return_offsets_mapping):
++        self.calls.append((text, add_special_tokens))
++        prefix = [1] if add_special_tokens else []
++        return {
++            "input_ids": prefix + [ord(c) + 2 for c in text],
++            "offset_mapping": ([(0, 0)] if prefix else []) + [(i, i + 1) for i in range(len(text))],
++        }
++
++
++@pytest.fixture
++def setup(tmp_path):
++    spec = load_model_spec("qwen35-4b")
++    tokenizer = OffsetTokenizer()
++    asset = tmp_path / "tokenizer.json"
++    asset.write_text('{"synthetic": true}')
++    return spec, tokenizer, [asset]
++
++
++def api():
++    return importlib.import_module("local_llm_lab.pipeline.lens_fitting.corpus")
++
++
++def evaluation(path, spec, *, count=5, task_id="train-read-0000-clean"):
++    steps = []
++    for i in range(count):
++        raw = f'Note {i}.\n```json\n{{"name":"read_file","arguments":{{"path":"/a"}}}}\n```'
++        steps.append(
++            {
++                "index": i,
++                "raw": raw,
++                "thought": f"Note {i}.",
++                "action": {"name": "read_file", "arguments": {"path": "/a"}},
++                "observation": f"unique observation {i}",
++            }
++        )
++    data = {
++        "summary": {
++            "model": {"spec": {"hf_id": spec.hf_id}},
++            "split": task_id.split("-")[0],
++            "keep_last": 2,
++        },
++        "trajectories": [{"task_id": task_id, "prompt": "Inspect the workspace.", "steps": steps}],
++    }
++    path.write_text(json.dumps(data))
++    return data
++
++
++def build(tmp_path, setup, data=None, **kwargs):
++    spec, tokenizer, assets = setup
++    source = tmp_path / "eval.json"
++    if data is None:
++        evaluation(source, spec)
++    else:
++        source.write_text(json.dumps(data))
++    manifest = tmp_path / "corpus.json"
++    api().build_agentic_corpus(
++        [source],
++        tokenizer,
++        spec,
++        manifest,
++        max_tokens=kwargs.pop("max_tokens", 20000),
++        tokenizer_files=assets,
++        **kwargs,
++    )
++    return manifest, api().read_corpus(manifest)
++
++
++def test_runner_prompt_spans_and_raw_completion(tmp_path, setup):
++    """§3.1: canonical windowing, raw output and BOS must share one aligned tokenization."""
++    manifest, rows = build(tmp_path, setup)
++    spec, tokenizer, _ = setup
++    messages = [
++        {"role": "system", "content": SYSTEM_PROMPT},
++        {"role": "user", "content": "Inspect the workspace."},
++    ]
++    for i in range(4):
++        messages += [
++            assistant_message(f"Note {i}.", Action("read_file", {"path": "/a"})),
++            tool_message("read_file", f"unique observation {i}"),
++        ]
++    assert rows[4]["prompt"] == build_prompt(tokenizer, messages, spec=spec, keep_last=2)
++    assert "unique observation 0" not in rows[4]["prompt"]
++    row = rows[4]
++    hidden = row["text"].index("[earlier read_file result hidden:")
++    assert row["spans"][hidden + 1] == "observation"
++    assert row["spans"][0] == "template"  # BOS has no character extent.
++    assert row["ids"][0] == 1
++    assert row["n_prompt"] == len(row["prompt"]) + 1
++    assert row["spans"][row["n_prompt"]] == "note"
++    assert row["spans"][-1] == "call"
++    assert len(tokenizer.calls) == 5
++    assert all(len(r["ids"]) == len(r["spans"]) for r in rows)
++    assert [r["split"] for r in rows] == ["fit", "fit", "fit", "fit", "held"]
++    assert json.loads(manifest.read_text())["counts"]["held"]["sequences"] == 1
++
++
++def test_parse_failure_is_included_and_finish_stops(tmp_path, setup):
++    """§3.1: final malformed raw output survives; replay stops at the runner's terminal turn."""
++    spec, _, _ = setup
++    data = evaluation(tmp_path / "original.json", spec, count=3)
++    data["trajectories"][0]["steps"][1] = {
++        "index": 1,
++        "raw": "unparsed final output",
++        "parse_error": "no call",
++    }
++    _, rows = build(tmp_path, setup, data)
++    assert len(rows) == 2
++    assert rows[-1]["text"].endswith("unparsed final output")
++
++
++def test_dropped_source_step_does_not_move_held_membership(tmp_path, setup):
++    """§3.1: source-step indexing precedes length filtering, including dropped rows."""
++    spec, _, _ = setup
++    data = evaluation(tmp_path / "original.json", spec)
++    data["trajectories"][0]["steps"][0]["raw"] = (
++        "x" * 30000 + data["trajectories"][0]["steps"][0]["raw"]
++    )
++    # Keep canonical history consistent with the raw completion.
++    data["trajectories"][0]["steps"][0]["thought"] = "x" * 30000 + "Note 0."
++    # An independent next trajectory avoids carrying the intentionally enormous note.
++    steps = data["trajectories"][0]["steps"]
++    data["trajectories"] = [dict(data["trajectories"][0], steps=steps[:1])]
++    for i, step in enumerate(steps[1:], 1):
++        data["trajectories"].append(
++            {
++                "task_id": f"train-read-{i:04d}-clean",
++                "prompt": "Task",
++                "steps": [dict(step, index=0)],
++            }
++        )
++    manifest, rows = build(tmp_path, setup, data)
++    assert [r["index"] for r in rows] == [1, 2, 3, 4]
++    assert rows[-1]["split"] == "held"
++    dropped = json.loads(manifest.read_text())["dropped_rows"]
++    assert dropped[0]["index"] == 0
++    assert dropped[0]["tokens"] > 20000
++    assert dropped[0]["source"] == str((tmp_path / "eval.json").resolve())
++
++
++@pytest.mark.parametrize(
++    "task_id",
++    [
++        "test-read-0000-clean",
++        "valid-read-0000-clean",
++        "validation-read-0000-clean",
++        "pilot-read-0000-clean",
++        "train-pilot-0000-clean",
++        "trainish-read-0000-clean",
++    ],
++)
++def test_reject_nontraining_and_pilot_ids(tmp_path, setup, task_id):
++    """§3.1/§10: neither held evaluation IDs nor malformed training lookalikes may leak."""
++    data = evaluation(tmp_path / "original.json", setup[0], task_id=task_id)
++    with pytest.raises(ValueError, match="training|pilot|split"):
++        build(tmp_path, setup, data)
++
++
++@pytest.mark.parametrize("mutation", ["mixed", "missing", "window", "split"])
++def test_fail_closed_on_source_provenance(tmp_path, setup, mutation):
++    """§3.1/§10: source identity and prompt-window policy cannot be guessed or mixed."""
++    data = evaluation(tmp_path / "original.json", setup[0])
++    if mutation == "mixed":
++        data["trajectories"][0]["model"] = {"spec": {"hf_id": "other/model"}}
++    elif mutation == "missing":
++        data["summary"].pop("model")
++    elif mutation == "window":
++        data["summary"]["keep_last"] = 9
++    else:
++        data["summary"]["split"] = "train2"
++    with pytest.raises(ValueError):
++        build(tmp_path, setup, data)
++
++
++@pytest.mark.parametrize("target", ["source", "sequences", "manifest", "tokenizer"])
++def test_hash_bound_artifacts_reject_corruption(tmp_path, setup, target):
++    """§10: modified input, token stream, manifest or tokenizer assets are detected on read."""
++    manifest, _ = build(tmp_path, setup)
++    content = json.loads(manifest.read_text())
++    path = {
++        "source": tmp_path / "eval.json",
++        "sequences": Path(content["sequences"]["path"]),
++        "manifest": manifest,
++        "tokenizer": setup[2][0],
++    }[target]
++    path.write_text(path.read_text() + " ")
++    if target == "manifest":
++        content["domain"] = "prose"
++        path.write_text(json.dumps(content))
++    with pytest.raises(ValueError, match="hash|SHA|digest"):
++        api().read_corpus(manifest)
++
++
++def test_duplicate_sources_and_trajectories_are_rejected(tmp_path, setup):
++    """§10: aliases or overlapping reports must not double-count trajectories."""
++    spec, tok, assets = setup
++    a, b = tmp_path / "a.json", tmp_path / "b.json"
++    evaluation(a, spec)
++    b.write_bytes(a.read_bytes())
++    for paths in ([a, a], [a, b]):
++        with pytest.raises(ValueError, match="duplicate"):
++            api().build_agentic_corpus(
++                paths, tok, spec, tmp_path / "out.json", max_tokens=20000, tokenizer_files=assets
++            )
++
++
++def test_prose_nonoverlap_tail_and_immutable_outputs(tmp_path, setup):
++    """§3.1/§10: fixed prose windows count the tail and forbid overwriting existing artifacts."""
++    spec, tok, assets = setup
++    path = tmp_path / "prose.txt"
++    path.write_text("abcd" * 1300)
++    out = tmp_path / "prose.json"
++    api().build_prose_corpus([path], tok, spec, out, tokenizer_files=assets)
++    rows = api().read_corpus(out)
++    assert len(rows) == 5
++    assert all(len(row["ids"]) == 1024 and row["n_prompt"] == 0 for row in rows)
++    assert all(set(row["spans"]) <= {"chat", "template"} for row in rows)
++    assert rows[-1]["split"] == "held"
++    assert json.loads(out.read_text())["discarded_trailing_tokens"] == 81
++    flattened = [token for row in rows for token in row["ids"]]
++    assert flattened == [1] + [ord(c) + 2 for c in path.read_text()[:5119]]
++    with pytest.raises(FileExistsError):
++        api().build_prose_corpus([path], tok, spec, out, tokenizer_files=assets)
++
++
++def test_finish_does_not_append_or_render_subsequent_steps(tmp_path, setup):
++    """§3.1: finish terminates rendering even if an input artifact contains trailing steps."""
++    data = evaluation(tmp_path / "original.json", setup[0], count=3)
++    data["trajectories"][0]["steps"][0].update(
++        raw='Done.\n```json\n{"name":"finish","arguments":{"answer":"ok"}}\n```',
++        thought="Done.",
++        action={"name": "finish", "arguments": {"answer": "ok"}},
++    )
++    _, rows = build(tmp_path, setup, data)
++    assert len(rows) == 1
++    assert rows[0]["text"].endswith('"ok"}}\n```')
++
++
++def test_boundary_crossing_token_is_template_without_second_encoding(tmp_path, setup):
++    """§3.1: a merged prompt/raw token is template and excluded from the prompt count."""
++    spec, _, assets = setup
++
++    class MergingTokenizer(OffsetTokenizer):
++        def __call__(self, text, **kwargs):
++            result = super().__call__(text, **kwargs)
++            boundary = text.index("Note 0.")
++            result["input_ids"][boundary : boundary + 2] = [999]
++            result["offset_mapping"][boundary : boundary + 2] = [(boundary - 1, boundary + 1)]
++            return result
++
++    tok = MergingTokenizer()
++    data = evaluation(tmp_path / "original.json", spec, count=1)
++    _, rows = build(tmp_path, (spec, tok, assets), data)
++    row = rows[0]
++    assert row["spans"][row["n_prompt"]] == "template"
++    assert row["ids"][row["n_prompt"]] == 999
++    assert len(tok.calls) == 1
++
++
++def test_existing_bos_suppresses_added_bos(tmp_path, setup):
++    """§3.1: BOS already in rendered text must follow the generator's no-double-BOS policy."""
++    spec, _, assets = setup
++
++    class BosTokenizer(OffsetTokenizer):
++        bos_token = "<BOS>"
++
++        def apply_chat_template(self, *args, **kwargs):
++            return self.bos_token + super().apply_chat_template(*args, **kwargs)
++
++    tok = BosTokenizer()
++    _, rows = build(tmp_path, (spec, tok, assets))
++    assert all(not add_special for _, add_special in tok.calls)
++    assert rows[0]["ids"][0] == ord("<") + 2
++
++
++@pytest.mark.parametrize(
++    "broken", ["missing_content", "missing_offsets", "reversed_offsets", "zero_offsets"]
++)
++def test_alignment_failure_is_not_silently_template(tmp_path, setup, broken):
++    """§3.1/§10: missing semantic alignment or invalid token offsets fail closed."""
++    spec, _, assets = setup
++
++    class BrokenTokenizer(OffsetTokenizer):
++        def apply_chat_template(self, *args, **kwargs):
++            prompt = super().apply_chat_template(*args, **kwargs)
++            return (
++                prompt.replace("Inspect the workspace.", "rewritten")
++                if broken == "missing_content"
++                else prompt
++            )
++
++        def __call__(self, *args, **kwargs):
++            result = super().__call__(*args, **kwargs)
++            if broken == "missing_offsets":
++                result.pop("offset_mapping")
++            elif broken == "zero_offsets":
++                result["offset_mapping"] = [(0, 0)] * len(result["input_ids"])
++            elif broken == "reversed_offsets":
++                result["offset_mapping"][3] = (10, 1)
++            return result
++
++    with pytest.raises(ValueError, match="alignment"):
++        build(tmp_path, (spec, BrokenTokenizer(), assets))
++    assert not (tmp_path / "corpus.json").exists()
++
++
++def test_raw_history_contradiction_rejected(tmp_path, setup):
++    """§3.1: canonical past actions must be the actions parsed from the model's own raw turn."""
++    data = evaluation(tmp_path / "original.json", setup[0])
++    data["trajectories"][0]["steps"][0]["thought"] = "invented note"
++    with pytest.raises(ValueError, match="contradict"):
++        build(tmp_path, setup, data)
++
++
++def _validation_remote(tmp_path, monkeypatch, texts):
++    from types import SimpleNamespace
++
++    import datasets
++    import huggingface_hub
++    import pyarrow as pa
++    import pyarrow.parquet as pq
++
++    shard = tmp_path / "fake-remote.parquet"
++    pq.write_table(pa.table({"text": texts}), shard)
++    calls = []
++
++    class Hub:
++        def dataset_info(self, repo_id, *, revision):
++            assert repo_id == "Salesforce/wikitext"
++            assert revision == "main"
++            return SimpleNamespace(sha="a" * 40)
++
++        def list_repo_files(self, repo_id, *, repo_type, revision):
++            assert (repo_id, repo_type, revision) == ("Salesforce/wikitext", "dataset", "a" * 40)
++            return [
++                "README.md",
++                "wikitext-103-raw-v1/train-00000-of-00001.parquet",
++                "wikitext-103-raw-v1/test-00000-of-00001.parquet",
++                "wikitext-2-raw-v1/validation-00000-of-00001.parquet",
++                "wikitext-103-raw-v1/validation-00000-of-00001.parquet",
++            ]
++
++    def download(repo_id, filename, *, repo_type, revision):
++        calls.append((repo_id, filename, repo_type, revision))
++        assert filename == "wikitext-103-raw-v1/validation-00000-of-00001.parquet"
++        return str(shard)
++
++    def reject_builder(*args, **kwargs):
++        raise AssertionError(
++            "Dataset builder may download excluded splits before selecting validation"
++        )
++
++    monkeypatch.setattr(huggingface_hub, "HfApi", Hub)
++    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
++    monkeypatch.setattr(datasets, "load_dataset", reject_builder)
++    return calls
++
++
++def test_download_is_validation_only_pinned_and_hash_verified(tmp_path, monkeypatch):
++    """§3.1/§10: only authorised validation shard bytes may cross the download boundary."""
++    calls = _validation_remote(
++        tmp_path, monkeypatch, ["first validation passage", "second validation passage"]
++    )
++    text, descriptor = api().download_prose(tmp_path, revision="main")
++    assert calls == [
++        (
++            "Salesforce/wikitext",
++            "wikitext-103-raw-v1/validation-00000-of-00001.parquet",
++            "dataset",
++            "a" * 40,
++        )
++    ]
++    assert text.read_text() == "first validation passage\nsecond validation passage\n"
++    record = json.loads(descriptor.read_text())
++    assert record["revision"] == "a" * 40
++    assert record["text"]["sha256"] == hashlib.sha256(text.read_bytes()).hexdigest()
++    assert (
++        record["files"][0]["sha256"]
++        == hashlib.sha256((tmp_path / "fake-remote.parquet").read_bytes()).hexdigest()
++    )
++    assert api().download_prose(tmp_path, revision="main") == (text, descriptor)
++    assert len(calls) == 1
++    text.write_text("corruption")
++    with pytest.raises(ValueError, match="hash|SHA"):
++        api().download_prose(tmp_path, revision="main")
++    assert len(calls) == 1
++
++
++def test_download_rejects_unresolved_revision_and_wrong_reuse(tmp_path, monkeypatch):
++    """§10: a moving revision cannot enter provenance; a changed download descriptor is rejected."""
++    import huggingface_hub
++
++    class Hub:
++        def dataset_info(self, *args, **kwargs):
++            from types import SimpleNamespace
++
++            return SimpleNamespace(sha="main")
++
++    monkeypatch.setattr(huggingface_hub, "HfApi", Hub)
++    with pytest.raises(ValueError, match="revision"):
++        api().download_prose(tmp_path, revision="main")
++    assert not list(tmp_path.iterdir())
++
++
++def test_tokenizer_loading_never_requests_weights(tmp_path, monkeypatch, setup):
++    """§3.1/§10: tokenizer loading restricts the snapshot to tokenizer/config assets."""
++    import fnmatch
++
++    import huggingface_hub
++    import transformers
++
++    calls = []
++
++    def snapshot_download(repo_id, *, allow_patterns, local_files_only):
++        assert repo_id == setup[0].hf_id
++        assert not any(
++            fnmatch.fnmatch(name, pattern)
++            for name in (
++                "model.safetensors",
++                "model-00001-of-00002.safetensors",
++                "pytorch_model.bin",
++                "model.safetensors.index.json",
++            )
++            for pattern in allow_patterns
++        )
++        calls.append(allow_patterns)
++        (tmp_path / "tokenizer.json").write_text("{}")
++        (tmp_path / "tokenizer_config.json").write_text("{}")
++        (tmp_path / "model.safetensors").write_text("must not be opened or hashed")
++        return str(tmp_path)
++
++    def from_pretrained(path, **kwargs):
++        assert kwargs == {"local_files_only": True, "trust_remote_code": False, "use_fast": True}
++        return setup[1]
++
++    monkeypatch.setattr(huggingface_hub, "snapshot_download", snapshot_download)
++    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", from_pretrained)
++    _, files = api().load_corpus_tokenizer(setup[0])
++    assert {p.name for p in files} == {"tokenizer.json", "tokenizer_config.json"}
++    assert len(calls) == 1
++
++
++def test_cli_builds_manifest_with_fixed_corpus_budget(tmp_path, setup, monkeypatch):
++    """§3.1/§10: CLI defaults apply the corpus data cap and use the tokenizer-only loader."""
++    import runpy
++
++    spec, tok, assets = setup
++    source = tmp_path / "eval.json"
++    data = evaluation(source, spec, count=1)
++    data["trajectories"][0]["prompt"] += "x" * 1000
++    source.write_text(json.dumps(data))
++    monkeypatch.setattr(api(), "load_corpus_tokenizer", lambda *a, **kw: (tok, assets))
++    main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/lens_corpus.py"))[
++        "main"
++    ]
++    output = tmp_path / "cli.json"
++    main(["--corpus", "agentic", "--evals", str(source), "--out", str(output)])
++    manifest = json.loads(output.read_text())
++    assert manifest["max_tokens"] == 2048
++    assert len(manifest["dropped_rows"]) == 1  # Character tokenizer exceeds the actual token cap.
++    assert api().read_corpus(output) == []
++
++
++def _rewrite_manifest(path, mutate):
++    manifest = json.loads(path.read_text())
++    mutate(manifest)
++    manifest.pop("manifest_sha256")
++    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
++    manifest["manifest_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
++    path.write_text(json.dumps(manifest))
++
++
++@pytest.mark.parametrize("mutation", ["spans", "n_prompt", "ids", "order", "split", "source_step"])
++def test_reader_checks_rows_beyond_file_hash(tmp_path, setup, mutation):
++    """§10: invalid typed rows and split/order invariants fail even with matching file hashes."""
++    manifest, _ = build(tmp_path, setup)
++    content = json.loads(manifest.read_text())
++    path = Path(content["sequences"]["path"])
++    rows = [json.loads(line) for line in path.read_text().splitlines()]
++    if mutation == "spans":
++        rows[0]["spans"].pop()
++    elif mutation == "n_prompt":
++        rows[0]["n_prompt"] = len(rows[0]["ids"]) + 1
++    elif mutation == "ids":
++        rows[0]["ids"][0] = True
++    elif mutation == "order":
++        rows.reverse()
++    elif mutation == "source_step":
++        rows[0]["step_index"] = 999
++    else:
++        rows[0]["split"] = "held"
++    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
++    _rewrite_manifest(
++        manifest,
++        lambda m: m["sequences"].update(sha256=hashlib.sha256(path.read_bytes()).hexdigest()),
++    )
++    with pytest.raises(ValueError):
++        api().read_corpus(manifest)
++
++
++def test_download_descriptor_cannot_be_reused_for_other_split(tmp_path, monkeypatch):
++    """§10: even a rehashed download descriptor cannot authorize a train/test split."""
++    _validation_remote(tmp_path, monkeypatch, ["validation"])
++    _, descriptor = api().download_prose(tmp_path)
++    data = json.loads(descriptor.read_text())
++    data["split"] = "test"
++    data.pop("descriptor_sha256")
++    canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
++    data["descriptor_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
++    descriptor.write_text(json.dumps(data))
++    with pytest.raises(ValueError, match="split"):
++        api().download_prose(tmp_path)
++
++
++def test_prose_manifest_binds_download_descriptor(tmp_path, setup, monkeypatch):
++    """§3.1/§10: a downloaded corpus binds both downloaded text and the pinned descriptor."""
++    _validation_remote(tmp_path, monkeypatch, ["prose " * 200])
++    source, descriptor = api().download_prose(tmp_path / "download")
++    spec, tok, assets = setup
++    manifest = tmp_path / "downloaded.json"
++    api().build_prose_corpus(
++        [source], tok, spec, manifest, tokenizer_files=assets, download_descriptor=descriptor
++    )
++    assert len(api().read_corpus(manifest)) == 1
++    descriptor.write_text(descriptor.read_text() + " ")
++    with pytest.raises(ValueError, match="hash|SHA"):
++        api().read_corpus(manifest)
++
++
++def test_source_order_is_explicit_and_global(tmp_path, setup):
++    """§3.1/§10: source ordering controls stable indices across training splits."""
++    spec, tok, assets = setup
++    first, second = tmp_path / "z-train.json", tmp_path / "a-train1.json"
++    evaluation(first, spec, count=3)
++    evaluation(second, spec, count=3, task_id="train1-read-0000-clean")
++    out = tmp_path / "ordered.json"
++    metadata = api().build_agentic_corpus(
++        [first, second], tok, spec, out, max_tokens=20000, tokenizer_files=assets
++    )
++    rows = api().read_corpus(out)
++    assert [source["path"] for source in metadata["sources"]] == [str(first), str(second)]
++    assert rows[3]["task_id"] == "train1-read-0000-clean"
++    assert rows[4]["step_index"] == 1
++    assert rows[4]["split"] == "held"
++
++
++def _rewrite_rows(manifest, mutate):
++    sequence_path = Path(json.loads(manifest.read_text())["sequences"]["path"])
++    rows = [json.loads(line) for line in sequence_path.read_text().splitlines()]
++    mutate(rows)
++    sequence_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
++    _rewrite_manifest(
++        manifest,
++        lambda m: m["sequences"].update(
++            sha256=hashlib.sha256(sequence_path.read_bytes()).hexdigest()
++        ),
++    )
++
++
++def _prose_manifest(tmp_path, setup):
++    spec, tok, assets = setup
++    first, second = tmp_path / "first.txt", tmp_path / "second.txt"
++    first.write_text("a" * 2050)  # BOS + text -> two chunks and three trailing tokens.
++    second.write_text("b" * 1024)  # BOS + text -> one chunk and one trailing token.
++    manifest = tmp_path / "prose.json"
++    api().build_prose_corpus([first, second], tok, spec, manifest, tokenizer_files=assets)
++    return manifest
++
++
++def test_reader_rejects_rehashed_wrong_prose_step(tmp_path, setup):
++    """§3.1/§10: internally consistent token_start cannot legitimize an absent source chunk."""
++    manifest = _prose_manifest(tmp_path, setup)
++    _rewrite_rows(manifest, lambda rows: rows[1].update(step_index=999, token_start=1022976))
++    with pytest.raises(ValueError, match="prose|source"):
++        api().read_corpus(manifest)
++
++
++@pytest.mark.parametrize(
++    "mutation",
++    [
++        "source_order",
++        "tokens",
++        "source_tail",
++        "total_tail",
++        "total_count",
++        "chunk_size",
++        "typed_tail",
++    ],
++)
++def test_reader_reconciles_prose_sources_chunks_and_tails(tmp_path, setup, mutation):
++    """§3.1/§10: ordered source chunks and declared token/tail budgets must reconcile."""
++    manifest = _prose_manifest(tmp_path, setup)
++    if mutation == "source_order":
++        _rewrite_rows(manifest, lambda rows: rows[0].update(source=rows[2]["source"]))
++    else:
++
++        def change(metadata):
++            if mutation == "tokens":
++                metadata["sources"][0]["tokens"] += 1024
++            elif mutation == "source_tail":
++                metadata["sources"][0]["discarded_trailing_tokens"] = 1024
++            elif mutation == "total_tail":
++                metadata["discarded_trailing_tokens"] += 1
++            elif mutation == "total_count":
++                metadata["source_sequence_count"] += 1
++            elif mutation == "chunk_size":
++                metadata["chunk_tokens"] = 512
++            else:
++                metadata["sources"][1]["discarded_trailing_tokens"] = True
++
++        _rewrite_manifest(manifest, change)
++    with pytest.raises(ValueError, match="prose|source|chunk|tail"):
++        api().read_corpus(manifest)
++
++
++@pytest.mark.parametrize(
++    "mutation", ["negative", "reversed", "out_of_text", "nonmonotonic", "boolean", "wrong_shape"]
++)
++def test_reader_rejects_rehashed_invalid_offsets(tmp_path, setup, mutation):
++    """§3.1/§10: reader enforces typed, bounded, monotonic offsets independently of hashes."""
++    manifest, _ = build(tmp_path, setup)
++
++    def change(rows):
++        row = rows[0]
++        if mutation == "negative":
++            row["offsets"][0] = [-100, 0]
++        elif mutation == "reversed":
++            row["offsets"][0] = [1, 0]
++        elif mutation == "out_of_text":
++            row["offsets"][-1][1] = len(row["text"]) + 1
++        elif mutation == "nonmonotonic":
++            row["offsets"][3] = [0, 1]
++        elif mutation == "boolean":
++            row["offsets"][0] = [False, 0]
++        else:
++            row["offsets"][0] = []
++
++    _rewrite_rows(manifest, change)
++    with pytest.raises(ValueError, match="alignment"):
++        api().read_corpus(manifest)
++
++
++@pytest.mark.parametrize("domain", ["agentic", "prose"])
++def test_pilot_rule_scope_and_legacy_manifest_compatibility(tmp_path, setup, domain):
++    """§3.1/§10: task-ID exclusions must not describe authorised prose validation as excluded."""
++    manifest = (
++        build(tmp_path, setup)[0] if domain == "agentic" else _prose_manifest(tmp_path, setup)
++    )
++    metadata = json.loads(manifest.read_text())
++    assert metadata["pilot_exclusion"]["applies_to"] == "agentic_task_ids"
++    expected = api().read_corpus(manifest)
++    _rewrite_manifest(manifest, lambda m: m["pilot_exclusion"].pop("applies_to"))
++    assert api().read_corpus(manifest) == expected
