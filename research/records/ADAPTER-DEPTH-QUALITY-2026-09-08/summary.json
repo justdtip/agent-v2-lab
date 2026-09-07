@@ -1,0 +1,55 @@
+[
+  {
+    "name": "arm A @ 800 rows (the divergence record, re-read)",
+    "n": 19,
+    "passes": 5,
+    "failures": 14,
+    "pairs": 11,
+    "gains": 1,
+    "locked_in": 12,
+    "defects": {
+      "malformed argument": 4,
+      "re-issued call after success": 5,
+      "unclassified": 2,
+      "path abbreviation": 3
+    }
+  },
+  {
+    "name": "arm 1 ckpt-0000800",
+    "n": 19,
+    "passes": 18,
+    "failures": 1,
+    "pairs": 1,
+    "gains": 4,
+    "locked_in": 0,
+    "defects": {
+      "truncated tool call": 1
+    }
+  },
+  {
+    "name": "arm 1 ckpt-0001200",
+    "n": 19,
+    "passes": 18,
+    "failures": 1,
+    "pairs": 1,
+    "gains": 4,
+    "locked_in": 1,
+    "defects": {
+      "re-issued call after success": 1
+    }
+  },
+  {
+    "name": "arm 1 ckpt-0000400",
+    "n": 19,
+    "passes": 13,
+    "failures": 6,
+    "pairs": 4,
+    "gains": 2,
+    "locked_in": 0,
+    "defects": {
+      "required tool unused": 3,
+      "truncated tool call": 2,
+      "malformed argument": 1
+    }
+  }
+]

@@ -1,0 +1,36 @@
+base (recorded, greedy, reused not rerun): 15/19 pass
+
+arm A @ 800 rows (the divergence record, re-read): 5/19 pass · 11 base-pass/adapter-fail pairs · 1 adapter-pass/base-fail · 12/14 failures locked in
+    recovers what the base missed: test-calculate-0014-clean
+    test-aggregate_report-0011-clean   malformed argument           step 6: expression='calculate(18 + 14'
+    test-batch_update-0010-clean       re-issued call after success step 9 repeats step 8 after a good result
+    test-calculate-0002-clean          malformed argument           step 0: expression='((47 + 7) * 7 - 5'
+    test-conditional_update-0009-clean unclassified                 9 steps, first identical repeat at None
+    test-cross_reference-0008-clean    unclassified                 24 steps, first identical repeat at None
+    test-ledger_reconcile-0007-clean   re-issued call after success step 1 repeats step 0 after a good result
+    test-list-0005-clean               path abbreviation            step 0: directory='notes' is not rooted
+    test-list-0017-clean               path abbreviation            step 0: directory='notes' is not rooted
+    test-read-0012-clean               path abbreviation            step 0: directory='project.md' is not rooted
+    test-search-0013-clean             re-issued call after success step 2 repeats step 1 after a good result
+    test-synthesis-0003-clean          malformed argument           step 2: expression='calculate'
+    test-synthesis-0015-clean          malformed argument           step 2: expression='calculate'
+    test-update-0004-clean             re-issued call after success step 1 repeats step 0 after a good result
+    test-update-0016-clean             re-issued call after success step 1 repeats step 0 after a good result
+    record says: 5 pass, 11 pairs, 12 locked in, defects {'malformed argument': 3, 're-issued call after success': 5, 'path abbreviation': 3, 'wrong hop': 1, 'state-note comparison error': 1, 'wrong file': 1}
+
+arm 1 ckpt-0000800: 18/19 pass · 1 base-pass/adapter-fail pairs · 4 adapter-pass/base-fail · 0/1 failures locked in
+    recovers what the base missed: test-batch_update-0010-clean, test-calculate-0014-clean, test-conditional_update-0009-clean, test-ledger_reconcile-0007-clean
+    test-aggregate_report-0011-clean   truncated tool call          step 12: response contains no tool call
+
+arm 1 ckpt-0001200: 18/19 pass · 1 base-pass/adapter-fail pairs · 4 adapter-pass/base-fail · 1/1 failures locked in
+    recovers what the base missed: test-batch_update-0010-clean, test-calculate-0014-clean, test-conditional_update-0009-clean, test-ledger_reconcile-0007-clean
+    test-update-0004-clean             re-issued call after success step 1 repeats step 0 after a good result
+
+arm 1 ckpt-0000400: 13/19 pass · 4 base-pass/adapter-fail pairs · 2 adapter-pass/base-fail · 0/6 failures locked in
+    recovers what the base missed: test-batch_update-0010-clean, test-calculate-0014-clean
+    test-synthesis-0003-clean          required tool unused         required tools unused: calculate after 2 steps
+    test-ledger_reconcile-0007-clean   truncated tool call          step 1: invalid JSON in tool call: Unterminated string starting at
+    test-conditional_update-0009-clean malformed argument           step 7: expression='88 > 66'
+    test-aggregate_report-0011-clean   required tool unused         required tools unused: calculate after 11 steps
+    test-synthesis-0015-clean          required tool unused         required tools unused: calculate after 2 steps
+    test-update-0016-clean             truncated tool call          step 1: response contains no tool call
