@@ -1,0 +1,122 @@
+{
+  "batch_size": 8,
+  "checks": [
+    {
+      "actual_batch_sizes": [
+        1
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 0.5059779739379883,
+      "layer": 1,
+      "max_error": null,
+      "mode": "restore",
+      "outcome": "inconclusive",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.601956844329834,
+        "outcome": "fail",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        8
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 0.5059779739379883,
+      "layer": 1,
+      "max_error": null,
+      "mode": "broadcast",
+      "outcome": "inconclusive",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.601956844329834,
+        "outcome": "fail",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        1
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 1.8385704040527344,
+      "layer": 16,
+      "max_error": null,
+      "mode": "restore",
+      "outcome": "inconclusive",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.11010277271270752,
+        "outcome": "fail",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        8
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 1.8385704040527344,
+      "layer": 16,
+      "max_error": null,
+      "mode": "broadcast",
+      "outcome": "inconclusive",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.11010277271270752,
+        "outcome": "fail",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        1
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 8.900575561523437,
+      "layer": 31,
+      "max_error": null,
+      "mode": "restore",
+      "outcome": "inconclusive",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.016890719532966614,
+        "outcome": "fail",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        8
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 8.900575561523437,
+      "layer": 31,
+      "max_error": null,
+      "mode": "broadcast",
+      "outcome": "inconclusive",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.016890719532966614,
+        "outcome": "fail",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    }
+  ],
+  "direction_seed": 20260904,
+  "directions": 16,
+  "plan_sha256": "9fa35bb395d8c424b982d817f966204dc39bdb8d31f28ed9b9dd716d33dbc558"
+}

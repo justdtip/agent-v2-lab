@@ -1,0 +1,2 @@
+primary_lock None mapped_MLX [] owned_pid 88320
+{"event": "stop_required", "reason": "missing or failed cached/reference self-check proof"}

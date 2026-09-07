@@ -1,0 +1,3 @@
+{"utc": "2026-09-07T11:48:00.518426+00:00", "owned_pid": 88320, "pressure": "kern.memorystatus_vm_pressure_level: 1\nvm.swapusage: total = 3072.00M  used = 1746.19M  free = 1325.81M  (encrypted)", "process": "88320 00:43  12.4 2892080 Ss"}
+{"utc": "2026-09-07T11:49:05.914649+00:00", "owned_pid": 88320, "pressure": "kern.memorystatus_vm_pressure_level: 1\nvm.swapusage: total = 3072.00M  used = 1746.19M  free = 1325.81M  (encrypted)", "process": "88320 01:48  11.9 2892256 Ss"}
+{"utc": "2026-09-07T11:50:10.167439+00:00", "owned_pid": 88320, "pressure": "kern.memorystatus_vm_pressure_level: 1\nvm.swapusage: total = 3072.00M  used = 1746.19M  free = 1325.81M  (encrypted)", "process": ""}

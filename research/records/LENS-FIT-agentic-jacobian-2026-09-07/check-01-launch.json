@@ -1,0 +1,17 @@
+{
+  "started_utc": "2026-09-07T11:47:17.416047+00:00",
+  "owned_pid": 88320,
+  "source_commit": "b0470fbf6c7b573214bd38ffe17c70f499b155f0",
+  "source_hashes": {
+    "scripts/lens_fit.py": "37c9410e55de205dec11a19b98568d20984ca57e80cdabbe92287c9131fcd307",
+    "src/local_llm_lab/pipeline/lens_fitting/jacobian.py": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893",
+    "src/local_llm_lab/pipeline/lens_fitting/validation.py": "3fcc8152f23b3453697ec30b33135a394164e07a1d5153b3846d8de9b7723513",
+    "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "f2049f849e7f3883f7a084faa2641717ae2d2de1f922ce8660e56164a5210dff",
+    "src/local_llm_lab/arch.py": "a69109c71c8743c43e1ba70b4ab06018a51f2fb83b33fc62dd63f40b56a9615d"
+  },
+  "registration_sha256": "3ccf3d099ffa9353149759c225f70cafbc2154ab002ed28ccbd567228bbe1b4c",
+  "plan_file_sha256": "93717ed7e4df1a1f7b36742af84b7a1f89d9a014e96d6d7eaa9dad2ce7e72167",
+  "plan_sha256": "9fa35bb395d8c424b982d817f966204dc39bdb8d31f28ed9b9dd716d33dbc558",
+  "stage": "check",
+  "fit_started": false
+}
