@@ -662,3 +662,57 @@ thought of. So the rule is:
 **The same identity is also the third and strongest demonstration that capture does not perturb
 generation**: fourfold difference in captured depth, different simulator, identical trajectory token
 for token. Measured three times now, never assumed.
+
+### 12. Class 2 is reported as the verdict's own reason vector, not as sub-classes. Chief's ruling.
+
+The D-CRO asked for a ruling on splitting class 2 three ways, having found that it holds an episode
+that did the task correctly and one that gave the exactly correct answer string while leaving the
+workspace wrong — counted identically.
+
+**Ruling: do not create sub-classes. Report the verdict's reasons as independent axes.** The harness
+already computes them and they are already independent (`env.py`, `Simulator.verdict`): *no finish
+call*, *wrong answer*, *file state wrong: X*, *unexpected file change: X*, and *missing required
+tools*. An episode can carry several at once — `batch_update-0166` carries a file-state reason and no
+answer reason — so any exclusive three-way split would put an episode in one bin and discard the
+rest of what is known about it.
+
+**This is the same correction made one amendment earlier**, when class 2 and the strategy measurement
+turned out to overlap: when categories co-occur, they are axes and not classes. Making it twice in a
+day is the argument for stating it as a general rule. **A partition is earned, not assumed**, and the
+verdict already supplies the unpartitioned truth.
+
+**One split that is warranted, inside the answer axis.** Separate *answer contains the expected value
+under normalisation* from *answer does not*. That distinguishes `search-0061`, which searched, found
+the file, read the field and reported `blocked` inside a sentence, from `list-0149`, which answered
+`task-complete` where `milestone-534` was wanted. Those are different failures and the current field
+cannot tell them apart.
+
+### 13. A benchmark ambiguity that touches 75 of 180 tasks, found through `search-0061`
+
+The system prompt says: *"Call finish only when the task is complete, with the answer in exactly the
+requested form."* It defers the form to the task. **75 of 180 task prompts request no form at all**,
+and four families request one in none of their fifteen:
+
+| family | prompts stating an output form |
+|---|---|
+| `aggregate_report` | 0/15 |
+| `batch_update` | 0/15 |
+| `conditional_update` | 0/15 |
+| `ledger_reconcile` | 0/15 |
+| `cross_reference`, `list`, `pointer_chain`, `read`, `update` | 15/15 |
+| `synthesis` | 11/15 |
+| `search` | 10/15 |
+| `calculate` | 9/15 |
+
+All 180 are graded on normalised equality with a specific string.
+
+**This is not cleanly "the grader is stricter than the prompt"**, because the system prompt does ask
+for exactness — it is that for 75 tasks the form it points at was never stated. `search-0061` is a
+concrete instance: *"Search the workspace for KEY-TEST-0061-916; report the Status field"*, answered
+*"the status of key-test-0061-916 is blocked"*, expected `blocked`, scored as a failure.
+
+**The direction of the effect is that a model doing the work correctly can score as failing**, so
+every pass rate in this programme is a lower bound by an unknown amount concentrated in four
+families. **Report the contains-expected count beside every pass rate.** It is computable from
+records we already hold, for every run including the Qwen comparators, and it bounds the effect
+without re-grading anything.
