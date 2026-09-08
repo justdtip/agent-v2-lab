@@ -144,3 +144,36 @@ what makes it a good target and also what stops it being a population.
 that never appears, and a commitment localised to a single layer step — in an episode already
 recorded. Whatever stage two measures at 23 against 24, this is the case where the answer is
 already legible in the readout and can be checked against it.
+
+### The obvious next question, asked and answered no
+
+Does a path the model gets **wrong** commit earlier than one it gets right? Every path-slot
+decision in both runs, across all fourteen episode-runs, classified by whether the resulting call
+returned `not found`, and scored by the layer at which the emitted token first reaches rank 1:
+
+| | n | median commitment layer | committed by layer 24 |
+|---|---:|---:|---:|
+| path resolved | 73 | 30 | 7% |
+| path not found | 34 | 24 | 85% |
+
+That looks like a finding and it is not one. **Twenty-nine of the thirty-four unresolved decisions
+are `update-0028`, in the two runs, which is the fixed point counted twenty-nine times.** The
+remaining five are three from `batch_update-0166`, committing at layer 30, and two singletons from
+stage one at 30 and 34 — none of which behaves like the fixed point at all.
+
+Deduplicated to one entry per distinct path-slot token per episode, so a repeated decision counts
+once:
+
+| | n | median commitment layer | committed by layer 24 |
+|---|---:|---:|---:|
+| path resolved | 13 | 30 | 15% |
+| path not found | 5 | 30 | 40% |
+
+**The difference disappears.** At that n there is nothing to test and no claim to make. The
+aggregate table above is what the pooled version of the caveat looks like when the caveat is
+ignored, and it is kept here so that the next reader meets it already refuted rather than
+rediscovering it as a result.
+
+So the early commitment at layer 24 is a property of **this fixed point**, not of wrong paths.
+Whether it generalises is a question for a corpus with more than one of them, which stage two
+would supply and this pair of runs does not.
