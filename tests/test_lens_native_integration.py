@@ -96,3 +96,66 @@ def test_native_hash_failure_preserves_first_cause_and_restores_wrappers(tmp_pat
     assert all(a is b for a, b in zip(originals, view.model.layers, strict=True))
     with pytest.raises(ValueError, match="incomplete"):
         read_source(target)
+
+
+def test_the_final_layer_readout_is_run_and_checked_against_the_model_s_own_logits(tmp_path):
+    """The check the layer-34 rank-1 rate was mistaken for, and it is a different check.
+
+    `output` reports the model's own softmax at the final layer, which is right: a reader of a
+    final-layer row should be able to assume it is the model's distribution. What was wrong was
+    that the readout was *only* substituted there, so a 100% rank-1 rate at the final layer said
+    that decoding is greedy and positions line up, and said nothing about the residual tap or the
+    unembedding — while a record and a published page both described it as the instrument proving
+    itself.
+
+    Run for real, the identity branch of `LensReadout.logits` exercises the tap and
+    `view.native_readout`, so agreement with the native logits covers everything the readout does
+    except the fitted maps. Every forward records its own figure so the gate can be tightened onto
+    observed behaviour rather than guessed.
+    """
+    view, _, _, _, events = captured_fixture(tmp_path)
+    errors = [
+        event["final_readout_max_abs_error"]
+        for event in events
+        if event.get("kind") == "forward"
+    ]
+    assert errors, "every forward records the final-layer agreement"
+    assert all(error is not None for error in errors), (
+        "and records it as a number, because a missing figure reads as a passing one"
+    )
+    assert max(errors) < 1e-3, (
+        f"the identity branch should reproduce the model's own logits; worst was {max(errors):.3g}"
+    )
+
+
+def test_a_readout_that_disagrees_at_the_final_layer_stops_the_run(tmp_path):
+    """The negative control: the check must be able to fail, on the defect it exists to catch.
+
+    A tap at the wrong position or an unembedding applied without its norm moves logits by whole
+    units. This breaks the identity branch by exactly that much and asserts the run stops, because
+    a gate that cannot fail is not a gate — the lesson of the residual comparator that compared a
+    broken loop against itself.
+    """
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    layers = tuple(range(1, view.num_layers + 1))
+    lens = LensMaps(
+        {layer: np.eye(view.hidden_size, dtype=np.float32) for layer in layers[:-1]},
+        "tiny-identity-fixture",
+        view.hidden_size,
+        view.num_layers,
+    )
+
+    class Skewed(LensReadout):
+        """Correct everywhere except the one branch the check covers."""
+
+        def logits(self, residual, layer):
+            value = super().logits(residual, layer)
+            return value + 5.0 if layer == self.view.num_layers else value
+
+    tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kwargs: [1, 2, 3])
+    session = CaptureSession(view, Skewed(view, lens), lambda row: None, layers=layers, top_k=3)
+    session.set_context(kind="chat", messages=[{"role": "user", "content": "first"}])
+    with pytest.raises(ValueError, match="disagrees with the model's own logits"):
+        with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
+            captured(mx.array([[1, 2, 3]]), cache=view.make_cache())

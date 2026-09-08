@@ -18,7 +18,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 from local_llm_lab.models import load_model_spec  # noqa: E402
-from local_llm_lab.pipeline.protocol import build_prompt  # noqa: E402
+from local_llm_lab.pipeline.protocol import build_prompt, system_prompt  # noqa: E402
 from local_llm_lab.pipeline.tasks import make_tasks  # noqa: E402
 
 # The lens, its digest and the registry were module constants pinned to Qwen. That made a
@@ -106,7 +106,12 @@ def main() -> None:
     for task_id, d in AGENTIC:
         task = by_difficulty[d][task_id]
         label = f"agentic-d{d}-{task_id.removeprefix('test-').removesuffix('-clean')}"
-        messages = [{"role": "system", "content": __import__('local_llm_lab.pipeline.protocol', fromlist=['SYSTEM_PROMPT']).SYSTEM_PROMPT}, {"role": "user", "content": task.prompt}]
+        # `system_prompt(spec=spec)`, not the module constant. The constant is the
+        # convention-free prompt, so on a family that re-roles observations the plan reported a
+        # length the model was never shown: the fair run's manifest said 437 where the model saw
+        # 523. A manifest that misreports what was in front of the model is worse than one that
+        # omits it, because a reader has no way to notice.
+        messages = [{"role": "system", "content": system_prompt(spec=spec)}, {"role": "user", "content": task.prompt}]
         n = len(tok(build_prompt(tok, messages, spec=spec, keep_last=2, generation=True), add_special_tokens=False)["input_ids"])
         plan.append({"label": label, "kind": "agentic", "task_id": task_id, "difficulty": d, "family": task.family, "horizon": task.horizon, "opening_prompt_tokens": n})
     for label, prompt in CHAT:
@@ -251,9 +256,25 @@ def main() -> None:
         manifest["episodes"].append(entry)
         json.dump(manifest, open(args.out / "manifest.json", "w"), indent=1)
         print(json.dumps({"event": "episode", **{k: v for k, v in entry.items() if k not in ("steps", "replies")}}), flush=True)
+    # What was planned but is not in `episodes`, named rather than left to subtraction. Stage one
+    # covered 11 of 12 families and no reader could tell: `read-0108` aborted, was moved aside, and
+    # the manifest simply had no row for it. An absent row reads as an absent episode only to
+    # someone who already knows the plan, and the whole point of a manifest is to be read by
+    # someone who does not. Same defect as a suite reporting green while its skips hid the files
+    # that mattered, one level up.
+    ran = {entry["label"] for entry in manifest["episodes"]}
+    manifest["planned"] = [item["label"] for item in plan]
+    manifest["missing"] = [item["label"] for item in plan if item["label"] not in ran]
+    manifest["families_planned"] = sorted({item.get("family") for item in plan if item.get("family")})
+    manifest["families_covered"] = sorted(
+        {item.get("family") for item in plan if item["label"] in ran and item.get("family")}
+    )
     manifest["elapsed_s"] = round(time.time() - t0, 1)
     json.dump(manifest, open(args.out / "manifest.json", "w"), indent=1)
-    print(json.dumps({"event": "done", "episodes": len(manifest["episodes"]), "elapsed_s": manifest["elapsed_s"]}))
+    print(json.dumps({"event": "done", "episodes": len(manifest["episodes"]),
+                      "missing": manifest["missing"],
+                      "families": f"{len(manifest['families_covered'])} of {len(manifest['families_planned'])}",
+                      "elapsed_s": manifest["elapsed_s"]}))
 
 
 if __name__ == "__main__":

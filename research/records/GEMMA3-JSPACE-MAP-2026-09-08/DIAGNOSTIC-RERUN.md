@@ -49,24 +49,58 @@ rather than the `approved_total=277` line the prompt asked for.
 person were answering it and started executing a plan — and then failed at the plan, which is a
 different and more tractable failure than not being able to proceed at all.
 
-## The third got worse, and it is the sharpest finding of the day
+## The third got worse, and the reason turned out to be ours
 
 `update-0028`'s prompt gives the path verbatim: *In `workspace/test/0028/config.ini`, change mode
-from fast to audit.* Four expert steps: read, replace, re-read, finish.
+from fast to audit.* Four expert steps: read, replace, re-read, finish. The corrected run reads
+`/test/0028/config.ini` instead — a dropped component and an added slash — and then issues that
+identical call twenty-three times running.
 
-Stage one's model read `/workspace/test/0028/config.ini` — the given path with a leading slash it
-added itself — and never recovered. The corrected run reads `/test/0028/config.ini`, which drops a
-component **and** adds the slash, and then issues that identical call twenty-three times running.
+**This section said the model regenerates paths rather than copying them. That is refuted and the
+sentence is struck.** Per-call path fidelity is indistinguishable between the two models: Gemma
+54/67 at 0.806, Qwen base 1,127/1,400 at 0.805. Only the error *shape* differs, and every leading
+slash in the whole Gemma corpus belongs to this one task.
 
-**Gemma does not copy a literal path. It regenerates one, and the regeneration is wrong.**
-Everything downstream is a consequence of that single corrupted string, and no amount of ceiling
-helps a model that cannot re-emit a path it was given.
+**What actually happened is in the model's own context at turn 2**, and the environment is the
+author of it:
+
+> **[system]** Rules: Inspect state with tools instead of guessing paths, file names, or values.
+> **[user]** In `workspace/test/0028/config.ini`, change mode from fast to audit.
+> **[assistant]** Progress note: Need to inspect the configuration file to see its current mode.
+> `{"name": "list_files", "arguments": {"directory": "/"}}`
+> **[tool]** `FILES: (none)`
+> **[assistant]** Progress note: The file list is empty, so there is no configuration file to
+> inspect. I need to create a configuration file to test.
+> `{"name": "read_file", "arguments": {"path": "/test/0028/config.ini"}}`
+
+`list_files` answered an unsatisfiable directory with an empty listing rather than an error, so the
+model was told the workspace was empty. It had been instructed to inspect rather than guess. It
+inspected. **The premise it reasoned from was false and we supplied it**, and this repository then
+recorded the resulting loop as the model's failure. The Chief's fix is at `020aa89`: both
+simulators now raise `directory not found`, echoing the caller's own string.
+
+Everything downstream is a consequence of that turn, not of a copying defect.
 
 Its notes make the failure legible in a way an outcome cannot. From the third turn on, every note
 says a variant of *"The file still doesn't exist. I need to create it"* — and the action attached
-to that note is `read_file`, twenty-three times. **There is no tool that creates a file.** The
-model has formed an intention the toolset cannot express and emits an action that does not
-implement its own stated plan.
+to that note is `read_file`, twenty-three times. There is no tool in this workspace that creates a
+file.
+
+**That note is not a confabulation, and calling it one would have been the wrong finding.** The
+observation it follows reads `ERROR: file not found: /test/0028/config.ini`, so *"the file still
+doesn't exist"* is an accurate reading of what the model was handed, and *"I need to create it"* is
+a sound inference from it. The premise is false, not the reasoning. The CRO raised this distinction
+and it is settled here from the transcript rather than left open: the model reads its instrument
+correctly and reasons correctly from a corrupted path.
+
+**What remains after that correction is the divergence itself.** The stated plan is to create; the
+emitted call is a read; and the two do not implement each other, twenty-three times running.
+
+**And the corrupted path was never out of sight.** The literal `workspace/test/0028/config.ini`
+is present in the rendered prompt at every turn, including the last at 2,701 tokens — the task
+statement is in the opening turn and windowing never removes it. So this is not a memory failure
+and not an artefact of hiding old observations. The string the model needed was in front of it on
+every one of the twenty-four decisions, and a different string came out.
 
 ## What this hands the map
 
@@ -85,3 +119,158 @@ corruption worsens with distance is testable and untested.
 1,341.9 s, 253.6 s and 392.8 s, 1,992.7 s in total, on a box with no other work on it. Peak 3.8 to
 4.1 GiB. These are usable, unlike the superseded run's, and the reason that matters is R61(b):
 contention moves seconds and cannot move a verdict.
+
+---
+
+## The fixed point, read off the records we already hold
+
+**Added after the CRO reframed the path failure. No model, no box: this is the corpus stage one
+and the re-run already wrote, read with `fixed_point.py`.**
+
+The wrong path is not twenty-three decisions. It is **one token**, taken twenty-three times. The
+correct path needs `' "'` after `"path":` and then `workspace`; the model emits the single token
+`' "/'`, and every character after it is forced by that choice. So the whole error lives at the
+position before that token, and the record carries what each read layer had there.
+
+| | |
+|---|---|
+| forks in the episode | 24 |
+| where the emitted wrong token is already rank 1 | layer 24, at all 24 |
+| its rank one layer earlier, at 23 | 14 to 20 (twice lower: 6 and 2) |
+| forks where the correct `' "'` is in any layer's top-10 | 24, and only at layer 34 |
+| forks where `workspace` is in any layer's top-10 | 0 |
+
+**The control, without which the first row means nothing.** Across the 1,149 other emitted tokens
+in the same episode, the layer at which the emitted token first reaches rank 1 is spread: 9 by
+layer 18, 183 at 23, 296 at 24, 408 at 30, 253 not until the identity at 34. Layer 24's median
+rank for an ordinary token is 2. So "rank 1 by layer 24" is where about a quarter of tokens land
+and is unremarkable on its own — what is not unremarkable is that **every one of the 24 forks
+commits in the same 23-to-24 step, none earlier and none later**, while ordinary tokens scatter
+across five layers.
+
+**The word is never a candidate; the punctuation that would have allowed it is, but only at the
+end.** `workspace` is absent from every read layer's top-10 at every one of the 24 forks — 192
+top-10 lists and it is in none of them. The `' "'` that would have opened a bare path is a
+different story and an earlier version of this record got it wrong: it is in the top-10 at **all
+24 forks, and only at layer 34**, where it sits directly behind the token that wins. Layer 34 is
+the identity, so that is the model's own output distribution: the correct opener is the runner-up
+in the model's own final decision, and it is not a candidate at any depth below.
+
+So the shape is not "the right branch was never live". It is narrower and stranger. At the moment
+of choosing, the alternative that keeps the path correct is present and beaten; the word the path
+actually needed is nowhere at all, at any depth. Whatever the residual carries about this path, it
+does not contain `workspace` in any form the readout can see.
+
+**Two limits, both real.** The top-10 is a narrow window and absence from it bounds the
+alternative's probability rather than proving it absent. And these twenty-four are one decision
+repeated, not twenty-four independent samples: it is one fixed point observed many times, which is
+what makes it a good target and also what stops it being a population.
+
+**What it hands stage two.** A known position, a known wrong token, a known correct alternative
+that never appears, and a commitment localised to a single layer step — in an episode already
+recorded. Whatever stage two measures at 23 against 24, this is the case where the answer is
+already legible in the readout and can be checked against it.
+
+### The obvious next question, asked and answered no
+
+Does a path the model gets **wrong** commit earlier than one it gets right? Every path-slot
+decision in both runs, across all fourteen episode-runs, classified by whether the resulting call
+returned `not found`, and scored by the layer at which the emitted token first reaches rank 1:
+
+| | n | median commitment layer | committed by layer 24 |
+|---|---:|---:|---:|
+| path resolved | 73 | 30 | 7% |
+| path not found | 34 | 24 | 85% |
+
+That looks like a finding and it is not one. **Twenty-nine of the thirty-four unresolved decisions
+are `update-0028`, in the two runs, which is the fixed point counted twenty-nine times.** The
+remaining five are three from `batch_update-0166`, committing at layer 30, and two singletons from
+stage one at 30 and 34 — none of which behaves like the fixed point at all.
+
+Deduplicated to one entry per distinct path-slot token per episode, so a repeated decision counts
+once:
+
+| | n | median commitment layer | committed by layer 24 |
+|---|---:|---:|---:|
+| path resolved | 13 | 30 | 15% |
+| path not found | 5 | 30 | 40% |
+
+**The difference disappears.** At that n there is nothing to test and no claim to make. The
+aggregate table above is what the pooled version of the caveat looks like when the caveat is
+ignored, and it is kept here so that the next reader meets it already refuted rather than
+rediscovering it as a result.
+
+So the early commitment at layer 24 is a property of **this fixed point**, not of wrong paths.
+Whether it generalises is a question for a corpus with more than one of them, which stage two
+would supply and this pair of runs does not.
+
+
+### A correction to this record's own method, and what it cost
+
+The first version of the table above said the correct opener appeared at 2 of 24 forks. It appears
+at all 24. The error was not in the reading of the result but in the join that produced it, and it
+is worth writing down because the failure is silent and the corpus invites it.
+
+**The record has two coordinate systems.** A `rank` row's position counts the turn's own stream, so
+the row at `p - 1` scores the token emitted at `p`, and it carries that token's id — which makes
+the alignment checkable rather than assumed. A `reading` row's position is the *forward's* offset,
+and with no cache across turns every turn re-encodes from zero, so **the same position occurs once
+per turn**. Keyed in one flat dictionary, later turns silently overwrite earlier ones and every
+lookup answers about the last turn instead of the one asked about.
+
+Every rank-based number in this record was checked against the rows' own token ids: 8,207 emitted
+tokens across every episode of both runs, zero mismatches. So the commitment layers, the
+argument-start baseline and the identity check are unaffected. The reading-based presence counts
+were not, and are now recomputed with readings grouped by turn.
+
+**The check that catches it is the identity, again.** At layer 34 the readout is the model's own
+distribution, so its top-1 must be the emitted token. Grouped by turn it is, for 100% of 1,173
+emissions. Keyed flat it was 4%. A join this wrong announces itself the moment a boundary
+condition is asked of it, which is the argument for having one.
+### Re-read after the confound register: the false premise was ours
+
+**Amended 2026-09-08 after the Chief's audit found the cause. The reading above stands and its
+subject changes.**
+
+`list_files` answered an unsatisfiable directory with `FILES: (none)` rather than an error.
+Workspace paths carry no leading slash, so every rooted guess matched nothing and the model was
+told the workspace was empty. `read_file` errors honestly; `list_files` did not. And there is no
+discoverable root: no tool lists the workspace top level, so the exact string `workspace` had to be
+guessed and every near miss was answered with a confident falsehood.
+
+**The corrected run's `update-0028` opens with `list_files("/")` and is told the workspace is
+empty.** Stage one's opens with a failed read and then `list_files("/workspace/test/0028")`, and is
+told the same. Everything downstream — *"there is no configuration file"*, *"I need to create it"*,
+the twenty-three repetitions — follows from an observation this repository manufactured.
+
+So the sentence *"Gemma does not copy a literal path, it regenerates one"* is not supported by this
+episode. The leading slash is **consistent with the belief the environment installed**: the model
+had been told the root was `/` and that it was empty. What looked like a copying defect is a
+correct inference from a false premise, one level further out than the previous amendment placed
+it. The Chief has fixed both simulators so that `list_files` raises, echoing the caller's own
+string.
+
+**The fork finding is not weakened by this and is better posed because of it.** The measurements
+are unchanged — the commitment at layer 24, the argument-start baseline it is read against, the
+absence of `workspace` from all 192 top-10 lists. What changes is the subject.
+
+It is no longer *the model cannot re-emit a string*. It is: **a false premise installed by the
+environment at turn 0 still fully determines the representation twenty-three turns later, and the
+alternative it ruled out never returns to candidacy at any read depth.** That is a question about
+how long a belief persists and how completely it closes off what it excludes, and it is a better
+interpretability target than the one it replaces because every part of it is identified — the
+premise, the turn it entered, the moment of commitment, and the absent alternative.
+
+**And it may explain the one row that was always the strongest, though this part is an
+interpretation and not a measurement.** The Chief's reading: `list_files("/")` returned without an
+error, which tells the model that `/` is a real directory here, so the prompt's `workspace/` reads
+as the name of the sandbox rather than as a path component, and the file becomes
+`/test/0028/config.ini`. On that account `workspace` is absent from all 192 top-10 lists **because
+the model had already ruled it out as a directory name, correctly, on our authority** — not
+because it could not recall the string.
+
+That is coherent and it is a claim about the model's reasoning inferred from its outputs, which the
+readout does not measure. What the readout establishes is the absence itself. The
+explanation is the Chief's and is recorded as one, because the difference between "the word was not
+available" and "the word had been excluded" is exactly the kind of thing a map should be asked to
+settle rather than told.

@@ -1300,16 +1300,19 @@ where each command runs in a fresh shell that is gone before the next one starts
 CRO announced a 75-minute window this way and `runlock status` reported *"holder pid 67432: not
 running — this window has no live holder"* from the moment it opened.
 
-The failure is worse than the absence it replaces. A missing window says the box is free, which is
-checkable. A window with a dead holder says the box is held by someone who has crashed, and R45
-gives a reader no safe move: clearing another seat's state is forbidden, so they either stand off a
-free machine or override a mechanism they were told never to override. This is the same shape as
-R45(c) — a seat idling beside an idle box because our own bookkeeping told it something untrue —
-and it is the second instance in one day.
+The failure is worse than the absence it replaces, and the D-CRO put the reason more precisely than
+the first draft of this rule did: **orphaned is the one signal that says a slot can be reclaimed.**
+A missing window says the box is free, which is checkable. A window with a dead holder says the box
+is held by someone who has crashed — and that is the single state in which another seat is entitled
+to act on another seat's bookkeeping. Spending that signal falsely is therefore not one error among
+several; it is the corruption of the only override the mechanism has. R45 otherwise gives a reader
+no safe move, so they either stand off a free machine or override a rule they were told never to
+override. This is the same shape as R45(c) — a seat idling beside an idle box because our own
+bookkeeping told it something untrue — and it is the second instance in one day.
 
 So: **a seat whose shell does not persist must announce against a process that does, and must check
 `runlock status` after announcing and see `running` before it starts work.** `runlock announce`
-now takes `--holder-pid` for exactly this, landed by the D-CRO the same hour: the default parent
+now takes `--holder-pid` for exactly this, landed by the D-CRO at 9c2fdee the same hour: the default parent
 stays right for an interactive seat and for a launcher script, and a harness-driven seat names
 something that will actually live — the run it is about to start, or a sentinel held for the
 window's duration. The CRO's audit that day used the latter, spawned for the window and ended with

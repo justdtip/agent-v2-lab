@@ -209,9 +209,23 @@ class Simulator:
     def _execute(self, action: Action) -> str:
         args = action.arguments
         if action.name == "list_files":
-            directory = _string(args, "directory").rstrip("/")
+            given = _string(args, "directory")
+            directory = given.rstrip("/")
             paths = sorted(path for path in self.files if path.startswith(directory + "/"))
-            return "FILES: " + (", ".join(paths) if paths else "(none)")
+            if not paths:
+                #: A workspace is a flat set of paths, so it holds no empty directories: every
+                #: directory that exists contains at least one file, and "nothing matched this
+                #: prefix" is therefore the same proposition as "this directory does not exist".
+                #: Answering it with `FILES: (none)` asserted the first while meaning the second,
+                #: and the model has no way to tell those apart. On 2026-09-08 that cost us an
+                #: entire episode: `update-0028` opened with `list_files("/")`, was told the
+                #: workspace was empty, correctly concluded there was no file to edit, and spent
+                #: its remaining twenty-three turns trying to create one with no tool that can.
+                #: Every note it wrote was sound reasoning from a falsehood we handed it. R56(f).
+                #: Echo what the caller sent, not the stripped form: `list_files("/")` strips
+                #: to the empty string, and an error naming nothing teaches nothing.
+                raise ValueError(f"directory not found: {given}")
+            return "FILES: " + ", ".join(paths)
         if action.name == "read_file":
             path = _string(args, "path")
             if path not in self.files:

@@ -87,9 +87,15 @@ class ToolSimulator:
             self.plan_updates.append(update)
             return f"PLAN UPDATED: {len(completed)} completed; next={next_action}"
         if action.name == "list_files":
-            directory = self._required_string(args, "directory").rstrip("/")
+            given = self._required_string(args, "directory")
+            directory = given.rstrip("/")
             paths = sorted(path for path in self.files if path.startswith(directory + "/"))
-            return "FILES: " + (", ".join(paths) if paths else "(none)")
+            if not paths:
+                #: Same defect and same reasoning as the pipeline simulator: a flat path set has
+                #: no empty directories, so a prefix that matches nothing names a directory that
+                #: does not exist, and saying `(none)` tells the model the opposite of the truth.
+                raise ValueError(f"directory not found: {given}")
+            return "FILES: " + ", ".join(paths)
         if action.name == "read_file":
             path = self._required_string(args, "path")
             if path not in self.files:
