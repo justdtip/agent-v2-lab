@@ -311,3 +311,47 @@ reconstruction error under quantisation is unmeasured.
 5. **Whether an instruction-tuned Gemma run is on the near path**, since every adapter we own is
    Qwen and the programme's question is about a trained agent. If it is, several deferred items
    become near-term.
+
+---
+
+## 10. Which size: 4B now, 12B as the planned step up, 27B only off this laptop
+
+The Director's order raised model size explicitly ("a larger parameter model with an
+architecture more friendly to the lens may be superior"). The first plan answered the
+architecture half and not the size half. Figures below are read from the official configs and
+the hub, not estimated.
+
+| | 4B | 12B | 27B |
+|---|---|---|---|
+| decoder layers | 34 | 48 | 62 |
+| hidden size | 2560 | 3840 | 5376 |
+| sliding window | 1024 | 1024 | 1024 |
+| terminators | `[1, 106]` | `[1, 106]` | `[1, 106]` |
+| MLX 4-bit text-only | 2.56 GB | 7.23 GB | 16.03 GB |
+| hosted lens, instruction-tuned | 432.5 MB | 1,386.1 MB | 3,526.0 MB |
+| lens resident as float32 | 0.81 GiB | 2.58 GiB | 6.6 GiB |
+
+**27B is out on this host.** Its weights alone are 14.9 GiB against a 17.76 GiB working set,
+before a lens. It is a RunPod question or nothing.
+
+**12B fits and is the meaningful step up.** Model and lens together are about 9.3 GiB resident
+before activations, which needs a declared window under R47 but is not close to the ceiling. Two
+things must change first, and both are small: `artifacts.py`'s one-gigabyte cap refuses a 12B
+lens at 1.39 GB, and the memory envelope's calibration is fitted at 4B.
+
+**There is a real scientific reason to prefer 12B for the lens work specifically, and it is not
+parameter count.** With a period of six, a block is global-attention when its index plus one
+divides by six. 48 divides by six and 34 does not. So **12B's final block is global-attention,
+and 4B's final four blocks are all sliding.** On 4B the top of the model, which is where the
+lens is most accurate and where the readout happens, has a hard-bounded receptive field with no
+global layer above it. That is a structural asymmetry of exactly the kind this project has
+named before as a structural zero rather than a finding. On 12B it does not exist.
+
+**Recommendation: run the port and the first pilot on 4B, then repeat on 12B.** Every port
+defect is identical on both, and proving it on the smaller model is faster and cheaper; 4B's
+weights and lens are already downloaded and verified; and the evaluation comparison against the
+Qwen record is like-for-like only at 4B. Then repeat the pilot on 12B, where the layer contrast
+is cleaner and the top of the model is not truncated, and the two together answer whether a
+depth profile is a property of Gemma 3 or of one size.
+
+Gemma Scope 2 covers both sizes at every layer, so nothing about that choice is foreclosed.
