@@ -53,7 +53,9 @@ def make_record(tmp_path, *, turns=5, long=False):
     ident = {"base": spec.base, "training": None, "num_layers": 34}
     tok_id = identity(tmp_path)
     path = tmp_path / "capture.jsonl"
-    with t.TranscriptWriter(path, {"model_identity": ident, "tokenizer": tok_id}) as writer:
+    with t.TranscriptWriter(
+        path, {"model_identity": ident, "tokenizer": tok_id, "fitting_context_tokens": 2048}
+    ) as writer:
         capture = t.TranscriptCapture(writer, materialize=lambda _: None)
         for step in range(turns):
             messages = [
@@ -84,7 +86,13 @@ def test_capture_roundtrip_and_unique_long_context(tmp_path):
     source, spec, ident, tok_id = make_record(tmp_path, long=True)
     path = tmp_path / "corpus.json"
     manifest = t.build_transcript_corpus(
-        [source], Tokenizer(), spec, path, tokenizer_identity=tok_id, model_identity=ident
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
     )
     rows = t.read_transcript_corpus(path)
     assert {r["split"] for r in rows} == {"fit", "held"}
@@ -142,7 +150,13 @@ def test_source_score_tampering_rejected_even_with_rehashed_rows(tmp_path):
     source, spec, ident, tok_id = make_record(tmp_path)
     path = tmp_path / "corpus.json"
     t.build_transcript_corpus(
-        [source], Tokenizer(), spec, path, tokenizer_identity=tok_id, model_identity=ident
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
     )
     manifest = json.loads(path.read_text())
     seq = tmp_path / "corpus.jsonl"
@@ -178,7 +192,13 @@ def test_rehashed_semantic_span_tampering_is_refused(tmp_path):
     source, spec, ident, tok_id = make_record(tmp_path)
     path = tmp_path / "corpus.json"
     t.build_transcript_corpus(
-        [source], Tokenizer(), spec, path, tokenizer_identity=tok_id, model_identity=ident
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
     )
     manifest = json.loads(path.read_text())
     seq = tmp_path / "corpus.jsonl"
@@ -210,7 +230,7 @@ def test_concentration_counts_member_generation_and_following_observations():
         }
         for i in range(4)
     ]
-    result = t.transcript_acceptance(rows, turns)
+    result = t.transcript_acceptance(rows, turns, max_tokens=2048)
     fit = result["concentration"]["fit"]
     assert result["repeated_runs"] == [[0, 1]]
     assert fit["repeated_run_positions"] == 8  # gen0+gen1, obs1+obs2; scaffold0 excluded
@@ -225,7 +245,13 @@ def test_reader_retains_a_complete_corpus_that_requires_ruling(tmp_path):
     source, spec, ident, tok_id = make_record(tmp_path)
     path = tmp_path / "corpus.json"
     manifest = t.build_transcript_corpus(
-        [source], Tokenizer(), spec, path, tokenizer_identity=tok_id, model_identity=ident
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
     )
     assert manifest["acceptance"]["status"] == "ruling_required"
     assert manifest["acceptance"]["concentration"]["fit"]["largest_episode_share"] == 1
@@ -241,14 +267,20 @@ def test_boolean_and_integer_arguments_are_not_identical_repeated_calls():
         }
         for i, value in enumerate([True, 1, False, 0])
     ]
-    assert t.transcript_acceptance([], turns)["repeated_runs"] == []
+    assert t.transcript_acceptance([], turns, max_tokens=2048)["repeated_runs"] == []
 
 
 def test_reader_rejects_same_episode_in_different_source_files(tmp_path):
     source, spec, ident, tok_id = make_record(tmp_path)
     path = tmp_path / "corpus.json"
     t.build_transcript_corpus(
-        [source], Tokenizer(), spec, path, tokenizer_identity=tok_id, model_identity=ident
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
     )
     duplicate = tmp_path / "duplicate.jsonl"
     duplicate.write_bytes(source.read_bytes())
@@ -258,4 +290,36 @@ def test_reader_rejects_same_episode_in_different_source_files(tmp_path):
     manifest["manifest_sha256"] = t.digest(manifest)
     path.write_bytes(t.encoded(manifest))
     with pytest.raises(ValueError, match="duplicate trajectory"):
+        t.read_transcript_corpus(path)
+
+
+def test_context_length_must_match_frozen_source_registration(tmp_path):
+    source, spec, ident, tok_id = make_record(tmp_path)
+    with pytest.raises(ValueError, match="capture identity"):
+        t.build_transcript_corpus(
+            [source],
+            Tokenizer(),
+            spec,
+            tmp_path / "wrong.json",
+            tokenizer_identity=tok_id,
+            model_identity=ident,
+            max_tokens=4096,
+        )
+    path = tmp_path / "corpus.json"
+    t.build_transcript_corpus(
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
+    )
+    manifest = json.loads(path.read_text())
+    manifest["max_tokens"] = 4096
+    manifest["window_rule"] = t._window_rule(4096)
+    manifest.pop("manifest_sha256")
+    manifest["manifest_sha256"] = t.digest(manifest)
+    path.write_bytes(t.encoded(manifest))
+    with pytest.raises(ValueError, match="source identity"):
         t.read_transcript_corpus(path)

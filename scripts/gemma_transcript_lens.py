@@ -161,6 +161,8 @@ def read_registration(path):
     if (
         registration.get("schema_version") != 1
         or registration.get("format") != FORMAT
+        or registration.get("fitting_context_tokens") != 2048
+        or type(registration.get("fitting_context_tokens")) is not int
         or registration.get("producer_model") != "gemma3-4b"
         or registration.get("fit_models") != list(FIT_MODELS)
         or registration.get("evaluation") != EVALUATION
@@ -279,6 +281,7 @@ def capture(registration_path, *, split, record, output, execute=False):
     spec = replace(model_spec("gemma3-4b"), cache_strategy="none")
     provenance = {
         "registration": binding,
+        "fitting_context_tokens": registration["fitting_context_tokens"],
         "model_identity": registration["model_identity"],
         "tokenizer": registration["tokenizer"],
         "producer_snapshot": registration["snapshots"]["gemma3-4b"],
@@ -368,7 +371,8 @@ def freeze(registration_path, *, captures, output):
             raise ValueError("capture has duplicate or unregistered training cohort")
         validate_captured_cohort(events, cohort)
         if (
-            provenance.get("producer_snapshot") != registration["snapshots"]["gemma3-4b"]
+            provenance.get("fitting_context_tokens") != registration["fitting_context_tokens"]
+            or provenance.get("producer_snapshot") != registration["snapshots"]["gemma3-4b"]
             or provenance.get("evaluation") != registration["evaluation"]
             or provenance.get("capture_limits") != registration["capture_limits"]
             or provenance.get("rendering_gate") != registration["rendering_gate"]
@@ -388,6 +392,7 @@ def freeze(registration_path, *, captures, output):
         Path(output),
         tokenizer_identity=registration["tokenizer"],
         model_identity=registration["model_identity"],
+        max_tokens=registration["fitting_context_tokens"],
     )
     return {
         "status": manifest["acceptance"]["status"],

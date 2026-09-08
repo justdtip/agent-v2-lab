@@ -45,6 +45,7 @@ def registered(tmp_path, monkeypatch):
     tokenizer = mod.tokenizer_identity_from_directory(Path(specs["gemma3-4b"].hf_id))
     registration = {
         "schema_version": 1,
+        "fitting_context_tokens": 2048,
         "format": mod.FORMAT,
         "producer_model": "gemma3-4b",
         "fit_models": list(mod.FIT_MODELS),
@@ -199,6 +200,7 @@ def test_freeze_uses_only_local_tokenizer_and_keeps_ruling_manifest(
         captures.append(source)
         provenance = {
             "registration": binding,
+            "fitting_context_tokens": 2048,
             "cohort": cohort,
             "producer_snapshot": data["snapshots"]["gemma3-4b"],
             "evaluation": data["evaluation"],
@@ -235,6 +237,7 @@ def test_freeze_uses_only_local_tokenizer_and_keeps_ruling_manifest(
     assert result["status"] == "ruling_required"
     assert seen[0][0][0] == captures
     assert seen[0][0][1] is tokenizer
+    assert seen[0][1]["max_tokens"] == 2048
 
 
 def test_captured_task_prompt_must_match_registered_fingerprint(registered):

@@ -24,7 +24,7 @@ from local_llm_lab.pipeline.protocol import _as_declared_roles, parse_turn, syst
 FORMAT = "transcript-native-replay-v1"
 SPANS = ("system", "task", "observation", "note", "call", "template")
 REPLAY_CAVEAT = (
-    "Native replay of captured token IDs in fresh 2048-token windows; generation forward "
+    "Native replay of captured token IDs in fresh windows of the registered context length; generation forward "
     "partitions, longer context, and absolute position origins are not preserved. "
     "No partition-identical live residual or generation-activation equivalence is claimed."
 )
@@ -308,7 +308,15 @@ def _generated_labels(tokenizer, tokens):
     return _labels(offsets, _assistant_ranges(text, 0)), text, offsets
 
 
-def _counts(rows):
+def _window_rule(max_tokens):
+    return {
+        "context_tokens": max_tokens,
+        "max_scored_block_tokens": max_tokens // 2,
+        "policy": "end at scored block end; retain maximal available preceding context",
+    }
+
+
+def _counts(rows, *, max_tokens):
     counts = {
         split: {
             "sequences": 0,
@@ -317,7 +325,7 @@ def _counts(rows):
             "spans": dict.fromkeys(SPANS, 0),
             "generated": 0,
             "positions_beyond_1024": 0,
-            "full_2048_rows": 0,
+            "full_context_rows": 0,
             "short_rows": 0,
         }
         for split in ("fit", "held")
@@ -326,7 +334,7 @@ def _counts(rows):
         c = counts[row["split"]]
         c["sequences"] += 1
         c["tokens"] += len(row["ids"])
-        c["full_2048_rows" if len(row["ids"]) == 2048 else "short_rows"] += 1
+        c["full_context_rows" if len(row["ids"]) == max_tokens else "short_rows"] += 1
         for i in row["score_positions"]:
             c["positions"] += 1
             c["spans"][row["spans"][i]] += 1
@@ -346,7 +354,7 @@ def _parsed_action(text):
     }
 
 
-def transcript_acceptance(rows, turns):
+def transcript_acceptance(rows, turns, *, max_tokens):
     """Amended Task 1 concentration gate, recomputable without a model forward.
 
     Invalid actions break runs; they are counted explicitly, never interpreted as
@@ -428,7 +436,7 @@ def transcript_acceptance(rows, turns):
         reasons.append("single largest episode exceeds one third of fitted positions")
     if fit["positions"] and 3 * fit["repeated_run_positions"] > fit["positions"]:
         reasons.append("identical repeated-call runs exceed one third of fitted positions")
-    counts = _counts(rows)
+    counts = _counts(rows, max_tokens=max_tokens)
     if not counts["fit"]["positions_beyond_1024"]:
         reasons.append("no fitted position actually exceeds the 1024-token sliding window")
     if not any(
@@ -453,11 +461,11 @@ def transcript_acceptance(rows, turns):
 
 
 def build_transcript_corpus(
-    sources, tokenizer, spec, manifest_path, *, tokenizer_identity, model_identity, max_tokens=2048
+    sources, tokenizer, spec, manifest_path, *, tokenizer_identity, model_identity, max_tokens
 ):
     """Freeze exact consumed IDs and score first appearances once; no native execution."""
-    if max_tokens != 2048:
-        raise ValueError("transcript fitting context must be 2048 tokens")
+    if type(max_tokens) is not int or max_tokens <= 1024 or max_tokens % 2:
+        raise ValueError("registered transcript context must be even and exceed the sliding window")
     _validate_identity(model_identity, tokenizer_identity)
     if model_identity != {
         "base": spec.base,
@@ -473,7 +481,8 @@ def build_transcript_corpus(
         events = read_transcript(record["path"])
         provenance = events[0]["provenance"]
         if (
-            provenance.get("model_identity") != model_identity
+            provenance.get("fitting_context_tokens") != max_tokens
+            or provenance.get("model_identity") != model_identity
             or provenance.get("tokenizer") != tokenizer_identity
         ):
             raise ValueError("capture identity differs from frozen corpus")
@@ -515,14 +524,14 @@ def build_transcript_corpus(
                     **_parsed_action(generated_text),
                 }
             )
-            # At most 1024 scores per row; maximal available preceding context for
-            # the scored block, bounded by 2048. Gaps create additional windows.
+            # Half a registered context of scores per row, with maximal available
+            # preceding context up to the registered cap. Gaps create extra windows.
             remaining = list(owned)
             while remaining:
                 first = remaining[0]
-                block = [i for i in remaining[:1024] if i < first + 1024]
+                block = [i for i in remaining[: max_tokens // 2] if i < first + max_tokens // 2]
                 end = block[-1] + 1
-                start = max(0, end - 2048)
+                start = max(0, end - max_tokens)
                 rows.append(
                     {
                         "index": len(rows),
@@ -551,18 +560,18 @@ def build_transcript_corpus(
         "schema_version": 2,
         "format": FORMAT,
         "domain": "agentic",
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
         "model_identity": model_identity,
         "model_hf_id": spec.hf_id,
         "tokenizer": tokenizer_identity,
         "sources": records,
         "turns": turns,
         "sequences": {"path": str(sequences_path), "sha256": hashlib.sha256(data).hexdigest()},
-        "counts": _counts(rows),
+        "counts": _counts(rows, max_tokens=max_tokens),
         "replay_caveat": REPLAY_CAVEAT,
         "split_rule": "every fifth source turn held; before windowing; trajectories may overlap",
         "score_rule": "initial prompt once; new observation wrapper/content once; consumed emitted tokens once",
-        "window_rule": "at most1024 eligible positions per block; up to2048 tokens ending at block end",
+        "window_rule": _window_rule(max_tokens),
         "span_rule": "observation wrapper included; generated is orthogonal; tokens intersecting a new observation are owned and boundary-crossing tokens labelled template",
         "observation_rendering": {
             "role": spec.chat.observation_role,
@@ -570,7 +579,7 @@ def build_transcript_corpus(
             "convention": spec.chat.observation_convention,
         },
     }
-    manifest["acceptance"] = transcript_acceptance(rows, turns)
+    manifest["acceptance"] = transcript_acceptance(rows, turns, max_tokens=max_tokens)
     manifest["manifest_sha256"] = digest(manifest)
     for record in records + tokenizer_identity["files"]:
         checked_bytes(record)
@@ -607,11 +616,15 @@ def read_transcript_corpus(manifest_path):
     sha = manifest.pop("manifest_sha256")
     if digest(manifest) != sha:
         raise ValueError("transcript corpus manifest hash mismatch")
+    max_tokens = manifest.get("max_tokens")
     if (
         manifest.get("schema_version") != 2
         or manifest.get("format") != FORMAT
         or manifest.get("domain") != "agentic"
-        or manifest.get("max_tokens") != 2048
+        or type(max_tokens) is not int
+        or max_tokens <= 1024
+        or max_tokens % 2
+        or manifest.get("window_rule") != _window_rule(max_tokens)
         or manifest.get("replay_caveat") != REPLAY_CAVEAT
     ):
         raise ValueError("unsupported transcript corpus schema")
@@ -624,7 +637,8 @@ def read_transcript_corpus(manifest_path):
             raise ValueError("duplicate transcript source")
         events = read_transcript(source["path"])
         if (
-            events[0]["provenance"].get("model_identity") != manifest["model_identity"]
+            events[0]["provenance"].get("fitting_context_tokens") != max_tokens
+            or events[0]["provenance"].get("model_identity") != manifest["model_identity"]
             or events[0]["provenance"].get("tokenizer") != manifest["tokenizer"]
         ):
             raise ValueError("source identity mismatch")
@@ -711,9 +725,9 @@ def read_transcript_corpus(manifest_path):
         remaining = list(turn["eligible_positions"])
         while remaining:
             first = remaining[0]
-            block = [i for i in remaining[:1024] if i < first + 1024]
+            block = [i for i in remaining[: max_tokens // 2] if i < first + max_tokens // 2]
             end = block[-1] + 1
-            start = max(0, end - 2048)
+            start = max(0, end - max_tokens)
             expected_windows.append((turn_index, start, end, [i - start for i in block]))
             remaining = remaining[len(block) :]
     if len(rows) != len(expected_windows):
@@ -734,7 +748,7 @@ def read_transcript_corpus(manifest_path):
             or row["source"] != turn["source"]
             or row["task_id"] != turn["task_id"]
             or row["step_index"] != turn["step"]
-            or not 0 < len(ids) <= 2048
+            or not 0 < len(ids) <= max_tokens
             or ids != ids_by_turn[t][start : start + len(ids)]
             or row["spans"] != spans_by_turn[t][start : start + len(ids)]
             or not positions
@@ -751,8 +765,11 @@ def read_transcript_corpus(manifest_path):
     for positions, turn in zip(scored, manifest["turns"], strict=True):
         if positions != sorted(set(positions)) or positions != turn["eligible_positions"]:
             raise ValueError("duplicated or missing transcript score ownership")
-    if transcript_acceptance(rows, manifest["turns"]) != manifest["acceptance"]:
+    if (
+        transcript_acceptance(rows, manifest["turns"], max_tokens=max_tokens)
+        != manifest["acceptance"]
+    ):
         raise ValueError("transcript acceptance accounting mismatch")
-    if _counts(rows) != manifest["counts"]:
+    if _counts(rows, max_tokens=max_tokens) != manifest["counts"]:
         raise ValueError("transcript corpus counts mismatch")
     return rows
