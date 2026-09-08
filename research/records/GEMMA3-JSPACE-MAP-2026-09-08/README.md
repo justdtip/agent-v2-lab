@@ -335,3 +335,39 @@ is an extrapolation of three to eighteen times, disclosed in full above. The com
 decides, only that it is where a readout trained toward the output stops distinguishing the two
 spans. And horizon 1 under greedy decoding saturates at the final layer by construction, which is
 why the null moved to horizons 4 and 8.
+
+### Layer 24, measured as a distribution rather than as two statistics
+
+The Chief and I computed different summaries of the same deduplicated rows and disagreed at layer
+24: arguments are more often **exactly right** (46.6% against 38.9%) and less often **within ten**
+(65.9% against 75.8%). They proposed bimodality as the reconciliation. It is measurable directly,
+so here it is, deduplicated, as the share of decisions in each rank band:
+
+**Layer 24**
+
+| span | rank 1 | 2–10 | 11–100 | 101–1k | 1k–10k | >10k |
+|---|---:|---:|---:|---:|---:|---:|
+| call argument | **46.6%** | 19.3% | 14.9% | 8.3% | 6.0% | **5.0%** |
+| call skeleton | 38.9% | **36.9%** | 15.9% | 1.5% | 3.3% | 3.5% |
+| note | 35.0% | 23.6% | 19.4% | 11.1% | 6.6% | 4.3% |
+
+**Layer 25**
+
+| span | rank 1 | 2–10 | 11–100 | 101–1k | 1k–10k | >10k |
+|---|---:|---:|---:|---:|---:|---:|
+| call argument | **57.6%** | 21.1% | 10.8% | 7.1% | 2.5% | 0.9% |
+| call skeleton | 40.9% | **43.7%** | 8.3% | 2.8% | 4.3% | 0.0% |
+
+**Confirmed, and the shape says more than either statistic.** At layer 24 arguments are beyond rank
+1,000 in 11.0% of decisions against the skeleton's 6.8%, while also leading on rank 1. The skeleton
+is not merely closer on average — it is almost never far away, and it is very often *nearly* right
+without being right: 36.9% of skeleton decisions sit in ranks 2 to 10 at layer 24, rising to 43.7%
+at 25.
+
+**The argument is either decided or nowhere. The skeleton is always close and often just short.**
+That is a difference in the shape of the decision and not only in its difficulty, and it is what the
+two disagreeing statistics were each seeing half of.
+
+It is also the same median-against-top-one disagreement that left this afternoon's boundary check
+unresolved, reached independently by two seats on different rows. Twice is a reason to compute the
+distribution by default rather than a coincidence.
