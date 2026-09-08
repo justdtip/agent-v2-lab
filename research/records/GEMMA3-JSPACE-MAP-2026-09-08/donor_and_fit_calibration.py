@@ -6,10 +6,22 @@ in-episode donor. The Chief's test: ask the model directly, against the same con
 produce the Result under a direct question, that is a larger result than the intervention it was
 meant to enable, and it costs one short generation.
 
-**The fit calibration.** A transcript-length lens fit projects 21 GiB at 2,816 tokens, which is
-1.97x R47's stop threshold, and the Director has not authorised it. The projection was made the way
-this repository's last two were: from the cheapest instance. This measures the real peak for one
-2,816-token window with every layer's residual retained in float32 — the floor the batch multiplies.
+**The fit calibration — and read the warning before the number.** This measures the peak for one
+2,816-token forward with every layer's residual retained in float32. **It is not the memory floor of
+a lens fit, and the version of this docstring that said so was wrong.**
+
+A fit holds the model, an fp32 unembedding over a 262,208 vocabulary (2.50 GiB), and a
+2,560-by-2,560 accumulator pair for each of 33 layers (1.61 GiB) — none of which this measures.
+Residuals are the small term: 0.89 GiB against roughly 4.1 GiB of fixed structure. Codex's fitter
+measured 12.44 GiB at 128 tokens, where residuals are 0.04 GiB, so nearly all of it is the fitter.
+
+The number below was real, precise, and cross-checked to three decimals against an independent
+derivation, and it was a measurement of the wrong artefact. It was used to call a 21 GiB projection
+"a batching choice rather than a floor", which inverted the truth: `lens_fitting.regression`
+accumulates row by row and has **no batch parameter at all**, so there is no batch to choose.
+
+What this measurement is good for: the cost of a capture pass at transcript length, which is what
+`live_lens_pilot` does. Nothing else.
 
     python donor_and_fit_calibration.py --out <dir> --i-am-a-record
 """

@@ -893,12 +893,26 @@ One 2,816-token window, every layer's residual retained in float32, which is wha
 | R47 stop threshold | 10.66 GiB |
 | the projection under review | 21 GiB |
 
-**The measured floor is 2.8 GiB, an eighth of the projection and about a quarter of the stop
-threshold.** The residual figure matches the Chief's arithmetic exactly, which is the useful
-cross-check: their 0.886 GiB was derived and this is measured.
+**WITHDRAWN. This measured the wrong artefact and the conclusion drawn from it was backwards.**
 
-So the 21 GiB is a **batching choice and not a floor.** At 2.8 GiB for one window there is room for
-a batch of three inside R47 with margin. The projection appears to have been made the way the
-stage-two memory declaration was — from a configuration rather than from the binding case — which
-is now the third instance of that error in this programme and the second caught by measuring
-instead of arguing.
+The measurement stands as what it is: 2.817 GiB for a 2,816-token **capture pass** retaining every
+residual. It is not a lens fit's floor. A fit also holds an fp32 unembedding over a 262,208
+vocabulary — 2.50 GiB — and a 2,560-by-2,560 accumulator pair for each of 33 layers, 1.61 GiB.
+Residuals are the small term. Codex's fitter measured **12.44 GiB at 128 tokens**, where residuals
+are 0.04 GiB, so almost all of that is fixed structure this script never allocated.
+
+So the 21 GiB projection was **sound extrapolation from a real measurement**, and calling it "a
+batching choice rather than a floor" inverted the truth. There is no batch to choose:
+`lens_fitting.regression` accumulates row by row and has **no batch parameter at all**, which is
+stronger than a hardcoded one.
+
+Recomputed honestly, at 2,816 tokens: **bf16 ≈ 12.3 GiB against R47's 10.66 stop**, so it may not
+run on this box; **4-bit ≈ 7.5 GiB**, which does. The order requires both precisions and did not
+anticipate that only one might be runnable here.
+
+**The shape, because it is new.** My number was real, precise, and agreed with an independent
+derivation to three decimals — and it was about the wrong object. **Precision about the wrong
+artefact is indistinguishable from precision about the right one**, and cross-checking two
+derivations of the same wrong quantity confirms nothing. Every other error today was caught by a
+control on the number; this one could only be caught by asking what the number was of. It was
+caught by Codex, who owns the fitter, before any checkpoint loaded.
