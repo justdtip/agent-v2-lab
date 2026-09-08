@@ -1,0 +1,17 @@
+{
+  "scripts/lens_fit.py": "b2f1c069ce70678d20dc05cee00ced3edb87ff5266a03c777d4024b0710670a0",
+  "src/local_llm_lab/arch.py": "75f3939907be9f6637fa2b7e3fbb79d43f083de5967406d6ae308fabac3fc9ed",
+  "src/local_llm_lab/models.py": "0628e93399b7fdf3a3389271bdc307df1ee7666c469e8b2807f342ffe6b63000",
+  "src/local_llm_lab/runlock.py": "0844065a209cddf9a444e6418877c0ccb58efd2bcf62def2f97f60f6ebc5c495",
+  "src/local_llm_lab/pipeline/lens_fitting/regression.py": "5fde50c22189b7390c47420e2f037a64d356588416f9dcf65a55f130ea9fb78a",
+  "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "63aca88cc425e22cac3c8d7e642eb7bb56edf119aad5cadf6ad8ad6943c6c639",
+  "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "f2049f849e7f3883f7a084faa2641717ae2d2de1f922ce8660e56164a5210dff",
+  "src/local_llm_lab/pipeline/lens_fitting/artifacts.py": "9bd38dc76830efd256f46c6faf4938ce409e6e658a7cf5d8825cb6e5c6bc66ed",
+  "src/local_llm_lab/pipeline/live_lens/instruments.py": "67519d056ea23a9914582608fb9780f9abc4aaf3b0ca4007555366bdcecaf555",
+  "configs/models/gemma3-4b-bf16.yaml": "88be6b984bc6c27af2bb08e47edf15780c8e213b92fa9e974aaf79af7991e2e8",
+  "data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json": "91ae8f6d5e716b0fda6a9c727d97437c756c688ee9ac056329bcd85942ec2148",
+  "data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.jsonl": "d98939522a9547271432b9d74e548420eddd8ad0b26439934da67e653a15d439",
+  "research/records/GEMMA3-REGRESSION-2026-09-08/run_native.py": "d7d582dac117dc81363957dc1073cef252a03221e07bb9944d7fd8fe1a1dbb51",
+  "research/records/GEMMA3-REGRESSION-2026-09-08/README.md": "e2b66e1da64f7f4799bcd777d897be09ec51f3e622234e342c792d748bb6f563",
+  "research/records/GEMMA3-REGRESSION-2026-09-08/checkpoint-identity.json": "2aec39817816edfe6693ac41d53f37fe53ec8996f5eb1a570a6ff260054b669d"
+}

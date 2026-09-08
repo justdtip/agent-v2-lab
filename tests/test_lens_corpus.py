@@ -778,3 +778,31 @@ def test_reader_rejects_rehashed_invalid_window_type(tmp_path, setup, chunk_toke
     manifest.write_bytes(api()._json_bytes(metadata))
     with pytest.raises(ValueError, match="chunk"):
         api().read_corpus(manifest)
+
+
+def test_tokenizer_loader_accepts_local_checkpoint_without_hub(tmp_path, setup, monkeypatch):
+    import sys
+    from dataclasses import replace
+    from types import ModuleType, SimpleNamespace
+
+    spec, tok, _ = setup
+    directory = tmp_path / "local-model"
+    directory.mkdir()
+    asset = directory / "tokenizer.json"
+    asset.write_text("{}")
+    (directory / "model.safetensors").write_text("must not be opened")
+    fake = ModuleType("transformers")
+    fake.AutoTokenizer = SimpleNamespace(from_pretrained=lambda path, **kw: tok)
+    monkeypatch.setitem(sys.modules, "transformers", fake)
+    import huggingface_hub
+
+    monkeypatch.setattr(
+        huggingface_hub,
+        "snapshot_download",
+        lambda *a, **kw: pytest.fail("local model reached Hub resolution"),
+    )
+    loaded, assets = api().load_corpus_tokenizer(
+        replace(spec, hf_id=str(directory)), local_files_only=True
+    )
+    assert loaded is tok
+    assert assets == [asset]

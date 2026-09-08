@@ -699,11 +699,17 @@ def load_corpus_tokenizer(
     from huggingface_hub import snapshot_download
     from transformers import AutoTokenizer
 
-    directory = Path(
-        snapshot_download(
-            spec.hf_id, allow_patterns=list(TOKENIZER_PATTERNS), local_files_only=local_files_only
+    directory = Path(spec.hf_id).expanduser()
+    if directory.is_dir():
+        directory = directory.resolve()
+    else:
+        directory = Path(
+            snapshot_download(
+                spec.hf_id,
+                allow_patterns=list(TOKENIZER_PATTERNS),
+                local_files_only=local_files_only,
+            )
         )
-    )
     tokenizer = AutoTokenizer.from_pretrained(
         str(directory), local_files_only=True, trust_remote_code=False, use_fast=True
     )
