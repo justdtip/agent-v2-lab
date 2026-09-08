@@ -159,3 +159,70 @@ def test_a_readout_that_disagrees_at_the_final_layer_stops_the_run(tmp_path):
     with pytest.raises(ValueError, match="disagrees with the model's own logits"):
         with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
             captured(mx.array([[1, 2, 3]]), cache=view.make_cache())
+
+
+def test_every_emitted_token_carries_its_span_label_at_write_time(tmp_path):
+    """The pre-registration's facet is a property of the data, not of a later analysis.
+
+    A segmentation computed after a record is read is a boundary chosen after seeing the answer,
+    which is the thing a pre-registration exists to prevent. So the label is written with the
+    token.
+    """
+    _, _, _, _, events = captured_fixture(tmp_path)
+    emitted = [event for event in events if event.get("kind") == "emitted"]
+    assert emitted, "the fixture generates tokens"
+    assert all("span" in event for event in emitted), "every emitted token is labelled"
+    assert {event["span"] for event in emitted} <= {
+        "note",
+        "call_skeleton",
+        "call_argument",
+        "chat_prose",
+    }
+
+
+def test_the_span_scanner_puts_the_fused_quote_and_slash_in_the_argument() -> None:
+    """The one token the `update-0028` finding turns on, and the boundary rule it forces.
+
+    Gemma emits `' "/'` as a single token: a space, the quote that opens the path, and the path's
+    first character. Assigning a token by its first character would file that whole token as
+    skeleton and take the finding's own decision point out of the argument facet. A token any part
+    of which carries argument content is an argument token.
+
+    The closing `'"}}'` is the other side of the same rule: it begins inside the value and carries
+    none of it, so it is skeleton.
+    """
+    from local_llm_lab.pipeline.live_lens.session import SpanLabeller
+
+    labeller = SpanLabeller("agentic")
+    pieces = [
+        "Progress", " note", ":", " ok", "\n", "```", "json", "\n",
+        '{"', "name", '":', ' "', "read", "_", "file", '",',
+        ' "', "arguments", '":', ' {"', "path", '":',
+        ' "/', "test", "/", "config", ".", "ini", '"}}',
+    ]
+    labels = [labeller.feed(piece) for piece in pieces]
+    by_piece = dict(zip(pieces, labels, strict=True))
+
+    assert by_piece["Progress"] == "note"
+    assert by_piece["```"] == "call_skeleton", "the fence is convention, not deliberation"
+    assert by_piece["file"] == "call_skeleton", "the tool name is fixed by the calling convention"
+    assert by_piece[' "/'] == "call_argument"
+    assert by_piece["config"] == "call_argument"
+    assert by_piece['"}}'] == "call_skeleton", "the terminator carries none of the value"
+
+
+def test_a_chat_episode_labels_every_token_prose_and_malformed_output_still_labels() -> None:
+    """Two ends the scanner must not fall off.
+
+    A chat turn has no calls, and this model produces malformed JSON often enough that a scanner
+    which raised on it would silently shrink one facet of the primary comparison.
+    """
+    from local_llm_lab.pipeline.live_lens.session import SpanLabeller
+
+    chat = SpanLabeller("chat")
+    assert {chat.feed(piece) for piece in ("Hello", " there", '{"', '"')} == {"chat_prose"}
+
+    broken = SpanLabeller("agentic")
+    labels = [broken.feed(piece) for piece in ("note", "```", 'json {"path": "a', "\\", '"')]
+    assert len(labels) == 5, "an unterminated string does not stop the labelling"
+    assert "call_argument" in labels

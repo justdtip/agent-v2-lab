@@ -120,6 +120,117 @@ def _logit_hash(logits):
     return digest.hexdigest()
 
 
+class SpanLabeller:
+    """Per-position span labels, decided from the model's own output as it arrives.
+
+    The pre-registration's segmentation (2026-09-08 amendment), emitted at write time so the facet
+    is a property of the data rather than of a later analysis. Four labels:
+
+    ``note``
+        generated tokens from the start of an agentic turn up to and excluding the opening fence.
+    ``call_skeleton``
+        tokens inside the fence whose value is fixed by the calling convention: the fence itself,
+        the key names, the punctuation, the tool name.
+    ``call_argument``
+        tokens inside the fence carrying a task-dependent value — the path, query, expression,
+        replacement text or answer.
+    ``chat_prose``
+        every generated token of a chat episode.
+
+    **A token that straddles a boundary counts as an argument**, and that is a decision rather than
+    a detail. Gemma emits `' "/'` as one token: a space, the opening quote and the first character
+    of a path. Assigning by the token's first character would file the whole of it as skeleton, and
+    that particular token is the one the whole `update-0028` finding turns on. A token any part of
+    which lies inside an argument value carries task-dependent content, so it is argument.
+
+    The scanner is deliberately small and deliberately not a JSON parser. It tracks whether the
+    fence has opened, whether it is inside a string, and which key the current string is the value
+    of. Malformed output — which this model produces — must not raise here: an unparseable turn
+    still emitted tokens, and dropping their labels would silently shrink one facet.
+    """
+
+    ARGUMENT_KEYS = frozenset(
+        {"path", "directory", "query", "expression", "old", "new", "answer"}
+    )
+
+    def __init__(self, kind: str):
+        self.kind = kind
+        self._fence = False
+        self._in_string = False
+        self._escaped = False
+        self._buffer = ""
+        self._pending_key = None
+        self._last_key = None
+        self._after_colon = False
+
+    def _label(self, character: str) -> str:
+        """The label of one character, decided from the state *before* it is consumed."""
+        if self.kind != "agentic":
+            return "chat_prose"
+        if not self._fence:
+            # The fence itself is skeleton; the note is what precedes it. Backticks appear in this
+            # protocol only as the fence, so the first one ends the note.
+            return "call_skeleton" if character == "`" else "note"
+        argument = self._last_key in self.ARGUMENT_KEYS
+        if self._in_string:
+            # The terminating quote closes the value and carries none of it.
+            closing = character == '"' and not self._escaped
+            return "call_skeleton" if closing or not argument else "call_argument"
+        if character == '"' and self._after_colon and self._pending_key in self.ARGUMENT_KEYS:
+            # The opening quote of an argument value. Gemma emits it fused to the value's first
+            # character as a single token, so filing it as skeleton would file that token as
+            # skeleton — and that token is the one the update-0028 finding turns on.
+            return "call_argument"
+        return "call_skeleton"
+
+    def _advance(self, character: str) -> None:
+        if not self._fence:
+            if character == "`":
+                self._fence = True
+            return
+        if self._in_string:
+            if self._escaped:
+                self._escaped = False
+            elif character == "\\":
+                self._escaped = True
+            elif character == '"':
+                self._in_string = False
+                if not self._after_colon:
+                    self._pending_key = self._buffer
+                self._buffer = ""
+            else:
+                self._buffer += character
+            return
+        if character == '"':
+            self._in_string = True
+            self._buffer = ""
+            if self._after_colon:
+                self._last_key = self._pending_key
+        elif character == ":":
+            self._after_colon = True
+        elif character in ",{":
+            self._after_colon = False
+            self._pending_key = None
+
+    def feed(self, piece: str) -> str:
+        """Label the token whose decoded text is ``piece``, and advance past it.
+
+        A token any part of which carries argument content is an argument token; otherwise a token
+        that begins in the note is a note token; otherwise skeleton. Malformed output never raises
+        here — an unparseable turn still emitted tokens, and dropping their labels would silently
+        shrink one facet of the comparison.
+        """
+        if not piece:
+            return "chat_prose" if self.kind != "agentic" else "call_skeleton"
+        seen = []
+        for character in piece:
+            seen.append(self._label(character))
+            self._advance(character)
+        if "call_argument" in seen:
+            return "call_argument"
+        return seen[0]
+
+
 class CaptureSession:
     def __init__(
         self,
@@ -174,6 +285,12 @@ class CaptureSession:
             raise ValueError("capture requires the resolved no-reuse cache strategy")
         prompt_ids = encode_prompt(tokenizer, prompt)
         self.ledger = ForwardLedger(prompt_ids)
+        # One labeller per turn: the spans are a property of a single generation and the scanner
+        # carries state across it. `kind` comes from the context the caller set; anything that is
+        # not explicitly a chat episode is an agentic one, because the agentic path does not
+        # declare a kind and adding a required field there would break every existing caller.
+        self._tokenizer = tokenizer
+        self._spans = SpanLabeller(self.context.get("kind", "agentic"))
         self.turn += 1
         self.ranks.reset()
         self.prompt_ids = prompt_ids
@@ -324,12 +441,31 @@ class CaptureSession:
         self.ledger.record(offset, ids)
         self._residuals.clear()
 
+    def _decode(self, token_id):
+        """One token's text, with a failure that costs a label rather than the run.
+
+        Tokenizers differ in whether `decode` is available on the wrapper the pilot passes, and a
+        span label is worth less than the episode it would abort.
+        """
+        try:
+            return self._tokenizer.decode([int(token_id)])
+        except Exception:  # noqa: BLE001 - any decoder failure is the same failure here
+            return ""
+
     def emitted(self, token_id):
         if not self._active:
             raise RuntimeError("token emitted outside capture context")
         position = len(self.prompt_ids) + len(self.generated)
         self.ledger.emitted(int(token_id))
-        self._write("emitted", position=position, token_id=int(token_id))
+        # The span label is written here, with the token, rather than derived later: the
+        # pre-registration requires the facet to be a property of the data, and a segmentation
+        # computed after a record is read is a boundary chosen after seeing the answer.
+        self._write(
+            "emitted",
+            position=position,
+            token_id=int(token_id),
+            span=self._spans.feed(self._decode(token_id)),
+        )
         for row in self.ranks.observe(position, int(token_id)):
             self._write("rank", **row)
 
