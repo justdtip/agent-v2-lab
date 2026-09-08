@@ -7,7 +7,9 @@ belong in the committed registration, not command-line overrides after seeing da
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import resource
 import sys
 import time
@@ -121,9 +123,11 @@ def main(argv=None):
     from local_llm_lab.pipeline.sae_bridge.core import iter_feature_topk
     from local_llm_lab.pipeline.sae_bridge.readout import acceptance, write_readout
 
-    reg = json.loads(args.registration.read_bytes())
-    registration_sha = file_sha256(args.registration)
-    if not reg.get("projected_peak_gib", 0) > 0 or not reg.get("peak_basis"):
+    registration_bytes = args.registration.read_bytes()
+    reg = json.loads(registration_bytes)
+    registration_sha = hashlib.sha256(registration_bytes).hexdigest()
+    peak = reg.get("projected_peak_gib", 0)
+    if not math.isfinite(peak) or peak <= 0 or not reg.get("peak_basis"):
         parser.error("registration must declare a projected peak and its basis")
     if not args.execute:
         print(
@@ -158,6 +162,7 @@ def main(argv=None):
     evidence, jd = acceptance(
         w, j, wrong_j, d, feature_id=reg["feature_id"], k=reg["k"], **reg["tolerances"]
     )
+    evidence.update(registration_sha256=registration_sha, instrument=reg)
     write_json(args.output / "acceptance.json", evidence)
     if not evidence["passed"]:
         print("A1 acceptance unmet; bounds and negative control are unchanged", flush=True)
@@ -196,6 +201,7 @@ def main(argv=None):
         "status": "accepted" if peak_gib <= reg["projected_peak_gib"] else "peak_bound_exceeded",
         "mode": args.mode,
         "registration_sha256": registration_sha,
+        "instrument": reg,
         "loaded_seconds": loaded_s,
         "elapsed_seconds": time.monotonic() - started,
         "measured_features": count,

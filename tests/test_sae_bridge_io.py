@@ -294,6 +294,10 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
     )
     result = json.loads((benchmark_dir / "result.json").read_text())
     assert result["model_forward_count"] == 0
+    assert result["instrument"] == reg
+    evidence = json.loads((benchmark_dir / "acceptance.json").read_text())
+    assert evidence["registration_sha256"] == sha(registration)
+    assert evidence["instrument"] == reg
     output = tmp_path / "readout"
     assert (
         main(
@@ -315,3 +319,14 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
     reg["lens"]["fitting_precision"] = "4bit"
     with pytest.raises(ValueError, match="BF16"):
         main.__globals__["load_inputs"](reg)
+    reg["lens"]["fitting_precision"] = "bf16"
+    reg["tolerances"]["atol"] = 1000  # The control cannot fail these deliberately loose bounds.
+    reg["tolerances"]["relative_l2_limit"] = 1000
+    registration.write_text(json.dumps(reg))
+    failed = tmp_path / "failed"
+    assert main(["--registration", str(registration), "--execute", "--output", str(failed)]) == 2
+    evidence = json.loads((failed / "acceptance.json").read_text())
+    assert not evidence["passed"]
+    assert evidence["registration_sha256"] == sha(registration)
+    assert evidence["instrument"] == reg
+    assert not (failed / "result.json").exists()
