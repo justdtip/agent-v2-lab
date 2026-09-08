@@ -716,3 +716,50 @@ every pass rate in this programme is a lower bound by an unknown amount concentr
 families. **Report the contains-expected count beside every pass rate.** It is computable from
 records we already hold, for every run including the Qwen comparators, and it bounds the effect
 without re-grading anything.
+
+### 14. The token cap is not raised. Chief's ruling, with the measurement it rests on.
+
+The D-CRO reproduced the stage-one token-cap failure: `aggregate_report-0167` turn 3 emits exactly
+200 tokens, yields no parseable action, and the episode dies of truncation — under the corrected
+rendering, the fixed simulator and the raised step ceiling. A harness limit reached twice and
+recorded as a model failure twice. They asked whether `--max-tokens 200`, inherited unexamined the
+way `--max-steps 12` was, should be raised.
+
+**Measured first, across every agentic turn in all three runs:**
+
+| run | turns at the 200-token cap | of | rate |
+|---|---:|---:|---:|
+| stage one | 1 | 89 | 1.1% |
+| corrected rendering | 0 | 40 | 0.0% |
+| stage two | 1 | 88 | 1.1% |
+
+**Two turns in 217, and both are the same episode.** No other episode in any run reaches the cap.
+
+**Ruling: do not raise it.** Not now and not on this evidence. Raising a parameter mid-programme
+changes the meaning of every number already recorded, and here it would do so to rescue one episode
+in 217 turns. The cost is certain and general; the benefit is one cell. **That trade is the wrong way
+round, and it stays the wrong way round even though the episode's failure is genuinely our artefact
+and not the model's.**
+
+**What is done instead, and it costs nothing.** Truncation is recorded as a **distinct outcome**, not
+as a wrong answer: a turn that emits exactly `max_tokens` **and** yields no parseable action. It is
+computable from records we already hold, for every run, and an episode ending that way is reported
+separately from every class in amendment 12 rather than counted against the model.
+
+**Two things this ruling does not settle, stated so they are not read as settled.**
+
+*The family is untested.* The pilot runs one `aggregate_report` episode, so 1.1% is a rate over
+episodes we happened to choose, not over the family. The full benchmark holds fifteen. If that family
+reaches the cap systematically the reach is up to 8.3% of tasks and this ruling should be revisited
+**with that measurement**, not with another single episode.
+
+*The cap is calibrated against a different model.* It was set when notes averaged 51.6 characters on
+Qwen; Gemma's average 83.9. That asymmetry is real and belongs in any cross-model comparison as a
+caveat. It is also, on this corpus, almost entirely theoretical — a fixed cap that bites 1.1% of
+turns is not what separates these models. **Both facts, neither inflated.**
+
+**And the shape is worth naming, because it is the third instance today.** A limit we chose, reached
+by the model, recorded as the model's limit. The step ceiling was visible by reading the comparator's
+configuration; this one is visible only by counting tokens per turn, which the records carry and no
+report reads. **Any inherited parameter is a candidate for this, and the check is cheap: count how
+often the run touches its own ceiling.** That check now belongs beside every declared limit.
