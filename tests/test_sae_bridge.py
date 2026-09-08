@@ -200,3 +200,218 @@ def test_streaming_validates_once_and_multiplies_one_column_per_next(monkeypatch
     assert [row.feature_id for row in stream] == [1, 2]
     assert multiplied_shapes == [(2,), (2,), (2,)]
     assert validations == ["W", "JD"]
+
+
+@pytest.fixture
+def shipped_readout():
+    return np.array([[2, 4], [3, 1], [0, 3]]), np.array([[3, 3], [10, 2], [0, 0]])
+
+
+def test_identity_baseline_has_no_j_product_and_reports_predeclared_coverage(
+    matrices,
+    shipped_readout,
+    monkeypatch,
+):
+    from local_llm_lab.pipeline.sae_bridge import readout
+
+    w, _, d = matrices
+    tokens, logits = shipped_readout
+    monkeypatch.setattr(readout, "compose_decoder", lambda *a: pytest.fail("J composition reached"))
+    result = readout.identity_baseline(w, d, tokens, logits, feature_ids=[1, 0], k=2)
+    assert result["passed"] and result["status"] == "passed"
+    assert result["mean_overlap"] == result["minimum_overlap"] == 1
+    assert result["coverage"] == dict(
+        compared_features=2,
+        dictionary_features=3,
+        feature_ids=[1, 0],
+        all_features=False,
+        vocabulary=5,
+        shipped_topk_width=2,
+    )
+    assert [r["feature_id"] for r in result["features"]] == [1, 0]
+    assert result["features"][0]["direct_tokens"] == [3, 1]
+    assert result["features"][0]["direct_minus_shipped_scores"] == [0, 0]
+    assert result["convention"] == "raw tied W; no final normalization"
+
+
+def test_identity_membership_gate_retains_mismatch_evidence(matrices, shipped_readout):
+    from local_llm_lab.pipeline.sae_bridge.readout import identity_baseline
+
+    w, _, d = matrices
+    tokens, logits = shipped_readout
+    tokens[0] = [2, 0]
+    logits[0] = [3, 2]
+    result = identity_baseline(w, d, tokens, logits, feature_ids=[0, 1], k=2)
+    assert not result["passed"] and result["status"] == "ruling_required"
+    assert result["minimum_overlap"] == 0.5 and result["mean_overlap"] == 0.75
+    assert result["features"][0]["direct_tokens"] == [2, 4]
+    assert result["features"][0]["shipped_tokens"] == [2, 0]
+    assert result["features"][0]["overlap_count"] == 1
+    assert result["features"][1]["overlap_count"] == 2
+    assert "unresolved" in result["interpretation"]
+
+
+def test_identity_order_and_numeric_differences_are_descriptive(matrices, shipped_readout):
+    from local_llm_lab.pipeline.sae_bridge.readout import identity_baseline
+
+    w, _, d = matrices
+    tokens, logits = shipped_readout
+    tokens[0] = [4, 2]
+    logits = logits.astype(float)
+    logits[0] = [3.25, 2.5]
+    result = identity_baseline(w, d, tokens, logits, feature_ids=[0], k=2)
+    assert result["passed"]
+    row = result["features"][0]
+    assert row["set_overlap"] == 1 and not row["ordered_equal"]
+    assert row["direct_scores_at_shipped_tokens"] == [3, 3]
+    assert row["direct_minus_shipped_scores"] == [-0.25, 0.5]
+    assert row["max_absolute_score_difference"] == 0.5
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "shape",
+        "float_tokens",
+        "duplicate",
+        "negative",
+        "bounds",
+        "nonfinite",
+        "logit_shape",
+        "feature_duplicate",
+        "empty",
+    ],
+)
+def test_identity_baseline_refuses_invalid_inputs(matrices, shipped_readout, bad):
+    from local_llm_lab.pipeline.sae_bridge.readout import identity_baseline
+
+    w, _, d = matrices
+    tokens, logits = shipped_readout
+    feature_ids = [0, 1]
+    if bad == "shape":
+        tokens = tokens[:2]
+    elif bad == "float_tokens":
+        tokens = tokens.astype(float)
+    elif bad == "duplicate":
+        tokens[0] = [2, 2]
+    elif bad == "negative":
+        tokens[0, 0] = -1
+    elif bad == "bounds":
+        tokens[0, 0] = 5
+    elif bad == "nonfinite":
+        logits = logits.astype(float)
+        logits[0, 0] = np.nan
+    elif bad == "logit_shape":
+        logits = logits[:, :1]
+    elif bad == "feature_duplicate":
+        feature_ids = [0, 0]
+    else:
+        feature_ids = []
+    with pytest.raises(ValueError):
+        identity_baseline(w, d, tokens, logits, feature_ids=feature_ids, k=2)
+
+
+def test_readout_adds_direct_and_shipped_comparisons_and_exact_unlabelled_reason(
+    tmp_path,
+    matrices,
+    shipped_readout,
+):
+    import json
+
+    from local_llm_lab.pipeline.sae_bridge.readout import write_readout
+
+    w, j, d = matrices
+    tokens, logits = shipped_readout
+    path = tmp_path / "readout.jsonl"
+    write_readout(
+        path,
+        w,
+        compose_decoder(j, d),
+        d=d,
+        shipped_tokens=tokens,
+        shipped_logits=logits,
+        k=2,
+        metadata={"probe_layer": 7},
+        token_piece=str,
+    )
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    row = next(row for row in rows if row["type"] == "feature" and row["feature_id"] == 1)
+    assert row["feature_id"] == 1
+    assert [t["id"] for t in row["tokens"]] == [0, 2]
+    assert [t["id"] for t in row["direct_tokens"]] == [3, 1]
+    assert row["direct_vs_j"]["set_overlap"] == 0
+    assert row["shipped_vs_direct"]["set_overlap"] == 1
+    assert row["label"] == "unlabelled"
+    assert row["label_reason"] == (
+        "no Neuronpedia source maps to `resid_post_all`; the residual labels index "
+        "`resid_post/layer_17_width_16k_l0_medium`, a different training run at a sparsity "
+        "this suite never published."
+    )
+    assert rows[0]["metadata"]["probe_layer"] == 7
+    assert rows[-1]["type"] == "complete" and rows[-1]["features"] == 3
+    assert rows[-1]["status"] == "passed"
+    assert rows[-1]["direct_baseline"]["compared_features"] == 3
+    assert [row["type"] for row in rows[1:4]] == ["direct_baseline_feature"] * 3
+
+
+def test_full_direct_scan_failure_records_all_features_without_any_j_readout(
+    tmp_path,
+    matrices,
+    shipped_readout,
+    monkeypatch,
+):
+    import json
+
+    from local_llm_lab.pipeline.sae_bridge import readout
+
+    w, j, d = matrices
+    jd = compose_decoder(j, d)
+    tokens, logits = shipped_readout
+    tokens[2] = [0, 1]  # The earlier benchmark features can pass while a later feature fails.
+    iterate = readout.iter_feature_topk
+
+    def forbid_j(w_arg, decoder, *args, **kwargs):
+        if decoder is jd:
+            pytest.fail("J readout began despite full direct-baseline failure")
+        return iterate(w_arg, decoder, *args, **kwargs)
+
+    monkeypatch.setattr(readout, "iter_feature_topk", forbid_j)
+    path = tmp_path / "failed.jsonl"
+    result = readout.write_readout(
+        path,
+        w,
+        jd,
+        d=d,
+        shipped_tokens=tokens,
+        shipped_logits=logits,
+        k=2,
+        metadata={},
+        token_piece=str,
+    )
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    assert result["status"] == "ruling_required"
+    assert result["features"] == 0
+    assert result["direct_baseline"]["compared_features"] == 3
+    assert result["direct_baseline"]["minimum_overlap"] == 0.5
+    assert len([r for r in rows if r["type"] == "direct_baseline_feature"]) == 3
+    assert not any(r["type"] == "feature" for r in rows)
+    assert rows[-1]["type"] == "complete" and rows[-1]["status"] == "ruling_required"
+
+
+@pytest.mark.parametrize("missing", ["d", "shipped_tokens", "shipped_logits"])
+def test_paired_readout_requires_all_direct_inputs_before_output(
+    tmp_path,
+    matrices,
+    shipped_readout,
+    missing,
+):
+    from local_llm_lab.pipeline.sae_bridge.readout import write_readout
+
+    w, j, d = matrices
+    tokens, logits = shipped_readout
+    args = dict(d=d, shipped_tokens=tokens, shipped_logits=logits)
+    del args[missing]
+    path = tmp_path / "invalid.jsonl"
+    with pytest.raises(ValueError, match="together"):
+        write_readout(path, w, compose_decoder(j, d), k=2, metadata={}, token_piece=str, **args)
+    assert not path.exists()
