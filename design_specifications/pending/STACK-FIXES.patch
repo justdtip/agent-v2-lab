@@ -1,0 +1,560 @@
+diff --git a/src/local_llm_lab/arch.py b/src/local_llm_lab/arch.py
+index dad830c..bfd1aa0 100644
+--- a/src/local_llm_lab/arch.py
++++ b/src/local_llm_lab/arch.py
+@@ -140,7 +140,7 @@ class ArchitectureView:
+             token_ids = token_ids[None, :]
+         if token_ids.ndim != 2:
+             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
+-        entry, _ = self._observe_forward(ids=token_ids)
++        entry, _ = self._observe_forward(token_ids)
+         return entry.astype(mx.float32)
+ 
+     def native_readout(self, h: Any) -> Any:
+@@ -179,13 +179,29 @@ class ArchitectureView:
+         """
+         import mlx.core as mx
+ 
+-        # A **dummy**, not ``h``. The mask constructors read shape, dtype and the cache and never
+-        # the values, and Gemma applies its entry scale after the ``input_embeddings`` branch, so
+-        # handing the real ``h`` in would return it multiplied by about fifty. Callers pass
+-        # mid-network residuals here -- ``pre_norm_tail`` does -- and the value must not travel.
+-        stand_in = mx.zeros(tuple(h.shape), dtype=h.dtype)
+-        _, observed = self._observe_forward(embeddings=stand_in, cache=cache)
+-        by_block = {index: observed[index] for index in range(self.num_layers)}
++        # Ids of the right length, not ``h``. The mask constructors read the sequence length and
++        # the cache and never the token values, so this observes exactly the masks the model
++        # would build for a sequence of this shape -- in the model's own embedding dtype, which
++        # is what inference uses and better than the caller's. Passing ``h`` itself would be
++        # wrong twice over: callers hand mid-network residuals to this method
++        # (``lens_fitting.jacobian.pre_norm_tail`` does), and Gemma would scale whatever it was
++        # given by about fifty and return it looking untouched.
++        stand_in = mx.zeros((1, int(h.shape[1])), dtype=mx.int32)
++        _, observed = self._observe_forward(stand_in, cache=cache)
++        # The model builds its masks in its own embedding dtype, which is right -- they are its
++        # masks. But a caller running the loop in float32 applies them to a float32 residual, and
++        # this method used to hand back masks built from the caller's own `h` and therefore in its
++        # dtype. An additive mask carried at a narrower precision than the stream it is added to
++        # is a silent precision change, so the content stays the model's and the dtype follows the
++        # residual. Sentinels and `None` pass through untouched.
++        by_block = {
++            index: (
++                observed[index].astype(h.dtype)
++                if isinstance(observed[index], mx.array)
++                else observed[index]
++            )
++            for index in range(self.num_layers)
++        }
+         if hidden_spans is None:
+             if record is not None:
+                 attention_cache = self._first_cache(
+@@ -436,7 +452,7 @@ class ArchitectureView:
+                 captured[index + 1] = h
+         return captured
+ 
+-    def _observe_forward(self, *, ids: Any = None, embeddings: Any = None, cache: Any = None):
++    def _observe_forward(self, ids: Any, cache: Any = None):
+         """Ask the model what it does before and between its blocks, instead of describing it.
+ 
+         Runs the text module's own ``__call__`` with every block replaced by a proxy that records
+@@ -456,11 +472,15 @@ class ArchitectureView:
+         block's own ``is_linear`` while Gemma dispatches on the loop index. A proxy that answered
+         neither would change the very masks it exists to observe.
+ 
+-        **Never pass a mid-network residual as ``embeddings``.** Gemma applies its entry scale
+-        *after* the ``input_embeddings`` branch, unconditionally, so a residual handed in that way
+-        comes back multiplied by about fifty and looking untouched. Callers here pass either real
+-        token ids, or a **dummy** whose values are irrelevant because only shape and dtype reach
+-        the mask constructors. Nothing may pass a residual it intends to keep.
++        **Driven by token ids and never by ``input_embeddings``.** Two reasons, and the second is
++        the one that changed this design. Gemma applies its entry scale *after* the
++        ``input_embeddings`` branch, unconditionally, so a residual handed in that way comes back
++        multiplied by about fifty and looking untouched — a footgun for any caller holding a
++        mid-network residual, which ``pre_norm_tail`` does. And requiring that keyword narrows
++        what this can read: several stand-in decoders accept ids and nothing else, and a view that
++        cannot observe them is a view that cannot be tested without a checkpoint. Masks need only
++        a sequence length and a cache, so ids of the right length are enough and are what every
++        decoder takes.
+         """
+ 
+         module = self.text_module
+@@ -487,10 +507,7 @@ class ArchitectureView:
+         original = list(module.layers)
+         try:
+             module.layers = [_Watch(block, index) for index, block in enumerate(blocks)]
+-            if ids is not None:
+-                module(ids, cache)
+-            else:
+-                module(None, cache, input_embeddings=embeddings)
++            module(ids, cache)
+         finally:
+             module.layers = original
+         if not entry or len(seen) != len(blocks):
+diff --git a/tests/test_arch.py b/tests/test_arch.py
+index 50607a9..d5ca831 100644
+--- a/tests/test_arch.py
++++ b/tests/test_arch.py
+@@ -81,6 +81,20 @@ class _HybridModel:
+         self.lm_head = _Head()
+ 
+ 
++def _mask_of(view, masks: dict, kind: str):
++    """The mask the model hands the first block of ``kind``.
++
++    `view.masks` is keyed by **block index** since the architecture port, because Gemma builds two
++    masks and dispatches on the index, so two blocks of one kind can receive different masks and a
++    kind-keyed mapping cannot say which. On this hybrid every block of a kind still gets the same
++    mask, so the assertions below are unchanged in meaning; this is the one place that translates.
++    """
++    for index in range(view.num_layers):
++        if view.layer_kind(index) == kind:
++            return masks[index]
++    raise AssertionError(f"this decoder has no {kind} block")
++
++
+ def _fp32_residual(view: ArchitectureView, ids: mx.array) -> mx.array:
+     h = view.embed(ids)
+     masks = view.masks(h, None)
+@@ -89,11 +103,31 @@ def _fp32_residual(view: ArchitectureView, ids: mx.array) -> mx.array:
+     return view.final_norm(h)
+ 
+ 
+-def _assert_uncached_hybrid_traversal(calls: list[tuple[object, ...]], dtype: mx.Dtype) -> None:
+-    assert calls[:2] == [
+-        ("attention_mask", None, dtype),
+-        ("ssm_mask", None, dtype),
++def _assert_uncached_hybrid_traversal(
++    calls: list[tuple[object, ...]], dtype: mx.Dtype, *, mask_dtype: mx.Dtype | None = None
++) -> None:
++    """The block traversal, and the mask construction that now happens inside the model's forward.
++
++    Since the architecture port, `view.masks` observes the model's own forward instead of calling
++    the mask constructors itself, so the log opens with a `native` entry and the constructors see
++    the **model's** embedding dtype rather than the caller's promoted residual. That is the point:
++    they are the model's constructors and it builds its masks the way it builds them. The view
++    casts an array mask to the residual's dtype before returning it, so a float32 loop still adds
++    a float32 mask; these fakes return sentinels, so the cast is not observable here.
++    """
++    mask_calls = [entry for entry in calls if entry[0] in ("attention_mask", "ssm_mask")]
++    expected_pair = [
++        ("attention_mask", None, mask_dtype or dtype),
++        ("ssm_mask", None, mask_dtype or dtype),
+     ]
++    # **Two pairs, not one, and that is a real cost of the port.** `embed` and `masks` are each
++    # one observing forward, and a forward builds masks whether or not the caller wanted them, so
++    # `embed`'s pair is built and discarded. Correct but not free: on a long sequence the
++    # discarded attention mask is an N-squared allocation. The Chief's ruling was to pay the
++    # forward and never cache it, and to hoist at the call site if measurement ever says
++    # otherwise; this assertion is where that measurement would first show up as a change.
++    assert mask_calls == expected_pair * (len(mask_calls) // 2)
++    assert len(mask_calls) in (2, 4), "one pair per observing forward"
+     assert [entry[1:5] for entry in calls if entry[0] == "block"] == [
+         (0, True, "ssm-sentinel", None),
+         (1, True, "ssm-sentinel", None),
+@@ -116,7 +150,7 @@ def test_hybrid_native_diagnostic_preserves_bfloat16_and_matches_reference() ->
+     ids = mx.arange(64, dtype=mx.int32)[None, :]
+ 
+     fp32_residual = _fp32_residual(view, ids)
+-    _assert_uncached_hybrid_traversal(model.calls, mx.float32)
++    _assert_uncached_hybrid_traversal(model.calls, mx.float32, mask_dtype=mx.bfloat16)
+     model.calls.clear()
+ 
+     native_reference = model.model(ids)
+@@ -445,10 +479,13 @@ def test_hidden_spans_match_the_library_route_on_the_full_sequence_path(cpu_stre
+     forced = view.masks(h, sentinel_cache, hidden_spans=())
+ 
+     assert offset == prefix.shape[1]
+-    assert default["attention"] == "causal"
+-    assert isinstance(forced["attention"], mx.array)
+-    assert forced["attention"].dtype == mx.bool_
+-    assert forced["attention"].shape == (scored.shape[1], offset + scored.shape[1])
++    assert _mask_of(view, default, "attention") == "causal"
++    assert isinstance(_mask_of(view, forced, "attention"), mx.array)
++    assert _mask_of(view, forced, "attention").dtype == mx.bool_
++    assert _mask_of(view, forced, "attention").shape == (
++        scored.shape[1],
++        offset + scored.shape[1],
++    )
+ 
+     sentinel_logits = _run_cached(view, scored, sentinel_cache)
+     array_logits = _run_cached(view, scored, array_cache, hidden_spans=())
+@@ -474,9 +511,9 @@ def test_hidden_spans_match_the_library_route_at_a_cached_single_step(cpu_stream
+     offset = sentinel_cache[3].offset
+     h = view.embed(step)
+     assert sentinel_cache[3].make_mask(1, return_array=True, window_size=None) is None
+-    assert view.masks(h, sentinel_cache)["attention"] is None
++    assert _mask_of(view, view.masks(h, sentinel_cache), "attention") is None
+ 
+-    forced = view.masks(h, sentinel_cache, hidden_spans=())["attention"]
++    forced = _mask_of(view, view.masks(h, sentinel_cache, hidden_spans=()), "attention")
+     assert isinstance(forced, mx.array)
+     assert forced.shape == (1, offset + 1)
+     assert bool(mx.all(forced).item())
+@@ -497,7 +534,9 @@ def test_hidden_spans_hide_exactly_the_named_columns_and_keep_causality(cpu_stre
+     for queries, spans in (((2, 5, 6), ((2, 5), (7, 8))), ((4,), ((2, 5),))):
+         ids = _tiny_ids(queries)
+         length = ids.shape[1]
+-        mask = view.masks(view.embed(ids), cache, hidden_spans=spans)["attention"]
++        mask = _mask_of(
++            view, view.masks(view.embed(ids), cache, hidden_spans=spans), "attention"
++        )
+         rows = mx.arange(offset, offset + length)[:, None]
+         columns = mx.arange(offset + length)[None]
+         hidden = mx.zeros(columns.shape, dtype=mx.bool_)
+@@ -534,8 +573,10 @@ def test_hidden_spans_leave_the_recurrent_mask_untouched(cpu_stream) -> None:
+     for entry in cache[:3]:
+         entry.prepare(lengths=[3])
+ 
+-    default = view.masks(h, cache)["linear_attention"]
+-    with_spans = view.masks(h, cache, hidden_spans=((1, 3),))["linear_attention"]
++    default = _mask_of(view, view.masks(h, cache), "linear_attention")
++    with_spans = _mask_of(
++        view, view.masks(h, cache, hidden_spans=((1, 3),)), "linear_attention"
++    )
+     assert isinstance(default, mx.array)
+     assert bool(mx.array_equal(default, with_spans).item())
+ 
+diff --git a/tests/test_arch_observation.py b/tests/test_arch_observation.py
+index b041016..0ee5dc0 100644
+--- a/tests/test_arch_observation.py
++++ b/tests/test_arch_observation.py
+@@ -82,8 +82,8 @@ def _view(module) -> SimpleNamespace:
+     return SimpleNamespace(text_module=module, num_layers=len(module.layers))
+ 
+ 
+-def _observe(module, **kwargs):
+-    return ArchitectureView._observe_forward(_view(module), **kwargs)
++def _observe(module, ids="ids", **kwargs):
++    return ArchitectureView._observe_forward(_view(module), ids, **kwargs)
+ 
+ 
+ def test_the_entry_transform_is_inherited_rather_than_reconstructed() -> None:
+@@ -94,7 +94,7 @@ def test_the_entry_transform_is_inherited_rather_than_reconstructed() -> None:
+     added or normalised instead would have been wrong differently with nothing to say so.
+     """
+     gemma = _GemmaShaped()
+-    entry, _ = _observe(gemma, ids="ids")
++    entry, _ = _observe(gemma)
+ 
+     assert entry == f"embed(ids)*{GEMMA_ENTRY_SCALE}", "what block 0 got, not what embed returned"
+     assert entry != "embed(ids)"
+@@ -102,7 +102,7 @@ def test_the_entry_transform_is_inherited_rather_than_reconstructed() -> None:
+     # And on a family whose entry is the identity, the same call returns the embedding unchanged,
+     # so the observation is not a Gemma special case.
+     qwen = _QwenShaped()
+-    assert _observe(qwen, ids="ids")[0] == "embed(ids)"
++    assert _observe(qwen)[0] == "embed(ids)"
+ 
+ 
+ def test_masks_come_back_per_block_because_two_blocks_of_one_kind_can_differ() -> None:
+@@ -112,7 +112,7 @@ def test_masks_come_back_per_block_because_two_blocks_of_one_kind_can_differ() -
+     twelve would have taken one entry and eleven of them would have been wrong.
+     """
+     gemma = _GemmaShaped(blocks=12)
+-    _, masks = _observe(gemma, ids="ids")
++    _, masks = _observe(gemma)
+ 
+     assert set(masks) == set(range(12))
+     globals_seen = {index for index, mask in masks.items() if mask.startswith("global")}
+@@ -129,7 +129,7 @@ def test_the_models_own_cache_selection_is_inherited_not_reimplemented() -> None
+     """
+     gemma = _GemmaShaped(blocks=12)
+     cache = [f"cache-{index}" for index in range(12)]
+-    _, masks = _observe(gemma, ids="ids", cache=cache)
++    _, masks = _observe(gemma, cache=cache)
+ 
+     assert masks[5] == "global(cache=cache-5)"
+     assert masks[0] == "sliding(cache=cache-0)"
+@@ -142,7 +142,7 @@ def test_the_proxy_forwards_attribute_access_or_it_changes_what_it_observes() ->
+     a property of the proxy rather than of the model.
+     """
+     qwen = _QwenShaped(blocks=8)
+-    _, masks = _observe(qwen, ids="ids")
++    _, masks = _observe(qwen)
+ 
+     attention = {index for index, mask in masks.items() if mask == "attention"}
+     assert attention == {3, 7}, "block i is attention when (i + 1) % 4 == 0"
+@@ -159,7 +159,7 @@ def test_the_module_is_left_exactly_as_it_was_found() -> None:
+     module = _Angry()
+     before = list(module.layers)
+     with pytest.raises(RuntimeError):
+-        _observe(module, ids="ids")
++        _observe(module)
+     assert module.layers == before and all(isinstance(b, _Block) for b in module.layers)
+ 
+ 
+@@ -174,4 +174,4 @@ def test_a_decoder_that_does_not_iterate_its_own_layers_is_refused() -> None:
+             return h
+ 
+     with pytest.raises(ValueError, match="does not iterate its own layer list"):
+-        _observe(_Partial(blocks=12), ids="ids")
++        _observe(_Partial(blocks=12))
+diff --git a/tests/test_jlens.py b/tests/test_jlens.py
+index b66cba0..dcc7916 100644
+--- a/tests/test_jlens.py
++++ b/tests/test_jlens.py
+@@ -237,7 +237,10 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
+         hf_id="fake/hf",
+         policies={},
+         probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
+-        chat=SimpleNamespace(template_kwargs={}),
++        chat=SimpleNamespace(template_kwargs={}, generation_prefix="<|im_start|>assistant\n"),
++        # A real `ModelSpec` always answers `.probes`; a fake that does not is a fake of a spec
++        # that cannot exist, and the sweep reads the recorded tie-breaks from it (issue 86).
++        probes=SimpleNamespace(partner_tie_breaks={}),
+     )
+     model = object()
+ 
+@@ -364,7 +367,12 @@ def test_jlens_rejects_depth_overflow_before_probe_execution(monkeypatch) -> Non
+     from local_llm_lab.pipeline import evaluate, tasks
+     from local_llm_lab.probes import guard, policies
+ 
+-    selected = SimpleNamespace(hf_id="fake/hf", policies={}, probe_layer_fractions=(1.0,))
++    selected = SimpleNamespace(
++        hf_id="fake/hf",
++        policies={},
++        probe_layer_fractions=(1.0,),
++        probes=SimpleNamespace(partner_tie_breaks={}),
++    )
+     model = object()
+     task = SimpleNamespace(
+         steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
+@@ -876,8 +884,11 @@ def test_the_4b_default_family_is_exp_003s_ten_layer_list() -> None:
+     [
+         (5, 4, "linear_attention", "attention"),
+         (7, 8, "linear_attention", "attention"),
++        # Layer 4 is attention-written and in band; before the generalisation it took no
++        # partner at all, which is the clause this test exists for. Layer 8 is deliberately
++        # absent: it is the final layer, which `in_band_layers` reports rather than decides on,
++        # so it takes no partner for an honest reason and would test the band, not the rule.
+         (4, 3, "attention", "linear_attention"),
+-        (8, 7, "attention", "linear_attention"),
+     ],
+ )
+ def test_partner_is_the_nearest_layer_of_the_opposite_kind_in_either_direction(
+diff --git a/tests/test_lens_regression.py b/tests/test_lens_regression.py
+index 934583d..e056091 100644
+--- a/tests/test_lens_regression.py
++++ b/tests/test_lens_regression.py
+@@ -77,6 +77,9 @@ def test_streams_once_per_sequence_with_disjoint_sums():
+     sums, counts = reg.accumulate(view, rows)
+     assert view.calls == [([1, 2], (1, 2, 3)), ([9], (1, 2, 3))]
+     assert counts == {
++        # Which forward produced the residuals travels with the totals, so a fitted lens says
++        # it rather than depending on a caller to stamp it (the Gemma pivot's native source).
++        "residual_source": "hand_run",
+         "fit": {"sequences": 1, "positions": 2},
+         "held": {"sequences": 1, "positions": 1},
+     }
+@@ -91,7 +94,7 @@ def test_native_nonsymmetric_linear_recovery_and_all_layer_archive(tmp_path):
+ 
+     from local_llm_lab.arch import ArchitectureView
+     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
+-    from local_llm_lab.pipeline.live_lens.instruments import LensMaps
++    from local_llm_lab.pipeline.live_lens.instruments import LensIdentity, LensMaps
+ 
+     reg = api()
+     native = ArchitectureView.from_model(tiny_model())
+@@ -123,20 +126,29 @@ def test_native_nonsymmetric_linear_recovery_and_all_layer_archive(tmp_path):
+     assert np.linalg.norm(recovered - known) / np.linalg.norm(known) < 0.08
+     assert np.linalg.norm(recovered.T - known) > np.linalg.norm(recovered - known) * 2
+     out = tmp_path / "tiny-agentic-regression.npz"
++    identity = LensIdentity("toy", "example/tiny", native.num_layers)
+     metadata = write_lens(
+         out,
+         result.maps,
+         hidden_size=d,
+         num_layers=native.num_layers,
+         metadata={"kind": "regression", "domain": "agentic"},
++        identity=identity,
+     )
+     loaded = LensMaps.load(
+-        out, expected_sha256=metadata["npz_sha256"], hidden_size=d, num_layers=native.num_layers
++        out,
++        expected_sha256=metadata["npz_sha256"],
++        hidden_size=d,
++        num_layers=native.num_layers,
++        identity=identity,
+     )
+     assert set(loaded.maps) == set(range(1, native.num_layers))
+     with np.load(out, allow_pickle=False) as archive:
+-        assert set(archive.files) == {f"J{i}" for i in range(native.num_layers - 1)}
+-        assert all(archive[k].dtype == np.float32 for k in archive.files)
++        # `identity` beside the maps: a lens says which model it was fitted on, and it goes
++        # inside the archive so the digest every reader pins covers it (issue 99).
++        maps = {f"J{i}" for i in range(native.num_layers - 1)}
++        assert set(archive.files) == maps | {"identity"}
++        assert all(archive[k].dtype == np.float32 for k in maps)
+     probe = rng.normal(size=(4, d)).astype(np.float32)
+     np.testing.assert_allclose(loaded.apply(probe, 1), probe @ recovered, atol=2e-6)
+     assert all("held_out_uncentered_r2" in row for row in result.per_layer.values())
+diff --git a/tests/test_live_lens_native.py b/tests/test_live_lens_native.py
+index e95f4c7..9ea4d6c 100644
+--- a/tests/test_live_lens_native.py
++++ b/tests/test_live_lens_native.py
+@@ -263,25 +263,40 @@ def test_residual_capture_runs_on_a_rotating_cache_and_head_capture_refuses_one(
+     false while leaving the arithmetic well-formed -- plausible per-head numbers against the
+     wrong positions, which is the failure mode worth refusing loudly.
+ 
+-    A small `max_size` here so the cache genuinely rotates within the test's own sequence rather
+-    than merely being of the rotating type.
++    **Only the attention entries are replaced.** This backbone is a hybrid, so its recurrent
++    blocks take an SSM cache and handing them a KV cache of any kind is a different error than
++    the one under test; the guard reads the attention entries and nothing else. A small
++    `max_size` so the cache genuinely rotates within the test rather than merely being of the
++    rotating type.
+     """
+     from mlx_lm.models.cache import RotatingKVCache
+ 
+     model = tiny_model()
+     view = ArchitectureView.from_model(model)
+     ids = mx.array([[1, 2, 3, 4]])
+-    baseline = np.array(model(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers]))
++
++    def rotating_cache():
++        entries = model.make_cache()
++        for index in range(view.num_layers):
++            if view.layer_kind(index) == "attention":
++                entries[index] = RotatingKVCache(max_size=2)
++        return entries
++
++    baseline = np.array(model(ids, cache=rotating_cache()))
+ 
+     sink = Sink()
+     with NativeCapture(view, sink, layers=(3, 4)) as wrapped:
+-        rotating = [RotatingKVCache(max_size=2) for _ in model.layers]
+-        np.testing.assert_array_equal(np.array(wrapped(ids, cache=rotating)), baseline)
++        np.testing.assert_array_equal(np.array(wrapped(ids, cache=rotating_cache())), baseline)
+     assert {layer for layer, _, _ in sink.residuals} == {3, 4}, "residuals still captured"
+     assert [entry[0] for entry in sink.logits] == [0], "and emitted against the monotone offset"
+ 
++    attention_block = next(
++        index for index in range(view.num_layers) if view.layer_kind(index) == "attention"
++    )
+     with (
+-        NativeCapture(view, Sink(), layers=(3, 4), attention_blocks=(3,)) as wrapped,
++        NativeCapture(
++            view, Sink(), layers=(3, 4), attention_blocks=(attention_block,)
++        ) as wrapped,
+         pytest.raises(ValueError, match="column j to absolute source position j"),
+     ):
+-        wrapped(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers])
++        wrapped(ids, cache=rotating_cache())
+diff --git a/tests/test_patch.py b/tests/test_patch.py
+index 3eb1d77..4541c2b 100644
+--- a/tests/test_patch.py
++++ b/tests/test_patch.py
+@@ -2043,7 +2043,13 @@ def test_render_markdown_summarises_counterfactual_note_sources() -> None:
+ # The fake below reproduces both: a newline merges into the following character, so
+ # ``encode("\n" + x) != encode("\n") + encode(x)``.
+ 
+-_FAKE_SPEC = SimpleNamespace(chat=SimpleNamespace(template_kwargs={}, thinking="on"))
++# `generation_prefix` is declared per model now, and `protocol.generation_suffix` reads it, so a
++# fake spec that omits it is a fake of a spec that cannot exist.
++_FAKE_SPEC = SimpleNamespace(
++    chat=SimpleNamespace(
++        template_kwargs={}, thinking="on", generation_prefix="<|im_start|>assistant\n"
++    )
++)
+ 
+ 
+ class _MergingTokenizer:
+diff --git a/tests/test_pipeline.py b/tests/test_pipeline.py
+index 722b54c..89f6c14 100644
+--- a/tests/test_pipeline.py
++++ b/tests/test_pipeline.py
+@@ -1082,6 +1082,23 @@ class _JLensInner(nn.Module):
+         self.layers = [_JLensBlock(dim) for _ in range(n_layers)]
+         self.norm = nn.RMSNorm(dim)
+ 
++    def __call__(self, inputs, cache=None):
++        """A forward, because the view now reads one rather than reproducing it.
++
++        This fake had the three attributes the view looks for and no way to run, which was
++        enough while `ArchitectureView` re-implemented the decoder loop itself. Since the
++        architecture port it observes the model's own forward, so a stand-in for a model needs
++        one. Dense: one mask for every block, which is what this shape means.
++        """
++        from mlx_lm.models.base import create_attention_mask
++
++        h = self.embed_tokens(inputs)
++        entries = [None] * len(self.layers) if cache is None else list(cache)
++        mask = create_attention_mask(h, entries[0])
++        for block, entry in zip(self.layers, entries, strict=True):
++            h = block(h, mask, entry)
++        return self.norm(h)
++
+ 
+ class _JLensModel(nn.Module):
+     """A fake tiny model with the ``model.{embed_tokens,layers,norm}`` shape jlens expects."""
+diff --git a/tests/test_probes.py b/tests/test_probes.py
+index a34dd5f..b1c9317 100644
+--- a/tests/test_probes.py
++++ b/tests/test_probes.py
+@@ -230,6 +230,33 @@ class _ArchitectureText(nn.Module):
+         self.mask_calls.append(("linear_attention", cache))
+         return _SSM_MASK
+ 
++    def __call__(self, inputs, cache=None):
++        """A forward, mirroring ``Qwen3_5TextModel.__call__``.
++
++        This fake had none: it exposed the two mask constructors and nothing else, because the
++        view used to call them itself. Since the architecture port the view **observes** the
++        model's forward instead of reproducing it, so a stand-in for a model has to have one.
++        That is the right ripple rather than a cost: a fake with no forward was a fake of a mask
++        factory, and the view's job is to read a model.
++
++        The dispatch is the library's, on the block's own ``is_linear``, and each mask comes from
++        the constructor above so ``mask_calls`` still records what was asked for and with which
++        cache entry.
++        """
++        h = self.embed_tokens(inputs)
++        entries = [None] * len(self.layers) if cache is None else list(cache)
++        first_attention = next(
++            (index for index, block in enumerate(self.layers) if not block.is_linear), 0
++        )
++        first_linear = next(
++            (index for index, block in enumerate(self.layers) if block.is_linear), 0
++        )
++        attention_mask = self.create_attention_mask(h, entries[first_attention])
++        ssm_mask = self.create_ssm_mask(h, entries[first_linear])
++        for block, entry in zip(self.layers, entries, strict=True):
++            h = block(h, ssm_mask if block.is_linear else attention_mask, entry)
++        return self.norm(h)
++
+ 
+ class _ArchitectureFakeBase(nn.Module):
+     text: _ArchitectureText
+@@ -464,7 +491,10 @@ def test_hybrid_architecture_view_uses_per_kind_masks_and_caches(variant) -> Non
+         "linear_attention",
+         "attention",
+     ]
+-    assert masks == {"attention": _ATTENTION_MASK, "linear_attention": _SSM_MASK}
++    # Keyed by block index since the architecture port: Gemma builds two masks and dispatches on
++    # the index, so two blocks of one kind can differ and a kind-keyed mapping cannot say which.
++    # On this hybrid the kinds still partition cleanly, which is what the mapping shows.
++    assert masks == {0: _SSM_MASK, 1: _SSM_MASK, 2: _SSM_MASK, 3: _ATTENTION_MASK}
+     assert model.text.mask_calls[-2:] == [
+         ("attention", caches[3]),
+         ("linear_attention", caches[0]),
+@@ -472,8 +502,8 @@ def test_hybrid_architecture_view_uses_per_kind_masks_and_caches(variant) -> Non
+     for index, cache_i in enumerate(caches):
+         h = view.run_block(index, h, masks, cache_i)
+ 
+-    with pytest.raises(ValueError, match="wrong mask"):
+-        view.run_block(0, view.embed(ids), {"linear_attention": None}, caches[0])
++    with pytest.raises(ValueError, match="missing mask for block"):
++        view.run_block(0, view.embed(ids), {1: None}, caches[0])
+ 
+ 
+ @pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
+@@ -1734,6 +1764,9 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
+         # Added 2026-09-08 (issue 88): the declared residual band, so a run can say which pairs
+         # its adapter depth covers without a second copy of the pairs beside the code.
+         "probe_live_lens_pairs",
++        # Added 2026-09-08 (issue 86): the recorded answers to equal-distance partner ties. A
++        # ruling, not a rule, so it is declared rather than derived and travels with the run.
++        "probe_partner_tie_breaks",
+         "probe_capture_dtype",
+         "memory_budget_gib",
+         "policies",
