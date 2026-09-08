@@ -80,3 +80,26 @@ not the precisions differ**, so a reader never reads agreement out of a missing 
 nothing: `models/` is git-ignored and exists once, in the primary. That is the box window's own bug
 before `box_state_root`, from the same cause, and it is fixed with the same reader. Third instance
 today of behaviour that depended on where a process was standing.
+
+## Callers outside this tree that the signature change reaches
+
+`LensIdentity` went from three fields to `(base, num_layers, training=None)`. One caller is known
+to still pass the old shape, and it is not in this checkout:
+
+`research/records/GEMMA3-REGRESSION-2026-09-08/compare_maps.py`, in the collaborator's
+`gemma-lens-fitting` worktree, constructs it twice with three positional arguments — a registry
+entry name, an artefact path, and the depth. Under the new signature that binds the path to
+`num_layers` and the depth to `training`, which fails at `int(self.num_layers)` rather than
+silently, but fails.
+
+Both calls become one identity, because both artefacts are the same model at two precisions:
+
+```python
+LensIdentity("google/gemma-3-4b-it", depth)
+```
+
+That is the point of the change rather than a consequence of it. The two entries differ only in
+stored precision, which is a property of the file; a lens is a map of the model. And their fitted
+lens now loads unchanged under R60 — the stamp keeps the absolute path it was written with, the
+loader resolves it to the base through the registry, and the digest published in four committed
+records stays valid with no archive rewrite.

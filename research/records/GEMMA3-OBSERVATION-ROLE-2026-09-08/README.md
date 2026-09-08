@@ -179,10 +179,21 @@ instrument.
 That run is kept, superseded, at `pilot/superseded/marking-only-12-steps/`, because it is the only
 run that isolates the marking from the ceiling, and the run that replaces it changes both.
 
-**Its timings are worthless and the directory says so.** The laptop suspended mid-run. The episode
-took 940 s against the control's 381 s for slightly less work, and a second episode was writing at
-about 360 bytes per second against the control's 33,000 when it was stopped. Nothing about the
-cost of this rendering should be read from those figures.
+**Its timings are worthless and the directory says so.** Two independent causes overlapped the
+run and cannot be separated after the fact: the Director reported that the laptop suspended, and
+the CRO reported a five-agent audit of theirs on the same machine, loading no model and taking no
+lock, with the load average peaking at 43. The episode took 940 s against the control's 381 s for
+slightly less work, and a second episode was writing at about 360 bytes per second against the
+control's 33,000 when it was stopped. **No record should carry 2.5x as a cost of this rendering.**
+
+The outcomes survive both, and the reason is worth stating rather than assumed: decoding is
+greedy, so the trajectory is deterministic given the same prompts. Under any load the model emits
+the same tokens and fails the same way. Contention moves seconds and cannot move a verdict.
+
+**This is a hole in the box discipline, not a footnote.** The window and the lock prevent a second
+model load. Neither covers a job that saturates the machine without loading anything, and such a
+job moved another seat's measurements by a factor of two and a half without touching the lock.
+Heavy non-model work needs announcing on the same mechanism.
 
 ## What landed
 
