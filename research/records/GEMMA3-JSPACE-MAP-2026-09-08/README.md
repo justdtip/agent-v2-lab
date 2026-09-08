@@ -336,38 +336,45 @@ decides, only that it is where a readout trained toward the output stops disting
 spans. And horizon 1 under greedy decoding saturates at the final layer by construction, which is
 why the null moved to horizons 4 and 8.
 
-### Layer 24, measured as a distribution rather than as two statistics
+### Layer 24, measured as a distribution, under a stated deduplication rule
 
-The Chief and I computed different summaries of the same deduplicated rows and disagreed at layer
-24: arguments are more often **exactly right** (46.6% against 38.9%) and less often **within ten**
-(65.9% against 75.8%). They proposed bimodality as the reconciliation. It is measurable directly,
-so here it is, deduplicated, as the share of decisions in each rank band:
+**The deduplication rule, because two seats computed this from the same rows and differed by seven
+points.** Within an episode, each turn's emitted call token sequence is collected, and a turn is
+kept only if that exact sequence has not appeared in an earlier turn. **Deduplication is per turn,
+keyed on the whole call.** A turn whose call differs by one character is kept in full. 65 turns
+kept, 23 dropped across the twelve agentic episodes.
 
-**Layer 24**
+My first version keyed on the *decision* — token plus its predecessor, collapsed across turns — and
+it was wrong for this comparison in a way that flattered it. Skeleton tokens repeat identically
+across turns while arguments vary, so a token-level key deduplicates skeletons far harder than
+arguments and discards independent observations from different turns. The Chief diagnosed it from
+the asymmetry alone: the argument rows agreed and only the skeleton's rank-1 share and far tail
+moved. Recomputed under the per-turn rule, my numbers reproduce theirs exactly.
+
+**Layer 24** (n = 1,241 argument, 1,312 skeleton)
 
 | span | rank 1 | 2–10 | 11–100 | 101–1k | 1k–10k | >10k |
 |---|---:|---:|---:|---:|---:|---:|
-| call argument | **46.6%** | 19.3% | 14.9% | 8.3% | 6.0% | **5.0%** |
-| call skeleton | 38.9% | **36.9%** | 15.9% | 1.5% | 3.3% | 3.5% |
-| note | 35.0% | 23.6% | 19.4% | 11.1% | 6.6% | 4.3% |
+| call argument | **46.2%** | 19.7% | 16.0% | 6.9% | 6.3% | 4.9% |
+| call skeleton | 31.8% | **36.9%** | 13.7% | 8.5% | 3.0% | 6.1% |
 
 **Layer 25**
 
 | span | rank 1 | 2–10 | 11–100 | 101–1k | 1k–10k | >10k |
 |---|---:|---:|---:|---:|---:|---:|
-| call argument | **57.6%** | 21.1% | 10.8% | 7.1% | 2.5% | 0.9% |
-| call skeleton | 40.9% | **43.7%** | 8.3% | 2.8% | 4.3% | 0.0% |
+| call argument | **59.7%** | 21.8% | 9.3% | 5.0% | 2.4% | 1.9% |
+| call skeleton | 46.5% | **34.9%** | 7.9% | 7.3% | 2.9% | 0.5% |
 
-**Confirmed, and the shape says more than either statistic.** At layer 24 arguments are beyond rank
-1,000 in 11.0% of decisions against the skeleton's 6.8%, while also leading on rank 1. The skeleton
-is not merely closer on average — it is almost never far away, and it is very often *nearly* right
-without being right: 36.9% of skeleton decisions sit in ranks 2 to 10 at layer 24, rising to 43.7%
-at 25.
+**What holds, and it is large under either rule.** Arguments lead on being exactly right, 46.2%
+against 31.8%; skeletons lead on being *nearly* right, 36.9% in ranks 2 to 10 against 19.7%. That
+gap is the finding: **the argument is more often decided, the skeleton more often almost-decided.**
 
-**The argument is either decided or nowhere. The skeleton is always close and often just short.**
-That is a difference in the shape of the decision and not only in its difficulty, and it is what the
-two disagreeing statistics were each seeing half of.
+**What weakens under the correct rule, and I had overstated it.** I wrote that the argument is
+"decided or nowhere". The far tail is 11.2% beyond rank 1,000 against the skeleton's 9.1% — the
+same direction, but a two-point difference rather than the four I reported from the over-deduplicated
+version. The bimodality is real at the top of the distribution and slight at the bottom.
 
-It is also the same median-against-top-one disagreement that left this afternoon's boundary check
-unresolved, reached independently by two seats on different rows. Twice is a reason to compute the
-distribution by default rather than a coincidence.
+The primary comparison's log2 median ratios under this rule are **+3.80 at layer 21** and **+3.22 at
+layer 23**, against raw values of +3.03 and +2.77. The result that deduplication *strengthens* the
+effect survives the change of rule; only its size moves.
+
