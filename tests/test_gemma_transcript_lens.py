@@ -21,6 +21,13 @@ def driver():
 @pytest.fixture
 def registered(tmp_path, monkeypatch):
     mod = driver()
+    from local_llm_lab.pipeline.lens_fitting import memory_policy
+
+    monkeypatch.setattr(
+        memory_policy,
+        "device_working_set",
+        lambda *, require_window: (require_window(), 17.76 * 2**30)[1],
+    )
     specs = {}
     snapshots = {}
     for name in mod.FIT_MODELS:
@@ -397,7 +404,7 @@ def test_capture_rechecks_identity_and_window_before_complete_footer(
         )
     events = [json.loads(line)["event"] for line in record.read_text().splitlines()]
     assert events[-1] == {"kind": "end_record", "status": "aborted"}
-    assert calls[:4] == ["window", "snapshot", "window", "run"]
+    assert calls[:5] == ["window", "snapshot", "window", "window", "run"]
 
 
 def test_environment_and_second_amendment_gate_cannot_be_omitted(committed_rendering_gate):
@@ -429,3 +436,20 @@ def test_driver_requires_reviewed_position_support(registered, key, bad):
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match="position support"):
         mod.read_registration(path)
+
+
+def test_capture_over_cap_never_loads_evaluation(registered, monkeypatch, tmp_path):
+    mod, path, data = registered
+    data["capture_projection"]["peak_gib"] = 21.0
+    path.write_text(json.dumps(data))
+    monkeypatch.setattr(mod, "require_owned_window", lambda: tmp_path)
+    monkeypatch.setattr(mod, "verify_snapshot", lambda *_: None)
+    monkeypatch.setattr(mod, "run_evaluation", lambda **_: pytest.fail("evaluation load reached"))
+    with pytest.raises(ValueError, match="0.6"):
+        mod.capture(
+            path,
+            split="train",
+            record=tmp_path / "capture.jsonl",
+            output=tmp_path / "evaluation.json",
+            execute=True,
+        )

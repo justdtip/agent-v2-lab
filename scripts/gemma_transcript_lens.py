@@ -313,6 +313,15 @@ def capture(registration_path, *, split, record, output, execute=False):
     require_owned_window()
     verify_snapshot(registration, "gemma3-4b")  # permitted hashing begins only inside owned window
     require_owned_window()  # hashing cannot silently consume the launch window
+    from local_llm_lab.pipeline.lens_fitting.memory_policy import (
+        check_projection,
+        device_working_set,
+    )
+
+    check_projection(
+        registration["capture_projection"]["peak_gib"] * 2**30,
+        device_working_set(require_window=require_owned_window),
+    )
     spec = replace(model_spec("gemma3-4b"), cache_strategy="none")
     provenance = {
         "registration": binding,

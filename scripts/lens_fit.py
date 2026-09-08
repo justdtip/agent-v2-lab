@@ -42,7 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--record-dir", type=Path, help="New directory for append-only Jacobian stage records"
     )
+    parser.add_argument("--statistics-storage", choices=("memory", "split_spill"), default="memory")
+    parser.add_argument("--scratch-parent", type=Path)
+    parser.add_argument("--memory-preflight", type=Path)
     args = parser.parse_args(argv)
+    if args.kind == "regression" and args.memory_preflight is None:
+        parser.error("regression requires matching successful --memory-preflight evidence")
     if args.kind == "jacobian":
         if args.jacobian_plan is None:
             parser.error("Jacobian stages require --jacobian-plan")
@@ -88,11 +93,33 @@ def main(argv: list[str] | None = None) -> int:
             write_record(args.record_dir / "run-plan.json", plan)
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
+    qualification = None
+    if args.kind == "regression":
+        from local_llm_lab.pipeline.lens_fitting.memory_policy import (
+            binding,
+            device_working_set,
+            guard_runtime_event,
+            require_owned_window,
+            validate_evidence,
+        )
+
+        qualification = validate_evidence(
+            args.memory_preflight,
+            binding(prepared, args.residual_source, args.statistics_storage),
+            device_working_set(),
+        )
+        require_owned_window()
     loaded = load_runtime(prepared)
     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
     from local_llm_lab.pipeline.lens_fitting.regression import ALPHA_GRID, fit_regression
     from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
 
+    if qualification is not None:
+        from local_llm_lab.pipeline.lens_fitting.memory_policy import check_projection
+
+        check_projection(
+            resource_snapshot()["peak_memory_gib"] * 2**30, qualification["working_set_bytes"]
+        )
     loaded.model.eval()
     allocator_cache = configure_allocator_cache()
 
@@ -115,15 +142,29 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     def progress(event):
-        print(json.dumps(enrich(event)), flush=True)
+        report = enrich(event)
+        if qualification is not None:
+            guard_runtime_event(
+                {"phase": "progress", "peak_memory_bytes": report["peak_memory_gib"] * 2**30},
+                qualification,
+            )
+        print(json.dumps(report), flush=True)
+
+    def memory_progress(event):
+        guard_runtime_event(event, qualification)
+        print(json.dumps({**event, "event": "memory_phase"}), flush=True)
 
     validation = None
     if args.kind == "regression":
+        require_owned_window()
         result = fit_regression(
             loaded.view,
             prepared.rows,
             progress=progress,
             residual_source=args.residual_source,
+            statistics_storage=args.statistics_storage,
+            scratch_parent=args.scratch_parent,
+            memory_progress=memory_progress,
         )
     else:
         write_record(
@@ -188,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         "model_run_lock": str(loaded.lock_path),
         "cache_strategy": loaded.resolved.cache_strategy,
         "allocator_cache": allocator_cache,
+        "statistics_storage": args.statistics_storage if args.kind == "regression" else None,
+        "memory_qualification": qualification,
     }
     if args.kind == "jacobian":
         for key in ("lambda_grid", "penalty_rule", "r2_definition"):
@@ -204,6 +247,13 @@ def main(argv: list[str] | None = None) -> int:
                 "record_dir": str(args.record_dir),
                 "orientation": "output-by-input; prediction directions @ J.T",
             }
+        )
+    if qualification is not None:
+        # Peak is a conservative upper bound for the current MLX active floor here.
+        peak = resource_snapshot()["peak_memory_gib"] * 2**30
+        guard_runtime_event(
+            {"phase": "artifact_start", "peak_memory_bytes": peak, "active_memory_bytes": peak},
+            qualification,
         )
     written = write_lens(
         prepared.output,

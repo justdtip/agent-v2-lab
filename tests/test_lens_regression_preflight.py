@@ -45,8 +45,11 @@ def test_ladder_uses_actual_maximum_and_never_extends_the_corpus():
     assert a.ladder(900) == [256, 512, 900]
     assert a.ladder(1024) == [256, 512, 1024]
     assert a.ladder(2044) == [256, 512, 1024, 2044]
+    assert a.ladder(100) == [25, 50, 100]
+    assert a.ladder(128) == [32, 64, 128]
+    assert a.ladder(2) == [1, 2]
     with pytest.raises(ValueError, match="short"):
-        a.ladder(100)
+        a.ladder(1)
 
 
 def test_refused_projection_never_calls_larger_measurement():
@@ -206,16 +209,19 @@ def test_falsified_initial_bound_stops_before_second_calibration():
 
 
 @pytest.mark.parametrize("residual_source", ["hand_run", "native"])
+@pytest.mark.parametrize("storage", ["memory", "split_spill"])
 def test_solve_resets_peak_and_reports_successful_measurement(
-    tmp_path, monkeypatch, residual_source
+    tmp_path, monkeypatch, residual_source, storage
 ):
     """R47(b)/review: solve peak starts after forward and records measured+projected bytes."""
     import json
     import sys
     from types import ModuleType, SimpleNamespace
 
-    from local_llm_lab.pipeline.lens_fitting import regression, runtime
+    from local_llm_lab.pipeline.lens_fitting import memory_policy, regression, runtime
 
+    monkeypatch.setattr(memory_policy, "require_owned_window", lambda: None)
+    monkeypatch.setattr(memory_policy, "binding", lambda *a: {})
     calls = []
     backend = ModuleType("mlx.core")
     backend.set_cache_limit = lambda n: 1024
@@ -223,7 +229,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(
     backend.get_active_memory = lambda: 10
     backend.device_info = lambda: {"max_recommended_working_set_size": 1000}
     backend.reset_peak_memory = lambda: calls.append("reset")
-    backend.get_peak_memory = lambda: 50 if calls[-1] == "solve" else 100
+    backend.get_peak_memory = lambda: 50 if calls and calls[-1] == "solve" else 100
     mlx = ModuleType("mlx")
     mlx.core = backend
     monkeypatch.setitem(sys.modules, "mlx", mlx)
@@ -244,8 +250,16 @@ def test_solve_resets_peak_and_reports_successful_measurement(
         ),
     )
 
+    point_directories = []
+
     def accumulate(*args, **kwargs):
         assert kwargs["residual_source"] == residual_source
+        assert kwargs["statistics_storage"] == storage
+        point = kwargs["scratch_dir"]
+        assert point.is_dir()
+        assert all(not prior.exists() for prior in point_directories)
+        point_directories.append(point)
+        (point / "retained-stats").write_text("fake statistics")
         for row in args[1]:
             start = 900 - len(row["ids"])
             assert row["score_positions"] == [p - start for p in [0, 300, 899] if p >= start]
@@ -253,6 +267,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(
         return {"fit": {1: None}, "held": {1: None}}, {}
 
     def solve(*args):
+        assert (point_directories[-1] / "retained-stats").is_file()
         assert calls[-1] == "reset"
         calls.append("solve")
         return None
@@ -279,6 +294,8 @@ def test_solve_resets_peak_and_reports_successful_measurement(
                 str(200 / 2**30),
                 "--residual-source",
                 residual_source,
+                "--statistics-storage",
+                storage,
             ]
         )
         == 0
@@ -301,7 +318,10 @@ def test_solve_resets_peak_and_reports_successful_measurement(
     assert measured[0]["scored_positions_per_sequence"] == 1
     assert measured[-1]["scored_positions_per_sequence"] == 3
     assert event["peak_bytes"] == 50
-    assert event["projected_peak_bytes"] == 74
+    assert event["projected_peak_bytes"] == 82
+    assert len(point_directories) == 3
+    assert all(not point.exists() for point in point_directories)
+    assert not point_directories[-1].parent.exists()
 
 
 def test_calibration_rows_preserve_and_truncate_score_selection():
@@ -354,3 +374,124 @@ def test_tail_scoring_calibration_preserves_registered_token_ownership(tokens):
         ]
     assert len(rows[0]["score_positions"]) == min(tokens, 1024)
     assert source == dict(ids=list(range(2048)), score_positions=list(range(1024, 2048)))
+
+
+def test_initial_over_cap_refuses_before_preparation_or_loading(monkeypatch, tmp_path):
+    from local_llm_lab.pipeline.lens_fitting import memory_policy, runtime
+
+    (tmp_path / "registration.json").write_text('{"residual_source": "hand_run"}')
+    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 17.76 * 2**30)
+    monkeypatch.setattr(runtime, "prepare_fit", lambda *_: pytest.fail("preparation reached"))
+    monkeypatch.setattr(runtime, "load_runtime", lambda *_: pytest.fail("loading reached"))
+    with pytest.raises(ValueError, match="0.6"):
+        api().main(
+            [
+                "--model",
+                "gemma3-4b",
+                "--corpus",
+                str(tmp_path / "corpus.json"),
+                "--planned-lens",
+                str(tmp_path / "lens.npz"),
+                "--registration",
+                str(tmp_path / "registration.json"),
+                "--report",
+                str(tmp_path / "report.jsonl"),
+                "--initial-bound-gib",
+                "21",
+            ]
+        )
+
+
+@pytest.mark.parametrize("breach_peak", [None, 55, 65])
+def test_short_diagnostic_repeats_eight_rows_and_never_solves(monkeypatch, tmp_path, breach_peak):
+    import json
+    import sys
+    from types import SimpleNamespace
+
+    from local_llm_lab.pipeline.lens_fitting import memory_policy, regression, runtime
+
+    mx = SimpleNamespace(
+        set_cache_limit=lambda _: 0,
+        clear_cache=lambda: None,
+        reset_peak_memory=lambda: None,
+        get_peak_memory=lambda: 30,
+        get_active_memory=lambda: 20,
+        device_info=lambda: {"max_recommended_working_set_size": 100},
+    )
+    monkeypatch.setitem(sys.modules, "mlx", SimpleNamespace(core=mx))
+    monkeypatch.setitem(sys.modules, "mlx.core", mx)
+    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 100)
+    monkeypatch.setattr(memory_policy, "require_owned_window", lambda: None)
+    monkeypatch.setattr(memory_policy, "binding", lambda *a: {})
+    prepared = SimpleNamespace(
+        rows=[{"index": 0, "ids": [1] * 128, "split": "fit"}],
+        snapshot={},
+        corpus_manifest_sha256="test",
+    )
+    monkeypatch.setattr(runtime, "prepare_fit", lambda *a: prepared)
+    monkeypatch.setattr(
+        runtime,
+        "load_runtime",
+        lambda *a: SimpleNamespace(
+            model=SimpleNamespace(eval=lambda: None),
+            view=SimpleNamespace(hidden_size=1, num_layers=2),
+            lock_path=tmp_path / "lock",
+        ),
+    )
+    calls = []
+
+    def accumulate(view, rows, **kwargs):
+        calls.append((rows, kwargs["statistics_storage"]))
+        assert kwargs["scratch_dir"].is_dir()
+        kwargs["memory_progress"]({"phase": "before_forward", "peak_memory_bytes": 30})
+        kwargs["memory_progress"](
+            {"phase": "after_statistics_eval", "peak_memory_bytes": breach_peak or 30}
+        )
+        calls.append("subsequent forward permitted")
+        return {}, {"fit": {"sequences": 4}, "held": {"sequences": 4}}
+
+    monkeypatch.setattr(regression, "accumulate", accumulate)
+    monkeypatch.setattr(regression, "solve_layer", lambda *a: pytest.fail("solver reached"))
+    registration = tmp_path / "registration.json"
+    registration.write_text(json.dumps({"residual_source": "native"}))
+    report = tmp_path / "report.jsonl"
+
+    def invoke():
+        return api().main(
+            [
+                "--model",
+                "gemma3-4b",
+                "--corpus",
+                str(tmp_path / "corpus"),
+                "--planned-lens",
+                str(tmp_path / "lens"),
+                "--registration",
+                str(registration),
+                "--report",
+                str(report),
+                "--initial-bound-gib",
+                str(50 / 2**30),
+                "--residual-source",
+                "native",
+                "--statistics-storage",
+                "split_spill",
+                "--diagnostic-tokens",
+                "128",
+            ]
+        )
+
+    if breach_peak is not None:
+        with pytest.raises(ValueError, match="measured memory breach"):
+            invoke()
+        assert len(calls) == 1  # no subsequent row/step after the observed breach
+        events = [json.loads(line) for line in report.read_text().splitlines()]
+        assert events[-1]["status"] == "error"
+        assert events[-2]["event"] == "memory_phase"
+        assert events[-2]["peak_memory_bytes"] == breach_peak
+        return
+    assert invoke() == 0
+    assert len(calls) == 2 and len(calls[0][0]) == 8 and calls[0][1] == "split_spill"
+    assert all(len(row["ids"]) == 128 for row in calls[0][0])
+    events = [json.loads(line) for line in report.read_text().splitlines()]
+    assert events[-1]["status"] == "diagnostic_complete"
+    assert not any(event["event"] == "measured_solve" for event in events)

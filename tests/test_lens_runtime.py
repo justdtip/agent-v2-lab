@@ -214,7 +214,14 @@ def test_cli_help_and_bad_input_do_not_import_mlx(arguments, exit_code):
         f"except SystemExit as e: assert e.code == {exit_code}\n"
         "assert not any(k == 'mlx' or k.startswith('mlx.') for k in sys.modules)\n"
     )
-    result = run([sys.executable, "-c", code], capture_output=True, text=True)
+    barrier = """import importlib.abc,sys
+class NoMLX(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'mlx','mlx_lm'}:
+            raise RuntimeError('real MLX forbidden in CLI fixture')
+sys.meta_path.insert(0, NoMLX())
+"""
+    result = run([sys.executable, "-c", barrier + code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
 
@@ -270,7 +277,7 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
             }
         )
     )
-    rows = [{"ids": [1], "split": "fit"}, {"ids": [2], "split": "held"}]
+    rows = [{"ids": [1] * 1024, "split": "fit"}, {"ids": [2] * 1024, "split": "held"}]
     monkeypatch.setattr(runtime, "read_corpus", lambda path: rows)
     root = snapshot(tmp_path)
     identity = {"snapshot_path": str(root), "snapshot_sha256": "fixture", "hf_id": spec.hf_id}
@@ -336,8 +343,73 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
     monkeypatch.setattr(
         runtime, "resource_snapshot", lambda: dict(peak_memory_gib=1, working_set_share=0.1)
     )
+    from local_llm_lab.pipeline.lens_fitting import memory_policy
+
+    monkeypatch.setattr(memory_policy, "runtime_fingerprint", lambda: {"fake": "runtime"})
+    monkeypatch.setattr(memory_policy, "require_owned_window", lambda: None)
+    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 10 * 2**30)
+    prepared = runtime.prepare_fit(manifest, spec, out)
+    bound = memory_policy.binding(prepared, "native", "memory")
+    report = tmp_path / "preflight.jsonl"
+    initial = 2 * 2**30
+    fixed = 2**30 + 128
+    measurements = []
+    for tokens in (256, 512, 1024):
+        projected = (
+            initial
+            if len(measurements) < 2
+            else memory_policy.project_peak(measurements, tokens, fixed_bytes=fixed)
+        )
+        measurements.append(
+            {
+                "event": "measured",
+                "tokens": tokens,
+                "peak_bytes": 2**30,
+                "projected_peak_bytes": projected,
+                "scored_positions_per_sequence": tokens,
+            }
+        )
+    envelope = {
+        "event": "full_fit_envelope",
+        "dense_matrix_bytes": 16,
+        "nonfinal_layers": 2,
+        "active_floor_bytes": 2**30,
+        "host_maps_and_serialization_bytes": 64,
+        "solver_workspace_bytes": 256,
+        "projected_peak_bytes": 2**30 + 320,
+    }
+    report.write_text(
+        "\n".join(
+            json.dumps(e)
+            for e in [
+                {
+                    "event": "begin",
+                    "mode": "qualification",
+                    "qualification_binding": bound,
+                    "initial_bound_bytes": initial,
+                    "lengths": [256, 512, 1024],
+                },
+                {
+                    "event": "loaded",
+                    "load_peak_bytes": 2**30,
+                    "resident_bytes": 2**30,
+                    "statistics_bytes": 128,
+                },
+                *measurements,
+                envelope,
+                {
+                    "event": "measured_solve",
+                    "peak_bytes": 2**30,
+                    "projected_peak_bytes": 2**30 + 320,
+                },
+                {"event": "end", "status": "measured", "fit_started": False},
+            ]
+        )
+    )
     main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/lens_fit.py"))["main"]
     argv = [
+        "--memory-preflight",
+        str(report),
         "--kind",
         "regression",
         "--model",
