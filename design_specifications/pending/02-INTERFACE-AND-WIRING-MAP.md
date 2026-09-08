@@ -1258,3 +1258,25 @@ projection for a sweep over sizes; this extends the same requirement to a fixed-
 threshold. Codex's regression fit declared a 14 GiB ceiling, peaked at 12.44 GiB (0.70 of the
 working set), and carried no projection — which is a departure from that seat's own registered
 protocol rather than an R47 breach, since R47's literal terms were met.
+
+**R61 — heavy work announces a window whether or not it loads a model.** The lock and the window
+were both built to prevent a second model load, and neither says anything about a job that
+saturates the machine without loading one. On 2026-09-08 a five-agent audit that correctly took no
+lock drove the load average to 43 and changed another seat's wall-clock measurements by a factor of
+two and a half. The seat that ran it was following the rule as written and still spoiled a
+measurement, which makes this a hole in the mechanism rather than a lapse by anyone.
+
+`announce_window` is already independent of `hold_model_run_lock`, so nothing new has to be built:
+a job that will occupy the machine announces, with its purpose and expected minutes, and a seat
+reading the window learns that the box is busy even though `running_model_processes()` is empty.
+The threshold is the same one R47 uses for the Director's laptop — if it would degrade the machine
+for someone using it, it is announced.
+
+**R61(b) — contention corrupts timings and cannot corrupt outcomes, so a contended run is
+annotated, not discarded.** Decoding in this repository is greedy, so a trajectory is deterministic
+given the same prompts: the model emits the same tokens, takes the same steps, and passes or fails
+identically under any load. A run that overlapped someone else's heavy job keeps its verdicts,
+step counts, loop detections and failure shapes, and records the overlap window beside its seconds.
+The corollary bites the other way too: **a timing is never evidence unless the machine's state
+during it is known**, which is why R47's projections and this rule's announcements are the same
+mechanism doing two jobs.
