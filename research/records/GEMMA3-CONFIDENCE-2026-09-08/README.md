@@ -114,3 +114,69 @@ the model itself generates, which is what makes the threshold in rule 1 interpre
 can show the fixed point is movable and not what the representation was carrying. That limit is
 structural, it is not fixed by either rule above, and any record from this arm states it rather than
 letting "we changed the output" read as "we found the cause".
+
+---
+
+## The Director's correction: the output distribution cannot test a claim about representations
+
+The D-CRO proposed that unwarranted certainty about a path and unwarranted certainty about being
+finished are one phenomenon at two scales. I tested it by reading the model's probability of each
+emitted token at layer 34, found identical confidence when wrong and when right, and then killed my
+own test with a control showing the median is saturated across every token in every episode.
+
+**The Director's objection goes a level deeper than my control did, and it is the more serious one:**
+
+> *Idk how you'd confirm that without reading activations under the actual condition.*
+
+He is right. Layer 34 **is the identity** — it is the model's own output distribution, not a
+representation. So the statistic I chose was not merely saturated; **it was the wrong kind of object
+for the claim.** A hypothesis that two behaviours share an internal mechanism cannot be confirmed by
+comparing the outputs those mechanisms produce, however the comparison is scaled or de-saturated.
+Fixing the saturation would have produced a better measurement of the wrong thing.
+
+This is the failure the D-CRO diagnosed in my work weeks ago and named exactly: *reaching for a
+property of the artefact when the question is about the thing the artefact represents.* The control
+caught the symptom. It did not catch that the instrument was pointed at the wrong object, and it
+could not have.
+
+### What a test with power actually requires
+
+Read the residual under both conditions and compare **where in depth the commitment happens**, which
+is a property of the representation and not of the output.
+
+We already have the shape for one of the two conditions. At the fork, the wrong token is rank 1 at
+layer 24 at all 24 forks and rank 6 to 20 at layer 23, against an argument-start control whose
+median commitment is layer 30 with 1.6% at layer 24. So the path condition has a signature: **an
+unusually early and unusually sharp commitment, localised to one layer step.**
+
+The test is whether a wrong self-terminating `finish` shows the same signature. Same measurement,
+same instrument, different condition:
+
+1. Locate the divergence position — the first token where the model's answer departs from the
+   expert's.
+2. Take the layer at which the emitted token first reaches rank 1, at that position.
+3. Compare against the same argument-start control, and against the fork's 23-to-24 step.
+
+**A shared signature is evidence for one phenomenon. Different depths are evidence against.** Either
+outcome is informative, and neither can be obtained from the output distribution at any scaling.
+
+**Stage two produces exactly this**, at all 34 layers over 15 episodes, and the wrong-answer
+termination class is now the largest we have at nine of eighteen. The test needs no additional run.
+
+### And the probability version is not recoverable from these records at all
+
+Worth recording so nobody designs around it. `reading` rows store the top-k as **token ids only**;
+`probability` exists solely on `rank` rows, and those exist only for tokens the model actually
+emitted. So the probability assigned to a *correct* answer the model did not emit is unavailable
+whether or not it sits in the top ten — membership buys a rank, never a value. The D-CRO measured the
+rank version: the expert's token is inside the layer-34 top ten at the divergence in 6 of 7 failed
+episodes, so a rank proxy has data. It is still a proxy for confidence, with the same weakness one
+level down, and it is still an output-side quantity, so the Director's objection applies to it too.
+
+**If the probability is wanted, it comes from a targeted replay, not a rerun.** Each `forward` row
+records `input_ids`, `offset`, `logits_shape` and **`logits_sha256`**. So a replay of the prefix up to
+a single divergence position reproduces that forward's logits and **proves itself bit-exact against
+the recorded hash before any new number is read**. Nine failed episodes means roughly nine such
+positions, not 247 forwards per episode. That is a check whose answer is known in advance, guarding a
+measurement that is otherwise unverifiable — which is the mechanism this programme has spent the day
+learning to insist on.

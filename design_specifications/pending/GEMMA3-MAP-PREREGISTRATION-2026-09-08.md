@@ -451,3 +451,17 @@ wrong one, which is not saturated. The obstacle is that only the top ten per lay
 where the correct token falls outside that the result is a bound — the regime that already bit at the
 fork, where `workspace` was outside the top ten at every read layer. **What a bound-only result is
 allowed to say is decided before that test runs, not after.**
+
+**Addendum to class 2, on the D-CRO's point.** The wrong-answer termination class is reported **per
+run and never pooled across the simulator change**. The verdict is simulator-independent, but the
+*population reaching* a wrong-answer termination is not: under the old simulator an episode could be
+talked into finishing early by a false empty listing, and under the fixed one it cannot. Same class,
+different denominators.
+
+**And on testing the two-scales hypothesis, per the Director.** It may not be tested with the
+model's output distribution. Layer 34 is the identity, so a comparison there compares outputs and not
+representations, and no rescaling of a saturated statistic repairs that. The test is the **depth at
+which commitment occurs**, read from the residual under both conditions: the layer at which the
+emitted token first reaches rank 1 at the divergence position, compared against the argument-start
+control and against the fork's layer 23-to-24 step. Stage two produces it at all 34 layers and needs
+no further run.
