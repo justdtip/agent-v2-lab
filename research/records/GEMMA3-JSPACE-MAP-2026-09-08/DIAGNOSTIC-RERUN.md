@@ -584,10 +584,22 @@ layer 34, which is its own output distribution and not a lens reading:
 | 1941 | `:` | ` artifact` | ` File` ` success` ` file` |
 
 **At the newline before the field name, the model's most likely continuation is `Next` — and the
-node says `Result`.** Six preceding nodes carried a `Next` field at exactly that position, and the
-model expects a seventh. This is the same schema that later produces a fabricated `node-7-288.txt`,
-and it is visible **fifty tokens earlier, while the model is reading the evidence that should
-break it.**
+node says `Result`.**
+
+**That reading was too strong and a within-episode control cut it down. Recorded here rather than
+revised away.** Across all 122 newline positions in that prompt with a captured reading, `Next` is
+top-1 at four, and three of those four are consecutive: positions 1893, 1916 and 1939. At the first
+two the true next token is merely `context`, an ordinary filler line, and the model predicts `Next`
+there as well.
+
+So this is **not** a substitution at the decisive moment. It is a diffuse late-record expectation
+that the `Next` field is about to arrive, spanning the last three lines regardless of what follows,
+and the terminal position is not special within it. `Next` is in the top-10 at 30% of newline
+positions and top-1 at 3%.
+
+What survives: in the last few lines of a record the model anticipates the field its schema
+predicts, and is wrong about it three times running. What does not survive: any claim that the
+model specifically misreads `Result` as `Next` at the moment the chain ends.
 
 The row below it is weaker evidence and is recorded as such: not predicting ` artifact` after
 `Result:` is unremarkable, because the value is an arbitrary identifier no model would anticipate.
@@ -619,3 +631,31 @@ row in the table above. Layer 34 stores the model's own softmax; no lens map is 
 entering at layer 31, and the whole depth structure. This episode runs to position 1,756 against a
 lens fitted at positions 16 to 126. That does not make them wrong. It does mean the depth structure
 is what a transcript-length lens fit would firm up, and the outcome numbers are not.
+
+### The matched pass/fail pair, and the confound that stops it being a result
+
+`cross_reference-0032` passed at 11 turns, and it is **structurally the same task**: follow a chain
+of keys, and when a record contains a terminal field report it exactly. `pointer_chain-0018`
+failed at the same shape. At the matched reading position — the newline before the terminal field
+name — the two look completely different:
+
+| | failed (`pointer_chain`) | passed (`cross_reference`) |
+|---|---|---|
+| true next token | `Result` | `Resolution` |
+| model's top-1 | **`Next`** | `context` |
+| `Next` in the top-10 | rank 1 | **absent** |
+| layers where `Next` is a candidate | 24 through 34, all of them | none |
+
+**And it is confounded, badly.** The token `Next` appears **ten times** in the failing episode's
+final prompt and **once** in the passing one, because that episode's records use `Next-Key` and its
+own progress notes repeat the word. A model predicting a token that occurs ten times in its recent
+context, rather than one that occurs once, needs no schema to explain it.
+
+The confound is not separable at n=2 and the two tasks differ in more than outcome: one alternates
+search and read, the other only reads. **The pair is a hypothesis, not a test.** It is recorded
+because the hypothesis is worth carrying to the remaining episodes, and because the tenfold
+frequency difference is exactly the sort of thing that makes a binary contrast look like a finding.
+
+What would separate them: the same contrast on episodes matched for how often the schema token
+appears in context. That is a selection over stage two's completed set, and it costs nothing but
+waiting for the set to exist.
