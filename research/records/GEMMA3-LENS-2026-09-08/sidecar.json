@@ -1,0 +1,260 @@
+{
+ "source_file": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--neuronpedia--jacobian-lens/blobs/dcb23c8627b2ef94225f45550d792d7608bd96f6cf89aa8d1701bd6a4681277c",
+ "source_sha256": "dcb23c8627b2ef94225f45550d792d7608bd96f6cf89aa8d1701bd6a4681277c",
+ "source_bytes": 432548236,
+ "pickle_globals": [
+  "collections.OrderedDict",
+  "torch.HalfStorage",
+  "torch._utils._rebuild_tensor_v2"
+ ],
+ "top_level_keys": [
+  "J",
+  "d_model",
+  "n_prompts",
+  "source_layers"
+ ],
+ "n_prompts": 546,
+ "d_model": 2560,
+ "layers_in_file": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  32
+ ],
+ "dtype_on_disk": "torch.float16",
+ "dtype_saved": "float16",
+ "layer_convention": "npz key J<l>: l = output of decoder block l (0-based); repo layer L reads J{L-1}; the last index is the identity (final-layer target)",
+ "npz_sha256": "a14ab264fc47de9c59b3183a8783a60ca6f1dee2ea635e88223d5b2d67b03193",
+ "npz_bytes": 432545456,
+ "per_layer": {
+  "0": {
+   "fro_norm": 1264.5691,
+   "identity_distance": 24.975845,
+   "diag_mean": 0.934572,
+   "max_abs": 85.4375
+  },
+  "1": {
+   "fro_norm": 1062.8854,
+   "identity_distance": 20.998703,
+   "diag_mean": 0.676771,
+   "max_abs": 85.4375
+  },
+  "2": {
+   "fro_norm": 1007.4064,
+   "identity_distance": 19.901119,
+   "diag_mean": 0.689291,
+   "max_abs": 100.1875
+  },
+  "3": {
+   "fro_norm": 843.6929,
+   "identity_distance": 16.668111,
+   "diag_mean": 0.614125,
+   "max_abs": 103.75
+  },
+  "4": {
+   "fro_norm": 769.7228,
+   "identity_distance": 15.210389,
+   "diag_mean": 0.539812,
+   "max_abs": 118.8125
+  },
+  "5": {
+   "fro_norm": 691.7816,
+   "identity_distance": 13.678258,
+   "diag_mean": 0.422137,
+   "max_abs": 137.5
+  },
+  "6": {
+   "fro_norm": 544.2152,
+   "identity_distance": 10.772934,
+   "diag_mean": 0.318067,
+   "max_abs": 95.625
+  },
+  "7": {
+   "fro_norm": 454.0335,
+   "identity_distance": 8.994404,
+   "diag_mean": 0.313553,
+   "max_abs": 92.875
+  },
+  "8": {
+   "fro_norm": 349.1148,
+   "identity_distance": 6.927729,
+   "diag_mean": 0.308339,
+   "max_abs": 87.5
+  },
+  "9": {
+   "fro_norm": 359.0517,
+   "identity_distance": 7.120882,
+   "diag_mean": 0.326,
+   "max_abs": 86.4375
+  },
+  "10": {
+   "fro_norm": 284.0481,
+   "identity_distance": 5.643952,
+   "diag_mean": 0.331468,
+   "max_abs": 80.5625
+  },
+  "11": {
+   "fro_norm": 258.7701,
+   "identity_distance": 5.143762,
+   "diag_mean": 0.349479,
+   "max_abs": 79.5
+  },
+  "12": {
+   "fro_norm": 268.6461,
+   "identity_distance": 5.324993,
+   "diag_mean": 0.418187,
+   "max_abs": 81.1875
+  },
+  "13": {
+   "fro_norm": 280.0483,
+   "identity_distance": 5.536619,
+   "diag_mean": 0.490851,
+   "max_abs": 88.9375
+  },
+  "14": {
+   "fro_norm": 324.6727,
+   "identity_distance": 6.403092,
+   "diag_mean": 0.588711,
+   "max_abs": 111.0625
+  },
+  "15": {
+   "fro_norm": 224.3416,
+   "identity_distance": 4.418222,
+   "diag_mean": 0.569633,
+   "max_abs": 52.8125
+  },
+  "16": {
+   "fro_norm": 200.9498,
+   "identity_distance": 3.947696,
+   "diag_mean": 0.594774,
+   "max_abs": 42.2812
+  },
+  "17": {
+   "fro_norm": 170.0853,
+   "identity_distance": 3.315934,
+   "diag_mean": 0.652513,
+   "max_abs": 42.125
+  },
+  "18": {
+   "fro_norm": 168.4405,
+   "identity_distance": 3.262701,
+   "diag_mean": 0.718859,
+   "max_abs": 43.8125
+  },
+  "19": {
+   "fro_norm": 163.9964,
+   "identity_distance": 3.151525,
+   "diag_mean": 0.786865,
+   "max_abs": 44.625
+  },
+  "20": {
+   "fro_norm": 153.3806,
+   "identity_distance": 2.912875,
+   "diag_mean": 0.852447,
+   "max_abs": 39.875
+  },
+  "21": {
+   "fro_norm": 151.4321,
+   "identity_distance": 2.843179,
+   "diag_mean": 0.937032,
+   "max_abs": 40.1562
+  },
+  "22": {
+   "fro_norm": 153.6355,
+   "identity_distance": 2.845403,
+   "diag_mean": 1.062,
+   "max_abs": 39.875
+  },
+  "23": {
+   "fro_norm": 152.2863,
+   "identity_distance": 2.780226,
+   "diag_mean": 1.164714,
+   "max_abs": 37.6875
+  },
+  "24": {
+   "fro_norm": 147.9238,
+   "identity_distance": 2.688884,
+   "diag_mean": 1.158697,
+   "max_abs": 37.2812
+  },
+  "25": {
+   "fro_norm": 145.226,
+   "identity_distance": 2.614363,
+   "diag_mean": 1.201835,
+   "max_abs": 36.25
+  },
+  "26": {
+   "fro_norm": 137.8136,
+   "identity_distance": 2.450074,
+   "diag_mean": 1.208086,
+   "max_abs": 32.4062
+  },
+  "27": {
+   "fro_norm": 129.3167,
+   "identity_distance": 2.264677,
+   "diag_mean": 1.201819,
+   "max_abs": 41.2812
+  },
+  "28": {
+   "fro_norm": 125.4033,
+   "identity_distance": 2.185007,
+   "diag_mean": 1.184378,
+   "max_abs": 40.4062
+  },
+  "29": {
+   "fro_norm": 98.8158,
+   "identity_distance": 1.565866,
+   "diag_mean": 1.181189,
+   "max_abs": 32.75
+  },
+  "30": {
+   "fro_norm": 88.6807,
+   "identity_distance": 1.331316,
+   "diag_mean": 1.149799,
+   "max_abs": 31.0781
+  },
+  "31": {
+   "fro_norm": 83.0185,
+   "identity_distance": 1.240057,
+   "diag_mean": 1.077248,
+   "max_abs": 31.2031
+  },
+  "32": {
+   "fro_norm": 71.867,
+   "identity_distance": 0.961353,
+   "diag_mean": 1.046675,
+   "max_abs": 29.5312
+  }
+ },
+ "converted_with": "torch 2.9.1, numpy 2.3.2, python 3.13.7",
+ "elapsed_s": 0.7
+}
