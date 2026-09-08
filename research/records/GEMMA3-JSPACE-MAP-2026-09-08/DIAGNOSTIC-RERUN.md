@@ -387,3 +387,53 @@ this. In each case the number was wrong in the direction of the hypothesis, and 
 caught it was asking a question whose answer was known in advance — here, that a single task's
 search returns a path, which takes one call to check and which I ran only because the zero was too
 clean.
+---
+
+## Does the strategy-switching class carve the failures? Not yet, and one way of asking is broken
+
+**The Chief flagged `list-0149` as a third shape — failed without looping, without searching, and
+without entering a repeated-failure state — and said it was worth watching at n=1 rather than
+acting on. The class can be computed retroactively from every episode we hold, so it is worth more
+than watching. It is computed here, and the first result is that the retroactive version does not
+work.**
+
+Applying `_strategy` to all 18 completed agentic episode-runs across the three runs:
+
+| failure shape | episode-runs |
+|---|---:|
+| failed and terminated on its own, with a wrong answer | **9** |
+| passed | 4 |
+| loop detected | 3 |
+| exhausted without the loop flag | 2 |
+
+**The strategy-switching class holds 3 of 18** — `ledger_reconcile-0163` and `update-0028` and
+`batch_update-0166`, all in the two earlier runs. **The modal failure is none of the shapes the
+class was built for: nine episode-runs call `finish` with a wrong answer and stop.** That is not a
+model failing to switch strategy. It is a model that believes it is done.
+
+### Why the retroactive computation cannot be trusted across runs
+
+`repeated_failure_step` counts **consecutive observations beginning `ERROR`**. Under the old
+simulator, `list_files` answered an unsatisfiable directory with `FILES: (none)` — a falsehood, not
+an error. So the detector was blind to precisely the failure the old runs contained most of:
+
+| run | steps | ERROR observations | `FILES: (none)` |
+|---|---:|---:|---:|
+| stage one | 89 | 16 | 6 |
+| corrected rendering | 40 | 27 | 1 |
+| stage two | 15 | 3 | 0 |
+
+**A "stuck" measure defined on errors cannot see an environment that answers falsely instead of
+erroring.** So the three earlier runs' strategy fields are not comparable with stage two's, and the
+3-of-18 above pools two incompatible definitions. Only stage two's rows measure what the field was
+designed to measure, and there are four of them so far, none in the class.
+
+**So the Chief's caution stands and for a better reason than n=1.** It is not that the sample is
+small. It is that the sample from before the simulator fix is measuring a different thing, and the
+question needs stage two's own episodes to answer.
+
+**What survives the confound and is worth carrying forward.** The nine wrong-answer terminations
+are counted the same way under both simulators, because they turn on the verdict and not on error
+text. That the modal failure is confident premature completion rather than any form of being stuck
+is a statement about the model that the pre-registration's strategy measurement does not reach, in
+any run. It should be measured beside it rather than instead of it.
