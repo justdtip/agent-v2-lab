@@ -48,10 +48,10 @@ index de63bf0..21960cc 100644
      print(
          json.dumps(
 diff --git a/scripts/live_lens_pilot.py b/scripts/live_lens_pilot.py
-index f2f46da..ae815e4 100644
+index f2f46da..0d2a311 100644
 --- a/scripts/live_lens_pilot.py
 +++ b/scripts/live_lens_pilot.py
-@@ -157,7 +157,7 @@ def main() -> None:
+@@ -157,12 +157,36 @@ def main() -> None:
      # constants above made a mismatch impossible by accident; this makes it impossible.
      lens = LensMaps.load(args.lens, expected_sha256=args.lens_sha256,
                           hidden_size=view.hidden_size, num_layers=view.num_layers,
@@ -60,11 +60,90 @@ index f2f46da..ae815e4 100644
      reader = LensReadout(view, lens)
      sampler = make_sampler(0.0)
      manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
+                 "registry_sha256": file_sha256(registry), "registry": str(registry),
+                 "observation_role": spec.chat.observation_role,
++                # The pre-registration requires the globally-attending layers recorded per layer,
++                # and neither Gemma entry declares a band, so `band` above is empty and carries no
++                # span information. This is where the map states its own secondary condition.
++                "attention_span": {str(x): view.attention_span(x - 1) for x in layers},
++                "secondary_comparison": {
++                    "attempted": False,
++                    "reasons": [
++                        "the hosted lens was fitted at 128 tokens, far below the 1,024 sliding "
++                        "window, so it carries no information about the sliding-global contrast",
++                        "only one episode puts any position past 1,024 at all, and the "
++                        "pre-registration forbids a claim from a single episode",
++                    ],
++                },
++                "lens_precision_mismatch": {
++                    "lens_fitted_on": "bfloat16 weights (hosted, neuronpedia/jacobian-lens)",
++                    "run_checkpoint": spec.hf_id,
++                    "same_base": spec.base,
++                    "note": (
++                        "permitted under R60 because the base and training match; the "
++                        "reconstruction difference between the two precisions is unmeasured and "
++                        "this line is present whether or not the precisions differ, so a reader "
++                        "never infers agreement from a missing line"
++                    ),
++                },
+                 "observation_role_status": (
+                     "provisional, reading only (Chief, 2026-09-08)"
+                     if spec.chat.observation_role != "tool"
+@@ -176,7 +200,26 @@ def main() -> None:
+     for p in plan:
+         path = args.out / f"{p['label']}.jsonl"
+         if path.exists():
+-            print(json.dumps({"event": "skip_existing", "label": p["label"]})); continue
++            # A record says whether it finished, in its own footer, and this used to skip on the
++            # file existing. Stage one found the consequence: a run that died mid-episode left a
++            # partial record, and the retry skipped it as though it had completed, so a truncated
++            # episode would have gone into the map silently. Refuse rather than overwrite — the
++            # writer creates exclusively, and a launcher that deletes records it finds
++            # inconvenient is a launcher with no records.
++            status = None
++            with path.open() as fh:
++                for line in fh:
++                    status = line
++            try:
++                status = json.loads(status)["event"].get("status") if status else None
++            except (ValueError, KeyError, TypeError):
++                status = None
++            if status == "complete":
++                print(json.dumps({"event": "skip_complete", "label": p["label"]})); continue
++            raise SystemExit(
++                f"{path} exists and its footer says {status!r}, not 'complete'. An unfinished "
++                "record is not a finished episode; remove it deliberately and re-run."
++            )
+         t1 = time.monotonic(); mx.reset_peak_memory()
+         entry = dict(p)
+         with RecordWriter(path, {"model": spec.hf_id, "lens_sha256": lens.sha256, "episode": p, "layers": layers}) as write:
 diff --git a/src/local_llm_lab/models.py b/src/local_llm_lab/models.py
-index c4addfc..bffbf8c 100644
+index c4addfc..c1b2337 100644
 --- a/src/local_llm_lab/models.py
 +++ b/src/local_llm_lab/models.py
-@@ -117,16 +117,22 @@ class ProbesSpec:
+@@ -40,10 +40,19 @@ _LOCAL_CHECKPOINT_PREFIX = "models/"
+ 
+ 
+ def _resolve_checkpoint(hf_id: str) -> str:
+-    """Absolute path for a local checkpoint; a Hugging Face repo id unchanged."""
++    """Absolute path for a local checkpoint; a Hugging Face repo id unchanged.
++
++    Resolved against the **primary checkout**, not the running one. A converted checkpoint is a
++    shared artefact like the lock and the window: `models/` is git-ignored and exists once, in the
++    primary, so a worktree resolving against its own root finds nothing. That is the same failure
++    the box window had before `box_state_root`, from the same cause, and it is fixed the same way
++    and by the same reader.
++    """
+     if not hf_id.startswith(_LOCAL_CHECKPOINT_PREFIX):
+         return hf_id
+-    return str((Path(__file__).resolve().parents[2] / hf_id).resolve())
++    from local_llm_lab.runlock import box_state_root
++
++    return str((box_state_root() / hf_id).resolve())
+ 
+ 
+ @dataclass(frozen=True)
+@@ -117,16 +126,22 @@ class ProbesSpec:
  class ModelSpec:
      name: str
      hf_id: str
@@ -96,7 +175,7 @@ index c4addfc..bffbf8c 100644
      family: str
      chat: ChatSpec
      lora: LoraSpec
-@@ -146,6 +152,18 @@ class ModelSpec:
+@@ -146,6 +161,18 @@ class ModelSpec:
      # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
      probe_capture_dtype: Literal["native", "float32"] = "native"
  
@@ -115,7 +194,7 @@ index c4addfc..bffbf8c 100644
      @property
      def probes(self) -> ProbesSpec:
          """The ``probes:`` block under the specs' own names; a view, not stored state."""
-@@ -235,6 +253,27 @@ class ResolvedSpec:
+@@ -235,6 +262,27 @@ class ResolvedSpec:
          }
  
  
@@ -143,7 +222,7 @@ index c4addfc..bffbf8c 100644
  def registered_models() -> list[str]:
      """Return registry names in deterministic lexicographic order."""
      return sorted(path.stem for path in _REGISTRY_DIR.glob("*.yaml"))
-@@ -340,7 +379,8 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
+@@ -340,7 +388,8 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
      return ModelSpec(
          name=_required_string(raw, "name", source),
          hf_id=_resolve_checkpoint(_required_string(raw, "hf_id", source)),
@@ -153,7 +232,7 @@ index c4addfc..bffbf8c 100644
          family=_required_string(raw, "family", source),
          chat=ChatSpec(
              thinking=thinking,
-@@ -380,7 +420,8 @@ def _default_spec(hf_id: str) -> ModelSpec:
+@@ -380,7 +429,8 @@ def _default_spec(hf_id: str) -> ModelSpec:
      return ModelSpec(
          name=hf_id,
          hf_id=hf_id,
@@ -163,7 +242,7 @@ index c4addfc..bffbf8c 100644
          family="unknown",
          # ChatML's markers, for a model nobody declared. They are a guess and the only honest
          # thing to say about them is that they are Qwen's; a run that reaches this path and is
-@@ -403,6 +444,24 @@ def _default_spec(hf_id: str) -> ModelSpec:
+@@ -403,6 +453,24 @@ def _default_spec(hf_id: str) -> ModelSpec:
      )
  
  
@@ -543,3 +622,104 @@ index 6d9d71b..0e837cd 100644
 +
 +    lens = LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA)
 +    assert lens.identity == GEMMA, "the old spelling resolved to the base it names"
+diff --git a/tests/test_models.py b/tests/test_models.py
+index 1889554..473afe5 100644
+--- a/tests/test_models.py
++++ b/tests/test_models.py
+@@ -12,7 +12,8 @@ import yaml
+ from local_llm_lab import models
+ from local_llm_lab.arch import ArchitectureView
+ from local_llm_lab.models import load_model_spec
+-from local_llm_lab.project import PROJECT_ROOT
++from local_llm_lab.project import PROJECT_ROOT  # noqa: F401
++from local_llm_lab.runlock import box_state_root as _box_state_root
+ 
+ 
+ @pytest.mark.parametrize(
+@@ -73,7 +74,7 @@ from local_llm_lab.project import PROJECT_ROOT
+             # The bf16 twin, for lens fitting: the hosted Jacobian lens was fitted on bf16 weights
+             # and a comparison against it should not also be a comparison of precisions.
+             "gemma3-4b-bf16",
+-            str(PROJECT_ROOT / "models/gemma-3-4b-it-bf16"),
++            str((_box_state_root() / "models/gemma-3-4b-it-bf16").resolve()),
+             "unsupported",
+             "none",
+             "auto",
+@@ -92,7 +93,7 @@ from local_llm_lab.project import PROJECT_ROOT
+             # equivalence claim. The train block is UNRULED and exists so no consumer meets a
+             # bare key error; it is the Qwen recipe's values and is evidence about another model.
+             "gemma3-4b",
+-            str(PROJECT_ROOT / "models/gemma-3-4b-it-4bit"),
++            str((_box_state_root() / "models/gemma-3-4b-it-4bit").resolve()),
+             "unsupported",
+             "none",
+             "auto",
+@@ -482,7 +483,6 @@ def test_a_local_checkpoint_resolves_against_the_project_root_not_the_working_di
+     repo id has no prefix and passes through untouched, which the Qwen entries assert above.
+     """
+     from local_llm_lab.models import load_model_spec
+-    from local_llm_lab.project import PROJECT_ROOT
+ 
+     monkeypatch.chdir(tmp_path)
+ 
+@@ -491,7 +491,28 @@ def test_a_local_checkpoint_resolves_against_the_project_root_not_the_working_di
+         ("gemma3-4b-bf16", "models/gemma-3-4b-it-bf16"),
+     ):
+         resolved = load_model_spec(name).hf_id
+-        assert resolved == str(PROJECT_ROOT / directory)
++        assert resolved == str((_box_state_root() / directory).resolve())
+         assert Path(resolved).is_absolute(), "a loader must not have to guess where this is"
+ 
+     assert load_model_spec("qwen35-4b").hf_id == "mlx-community/Qwen3.5-4B-MLX-4bit"
++
++
++def test_a_local_checkpoint_resolves_to_the_primary_checkout_not_the_running_one() -> None:
++    """A converted checkpoint is a shared artefact, like the lock and the window.
++
++    `models/` is git-ignored and exists once, in the primary checkout, so a worktree resolving
++    against its own root finds nothing — which is exactly what happened the first time this ran
++    from one. That is the box window's own bug before `box_state_root`, from the same cause and
++    fixed by the same reader, and the third instance today of behaviour that depended on where a
++    process was standing.
++    """
++    from pathlib import Path
++
++    from local_llm_lab.models import load_model_spec
++    from local_llm_lab.runlock import box_state_root
++
++    resolved = Path(load_model_spec("gemma3-4b").hf_id)
++
++    assert resolved.is_absolute()
++    assert resolved == (box_state_root() / "models/gemma-3-4b-it-4bit").resolve()
++    assert load_model_spec("qwen35-4b").hf_id == "mlx-community/Qwen3.5-4B-MLX-4bit"
+diff --git a/tests/test_patch.py b/tests/test_patch.py
+index 4541c2b..efb75fb 100644
+--- a/tests/test_patch.py
++++ b/tests/test_patch.py
+@@ -2047,7 +2047,10 @@ def test_render_markdown_summarises_counterfactual_note_sources() -> None:
+ # fake spec that omits it is a fake of a spec that cannot exist.
+ _FAKE_SPEC = SimpleNamespace(
+     chat=SimpleNamespace(
+-        template_kwargs={}, thinking="on", generation_prefix="<|im_start|>assistant\n"
++        template_kwargs={},
++        thinking="on",
++        generation_prefix="<|im_start|>assistant\n",
++        observation_role="tool",
+     )
+ )
+ 
+diff --git a/tests/test_probes.py b/tests/test_probes.py
+index b1c9317..9e3800b 100644
+--- a/tests/test_probes.py
++++ b/tests/test_probes.py
+@@ -1767,6 +1767,10 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
+         # Added 2026-09-08 (issue 86): the recorded answers to equal-distance partner ties. A
+         # ruling, not a rule, so it is declared rather than derived and travels with the run.
+         "probe_partner_tie_breaks",
++        # Added 2026-09-08 (R57, R60): a lens is a map of a model's residual geometry, so the
++        # identity is the base checkpoint and the training on top of it, not the artefact loaded.
++        "base",
++        "training",
+         "probe_capture_dtype",
+         "memory_budget_gib",
+         "policies",

@@ -3,8 +3,7 @@
 Patch: `design_specifications/pending/LENS-LINEAGE.patch`, made with **`git add -A && git diff
 HEAD`**, so new files are in it. Thirteen files, 244 insertions. **Not landed.**
 
-**904 passed, 1,103 skipped, exit 0.** The skips are the model-library files while stage one holds
-the box; they run in the gap after it and I am not reporting them green.
+**1,994 passed, 14 skipped, exit 0**, with the box free — nothing skipped for a window.
 
 ## What the Director ruled, and what it replaces
 
@@ -58,7 +57,26 @@ default was refused.
 **`training_lineage: {}` is written explicitly in both Gemma entries**, not omitted. A reader must
 never have to decide whether an absent block means *no training* or *not recorded*.
 
-## Still owed before stage two
+## Three things stage one required, now in the same patch
 
-The precision-mismatch line in the manifest whether or not it is today's case, `attention_span`
-per layer, and the statement that the secondary comparison is not attempted with both its reasons.
+**An aborted record is no longer skipped as a finished episode.** The record writer already stamps
+`status: complete` or `aborted` in its own footer, and the resume check looked only at whether the
+file existed. Stage one hit it: a run that died mid-episode left a partial record and the retry
+skipped it, so a truncated episode would have gone into the map silently. It now reads the footer,
+and **refuses** rather than overwriting — a launcher that deletes records it finds inconvenient is
+a launcher with no records.
+
+**`attention_span` per layer in the manifest**, which the pre-registration requires and which
+`band` cannot supply because neither Gemma entry declares one.
+
+**Two statements that must not be inferred from absence.** That the secondary comparison is not
+attempted, with both reasons — the hosted lens was fitted at 128 tokens against a 1,024 window, and
+one episode has any position past 1,024 at all. And the precision mismatch, present **whether or
+not the precisions differ**, so a reader never reads agreement out of a missing line.
+
+## And one more instance of the day's recurring fault
+
+`_resolve_checkpoint` resolved `models/...` against the **running** checkout, so a worktree found
+nothing: `models/` is git-ignored and exists once, in the primary. That is the box window's own bug
+before `box_state_root`, from the same cause, and it is fixed with the same reader. Third instance
+today of behaviour that depended on where a process was standing.
