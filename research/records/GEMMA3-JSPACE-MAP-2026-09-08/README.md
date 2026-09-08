@@ -378,3 +378,78 @@ The primary comparison's log2 median ratios under this rule are **+3.80 at layer
 layer 23**, against raw values of +3.03 and +2.77. The result that deduplication *strengthens* the
 effect survives the change of rule; only its size moves.
 
+
+## Closing the stage-two analyses
+
+**Three readings that need no model and no GPU, done before the CUDA migration starts, because
+they are the evidence base every extension in the migration plan is motivated by.**
+
+### 1. The harness's own verdict reasons, replacing my reading of the trajectories
+
+Every episode's recorded actions replayed through a fresh simulator. The replay reproduces all four
+passes exactly, so the reasons below are the harness's, not an interpretation:
+
+| episode | reasons |
+|---|---|
+| `read-0108`, `calculate-0158`, `synthesis-0039`, `cross_reference-0032` | passed |
+| `search-0061` | wrong answer |
+| `pointer_chain-0018` | wrong answer |
+| `list-0149` | wrong answer; **unexpected file change** |
+| `ledger_reconcile-0163` | wrong answer; file state wrong |
+| `conditional_update-0093` | wrong answer; file state wrong; unexpected file change |
+| `batch_update-0166` | **file state wrong ×3, and no wrong-answer reason at all** |
+| `update-0028` | no finish call; file state wrong; required tools unused |
+| `aggregate_report-0167` | no finish call; file state wrong; required tools unused |
+
+| reason | episodes |
+|---|---:|
+| file state wrong | **7** |
+| wrong answer | 5 |
+| unexpected file change | 2 |
+| no finish call | 2 |
+| required tools unused | 2 |
+
+**The most common failure is leaving the workspace wrong, not answering wrongly.** And
+`batch_update-0166` carries no wrong-answer reason, which confirms from the harness what I had
+inferred from the answer strings: it said the right thing and did the wrong thing. **The class I
+called "wrong-answer termination" is named after its second most common reason.**
+
+The taxonomy is also finer than my trajectory reading. `list-0149`'s gratuitous write is penalised
+explicitly as an unexpected file change; `conditional_update-0093` carries all three of wrong
+answer, the file it should have changed unchanged, and the file it should not have changed changed.
+That is the incomplete survey stated by the harness rather than by me.
+
+### 2. The token cap reaches exactly one episode
+
+| | |
+|---|---:|
+| turns across all fifteen episodes | 94 |
+| turns reaching the 200-token cap | **1** |
+| episodes affected | `aggregate_report-0167` only |
+
+So the cap is not a systemic confound. It is one episode, scored as a model failure, whose
+terminating turn was truncated mid-call — and that one episode also failed the same way in stage
+one. A single instance, and it should be disclosed rather than counted.
+
+### 3. The primary comparison by position band
+
+Deduplicated per turn, layers 21 and 23, as log2 of the argument median over the skeleton median:
+
+| band | layer 21 | layer 23 | n argument | episodes |
+|---|---:|---:|---:|---:|
+| 500–800 | +4.79 | +4.19 | 277 | 12 |
+| 800–1200 | +5.38 | +4.77 | 195 | 9 |
+| 1200+ | **+2.22** | **+2.26** | 769 | 6 |
+
+**The effect is present in every band and roughly halves above position 1,200.**
+
+**And it is not the loop episode.** Excluding `update-0028` changes the first two bands by at most
+0.31 and the 1200+ band **not at all** — identical to three decimals, same n. Its twenty-four turns
+deduplicate to two, both early, so it contributes nothing above position 800. The deduplication rule
+is doing exactly what it was written for.
+
+**What the halving means cannot be settled here.** Greater extrapolation degrading both arms toward
+noise would shrink the gap; so would a composition difference between the six episodes long enough
+to reach those positions. This corpus cannot separate them, which is the amendment-9 obstacle
+arriving from a third direction — and it is the most direct motivation yet for a lens fitted at
+transcript length, where the question becomes measurable instead of confounded.
