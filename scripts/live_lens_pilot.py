@@ -57,6 +57,47 @@ CHAT = [
 FOLLOW_UP = "Now give the single most important caveat to your answer, in one sentence."
 
 
+
+#: How many consecutive errored calls count as "the model is not getting anywhere". Three rather
+#: than two, so a single retry after a transient failure -- which the system prompt explicitly
+#: permits -- is not counted as a failure to switch strategy.
+REPEATED_FAILURE = 3
+
+
+def _strategy(steps):
+    """Whether the episode ever searched, and whether it kept failing without searching.
+
+    Recorded per episode and decided before the run, because the alternative is deciding after
+    reading the records what counts as being stuck. `update-0028` under the fixed simulator takes
+    twenty-four honest errors on two guesses with `search_files` in its own tool list and named in
+    its own recovery rule, and the open question is whether that is one episode or a population.
+    If it is common across families the map is measuring strategy switching and should say so in
+    those words; if it stays confined, it is an outlier and the map is unaffected.
+
+    `search_files` reaches the full true path from a word of the task's own prompt on 165 of the
+    180 test tasks -- every family except `calculate`, which has no files -- so not calling it is
+    a choice the environment leaves open rather than a wall.
+    """
+    searched_at = None
+    stuck_at = None
+    run = 0
+    for index, step in enumerate(steps):
+        action = step.get("action") or {}
+        if action.get("name") == "search_files" and searched_at is None:
+            searched_at = index
+        run = run + 1 if str(step.get("observation", "")).startswith("ERROR") else 0
+        if run >= REPEATED_FAILURE and stuck_at is None:
+            stuck_at = index
+    return {
+        "called_search_files": searched_at is not None,
+        "first_search_step": searched_at,
+        "repeated_failure_step": stuck_at,
+        "repeated_failure_without_search": (
+            stuck_at is not None and (searched_at is None or searched_at > stuck_at)
+        ),
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
@@ -172,6 +213,13 @@ def main() -> None:
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
                 "registry_sha256": file_sha256(registry), "registry": str(registry),
                 "observation_role": spec.chat.observation_role,
+                # Stated rather than asserted. The repository's convention is that layer L is the
+                # output of block L-1, and orientation is confirmed empirically. What is not
+                # settled is whether the hosted lens was fitted under the same convention: its
+                # `source_layers = [0..32]` is consistent with both readings, and the geometry
+                # cannot separate them at the agreement levels we have. So a run records which
+                # convention it assumed and a reader can re-derive under the other.
+                "residual_layer_convention": "layer L is the output of block L-1 (repository convention; the lens's own is undetermined and disclosed)",
                 # The pre-registration requires the globally-attending layers recorded per layer,
                 # and neither Gemma entry declares a band, so `band` above is empty and carries no
                 # span information. This is where the map states its own secondary condition.
@@ -237,8 +285,10 @@ def main() -> None:
                 task = by_difficulty[p["difficulty"]][p["task_id"]]
                 traj = run_task(model, mtok, task, sampler=sampler, spec=spec, view=view, resolved=resolved,
                                 max_steps=args.max_steps, max_tokens=args.max_tokens, keep_last=2, capture=session)
+                steps = [{"action": s.get("action"), "observation": str(s.get("observation", ""))[:200]} for s in traj.steps]
                 entry.update(turns=traj.turns, generated_tokens=traj.generated_tokens, success=bool(traj.verdict.get("success")),
-                             loop_detected=traj.loop_detected, exhausted=traj.exhausted, steps=[{"action": s.get("action"), "observation": str(s.get("observation", ""))[:200]} for s in traj.steps])
+                             loop_detected=traj.loop_detected, exhausted=traj.exhausted, steps=steps,
+                             **_strategy(steps))
             else:
                 prompt_text = dict(CHAT)[p["label"]]
                 messages = [{"role": "user", "content": prompt_text}]
