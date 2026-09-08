@@ -311,3 +311,47 @@ carries it, inside one syntactic object, which holds format and lens domain roug
 are not compounds of populations that behave oppositely, and check the comparison against a control
 of the same syntactic kind rather than against a pooled background. Both checks changed a
 conclusion here, and neither needs our code or this model.
+
+---
+
+## The falsification, which came back against me
+
+The fix was worth making and my causal claim was too strong. Both halves are settled by one episode
+run under the fixed simulator by the D-CRO at my request, precisely because it risked my own account.
+
+`update-0028`, 24 steps, corrected rendering, fixed environment, greedy, 65.7 s:
+
+| | before the fix | after the fix |
+|---|---|---|
+| distinct calls | 2 | 2 |
+| the calls | `read_file("/test/0028/config.ini")` x 23 | `list_files("/")` x 12, `list_files(".")` x 12 |
+| observations | `ERROR: file not found` | `ERROR: directory not found` — honest |
+| ever names `workspace` | no | **no** |
+| passes | no | **no** |
+
+**What the fix did.** The false belief is gone. The model is no longer told the workspace is empty,
+so it no longer writes "there is no configuration file, I need to create it", and the `read_file`
+loop it produced does not occur. The note/call divergence that looked like confabulation this morning
+does not appear at all. That defect was real and this closes it.
+
+**What the fix did not do, and what I claimed it would.** I wrote above that the model ruled the token
+`workspace` out as a directory name "correctly, on our authority", and that this explained its absence
+from every read layer's top-10 at every fork. **That is refuted.** Given twenty-four turns, honest
+errors on both of its guesses twelve times each, and the literal string `workspace/test/0028/config.ini`
+in its prompt throughout, the model never once tries `workspace`. It alternates two rejected guesses
+until the ceiling. Our false observation was not what kept the right answer out of the candidate set.
+
+**So the D-CRO's finding is stronger than mine and mine was the one that needed correcting.** Their
+observation that `workspace` is absent from all 192 top-10 lists is a property of the model, not an
+artefact of the environment we now know was lying. It survives the removal of the lie.
+
+**The finding that replaces my explanation**, and it is cleaner than what it replaces because it now
+has a control: *Gemma does not extract a directory name from a path supplied in its prompt, and
+rejecting its alternatives does not cause it to look for one.* Twenty-four honest rejections change
+nothing. This is a statement about the model, made under an environment that no longer misleads it,
+and it is the first thing in this programme that is both about Gemma and not about our instruments.
+
+**One metric weakness this exposes.** `longest_identical_run` is 1 while `loop_detected` is true,
+because a two-cycle defeats a longest-identical-run counter. We have been quoting that column in the
+comparison table all day. A model alternating two failing calls is looping as surely as one repeating
+a single call, and the column would have read as a clean recovery.
