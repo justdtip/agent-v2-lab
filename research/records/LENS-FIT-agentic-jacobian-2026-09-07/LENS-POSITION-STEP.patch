@@ -1,0 +1,794 @@
+diff --git a/scripts/lens_position_step_diagnostic.py b/scripts/lens_position_step_diagnostic.py
+new file mode 100644
+index 0000000..c7880dd
+--- /dev/null
++++ b/scripts/lens_position_step_diagnostic.py
+@@ -0,0 +1,145 @@
++"""Run requirements §15; concurrent loading requires an explicit one-run flag."""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import subprocess
++import sys
++import time
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++
++
++def main():
++    started = time.monotonic()
++    parser = argparse.ArgumentParser(description=__doc__)
++    for name in ("model", "revision"):
++        parser.add_argument("--" + name, required=True)
++    for name in ("corpus", "plan", "record-dir", "registration"):
++        parser.add_argument("--" + name, required=True, type=Path)
++    parser.add_argument("--allow-concurrent-run", action="store_true")
++    args = parser.parse_args()
++    from local_llm_lab import runlock
++    from local_llm_lab.models import load_model_spec
++    from local_llm_lab.pipeline.lens_fitting.epsilon_diagnostic import atomic_record, validate_scope
++    from local_llm_lab.pipeline.lens_fitting.jacobian import WorkloadMemoryGuard, prepare_plan
++    from local_llm_lab.pipeline.lens_fitting.position_step_diagnostic import run_sweep
++    from local_llm_lab.pipeline.lens_fitting.runtime import (
++        configure_allocator_cache,
++        load_runtime,
++        prepare_fit,
++        primary_worktree,
++    )
++    from local_llm_lab.pipeline.live_lens.instruments import file_sha256
++
++    directory = args.record_dir.resolve()
++    registration = args.registration.read_text()
++    if "Director-authorized concurrent load" not in registration and args.allow_concurrent_run:
++        parser.error("concurrent run requires its written registration")
++    directory.mkdir(parents=True, exist_ok=False)
++
++    def progress(event):
++        row = dict(event, elapsed_s=time.monotonic() - started)
++        with (directory / "progress.jsonl").open("a") as stream:
++            stream.write(json.dumps(row, allow_nan=False) + "\n")
++            stream.flush()
++            os.fsync(stream.fileno())
++        print(json.dumps(row, allow_nan=False), flush=True)
++
++    try:
++        spec = load_model_spec(args.model)
++        sentinel = directory / f"{spec.name}-agentic-jacobian-unused.npz"
++        prepared = prepare_fit(args.corpus, spec, sentinel, kind="jacobian", revision=args.revision)
++        plan = prepare_plan(prepared, args.plan)
++        validate_scope(prepared.rows, plan)
++        root = Path(__file__).resolve().parents[1]
++        primary = primary_worktree()
++        sources = [
++            Path(__file__).resolve(),
++            root / "src/local_llm_lab/arch.py",
++            root / "src/local_llm_lab/runlock.py",
++            *sorted((root / "src/local_llm_lab/pipeline/lens_fitting").glob("*.py")),
++        ]
++        provenance = dict(
++            pid=os.getpid(),
++            snapshot=prepared.snapshot,
++            corpus_manifest_sha256=prepared.corpus_manifest_sha256,
++            plan_file_sha256=file_sha256(args.plan),
++            registration_sha256=file_sha256(args.registration),
++            source_commit=subprocess.check_output(
++                ["git", "rev-parse", "HEAD"], cwd=root, text=True
++            ).strip(),
++            source_sha256={str(p.relative_to(root)): file_sha256(p) for p in sources},
++            concurrent_authorized=args.allow_concurrent_run,
++            primary_state_before={
++                str(p): p.read_text() if p.exists() else None
++                for p in (primary / "outputs/.model-run.lock", primary / "outputs/.box-window.json")
++            },
++        )
++        atomic_record(directory / "provenance.json", provenance)
++        if args.allow_concurrent_run:
++            # Process-local exception only. Existing primary lock/window remain untouched.
++            private_lock = directory / ".model-run.lock"
++            runlock.LOCK_RELATIVE_PATH = private_lock
++            runlock.hold_model_run_lock(
++                path=private_lock,
++                check_processes=False,
++                session="Codex Director-authorized concurrent §15 diagnostic",
++            )
++        else:
++            runlock.PROJECT_ROOT = primary
++            runlock.hold_model_run_lock(path=primary / runlock.LOCK_RELATIVE_PATH)
++        import mlx.core as mx
++
++        limit = 6 * 2**30
++        previous_limit = mx.set_memory_limit(limit)
++        allocator = configure_allocator_cache()
++        progress(dict(event="load_started", pid=os.getpid(), allocation_limit_bytes=limit))
++        loaded = load_runtime(prepared)
++        loaded.model.eval()
++        guard = WorkloadMemoryGuard(
++            limit, mx.device_info()["max_recommended_working_set_size"], mx.get_peak_memory
++        )
++        guard("after_load")
++        provenance.update(
++            model_run_lock=str(loaded.lock_path),
++            allocator=allocator,
++            allocation_limit_bytes=limit,
++            previous_allocation_limit_bytes=previous_limit,
++        )
++        atomic_record(directory / "provenance.json", provenance)
++        report = run_sweep(
++            loaded.view,
++            prepared.rows,
++            plan,
++            directory,
++            started=started,
++            guard=guard,
++            provenance=provenance,
++            progress=progress,
++        )
++        report["peak_memory_bytes"] = float(mx.get_peak_memory())
++        atomic_record(directory / "diagnostic.json", report)
++        progress(
++            dict(
++                event="done", status=report["status"], peak_memory_bytes=report["peak_memory_bytes"]
++            )
++        )
++        return 0 if report["status"] == "self_check_passed" else 2
++    except BaseException as error:
++        atomic_record(
++            directory / "failure.json",
++            dict(
++                error_type=type(error).__name__,
++                error=str(error),
++                elapsed_s=time.monotonic() - started,
++            ),
++        )
++        raise
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/jacobian.py b/src/local_llm_lab/pipeline/lens_fitting/jacobian.py
+index 2388a04..e86007d 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/jacobian.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/jacobian.py
+@@ -9,7 +9,7 @@ from __future__ import annotations
+ import hashlib
+ import json
+ from collections import defaultdict
+-from dataclasses import dataclass, field
++from dataclasses import dataclass, field, replace
+ from pathlib import Path
+ from typing import Any
+ 
+@@ -88,6 +88,7 @@ def make_plan(
+     held_count,
+     working_set_bytes,
+     initial_peak_bytes,
++    step_coefficient=None,
+ ):
+     layers = list(layers)
+     if len(layers) < 3 or layers != list(range(1, max(layers) + 1)) or hidden_size <= 0:
+@@ -101,7 +102,7 @@ def make_plan(
+         raise ValueError("held sampling must cover the fit spans")
+     # Shortest fit prompt bounds the full-sequence reference's operational cost.
+     self_row = min({p["row"] for p in fit}, key=lambda i: (len(rows[i]["ids"]), i))
+-    return dict(
++    plan = dict(
+         schema_version=1,
+         allocator_cache_limit_bytes=0,
+         rows_sha256=digest(rows),
+@@ -136,6 +137,20 @@ def make_plan(
+         ),
+     )
+ 
++    if step_coefficient is not None:
++        if not np.isfinite(step_coefficient) or step_coefficient <= 0:
++            raise ValueError("finite positive position-step coefficient required")
++        plan["step_coefficient"] = float(step_coefficient)
++        plan["epsilon"] = (
++            "float32: c * norm(selected position primal) / norm(one tangent); zero norm: stop"
++        )
++    return plan
++
++
++def position_step_kwargs(plan):
++    """Legacy plans replay unchanged; revised plans bind all four numerical stages."""
++    return {"step_coefficient": plan["step_coefficient"]} if "step_coefficient" in plan else {}
++
+ 
+ def freeze_plan(path: Path, plan: dict) -> dict:
+     frozen = dict(plan, plan_sha256=digest(plan))
+@@ -169,6 +184,7 @@ def read_plan(path: Path, rows: list[dict]) -> dict:
+         held_count=len(plan["held_positions"]),
+         working_set_bytes=plan["working_set_bytes"],
+         initial_peak_bytes=plan["initial_peak_bytes"],
++        **position_step_kwargs(plan),
+     )
+     if expected != payload:
+         raise ValueError("plan does not match fixed protocol")
+@@ -364,13 +380,27 @@ class PositionState:
+     prefix_cache: Any
+     epsilon: float
+     primal_norm: float
++    step_coefficient: float = 0.01
+ 
+ 
+-def prepare_position(view, ids, layer: int, position: int, *, guard=None) -> PositionState:
++def with_position_step(state, coefficient):
++    """§15: normalize by only the perturbed float32 position, preserving native state."""
++    selected = np.asarray(state.full_primal[0, state.position], dtype=np.float32)
++    norm = float(np.linalg.norm(selected))
++    if not np.isfinite([norm, coefficient]).all() or min(norm, coefficient) <= 0:
++        raise ValueError("finite positive selected-position norm and coefficient required")
++    return replace(
++        state, primal_norm=norm, epsilon=coefficient * norm, step_coefficient=float(coefficient)
++    )
++
++
++def prepare_position(
++    view, ids, layer: int, position: int, *, guard=None, step_coefficient=None
++) -> PositionState:
+     """Cache the prefix through *all* blocks, derive current residual on a clone.
+ 
+-    The full original sequence (including suffix) defines epsilon. Its residual
+-    is also retained solely for the independent uncached reference calculation.
++    Legacy plans use the full-sequence norm. Revised §15 plans use only the
++    selected position. The full residual is retained for the uncached reference.
+     """
+     import mlx.core as mx
+ 
+@@ -405,7 +435,8 @@ def prepare_position(view, ids, layer: int, position: int, *, guard=None) -> Pos
+         h = view.run_block(index, h, masks, current_cache[index])
+     mx.eval(h)
+     _check_workload(guard, "prepare_current_primal")
+-    return PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon, norm)
++    state = PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon, norm)
++    return with_position_step(state, step_coefficient) if step_coefficient is not None else state
+ 
+ 
+ def _directions(state, directions):
+@@ -427,7 +458,14 @@ def reference_responses(state, directions, *, epsilon_scale=1.0, guard=None):
+         raise ValueError("positive epsilon scale required")
+     responses = []
+     for number, (direction, norm) in enumerate(zip(directions, norms, strict=True)):
+-        eps = float(finite_difference_steps(state.primal_norm, np.array([norm]), epsilon_scale)[0])
++        eps = float(
++            finite_difference_steps(
++                state.primal_norm,
++                np.array([norm]),
++                epsilon_scale,
++                coefficient=getattr(state, "step_coefficient", 0.01),
++            )[0]
++        )
+         tangent = mx.zeros_like(state.full_primal)
+         tangent[0, state.position] = mx.array(direction)
+         plus = pre_norm_tail(state.view, state.layer, state.full_primal + eps * tangent)
+@@ -460,7 +498,12 @@ def cached_responses(state, directions, *, mode, batch_size=8, epsilon_scale=1.0
+     for start in range(0, len(directions), width):
+         d = mx.array(directions[start : start + width])[:, None, :]
+         eps = mx.array(
+-            finite_difference_steps(state.primal_norm, norms[start : start + width], epsilon_scale)
++            finite_difference_steps(
++                state.primal_norm,
++                norms[start : start + width],
++                epsilon_scale,
++                coefficient=getattr(state, "step_coefficient", 0.01),
++            )
+         )[:, None, None]
+         primal = mx.broadcast_to(state.primal, d.shape)
+         outputs = []
+@@ -530,7 +573,12 @@ def self_check(view, rows, plan, *, batch_size=8):
+     for layer in plan["self_layers"]:
+         guard.context.update(layer=layer, mode="reference", epsilon_scale=1.0)
+         state = prepare_position(
+-            view, rows[plan["self_row"]]["ids"], layer, plan["self_position"], guard=guard
++            view,
++            rows[plan["self_row"]]["ids"],
++            layer,
++            plan["self_position"],
++            guard=guard,
++            **position_step_kwargs(plan),
+         )
+         guard("self_check_prepared")
+         reference = reference_responses(state, directions, guard=guard)
+@@ -716,7 +764,12 @@ def benchmark(view, rows, plan, proof, *, progress=None):
+             guard.context.update(extreme=extreme, sample=sample)
+             started = time.monotonic()
+             state = prepare_position(
+-                view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
++                view,
++                rows[sample["row"]]["ids"],
++                layer,
++                sample["position"],
++                guard=guard,
++                **position_step_kwargs(plan),
+             )
+             guard("benchmark_prepared")
+             preparation_s = time.monotonic() - started
+@@ -806,7 +859,12 @@ def fit_jacobian(view, rows, plan, proof, benchmark_report, *, progress=None):
+         for sample in plan["fit_positions"]:
+             guard.context["sample"] = sample
+             state = prepare_position(
+-                view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
++                view,
++                rows[sample["row"]]["ids"],
++                layer,
++                sample["position"],
++                guard=guard,
++                **position_step_kwargs(plan),
+             )
+             guard("fit_prepared")
+             matrix = full_jacobian(
+@@ -860,7 +918,8 @@ def prepare_plan(prepared, path, *, config_path=None):
+     config_path supplies exactly seed, held_count, working_set_bytes,
+     initial_peak_bytes and self/response/stability_bounds. The initial peak is a
+     declared conservative envelope including model, full reference and caches.
+-    Values exceeding the normal window stop here; no permission bypass exists.
++    An optional step_coefficient freezes the measured §15 position-local rule.
++    Values exceeding the normal memory window still stop here.
+     """
+     config = json.loads((Path(prepared.snapshot["snapshot_path"]) / "config.json").read_text())
+     config = config.get("text_config", config)
+@@ -876,8 +935,8 @@ def prepare_plan(prepared, path, *, config_path=None):
+             "response_bounds",
+             "stability_bounds",
+         }
+-        if set(parameters) != expected:
+-            raise ValueError(f"plan config requires exactly {sorted(expected)}")
++        if set(parameters) - {"step_coefficient"} != expected:
++            raise ValueError(f"plan config requires {sorted(expected)}; optional step_coefficient")
+         plan = make_plan(
+             prepared.rows,
+             layers=range(1, depth),
+@@ -941,8 +1000,8 @@ def run_jacobian_stage(view, rows, plan, *, stage, record_dir, progress=None):
+         raise
+ 
+ 
+-def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0):
+-    """The jlens full-primal rule, with an absolute zero-primal fallback."""
++def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0, *, coefficient=0.01):
++    """Direction-normalized step; caller supplies the frozen norm and coefficient."""
+     norms = np.asarray(tangent_norms, dtype=np.float32)
+     if (
+         not np.isfinite(primal_norm)
+@@ -951,7 +1010,10 @@ def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0):
+         or np.any(norms <= 0)
+         or not np.isfinite(epsilon_scale)
+         or epsilon_scale <= 0
++        or not np.isfinite(coefficient)
++        or coefficient <= 0
+     ):
+         raise ValueError("finite primal and positive tangent norms/epsilon scale required")
+     steps = 0.01 * primal_norm / norms if primal_norm else np.full_like(norms, 0.01)
+-    return steps * epsilon_scale
++    factor = epsilon_scale if coefficient == 0.01 else epsilon_scale * coefficient / 0.01
++    return steps * factor
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/position_step_diagnostic.py b/src/local_llm_lab/pipeline/lens_fitting/position_step_diagnostic.py
+new file mode 100644
+index 0000000..ff1e6b3
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/lens_fitting/position_step_diagnostic.py
+@@ -0,0 +1,231 @@
++"""Position-local finite-difference diagnostic specified by requirements §15.
++
++The production fitter remains unchanged until the sweep and original self-check pass.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import time
++from dataclasses import replace
++from pathlib import Path
++
++import numpy as np
++
++from .epsilon_diagnostic import BlockLedger, atomic_record, compare, validate_scope
++from .jacobian import (
++    cached_responses,
++    finite_difference_steps,
++    prepare_position,
++    reference_responses,
++    unit_directions,
++)
++
++COEFFICIENTS = (1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2)
++BUDGET_SECONDS = 1200
++
++
++def position_local_state(state):
++    """Change only the step normalization; retain both native primals and caches."""
++    selected = np.asarray(state.full_primal[0, state.position], dtype=np.float32)
++    norm = float(np.linalg.norm(selected))
++    if not np.isfinite(norm) or norm <= 0:
++        raise ValueError("finite positive selected-position norm required")
++    return replace(state, primal_norm=norm, epsilon=0.01 * norm)
++
++
++def plateaus(points):
++    """Return every eligible upper point; an isolated passing point is insufficient."""
++    if [p["coefficient"] for p in points] != list(COEFFICIENTS):
++        raise ValueError("complete ascending preregistered coefficient grid required")
++    return [
++        p["coefficient"]
++        for previous, p in zip(points, points[1:], strict=False)
++        if previous["failed_coordinates"] == p["failed_coordinates"] == 0
++    ]
++
++
++def run_sweep(
++    view,
++    rows,
++    plan,
++    directory,
++    *,
++    started,
++    guard,
++    provenance,
++    prepare=prepare_position,
++    reference=reference_responses,
++    cached=cached_responses,
++    progress=None,
++):
++    directory = Path(directory)
++    validate_scope(rows, plan)
++    directions = unit_directions(16, plan["hidden_size"], plan["seeds"]["self_directions"])
++    np.save(directory / "directions.npy", directions, allow_pickle=False)
++    report = dict(
++        status="incomplete",
++        diagnostic_only=True,
++        production_acceptance=False,
++        coefficient_grid=list(COEFFICIENTS),
++        budget_seconds=BUDGET_SECONDS,
++        normalization="float32 norm of the selected full-sequence residual position",
++        step="c * norm(h_t) / norm(direction)",
++        zero_norm="stop, no absolute fallback",
++        selection="largest common upper point with passing stability at it and next smaller grid point",
++        plan_sha256=plan["plan_sha256"],
++        provenance=provenance,
++        row=0,
++        position=438,
++        input_ids=rows[0]["ids"],
++        direction_sha256=hashlib.sha256(directions.tobytes()).hexdigest(),
++        measurements=[],
++        stability=[],
++        primals=[],
++        eligible={},
++        self_check=[],
++    )
++    with (directory / "block-ledger.jsonl").open("x") as ledger_stream:
++
++        def emit(event):
++            ledger_stream.write(json.dumps(event, sort_keys=True, allow_nan=False) + "\n")
++            ledger_stream.flush()
++            if event["event"] == "materialized_workload":
++                os.fsync(ledger_stream.fileno())
++
++        wrapped = BlockLedger(view, emit, started=started, budget=BUDGET_SECONDS)
++
++        def measured_guard(workload, **details):
++            wrapped.confirm(workload)
++            guard(workload, **details)
++
++        def checkpoint(event):
++            report.update(
++                elapsed_s=time.monotonic() - started,
++                block_accounting=wrapped.summary(),
++                progress=event,
++            )
++            atomic_record(directory / "diagnostic.json", report)
++            if progress:
++                progress(event)
++
++        def prepare_layer(layer):
++            wrapped.phase = dict(layer=layer, operation="prepare")
++            original = prepare(wrapped, rows[0]["ids"], layer, 438, guard=measured_guard)
++            corrected = position_local_state(original)
++            report["primals"].append(
++                dict(
++                    layer=layer, full_norm=original.primal_norm, position_norm=corrected.primal_norm
++                )
++            )
++            return corrected
++
++        def measure(state, coefficient, mode):
++            wrapped.phase = dict(layer=state.layer, coefficient=coefficient, operation=mode)
++            checkpoint(dict(event="measurement_started", **wrapped.phase))
++            kwargs = dict(epsilon_scale=coefficient / 0.01, guard=measured_guard)
++            response = (
++                reference(state, directions, **kwargs)
++                if mode == "reference"
++                else cached(state, directions, mode=mode, batch_size=8, **kwargs)
++            )
++            response = np.asarray(response, dtype=np.float32)
++            measured_guard("sweep_response", **wrapped.phase)
++            if response.shape != directions.shape:
++                raise ValueError("response shape differs from fixed directions")
++            filename = f"measurement-{len(report['measurements']) + 1:03}-layer-{state.layer}-c-{coefficient:g}-{mode}.npy"
++            np.save(directory / filename, response, allow_pickle=False)
++            report["measurements"].append(
++                dict(
++                    layer=state.layer,
++                    coefficient=coefficient,
++                    mode=mode,
++                    file=filename,
++                    file_sha256=hashlib.sha256((directory / filename).read_bytes()).hexdigest(),
++                    epsilon=finite_difference_steps(
++                        state.primal_norm, np.linalg.norm(directions, axis=1), coefficient / 0.01
++                    ).tolist(),
++                    nonfinite_coordinates=int((~np.isfinite(response)).sum()),
++                )
++            )
++            checkpoint(dict(event="measurement_completed", **wrapped.phase))
++            return response
++
++        try:
++            checkpoint(dict(event="sweep_started"))
++            for layer in plan["self_layers"]:
++                state = prepare_layer(layer)
++                points = []
++                for c in COEFFICIENTS:
++                    full = measure(state, c, "reference")
++                    half = measure(state, c / 2, "reference")
++                    point = dict(
++                        layer=layer,
++                        coefficient=c,
++                        **compare(full, half, **plan["stability_bounds"]),
++                    )
++                    points.append(point)
++                    report["stability"].append(point)
++                    checkpoint(
++                        dict(
++                            event="stability_completed",
++                            layer=layer,
++                            coefficient=c,
++                            failed_coordinates=point["failed_coordinates"],
++                            max_error=point["max_error"],
++                        )
++                    )
++                report["eligible"][str(layer)] = plateaus(points)
++                checkpoint(dict(event="layer_completed", layer=layer, eligible=plateaus(points)))
++                del state, full, half
++            common = set(COEFFICIENTS)
++            for values in report["eligible"].values():
++                common.intersection_update(values)
++            report["selected_per_layer"] = {
++                k: max(v) if v else None for k, v in report["eligible"].items()
++            }
++            report["selected_common_coefficient"] = max(common) if common else None
++            if not common:
++                report["status"] = (
++                    "instrument_limited"
++                    if any(not v for v in report["eligible"].values())
++                    else "no_common_coefficient"
++                )
++            else:
++                c = max(common)
++                # Re-run the original stability and both cache paths at the selected rule.
++                for layer in plan["self_layers"]:
++                    state = prepare_layer(layer)
++                    ref = measure(state, c, "reference")
++                    half = measure(state, c / 2, "reference")
++                    stable = compare(ref, half, **plan["stability_bounds"])
++                    for mode in ("restore", "broadcast"):
++                        candidate = measure(state, c, mode)
++                        agreement = compare(ref, candidate, **plan["self_bounds"])
++                        report["self_check"].append(
++                            dict(
++                                layer=layer,
++                                mode=mode,
++                                coefficient=c,
++                                stability=stable,
++                                agreement=agreement,
++                                passed=stable["failed_coordinates"]
++                                == agreement["failed_coordinates"]
++                                == 0,
++                            )
++                        )
++                    del state, ref, half, candidate
++                report["status"] = (
++                    "self_check_passed"
++                    if all(r["passed"] for r in report["self_check"])
++                    else "self_check_failed"
++                )
++            if wrapped.pending:
++                raise RuntimeError("unconfirmed native work at end of sweep")
++        except BaseException as error:
++            report.update(status="incomplete", error_type=type(error).__name__, error=str(error))
++        finally:
++            checkpoint(dict(event="sweep_finished", status=report["status"]))
++    return report
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/validation.py b/src/local_llm_lab/pipeline/lens_fitting/validation.py
+index 231f691..ea63644 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/validation.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/validation.py
+@@ -59,6 +59,7 @@ def validate_maps(view, rows, maps, plan, benchmark_report, *, progress=None):
+         WorkloadMemoryGuard,
+         cached_responses,
+         digest,
++        position_step_kwargs,
+         prepare_position,
+         require_benchmark,
+         unit_directions,
+@@ -99,7 +100,12 @@ def validate_maps(view, rows, maps, plan, benchmark_report, *, progress=None):
+             guard.context.update(sample=sample, epsilon_scale=scale)
+             if current != sample:
+                 state = prepare_position(
+-                    view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
++                    view,
++                    rows[sample["row"]]["ids"],
++                    layer,
++                    sample["position"],
++                    guard=guard,
++                    **position_step_kwargs(plan),
+                 )
+                 guard("validation_prepared")
+                 current = sample
+diff --git a/tests/test_lens_position_step_diagnostic.py b/tests/test_lens_position_step_diagnostic.py
+new file mode 100644
+index 0000000..5972d7a
+--- /dev/null
++++ b/tests/test_lens_position_step_diagnostic.py
+@@ -0,0 +1,158 @@
++"""Requirements §15: position-local steps and two-point plateau selection."""
++
++import numpy as np
++import pytest
++
++from local_llm_lab.pipeline.lens_fitting import position_step_diagnostic as diagnostic
++from local_llm_lab.pipeline.lens_fitting.jacobian import PositionState, finite_difference_steps
++
++
++def state(full):
++    return PositionState(None, 1, 0, full, full[:, :1], [], 1.0, float(np.linalg.norm(full)))
++
++
++def test_position_step_ignores_unperturbed_tokens():
++    # A return to whole-sequence scaling must fail this suffix-invariance check.
++    a = state(np.array([[[3.0, 4.0], [0.0, 0.0]]], dtype=np.float32))
++    b = state(np.array([[[3.0, 4.0], [600.0, 800.0]]], dtype=np.float32))
++    for source in (a, b):
++        corrected = diagnostic.position_local_state(source)
++        assert corrected.primal_norm == 5.0
++        assert corrected.full_primal is source.full_primal
++        assert finite_difference_steps(corrected.primal_norm, [2.0], 0.1)[0] == pytest.approx(
++            0.0025
++        )
++    with pytest.raises(ValueError, match="positive"):
++        diagnostic.position_local_state(state(np.zeros((1, 2, 2), dtype=np.float32)))
++
++
++def points(failures):
++    return [
++        dict(coefficient=c, failed_coordinates=f)
++        for c, f in zip(diagnostic.COEFFICIENTS, failures, strict=True)
++    ]
++
++
++def test_plateau_needs_adjacent_passes_and_chooses_largest():
++    assert diagnostic.plateaus(points([0, 1, 0, 1, 0, 1])) == []
++    assert diagnostic.plateaus(points([0, 0, 1, 0, 0, 1])) == [3e-4, 1e-2]
++    assert diagnostic.plateaus(points([0, 0, 0, 0, 0, 0]))[-1] == 3e-2
++    with pytest.raises(ValueError, match="complete"):
++        diagnostic.plateaus(points([0, 0, 0, 0, 0, 0])[:-1])
++
++
++def test_sweep_records_all_36_reference_measurements_and_six_cache_checks(tmp_path):
++    import hashlib
++    import json
++    import time
++    from types import SimpleNamespace
++
++    from local_llm_lab.pipeline.lens_fitting.jacobian import digest
++
++    rows = [dict(ids=list(range(439)))]
++    plan = dict(
++        self_row=0,
++        self_position=438,
++        self_layers=[1, 16, 31],
++        seeds=dict(self_directions=20260904),
++        rows_sha256=digest(rows),
++        hidden_size=3,
++        plan_sha256="p",
++        self_bounds=dict(atol=0.0003, rtol=0.003),
++        stability_bounds=dict(atol=0.003, rtol=0.03),
++    )
++    calls = []
++
++    def prepare(view, ids, layer, position, guard):
++        full = np.ones((1, 439, 3), dtype=np.float32)
++        return PositionState(view, layer, position, full, full[:, -1:], [], 1.0, 36.0)
++
++    def response(state, directions, *, epsilon_scale, guard, mode="reference", batch_size=None):
++        calls.append((state.layer, epsilon_scale, mode))
++        assert state.primal_norm == pytest.approx(np.sqrt(3))
++        state.view.run_block(state.layer, np.zeros((1, 439 if mode == "reference" else 1, 3)))
++        guard("materialized")
++        return directions.copy()  # Analytic identity tail: every coefficient is stable.
++
++    result = diagnostic.run_sweep(
++        SimpleNamespace(run_block=lambda *a: a[1]),
++        rows,
++        plan,
++        tmp_path,
++        started=time.monotonic(),
++        guard=lambda *a, **k: None,
++        provenance={},
++        prepare=prepare,
++        reference=response,
++        cached=response,
++    )
++    assert result["status"] == "self_check_passed"
++    assert result["selected_common_coefficient"] == 0.03
++    assert len(result["stability"]) == 18
++    assert len(calls) == 48  # 36 grid refs + 6 fresh refs + 6 cache comparisons.
++    assert len(result["self_check"]) == 6
++    assert result["block_accounting"]["pending_block_calls"] == 0
++    assert result["block_accounting"]["materialized_block_tokens"] == 42 * 439 + 6
++    names = [m["file"] for m in result["measurements"]]
++    assert len(set(names)) == len(names)  # Self-check must never overwrite sweep responses.
++    for m in result["measurements"]:
++        assert hashlib.sha256((tmp_path / m["file"]).read_bytes()).hexdigest() == m["file_sha256"]
++    assert json.loads((tmp_path / "diagnostic.json").read_text())["status"] == result["status"]
++
++
++def test_production_position_rule_preserves_primals_and_propagates_coefficient():
++    from local_llm_lab.pipeline.lens_fitting import jacobian as j
++
++    original = state(np.array([[[3.0, 4.0], [600.0, 800.0]]], dtype=np.float32))
++    corrected = j.with_position_step(original, 0.03)
++    assert corrected.primal_norm == 5.0
++    assert corrected.epsilon == 0.15
++    assert corrected.step_coefficient == 0.03
++    assert corrected.full_primal is original.full_primal
++    assert corrected.primal is original.primal
++    assert corrected.prefix_cache is original.prefix_cache
++    assert j.finite_difference_steps(
++        corrected.primal_norm, [2.0], 0.5, coefficient=corrected.step_coefficient
++    )[0] == pytest.approx(0.0375)
++    for c in (0.0, float("nan"), -0.01):
++        with pytest.raises(ValueError):
++            j.with_position_step(original, c)
++
++
++def test_revised_plan_round_trip_binds_step_without_changing_samples(tmp_path):
++    from local_llm_lab.pipeline.lens_fitting import jacobian as j
++
++    rows = [
++        dict(
++            index=i,
++            source=f"source-{i}",
++            split=split,
++            ids=[1, 2, 3],
++            spans=["task", "task", "call"],
++        )
++        for i, split in enumerate(("fit", "held"))
++    ]
++    kwargs = dict(
++        layers=[1, 2, 3],
++        hidden_size=4,
++        corpus_sha256="corpus",
++        snapshot_sha256="snapshot",
++        seed=9,
++        self_bounds=dict(atol=0.0003, rtol=0.003),
++        response_bounds=dict(atol=0.01, rtol=0.1),
++        stability_bounds=dict(atol=0.003, rtol=0.03),
++        held_count=150,
++        working_set_bytes=10000,
++        initial_peak_bytes=1000,
++    )
++    old = j.make_plan(rows, **kwargs)
++    revised = j.make_plan(rows, **kwargs, step_coefficient=0.03)
++    assert old["fit_positions"] == revised["fit_positions"]
++    assert old["held_positions"] == revised["held_positions"]
++    assert old["self_bounds"] == revised["self_bounds"]
++    assert j.digest(old) != j.digest(revised)
++    path = tmp_path / "plan.json"
++    frozen = j.freeze_plan(path, revised)
++    assert j.read_plan(path, rows) == frozen
++    assert j.position_step_kwargs(frozen) == dict(step_coefficient=0.03)
++    assert j.position_step_kwargs(old) == {}

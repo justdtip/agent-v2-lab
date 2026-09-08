@@ -1,0 +1,58 @@
+{
+  "time_utc": "2026-09-08T00:08:27.887870+00:00",
+  "reason": "projected cost exceeds 25 minutes/layer; Director choice required",
+  "stop_scope": "owned fit retry only",
+  "self_check_passed": true,
+  "benchmark_complete": false,
+  "full_fit_started": false,
+  "observations": [
+    {
+      "mode": "restore",
+      "batch_size": 8,
+      "preparation_s": 6.830136374999711,
+      "derivative_batch_s": 0.9420430829995894,
+      "projected_seconds_400": 123313.56917394733,
+      "projected_seconds_150": 46242.58844023025,
+      "peak_bytes": 6033572472
+    },
+    {
+      "mode": "broadcast",
+      "batch_size": 8,
+      "preparation_s": 7.225234957993962,
+      "derivative_batch_s": 0.40203233300417196,
+      "projected_seconds_400": 54350.232607731596,
+      "projected_seconds_150": 20381.33722789935,
+      "peak_bytes": 6033572472
+    }
+  ],
+  "best": {
+    "mode": "broadcast",
+    "batch_size": 8,
+    "preparation_s": 7.225234957993962,
+    "derivative_batch_s": 0.40203233300417196,
+    "projected_seconds_400": 54350.232607731596,
+    "projected_seconds_150": 20381.33722789935,
+    "peak_bytes": 6033572472
+  },
+  "larger_batches": [
+    {
+      "batch": 16,
+      "projection_bytes": 17179869184.0,
+      "reason": "memory projection exceeds 0.6 working set; Director window required"
+    },
+    {
+      "batch": 32,
+      "projection_bytes": 34359738368.0,
+      "reason": "memory projection exceeds 0.6 working set; Director window required"
+    },
+    {
+      "batch": 64,
+      "projection_bytes": 68719476736.0,
+      "reason": "memory projection exceeds 0.6 working set; Director window required"
+    }
+  ],
+  "progress_sha256": "1054c592f5bdd9c38332ad5cc194e62f3d21876e6001cb498da9629d30d4684a",
+  "note": "Progress elapsed_s is cumulative CLI time; derivative durations reconstructed from retained extremes, as benchmark() does.",
+  "signalled_wrapper_pid": 17995,
+  "owned_child_pid": 18003
+}

@@ -1,0 +1,122 @@
+{
+  "batch_size": 8,
+  "checks": [
+    {
+      "actual_batch_sizes": [
+        1
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 0.06586534023284912,
+      "layer": 1,
+      "max_error": 0.0012161731719970703,
+      "mode": "restore",
+      "outcome": "pass",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.012155294418334961,
+        "outcome": "pass",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        8
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 0.06586534023284912,
+      "layer": 1,
+      "max_error": 0.0014443397521972656,
+      "mode": "broadcast",
+      "outcome": "pass",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.012155294418334961,
+        "outcome": "pass",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        1
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 0.24499405860900877,
+      "layer": 16,
+      "max_error": 0.00019073486328125,
+      "mode": "restore",
+      "outcome": "pass",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.00202806293964386,
+        "outcome": "pass",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        8
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 0.24499405860900877,
+      "layer": 16,
+      "max_error": 0.00019657611846923828,
+      "mode": "broadcast",
+      "outcome": "pass",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.00202806293964386,
+        "outcome": "pass",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        1
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 1.1183559036254882,
+      "layer": 31,
+      "max_error": 2.3245811462402344e-05,
+      "mode": "restore",
+      "outcome": "pass",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.00034302473068237305,
+        "outcome": "pass",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    },
+    {
+      "actual_batch_sizes": [
+        8
+      ],
+      "atol": 0.0003,
+      "candidate_rows": 16,
+      "epsilon": 1.1183559036254882,
+      "layer": 31,
+      "max_error": 2.0042061805725098e-05,
+      "mode": "broadcast",
+      "outcome": "pass",
+      "reference_stability": {
+        "atol": 0.003,
+        "max_error": 0.00034302473068237305,
+        "outcome": "pass",
+        "rtol": 0.03
+      },
+      "rtol": 0.003
+    }
+  ],
+  "direction_seed": 20260904,
+  "directions": 16,
+  "plan_sha256": "f641666af320bca2580f85112026728954757e3770396d6ab2086b84810526e3"
+}
