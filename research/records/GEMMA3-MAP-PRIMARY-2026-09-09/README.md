@@ -162,3 +162,56 @@ any scale.** It is not a matter of waiting for more episodes; more episodes of t
 out-of-range rows. **The only route is a lens fitted at agent-transcript context lengths**, which is
 Codex's task 1 and which replaces the extrapolation rather than measuring it. That moves task 1 from
 the critical path to the only path for this particular question.
+
+---
+
+## The window-conditioned secondary comparison: null, and uninformatively so
+
+This comparison was declared void in the pre-registration on a hardcoded assumption, shown this
+morning to be live, and has never been computed. It now can be: **7 of 12 agentic episodes qualify,
+supplying 99,042 rank rows beyond the 1,024-token sliding window at horizon 4.**
+
+Globally-attending residual layers against their immediate window-attending neighbours, equal weight
+per episode:
+
+| global layer | global | neighbours | difference |
+|---:|---:|---:|---:|
+| 6 | 0.035 | 0.051 | −0.016 |
+| 12 | 0.033 | 0.028 | +0.005 |
+| 18 | 0.016 | 0.016 | −0.001 |
+| 24 | 0.033 | 0.039 | −0.006 |
+| 30 | 0.120 | 0.113 | +0.007 |
+
+**No difference at any depth, inconsistent in sign, on seven episodes and ninety-nine thousand rows.**
+
+**And the pre-registration said in advance that this null would be uninformative**, in terms worth
+quoting because they were written before any of it existed:
+
+> *the lens itself was fitted at a sequence length of 128 against a window of 1,024, so every
+> window-attending layer was fully causal throughout its fit. This comparison therefore reads
+> long-context behaviour through a lens that never saw it. It is a measurement worth making and it is
+> not evidence about the model until a lens fitted above the window agrees with it.*
+
+A lens for which the two layer kinds were identical during fitting is a lens that cannot distinguish
+them at readout. **The null is exactly what an instrument blind to the distinction produces, so it
+cannot separate "the model does not differ here" from "the lens cannot see it."** That was called
+correctly in advance and it is the reason the comparison is reported and not interpreted.
+
+**One thing worth noting beside it.** Foreknowledge beyond position 1,024 runs 0.016 to 0.120 at
+horizon 4, against a base rate of 19.1% computed across all positions. Long-context positions are
+much harder to read. That is consistent with extrapolation degrading the lens and equally consistent
+with long contexts being genuinely harder, and nothing in this corpus separates them — the same
+confound, for the third time.
+
+## Three pre-registered questions, one answer
+
+| question | outcome |
+|---|---|
+| what the 3x–18x extrapolation costs | **uncomputable**: no agentic reading is in range |
+| global against window-attending layers | **null, uninterpretable**: the lens was fitted where the distinction does not exist |
+| why long-context foreknowledge is low | **unseparable**: instrument or task, not distinguishable here |
+
+All three want the same thing and it is not more episodes. **A lens fitted at agent-transcript context
+lengths, above the sliding window, is the only instrument that makes any of these three answerable**,
+and it is Codex's task 1. That is now three independent routes to the same conclusion, and none of
+them was the argument for it this morning.
