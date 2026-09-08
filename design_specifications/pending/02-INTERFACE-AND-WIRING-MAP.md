@@ -1113,5 +1113,18 @@ hoist, an inline, a rename or a caching change all count — **re-demonstrate th
 bites** before quoting the gate. A control is code and it rots like code, except that its rot is
 silent by construction, because a disarmed control reports success.
 
+**R56(f) — when a filter can empty a set, an empty set must be an error and not an answer.** On
+2026-09-08 the layer-family pairing selected candidate partners by block kind. On a dense backbone
+the opposite kind does not exist, so the candidate set was **empty**, every in-band layer silently
+lost its partner, and the family was returned as the bare selection **with a confident reason
+string attached**. The label was wrong and that was the visible part; the silent part was that a
+filter had removed everything and the code read that as "no partners" rather than as "this
+partition does not apply here". A wrong label is a reader's problem. A confidently explained empty
+result is the failure this programme keeps rediscovering. Any filter whose predicate can be
+unsatisfiable by construction — a kind that a family lacks, a span a model never uses, a tag no
+record carries — must distinguish *nothing matched* from *nothing applies*, and raise on the
+second. **A visible failure would have been better** is the standard, and it is cheap: one
+emptiness check at the point of filtering.
+
 Together these are why the port was accepted on evidence rather than on a passing number:
 `research/records/GEMMA3-PORT-ACCEPTANCE-2026-09-08/`.
