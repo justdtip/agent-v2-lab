@@ -540,3 +540,52 @@ plan" survives, and gains a stage in front of it: the plan also shapes what it e
 store top-k ids only. *How much* mass the schema holds — whether `Next` sits at 0.4 or 0.99 — is the
 quantity that would separate a strong prior from a fixed one, and it is exactly what the targeted
 replay recovers. This is now the best-motivated use of that replay.
+
+### 11. The primary comparison is stratified by token history, measured before stage two lands
+
+The D-CRO quantified how strongly the layer-34 readout depends on whether a token has already
+appeared in its own prompt, over 10,575 reading positions across eight completed episodes:
+
+| prior occurrences of the true token | n | in top ten | is top-1 |
+|---|---:|---:|---:|
+| 0 | 2,238 | **51.5%** | 22.6% |
+| 1–2 | 1,843 | 82.4% | 59.3% |
+| 3–9 | 2,576 | 94.6% | 80.2% |
+| 10+ | 3,918 | **96.8%** | 83.1% |
+
+**That gradient is large enough to carry a span comparison on its own**, so the restated primary
+comparison — call arguments against call skeletons — has to be checked against it rather than assumed
+immune. Measured over the same episodes:
+
+| span | n | median prior occurrences | % with 0 | % with 10+ |
+|---|---:|---:|---:|---:|
+| `call_skeleton` | 1,312 | 8 | 3.7% | **47.0%** |
+| `call_argument` | 666 | 12 | 3.6% | **55.9%** |
+| `note` | 1,203 | 11 | 6.7% | 52.1% |
+
+**The confound is real, modest, and runs opposite to the intuition** that made me look for it. I
+expected arguments to be novel and skeletons repeated. In this corpus arguments are the *more*
+repeated class — paths are read from observations and re-emitted, while the skeleton carries rarer
+punctuation. So the bias inflates the **argument** side, and an unadjusted result showing arguments
+read earlier in depth would be partly a statement about how often the model has already seen those
+tokens.
+
+**Fixed.** The primary comparison is reported **stratified by prior-occurrence bucket**, using the
+four buckets above, with the per-bucket counts printed. An unstratified figure may be shown beside it
+and is never the headline. Both quantities are computable from what stage two already records —
+`prompt_ids` on `begin_turn`, `span` and `token_id` on `emitted` — so this needs no rerun and no
+capture change.
+
+**And a threshold that applies to every comparison in this map, not only the primary.** Below about
+three prior occurrences the readout is in a weak regime: 51.5% top-ten at zero occurrences against
+94.6% at three to nine. **No comparison across positions of unequal token history is reported without
+matching on it.** Two claims died of exactly this today — one from each seat, on the same episode,
+within an hour — which is the evidence that the rule is needed rather than fastidious.
+
+**What the same measurement establishes in the instrument's favour**, and it corrects an
+over-reaction of mine: 51.5% in the top ten for a token that has **never** appeared in the prompt,
+against 0.004% by chance in a 262,208-token vocabulary, is not a frequency counter. I had written
+that a top-k over a just-seen prompt "may not be a good instrument for this question at all". That is
+too strong and it is now measured. The readout carries real predictive content on unseen tokens; what
+it cannot support is an uncontrolled comparison across unequal history. **The rule is a filter, not
+an abandonment.**
