@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import resource
 import sys
 import time
@@ -29,8 +30,19 @@ def require_window():
     from local_llm_lab.pipeline.lens_fitting.runtime import primary_worktree
 
     path = primary_worktree() / "." / "outputs/.box-window.json"
-    if runlock.read_window(path) is None or runlock.blocking_window(path) is not None:
+    held = runlock.read_window(path)
+    if (
+        held is None
+        or not held.nonce
+        or held.nonce != os.environ.get(runlock.WINDOW_HOLDER_ENV)
+        or runlock.blocking_window(path) is not None
+        or held.holder_state != "running"
+        or held.expected_end_epoch is None
+        or time.time() >= held.expected_end_epoch
+    ):
         raise ValueError("heavy CPU readout requires this process's announced R61 window")
+    print(f"window status: holder pid {held.pid}: {held.holder_state}", flush=True)
+    return held
 
 
 def load_inputs(registration):
@@ -39,6 +51,7 @@ def load_inputs(registration):
     from local_llm_lab.pipeline.sae_bridge.assets import (
         checked_hash,
         decoder_from_files,
+        example_topk_from_file,
         read_bf16_matrix,
         validate_reference_config,
     )
@@ -108,7 +121,15 @@ def load_inputs(registration):
     from tokenizers import Tokenizer
 
     tokenizer = Tokenizer.from_file(str(root / "tokenizer.json"))
-    return w, j, wrong_j, d, tokenizer
+    examples = dictionary["examples"]
+    tokens, logits = example_topk_from_file(
+        Path(examples["path"]),
+        expected_sha256=examples["sha256"],
+        width=dictionary["width"],
+        k=reg["k"],
+        vocabulary=vocab,
+    )
+    return w, j, wrong_j, d, tokenizer, tokens, logits
 
 
 def main(argv=None):
@@ -120,8 +141,11 @@ def main(argv=None):
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args(argv)
     from local_llm_lab.pipeline.live_lens.instruments import file_sha256
-    from local_llm_lab.pipeline.sae_bridge.core import iter_feature_topk
-    from local_llm_lab.pipeline.sae_bridge.readout import acceptance, write_readout
+    from local_llm_lab.pipeline.sae_bridge.readout import (
+        acceptance,
+        identity_baseline,
+        write_readout,
+    )
 
     registration_bytes = args.registration.read_bytes()
     reg = json.loads(registration_bytes)
@@ -129,6 +153,14 @@ def main(argv=None):
     peak = reg.get("projected_peak_gib", 0)
     if not math.isfinite(peak) or peak <= 0 or not reg.get("peak_basis"):
         parser.error("registration must declare a projected peak and its basis")
+    baseline = reg.get("identity_baseline", {})
+    feature_ids = baseline.get("feature_ids", [])
+    if (
+        baseline.get("criterion") != "exact_topk_membership"
+        or not feature_ids
+        or not reg.get("dictionary", {}).get("examples")
+    ):
+        parser.error("registration needs shipped examples and a predeclared identity baseline")
     if not args.execute:
         print(
             json.dumps(
@@ -157,8 +189,20 @@ def main(argv=None):
             parser.error("benchmark is not accepted for this exact registration")
     args.output.mkdir(parents=True)
     started = time.monotonic()
-    w, j, wrong_j, d, tokenizer = load_inputs(reg)
+    w, j, wrong_j, d, tokenizer, shipped_tokens, shipped_logits = load_inputs(reg)
     loaded_s = time.monotonic() - started
+    # First computation: J=I, without composing any Jacobian/decoder product.
+    direct = identity_baseline(
+        w, d, shipped_tokens, shipped_logits, feature_ids=feature_ids, k=reg["k"]
+    )
+    direct.update(registration_sha256=registration_sha, instrument=reg)
+    write_json(args.output / "identity-baseline.json", direct)
+    if not direct["passed"]:
+        print(
+            "Direct/shipped readout compatibility unresolved; stopping before J readout", flush=True
+        )
+        return 2
+    require_window()
     evidence, jd = acceptance(
         w, j, wrong_j, d, feature_id=reg["feature_id"], k=reg["k"], **reg["tolerances"]
     )
@@ -170,16 +214,32 @@ def main(argv=None):
     before_scores = time.monotonic()
     if args.mode == "benchmark":
         count = min(16, d.shape[1])
-        for _row in iter_feature_topk(w, jd, reg["k"], feature_ids=list(range(count))):
-            pass
+        completion = write_readout(
+            args.output / "benchmark-features.jsonl",
+            w,
+            jd[:, :count],
+            k=reg["k"],
+            metadata={
+                **reg,
+                "registration_sha256": registration_sha,
+                "benchmark_feature_ids": list(range(count)),
+            },
+            d=d[:, :count],
+            shipped_tokens=shipped_tokens[:count],
+            shipped_logits=shipped_logits[:count],
+            token_piece=tokenizer.id_to_token,
+        )
+        if completion.get("status") != "passed":
+            raise ValueError("direct benchmark changed after its initial acceptance")
         seconds = time.monotonic() - before_scores
         projected_seconds = seconds / count * d.shape[1]
     else:
 
         def progress(row):
+            require_window()
             print(json.dumps(row), flush=True)
 
-        write_readout(
+        completion = write_readout(
             args.output / "features.jsonl",
             w,
             jd,
@@ -188,25 +248,46 @@ def main(argv=None):
                 **reg,
                 "registration_sha256": registration_sha,
                 "benchmark_sha256": file_sha256(args.benchmark),
+                "identity_baseline_sha256": file_sha256(args.output / "identity-baseline.json"),
             },
+            d=d,
+            shipped_tokens=shipped_tokens,
+            shipped_logits=shipped_logits,
             token_piece=tokenizer.id_to_token,
             progress=progress,
         )
+        if completion.get("status") == "ruling_required":
+            write_json(
+                args.output / "result.json",
+                {
+                    "status": "ruling_required",
+                    "mode": args.mode,
+                    "registration_sha256": registration_sha,
+                    "instrument": reg,
+                    "completion": completion,
+                    "model_forward_count": 0,
+                },
+            )
+            return 2
         count = d.shape[1]
         seconds = time.monotonic() - before_scores
         projected_seconds = benchmark["projected_readout_seconds"]
     # This tool targets the local macOS CPU; ru_maxrss there is bytes.
     peak_gib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**30
+    require_window()
     result = {
         "status": "accepted" if peak_gib <= reg["projected_peak_gib"] else "peak_bound_exceeded",
         "mode": args.mode,
         "registration_sha256": registration_sha,
         "instrument": reg,
+        "identity_baseline_sha256": file_sha256(args.output / "identity-baseline.json"),
         "loaded_seconds": loaded_s,
         "elapsed_seconds": time.monotonic() - started,
         "measured_features": count,
         "feature_seconds": seconds,
         "projected_readout_seconds": projected_seconds,
+        "projected_total_seconds": before_scores - started + projected_seconds,
+        "benchmark_scope": "direct pass + lensed pass + companion comparisons + JSONL writes",
         "peak_rss_gib": peak_gib,
         "projected_peak_gib": reg["projected_peak_gib"],
         "model_forward_count": 0,

@@ -135,3 +135,31 @@ def decoder_from_files(
         raise ValueError("nonfinite dictionary decoder")
     checked_hash(params_path, expected_params_sha256)
     return result.T
+
+
+def example_topk_from_file(
+    path: Path, *, expected_sha256: str, width: int, k: int, vocabulary: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Read only the shipped top-token companion, never its activation corpus.
+
+    Full-file hashes bind these small arrays to the exact selected dictionary's
+    examples artifact. Equal dimensions or byte lengths cannot establish identity.
+    """
+    if any(type(n) is not int or n <= 0 for n in (width, k, vocabulary)):
+        raise ValueError("examples geometry must be positive integers")
+    checked_hash(path, expected_sha256)
+    with safe_open(str(path), framework="np") as archive:
+        for key, dtype in (("top_tokens", "I32"), ("top_logits", "F32")):
+            tensor = archive.get_slice(key)
+            if tensor.get_shape() != [width, k] or tensor.get_dtype() != dtype:
+                raise ValueError(f"examples {key} shape/dtype differs from registration")
+        tokens = archive.get_tensor("top_tokens")
+        logits = archive.get_tensor("top_logits")
+    if np.any(tokens < 0) or np.any(tokens >= vocabulary):
+        raise ValueError("examples token ID outside readout vocabulary")
+    if np.any(np.diff(np.sort(tokens, axis=1), axis=1) == 0):
+        raise ValueError("examples top tokens contain duplicate IDs")
+    if not np.isfinite(logits).all() or np.any(np.diff(logits, axis=1) > 0):
+        raise ValueError("examples top logits must be finite and nonincreasing")
+    checked_hash(path, expected_sha256)
+    return tokens, logits

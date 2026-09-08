@@ -1,0 +1,114 @@
+{
+  "schema_version": 2,
+  "stage": "A1",
+  "reference_model": "gemma3-4b-bf16",
+  "model_identity": {
+    "base": "google/gemma-3-4b-it",
+    "training": null,
+    "num_layers": 34
+  },
+  "hidden_size": 2560,
+  "reference_config_sha256": "d9fb6da67367cb47c34f94f2c8dc1e1f3339b4b7554a45bdf2dc894039cb4a21",
+  "tokenizer_sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+  "readout": {
+    "index": "model.safetensors.index.json",
+    "index_sha256": "939869951aab5cfb9f691c179830e70fd28d1d2832e7fca21c6f99f37ad9ff57",
+    "key": "language_model.model.embed_tokens.weight",
+    "shard": "model-00001-of-00002.safetensors",
+    "shard_sha256": "e6a38f837c7e9f463d2997231ba2b07d2c82b63a7925c3bd8f30ba7a68021765",
+    "convention": "raw tied embedding; no final RMSNorm, softcap, bias or softmax",
+    "scope": "raw linear readout defined by this instrument; not the complete model logit function"
+  },
+  "lens": {
+    "path": "/Users/daniel.tipton/Desktop/An app/models/jlens/gemma-3-4b-it_jacobian_lens.npz",
+    "sha256": "a14ab264fc47de9c59b3183a8783a60ca6f1dee2ea635e88223d5b2d67b03193",
+    "fitting_precision": "bf16",
+    "stored_precision": "fp16 widened to fp32",
+    "fit_context_tokens": 128,
+    "scope_limit": "prose; cannot support sliding/global contrast",
+    "layer_convention_status": "assumed J{k} = output of block k, probe layer k+1; hosted fitting source offset not established by geometry"
+  },
+  "probe_layer": 18,
+  "wrong_probe_layer": 1,
+  "feature_id": 0,
+  "k": 10,
+  "dictionary": {
+    "repository": "google/gemma-scope-2-4b-it",
+    "revision": "3e94b68be95290aada5b7525cf431d3040f81bb1",
+    "suite": "resid_post_all",
+    "variant": "big",
+    "width": 16384,
+    "l0": 120,
+    "config": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/config.json",
+    "config_sha256": "6622dc7dd7b98a604bb40989efdacf09adb7a52f0383ed9e62c13cde20ee8d61",
+    "params": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/params.safetensors",
+    "params_sha256": "7a0ccb745bd06e4abdfb8929f1f6399209429d02594a849efead101e38262924",
+    "coordinate_convention": "gemma_scope2_raw_resid_post_no_rescale",
+    "scaling_evidence": "SAELens ee45e7406165ce267b33d33b7371bbb63ef24db8 Gemma 3 loader: raw w_dec, normalize_activations none",
+    "examples": {
+      "repository": "google/gemma-scope-2-4b-it",
+      "revision": "3e94b68be95290aada5b7525cf431d3040f81bb1",
+      "filename": "resid_post_all/layer_17_width_16k_l0_big/examples.safetensors",
+      "path": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/examples.safetensors",
+      "sha256": "2947b2bd64234f61aef694e7edd3d8c5e7437c5af10b65bc07b3fd298c97dd7d",
+      "bytes": 815733608,
+      "scope": "one examples file at the already authorised dictionary layer; no checkpoint loaded"
+    }
+  },
+  "tolerances": {
+    "rtol": 0.0001,
+    "atol": 0.001,
+    "relative_l2_limit": 0.0001
+  },
+  "label_status": "unlabelled",
+  "projected_peak_gib": 6.0,
+  "peak_basis": "FP32 W 2.686GB + D/JD/wrong-JD 0.504GB + two maps 0.052GB + independent FP64 J and two 4096-row scratch blocks 0.220GB + bounded BF16 input chunks and vocabulary ranking scratch. All other hosted maps freed before W load. Sum about3.5GB, with >2GiB allocator/BLAS/OS margin. No full vocabulary-by-features matrix. Benchmark records process peak before full run. The examples reader retains only two [16384,10] arrays, about1.3MB; full direct baseline caches top-k only, about2MB. Direct and lensed vocabulary scores are streamed separately. Companion adds no full corpus allocation.",
+  "amends": {
+    "path": "A1-REGISTRATION.json",
+    "sha256": "7fba477c3669dd7af42f3f66575e61a8f75acf4c60f47113e8e28d6e4749dd24",
+    "reason": "second bridge amendment; no previous real readout executed"
+  },
+  "label_reason": "no Neuronpedia source maps to `resid_post_all`; the residual labels index `resid_post/layer_17_width_16k_l0_medium`, a different training run at a sparsity this suite never published.",
+  "identity_baseline": {
+    "feature_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "criterion": "exact_topk_membership",
+    "order": "first numerical operation; J replaced by identity; no J composition until passed",
+    "convention": "raw tied W @ d, no final normalization",
+    "full_readout": "after the named-feature independent-product acceptance, all direct features are checked before any production WJD readout column; stop on incompatibility",
+    "interpretation": "Tests compatibility with the shipped score convention. Mismatch is unresolved compatibility, not proof of an orientation defect. Official tutorial includes stored final-norm weights, but its provenance is not the generation implementation for this artifact. Native Gemma uses 1 + stored weights. No silent substitution.",
+    "sequence": [
+      "first16 raw direct vs shipped",
+      "named feature0 independent-product and wrong-layer acceptance",
+      "all direct features vs shipped",
+      "all production WJD feature readouts only if direct pass"
+    ],
+    "registration_status": "unrun; source-review correction explicitly distinguishes named-feature numerical acceptance from production readout"
+  },
+  "final_norm_diagnostic": {
+    "artifact": "final-norm-weights.npz",
+    "sha256": "6b1e889a84ead75b5a4b603d12493fa2f81685999d83254b93f745563e1fcc8a",
+    "conventions": [
+      "raw W D",
+      "tutorial W diag(stored_weight) D",
+      "native gain W diag(1 + stored_weight) D"
+    ],
+    "status": "weights acquired on explicit authorization; numerical comparison unrun and descriptive; original raw gate unchanged"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "repository": "google/gemma-scope-2-4b-it",
+  "revision": "3e94b68be95290aada5b7525cf431d3040f81bb1",
+  "filename": "resid_post_all/layer_17_width_16k_l0_big/examples.safetensors",
+  "path": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/examples.safetensors",
+  "sha256": "2947b2bd64234f61aef694e7edd3d8c5e7437c5af10b65bc07b3fd298c97dd7d",
+  "bytes": 815733608,
+  "scope": "one examples file at the already authorised dictionary layer; no checkpoint loaded"
+}

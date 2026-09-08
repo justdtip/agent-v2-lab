@@ -1,0 +1,42 @@
+{
+  "model": {
+    "base": "google/gemma-3-4b-it",
+    "training": null,
+    "num_layers": 34
+  },
+  "precision": "bf16",
+  "source_shard": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-bf16/model-00002-of-00002.safetensors",
+  "source_shard_sha256": "6522ed33ab081ee217df37cd795a515c4bed5bb23eef0947c1ef53296c1be91a",
+  "index_sha256": "939869951aab5cfb9f691c179830e70fd28d1d2832e7fca21c6f99f37ad9ff57",
+  "tensor": "language_model.model.norm.weight",
+  "tensor_metadata": {
+    "data_offsets": [
+      1997773312,
+      1997778432
+    ],
+    "dtype": "BF16",
+    "shape": [
+      2560
+    ]
+  },
+  "tensor_raw_sha256": "5c5c3da05bb119e00508ea5dde3d56509c9cdea991b48f323635cdf7ac2861f5",
+  "artifact": "final-norm-weights.npz",
+  "artifact_sha256": "6b1e889a84ead75b5a4b603d12493fa2f81685999d83254b93f745563e1fcc8a",
+  "shape": [
+    2560
+  ],
+  "stored_dtype": "BF16",
+  "output_dtype": "float32",
+  "conversion": "BF16 bits widened exactly; F32 retained",
+  "effective_gain_rule": "1 + stored_weight; no residual-dependent RMS factor",
+  "local_runtime_source": "/Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/mlx_lm/models/gemma3_text.py",
+  "local_runtime_source_sha256": "884bb398288beda5e90caf3de60a15f5d17b8e383d28c85cca07de1e0aeafa38",
+  "local_runtime_norm_definition": "class RMSNorm(nn.Module):\n    def __init__(self, dims: int, eps: float = 1e-5):\n        super().__init__()\n        self.weight = mx.ones((dims,))\n        self.eps = eps\n\n    def __call__(self, x):\n        return mx.fast.rms_norm(x, 1.0 + self.weight, self.eps)\n\n",
+  "stored_min": -1.0546875,
+  "stored_max": 53.5,
+  "effective_min": -0.0546875,
+  "effective_max": 54.5,
+  "model_forward_count": 0,
+  "native_framework_imported": false,
+  "scope": "small vector extraction only; no embedding matrix or model instantiated"
+}

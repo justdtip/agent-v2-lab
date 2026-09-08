@@ -1,0 +1,515 @@
+{
+  "schema_version": 1,
+  "format": "gemma-transcript-lens-registration-v1",
+  "producer_model": "gemma3-4b",
+  "fit_models": [
+    "gemma3-4b-bf16",
+    "gemma3-4b"
+  ],
+  "model_identity": {
+    "base": "google/gemma-3-4b-it",
+    "training": null,
+    "num_layers": 34
+  },
+  "fitting_context_tokens": 2048,
+  "tokenizer_directory": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-4bit",
+  "tokenizer": {
+    "files": [
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-4bit/chat_template.jinja",
+        "sha256": "7de1c58e208eda46e9c7f86397df37ec49883aeece39fb961e0a6b24088dd3c4"
+      },
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-4bit/tokenizer.json",
+        "sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726"
+      },
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-4bit/tokenizer_config.json",
+        "sha256": "e8d2a8cd75e50a9112fed9e92680732dca8b8928895c7d2bb1e9bfc5031c6eec"
+      }
+    ],
+    "assets": [
+      {
+        "name": "chat_template.jinja",
+        "sha256": "7de1c58e208eda46e9c7f86397df37ec49883aeece39fb961e0a6b24088dd3c4"
+      },
+      {
+        "name": "tokenizer.json",
+        "sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726"
+      },
+      {
+        "name": "tokenizer_config.json",
+        "sha256": "e8d2a8cd75e50a9112fed9e92680732dca8b8928895c7d2bb1e9bfc5031c6eec"
+      }
+    ],
+    "chat_template_sha256": "a5c992cca048607f8a84c3d6ca4eb14bacc19bc1b4b2b3adfe3b987a4569f714"
+  },
+  "snapshots": {
+    "gemma3-4b": {
+      "hf_id": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-4bit",
+      "resolved_revision": null,
+      "snapshot_path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-4bit",
+      "snapshot_sha256": "e20f902f59124c155a8739a93221bfeafdea69b3a90ca39e74cfeae47c051b19",
+      "files": [
+        {
+          "name": "chat_template.jinja",
+          "sha256": "7de1c58e208eda46e9c7f86397df37ec49883aeece39fb961e0a6b24088dd3c4",
+          "bytes": 1532
+        },
+        {
+          "name": "config.json",
+          "sha256": "9c7211ac790b14677c1e104eab954feeee1ba33634075f8e97459816b707c11c",
+          "bytes": 980
+        },
+        {
+          "name": "generation_config.json",
+          "sha256": "fd9324becc53c4be610db39e13a613006f09fd6ef71a95fb6320dc33157490a3",
+          "bytes": 215
+        },
+        {
+          "name": "model.safetensors",
+          "sha256": "50f39122c318f262136df495b5cd1dfeb6e8170fbc5eabda1bc400670b8198da",
+          "bytes": 2183295977
+        },
+        {
+          "name": "model.safetensors.index.json",
+          "sha256": "3a5bbc82ff34d68405c524e03aca88d2e455dacf87e3957441c10a389e48c518",
+          "bytes": 79768
+        },
+        {
+          "name": "tokenizer.json",
+          "sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+          "bytes": 33384567
+        },
+        {
+          "name": "tokenizer_config.json",
+          "sha256": "e8d2a8cd75e50a9112fed9e92680732dca8b8928895c7d2bb1e9bfc5031c6eec",
+          "bytes": 744
+        }
+      ],
+      "identity_basis": "exact config, model*.safetensors, indices and runtime assets"
+    },
+    "gemma3-4b-bf16": {
+      "hf_id": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-bf16",
+      "resolved_revision": null,
+      "snapshot_path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-bf16",
+      "snapshot_sha256": "107888c0f7d717d4357699e32077144ffce6d7665c5bd0a75dfd0d85e17f52ed",
+      "files": [
+        {
+          "name": "chat_template.jinja",
+          "sha256": "7de1c58e208eda46e9c7f86397df37ec49883aeece39fb961e0a6b24088dd3c4",
+          "bytes": 1532
+        },
+        {
+          "name": "config.json",
+          "sha256": "d9fb6da67367cb47c34f94f2c8dc1e1f3339b4b7554a45bdf2dc894039cb4a21",
+          "bytes": 775
+        },
+        {
+          "name": "generation_config.json",
+          "sha256": "fd9324becc53c4be610db39e13a613006f09fd6ef71a95fb6320dc33157490a3",
+          "bytes": 215
+        },
+        {
+          "name": "model-00001-of-00002.safetensors",
+          "sha256": "e6a38f837c7e9f463d2997231ba2b07d2c82b63a7925c3bd8f30ba7a68021765",
+          "bytes": 5338068786
+        },
+        {
+          "name": "model-00002-of-00002.safetensors",
+          "sha256": "6522ed33ab081ee217df37cd795a515c4bed5bb23eef0947c1ef53296c1be91a",
+          "bytes": 2422515695
+        },
+        {
+          "name": "model.safetensors.index.json",
+          "sha256": "939869951aab5cfb9f691c179830e70fd28d1d2832e7fca21c6f99f37ad9ff57",
+          "bytes": 45758
+        },
+        {
+          "name": "tokenizer.json",
+          "sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+          "bytes": 33384567
+        },
+        {
+          "name": "tokenizer_config.json",
+          "sha256": "e8d2a8cd75e50a9112fed9e92680732dca8b8928895c7d2bb1e9bfc5031c6eec",
+          "bytes": 744
+        }
+      ],
+      "identity_basis": "exact config, model*.safetensors, indices and runtime assets"
+    }
+  },
+  "cohorts": [
+    {
+      "split": "train",
+      "difficulty": 0,
+      "count": 24,
+      "seed": 20260902,
+      "generator_version": 4,
+      "tasks": [
+        {
+          "task_id": "train-read-0000-clean",
+          "fingerprint": "2af0f61b95bd8fb2f91fd535f631565ec9439fb9ee1ffc8ac2e1833950aaf2ed"
+        },
+        {
+          "task_id": "train-search-0001-clean",
+          "fingerprint": "aa1c5534f824f9bde84ba13947a566beebba5a3e8504113b6253153baebb42fe"
+        },
+        {
+          "task_id": "train-calculate-0002-clean",
+          "fingerprint": "015545540277b3be42cf7234b546798f446449a715552d68e315674103407395"
+        },
+        {
+          "task_id": "train-synthesis-0003-clean",
+          "fingerprint": "eb1d558e9b1327325c7afb74edbedb1f3735f18fa0416154b2cf33f5568ebd96"
+        },
+        {
+          "task_id": "train-update-0004-clean",
+          "fingerprint": "c70ceb61613a42f8adf66bd3d351f286b2b53e6862f25a417a49798f95d93e0b"
+        },
+        {
+          "task_id": "train-list-0005-clean",
+          "fingerprint": "cc5218e943a60586991ee4104c3af0a1bc70b898c72dad52e844b7e6443ddd26"
+        },
+        {
+          "task_id": "train-pointer_chain-0006-clean",
+          "fingerprint": "21f47ea712facaeba7b71d8b4d623a91a3030791d574a88751d61b32d63b1835"
+        },
+        {
+          "task_id": "train-ledger_reconcile-0007-clean",
+          "fingerprint": "69b657d0e71bdf735b040d7da1ee1a9ba4a091ae619c8e990fc56252f4bcd265"
+        },
+        {
+          "task_id": "train-cross_reference-0008-clean",
+          "fingerprint": "d1603f07fd1077e0cacb8a48a6e26d5e15d3d708a81bab285390ac98e3f05d92"
+        },
+        {
+          "task_id": "train-conditional_update-0009-clean",
+          "fingerprint": "97b4127d9bc4d5a2c1f27cf2497027a48ced3cb3a11afbd4ebfe7a980491ad28"
+        },
+        {
+          "task_id": "train-batch_update-0010-clean",
+          "fingerprint": "7f328c2f829f920c4311ecd5285f371e9c497c39672deefe33aa0ae0050ed174"
+        },
+        {
+          "task_id": "train-aggregate_report-0011-clean",
+          "fingerprint": "902e19f728a2e236021f97f875ca7862cbfcefbf9d1f96849a20f64da64a1292"
+        },
+        {
+          "task_id": "train-read-0012-transient",
+          "fingerprint": "3f04e76985fa961dfed97a499894797145c6ad71760e8ab3230640b7cee2d4fc"
+        },
+        {
+          "task_id": "train-search-0013-wrong_path",
+          "fingerprint": "f6f2be62edf1916f7698e7614b45182fdf459501572cd091030b68be8207fe95"
+        },
+        {
+          "task_id": "train-calculate-0014-transient",
+          "fingerprint": "f2bd81e362470073e00b7047709300ba501ef2f1653fa5b71f771f8a57ac9625"
+        },
+        {
+          "task_id": "train-synthesis-0015-wrong_path",
+          "fingerprint": "69947a01d23d1fb8b0cd6ae5c259c9c9ed7bff5fbfd7c124a8d0b7d9eea3fcc8"
+        },
+        {
+          "task_id": "train-update-0016-wrong_path",
+          "fingerprint": "7c210d1880ef1774f1f94cf54e58b3e6f8bb1bb4bbf1326d6c4f82244f55630c"
+        },
+        {
+          "task_id": "train-list-0017-wrong_path",
+          "fingerprint": "a2f637bb9a0c8ea13550eb3dfae6eb53d7a26fece73978c532056cad0d9d351d"
+        },
+        {
+          "task_id": "train-pointer_chain-0018-wrong_path",
+          "fingerprint": "f494609b1ee589be7b7cf6601ad755adbed31b8e7916676f263fa0ffb44a58ff"
+        },
+        {
+          "task_id": "train-ledger_reconcile-0019-wrong_path",
+          "fingerprint": "252732749324c60d4c4bc11c23361fcf0659d7a45303f815e50bc44bcf2bd1f3"
+        },
+        {
+          "task_id": "train-cross_reference-0020-wrong_path",
+          "fingerprint": "47e592ab721e9c56a828978e8ce6095792e8bccdf40b3c49488928e4a13f61ec"
+        },
+        {
+          "task_id": "train-conditional_update-0021-wrong_path",
+          "fingerprint": "869f766de9ee3eae25befecb61ca5ac29c224c3d6f852ad91ee3bfc9bfd251de"
+        },
+        {
+          "task_id": "train-batch_update-0022-wrong_path",
+          "fingerprint": "99b3f84c222daca65d5eda5f451a1704dfbc4e52982c6183c2877a003fa88918"
+        },
+        {
+          "task_id": "train-aggregate_report-0023-wrong_path",
+          "fingerprint": "2bd6009e95483f1ad7021469670682f4ff9564a21fad14c8a39f7aa734c45b0c"
+        }
+      ]
+    },
+    {
+      "split": "train1",
+      "difficulty": 1,
+      "count": 24,
+      "seed": 20260902,
+      "generator_version": 4,
+      "tasks": [
+        {
+          "task_id": "train1-read-0000-clean",
+          "fingerprint": "21a847487339a028bcf11204604791b4c99c52dbef89d464b27de099ef6358cd"
+        },
+        {
+          "task_id": "train1-search-0001-clean",
+          "fingerprint": "40c2e486c0c9021dc3166c281e8a5ddbd880346b093e271cef3721f8963062b1"
+        },
+        {
+          "task_id": "train1-calculate-0002-clean",
+          "fingerprint": "0e824aa3944cc0b285affc433f9b25b05b2142314c7e8a9aea42a75ea9e1a02b"
+        },
+        {
+          "task_id": "train1-synthesis-0003-clean",
+          "fingerprint": "ef7d4ce76b7234f18aeb0c373328371f0d4ba4edfd5fbfd2cb993ec5de2c512e"
+        },
+        {
+          "task_id": "train1-update-0004-clean",
+          "fingerprint": "696f2798762d86295bcf408c2c89066cdaa59d08ef4057647e4750c9118c0aca"
+        },
+        {
+          "task_id": "train1-list-0005-clean",
+          "fingerprint": "086bfe51e97822515bdaa06ec04ab3b2565fd1bd7ae7d15df58c20b3797fcb21"
+        },
+        {
+          "task_id": "train1-pointer_chain-0006-clean",
+          "fingerprint": "724b7041272827b2b47ce7e9cc8de9068d60c525634a2984022727631ac52232"
+        },
+        {
+          "task_id": "train1-ledger_reconcile-0007-clean",
+          "fingerprint": "00548c883db3110a9d199d7e2a6c0d35f6b3148ac600bb5128ebaae6714fe332"
+        },
+        {
+          "task_id": "train1-cross_reference-0008-clean",
+          "fingerprint": "75212dfffa491cc4f9299fe3b8a18934799d5edf2d5304967db11b0d1815db75"
+        },
+        {
+          "task_id": "train1-conditional_update-0009-clean",
+          "fingerprint": "ac750eba47bbaf23be94c058ae9e588c65c417bc1300268201359c3a4d1ab132"
+        },
+        {
+          "task_id": "train1-batch_update-0010-clean",
+          "fingerprint": "5d681808fe4fabf487b16ddd9180c49d80651d8248d2ffcc8beef7f1848a12d0"
+        },
+        {
+          "task_id": "train1-aggregate_report-0011-clean",
+          "fingerprint": "5d176266b1dee7b33ee01780e18939d54120095896a2f453e12c81d2ab3e95f4"
+        },
+        {
+          "task_id": "train1-read-0012-transient",
+          "fingerprint": "1796ad7f954a641e4f142fb2b592c6b886f3ac147ee843a7f72d39e6a0fb85ce"
+        },
+        {
+          "task_id": "train1-search-0013-wrong_path",
+          "fingerprint": "e43157bd7af244d9deaa316c99bfd4c686b58b345f74db02db4c03f50d7333f9"
+        },
+        {
+          "task_id": "train1-calculate-0014-transient",
+          "fingerprint": "f719c8c5089f4e9c815908b0327f415f8ff1347ca27f4b6a9455f3af5e2b03ec"
+        },
+        {
+          "task_id": "train1-synthesis-0015-wrong_path",
+          "fingerprint": "06353f693995a0e841a0282628f689eba53b44ab5f5f3a5f2adf6b9d5ab5a05f"
+        },
+        {
+          "task_id": "train1-update-0016-wrong_path",
+          "fingerprint": "256f9234100a33f30a2007a7152889fbfa0c709cdfa9b4466d0a7d595346f68b"
+        },
+        {
+          "task_id": "train1-list-0017-wrong_path",
+          "fingerprint": "d92460f72cd1d0883c3419ba70e6bda195c46ce350fe83d82a40641eca3fb433"
+        },
+        {
+          "task_id": "train1-pointer_chain-0018-wrong_path",
+          "fingerprint": "f682617af6e22953f01b24b9abdd88a8441a12ec341acaa2242ae14653fb7df8"
+        },
+        {
+          "task_id": "train1-ledger_reconcile-0019-wrong_path",
+          "fingerprint": "9598160a8ee86332ad34ec619a361bdf75c0cba85b4598276519dc6afcc022c7"
+        },
+        {
+          "task_id": "train1-cross_reference-0020-wrong_path",
+          "fingerprint": "2f4570a8cbb064fe8a877960d2d91d926f19204dba0f195568d7e17c3532a026"
+        },
+        {
+          "task_id": "train1-conditional_update-0021-wrong_path",
+          "fingerprint": "9c2e59108d3cd3882d61b0ce7a310d9eed1b62ee6873d9da892d8716482e3066"
+        },
+        {
+          "task_id": "train1-batch_update-0022-wrong_path",
+          "fingerprint": "7a9ba4c713cbac584881410f34c85f2835eab0c97845e6d601bcc68e8b2ee7cf"
+        },
+        {
+          "task_id": "train1-aggregate_report-0023-wrong_path",
+          "fingerprint": "e5e3e1088cb8e1427994201168aa7caaa2ce81f1d40332b206eff6caed79ba06"
+        }
+      ]
+    },
+    {
+      "split": "train2",
+      "difficulty": 2,
+      "count": 24,
+      "seed": 20260902,
+      "generator_version": 4,
+      "tasks": [
+        {
+          "task_id": "train2-read-0000-clean",
+          "fingerprint": "39b2e9360f67281d4ff52b0d016cd775a894b627d16ab567ff03e6bfdacea4f5"
+        },
+        {
+          "task_id": "train2-search-0001-clean",
+          "fingerprint": "942c8049a2a8fd0f00b8f74436673b596b1a8708768218dbeb391f568855753b"
+        },
+        {
+          "task_id": "train2-calculate-0002-clean",
+          "fingerprint": "0323e25fd9112f12ce9d81f1299850f1d6afa61f8a36076c4e5a869617cfe9b4"
+        },
+        {
+          "task_id": "train2-synthesis-0003-clean",
+          "fingerprint": "d8fd130c5903ddd770a7de76b540d80e1c818e9e52f8717ac13d06fe1926a8ff"
+        },
+        {
+          "task_id": "train2-update-0004-clean",
+          "fingerprint": "792bd29b495ef658f724014b51214dddd91ea82745ed8409b0653a37065c3e80"
+        },
+        {
+          "task_id": "train2-list-0005-clean",
+          "fingerprint": "60fc14cc3201fea96f88e2f937d3f04b93f3456b4ee8b817a932248824f94843"
+        },
+        {
+          "task_id": "train2-pointer_chain-0006-clean",
+          "fingerprint": "da86456becc617eec335553d0b124be77f97ac5daa9d42d5f8cc0a62d836b10b"
+        },
+        {
+          "task_id": "train2-ledger_reconcile-0007-clean",
+          "fingerprint": "0d7ebea39dbd4e08d801e50304e3f7a2c607c959ffd601f342a61ac95d270d00"
+        },
+        {
+          "task_id": "train2-cross_reference-0008-clean",
+          "fingerprint": "2d6ed4997a13b4bc3413f93034b271bbb4be45ed0dae4607e86c17abaad14c7e"
+        },
+        {
+          "task_id": "train2-conditional_update-0009-clean",
+          "fingerprint": "e2d1adc13b82f5bd717862aca09284cf79ba9957e756f8d87e357a977793e6fd"
+        },
+        {
+          "task_id": "train2-batch_update-0010-clean",
+          "fingerprint": "e5de16316b0ec2a0d575b6c366caba39bf57eeec3dfc086d83b0c8abbddd85a9"
+        },
+        {
+          "task_id": "train2-aggregate_report-0011-clean",
+          "fingerprint": "bf8aad277b5f64b72ce34af03e22b83905e62200387d87f4f911a8928cf19d4c"
+        },
+        {
+          "task_id": "train2-read-0012-transient",
+          "fingerprint": "f9ff5e000570963312a1c5e6a3fd46b1f6deff7325ea874db4714b9df8f8652d"
+        },
+        {
+          "task_id": "train2-search-0013-wrong_path",
+          "fingerprint": "39894461575c5aecc3e6524398ce06ee04f6facea9464a7de1e93058cfcd7166"
+        },
+        {
+          "task_id": "train2-calculate-0014-transient",
+          "fingerprint": "15e335b39aa517a872600ab3117a1e30238567faa1344f8a81fffe826f4d0901"
+        },
+        {
+          "task_id": "train2-synthesis-0015-wrong_path",
+          "fingerprint": "f2dfa24685465821df02dd4e4f6556b5bd0dab1d20d8ffadffcfef119489ef67"
+        },
+        {
+          "task_id": "train2-update-0016-wrong_path",
+          "fingerprint": "93e6476640d2a869cf28e3c021f53e96f8ab60db87872b925115abb83d847528"
+        },
+        {
+          "task_id": "train2-list-0017-wrong_path",
+          "fingerprint": "c2883508aa166a7aa77de961421f0bd5d190fad4d4225adf9417a35784b13320"
+        },
+        {
+          "task_id": "train2-pointer_chain-0018-wrong_path",
+          "fingerprint": "3b9f16891b8c710d5157ea1058f356ab0a38a99494541c1effafaaf607420875"
+        },
+        {
+          "task_id": "train2-ledger_reconcile-0019-wrong_path",
+          "fingerprint": "5af1fff42134cf49819b00be8dd90a42ecd0abc7bdba14e5cf2c4a75aad21098"
+        },
+        {
+          "task_id": "train2-cross_reference-0020-wrong_path",
+          "fingerprint": "d58ca8fe4adbac271d466473822a918c7fa48b1426eca376b000910ce4535a81"
+        },
+        {
+          "task_id": "train2-conditional_update-0021-wrong_path",
+          "fingerprint": "25bd1a7dff3a12486d834bb8124d17c96de135c32493a434c0776caf32bf26e0"
+        },
+        {
+          "task_id": "train2-batch_update-0022-wrong_path",
+          "fingerprint": "5b6f1b2f094aa0126e03c3b8653d7403a80e77b50b3a331a8bc521c0a434904f"
+        },
+        {
+          "task_id": "train2-aggregate_report-0023-wrong_path",
+          "fingerprint": "9d66754063bdd4d3b3974d7291da7374cb6a188009551fee0ca0f4138973adb0"
+        }
+      ]
+    }
+  ],
+  "evaluation": {
+    "max_steps": 24,
+    "max_tokens": 200,
+    "temperature": 0.0,
+    "keep_last": 2,
+    "use_cache": false
+  },
+  "rendering_gate": {
+    "landed_commit": "7d2a18a4e623b693e5c5065a834787d999709efd",
+    "ruling_commit": "a1ff0b0be15dfffaa440e3a5bab4a203efc3500f",
+    "files": [
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/design_specifications/pending/CODEX-TASKS-2026-09-08.md",
+        "commit": "a1ff0b0be15dfffaa440e3a5bab4a203efc3500f",
+        "sha256": "507b2ca0a33497d3fc1e975282e69c73cb3affb592cf91d51f9b5785f52a2cdd",
+        "storage": "git_blob"
+      },
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/research/records/GEMMA3-JSPACE-MAP-2026-09-08/DIAGNOSTIC-RERUN.md",
+        "commit": "7d2a18a4e623b693e5c5065a834787d999709efd",
+        "sha256": "d11f777210ac1fabdfeb5dc450174df605655631019da06a177661e0cd5a61d6",
+        "storage": "git_blob"
+      },
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/src/local_llm_lab/pipeline/protocol.py",
+        "commit": "7d2a18a4e623b693e5c5065a834787d999709efd",
+        "sha256": "37ff1be7f32842adc01ee76bef654c0d618a58642c3cea124cfa3275acf7166c",
+        "storage": "git_blob"
+      },
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/configs/models/gemma3-4b.yaml",
+        "commit": "7d2a18a4e623b693e5c5065a834787d999709efd",
+        "sha256": "aff12b3e048da18d64e40c8fa4b1610172fbe9d8ec7e63c9e728db57b01fafe4",
+        "storage": "git_blob"
+      },
+      {
+        "path": "/Users/daniel.tipton/Desktop/An app/configs/models/gemma3-4b-bf16.yaml",
+        "commit": "7d2a18a4e623b693e5c5065a834787d999709efd",
+        "sha256": "f4379afc7b19914e3953320399e4956b043c3316e93ef930ee4428bbf525d76c",
+        "storage": "git_blob"
+      }
+    ]
+  },
+  "capture_limits": {
+    "max_prompt_tokens": 8192,
+    "max_forward_tokens": 8393
+  },
+  "capture_projection": {
+    "peak_gib": 16.0,
+    "basis": "Conservative, unmeasured source bound for the registered 8192-token prompt cap and native 2048-token prefill chunks. Decimal GB: 4-bit weight data about2.1 + transient load copy2.1 + FP32 KV cache1.07 (5 global8393 and29 local3072; 4 KV heads,256 head dimensions,two K/V arrays) + two FP32 prefill logits4.30 + two FP32 attention buffers1.10 + FFN intermediates0.17 + possible FP32 readout workspace2.69 = about13.53GB. Projection16GiB includes >3GB margin. FP32 and full attention/readout scratch are conservative allowances; the actual fused implementation may use less. Oversize prompts refuse before a forward; no truncation to make the bound pass."
+  },
+  "residual_source": "native",
+  "initial_fit_calibration_bound_gib": 14.5,
+  "provisional_full_fit_peak_gib": 18.5,
+  "fit_projection_basis": "Prior BF16 native128 fit measured12.44GiB. At2048, conservatively add about0.67GB for all34 FP32 residual streams,0.35GB for masked row/cast arrays,0.27GB for two full attention matrices,0.16GB FFN growth,and4.03GB for two FP32 logits buffers beyond the128 baseline. Total about17.55GiB; round up18.5GiB. Some output graphs are pruned and fused buffers may not coexist; this is an unmeasured upper estimate, not claimed actual peak. The256/512 calibration starts at14.5GiB using the same growth calculation at512 with margin. Native masked calibration then measures512/1024/2048 and projects each larger size before launch under the22GiB registry budget. Its measured projection is mandatory before the combined two-precision fit window.",
+  "queue": "after CRO confound audit and Deputy stage-two all-layer map; not an active reservation"
+}

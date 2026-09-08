@@ -4,6 +4,7 @@ import hashlib
 import json
 import runpy
 import struct
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ from safetensors.numpy import save_file
 
 from local_llm_lab.pipeline.sae_bridge.assets import (
     decoder_from_files,
+    example_topk_from_file,
     read_bf16_matrix,
     validate_reference_config,
 )
@@ -22,6 +24,35 @@ from local_llm_lab.pipeline.sae_bridge.readout import acceptance, write_readout
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_window_readback_requires_live_owned_holder(monkeypatch, tmp_path, capsys):
+    from local_llm_lab import runlock
+    from local_llm_lab.pipeline.lens_fitting import runtime
+
+    script = Path(__file__).resolve().parents[1] / "scripts/sae_bridge.py"
+    require_window = runpy.run_path(str(script))["require_window"]
+    held = SimpleNamespace(
+        nonce="ours", holder_state="running", pid=123, expected_end_epoch=time.time() + 600
+    )
+    monkeypatch.setattr(runtime, "primary_worktree", lambda: tmp_path)
+    monkeypatch.setattr(runlock, "read_window", lambda _: held)
+    monkeypatch.setattr(runlock, "blocking_window", lambda _: None)
+    monkeypatch.setenv(runlock.WINDOW_HOLDER_ENV, "ours")
+    assert require_window() is held
+    assert "holder pid 123: running" in capsys.readouterr().out
+    for state in ("not running", "unknown"):
+        held.holder_state = state
+        with pytest.raises(ValueError, match="R61"):
+            require_window()
+    held.holder_state = "running"
+    held.nonce = "foreign"
+    with pytest.raises(ValueError, match="R61"):
+        require_window()
+    held.nonce = "ours"
+    held.expected_end_epoch = time.time() - 1
+    with pytest.raises(ValueError, match="R61"):
+        require_window()
 
 
 def bf16_file(path, values, key="weight"):
@@ -148,6 +179,42 @@ def test_decoder_rejects_wrong_output_hook_even_if_input_matches(dictionary):
         load_dictionary(config, params)
 
 
+def test_examples_reader_authenticates_exact_companion(tmp_path):
+    path = tmp_path / "examples.safetensors"
+    tokens = np.array([[2, 1], [0, 2]], dtype=np.int32)
+    logits = np.array([[5.0, 3.0], [2.0, -1.0]], dtype=np.float32)
+    save_file({"top_tokens": tokens, "top_logits": logits}, str(path))
+    got = example_topk_from_file(path, expected_sha256=sha(path), width=2, k=2, vocabulary=3)
+    np.testing.assert_array_equal(got[0], tokens)
+    np.testing.assert_array_equal(got[1], logits)
+    with pytest.raises(ValueError, match="hash"):
+        example_topk_from_file(path, expected_sha256="0" * 64, width=2, k=2, vocabulary=3)
+    with pytest.raises(ValueError, match="shape/dtype"):
+        example_topk_from_file(path, expected_sha256=sha(path), width=1, k=2, vocabulary=3)
+
+
+@pytest.mark.parametrize(
+    "tokens,logits,reason",
+    [
+        ([[0, 0]], [[2.0, 1.0]], "duplicate"),
+        ([[0, 3]], [[2.0, 1.0]], "outside"),
+        ([[0, 1]], [[1.0, 2.0]], "nonincreasing"),
+        ([[0, 1]], [[float("inf"), 1.0]], "finite"),
+    ],
+)
+def test_examples_reader_refuses_invalid_companion(tmp_path, tokens, logits, reason):
+    path = tmp_path / "examples.safetensors"
+    save_file(
+        {
+            "top_tokens": np.array(tokens, dtype=np.int32),
+            "top_logits": np.array(logits, dtype=np.float32),
+        },
+        str(path),
+    )
+    with pytest.raises(ValueError, match=reason):
+        example_topk_from_file(path, expected_sha256=sha(path), width=1, k=2, vocabulary=3)
+
+
 def test_acceptance_control_bites_through_actual_composition():
     w = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]], np.float32)
     j = np.eye(2, dtype=np.float32)
@@ -178,7 +245,8 @@ def test_artifact_is_exclusive_stream_and_carries_missing_labels(tmp_path):
     assert rows[0]["type"] == "header"
     assert "not token probabilities" in rows[0]["interpretation"]
     assert [row["feature_id"] for row in rows[1:-1]] == [0, 1]
-    assert rows[1]["label"] is None
+    assert rows[1]["label"] == "unlabelled"
+    assert "no Neuronpedia source maps" in rows[1]["label_reason"]
     assert rows[1]["tokens"][0]["piece"] == "token0"
     assert rows[-1]["type"] == "complete"
     assert rows[-1]["features"] == 2
@@ -252,6 +320,14 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
     _, params, metadata = dictionary
     dictionary_config = tmp_path / "dictionary.json"
     dictionary_config.write_text(json.dumps(metadata))
+    examples = tmp_path / "examples.safetensors"
+    save_file(
+        {
+            "top_tokens": np.array([[1], [1], [1]], np.int32),
+            "top_logits": np.array([[2.0], [4.0], [6.0]], np.float32),
+        },
+        str(examples),
+    )
     reg = {
         "reference_model": "fixture",
         "model_identity": identity,
@@ -270,6 +346,7 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
         "wrong_probe_layer": 1,
         "feature_id": 0,
         "k": 1,
+        "identity_baseline": {"criterion": "exact_topk_membership", "feature_ids": [0, 1, 2]},
         "dictionary": {
             "suite": "resid_post_all",
             "config": str(dictionary_config),
@@ -279,6 +356,7 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
             "width": 3,
             "l0": 2,
             "coordinate_convention": "gemma_scope2_raw_resid_post_no_rescale",
+            "examples": {"path": str(examples), "sha256": sha(examples)},
         },
         "tolerances": {"rtol": 1e-4, "atol": 1e-3, "relative_l2_limit": 1e-4},
         "projected_peak_gib": 6,
@@ -295,6 +373,16 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
     result = json.loads((benchmark_dir / "result.json").read_text())
     assert result["model_forward_count"] == 0
     assert result["instrument"] == reg
+    assert result["projected_total_seconds"] >= result["projected_readout_seconds"]
+    measured_rows = [
+        json.loads(line)
+        for line in (benchmark_dir / "benchmark-features.jsonl").read_text().splitlines()
+    ]
+    assert sum(row["type"] == "direct_baseline_feature" for row in measured_rows) == 3
+    assert sum(row["type"] == "feature" for row in measured_rows) == 3
+    direct = json.loads((benchmark_dir / "identity-baseline.json").read_text())
+    assert direct["passed"]
+    assert direct["instrument"] == reg
     evidence = json.loads((benchmark_dir / "acceptance.json").read_text())
     assert evidence["registration_sha256"] == sha(registration)
     assert evidence["instrument"] == reg
@@ -330,3 +418,21 @@ def test_driver_tiny_end_to_end_and_wrong_precision_guard(tmp_path, dictionary, 
     assert evidence["registration_sha256"] == sha(registration)
     assert evidence["instrument"] == reg
     assert not (failed / "result.json").exists()
+    # An authenticated but incompatible companion stops before ANY J composition.
+    save_file(
+        {
+            "top_tokens": np.array([[0], [0], [0]], np.int32),
+            "top_logits": np.array([[1.0], [3.0], [5.0]], np.float32),
+        },
+        str(examples),
+    )
+    reg["dictionary"]["examples"]["sha256"] = sha(examples)
+    registration.write_text(json.dumps(reg))
+    incompatible = tmp_path / "incompatible"
+    assert (
+        main(["--registration", str(registration), "--execute", "--output", str(incompatible)]) == 2
+    )
+    evidence = json.loads((incompatible / "identity-baseline.json").read_text())
+    assert not evidence["passed"]
+    assert evidence["instrument"] == reg
+    assert not (incompatible / "acceptance.json").exists()

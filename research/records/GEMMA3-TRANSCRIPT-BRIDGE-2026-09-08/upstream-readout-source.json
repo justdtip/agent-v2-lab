@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-09-08T11:32:49.466398+00:00",
+  "scope": "Read-only source audit; no model imports, weight loads, or score computation.",
+  "official_notebook": {
+    "url": "https://colab.research.google.com/drive/1NhWjg7n0nhfW--CjtsOdw5A5J_-Bzn4r",
+    "download_url": "https://drive.google.com/uc?export=download&id=1NhWjg7n0nhfW--CjtsOdw5A5J_-Bzn4r",
+    "official_link_source": "https://huggingface.co/google/gemma-scope-2",
+    "full_notebook_sha256": "cf530a2673ce835ecbf46d5d067c431253f5e241c879dc2e196ea2c0d7b3e4f4",
+    "full_notebook_bytes": 627921,
+    "index_convention": "zero-based notebook cell index",
+    "loading": {
+      "import_cell": 4,
+      "load_cell": 7,
+      "class": "transformers.AutoModelForCausalLM",
+      "checkpoint": "google/gemma-3-1b-pt",
+      "arguments": {
+        "device_map": "auto"
+      },
+      "checkpoint_revision": null,
+      "transformers_version_pin": null,
+      "custom_model_class": false
+    },
+    "readout_cell": 45,
+    "bounded_code_excerpt": "w_u = model.lm_head.weight\nw_u_eff = w_u * model.model.norm.weight",
+    "readout_semantics": "Multiply decoder row by unembedding with columns multiplied by stored norm.weight; then select the largest ten signed scores.",
+    "folding_audit": "Inspected all code cells involving model access, weights, normalization, state_dict, imports, package installation, and folding. No addition of one to final norm weights, norm-weight reassignment, norm-folding call, or custom Gemma implementation was found. The custom classes implement SAEs, not Gemma. Model hooks alter activations and are removed in finally blocks.",
+    "runtime_limit": "The notebook does not pin its Transformers version or model revision. Its source cannot prove the exact historical runtime that produced saved output.",
+    "examples_limit": "The notebook consumes examples.safetensors by direct feature row index. It does not expose the generation code for the pinned 4B-IT examples artifact."
+  },
+  "transformers_comparator": {
+    "url": "https://raw.githubusercontent.com/huggingface/transformers/v4.53.0/src/transformers/models/gemma3/modeling_gemma3.py",
+    "version_tag": "v4.53.0",
+    "source_sha256": "9760df529d6632f5e914e805f266cb0bb737be1ec48fd620dda62533a2e05e2f",
+    "source_bytes": 52924,
+    "symbol": "Gemma3RMSNorm.forward",
+    "bounded_code_excerpt": "output = output * (1.0 + self.weight.float())",
+    "semantics": "Stored norm weight is an offset. Effective channel multiplier is one plus that offset, after RMS normalization of the activation.",
+    "limit": "This fixed source version is a comparator, not a claim about the notebook historical environment."
+  },
+  "local_transformers_source": {
+    "path": "/Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/transformers/models/gemma3/modeling_gemma3.py",
+    "sha256": "8ca30694d9397d264ee1ec08e6ff17dc496a87836ba84ee17a52ecbb45be3316",
+    "symbol": "Gemma3RMSNorm.forward",
+    "effective_multiplier": "1 + self.weight.float()",
+    "method": "Read source bytes only; no Transformers import."
+  },
+  "conclusion": {
+    "no_notebook_folding_found": true,
+    "tutorial_stored_weight_equals_checkpoint_effective_multiplier": false,
+    "examples_generation_convention_confirmed": false,
+    "recommended_named_comparisons": [
+      "raw W d_i",
+      "tutorial W diag(stored_norm_weight) d_i",
+      "effective-channel W diag(1+stored_norm_weight) d_i"
+    ],
+    "gate_boundary": "Register all candidate formulas before evaluating scores. Report every candidate with the same feature IDs, top-k rule and unchanged tolerances. Empirical agreement identifies compatibility for that sample; it does not establish undisclosed upstream generation code. Do not silently change the primary raw-W bridge.",
+    "normalization_limit": "A fixed effective channel multiplier is not the full RMSNorm transform or its Jacobian: the input-dependent RMS denominator and its derivative remain omitted."
+  }
+}

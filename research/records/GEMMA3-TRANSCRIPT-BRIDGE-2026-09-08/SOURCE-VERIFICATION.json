@@ -1,0 +1,48 @@
+{
+  "utc": "2026-09-08T11:45:42.318397+00:00",
+  "result": {
+    "passed": 190,
+    "failed": 0,
+    "exit_code": 0
+  },
+  "test_files": [
+    "test_sae_bridge.py",
+    "test_sae_bridge_io.py",
+    "test_lens_transcript.py",
+    "test_gemma_transcript_lens.py",
+    "test_lens_runtime.py",
+    "test_lens_regression_preflight.py",
+    "test_evaluation_capture.py"
+  ],
+  "static_checks": [
+    "repository banned model constants",
+    "processes use spawn helper"
+  ],
+  "native_guard": "meta-path finder rejects mlx/mlx_lm in parent; failing packages placed first on subprocess PYTHONPATH; no mlx.core or mlx_lm in sys.modules on completion",
+  "ruff": "passed on affected source/tests/record helpers",
+  "diff_check": "passed",
+  "paired_comparison_self_check": "analytic scaling and zero norm passed",
+  "registrations_inspection": "v2 transcript and A1 passed; no model loading",
+  "source_sha256": {
+    "scripts/sae_bridge.py": "73eaf34520f7aa48322ca2b6a2b06e08c44e1f5adf39b641cb50b73f4a9689de",
+    "scripts/gemma_transcript_lens.py": "951e8518c8fa35a5447d1285c1c2c11617be91391072475e04e1cc319eab00f8",
+    "scripts/lens_fit.py": "e1e3334cb6e0437ba213a7f2de3307b886f3a35a427ca6fead60a5a6f8ca51f6",
+    "scripts/lens_regression_preflight.py": "2725d0cb42de8389379113bba96febae1453fa5b6f2ce338d29f2d13aa997f80",
+    "src/local_llm_lab/pipeline/sae_bridge/assets.py": "4e52d4bdddf496bdb7689c44f73bbf0f6ecd9ea4326319ae97d5296935083f3d",
+    "src/local_llm_lab/pipeline/sae_bridge/core.py": "dd394865860122beab76e493c889a29be9ff3e07b6d71afa48b905d506715fa7",
+    "src/local_llm_lab/pipeline/sae_bridge/readout.py": "530a70b8f758da44f4f47d686a177313035f27e25a47d9326aff96df8c79ab35",
+    "src/local_llm_lab/pipeline/lens_fitting/transcript.py": "1c29d7c42f1545d35e4fb5f298648c5280dfa3c5a0efe78f89f4aadc5fb237eb",
+    "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "83e9225d661dcda261c6529275464f47d1c9ece4b651b3025a040b22955aacb3",
+    "src/local_llm_lab/pipeline/lens_fitting/runtime.py": "a96a20c60dc2239fda64bd5ac305dc66cc6e9779575b35b162e5ceb76ed11a2a",
+    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "4e7f6b329ab4d01249268d846c6a8b9ab245d0da5ffe36ad7133b7f1a24e37ea",
+    "src/local_llm_lab/pipeline/evaluate.py": "9e2614fb840bea2ef92ef16eb7349fd45f849d7bd96b08b4762322477ed4e09b"
+  },
+  "unrun": [
+    "real transcript capture",
+    "real masked resource calibration",
+    "both precision fits",
+    "real A1 direct baseline and readout",
+    "real norm-convention comparison"
+  ],
+  "independent_source_review": "transcript amendment no findings; bridge review found missing direct-pass timing and ambiguous sequencing; benchmark now measures both passes and unrun registration explicitly separates named acceptance from production readout"
+}
