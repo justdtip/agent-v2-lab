@@ -131,7 +131,11 @@ def validate_registration_source(path: Path, residual_source: str) -> None:
 
 
 def calibration_rows(source: dict, tokens: int) -> list[dict]:
-    """Use a prefix of the full context and precisely its registered scored positions."""
+    """Masked rows use a suffix ending at the source end; unmasked rows retain prefixes.
+
+    Only original scored positions inside that suffix survive, translated by its
+    start. At full source length this is exactly the frozen fit row's selection.
+    """
     from local_llm_lab.pipeline.lens_fitting.regression import validated_score_positions
 
     if (
@@ -139,15 +143,19 @@ def calibration_rows(source: dict, tokens: int) -> list[dict]:
         or not isinstance(tokens, int)
         or not 0 < tokens <= len(source["ids"])
     ):
-        raise ValueError("calibration tokens must select a nonempty source prefix")
+        raise ValueError("calibration tokens must select a nonempty source window")
     positions = validated_score_positions(source)
+    start = 0 if positions is None else len(source["ids"]) - tokens
     selected = (
-        {} if positions is None else {"score_positions": [i for i in positions if i < tokens]}
+        {}
+        if positions is None
+        else {"score_positions": [i - start for i in positions if i >= start]}
     )
     if positions is not None and not selected["score_positions"]:
-        raise ValueError("calibration prefix contains no scored positions")
+        raise ValueError("calibration suffix contains no scored positions")
     return [
-        {"ids": source["ids"][:tokens], "split": split, **selected} for split in ("fit", "held")
+        {"ids": source["ids"][start : start + tokens], "split": split, **selected}
+        for split in ("fit", "held")
     ]
 
 
@@ -176,7 +184,7 @@ def main(argv=None):
     if len(source["ids"]) < maximum:
         parser.error("the maximum sequence is held; preflight needs a fit row reaching that size")
     for tokens in lengths:
-        calibration_rows(source, tokens)  # Reject an unusable scoring prefix before model loading.
+        calibration_rows(source, tokens)  # Reject an unusable scoring window before model loading.
     args.report.parent.mkdir(parents=True, exist_ok=True)
     with args.report.open("x") as report:
 
@@ -197,6 +205,14 @@ def main(argv=None):
                 "initial_bound_bytes": args.initial_bound_gib * 2**30,
                 "lengths": lengths,
                 "source_sequence_index": source["index"],
+                "source_input_positions": len(source["ids"]),
+                "source_scored_positions": len(source.get("score_positions", source["ids"])),
+                "calibration_window_rule": (
+                    "suffix ending at registered source end; intersect original score_positions "
+                    "and translate by suffix start; no new scored positions"
+                    if "score_positions" in source
+                    else "legacy unmasked source prefix"
+                ),
                 "purpose": (
                     "two copies of one fit row exercise both statistics slots; "
                     "no held data or quality output"
@@ -255,6 +271,15 @@ def main(argv=None):
                     "seconds_per_sequence": elapsed / len(rows),
                     "residual_source": args.residual_source,
                     "counts": counts,
+                    "source_window_start": len(source["ids"]) - tokens
+                    if "score_positions" in source
+                    else 0,
+                    "source_window_end": len(source["ids"])
+                    if "score_positions" in source
+                    else tokens,
+                    "scored_positions_per_sequence": len(
+                        rows[0].get("score_positions", rows[0]["ids"])
+                    ),
                 }
 
             rows, stop = run_ladder(

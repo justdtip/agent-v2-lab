@@ -247,7 +247,8 @@ def test_solve_resets_peak_and_reports_successful_measurement(
     def accumulate(*args, **kwargs):
         assert kwargs["residual_source"] == residual_source
         for row in args[1]:
-            assert row["score_positions"] == [p for p in [0, 300, 899] if p < len(row["ids"])]
+            start = 900 - len(row["ids"])
+            assert row["score_positions"] == [p - start for p in [0, 300, 899] if p >= start]
         calls.append("forward")
         return {"fit": {1: None}, "held": {1: None}}, {}
 
@@ -289,6 +290,16 @@ def test_solve_resets_peak_and_reports_successful_measurement(
     )
     begin = json.loads(report.read_text().splitlines()[0])
     assert begin["residual_source"] == residual_source
+    assert begin["source_input_positions"] == 900
+    assert begin["source_scored_positions"] == 3
+    assert begin["calibration_window_rule"].startswith("suffix ending at registered source end")
+    measured = [
+        e for e in map(json.loads, report.read_text().splitlines()) if e["event"] == "measured"
+    ]
+    assert measured[0]["source_window_start"] == 644
+    assert measured[0]["source_window_end"] == 900
+    assert measured[0]["scored_positions_per_sequence"] == 1
+    assert measured[-1]["scored_positions_per_sequence"] == 3
     assert event["peak_bytes"] == 50
     assert event["projected_peak_bytes"] == 74
 
@@ -297,10 +308,10 @@ def test_calibration_rows_preserve_and_truncate_score_selection():
     a = api()
     source = dict(ids=[1, 2, 3, 4], score_positions=[1, 3], index=5, split="fit")
     rows = a.calibration_rows(source, 3)
-    assert rows == [dict(ids=[1, 2, 3], score_positions=[1], split=s) for s in ("fit", "held")]
+    assert rows == [dict(ids=[2, 3, 4], score_positions=[0, 2], split=s) for s in ("fit", "held")]
     assert source["score_positions"] == [1, 3]
     with pytest.raises(ValueError, match="scor"):
-        a.calibration_rows(source, 1)
+        a.calibration_rows(dict(ids=[1, 2, 3, 4], score_positions=[0]), 1)
     with pytest.raises(ValueError):
         a.calibration_rows(source, 5)
     assert a.calibration_rows(dict(ids=[1, 2]), 1) == [
@@ -327,3 +338,19 @@ def test_registration_residual_source_is_explicit_for_native(tmp_path, record, s
     else:
         with pytest.raises(ValueError, match="residual_source"):
             api().validate_registration_source(path, source)
+
+
+@pytest.mark.parametrize("tokens", [256, 512, 1024, 2048])
+def test_tail_scoring_calibration_preserves_registered_token_ownership(tokens):
+    source = dict(ids=list(range(2048)), score_positions=list(range(1024, 2048)))
+    rows = api().calibration_rows(source, tokens)
+    start = 2048 - tokens
+    expected_scores = list(range(max(0, 1024 - start), tokens))
+    for row in rows:
+        assert row["ids"] == list(range(start, 2048))
+        assert row["score_positions"] == expected_scores
+        assert [row["ids"][p] for p in row["score_positions"]] == [
+            p for p in source["score_positions"] if p >= start
+        ]
+    assert len(rows[0]["score_positions"]) == min(tokens, 1024)
+    assert source == dict(ids=list(range(2048)), score_positions=list(range(1024, 2048)))
