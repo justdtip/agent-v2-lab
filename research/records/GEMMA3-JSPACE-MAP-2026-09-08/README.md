@@ -112,3 +112,55 @@ description of them.
 difference a model effect, a rendering effect or an environment effect. Three things moved and the
 run was not designed to separate them. If that separation is wanted it is a deliberate follow-up
 with one variable at a time, and it is cheap compared with getting it wrong here.
+
+## Where the map reads, against where the lens was fitted
+
+**Measured off the records already on disk, no model and no box, before stage two's figures are
+read. The lens was fitted at absolute positions 16 to 126: `SKIP_FIRST_N_POSITIONS = 16` in the
+upstream fitter, which excludes attention sinks as having atypical residual statistics, and the
+final position is dropped for having no next-token target.**
+
+Every scored position in the corrected run and stage one, by where it falls relative to that range:
+
+| | rank rows | share |
+|---|---:|---:|
+| below 16, the excluded attention-sink regime | 0 | 0.00% |
+| inside 16 to 126, where the lens was fitted | 1,144 | 2.48% |
+| above 126 | 44,936 | 97.52% |
+
+**The attention-sink worry does not reach this instrument at all.** Rank rows exist only for
+generated tokens, generation begins after the prompt, and the smallest opening prompt in the set is
+420 tokens. No scored position is below 16 and none can be. The 1.3% of *reading* rows that do sit
+there are prompt positions, which carry no rank rows and enter no comparison.
+
+**The extrapolation is not partial, it is total.** Every agentic read — the whole primary
+comparison — is outside the range the lens was fitted on, by a factor of at least 3.3 and up to 18.
+The only in-range reads in the entire corpus are 1,144 from two short chat episodes.
+
+### What those two episodes let us measure
+
+They are the only place the lens is used as fitted, and they cross the boundary within a single
+episode, so they give a comparison rather than a caveat:
+
+| layer | in-range median | in-range rank 1 | out median | out rank 1 |
+|---:|---:|---:|---:|---:|
+| 11 | 886 | 1.4% | 715 | 1.0% |
+| 17 | 2315 | 0.7% | 1760 | 1.9% |
+| 23 | 34 | 23.1% | 22 | 13.3% |
+| 24 | 5 | 32.2% | 5 | 31.4% |
+| 30 | 1 | 68.5% | 1 | 68.6% |
+| 34 | 1 | 100.0% | 1 | 100.0% |
+
+**No systematic degradation is visible at the boundary.** Medians and rank-1 shares track each
+other at every layer, with layer 23 slightly better outside and layer 17 slightly worse, on 143
+against 105 reads.
+
+**And that is a much weaker reassurance than it looks.** The out-of-range side here reaches about
+position 250 — an extrapolation of roughly **2x**. The agentic episodes run to 2,298, which is
+**18x**. This measures the near boundary and says nothing about the far tail, and there is no
+in-range comparison available at any depth of context because the corpus contains none. A map read
+at 2,000 tokens is resting on an instrument validated to 126 and spot-checked to 250.
+
+**The honest statement for anything stage two publishes:** the lens is used outside its fitted
+position range for 97.5% of reads and for 100% of the primary comparison; the one available
+boundary check finds no degradation at 2x and nothing tests 18x.
