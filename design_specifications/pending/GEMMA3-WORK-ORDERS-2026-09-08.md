@@ -265,3 +265,40 @@ with the mapping run, and competes for nothing.
 The map first, because it says which layers are worth 336 MB and a matmul. Then the composition at
 those layers. Owner: Codex, alongside the lens validation, since it is the same matrices and the
 same skill, and it blocks on nothing.
+
+---
+
+## What a finding must record, on the Director's statement of the deliverable
+
+**"The value here is not necessarily the code. It is the knowledge encoded by the findings, and
+the techniques used to elicit them. These transfer to any model with some tweaks, which is what I
+want to test."**
+
+That is a specification, and three things follow.
+
+**Every record separates three layers.** What the model does, which is the finding. How it was
+elicited, which is the technique, stated so that someone on a different stack could reproduce it
+without our code. And what our implementation happens to be, which is the least durable of the
+three. Our records currently interleave all three, and the technique is usually the part left
+implicit. Write it explicitly, in its own section, in terms of the model rather than of our
+modules.
+
+**The port is the test, not the cost.** The audit's central finding is which of our instruments
+described one architecture and which asked any model. The Deputy's design for the port is that
+principle in code: observe the model rather than describe it. **So the list of what broke in the
+move from a hybrid to a dense model is itself a deliverable**, and it should be written up as one
+rather than left in a work order. It is the most direct evidence we will get about which
+interpretability techniques are architecture-bound.
+
+**Retired work is reframed, not mourned.** The Qwen Jacobian step rule, the plateau sweep and the
+six-comparison self-check are gone. The finding underneath them is not: *recurrent state makes a
+finite-difference reference ambiguous, because the state is a lossy summary whose value depends on
+the schedule that produced it, so an all-attention model admits Jacobian methods that a hybrid does
+not.* That is a transferable statement about which architectures admit which lens methods, it cost
+two days to learn, and it belongs in the record as a finding rather than in a changelog as a
+deletion.
+
+**A consequence for the pre-registration.** The pilot's reading rules must be stated in
+model-agnostic terms — depth as a fraction, layer kind by its role rather than its library flag,
+spans by their function in the protocol — so the same rules apply unchanged to 12B and to the next
+family. A rule that names a layer index is a rule that does not transfer.
