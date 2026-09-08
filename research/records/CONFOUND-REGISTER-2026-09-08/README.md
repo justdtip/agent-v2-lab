@@ -355,3 +355,60 @@ and it is the first thing in this programme that is both about Gemma and not abo
 because a two-cycle defeats a longest-identical-run counter. We have been quoting that column in the
 comparison table all day. A model alternating two failing calls is looping as surely as one repeating
 a single call, and the column would have read as a clean recovery.
+
+---
+
+## Ruling: the root is reachable, and stage two proceeds
+
+The D-CRO put the blocking question well: if the workspace entry point cannot be found by inspection,
+then eleven families of episodes are all measuring one navigation failure and the map is a map of
+that. It is the right question and it decides whether stage two is worth running at all. Settled with
+data.
+
+**The entry point is reachable, in one call, using a word from the task's own prompt.** On the failing
+task:
+
+| call | result |
+|---|---|
+| `search_files("config")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("0028")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("mode")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("workspace")` | `MATCHES: workspace/test/0028/config.ini` |
+
+Any of four obvious words returns the full true path immediately, including the literal string the
+model needed and never produced.
+
+**Across the whole benchmark: 165 of 180 tasks are reachable by a single search of a word taken from
+the prompt.** The 15 that are not are the entire `calculate` family, which has no files and needs no
+path. **Every task with a workspace has a reachable workspace.**
+
+**And the system prompt names the route, in the rule the model was obeying when it failed:**
+
+> - Inspect state with tools instead of guessing paths, file names, or values.
+> - If a tool returns an error, read it and recover: **list or search** to find the right path, use an
+>   available tool, or retry a transient failure.
+> - `search_files(query: string)`: Find virtual files whose path or content contains a query.
+
+**So the correction runs the other way from the one I drafted an hour ago.** I was about to promote
+"the environment has no discoverable root" from a closing question to the headline. It is not true.
+The root is discoverable by the documented recovery, in one call, on every task that has one. What
+`update-0028` shows is that the model, given twenty-four honest errors on two guesses, never takes the
+recovery its own instructions name and its own tool list describes.
+
+**That is a finding about the model and it is the sharper one.** Not "it cannot find the workspace"
+but "it does not switch strategy under repeated unambiguous failure". The distinction matters because
+the first would indict our benchmark and the second is a property of the agent, measured under an
+environment that no longer lies to it, with the escape route in front of it the whole time.
+
+**Stage two proceeds.** Two grounds. The navigation the map would supposedly be measuring is
+available, documented and cheap, so failing it is a choice the model makes rather than a wall we
+built. And outside `update-0028` the corpus does not show this failure: 50 path arguments across the
+other ten episodes produced 2 errors, neither by this mechanism, and `pointer_chain-0018` copied 10 of
+10 paths out of observations correctly. **One episode fails this way. It is an outlier, not the
+population**, which is the same rule the D-CRO and I have now both been caught by in one day.
+
+**What stage two must record because of this.** Per episode, whether `search_files` was ever called,
+and whether the episode entered a repeated-failure state without calling it. If that turns out to be
+common across families, the map is measuring strategy switching and should say so in those words. If
+it stays confined to one episode, it is an outlier and the map is unaffected. **Either way it is
+recorded before the run rather than argued after it.**
