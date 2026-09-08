@@ -111,6 +111,44 @@ acceptance below measures it rather than asserting it.
 
 ---
 
+## 3a. What this requires of a model, which the first draft did not state
+
+**Added after the suite answered the question the design should have asked.** Forty-five tests
+failed on it, and they are not fixture nits.
+
+The hand-run loop required a view's model to expose `.layers` and a way to run one block. It never
+called the model. **Observation requires a model that can be called and that iterates its own
+layer list**, and that is a real strengthening of the contract, not an implementation detail.
+
+Two consequences, and the second is the one to hold on to.
+
+**The refusal is deliberate.** A model whose forward does not reach every block raises rather than
+returning a partial observation, because a partial observation is not evidence. There is **no
+fallback to the described path** and there must not be: a silent fallback would reintroduce
+exactly what this change exists to delete, and it would be invisible in the artifact.
+
+**The doubles that break are the ones that encoded the assumption being removed.** `_ProbeInner`,
+`_ArchitectureText` and `_JLensInner` each exposed the three attributes a view looks for and no way
+to run. That was sufficient while the view re-implemented the decoder; it is insufficient now, and
+the Chief's phrasing is the right one to keep: *a double that cannot be called is not modelling a
+model, it is modelling the loop we are removing.* So upgrading them is the honest fix and the
+breakage is the same defect one level up.
+
+**What it does not require**, after a correction to the first implementation: `input_embeddings`.
+That draft drove the observation by handing a dummy through that keyword, which demanded a
+signature several decoders do not have and kept alive the footgun of §3's prohibition. The
+observation is driven by **token ids** instead — masks need a sequence length and a cache and never
+the values — so the requirement is the weakest one that can work, and nothing is ever passed as
+embeddings.
+
+**One cost, unmeasured.** `embed` and `masks` are each an observing forward, and a forward builds
+masks whether or not the caller wanted them, so `embed`'s pair is built and discarded. On a long
+sequence that is an N-squared allocation. The Chief's ruling stands — pay the forward, never cache,
+hoist at the call site if measurement says otherwise — and the traversal test asserts one pair per
+forward so a hoist appears as a change rather than as a silent improvement.
+
+---
+
 ## 4. What deliberately does not change
 
 **`layer_kind` keeps its two-value vocabulary.** The pivot document is right that widening it in
