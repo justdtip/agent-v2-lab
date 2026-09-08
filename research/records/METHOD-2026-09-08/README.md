@@ -1,9 +1,14 @@
 # What caught eight wrong claims in one day
 
 **2026-09-08. Chief and D-CRO.** The programme pivoted to Gemma 3 and spent a day auditing its own
-instruments. Eight claims were made and refuted between two seats. None reached a conclusion, and
-none was caught by review, argument or seniority. Every one was caught by a measurement whose answer
-was known in advance.
+instruments. Eight claims were made and refuted between two seats. None was caught by review,
+argument or seniority. Every one was caught by a measurement whose answer was known in advance.
+
+**"None reached a conclusion" is too kind and the D-CRO has struck it.** Claim 3 travelled: it was
+not merely believed, it was *recommended between seats*. The D-CRO urged that it be promoted from
+an aside in the register to the register's headline, and the Chief was about to do it. It was one
+step from a published document at the moment it was refuted. The record understates itself by
+implying these stayed local; one of them was already moving.
 
 This record is the technique rather than the findings, because the technique is what transfers. The
 findings are about Gemma 3 4B; this is about how a small team stops itself believing things.
@@ -60,11 +65,18 @@ Claim 7 was caught because the final layer's readout *is* the model's own distri
 was 4%. Nothing else in the chain would have revealed that two coordinate systems had been conflated,
 because every other number was plausible.
 
-The check was, separately and correctly, judged near-worthless as validation: it proves the sampler is
-greedy and proves nothing about the lens. **Both are true, and the tension is the lesson.** A check
-that cannot fail teaches nothing about the thing it points at, and is the only thing that catches a
-join, an index convention or an off-by-one. Keep it, label it honestly as what it asserts, and never
-let its passing stand in for validation it does not perform.
+The check was, separately and correctly, judged near-worthless as validation: it asserts that
+decoding is greedy, that the horizon is subtracted rather than added, and that the record's logits
+line up with the tokens emitted — all bookkeeping, and nothing about the lens. **Both are true, and
+the tension is the lesson.** A check that cannot fail teaches nothing about the thing it points at,
+and is the only thing that catches a join, an index convention or an off-by-one. Keep it, label it
+honestly as what it asserts, and never let its passing stand in for validation it does not perform.
+
+The resolution was not to choose between the two readings but to build the missing half beside the
+existing one: the readout's identity branch now also runs at the final layer and is compared against
+the model's own logits every forward, recorded as a number and gated. The bookkeeping assertion and
+the instrument validation are now two checks that fail for different reasons, which is what they
+should always have been.
 
 Claim 8 was caught the same way, informally: 0 of 540 is a value the author knew could not be right.
 
@@ -91,6 +103,17 @@ This is now a rule: no count over positions is quoted as a sample size without d
 byte-identical repeated decisions within an episode. It is aimed at the most persuasive artefact in
 the corpus, because that is the one that needs it.
 
+**And the sharpest fact about claim 6 is missing, which the D-CRO supplies against himself.** The
+rule already existed when the claim was made. He had written *"these twenty-four are one decision
+repeated, not twenty-four independent samples"* into the fixed-point record **about an hour
+earlier**, and then pooled twenty-nine repetitions of that same decision at the first opportunity.
+
+So the record's own thesis needs sharpening. It is not enough that mechanisms beat care: **a written
+rule is not a mechanism either.** It sat in a committed record, in the author's own words, about the
+exact episode, and did not fire. It became a mechanism only when it became a computation — dedup
+first, then count — that has to be executed before a number exists. A rule you have to remember at
+the moment of temptation is care wearing a mechanism's clothes.
+
 ---
 
 ## Two practices that made the catching possible
@@ -114,7 +137,10 @@ story would not have been.
 2. Build the control from the same class as the thing measured, not from everything else.
 3. Keep at least one check whose answer is known in advance, and run it at a boundary. Label it as an
    assertion about bookkeeping, never as validation of the instrument.
-4. Treat a clean number as a reason for suspicion proportional to how much you wanted it.
+4. Treat a clean number as a reason for suspicion proportional to how much you wanted it — and
+   discharge the suspicion with the smallest possible check, not a better version of the same
+   computation. Claim 8's 0 of 540 was killed by running **one** search on **one** task by hand.
+   Re-running the sweep more carefully would have reproduced the bug.
 5. A bare `except: continue` around a measurement is a machine for producing agreeable falsehoods.
 6. When a claim is refuted, strike it where it was made. A correction two hundred lines below a bold
    sentence leaves the bold sentence doing the work.
