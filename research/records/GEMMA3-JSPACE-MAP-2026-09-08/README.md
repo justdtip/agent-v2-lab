@@ -212,3 +212,29 @@ episodes and a residual stream and are not independent draws.
 points at "it does, at long horizons and at depth", and is too weak to act on.** It is recorded
 because it is the sole measurement that exists on the question, and because writing it up as a
 result would be the day's tenth instance of the pattern in `METHOD-2026-09-08`.
+
+## The stage-two declaration against its measurements, so far
+
+**Recorded mid-run, 6 of 15 episodes, because the method error is visible now and the final peak is
+not. The numbers close out when the run does.**
+
+| | declared | observed at 6 of 15 |
+|---|---:|---:|
+| peak memory | 3.4 GiB | 4.70 GiB |
+| rate | 1.80 s/token | 3.68 s/token overall; 5.01 on the long episode, 2.15 on the other five |
+| window | 5.5 h, then 7 h | extended to 9 h; naive projection 5.2 h |
+
+Neither overrun is near a threshold, R47's stop sits at 10.66 GiB, and the window has headroom. **The
+projection method is the finding.** Both figures were measured on `calculate-0158`, two turns and
+103 tokens, the shortest episode in the set, because it was the cheapest to run. Memory and per-token
+cost both scale with context, and the episodes that follow run to 2,749 positions. Projecting a
+context-scaling quantity from the shortest instance understates it by construction, and the 38%
+memory miss and the 2.3x rate miss are the same mistake once each.
+
+The rule, for the next declaration: **calibrate at the longest context the run will reach, not the
+shortest**, and treat episode length rather than episode count as the driver. The Chief caught it
+because the declaration carried its measurement, which is what R60(c) is for.
+
+Composition at 6 of 15: `update-0028` is 1,050 of 1,965 generated tokens, 53.4%, against the
+pre-run projection of 34.1% of rank rows. The equal-weight-per-episode rule was fixed before the run
+and handles it; the projection was the optimistic one.
