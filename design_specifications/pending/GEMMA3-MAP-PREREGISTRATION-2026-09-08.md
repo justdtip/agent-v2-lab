@@ -392,3 +392,62 @@ is named here so it cannot be committed later by either seat.
    gradient turns, so the penalty would be concentrated on every interesting result we have.
 
 **Nothing here changes what stage two computes.** It fixes how one already-planned analysis is read.
+
+### 10. The failure classes, fixed before stage two lands, because the ordered one addresses a minority
+
+Amendment 8's strategy-switching measurement — whether `search_files` was ever called, and whether an
+episode entered repeated failure without it — was ordered on the strength of one episode. Counted
+across the 18 completed agentic episode-runs we hold, it addresses **3**. The modal failure is a
+different shape entirely:
+
+| failure shape | episode-runs |
+|---|---:|
+| **terminated on its own with a wrong answer** | **9** |
+| passed | 4 |
+| loop detected | 3 |
+| exhausted without the loop flag | 2 |
+
+**Nine of eighteen call `finish` and stop while wrong.** That is not a model failing to switch
+strategy. It is a model that believes it is done, and the ordered measurement does not reach it in any
+run.
+
+**And the retrospective count is not trustworthy either**, which the D-CRO found while computing it.
+`repeated_failure_step` counts consecutive observations beginning `ERROR`. Under the old simulator
+`list_files` answered an unsatisfiable directory with `FILES: (none)` — a falsehood, not an error — so
+the detector was blind to exactly the failure the pre-fix runs contain most of:
+
+| run | steps | `ERROR` observations | `FILES: (none)` |
+|---|---:|---:|---:|
+| stage one | 89 | 16 | 6 |
+| corrected rendering | 40 | 27 | 1 |
+| stage two | 15 | 3 | 0 |
+
+So the 3-of-18 pools two incompatible definitions. **Only stage two's rows measure what the field was
+designed to measure.** Pre-fix and post-fix values of `repeated_failure_step` and
+`repeated_failure_without_search` are not comparable and are never tabulated together.
+
+**Fixed.** Every episode is assigned exactly one of four classes, reported as counts beside every
+aggregate:
+
+1. **passed**
+2. **self-terminated wrong** — `not success and not exhausted and not loop_detected`
+3. **looped** — `loop_detected`
+4. **exhausted** — `exhausted and not loop_detected`
+
+Class 2 needs no code, no rerun and no error text: it turns on the verdict alone, so it is
+**simulator-independent and comparable across every run we hold**, which is the property the
+strategy-switching field lacks.
+
+**A hypothesis, recorded as one and not as a finding.** The D-CRO proposes that unwarranted certainty
+about a path and unwarranted certainty about being finished are the same phenomenon at different
+scales. The Chief tested it on the four completed stage-two episodes: answer-token median probability
+was 1.000000 for a wrong self-terminated episode and 1.000000 for a passing one, which appeared to
+confirm it. **The control refuted the test, not the hypothesis.** Median probability across *every*
+emitted token is ~0.999999 in every episode regardless of outcome, so the statistic is saturated and
+carries no information about answers specifically.
+
+A test with power needs the probability the model assigns to the **correct** answer while emitting a
+wrong one, which is not saturated. The obstacle is that only the top ten per layer are stored, so
+where the correct token falls outside that the result is a bound — the regime that already bit at the
+fork, where `workspace` was outside the top ten at every read layer. **What a bound-only result is
+allowed to say is decided before that test runs, not after.**
