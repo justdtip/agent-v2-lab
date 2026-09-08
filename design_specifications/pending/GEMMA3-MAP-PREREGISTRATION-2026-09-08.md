@@ -287,3 +287,54 @@ instrument known to be wrong cannot be repaired afterwards.
 the correct outcome and not a loss, but it means **any validation that depends on that fork must be
 performed against the stage-one and corrected-rendering records already on disk**, which are frozen,
 and not assumed to reappear.
+
+### 8. The position-range disclosure, which is now the binding limitation on this map
+
+Added while stage two is generating, because it constrains **publication** rather than measurement and
+so does not change what the run computes. Measured by the D-CRO off records already on disk at
+`880e720`.
+
+| where the lens reads | rank rows | share |
+|---|---:|---:|
+| below position 16 — the attention-sink regime the fit excludes | **0** | 0.00% |
+| positions 16 to 126 — where the lens was actually fitted | 1,144 | **2.48%** |
+| above position 126 | 44,936 | **97.52%** |
+
+**My sub-16 concern is withdrawn and the premise it rested on was false.** I reasoned that with no
+cache across turns every turn re-encodes from zero, so scored positions would re-enter the excluded
+sink regime at each turn boundary. Rank rows exist only for generated tokens, generation begins after
+the prompt, and the smallest opening prompt in the set is 420 tokens. Turn-relative offsets restart at
+the prompt length, not near zero. No scored position is below 16 and none can be.
+
+**The other half is worse than I stated it.** The extrapolation is not partial but total: **every
+agentic read is outside the fitted range, and so is 100% of the primary comparison.** The only
+in-range reads in the entire corpus are 1,144 from two short chat episodes.
+
+**Every published per-layer figure from this map carries this sentence:** *the lens is used outside
+its fitted position range for 97.5% of reads and for 100% of the primary comparison; the one available
+boundary check finds no degradation at roughly 2x extrapolation and nothing tests the 18x the agentic
+episodes reach.*
+
+**The boundary check, and what it is worth.** Two chat episodes cross position 126 inside a single
+episode, giving 143 in-range against 105 out-of-range reads:
+
+| layer | in-range median | in-range rank 1 | out median | out rank 1 |
+|---:|---:|---:|---:|---:|
+| 11 | 886 | 1.4% | 715 | 1.0% |
+| 23 | 34 | 23.1% | 22 | 13.3% |
+| 24 | 5 | 32.2% | 5 | 31.4% |
+| 30 | 1 | 68.5% | 1 | 68.6% |
+
+**It is a spot-check and must be reported as one, for three reasons.** It confounds position with
+context: out-of-range reads sit later in the sequence and therefore have more context, which makes
+next-token prediction easier on its own, so "no degradation" may be degradation cancelled by an easier
+task. Its two statistics disagree at the shallowest layer, where the lens does the most work — median
+rank improves out of range at layer 11 while rank-1 share falls. And its out-of-range side reaches
+only about position 250, so it measures a 2x extrapolation and is silent about 18x.
+
+**No in-range comparison exists at any real depth of context, because the corpus contains none.** That
+is not a gap this run can close.
+
+**The fix is a fit at agent-transcript context lengths**, which is Codex's task 1 and would replace an
+18x extrapolation with none. Stage two is not blocked on it — the map is worth having with the
+limitation stated — and no per-layer figure is published without the sentence.
