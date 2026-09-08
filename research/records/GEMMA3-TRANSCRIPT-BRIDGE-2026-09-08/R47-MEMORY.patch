@@ -1,0 +1,2659 @@
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/POSITION-COVERAGE-AMENDMENT.md b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/POSITION-COVERAGE-AMENDMENT.md
+index 3a7370a..ca1d2f0 100644
+--- a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/POSITION-COVERAGE-AMENDMENT.md
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/POSITION-COVERAGE-AMENDMENT.md
+@@ -47,7 +47,13 @@ A change in between-turn cache strategy requires renewed position/context verifi
+ current capture path rejects turn-cache reuse explicitly, so it cannot silently inherit a future
+ registry default. Covering this observed maximum also does not cover future reads above 2,815.
+ 
+-## Resource correction: the larger context is not free
++## Historical resource proposal — withdrawn under R47
++
++The calculation below is retained to explain the superseded proposal. Comparing it with the
++registry's 22 GiB limit was wrong: the applicable ordinary threshold is 10.656 GiB. Its assumed
++full-vocabulary fitting buffers were also unsupported by the native residual path. Neither this
++21 GiB proposal nor the 14.5 GiB initial calibration or 16 GiB capture proposal authorizes a run.
++[R47-MEMORY-CORRECTION.md](R47-MEMORY-CORRECTION.md) supersedes their resource interpretation.
+ 
+ The measured native bf16 128-token fit peaked at **12.4436 GiB**. The revised scalar estimate uses
+ the same registered dimensions: residual width 2,560, vocabulary 262,208, 34 layers, eight attention
+@@ -62,8 +68,9 @@ heads and FFN width 10,240. The scored block is half a context: **1,408 position
+ | Two vocabulary-logit buffers, growth from 128 | 5.251282 |
+ | **Baseline plus these terms** | **19.699765** |
+ 
+-The provisional declaration is **21 GiB**, leaving 1.300235 GiB margin and remaining below the
+-22 GiB registry budget. For scale, an extra BF16 gathered-row copy is 0.228271 GiB and sixteen
++The withdrawn declaration was **21 GiB**, leaving 1.300235 GiB arithmetic margin. Its comparison
++with the 22 GiB registry budget did not satisfy R47. For scale, an extra BF16 gathered-row copy is
++0.228271 GiB and sixteen
+ FP32 solve matrices are 0.390625 GiB. Their simultaneous allocation is not asserted. The fixed
+ fit/held statistics, 3.222656 GiB, are already present in the measured baseline and are not added
+ twice. This is a source estimate, not a measured bound; native calibration can still refuse it.
+@@ -72,10 +79,11 @@ For each full window, token-dependent terms increase 37.5% and quadratic attenti
+ versus 2,048. The larger scored block can reduce the number of windows, so neither ratio predicts
+ total elapsed time. Actual corpus shape and measured calibration determine the run projection.
+ 
+-Capture remains **16 GiB**: its 8,192-token prompt bound and library prefill schedule have not
+-changed. Initial 256/512 calibration remains **14.5 GiB**. The measured ladder projects each
+-larger shape before execution, under the same 22 GiB cap. A resource refusal stops the run for a
+-ruling; this amendment does not authorize bypassing it or taking another seat's machine window.
++Capture was estimated at **16 GiB** for its 8,192-token prompt bound and library prefill schedule.
++Initial 256/512 calibration was estimated at **14.5 GiB**. Both exceed R47 and are withdrawn.
++The ladder's existing next-size checks use 0.6 of the device working set; the earlier prose
++incorrectly described that as a 22 GiB cap. The correction adds protection before checkpoint
++loading and requires matching evidence for a full fit.
+ 
+ ## Source verification
+ 
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-ALLOCATION-AUDIT.json b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-ALLOCATION-AUDIT.json
+new file mode 100644
+index 0000000..00cbd4e
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-ALLOCATION-AUDIT.json
+@@ -0,0 +1,29 @@
++{
++  "schema_version": 1,
++  "status": "source_diagnosis_not_runtime_validation",
++  "source_run": "/Users/daniel.tipton/worktrees/gemma-lens-fitting/research/records/GEMMA3-REGRESSION-2026-09-08/run.log",
++  "source_run_sha256": "271cd8ecd58c14f106e78a2f85c75f63d8a8eff163db57737eb661b80f00d90d",
++  "source_snapshot_sha256": "107888c0f7d717d4357699e32077144ffce6d7665c5bd0a75dfd0d85e17f52ed",
++  "working_set_bytes": 19069665280,
++  "r47_fraction": 0.6,
++  "cap_gib": 10.656005859375,
++  "old_registered_allocation_cap_bytes": 15032385536,
++  "first_sequence_peak_gib": 9.658590639010072,
++  "accumulation_peak_gib": 12.443627851083875,
++  "first_peak_sequence": 1640,
++  "solver_peak_gib": [
++    12.443627851083875
++  ],
++  "matching_residual_sized_peak_increments": 42,
++  "one_bf16_capture_128_gib": 0.020751953125,
++  "weight_file_bytes": 7760584481,
++  "weight_memory_basis": "file-size proxy, not measured resident memory",
++  "both_split_statistics_gib": 3.22265625,
++  "one_split_statistics_gib": 1.611328125,
++  "one_layer_fit_held_pair_gib": 0.09765625,
++  "all_maps_gib": 0.8056640625,
++  "one_bf16_capture_2816_gib": 0.45654296875,
++  "selected_rows_2816_gib": 0.040283203125,
++  "no_native_execution": true,
++  "attribution_limit": "Python ownership defect is reproduced with fakes; its share of the real peak remains unmeasured."
++}
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN-v2.json b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN-v2.json
+new file mode 100644
+index 0000000..9f77700
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN-v2.json
+@@ -0,0 +1,75 @@
++{
++  "schema_version": 1,
++  "status": "deferred_until_actual_machine_handoff",
++  "source_commit": "26d5d47",
++  "residual_source": "native",
++  "statistics_storage": "split_spill",
++  "model": "gemma3-4b-bf16",
++  "batch_size": 1,
++  "diagnostic_tokens": 128,
++  "fit_repetitions": 4,
++  "held_repetitions": 4,
++  "sequence_order": "fit_then_held_stable",
++  "initial_bound_gib": 10.5,
++  "reference_cap_gib": 10.656005859375,
++  "r47_fraction": 0.6,
++  "source_verification": {
++    "path": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-v2.json",
++    "sha256": "5c975604288cfcce0ed39448e67b37cc7254064501d0c82d464fbd04bddf3698"
++  },
++  "corpus": {
++    "path": "/Users/daniel.tipton/worktrees/gemma-lens-fitting/data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json",
++    "sha256": "91ae8f6d5e716b0fda6a9c727d97437c756c688ee9ac056329bcd85942ec2148"
++  },
++  "selection": "first longest fit row (index0); unchanged exact128tokenIDs; repeated fourtimes in each split",
++  "bound_basis": {
++    "old_four_fit_row_peak_gib": 9.960717940703034,
++    "old_first_held_row_peak_gib": 11.352926330640912,
++    "retained_growth_allowance_gib": 0.1435546875,
++    "anchor_plus_allowance_gib": 10.104272628203034,
++    "remaining_margin_gib": 0.395727371796966,
++    "one_fp32_spill_staging_matrix_gib": 0.0244140625,
++    "interpretation": "Engineering projection only. Retain the inspected128-to512 tensor allowance although shape stays128. Remaining margin includes one-at-a-time spill staging. Assumes tested collector release and one-resident-split storage remove the old simultaneous-split overlap. No predicted savings deducted from the four-row anchor."
++  },
++  "temporary_statistics_disk_gib": 3.22265625,
++  "requested_window_minutes": 10,
++  "purpose": "allocation and retention diagnostic; no solver, quality output or lens artifact",
++  "requires": [
++    "actual Deputy release",
++    "live owned primary window",
++    "compare source and corpus hashes to this plan before invocation",
++    "before-load cap recheck and per-phase breach stops"
++  ],
++  "not_qualified": [
++    "larger token lengths",
++    "memory statistics strategy",
++    "full fit",
++    "transcript capture"
++  ],
++  "native_execution_started": false,
++  "argv_inside_owned_window": [
++    "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/scripts/lens_regression_preflight.py",
++    "--model",
++    "gemma3-4b-bf16",
++    "--corpus",
++    "/Users/daniel.tipton/worktrees/gemma-lens-fitting/data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json",
++    "--planned-lens",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-diagnostic-unused.npz",
++    "--registration",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN-v2.json",
++    "--report",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-128-v2.run.jsonl",
++    "--initial-bound-gib",
++    "10.5",
++    "--residual-source",
++    "native",
++    "--statistics-storage",
++    "split_spill",
++    "--diagnostic-tokens",
++    "128",
++    "--scratch-parent",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08"
++  ],
++  "amends": "R47-DIAGNOSTIC-PLAN.json; unlaunched; refresh source binding after qualification repeated-update and ladder fixes"
++}
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN.json b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN.json
+new file mode 100644
+index 0000000..7212e90
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN.json
+@@ -0,0 +1,74 @@
++{
++  "schema_version": 1,
++  "status": "deferred_until_actual_machine_handoff",
++  "source_commit": "8b105f9",
++  "residual_source": "native",
++  "statistics_storage": "split_spill",
++  "model": "gemma3-4b-bf16",
++  "batch_size": 1,
++  "diagnostic_tokens": 128,
++  "fit_repetitions": 4,
++  "held_repetitions": 4,
++  "sequence_order": "fit_then_held_stable",
++  "initial_bound_gib": 10.5,
++  "reference_cap_gib": 10.656005859375,
++  "r47_fraction": 0.6,
++  "source_verification": {
++    "path": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-final.json",
++    "sha256": "9176db2aa71667438ed85a35e00f561cdd96f91584b1a34413010cee30eb03dd"
++  },
++  "corpus": {
++    "path": "/Users/daniel.tipton/worktrees/gemma-lens-fitting/data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json",
++    "sha256": "91ae8f6d5e716b0fda6a9c727d97437c756c688ee9ac056329bcd85942ec2148"
++  },
++  "selection": "first longest fit row (index0); unchanged exact128tokenIDs; repeated fourtimes in each split",
++  "bound_basis": {
++    "old_four_fit_row_peak_gib": 9.960717940703034,
++    "old_first_held_row_peak_gib": 11.352926330640912,
++    "retained_growth_allowance_gib": 0.1435546875,
++    "anchor_plus_allowance_gib": 10.104272628203034,
++    "remaining_margin_gib": 0.395727371796966,
++    "one_fp32_spill_staging_matrix_gib": 0.0244140625,
++    "interpretation": "Engineering projection only. Retain the inspected128-to512 tensor allowance although shape stays128. Remaining margin includes one-at-a-time spill staging. Assumes tested collector release and one-resident-split storage remove the old simultaneous-split overlap. No predicted savings deducted from the four-row anchor."
++  },
++  "temporary_statistics_disk_gib": 3.22265625,
++  "requested_window_minutes": 10,
++  "purpose": "allocation and retention diagnostic; no solver, quality output or lens artifact",
++  "requires": [
++    "actual Deputy release",
++    "live owned primary window",
++    "compare source and corpus hashes to this plan before invocation",
++    "before-load cap recheck and per-phase breach stops"
++  ],
++  "not_qualified": [
++    "larger token lengths",
++    "memory statistics strategy",
++    "full fit",
++    "transcript capture"
++  ],
++  "native_execution_started": false,
++  "argv_inside_owned_window": [
++    "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/scripts/lens_regression_preflight.py",
++    "--model",
++    "gemma3-4b-bf16",
++    "--corpus",
++    "/Users/daniel.tipton/worktrees/gemma-lens-fitting/data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json",
++    "--planned-lens",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-diagnostic-unused.npz",
++    "--registration",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN.json",
++    "--report",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-128.run.jsonl",
++    "--initial-bound-gib",
++    "10.5",
++    "--residual-source",
++    "native",
++    "--statistics-storage",
++    "split_spill",
++    "--diagnostic-tokens",
++    "128",
++    "--scratch-parent",
++    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08"
++  ]
++}
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-MEMORY-CORRECTION.md b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-MEMORY-CORRECTION.md
+new file mode 100644
+index 0000000..b140e36
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-MEMORY-CORRECTION.md
+@@ -0,0 +1,122 @@
++# R47 correction: batch one was already in use
++
++The 21 GiB proposal is withdrawn. Comparing it with the registry's 22 GiB budget was an
++operational error: the applicable ordinary-run threshold is **0.6 of the recommended working
++set**, not the registry budget. The previous log records a working set of 19,069,665,280 bytes;
++its threshold is **10.656005859375 GiB**. No transcript rollout, new fit, or calibration was
++launched under the 16 / 14.5 / 21 GiB proposals. All three exceed this threshold and are withdrawn
++as launch allowances. The historical registrations and patches remain unchanged for audit.
++
++## Findings and limits
++
++The fitter already uses one unpadded sequence per forward. There is no batch of sixteen to
++reduce. The 12.443628 GiB peak of the earlier 128-token native bf16 fit was reached during
++accumulation, at sequence 1,640, before any ridge solve. Moving the solver alone cannot explain
++or remove that peak. Its old 14 GiB allocation ceiling did not establish compliance with R47.
++
++Two causes require different remedies:
++
++1. Both fit and held statistics coexist: 33 layers, two splits, two 2,560-square FP32 matrices
++   per split/layer, or **3.222656 GiB** plus scalar energies. The bf16 checkpoint's tensor-file
++   size is about **7.227608 GiB**, rather than the roughly 4 GiB model allowance in the batching
++   argument. Their sum is **10.450264 GiB** before forward scratch. File size is a weight-memory
++   proxy, not a measured resident allocation; lazy loading and allocator behavior matter.
++2. Native residual capture has a confirmed Python ownership bug. A dynamically defined collector
++   class closes over its residual dictionary; class cycles can keep those arrays alive until
++   cyclic garbage collection. The old log contains peak increments of exactly
++   **0.020751953125 GiB**, equal to 34 x 128 x 2,560 bf16 elements. A weak-reference test on the
++   actual method reproduces delayed release without importing MLX. This confirms the lifetime
++   defect, but the fraction of the real peak it caused remains unmeasured.
++
++The previous extrapolation also imported vocabulary-logit buffers from a different path.
++Native residual fitting discards the model's output and evaluates residual-derived statistics;
++the transcript ledger explicitly evaluates returned logits. Full vocabulary tensors therefore
++cannot be assumed live in the fitting path. Likewise, a fused attention call does not establish
++that two dense attention matrices are simultaneously resident. The 21 GiB total was not a
++reliable explanation of the observed allocation.
++
++## Technique, independent of this implementation
++
++Separate live-memory accounting into weights, sufficient statistics, retained activations,
++temporary arithmetic, allocator cache, and host-side export/validation. Measure phases rather
++than attributing one process maximum to every phase. Test ownership independently with weak
++references and automatic cycle collection disabled; arrays should survive while the caller owns
++them and release as soon as that ownership ends, including exception paths.
++
++For a stateless regression forward, partition the frozen rows by fit/held membership while
++preserving row order within each split. Accumulate just one split's sufficient statistics,
++evaluate each layer's update before proceeding, write the completed statistics to temporary
++files, then release them before the other split. Solve from one layer's fit/held pair at a time.
++Every window still receives exactly one forward; every selected position contributes once to
++the same FP32 sum in the same within-split order. The ridge grid and selection objective stay
++unchanged. Changing synchronization can still change backend arithmetic; real-checkpoint
++numerical and resource checks remain necessary.
++
++This reduces simultaneous statistics to **1.611328 GiB** during capture and **0.097656 GiB**
++during a layer solve. It requires about **3.222656 GiB** of temporary statistics on disk and
++**6.445313 GiB** of total statistics write/read traffic per fit, excluding small headers.
++Saving CPU arrays alone would not achieve the same reduction on a unified-memory laptop.
++
++## Implementation and acceptance
++
++- Repair collector ownership without adding a forward, changing the model graph, or changing
++  its evaluation schedule. Cover normal completion and errors with actual-method fake tests.
++- Add an explicit `split_spill` statistics strategy. Keep the legacy strategy distinguishable;
++  record batch one, stable split ordering, per-layer synchronization and storage strategy in
++  provenance. Temporary statistics must be removed on successful completion and failure.
++- Require R47 qualification before loading a checkpoint. An ordinary owned machine window does
++  not override the threshold. A full fit needs successful calibration bound to its exact model,
++  corpus, residual producer, statistics strategy, implementation and scored/input workload.
++- Log active allocation, allocator cache and peak at accumulation boundaries without introducing
++  an extra residual evaluation. MLX allocation is not OS-wide resident memory; the report must
++  retain that distinction, and host-side artifact validation needs its own allowance.
++- First test with small fakes and import barriers. After the Deputy's actual release, announce a
++  short calibration window, confirm its live holder, and start at **one window**. Do not increase
++  window concurrency: the current native residual contract supports batch one only. Increase
++  token length only after the next shape's projection passes the threshold.
++
++The split strategy's weight-file proxy plus statistics is **8.838936 GiB**, leaving about
++**1.817070 GiB** to the current threshold. At 2,816 tokens, all 34 bf16 residuals occupy
++**0.456543 GiB**; two selected FP32 arrays and two bf16 gathers at 1,408 positions occupy roughly
++**0.040283 GiB**. This is a plausible path to a compliant run, **not a measured or certified
++peak**. Native intermediates, update temporaries and backend workspace still need calibration.
++
++Capture requires separate qualification: its withdrawn 16 GiB projection cannot launch the
++72-task cohort. Token limits and a model lock do not replace that memory check. No runtime
++estimate is certified before the corpus sizes and revised pipeline timings are measured.
++
++The corpus gates are unchanged: actual fitted replay positions must reach 2,749; a larger cap
++does not count as coverage. Concentration, span, BOS, source-offset and precision requirements
++continue to apply.
++
++## Source outcome and next diagnostic
++
++The correction is implemented through source commit `26d5d47`. **244 affected integration checks
++passed** with real MLX imports blocked in the parent and subprocesses. `R47-SOURCE-VERIFICATION-v2.json` binds the exact final source hashes; earlier 241-check and
++26-check records remain as history.
++The residual-ownership tests failed before the fix and passed after it. Fake-array tests verify
++unchanged statistics, maps, masks and forward counts, plus one-split ownership and scratch cleanup.
++They do not establish native numerical equivalence or measured resource use.
++
++`R47-DIAGNOSTIC-PLAN-v2.json` freezes the first 128-token, eight-forward diagnostic with a **10.5 GiB
++engineering projection**, strictly below the recorded 10.656 GiB threshold. The old four-fit-row
++peak was 9.960718 GiB; retained dimensional allowance is 0.143555 GiB, leaving 0.395727 GiB for
++staging and unmeasured workspace. It assumes tested split-release behavior, not simultaneous
++split storage: the old first-held-row peak of 11.352926 GiB rules out that alternative. The plan
++qualifies no larger shape, solver, complete fit or capture run. Qualification also repeats four updates per split and includes 2,048 before 2,816.
++The diagnostic remains deferred until the
++Deputy actually releases the machine and a live owned window is announced.
++
++Capture now compares its registered projection with the device threshold before loading.
++It does **not** have a capture-specific measured-evidence validator. The withdrawn 16 GiB
++projection fails that comparison. A new bound must be justified or measured separately;
++lowering the number merely to pass is not qualification.
++
++## Evidence
++
++- R47: `design_specifications/live/STANDING-LIFT-EXPERIMENTS-2026-09-05.md`, Director's rulings.
++- Earlier real run: `/Users/daniel.tipton/worktrees/gemma-lens-fitting/research/records/GEMMA3-REGRESSION-2026-09-08/run.log`;
++  its first sequence peak is 9.658590639 GiB and final peak is 12.443627851 GiB.
++- Source at `adcd43d`: `arch.py` native capture, `lens_fitting/regression.py` accumulation,
++  and the regression/capture launch scripts. The new correction is source work; no real
++  checkpoint has yet exercised it.
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-final.json b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-final.json
+new file mode 100644
+index 0000000..2028720
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-final.json
+@@ -0,0 +1,43 @@
++{
++  "schema_version": 1,
++  "source_commit": "8b105f9",
++  "verified_at": "2026-09-08T13:55:51.286498+00:00",
++  "previous_integration": {
++    "path": "R47-SOURCE-VERIFICATION.json",
++    "sha256": "15f8a46da1f7efc879cc7870370a65ae9a7f568ffb1bd42d4382d53f983807d8",
++    "passed": 241
++  },
++  "followup": "Include measured peak and both thresholds in the runtime breach error; arithmetic/control flow unchanged.",
++  "changed_source": [
++    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py"
++  ],
++  "changed_tests": [
++    "tests/test_lens_memory_policy.py"
++  ],
++  "targeted_outcomes": {
++    "passed": 26
++  },
++  "pytest_exit_code": 0,
++  "source_sha256": {
++    "src/local_llm_lab/arch.py": "e43a0f2a0a00404c88579362ecd897660621bfb02fe397983d79e52e6cc2b30e",
++    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "a2f88937b32d946788e69200ffb7759f2bb6452f9ce77734d0bf5534b188b74b",
++    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py": "823bf822791fce22dfc6d45272ab79df94e772d6882028db74087a3baa6aa0a5",
++    "scripts/lens_regression_preflight.py": "048218a1f8959283e25898872b8cfba0c5979ba86f139d4d9a180ccabeaeeba5",
++    "scripts/lens_fit.py": "e5cba2b6bf36cabeacefb6d610d82dcd5fa1dbf60dad972029bc2bd1e2fb066c",
++    "scripts/gemma_transcript_lens.py": "01dbadbd137fc0b774e2693116f1f78891ed66364d94ad8bba8e8954d33b508a"
++  },
++  "test_sha256": {
++    "tests/test_native_residual_lifetime.py": "0bc9b9e389d06857a57efe0bf2a48ace538805a42055b79388e6ef91b7227a37",
++    "tests/test_lens_regression_memory.py": "60d9f03cafae426446b9815e79a2c01410fe8f82b1d3b52d954d2ea10fc5d1e8",
++    "tests/test_lens_memory_policy.py": "9c9d36bf2c255f7fb395f850d71fe53d6bdd3a4ff146a21380efac6bf9f61c40",
++    "tests/test_lens_regression_preflight.py": "0ea4c7bb370cc73a6f3891eca7904999148a4aae0733a455894c0103e151a26c",
++    "tests/test_lens_runtime.py": "614f6dd9e19d6e9adb30b841c41086c73696fcff71e0b9dec0dea2ac0909f985",
++    "tests/test_lens_transcript.py": "fd9fbf429296566bf9a95342c533e9ffd5a3f5a3aa2be9d2c6091b65c101e524",
++    "tests/test_gemma_transcript_lens.py": "a95c5da4ec1c38ff72eefd36bf644b6af329783a06ec104003563d56149da6a4",
++    "tests/test_evaluation_capture.py": "5039814fe39588916820a07c385d10d55a9aa01dca416ac51da2053c7453cd6e",
++    "tests/test_sae_bridge.py": "c7f5ee11c8e8ccca3d9db19b51fb3f63dbb22f0073e5103e6b3f81f0288c5477",
++    "tests/test_sae_bridge_io.py": "8010d7ef517485144f37303c11401511e4447a91c9f713a36ccdcb0f5ad26cfe",
++    "tests/test_repository_rules.py": "ed847ed5622d891fbf11b8fcd189e3c87a64e339765af5b059828cf6fec3a7e5"
++  },
++  "native_checkpoint_execution": false
++}
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-v2.json b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-v2.json
+new file mode 100644
+index 0000000..f91584f
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-v2.json
+@@ -0,0 +1,50 @@
++{
++  "schema_version": 1,
++  "verified_at": "2026-09-08T14:35:33.793106+00:00",
++  "scope": "final affected integration after repeated-update qualification and gradual ladder; real MLX blocked in parent and child runtimes",
++  "pytest_exit_code": 0,
++  "outcomes": {
++    "passed": 244
++  },
++  "tests": [
++    "tests/test_native_residual_lifetime.py",
++    "tests/test_lens_regression_memory.py",
++    "tests/test_lens_memory_policy.py",
++    "tests/test_lens_regression_preflight.py",
++    "tests/test_lens_runtime.py",
++    "tests/test_lens_transcript.py",
++    "tests/test_gemma_transcript_lens.py",
++    "tests/test_evaluation_capture.py",
++    "tests/test_sae_bridge.py",
++    "tests/test_sae_bridge_io.py",
++    "tests/test_repository_rules.py::test_banned_model_constants_are_limited_to_approved_or_legacy_modules",
++    "tests/test_repository_rules.py::test_processes_are_started_only_through_the_spawn_helper"
++  ],
++  "source_sha256": {
++    "src/local_llm_lab/arch.py": "e43a0f2a0a00404c88579362ecd897660621bfb02fe397983d79e52e6cc2b30e",
++    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "a2f88937b32d946788e69200ffb7759f2bb6452f9ce77734d0bf5534b188b74b",
++    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py": "bf4ef8344b0f755f29bf8c1e0da0094fc883b79967e955ec277f2cd0538849cf",
++    "scripts/lens_regression_preflight.py": "0e6c21733290d3d3857ba813301b5c39a0b17ff339afda8df10bdf1dcc0d7612",
++    "scripts/lens_fit.py": "e5cba2b6bf36cabeacefb6d610d82dcd5fa1dbf60dad972029bc2bd1e2fb066c",
++    "scripts/gemma_transcript_lens.py": "01dbadbd137fc0b774e2693116f1f78891ed66364d94ad8bba8e8954d33b508a"
++  },
++  "test_sha256": {
++    "tests/test_native_residual_lifetime.py": "0bc9b9e389d06857a57efe0bf2a48ace538805a42055b79388e6ef91b7227a37",
++    "tests/test_lens_regression_memory.py": "60d9f03cafae426446b9815e79a2c01410fe8f82b1d3b52d954d2ea10fc5d1e8",
++    "tests/test_lens_memory_policy.py": "235cca8f698e8dfb6c500ceff5aac6afd8fbd89986b5f30066031de63abea21a",
++    "tests/test_lens_regression_preflight.py": "fba601f8644481b9f66596692745271c1e869aa3558737307d6979e0b7581b12",
++    "tests/test_lens_runtime.py": "9d1e6c4a27405be04badc19f52fde189ab4e811e7ec6b2c81c6ab2ed53b990e5",
++    "tests/test_lens_transcript.py": "fd9fbf429296566bf9a95342c533e9ffd5a3f5a3aa2be9d2c6091b65c101e524",
++    "tests/test_gemma_transcript_lens.py": "a95c5da4ec1c38ff72eefd36bf644b6af329783a06ec104003563d56149da6a4",
++    "tests/test_evaluation_capture.py": "5039814fe39588916820a07c385d10d55a9aa01dca416ac51da2053c7453cd6e",
++    "tests/test_sae_bridge.py": "c7f5ee11c8e8ccca3d9db19b51fb3f63dbb22f0073e5103e6b3f81f0288c5477",
++    "tests/test_sae_bridge_io.py": "8010d7ef517485144f37303c11401511e4447a91c9f713a36ccdcb0f5ad26cfe",
++    "tests/test_repository_rules.py": "ed847ed5622d891fbf11b8fcd189e3c87a64e339765af5b059828cf6fec3a7e5"
++  },
++  "native_checkpoint_execution": false,
++  "limitations": [
++    "Fake backend numerical equality is not real-checkpoint numerical equivalence.",
++    "No measured allocation or throughput for corrected runtime.",
++    "Capture has a before-load scalar cap gate, not a capture-specific measured-evidence validator."
++  ]
++}
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION.json b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION.json
+new file mode 100644
+index 0000000..109c41e
+--- /dev/null
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION.json
+@@ -0,0 +1,51 @@
++{
++  "schema_version": 1,
++  "verified_at": "2026-09-08T13:37:56.610392+00:00",
++  "scope": "affected source integration; native MLX imports blocked in parent and child runtimes",
++  "pytest_exit_code": 0,
++  "outcomes": {
++    "passed": 241
++  },
++  "tests": [
++    "tests/test_native_residual_lifetime.py",
++    "tests/test_lens_regression_memory.py",
++    "tests/test_lens_memory_policy.py",
++    "tests/test_lens_regression_preflight.py",
++    "tests/test_lens_runtime.py",
++    "tests/test_lens_transcript.py",
++    "tests/test_gemma_transcript_lens.py",
++    "tests/test_evaluation_capture.py",
++    "tests/test_sae_bridge.py",
++    "tests/test_sae_bridge_io.py",
++    "tests/test_repository_rules.py::test_banned_model_constants_are_limited_to_approved_or_legacy_modules",
++    "tests/test_repository_rules.py::test_processes_are_started_only_through_the_spawn_helper"
++  ],
++  "parent_native_import_attempts_blocked": [],
++  "source_sha256": {
++    "src/local_llm_lab/arch.py": "e43a0f2a0a00404c88579362ecd897660621bfb02fe397983d79e52e6cc2b30e",
++    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "a2f88937b32d946788e69200ffb7759f2bb6452f9ce77734d0bf5534b188b74b",
++    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py": "75016467b1f4561e25ebd4bc92f944071a6e91abb9e7480e097237e4a525713f",
++    "scripts/lens_regression_preflight.py": "048218a1f8959283e25898872b8cfba0c5979ba86f139d4d9a180ccabeaeeba5",
++    "scripts/lens_fit.py": "e5cba2b6bf36cabeacefb6d610d82dcd5fa1dbf60dad972029bc2bd1e2fb066c",
++    "scripts/gemma_transcript_lens.py": "01dbadbd137fc0b774e2693116f1f78891ed66364d94ad8bba8e8954d33b508a"
++  },
++  "test_sha256": {
++    "tests/test_native_residual_lifetime.py": "0bc9b9e389d06857a57efe0bf2a48ace538805a42055b79388e6ef91b7227a37",
++    "tests/test_lens_regression_memory.py": "60d9f03cafae426446b9815e79a2c01410fe8f82b1d3b52d954d2ea10fc5d1e8",
++    "tests/test_lens_memory_policy.py": "7fc9804922d0e286df0fe79a97096e0bf297875dceb8591f768c629a41dbfabb",
++    "tests/test_lens_regression_preflight.py": "0ea4c7bb370cc73a6f3891eca7904999148a4aae0733a455894c0103e151a26c",
++    "tests/test_lens_runtime.py": "614f6dd9e19d6e9adb30b841c41086c73696fcff71e0b9dec0dea2ac0909f985",
++    "tests/test_lens_transcript.py": "fd9fbf429296566bf9a95342c533e9ffd5a3f5a3aa2be9d2c6091b65c101e524",
++    "tests/test_gemma_transcript_lens.py": "a95c5da4ec1c38ff72eefd36bf644b6af329783a06ec104003563d56149da6a4",
++    "tests/test_evaluation_capture.py": "5039814fe39588916820a07c385d10d55a9aa01dca416ac51da2053c7453cd6e",
++    "tests/test_sae_bridge.py": "c7f5ee11c8e8ccca3d9db19b51fb3f63dbb22f0073e5103e6b3f81f0288c5477",
++    "tests/test_sae_bridge_io.py": "8010d7ef517485144f37303c11401511e4447a91c9f713a36ccdcb0f5ad26cfe",
++    "tests/test_repository_rules.py": "ed847ed5622d891fbf11b8fcd189e3c87a64e339765af5b059828cf6fec3a7e5"
++  },
++  "native_checkpoint_execution": false,
++  "limitations": [
++    "Fake backend numerical equality is not real-checkpoint numerical equivalence.",
++    "No measured allocation or throughput for corrected runtime.",
++    "Capture has a before-load scalar cap gate, not a capture-specific measured-evidence validator."
++  ]
++}
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/README.md b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/README.md
+index 7b4e265..9d4e898 100644
+--- a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/README.md
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/README.md
+@@ -76,6 +76,12 @@ published. No labels are borrowed across feature indices.
+ 
+ ## Resources and remaining acceptance
+ 
++**R47 correction:** the previous 16 GiB capture, 14.5 GiB initial calibration and 21 GiB full-fit
++proposals are withdrawn as launch allowances. The current ordinary threshold is 10.656 GiB,
++derived from the machine's recommended working set, not the 22 GiB registry budget. See
++[R47-MEMORY-CORRECTION.md](R47-MEMORY-CORRECTION.md) for the fixed-statistics and residual-ownership
++findings and the explicit split-spill implementation. No new model run has started.
++
+ No MLX import is needed for A1. The selected BF16 embedding is 262,208 by 2,560. Float32 W is
+ 2.69 GB, D and JD are about 0.168 GB each. The loader and independent reference add bounded
+ scratch; loading every hosted map transiently adds about 0.865 GB. Never allocate the 17.2 GB
+diff --git a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/WINDOW-REQUEST.md b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/WINDOW-REQUEST.md
+index 2450e38..c807a96 100644
+--- a/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/WINDOW-REQUEST.md
++++ b/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/WINDOW-REQUEST.md
+@@ -1,50 +1,69 @@
+-# Queued request — not an active machine window
+-
+-Updated by the Director's position-coverage review: use `TRANSCRIPT-REGISTRATION-v3.json`,
+-**2,816-token** fit windows, actual scored support through **position 2,749**, and the provisional
+-**21 GiB** fit estimate. `POSITION-COVERAGE-AMENDMENT.md` gives the calculation and its limits.
+-
+-Task 1 remains the critical path. Predecessor: the Deputy's all-layer stage-two map, observed
+-holding PID 37593 at 2026-09-08T11:22:02Z with a 330-minute declaration. An expected end is not a
+-release. No window has been announced or claimed by this work; wait for the actual handoff.
+-
+-## Serial sequence and projected peaks
+-
+-1. Generate the three registered training cohorts through evaluation with explicit no reuse,
+-   24 steps and 200 emitted tokens per turn. The capture ledger counts successful forwards and
+-   records generated spans as tokens arrive. **Capture projection: 16 GiB**, conservative and
+-   unmeasured, with its weight/cache/logit/attention terms in `TRANSCRIPT-REGISTRATION-v3.json`.
+-   Cap prompts at 8,192 tokens and refuse oversized prompts before a forward; do not truncate them
+-   to make the projection fit. Capture each cohort in its own process and fresh artifact paths.
+-2. Freeze the corpus using the exact capture records. Inspect largest-episode share, identical-call
+-   concentration, four generated spans, input-role counts, absolute-position distributions and
+-   BOS composition. If concentration exceeds one third, stop for the Director. No resampling or
+-   downweighting without a ruling. Also stop if actual FIT SCORED replay positions do not reach
+-   2,749. A long input, held-only position or large configured cap cannot satisfy that requirement.
+-3. Native masked resource calibration, all layers. **Initial 256/512 bound: 14.5 GiB.** Use suffix
+-   windows whose scored tokens remain from the registered source row; an empty prefix mask is not
+-   a valid calibration. Measure and project larger shapes before running them.
+-4. BF16 and 4-bit regression fits on exactly the same frozen corpus, serially. **Provisional
+-   2,816-token peak: 21 GiB**, derived from the 12.44 GiB native 128-token fit plus the changed
+-   residual/logit/attention/mask buffers. This is not the measured launch allowance: calibration
+-   must produce that before fitting under the 22 GiB registry resource limit. Select duration
+-   from actual captured positions and measured calibration, then announce it.
+-5. Paired per-layer precision comparison and records. Fit outputs must identify both exact
+-   checkpoint snapshots, the same corpus hash and masks, native residual source and R57 identity.
+-6. A1 convention diagnostic and benchmark in a separate CPU window if needed. **Projection:
+-   6 GiB**, mostly the 2.69 GB FP32 readout, decoder products and bounded independent-reference
+-   scratch. Start with the raw identity baseline; the norm-convention diagnostic remains distinct.
+-   Measure 16 features before projecting the full readout, which now includes a direct pass as well
+-   as the lensed pass. The old 150-second estimate is not a measurement of this implementation.
++# Deferred short calibration request — no active machine window
+ 
+-## Window ownership
++The Director's R47 correction supersedes the earlier 16 / 14.5 / 21 GiB proposals. They are all
++above **0.6 of the recommended working set**, currently **10.656 GiB**, and cannot be used as
++launch allowances. The registry's 22 GiB budget does not override that threshold. Historical
++`TRANSCRIPT-REGISTRATION-v3.json` remains an unlaunched protocol record; its memory numbers are
++withdrawn. See [R47-MEMORY-CORRECTION.md](R47-MEMORY-CORRECTION.md).
++
++The Deputy's stage-two map is the predecessor. The last observed declaration belongs to PID
++37593, opened at 2026-09-08T11:22:02Z and extended to 420 minutes. Neither an estimated finish
++time nor an empty filtered process search is a handoff. No window has been announced or claimed
++by this task. Model loads and native MLX tests wait for the actual release.
++
++## First machine work
++
++Request a short diagnostic window, starting with one window in flight. The native residual API
++already enforces batch one; increasing a nonexistent batch setting is not the remedy. The
++corrected candidate clears residual ownership and streams fit/held statistics separately.
++
++Start with a fresh checkpoint load and a 128-token, batch-one diagnostic. Record load peak and
++post-load active/cache bytes, then forward/statistics/release phase allocation. The previous
++first 128-token sequence peaked at 9.658591 GiB, while repeated sequences later reached
++12.443628 GiB. A first-row result alone cannot certify the absence of retention over a corpus.
++Exercise both split slots and repeated rows, with no quality outputs or lens writing.
++
++The narrow invocation is frozen in `R47-DIAGNOSTIC-PLAN-v2.json`: **10.5 GiB projected peak**, only
++for eight 128-token forwards using `split_spill`, without solving or writing a lens. The first
++four fit rows of the old run reached 9.960718 GiB. Retaining the inspected 128-to-512 tensor
++allowance, despite keeping this diagnostic at 128, gives 10.104273 GiB and leaves 0.395727 GiB
++for spill staging and unmeasured workspace. A single FP32 staging matrix is 0.024414 GiB.
+ 
+-All invocations use the primary box-state directory
+-`/Users/daniel.tipton/Desktop/An app`, even from the home worktree. `runlock run` records its own
+-long-lived wrapper PID and closes the announcement in `finally`. If using `announce` directly,
+-pass `--holder-pid` for a process that outlives the command. Read `runlock status` and confirm the
+-holder says **running** before starting. The launch driver's own ownership/readback check runs
+-before checkpoint access and again before accepting completion.
++This is an evidence-based engineering projection, not a measured peak or a guaranteed upper
++bound. The old first held row reached 11.352926 GiB with both splits resident; the new bound
++depends on the tested split-release behavior and cannot authorize the legacy memory strategy.
++Before invocation, compare the frozen source and corpus hashes, confirm the actual handoff and
++live owned window, and recheck the current device threshold. Larger shapes require new evidence.
++A measured breach is a breach, not successful pre-launch protection.
++
++The regular fitting preflight still requires an honest initial bound and checks it before
++checkpoint loading. Each subsequent token length must pass a projection before its forward.
++Full fitting additionally requires matching successful calibration evidence, including the
++unchanged model, corpus, residual source, storage strategy, source files and scored/input
++workload. A window by itself cannot waive the cap.
++
++## Work after qualification
++
++1. Qualify transcript capture separately before its 72-task generation. The ledger materializes
++   logits, unlike residual fitting; a fit calibration does not certify capture memory. Keep
++   explicit no reuse, 24 steps, 200 generated tokens, and the registered token limits. Do not
++   shorten prompts or resample tasks to make a resource bound pass without recording the change.
++2. Freeze the exact corpus and enforce concentration, span and position gates. In particular,
++   actual FIT SCORED replay positions must reach 2,749; long inputs and held-only coverage do
++   not qualify. Fit windows remain capped at 2,816 and carry their original offsets and BOS facts.
++3. Calibrate the complete native masked split-spill fitting path separately for bf16 and 4-bit,
++   on the frozen workload. Include solve, disk transfer and artifact validation allowances.
++4. Run the two qualified fits serially, then the paired per-layer precision comparison. Announce
++   duration from the real corpus and measured timings. The earlier eight-hour estimate is a
++   planning estimate, not a measured duration of the revised implementation.
++5. A1 remains separate, with its own CPU window and measured feature-batch timing. This memory
++   correction does not alter the bridge's identity gate or normalization-convention diagnostic.
++
++## Window ownership
+ 
+-No weights are downloaded for the transcript run: both converted checkpoints already exist.
+-Native MLX tests are machine work too and stay out of another seat's window.
++Use the primary box-state directory `/Users/daniel.tipton/Desktop/An app`, including from the
++home worktree. A `runlock run` wrapper owns its lifetime and records closure in `finally`.
++If announcing directly, pass `--holder-pid` for a process that outlives the command. Read
++`runlock status` back and confirm the holder is running before starting. Ownership is checked
++before device queries or checkpoint access. No foreign lock is cleared and no foreign process
++is stopped.
+diff --git a/scripts/gemma_transcript_lens.py b/scripts/gemma_transcript_lens.py
+index 9685514..8e0f832 100644
+--- a/scripts/gemma_transcript_lens.py
++++ b/scripts/gemma_transcript_lens.py
+@@ -313,6 +313,15 @@ def capture(registration_path, *, split, record, output, execute=False):
+     require_owned_window()
+     verify_snapshot(registration, "gemma3-4b")  # permitted hashing begins only inside owned window
+     require_owned_window()  # hashing cannot silently consume the launch window
++    from local_llm_lab.pipeline.lens_fitting.memory_policy import (
++        check_projection,
++        device_working_set,
++    )
++
++    check_projection(
++        registration["capture_projection"]["peak_gib"] * 2**30,
++        device_working_set(require_window=require_owned_window),
++    )
+     spec = replace(model_spec("gemma3-4b"), cache_strategy="none")
+     provenance = {
+         "registration": binding,
+diff --git a/scripts/lens_fit.py b/scripts/lens_fit.py
+index be2c228..9cfdb49 100644
+--- a/scripts/lens_fit.py
++++ b/scripts/lens_fit.py
+@@ -42,7 +42,12 @@ def main(argv: list[str] | None = None) -> int:
+     parser.add_argument(
+         "--record-dir", type=Path, help="New directory for append-only Jacobian stage records"
+     )
++    parser.add_argument("--statistics-storage", choices=("memory", "split_spill"), default="memory")
++    parser.add_argument("--scratch-parent", type=Path)
++    parser.add_argument("--memory-preflight", type=Path)
+     args = parser.parse_args(argv)
++    if args.kind == "regression" and args.memory_preflight is None:
++        parser.error("regression requires matching successful --memory-preflight evidence")
+     if args.kind == "jacobian":
+         if args.jacobian_plan is None:
+             parser.error("Jacobian stages require --jacobian-plan")
+@@ -88,11 +93,33 @@ def main(argv: list[str] | None = None) -> int:
+             write_record(args.record_dir / "run-plan.json", plan)
+         except (OSError, ValueError, KeyError) as error:
+             parser.error(str(error))
++    qualification = None
++    if args.kind == "regression":
++        from local_llm_lab.pipeline.lens_fitting.memory_policy import (
++            binding,
++            device_working_set,
++            guard_runtime_event,
++            require_owned_window,
++            validate_evidence,
++        )
++
++        qualification = validate_evidence(
++            args.memory_preflight,
++            binding(prepared, args.residual_source, args.statistics_storage),
++            device_working_set(),
++        )
++        require_owned_window()
+     loaded = load_runtime(prepared)
+     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
+     from local_llm_lab.pipeline.lens_fitting.regression import ALPHA_GRID, fit_regression
+     from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
+ 
++    if qualification is not None:
++        from local_llm_lab.pipeline.lens_fitting.memory_policy import check_projection
++
++        check_projection(
++            resource_snapshot()["peak_memory_gib"] * 2**30, qualification["working_set_bytes"]
++        )
+     loaded.model.eval()
+     allocator_cache = configure_allocator_cache()
+ 
+@@ -115,15 +142,29 @@ def main(argv: list[str] | None = None) -> int:
+         }
+ 
+     def progress(event):
+-        print(json.dumps(enrich(event)), flush=True)
++        report = enrich(event)
++        if qualification is not None:
++            guard_runtime_event(
++                {"phase": "progress", "peak_memory_bytes": report["peak_memory_gib"] * 2**30},
++                qualification,
++            )
++        print(json.dumps(report), flush=True)
++
++    def memory_progress(event):
++        guard_runtime_event(event, qualification)
++        print(json.dumps({**event, "event": "memory_phase"}), flush=True)
+ 
+     validation = None
+     if args.kind == "regression":
++        require_owned_window()
+         result = fit_regression(
+             loaded.view,
+             prepared.rows,
+             progress=progress,
+             residual_source=args.residual_source,
++            statistics_storage=args.statistics_storage,
++            scratch_parent=args.scratch_parent,
++            memory_progress=memory_progress,
+         )
+     else:
+         write_record(
+@@ -188,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
+         "model_run_lock": str(loaded.lock_path),
+         "cache_strategy": loaded.resolved.cache_strategy,
+         "allocator_cache": allocator_cache,
++        "statistics_storage": args.statistics_storage if args.kind == "regression" else None,
++        "memory_qualification": qualification,
+     }
+     if args.kind == "jacobian":
+         for key in ("lambda_grid", "penalty_rule", "r2_definition"):
+@@ -205,6 +248,13 @@ def main(argv: list[str] | None = None) -> int:
+                 "orientation": "output-by-input; prediction directions @ J.T",
+             }
+         )
++    if qualification is not None:
++        # Peak is a conservative upper bound for the current MLX active floor here.
++        peak = resource_snapshot()["peak_memory_gib"] * 2**30
++        guard_runtime_event(
++            {"phase": "artifact_start", "peak_memory_bytes": peak, "active_memory_bytes": peak},
++            qualification,
++        )
+     written = write_lens(
+         prepared.output,
+         result.maps,
+diff --git a/scripts/lens_regression_preflight.py b/scripts/lens_regression_preflight.py
+index 5b29572..b3cb865 100644
+--- a/scripts/lens_regression_preflight.py
++++ b/scripts/lens_regression_preflight.py
+@@ -10,36 +10,16 @@ from __future__ import annotations
+ import argparse
+ import json
+ import math
++import shutil
+ import sys
+ import time
+ from pathlib import Path
++from tempfile import TemporaryDirectory
+ 
+ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+ 
+ 
+-def ladder(maximum: int) -> list[int]:
+-    if maximum <= 512:
+-        raise ValueError("corpus too short for the two initial calibration sizes")
+-    return sorted({256, 512, *(n for n in (1024, maximum) if n <= maximum)})
+-
+-
+-def project_peak(rows: list[dict], tokens: int, *, fixed_bytes: float) -> float:
+-    """Fit variable memory over a fixed resident/sums floor, quadratic or steeper."""
+-    if len(rows) < 2 or not math.isfinite(fixed_bytes) or fixed_bytes < 0:
+-        raise ValueError("two measured sizes and a finite nonnegative floor are required")
+-    left, right = rows[-2:]
+-    t0, t1 = left["tokens"], right["tokens"]
+-    p0, p1 = left["peak_bytes"], right["peak_bytes"]
+-    if not all(math.isfinite(v) and v > 0 for v in (t0, t1, p0, p1, tokens)):
+-        raise ValueError("finite positive sizes and peaks are required")
+-    if not t0 < t1 < tokens:
+-        raise ValueError("projection must extend strictly increasing measured sizes")
+-    # A theoretical floor may exceed a measured peak (e.g. allocator aliasing).
+-    # Reduce it, rather than clipping the variable term to zero and projecting flat.
+-    floor = fixed_bytes if fixed_bytes < min(p0, p1) else 0.9 * min(p0, p1)
+-    v0, v1 = p0 - floor, p1 - floor
+-    exponent = max(2.0, math.log(v1 / v0) / math.log(t1 / t0))
+-    return max(p1, floor + v1 * (tokens / t1) ** exponent)
++from local_llm_lab.pipeline.lens_fitting.memory_policy import ladder, project_peak
+ 
+ 
+ def run_ladder(lengths, measure, *, fixed_bytes, initial_bound_bytes, cap_bytes, emit):
+@@ -168,6 +148,9 @@ def main(argv=None):
+     parser.add_argument("--report", type=Path, required=True)
+     parser.add_argument("--initial-bound-gib", type=float, required=True)
+     parser.add_argument("--residual-source", choices=("hand_run", "native"), default="hand_run")
++    parser.add_argument("--statistics-storage", choices=("memory", "split_spill"), default="memory")
++    parser.add_argument("--scratch-parent", type=Path)
++    parser.add_argument("--diagnostic-tokens", type=int)
+     args = parser.parse_args(argv)
+     from local_llm_lab.models import load_model_spec
+     from local_llm_lab.pipeline.lens_fitting.runtime import load_runtime, prepare_fit
+@@ -175,18 +158,34 @@ def main(argv=None):
+ 
+     if not math.isfinite(args.initial_bound_gib) or args.initial_bound_gib <= 0:
+         parser.error("initial inspected bound must be positive and finite")
++    from local_llm_lab.pipeline.lens_fitting.memory_policy import (
++        binding,
++        check_projection,
++        device_working_set,
++        require_owned_window,
++    )
++
+     registration_sha = file_sha256(args.registration)
+     validate_registration_source(args.registration, args.residual_source)
++    if args.report.exists():
++        raise FileExistsError(args.report)
++    device_bytes = device_working_set()  # owned window checked before MLX device query
++    check_projection(args.initial_bound_gib * 2**30, device_bytes)
+     prepared = prepare_fit(args.corpus, load_model_spec(args.model), args.planned_lens)
+     maximum = max(len(row["ids"]) for row in prepared.rows)
+-    lengths = ladder(maximum)
++    if args.diagnostic_tokens is not None and not 0 < args.diagnostic_tokens <= maximum:
++        parser.error("diagnostic tokens must be positive and within the frozen corpus")
++    lengths = [args.diagnostic_tokens] if args.diagnostic_tokens is not None else ladder(maximum)
+     source = max((r for r in prepared.rows if r["split"] == "fit"), key=lambda r: len(r["ids"]))
+-    if len(source["ids"]) < maximum:
++    if len(source["ids"]) < max(lengths):
+         parser.error("the maximum sequence is held; preflight needs a fit row reaching that size")
+     for tokens in lengths:
+         calibration_rows(source, tokens)  # Reject an unusable scoring window before model loading.
+     args.report.parent.mkdir(parents=True, exist_ok=True)
+-    with args.report.open("x") as report:
++    with (
++        TemporaryDirectory(prefix="lens-preflight-", dir=args.scratch_parent) as scratch,
++        args.report.open("x") as report,
++    ):
+ 
+         def emit(event):
+             line = json.dumps(event, allow_nan=False)
+@@ -197,6 +196,12 @@ def main(argv=None):
+         emit(
+             {
+                 "event": "begin",
++                "qualification_binding": binding(
++                    prepared, args.residual_source, args.statistics_storage
++                ),
++                "statistics_storage": args.statistics_storage,
++                "mode": "diagnostic" if args.diagnostic_tokens is not None else "qualification",
++                "repetitions_per_split": 4,
+                 "model": prepared.snapshot,
+                 "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
+                 "registration_sha256": registration_sha,
+@@ -214,7 +219,7 @@ def main(argv=None):
+                     else "legacy unmasked source prefix"
+                 ),
+                 "purpose": (
+-                    "two copies of one fit row exercise both statistics slots; "
++                    "four repetitions per split exercise initialized statistics updates; "
+                     "no held data or quality output"
+                 ),
+                 "buffer_cap": (
+@@ -224,6 +229,8 @@ def main(argv=None):
+             }
+         )
+         try:
++            require_owned_window()
++            check_projection(args.initial_bound_gib * 2**30, device_bytes)
+             loaded = load_runtime(prepared)
+             import mlx.core as mx
+ 
+@@ -236,12 +243,19 @@ def main(argv=None):
+             mx.clear_cache()
+             resident = mx.get_active_memory()
+             device_bytes = mx.device_info()["max_recommended_working_set_size"]
+-            sums_bytes = 4 * 4 * loaded.view.hidden_size**2 * (loaded.view.num_layers - 1)
++            check_projection(mx.get_peak_memory(), device_bytes)
++            sums_bytes = (
++                (2 if args.statistics_storage == "split_spill" else 4)
++                * 4
++                * loaded.view.hidden_size**2
++                * (loaded.view.num_layers - 1)
++            )
+             emit(
+                 {
+                     "event": "loaded",
+                     "lock": str(loaded.lock_path),
+                     "resident_bytes": resident,
++                    "load_peak_bytes": mx.get_peak_memory(),
+                     "statistics_bytes": sums_bytes,
+                     "working_set_bytes": device_bytes,
+                     "cap_bytes": 0.6 * device_bytes,
+@@ -253,16 +267,43 @@ def main(argv=None):
+                 }
+             )
+             retained = None
++            shape_scratch = None
+ 
+             def measure(tokens):
+-                nonlocal retained
++                nonlocal retained, shape_scratch
+                 retained = None
++                if shape_scratch is not None:
++                    shutil.rmtree(shape_scratch)
+                 mx.clear_cache()
+                 mx.reset_peak_memory()
++                require_owned_window()
+                 rows = calibration_rows(source, tokens)
++                rows = rows * 4
++                shape_scratch = Path(scratch) / str(tokens)
++                shape_scratch.mkdir()
++
++                def memory_progress(event):
++                    emit({**event, "event": "memory_phase"})
++                    if event.get("phase") == "before_forward":
++                        require_owned_window()
++                    peak = event["peak_memory_bytes"]
++                    limit = 0.6 * device_bytes
++                    if tokens in lengths[:2]:
++                        limit = min(limit, args.initial_bound_gib * 2**30)
++                    if not math.isfinite(peak) or peak > limit:
++                        raise ValueError(
++                            "measured memory breach or initial-bound falsification; "
++                            "stop before another calibration row, not first-spike prevention"
++                        )
++
+                 started = time.perf_counter()
+                 retained, counts = accumulate(
+-                    loaded.view, rows, residual_source=args.residual_source
++                    loaded.view,
++                    rows,
++                    residual_source=args.residual_source,
++                    statistics_storage=args.statistics_storage,
++                    scratch_dir=shape_scratch,
++                    memory_progress=memory_progress,
+                 )
+                 elapsed = time.perf_counter() - started
+                 return {
+@@ -293,18 +334,42 @@ def main(argv=None):
+             if stop is not None:
+                 emit({"event": "end", "status": "stopped", "fit_started": False})
+                 return 2
++            if args.diagnostic_tokens is not None:
++                emit({"event": "end", "status": "diagnostic_complete", "fit_started": False})
++                return 0
+             # One complete fixed-alpha grid, using calibration sums, only for timing.
+             # Quality values and maps are discarded and never written/read as findings.
+             mx.clear_cache()
+             # The solve adds a fixed number of dense matrices, not a longer token
+             # graph. Budget sixteen float32 matrices for inputs, CPU solve work,
+             # candidate/best solutions and error products, before running the grid.
+-            solve_bound = mx.get_active_memory() + 16 * 4 * loaded.view.hidden_size**2
++            dense_bytes = 4 * loaded.view.hidden_size**2
++            active_floor = mx.get_active_memory()
++            host_reserve = 2 * (loaded.view.num_layers - 1) * dense_bytes
++            solve_bound = active_floor + 16 * dense_bytes + host_reserve
++            emit(
++                {
++                    "event": "full_fit_envelope",
++                    "dense_matrix_bytes": dense_bytes,
++                    "nonfinal_layers": loaded.view.num_layers - 1,
++                    "active_floor_bytes": active_floor,
++                    "host_maps_and_serialization_bytes": host_reserve,
++                    "solver_workspace_bytes": 16 * dense_bytes,
++                    "projected_peak_bytes": solve_bound,
++                    "scope": (
++                        "MLX active floor plus analytical host/solve reserves; "
++                        "not measured process RSS"
++                    ),
++                }
++            )
+             emit(
+                 {
+                     "event": "before_solve",
+                     "projected_peak_bytes": solve_bound,
+-                    "basis": "active bytes plus sixteen dense float32 matrices",
++                    "basis": (
++                        "active bytes plus sixteen dense float32 matrices and two all-layer "
++                        "host map sets (fit plus artifact readback)"
++                    ),
+                 }
+             )
+             if solve_bound > 0.6 * device_bytes:
+@@ -319,6 +384,7 @@ def main(argv=None):
+                 return 2
+             mx.reset_peak_memory()
+             started = time.perf_counter()
++            require_owned_window()
+             temporary = solve_layer(retained["fit"][1], retained["held"][1])
+             solve_s = time.perf_counter() - started
+             del temporary, retained
+diff --git a/src/local_llm_lab/arch.py b/src/local_llm_lab/arch.py
+index 8283690..8c14786 100644
+--- a/src/local_llm_lab/arch.py
++++ b/src/local_llm_lab/arch.py
+@@ -581,12 +581,17 @@ class ArchitectureView:
+             def head(self, *args, **kwargs):  # pragma: no cover - head capture is off
+                 return None
+ 
+-        with NativeCapture(self, _Collect(), layers=tuple(wanted)) as wrapped:
+-            wrapped(token_ids)
+-        missing = set(wanted) - set(captured)
+-        if missing:  # pragma: no cover - defensive; the tap emits every requested layer
+-            raise ValueError(f"native capture emitted no residual for layers {sorted(missing)}")
+-        return captured
++        try:
++            with NativeCapture(self, _Collect(), layers=tuple(wanted)) as wrapped:
++                wrapped(token_ids)
++            missing = set(wanted) - set(captured)
++            if missing:  # pragma: no cover - defensive; the tap emits every requested layer
++                raise ValueError(f"native capture emitted no residual for layers {sorted(missing)}")
++            return dict(captured)
++        finally:
++            # Dynamic collector/wrapper classes can survive until cyclic GC. Only
++            # the returned mapping should retain residual arrays after this call.
++            captured.clear()
+ 
+     def residual_source_agreement(
+         self, ids: Any, layers: Sequence[int]
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/memory_policy.py b/src/local_llm_lab/pipeline/lens_fitting/memory_policy.py
+new file mode 100644
+index 0000000..ee49760
+--- /dev/null
++++ b/src/local_llm_lab/pipeline/lens_fitting/memory_policy.py
+@@ -0,0 +1,280 @@
++"""Fail-closed R47 launch qualification; importing this module does not import MLX."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import math
++import os
++import time
++from pathlib import Path
++
++
++def require_owned_window():
++    from local_llm_lab.pipeline.lens_fitting.runtime import primary_worktree
++    from local_llm_lab.runlock import (
++        BOX_STATE_DIR_ENV,
++        WINDOW_HOLDER_ENV,
++        WINDOW_RELATIVE_PATH,
++        read_window,
++    )
++
++    root = primary_worktree()
++    window = read_window(root / WINDOW_RELATIVE_PATH)
++    if (
++        window is None
++        or not os.environ.get(WINDOW_HOLDER_ENV)
++        or window.nonce != os.environ[WINDOW_HOLDER_ENV]
++        or window.holder_state != "running"
++        or window.expected_end_epoch is None
++        or window.expected_end_epoch <= time.time()
++    ):
++        raise ValueError("memory qualification requires a current owned primary window")
++    os.environ[BOX_STATE_DIR_ENV] = str(root)
++    return root
++
++
++def positive(value):
++    if (
++        isinstance(value, bool)
++        or not isinstance(value, (int, float))
++        or not math.isfinite(value)
++        or value <= 0
++    ):
++        raise ValueError("memory values must be finite and positive")
++    return value
++
++
++def check_projection(projected_bytes, working_set_bytes):
++    cap = 0.6 * positive(working_set_bytes)
++    if positive(projected_bytes) > cap:
++        raise ValueError("R47 projection exceeds 0.6 of device working set; no override")
++    return cap
++
++
++def device_working_set(*, require_window=None, device_info=None):
++    (require_window or require_owned_window)()
++    if device_info is None:
++        import mlx.core as mx
++
++        device_info = mx.device_info
++    return positive(device_info()["max_recommended_working_set_size"])
++
++
++def sha(path):
++    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
++
++
++def ladder(maximum: int) -> list[int]:
++    if maximum < 2:
++        raise ValueError("corpus too short for two calibration sizes")
++    if maximum <= 512:
++        return sorted(
++            {n for n in (max(1, maximum // 4), max(2, maximum // 2), maximum) if n <= maximum}
++        )
++    sizes = {maximum}
++    size = 256
++    while size <= maximum:
++        sizes.add(size)
++        size *= 2
++    return sorted(sizes)
++
++
++def project_peak(rows: list[dict], tokens: int, *, fixed_bytes: float) -> float:
++    """Fit variable memory over a fixed resident/sums floor, quadratic or steeper."""
++    if len(rows) < 2 or not math.isfinite(fixed_bytes) or fixed_bytes < 0:
++        raise ValueError("two measured sizes and a finite nonnegative floor are required")
++    left, right = rows[-2:]
++    t0, t1 = left["tokens"], right["tokens"]
++    p0, p1 = left["peak_bytes"], right["peak_bytes"]
++    if not all(math.isfinite(v) and v > 0 for v in (t0, t1, p0, p1, tokens)):
++        raise ValueError("finite positive sizes and peaks are required")
++    if not t0 < t1 < tokens:
++        raise ValueError("projection must extend strictly increasing measured sizes")
++    # A theoretical floor may exceed a measured peak (e.g. allocator aliasing).
++    # Reduce it, rather than clipping the variable term to zero and projecting flat.
++    floor = fixed_bytes if fixed_bytes < min(p0, p1) else 0.9 * min(p0, p1)
++    v0, v1 = p0 - floor, p1 - floor
++    exponent = max(2.0, math.log(v1 / v0) / math.log(t1 / t0))
++    return max(p1, floor + v1 * (tokens / t1) ** exponent)
++
++
++def runtime_fingerprint():
++    # Distribution lookup and source-byte reads do not import either runtime.
++    from importlib.metadata import distribution
++
++    result = {}
++    for name in ("mlx", "mlx-lm"):
++        dist = distribution(name)
++        files = {}
++        for item in dist.files or ():
++            path = str(item)
++            if (path.endswith(".py") and path.startswith(("mlx/", "mlx_lm/"))) or path.endswith(
++                ".dist-info/RECORD"
++            ):
++                files[path] = sha(dist.locate_file(item))
++        if not files:
++            raise ValueError("runtime distribution has no source inventory")
++        result[name] = {"version": dist.version, "files": files}
++    return result
++
++
++def binding(prepared, residual_source, statistics_storage):
++    if statistics_storage not in ("memory", "split_spill"):
++        raise ValueError("invalid statistics storage")
++    root = Path(__file__).resolve().parents[4]
++    paths = [
++        Path(__file__),
++        Path(__file__).with_name("regression.py"),
++        Path(__file__).with_name("runtime.py"),
++        Path(__file__).with_name("artifacts.py"),
++        root / "src/local_llm_lab/arch.py",
++        root / "scripts/lens_regression_preflight.py",
++        root / "scripts/lens_fit.py",
++    ]
++    config = json.loads((Path(prepared.snapshot["snapshot_path"]) / "config.json").read_bytes())
++    config = config.get("text_config", config)
++    geometry = {"hidden_size": config["hidden_size"], "num_layers": config["num_hidden_layers"]}
++    if any(type(v) is not int or v <= 0 for v in geometry.values()) or geometry["num_layers"] < 2:
++        raise ValueError("invalid snapshot geometry")
++    rows = [
++        {
++            "input": len(r["ids"]),
++            "scored": len(r.get("score_positions", r["ids"])),
++            "split": r["split"],
++        }
++        for r in prepared.rows
++    ]
++    return {
++        "schema_version": 1,
++        "snapshot": prepared.snapshot,
++        "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
++        "sequences_sha256": prepared.manifest["sequences"]["sha256"],
++        "residual_source": residual_source,
++        "statistics_storage": statistics_storage,
++        "implementation": {str(p.relative_to(root)): sha(p) for p in paths},
++        "workload": rows,
++        "geometry": geometry,
++        "runtime": runtime_fingerprint(),
++        "allocator_cache_bytes": 0,
++    }
++
++
++def validate_evidence(path, expected, working_set_bytes):
++    raw = Path(path).read_bytes()
++    events = [json.loads(line) for line in raw.splitlines() if line.strip()]
++    if (
++        not events
++        or events[0].get("event") != "begin"
++        or events[0].get("qualification_binding") != expected
++    ):
++        raise ValueError("preflight binding differs from this fit")
++    if events[-1] != {"event": "end", "status": "measured", "fit_started": False}:
++        raise ValueError("preflight did not complete successfully")
++    if any(e.get("event") in ("stopped", "end") for e in events[1:-1]):
++        raise ValueError("preflight contains a refusal")
++    begin = events[0]
++    if begin.get("mode") != "qualification":
++        raise ValueError("diagnostic preflight cannot qualify a full fit")
++    if type(begin.get("repetitions_per_split")) is not int or begin["repetitions_per_split"] != 4:
++        raise ValueError("qualification requires four repetitions per split")
++    check_projection(begin["initial_bound_bytes"], working_set_bytes)
++    measured = [e for e in events if e.get("event") == "measured"]
++    canonical = ladder(max(r["input"] for r in expected["workload"]))
++    if begin["lengths"] != canonical or [e["tokens"] for e in measured] != canonical:
++        raise ValueError("preflight ladder is incomplete")
++    for row in measured:
++        counts = row.get("counts", {})
++        if any(
++            type(counts.get(split, {}).get("sequences")) is not int
++            or counts[split]["sequences"] != 4
++            for split in ("fit", "held")
++        ):
++            raise ValueError("calibration did not measure four sequences per split")
++    solves = [e for e in events if e.get("event") == "measured_solve"]
++    loads = [e for e in events if e.get("event") == "loaded"]
++    if len(solves) != 1 or len(loads) != 1:
++        raise ValueError("preflight loading/solve evidence is incomplete")
++    envelopes = [e for e in events if e.get("event") == "full_fit_envelope"]
++    if len(envelopes) != 1:
++        raise ValueError("preflight lacks full-fit host and serialization reserve")
++    envelope = envelopes[0]
++    dense = positive(envelope["dense_matrix_bytes"])
++    depth = envelope["nonfinal_layers"]
++    if type(depth) is not int or depth <= 0:
++        raise ValueError("invalid full-fit layer count")
++    if (
++        dense != 4 * expected["geometry"]["hidden_size"] ** 2
++        or depth != expected["geometry"]["num_layers"] - 1
++    ):
++        raise ValueError("full-fit envelope geometry differs from snapshot")
++    stats = (2 if expected["statistics_storage"] == "split_spill" else 4) * dense * depth
++    if loads[0]["statistics_bytes"] != stats:
++        raise ValueError("statistics floor differs from storage geometry")
++    fixed = positive(loads[0]["resident_bytes"]) + stats
++    for index, row in enumerate(measured):
++        prediction = (
++            begin["initial_bound_bytes"]
++            if index < 2
++            else project_peak(measured[:index], row["tokens"], fixed_bytes=fixed)
++        )
++        if row["projected_peak_bytes"] != prediction:
++            raise ValueError("recorded ladder projection differs from measured recurrence")
++        if index < 2 and row["peak_bytes"] > begin["initial_bound_bytes"]:
++            raise ValueError("initial bound was falsified")
++    reserve = 2 * depth * dense
++    projected = positive(envelope["active_floor_bytes"]) + 16 * dense + reserve
++    if (
++        envelope["host_maps_and_serialization_bytes"] != reserve
++        or envelope["solver_workspace_bytes"] != 16 * dense
++        or envelope["projected_peak_bytes"] != projected
++        or solves[0]["projected_peak_bytes"] != projected
++    ):
++        raise ValueError("full-fit analytical reserves do not match")
++    check_projection(projected, working_set_bytes)
++    check_projection(loads[0]["load_peak_bytes"], working_set_bytes)
++    for event in measured + solves:
++        check_projection(event["peak_bytes"], working_set_bytes)
++        check_projection(event["projected_peak_bytes"], working_set_bytes)
++    maximum = measured[-1]
++    if any(
++        r["input"] > maximum["tokens"] or r["scored"] > maximum["scored_positions_per_sequence"]
++        for r in expected["workload"]
++    ):
++        raise ValueError("calibration does not dominate the full fit workload")
++    return {
++        "sha256": hashlib.sha256(raw).hexdigest(),
++        "binding": expected,
++        "working_set_bytes": working_set_bytes,
++        "cap_bytes": 0.6 * working_set_bytes,
++        "full_fit_envelope": envelope,
++        "qualified_peak_bytes": max(
++            begin["initial_bound_bytes"],
++            projected,
++            *(e["projected_peak_bytes"] for e in measured),
++            *(e["peak_bytes"] for e in measured + solves),
++            loads[0]["load_peak_bytes"],
++        ),
++    }
++
++
++def guard_runtime_event(event, qualification, *, require_window=None):
++    """Refuse the next phase after a measured breach; cannot prevent its first spike."""
++    if event.get("phase") in ("before_forward", "solve_start", "artifact_start"):
++        (require_window or require_owned_window)()
++    peak = positive(event["peak_memory_bytes"])
++    cap = qualification["cap_bytes"]
++    if peak > min(cap, qualification["qualified_peak_bytes"]):
++        raise ValueError(
++            "measured memory breach; stop before further work (not first-spike prevention): "
++            f"peak_bytes={peak}, qualified_peak_bytes={qualification['qualified_peak_bytes']}, "
++            f"cap_bytes={cap}"
++        )
++    if event.get("phase") in ("solve_start", "artifact_start"):
++        envelope = qualification["full_fit_envelope"]
++        projected = (
++            positive(event["active_memory_bytes"]) + envelope["host_maps_and_serialization_bytes"]
++        )
++        if event["phase"] == "solve_start":
++            projected += envelope["solver_workspace_bytes"]
++        check_projection(projected, qualification["working_set_bytes"])
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/regression.py b/src/local_llm_lab/pipeline/lens_fitting/regression.py
+index 18ec9a0..98d34fb 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/regression.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/regression.py
+@@ -7,10 +7,13 @@ The row solve is X W = Y; artifacts carry J = W.T for the existing lens reader.
+ from __future__ import annotations
+ 
+ import math
++import shutil
++import tempfile
+ import time
+-from collections.abc import Callable, Iterable
++from collections.abc import Callable, Iterable, Mapping
+ from dataclasses import dataclass
+ from numbers import Integral
++from pathlib import Path
+ from typing import Any
+ 
+ import numpy as np
+@@ -36,7 +39,7 @@ class SufficientStats:
+         )
+ 
+     def add(self, x: Any, y: Any) -> None:
+-        """Enqueue one sequence; the streaming caller evaluates all layers together."""
++        """Enqueue one sequence; the caller chooses the evaluation schedule."""
+         import mlx.core as mx
+ 
+         if x.ndim != 2 or x.shape != y.shape or x.shape[1] != self.xtx.shape[0]:
+@@ -73,12 +76,71 @@ def validated_score_positions(row: dict) -> list[int] | None:
+     return [int(i) for i in positions]
+ 
+ 
++def _memory_event(callback, phase, **details):
++    if callback is not None:
++        import mlx.core as mx
++
++        callback(
++            dict(
++                phase=phase,
++                **details,
++                active_memory_bytes=mx.get_active_memory(),
++                cache_memory_bytes=mx.get_cache_memory(),
++                peak_memory_bytes=mx.get_peak_memory(),
++            )
++        )
++
++
++class SpilledStats(Mapping):
++    """Uncached layer loads; the caller owns the scratch directory lifetime."""
++
++    def __init__(self, directory):
++        self.directory, self.counts = directory, {}
++
++    def __len__(self):
++        return len(self.counts)
++
++    def __iter__(self):
++        return iter(self.counts)
++
++    def __getitem__(self, layer):
++        import mlx.core as mx
++
++        n = self.counts[layer]
++        arrays = []
++        for name in ("xtx", "xty", "yty"):
++            with (self.directory / f"{layer}-{name}.npy").open("rb") as stream:
++                array = mx.array(np.load(stream, allow_pickle=False))
++                # Finish each conversion before staging the next host matrix.
++                mx.eval(array)
++                arrays.append(array)
++        return SufficientStats(*arrays, n=n)
++
++    def pop(self, layer):
++        result = self[layer]
++        for name in ("xtx", "xty", "yty"):
++            (self.directory / f"{layer}-{name}.npy").unlink()
++        del self.counts[layer]
++        return result
++
++    def store(self, layer, stats):
++        for name in ("xtx", "xty", "yty"):
++            with (self.directory / f"{layer}-{name}.npy").open("xb") as stream:
++                np.save(
++                    stream, np.asarray(getattr(stats, name), dtype=np.float32), allow_pickle=False
++                )
++        self.counts[layer] = stats.n
++
++
+ def accumulate(
+     view: Any,
+     rows: Iterable[dict],
+     *,
+     progress: Callable | None = None,
+     residual_source: str = "hand_run",
++    statistics_storage: str = "memory",
++    scratch_dir: Path | None = None,
++    memory_progress: Callable | None = None,
+ ) -> tuple:
+     """One uncached all-layer forward per sequence, separate fit and selection sums.
+ 
+@@ -87,6 +149,10 @@ def accumulate(
+     the same shape either way and nothing in the artifact would say which forward made them. The
+     caller passes it and the caller records it.
+ 
++    ``split_spill`` retains one split at a time, evaluates each layer update, and writes
++    exact FP32 sums under caller-owned ``scratch_dir``. Returned mappings load individual
++    layers without caching; keep that directory alive until all solves finish.
++
+     ``"hand_run"`` is ``view.residuals``, this repository's own decoder loop, which is what every
+     Qwen fit used. ``"native"`` is ``view.native_residuals``, the model's own forward tapped
+     through capture, which inherits the entry transform and the mask construction rather than
+@@ -106,55 +172,110 @@ def accumulate(
+     if d <= 0 or depth < 2:
+         raise ValueError("regression requires positive hidden size and nonfinal layers")
+     layers = tuple(range(1, depth + 1))
+-    sums = {
+-        split: {layer: SufficientStats.zeros(d) for layer in layers[:-1]}
+-        for split in ("fit", "held")
+-    }
++    if statistics_storage not in ("memory", "split_spill"):
++        raise ValueError("statistics_storage must be memory or split_spill")
++    spill = statistics_storage == "split_spill"
++    if spill and scratch_dir is None:
++        raise ValueError("split_spill requires caller-owned scratch_dir")
++    groups = [(None, rows)]
++    if spill:
++        grouped = {"fit": [], "held": []}
++        for row in rows:
++            if row["split"] not in grouped or not row["ids"]:
++                raise ValueError("every sequence needs nonempty ids and fit/held membership")
++            validated_score_positions(row)
++            grouped[row["split"]].append(row)
++        if not all(grouped.values()):
++            raise ValueError("both fit and held selection splits require positions")
++        groups = list(grouped.items())
++    sums = {split: {} for split in ("fit", "held")}
++    if not spill:
++        sums = {split: {layer: SufficientStats.zeros(d) for layer in layers[:-1]} for split in sums}
+     counts = {
+         split: {"sequences": 0, "positions": 0, "scored_positions": 0, "input_positions": 0}
+         for split in sums
+     }
+-    # Carried in the counts so it reaches the artifact by the same route the sequence and
+-    # position totals do, rather than depending on a caller remembering to stamp it.
+     counts["residual_source"] = residual_source
+-    for number, row in enumerate(rows, 1):
+-        split, ids = row["split"], row["ids"]
+-        if split not in sums or not ids:
+-            raise ValueError("every sequence needs nonempty ids and fit/held membership")
+-        positions = validated_score_positions(row)
+-        residuals = produce(ids, layers)
+-        if set(residuals) != set(layers) or any(
+-            h.shape != (1, len(ids), d) for h in residuals.values()
+-        ):
+-            raise ValueError(
+-                "forward must return every requested (1, positions, hidden_size) residual"
+-            )
+-        selection = slice(None) if positions is None else mx.array(positions)
+-        target = residuals[depth][0][selection].astype(mx.float32)
+-        for layer in layers[:-1]:
+-            sums[split][layer].add(residuals[layer][0][selection], target)
+-        # Materialize before dropping the forward so lazy graphs cannot retain the corpus.
+-        mx.eval(*[a for s in sums[split].values() for a in (s.xtx, s.xty, s.yty)])
+-        del residuals, target
+-        counts[split]["sequences"] += 1
+-        scored = len(ids) if positions is None else len(positions)
+-        counts[split]["positions"] += scored
+-        counts[split]["scored_positions"] += scored
+-        counts[split]["input_positions"] += len(ids)
+-        if progress:
+-            progress(
+-                {
+-                    "event": "sequence",
+-                    "sequence": number,
+-                    "counts": {
+-                        key: dict(value) if isinstance(value, dict) else value
+-                        for key, value in counts.items()
+-                    },
+-                }
+-            )
+-    if any(not counts[split]["positions"] for split in sums):
+-        raise ValueError("both fit and held selection splits require positions")
+-    return sums, counts
++    if spill:
++        counts.update(
++            batch_size=1,
++            statistics_storage="split_spill",
++            sequence_order="fit_then_held_stable",
++            statistics_sync="per_layer",
++        )
++    owned = Path(tempfile.mkdtemp(prefix="statistics-", dir=scratch_dir)) if spill else None
++    number = 0
++    try:
++        for group, group_rows in groups:
++            if spill:
++                sums[group] = {layer: SufficientStats.zeros(d) for layer in layers[:-1]}
++                _memory_event(memory_progress, "split_allocated", split=group)
++            for row in group_rows:
++                number += 1
++                split, ids = row["split"], row["ids"]
++                if split not in sums or not ids:
++                    raise ValueError("every sequence needs nonempty ids and fit/held membership")
++                positions = validated_score_positions(row)
++                scored = len(ids) if positions is None else len(positions)
++                memory_details = dict(
++                    split=split, sequence=number, input_positions=len(ids), scored_positions=scored
++                )
++                _memory_event(memory_progress, "before_forward", **memory_details)
++                residuals = produce(ids, layers)
++                _memory_event(memory_progress, "after_graph", **memory_details)
++                if set(residuals) != set(layers) or any(
++                    h.shape != (1, len(ids), d) for h in residuals.values()
++                ):
++                    raise ValueError(
++                        "forward must return every requested (1, positions, hidden_size) residual"
++                    )
++                selection = slice(None) if positions is None else mx.array(positions)
++                target = residuals[depth][0][selection].astype(mx.float32)
++                for layer in layers[:-1]:
++                    sums[split][layer].add(residuals[layer][0][selection], target)
++                    if spill:
++                        stats = sums[split][layer]
++                        mx.eval(stats.xtx, stats.xty, stats.yty)
++                        del stats
++                # Materialize before dropping the forward so lazy graphs cannot retain the corpus.
++                if not spill:
++                    mx.eval(*[a for s in sums[split].values() for a in (s.xtx, s.xty, s.yty)])
++                _memory_event(memory_progress, "after_statistics_eval", **memory_details)
++                del residuals, target
++                _memory_event(memory_progress, "after_residual_release", **memory_details)
++                counts[split]["sequences"] += 1
++                counts[split]["positions"] += scored
++                counts[split]["scored_positions"] += scored
++                counts[split]["input_positions"] += len(ids)
++                if progress:
++                    progress(
++                        {
++                            "event": "sequence",
++                            "sequence": number,
++                            "counts": {
++                                key: dict(value) if isinstance(value, dict) else value
++                                for key, value in counts.items()
++                            },
++                        }
++                    )
++            if spill:
++                directory = owned / group
++                directory.mkdir()
++                stored = SpilledStats(directory)
++                for layer in layers[:-1]:
++                    stats = sums[group].pop(layer)
++                    stored.store(layer, stats)
++                    del stats
++                    _memory_event(memory_progress, "layer_spilled", split=group, layer=layer)
++                sums[group] = stored
++                _memory_event(memory_progress, "split_spilled", split=group)
++        if any(not counts[split]["positions"] for split in sums):
++            raise ValueError("both fit and held selection splits require positions")
++        return sums, counts
++    except BaseException:
++        if owned is not None:
++            shutil.rmtree(owned)
++        raise
+ 
+ 
+ def squared_error(sums: SufficientStats, w: Any) -> float:
+@@ -229,24 +350,51 @@ def fit_regression(
+     *,
+     progress: Callable | None = None,
+     residual_source: str = "hand_run",
++    statistics_storage: str = "memory",
++    scratch_parent: Path | None = None,
++    memory_progress: Callable | None = None,
+ ) -> RegressionResult:
+     """Fit every nonfinal residual index and return hosted-orientation float32 maps.
+ 
+     ``residual_source`` is passed through and reaches the artifact in ``counts``, so a fitted
+     lens says which forward produced the residuals it was fitted on.
++    ``split_spill`` creates temporary statistics under ``scratch_parent`` (normally the
++    output parent), removing them after solving or on failure.
+     """
+     import mlx.core as mx
+ 
+     started = time.monotonic()
+-    sums, counts = accumulate(view, rows, progress=progress, residual_source=residual_source)
+-    maps, per_layer = {}, {}
+-    for layer in range(1, view.num_layers):
+-        layer_started = time.monotonic()
+-        w, info = solve_layer(sums["fit"].pop(layer), sums["held"].pop(layer))
+-        maps[layer] = w.T.copy()
+-        per_layer[str(layer)] = info | {"elapsed_s": time.monotonic() - layer_started}
+-        if progress:
+-            progress({"event": "layer", "layer": layer, **per_layer[str(layer)]})
+-    return RegressionResult(
+-        maps, per_layer, counts, time.monotonic() - started, mx.get_peak_memory() / 2**30
++    if statistics_storage not in ("memory", "split_spill"):
++        raise ValueError("statistics_storage must be memory or split_spill")
++    temporary = (
++        tempfile.TemporaryDirectory(prefix="lens-statistics-", dir=scratch_parent)
++        if statistics_storage == "split_spill"
++        else None
+     )
++    scratch = Path(temporary.name) if temporary is not None else None
++    try:
++        sums, counts = accumulate(
++            view,
++            rows,
++            progress=progress,
++            residual_source=residual_source,
++            statistics_storage=statistics_storage,
++            scratch_dir=scratch,
++            memory_progress=memory_progress,
++        )
++        maps, per_layer = {}, {}
++        for layer in range(1, view.num_layers):
++            layer_started = time.monotonic()
++            _memory_event(memory_progress, "solve_start", layer=layer)
++            w, info = solve_layer(sums["fit"].pop(layer), sums["held"].pop(layer))
++            maps[layer] = w.T.copy()
++            _memory_event(memory_progress, "solve_end", layer=layer)
++            per_layer[str(layer)] = info | {"elapsed_s": time.monotonic() - layer_started}
++            if progress:
++                progress({"event": "layer", "layer": layer, **per_layer[str(layer)]})
++        return RegressionResult(
++            maps, per_layer, counts, time.monotonic() - started, mx.get_peak_memory() / 2**30
++        )
++    finally:
++        if temporary is not None:
++            temporary.cleanup()
+diff --git a/tests/test_gemma_transcript_lens.py b/tests/test_gemma_transcript_lens.py
+index c0154fa..8294280 100644
+--- a/tests/test_gemma_transcript_lens.py
++++ b/tests/test_gemma_transcript_lens.py
+@@ -21,6 +21,13 @@ def driver():
+ @pytest.fixture
+ def registered(tmp_path, monkeypatch):
+     mod = driver()
++    from local_llm_lab.pipeline.lens_fitting import memory_policy
++
++    monkeypatch.setattr(
++        memory_policy,
++        "device_working_set",
++        lambda *, require_window: (require_window(), 17.76 * 2**30)[1],
++    )
+     specs = {}
+     snapshots = {}
+     for name in mod.FIT_MODELS:
+@@ -397,7 +404,7 @@ def test_capture_rechecks_identity_and_window_before_complete_footer(
+         )
+     events = [json.loads(line)["event"] for line in record.read_text().splitlines()]
+     assert events[-1] == {"kind": "end_record", "status": "aborted"}
+-    assert calls[:4] == ["window", "snapshot", "window", "run"]
++    assert calls[:5] == ["window", "snapshot", "window", "window", "run"]
+ 
+ 
+ def test_environment_and_second_amendment_gate_cannot_be_omitted(committed_rendering_gate):
+@@ -429,3 +436,20 @@ def test_driver_requires_reviewed_position_support(registered, key, bad):
+     path.write_text(json.dumps(data))
+     with pytest.raises(ValueError, match="position support"):
+         mod.read_registration(path)
++
++
++def test_capture_over_cap_never_loads_evaluation(registered, monkeypatch, tmp_path):
++    mod, path, data = registered
++    data["capture_projection"]["peak_gib"] = 21.0
++    path.write_text(json.dumps(data))
++    monkeypatch.setattr(mod, "require_owned_window", lambda: tmp_path)
++    monkeypatch.setattr(mod, "verify_snapshot", lambda *_: None)
++    monkeypatch.setattr(mod, "run_evaluation", lambda **_: pytest.fail("evaluation load reached"))
++    with pytest.raises(ValueError, match="0.6"):
++        mod.capture(
++            path,
++            split="train",
++            record=tmp_path / "capture.jsonl",
++            output=tmp_path / "evaluation.json",
++            execute=True,
++        )
+diff --git a/tests/test_lens_memory_policy.py b/tests/test_lens_memory_policy.py
+new file mode 100644
+index 0000000..4c405dd
+--- /dev/null
++++ b/tests/test_lens_memory_policy.py
+@@ -0,0 +1,287 @@
++"""Pure resource qualification checks: no model, MLX import, or device access."""
++
++import copy
++import json
++from types import SimpleNamespace
++
++import pytest
++
++from local_llm_lab.pipeline.lens_fitting.memory_policy import (
++    binding,
++    check_projection,
++    device_working_set,
++    validate_evidence,
++)
++
++
++def test_threshold_is_device_fraction_not_registry_budget():
++    working = 17.76 * 2**30
++    assert check_projection(10.656 * 2**30, working) == pytest.approx(10.656 * 2**30)
++    for peak in (14.5, 16, 21, 22):
++        with pytest.raises(ValueError, match="0.6"):
++            check_projection(peak * 2**30, working)
++
++
++@pytest.mark.parametrize("value", [None, True, 0, -1, float("nan"), float("inf")])
++def test_missing_or_invalid_device_fails_closed(value):
++    with pytest.raises(ValueError):
++        check_projection(1, value)
++
++
++def test_owner_refusal_precedes_device_query():
++    called = []
++
++    def refuse():
++        raise ValueError("foreign window")
++
++    with pytest.raises(ValueError, match="foreign"):
++        device_working_set(require_window=refuse, device_info=lambda: called.append("device"))
++    assert called == []
++
++
++def test_device_query_follows_owner_check():
++    called = []
++
++    def query():
++        called.append("device")
++        return {"max_recommended_working_set_size": 100}
++
++    assert (
++        device_working_set(require_window=lambda: called.append("owner"), device_info=query) == 100
++    )
++    assert called == ["owner", "device"]
++
++
++def evidence(tmp_path):
++    expected = {
++        "workload": [{"input": 1024, "scored": 512, "split": "fit"}],
++        "geometry": {"hidden_size": 1, "num_layers": 3},
++        "statistics_storage": "memory",
++    }
++    events = [
++        {
++            "event": "begin",
++            "qualification_binding": expected,
++            "initial_bound_bytes": 50,
++            "mode": "qualification",
++            "repetitions_per_split": 4,
++            "lengths": [256, 512, 1024],
++        },
++        {"event": "loaded", "load_peak_bytes": 20, "resident_bytes": 20, "statistics_bytes": 32},
++        *[
++            {
++                "event": "measured",
++                "tokens": n,
++                "peak_bytes": 45,
++                "projected_peak_bytes": 50 if n < 1024 else 58.5,
++                "scored_positions_per_sequence": n // 2,
++                "counts": {"fit": {"sequences": 4}, "held": {"sequences": 4}},
++            }
++            for n in (256, 512, 1024)
++        ],
++        {
++            "event": "full_fit_envelope",
++            "dense_matrix_bytes": 4,
++            "nonfinal_layers": 2,
++            "active_floor_bytes": 35,
++            "host_maps_and_serialization_bytes": 16,
++            "solver_workspace_bytes": 64,
++            "projected_peak_bytes": 115,
++        },
++        {"event": "measured_solve", "peak_bytes": 50, "projected_peak_bytes": 115},
++        {"event": "end", "status": "measured", "fit_started": False},
++    ]
++    path = tmp_path / "preflight.jsonl"
++
++    def write():
++        path.write_text("\n".join(json.dumps(e) for e in events))
++
++    write()
++    return expected, events, path, write
++
++
++def test_complete_evidence_qualifies_under_current_device(tmp_path):
++    expected, _, path, _ = evidence(tmp_path)
++    assert validate_evidence(path, expected, 200)["cap_bytes"] == 120
++    with pytest.raises(ValueError, match="0.6"):
++        validate_evidence(path, expected, 80)
++
++
++@pytest.mark.parametrize(
++    "mutation",
++    [
++        "failed",
++        "partial",
++        "binding",
++        "load",
++        "projection",
++        "dense",
++        "long",
++        "refusal",
++        "diagnostic",
++        "reserve",
++    ],
++)
++def test_invalid_evidence_refuses(tmp_path, mutation):
++    expected, events, path, write = evidence(tmp_path)
++    if mutation == "failed":
++        events[-1]["status"] = "error"
++    elif mutation == "partial":
++        del events[3]
++    elif mutation == "binding":
++        expected = copy.deepcopy(expected)
++        expected["statistics_storage"] = "split_spill"
++    elif mutation == "load":
++        events[1]["load_peak_bytes"] = 121
++    elif mutation == "projection":
++        events[-2]["projected_peak_bytes"] = 121
++    elif mutation == "dense":
++        expected["workload"][0]["scored"] = 513
++    elif mutation == "long":
++        expected["workload"][0]["input"] = 1025
++    elif mutation == "diagnostic":
++        events[0]["mode"] = "diagnostic"
++    elif mutation == "reserve":
++        del events[-3]
++    else:
++        events.insert(-1, {"event": "stopped"})
++    write()
++    with pytest.raises(ValueError):
++        validate_evidence(path, expected, 200)
++
++
++def test_binding_changes_with_producer_storage_snapshot_corpus_and_workload(tmp_path, monkeypatch):
++    from local_llm_lab.pipeline.lens_fitting import memory_policy
++
++    monkeypatch.setattr(memory_policy, "runtime_fingerprint", lambda: {"test": "runtime"})
++    (tmp_path / "config.json").write_text(json.dumps({"hidden_size": 1, "num_hidden_layers": 3}))
++    prepared = SimpleNamespace(
++        snapshot={"snapshot_sha256": "one", "snapshot_path": str(tmp_path)},
++        corpus_manifest_sha256="corpus",
++        manifest={"sequences": {"sha256": "rows"}},
++        rows=[{"ids": [1, 2], "score_positions": [1], "split": "fit"}],
++    )
++    original = binding(prepared, "native", "memory")
++    assert binding(prepared, "hand_run", "memory") != original
++    assert binding(prepared, "native", "split_spill") != original
++    for field, value in [
++        ("snapshot", {"snapshot_sha256": "two", "snapshot_path": str(tmp_path)}),
++        ("corpus_manifest_sha256", "changed"),
++        ("rows", [{"ids": [1, 2], "split": "fit"}]),
++    ]:
++        changed = copy.deepcopy(prepared)
++        setattr(changed, field, value)
++        assert binding(changed, "native", "memory") != original
++
++
++def test_bare_full_fit_refuses_before_prepare(monkeypatch, tmp_path):
++    import importlib.util
++    from pathlib import Path
++
++    from local_llm_lab.pipeline.lens_fitting import runtime
++
++    path = Path(__file__).parents[1] / "scripts/lens_fit.py"
++    spec = importlib.util.spec_from_file_location("memory_fit_test", path)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    monkeypatch.setattr(runtime, "prepare_fit", lambda *_: pytest.fail("preparation reached"))
++    with pytest.raises(SystemExit):
++        module.main(
++            [
++                "--kind",
++                "regression",
++                "--model",
++                "gemma3-4b",
++                "--corpus",
++                str(tmp_path / "corpus"),
++                "--out",
++                str(tmp_path / "lens"),
++            ]
++        )
++
++
++def test_invalid_full_fit_evidence_never_reaches_loader(monkeypatch, tmp_path):
++    import importlib.util
++    from pathlib import Path
++
++    from local_llm_lab.pipeline.lens_fitting import memory_policy, runtime
++
++    expected, events, report, write = evidence(tmp_path)
++    events[-1]["status"] = "diagnostic_complete"
++    write()
++    path = Path(__file__).parents[1] / "scripts/lens_fit.py"
++    spec = importlib.util.spec_from_file_location("memory_fit_bad_evidence", path)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    monkeypatch.setattr(runtime, "prepare_fit", lambda *a, **k: object())
++    monkeypatch.setattr(runtime, "load_runtime", lambda *_: pytest.fail("loader reached"))
++    monkeypatch.setattr(memory_policy, "binding", lambda *a: expected)
++    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 100)
++    with pytest.raises(ValueError, match="complete"):
++        module.main(
++            [
++                "--kind",
++                "regression",
++                "--model",
++                "gemma3-4b",
++                "--corpus",
++                str(tmp_path / "corpus"),
++                "--out",
++                str(tmp_path / "lens"),
++                "--memory-preflight",
++                str(report),
++            ]
++        )
++
++
++def test_runtime_measured_breach_prevents_next_forward_and_artifact():
++    from local_llm_lab.pipeline.lens_fitting.memory_policy import guard_runtime_event
++
++    qualification = {"cap_bytes": 60, "qualified_peak_bytes": 55}
++    calls = []
++    with pytest.raises(ValueError, match="peak_bytes=56, qualified_peak_bytes=55, cap_bytes=60"):
++        guard_runtime_event(
++            {"phase": "after_statistics_eval", "peak_memory_bytes": 56}, qualification
++        )
++        calls.append("next forward")
++        calls.append("artifact")
++    assert calls == []
++
++
++def test_runtime_before_forward_rechecks_owner():
++    from local_llm_lab.pipeline.lens_fitting.memory_policy import guard_runtime_event
++
++    def refuse():
++        raise ValueError("window expired")
++
++    with pytest.raises(ValueError, match="window expired"):
++        guard_runtime_event(
++            {"phase": "before_forward", "peak_memory_bytes": 1},
++            {"cap_bytes": 60, "qualified_peak_bytes": 55},
++            require_window=refuse,
++        )
++
++
++def test_late_observed_peak_under_cap_is_part_of_qualified_ceiling(tmp_path):
++    expected, events, path, write = evidence(tmp_path)
++    measured = [event for event in events if event["event"] == "measured"]
++    measured[-1]["peak_bytes"] = 119
++    write()
++    qualified = validate_evidence(path, expected, 200)
++    assert qualified["qualified_peak_bytes"] == 119
++    from local_llm_lab.pipeline.lens_fitting.memory_policy import guard_runtime_event
++
++    guard_runtime_event({"phase": "after_statistics_eval", "peak_memory_bytes": 119}, qualified)
++
++
++@pytest.mark.parametrize("changed", ["declaration", "actual_fit", "actual_held"])
++def test_two_forward_evidence_cannot_qualify(tmp_path, changed):
++    expected, events, path, write = evidence(tmp_path)
++    if changed == "declaration":
++        events[0]["repetitions_per_split"] = 1
++    else:
++        split = changed.removeprefix("actual_")
++        next(e for e in events if e["event"] == "measured")["counts"][split]["sequences"] = 1
++    write()
++    with pytest.raises(ValueError, match="four"):
++        validate_evidence(path, expected, 200)
+diff --git a/tests/test_lens_regression_memory.py b/tests/test_lens_regression_memory.py
+new file mode 100644
+index 0000000..2193e55
+--- /dev/null
++++ b/tests/test_lens_regression_memory.py
+@@ -0,0 +1,203 @@
++"""Tiny NumPy fakes only: never import the native regression test module."""
++
++import sys
++import types
++import weakref
++
++import numpy as np
++import pytest
++
++from local_llm_lab.pipeline.lens_fitting import regression as reg
++
++
++@pytest.fixture
++def fake_mlx(monkeypatch):
++    mx = types.ModuleType("mlx.core")
++    for name in ("zeros", "array", "sum", "all", "isfinite", "mean", "diag", "eye", "float32"):
++        setattr(mx, name, getattr(np, name))
++    mx.eye = lambda n, **kw: np.eye(n, **({"dtype": np.float32} | kw))
++    mx.cpu = "cpu"
++    mx.linalg = types.SimpleNamespace(solve=lambda a, b, **kw: np.linalg.solve(a, b))
++    mx.evaluations = []
++    mx.eval = lambda *args: mx.evaluations.append(len(args))
++    mx.get_peak_memory = lambda: 123
++    mx.get_active_memory = lambda: 45
++    mx.get_cache_memory = lambda: 0
++    package = types.ModuleType("mlx")
++    package.core = mx
++    monkeypatch.setitem(sys.modules, "mlx", package)
++    monkeypatch.setitem(sys.modules, "mlx.core", mx)
++    return mx
++
++
++class View:
++    hidden_size, num_layers = 2, 3
++
++    def __init__(self, fail=False):
++        self.calls = []
++        self.fail = fail
++
++    def native_residuals(self, ids, layers):
++        self.calls.append(tuple(ids))
++        if self.fail and ids[0] == 9:
++            raise RuntimeError("forward failure")
++        x = np.array([[[i, 1] for i in ids]], dtype=np.float32)
++        return {1: x, 2: x * 2, 3: x @ np.array([[2, 1], [-1, 3]], dtype=np.float32)}
++
++
++ROWS = [
++    {"ids": [1, 2, 3], "split": "fit", "score_positions": [1, 2]},
++    {"ids": [9, 10], "split": "held", "score_positions": [1]},
++    {"ids": [4, 5], "split": "fit"},
++    {"ids": [11, 12], "split": "held"},
++]
++
++
++def test_spill_exact_stats_order_and_layer_loads(fake_mlx, tmp_path):
++    expected, old_counts = reg.accumulate(View(), ROWS, residual_source="native")
++    fake_mlx.evaluations.clear()
++    view, events = View(), []
++    sums, counts = reg.accumulate(
++        view,
++        iter(ROWS),
++        residual_source="native",
++        statistics_storage="split_spill",
++        scratch_dir=tmp_path,
++        memory_progress=events.append,
++    )
++    assert view.calls == [(1, 2, 3), (4, 5), (9, 10), (11, 12)]
++    assert fake_mlx.evaluations == [3] * 8
++    assert counts["fit"] == old_counts["fit"]
++    assert counts["held"] == old_counts["held"]
++    assert counts["batch_size"] == 1
++    assert counts["statistics_sync"] == "per_layer"
++    assert len(list(tmp_path.rglob("*.npy"))) == 12
++    for split in ("fit", "held"):
++        assert not isinstance(sums[split], dict)
++        for layer in (1, 2):
++            first, second = sums[split][layer], sums[split][layer]
++            assert first is not second
++            got = sums[split].pop(layer)
++            for name in ("xtx", "xty", "yty"):
++                np.testing.assert_array_equal(
++                    getattr(got, name), getattr(expected[split][layer], name)
++                )
++            assert got.n == expected[split][layer].n
++        assert len(sums[split]) == 0
++    assert not list(tmp_path.rglob("*.npy"))
++    assert all(event["active_memory_bytes"] == 45 for event in events)
++    first = [event for event in events if event.get("sequence") == 1]
++    assert [event["phase"] for event in first] == [
++        "before_forward",
++        "after_graph",
++        "after_statistics_eval",
++        "after_residual_release",
++    ]
++    assert all(event["input_positions"] == 3 and event["scored_positions"] == 2 for event in first)
++    assert [event["split"] for event in events if event["phase"] == "split_allocated"] == [
++        "fit",
++        "held",
++    ]
++
++
++def test_fit_exact_maps_and_cleanup(fake_mlx, tmp_path):
++    expected = reg.fit_regression(View(), ROWS, residual_source="native")
++    actual = reg.fit_regression(
++        View(),
++        ROWS,
++        residual_source="native",
++        statistics_storage="split_spill",
++        scratch_parent=tmp_path,
++    )
++    for layer in expected.maps:
++        np.testing.assert_array_equal(actual.maps[layer], expected.maps[layer])
++        assert (
++            actual.per_layer[str(layer)]["candidates"]
++            == expected.per_layer[str(layer)]["candidates"]
++        )
++    assert list(tmp_path.iterdir()) == []
++
++
++def test_failure_cleans_owned_scratch(fake_mlx, tmp_path):
++    sentinel = tmp_path / "keep"
++    sentinel.write_text("unrelated")
++    with pytest.raises(RuntimeError, match="forward failure"):
++        reg.fit_regression(
++            View(fail=True),
++            ROWS,
++            residual_source="native",
++            statistics_storage="split_spill",
++            scratch_parent=tmp_path,
++        )
++    assert list(tmp_path.iterdir()) == [sentinel]
++    with pytest.raises(RuntimeError, match="forward failure"):
++        reg.accumulate(
++            View(fail=True),
++            ROWS,
++            residual_source="native",
++            statistics_storage="split_spill",
++            scratch_dir=tmp_path,
++        )
++    assert list(tmp_path.iterdir()) == [sentinel]
++
++
++@pytest.mark.parametrize(
++    "kwargs", [{"statistics_storage": "unknown"}, {"statistics_storage": "split_spill"}]
++)
++def test_invalid_storage_before_forward(fake_mlx, kwargs):
++    view = View()
++    with pytest.raises(ValueError):
++        reg.accumulate(view, ROWS, residual_source="native", **kwargs)
++    assert not view.calls
++
++
++def test_only_one_split_live_and_no_cached_layer(fake_mlx, monkeypatch, tmp_path):
++    references = []
++    original = reg.SufficientStats.zeros
++
++    def zeros(cls, dimension):
++        assert sum(ref() is not None for ref in references) < View.num_layers - 1
++        result = original(dimension)
++        references.append(weakref.ref(result))
++        return result
++
++    monkeypatch.setattr(reg.SufficientStats, "zeros", classmethod(zeros))
++    sums, _ = reg.accumulate(
++        View(),
++        ROWS,
++        residual_source="native",
++        statistics_storage="split_spill",
++        scratch_dir=tmp_path,
++    )
++    assert all(ref() is None for ref in references)
++    loaded = sums["fit"][1]
++    ref = weakref.ref(loaded)
++    del loaded
++    assert ref() is None
++
++
++def test_solve_and_spill_failures_clean_scratch(fake_mlx, monkeypatch, tmp_path):
++    def fail(*args, **kwargs):
++        raise RuntimeError("injected failure")
++
++    with monkeypatch.context() as patch:
++        patch.setattr(reg, "solve_layer", fail)
++        with pytest.raises(RuntimeError, match="injected failure"):
++            reg.fit_regression(
++                View(),
++                ROWS,
++                residual_source="native",
++                statistics_storage="split_spill",
++                scratch_parent=tmp_path,
++            )
++    assert not list(tmp_path.iterdir())
++    monkeypatch.setattr(reg.SpilledStats, "store", fail)
++    with pytest.raises(RuntimeError, match="injected failure"):
++        reg.accumulate(
++            View(),
++            ROWS,
++            residual_source="native",
++            statistics_storage="split_spill",
++            scratch_dir=tmp_path,
++        )
++    assert not list(tmp_path.iterdir())
+diff --git a/tests/test_lens_regression_preflight.py b/tests/test_lens_regression_preflight.py
+index 3a08ed0..530a8af 100644
+--- a/tests/test_lens_regression_preflight.py
++++ b/tests/test_lens_regression_preflight.py
+@@ -45,8 +45,12 @@ def test_ladder_uses_actual_maximum_and_never_extends_the_corpus():
+     assert a.ladder(900) == [256, 512, 900]
+     assert a.ladder(1024) == [256, 512, 1024]
+     assert a.ladder(2044) == [256, 512, 1024, 2044]
++    assert a.ladder(2816) == [256, 512, 1024, 2048, 2816]
++    assert a.ladder(100) == [25, 50, 100]
++    assert a.ladder(128) == [32, 64, 128]
++    assert a.ladder(2) == [1, 2]
+     with pytest.raises(ValueError, match="short"):
+-        a.ladder(100)
++        a.ladder(1)
+ 
+ 
+ def test_refused_projection_never_calls_larger_measurement():
+@@ -206,16 +210,19 @@ def test_falsified_initial_bound_stops_before_second_calibration():
+ 
+ 
+ @pytest.mark.parametrize("residual_source", ["hand_run", "native"])
++@pytest.mark.parametrize("storage", ["memory", "split_spill"])
+ def test_solve_resets_peak_and_reports_successful_measurement(
+-    tmp_path, monkeypatch, residual_source
++    tmp_path, monkeypatch, residual_source, storage
+ ):
+     """R47(b)/review: solve peak starts after forward and records measured+projected bytes."""
+     import json
+     import sys
+     from types import ModuleType, SimpleNamespace
+ 
+-    from local_llm_lab.pipeline.lens_fitting import regression, runtime
++    from local_llm_lab.pipeline.lens_fitting import memory_policy, regression, runtime
+ 
++    monkeypatch.setattr(memory_policy, "require_owned_window", lambda: None)
++    monkeypatch.setattr(memory_policy, "binding", lambda *a: {})
+     calls = []
+     backend = ModuleType("mlx.core")
+     backend.set_cache_limit = lambda n: 1024
+@@ -223,7 +230,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(
+     backend.get_active_memory = lambda: 10
+     backend.device_info = lambda: {"max_recommended_working_set_size": 1000}
+     backend.reset_peak_memory = lambda: calls.append("reset")
+-    backend.get_peak_memory = lambda: 50 if calls[-1] == "solve" else 100
++    backend.get_peak_memory = lambda: 50 if calls and calls[-1] == "solve" else 100
+     mlx = ModuleType("mlx")
+     mlx.core = backend
+     monkeypatch.setitem(sys.modules, "mlx", mlx)
+@@ -244,15 +251,29 @@ def test_solve_resets_peak_and_reports_successful_measurement(
+         ),
+     )
+ 
++    point_directories = []
++
+     def accumulate(*args, **kwargs):
+         assert kwargs["residual_source"] == residual_source
++        assert kwargs["statistics_storage"] == storage
++        point = kwargs["scratch_dir"]
++        assert point.is_dir()
++        assert all(not prior.exists() for prior in point_directories)
++        point_directories.append(point)
++        (point / "retained-stats").write_text("fake statistics")
++        assert len(args[1]) == 8
++        assert all(sum(row["split"] == split for row in args[1]) == 4 for split in ("fit", "held"))
+         for row in args[1]:
+             start = 900 - len(row["ids"])
+             assert row["score_positions"] == [p - start for p in [0, 300, 899] if p >= start]
+         calls.append("forward")
+-        return {"fit": {1: None}, "held": {1: None}}, {}
++        return {"fit": {1: None}, "held": {1: None}}, {
++            "fit": {"sequences": 4},
++            "held": {"sequences": 4},
++        }
+ 
+     def solve(*args):
++        assert (point_directories[-1] / "retained-stats").is_file()
+         assert calls[-1] == "reset"
+         calls.append("solve")
+         return None
+@@ -279,6 +300,8 @@ def test_solve_resets_peak_and_reports_successful_measurement(
+                 str(200 / 2**30),
+                 "--residual-source",
+                 residual_source,
++                "--statistics-storage",
++                storage,
+             ]
+         )
+         == 0
+@@ -290,6 +313,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(
+     )
+     begin = json.loads(report.read_text().splitlines()[0])
+     assert begin["residual_source"] == residual_source
++    assert begin["repetitions_per_split"] == 4
+     assert begin["source_input_positions"] == 900
+     assert begin["source_scored_positions"] == 3
+     assert begin["calibration_window_rule"].startswith("suffix ending at registered source end")
+@@ -301,7 +325,10 @@ def test_solve_resets_peak_and_reports_successful_measurement(
+     assert measured[0]["scored_positions_per_sequence"] == 1
+     assert measured[-1]["scored_positions_per_sequence"] == 3
+     assert event["peak_bytes"] == 50
+-    assert event["projected_peak_bytes"] == 74
++    assert event["projected_peak_bytes"] == 82
++    assert len(point_directories) == 3
++    assert all(not point.exists() for point in point_directories)
++    assert not point_directories[-1].parent.exists()
+ 
+ 
+ def test_calibration_rows_preserve_and_truncate_score_selection():
+@@ -354,3 +381,124 @@ def test_tail_scoring_calibration_preserves_registered_token_ownership(tokens):
+         ]
+     assert len(rows[0]["score_positions"]) == min(tokens, 1024)
+     assert source == dict(ids=list(range(2048)), score_positions=list(range(1024, 2048)))
++
++
++def test_initial_over_cap_refuses_before_preparation_or_loading(monkeypatch, tmp_path):
++    from local_llm_lab.pipeline.lens_fitting import memory_policy, runtime
++
++    (tmp_path / "registration.json").write_text('{"residual_source": "hand_run"}')
++    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 17.76 * 2**30)
++    monkeypatch.setattr(runtime, "prepare_fit", lambda *_: pytest.fail("preparation reached"))
++    monkeypatch.setattr(runtime, "load_runtime", lambda *_: pytest.fail("loading reached"))
++    with pytest.raises(ValueError, match="0.6"):
++        api().main(
++            [
++                "--model",
++                "gemma3-4b",
++                "--corpus",
++                str(tmp_path / "corpus.json"),
++                "--planned-lens",
++                str(tmp_path / "lens.npz"),
++                "--registration",
++                str(tmp_path / "registration.json"),
++                "--report",
++                str(tmp_path / "report.jsonl"),
++                "--initial-bound-gib",
++                "21",
++            ]
++        )
++
++
++@pytest.mark.parametrize("breach_peak", [None, 55, 65])
++def test_short_diagnostic_repeats_eight_rows_and_never_solves(monkeypatch, tmp_path, breach_peak):
++    import json
++    import sys
++    from types import SimpleNamespace
++
++    from local_llm_lab.pipeline.lens_fitting import memory_policy, regression, runtime
++
++    mx = SimpleNamespace(
++        set_cache_limit=lambda _: 0,
++        clear_cache=lambda: None,
++        reset_peak_memory=lambda: None,
++        get_peak_memory=lambda: 30,
++        get_active_memory=lambda: 20,
++        device_info=lambda: {"max_recommended_working_set_size": 100},
++    )
++    monkeypatch.setitem(sys.modules, "mlx", SimpleNamespace(core=mx))
++    monkeypatch.setitem(sys.modules, "mlx.core", mx)
++    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 100)
++    monkeypatch.setattr(memory_policy, "require_owned_window", lambda: None)
++    monkeypatch.setattr(memory_policy, "binding", lambda *a: {})
++    prepared = SimpleNamespace(
++        rows=[{"index": 0, "ids": [1] * 128, "split": "fit"}],
++        snapshot={},
++        corpus_manifest_sha256="test",
++    )
++    monkeypatch.setattr(runtime, "prepare_fit", lambda *a: prepared)
++    monkeypatch.setattr(
++        runtime,
++        "load_runtime",
++        lambda *a: SimpleNamespace(
++            model=SimpleNamespace(eval=lambda: None),
++            view=SimpleNamespace(hidden_size=1, num_layers=2),
++            lock_path=tmp_path / "lock",
++        ),
++    )
++    calls = []
++
++    def accumulate(view, rows, **kwargs):
++        calls.append((rows, kwargs["statistics_storage"]))
++        assert kwargs["scratch_dir"].is_dir()
++        kwargs["memory_progress"]({"phase": "before_forward", "peak_memory_bytes": 30})
++        kwargs["memory_progress"](
++            {"phase": "after_statistics_eval", "peak_memory_bytes": breach_peak or 30}
++        )
++        calls.append("subsequent forward permitted")
++        return {}, {"fit": {"sequences": 4}, "held": {"sequences": 4}}
++
++    monkeypatch.setattr(regression, "accumulate", accumulate)
++    monkeypatch.setattr(regression, "solve_layer", lambda *a: pytest.fail("solver reached"))
++    registration = tmp_path / "registration.json"
++    registration.write_text(json.dumps({"residual_source": "native"}))
++    report = tmp_path / "report.jsonl"
++
++    def invoke():
++        return api().main(
++            [
++                "--model",
++                "gemma3-4b",
++                "--corpus",
++                str(tmp_path / "corpus"),
++                "--planned-lens",
++                str(tmp_path / "lens"),
++                "--registration",
++                str(registration),
++                "--report",
++                str(report),
++                "--initial-bound-gib",
++                str(50 / 2**30),
++                "--residual-source",
++                "native",
++                "--statistics-storage",
++                "split_spill",
++                "--diagnostic-tokens",
++                "128",
++            ]
++        )
++
++    if breach_peak is not None:
++        with pytest.raises(ValueError, match="measured memory breach"):
++            invoke()
++        assert len(calls) == 1  # no subsequent row/step after the observed breach
++        events = [json.loads(line) for line in report.read_text().splitlines()]
++        assert events[-1]["status"] == "error"
++        assert events[-2]["event"] == "memory_phase"
++        assert events[-2]["peak_memory_bytes"] == breach_peak
++        return
++    assert invoke() == 0
++    assert len(calls) == 2 and len(calls[0][0]) == 8 and calls[0][1] == "split_spill"
++    assert all(len(row["ids"]) == 128 for row in calls[0][0])
++    events = [json.loads(line) for line in report.read_text().splitlines()]
++    assert events[-1]["status"] == "diagnostic_complete"
++    assert not any(event["event"] == "measured_solve" for event in events)
+diff --git a/tests/test_lens_runtime.py b/tests/test_lens_runtime.py
+index 17e3320..8ec1bd7 100644
+--- a/tests/test_lens_runtime.py
++++ b/tests/test_lens_runtime.py
+@@ -214,7 +214,14 @@ def test_cli_help_and_bad_input_do_not_import_mlx(arguments, exit_code):
+         f"except SystemExit as e: assert e.code == {exit_code}\n"
+         "assert not any(k == 'mlx' or k.startswith('mlx.') for k in sys.modules)\n"
+     )
+-    result = run([sys.executable, "-c", code], capture_output=True, text=True)
++    barrier = """import importlib.abc,sys
++class NoMLX(importlib.abc.MetaPathFinder):
++    def find_spec(self, fullname, path=None, target=None):
++        if fullname.split('.')[0] in {'mlx','mlx_lm'}:
++            raise RuntimeError('real MLX forbidden in CLI fixture')
++sys.meta_path.insert(0, NoMLX())
++"""
++    result = run([sys.executable, "-c", barrier + code], capture_output=True, text=True)
+     assert result.returncode == 0, result.stderr
+ 
+ 
+@@ -270,7 +277,7 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
+             }
+         )
+     )
+-    rows = [{"ids": [1], "split": "fit"}, {"ids": [2], "split": "held"}]
++    rows = [{"ids": [1] * 1024, "split": "fit"}, {"ids": [2] * 1024, "split": "held"}]
+     monkeypatch.setattr(runtime, "read_corpus", lambda path: rows)
+     root = snapshot(tmp_path)
+     identity = {"snapshot_path": str(root), "snapshot_sha256": "fixture", "hf_id": spec.hf_id}
+@@ -336,8 +343,75 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
+     monkeypatch.setattr(
+         runtime, "resource_snapshot", lambda: dict(peak_memory_gib=1, working_set_share=0.1)
+     )
++    from local_llm_lab.pipeline.lens_fitting import memory_policy
++
++    monkeypatch.setattr(memory_policy, "runtime_fingerprint", lambda: {"fake": "runtime"})
++    monkeypatch.setattr(memory_policy, "require_owned_window", lambda: None)
++    monkeypatch.setattr(memory_policy, "device_working_set", lambda: 10 * 2**30)
++    prepared = runtime.prepare_fit(manifest, spec, out)
++    bound = memory_policy.binding(prepared, "native", "memory")
++    report = tmp_path / "preflight.jsonl"
++    initial = 2 * 2**30
++    fixed = 2**30 + 128
++    measurements = []
++    for tokens in (256, 512, 1024):
++        projected = (
++            initial
++            if len(measurements) < 2
++            else memory_policy.project_peak(measurements, tokens, fixed_bytes=fixed)
++        )
++        measurements.append(
++            {
++                "event": "measured",
++                "tokens": tokens,
++                "peak_bytes": 2**30,
++                "projected_peak_bytes": projected,
++                "scored_positions_per_sequence": tokens,
++                "counts": {split: {"sequences": 4} for split in ("fit", "held")},
++            }
++        )
++    envelope = {
++        "event": "full_fit_envelope",
++        "dense_matrix_bytes": 16,
++        "nonfinal_layers": 2,
++        "active_floor_bytes": 2**30,
++        "host_maps_and_serialization_bytes": 64,
++        "solver_workspace_bytes": 256,
++        "projected_peak_bytes": 2**30 + 320,
++    }
++    report.write_text(
++        "\n".join(
++            json.dumps(e)
++            for e in [
++                {
++                    "event": "begin",
++                    "mode": "qualification",
++                    "repetitions_per_split": 4,
++                    "qualification_binding": bound,
++                    "initial_bound_bytes": initial,
++                    "lengths": [256, 512, 1024],
++                },
++                {
++                    "event": "loaded",
++                    "load_peak_bytes": 2**30,
++                    "resident_bytes": 2**30,
++                    "statistics_bytes": 128,
++                },
++                *measurements,
++                envelope,
++                {
++                    "event": "measured_solve",
++                    "peak_bytes": 2**30,
++                    "projected_peak_bytes": 2**30 + 320,
++                },
++                {"event": "end", "status": "measured", "fit_started": False},
++            ]
++        )
++    )
+     main = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/lens_fit.py"))["main"]
+     argv = [
++        "--memory-preflight",
++        str(report),
+         "--kind",
+         "regression",
+         "--model",
+diff --git a/tests/test_native_residual_lifetime.py b/tests/test_native_residual_lifetime.py
+new file mode 100644
+index 0000000..3638e37
+--- /dev/null
++++ b/tests/test_native_residual_lifetime.py
+@@ -0,0 +1,82 @@
++"""Residual ownership checks using only Python fakes, with cyclic GC disabled."""
++
++import gc
++import sys
++import types
++import weakref
++
++import pytest
++
++from local_llm_lab import arch
++
++
++class FakeIds:
++    ndim = 2
++    shape = (1, 2)
++
++    def astype(self, _dtype):
++        return self
++
++
++class Residual:
++    pass
++
++
++@pytest.mark.parametrize("failure", [None, "forward", "missing"])
++def test_native_residuals_release_without_cyclic_collection(monkeypatch, failure):
++    fake_mlx = types.ModuleType("mlx")
++    fake_core = types.ModuleType("mlx.core")
++    fake_core.array = lambda _ids: FakeIds()
++    fake_core.int32 = object()
++    fake_mlx.core = fake_core
++    monkeypatch.setitem(sys.modules, "mlx", fake_mlx)
++    monkeypatch.setitem(sys.modules, "mlx.core", fake_core)
++    references = []
++    calls = []
++
++    class FakeCapture:
++        def __init__(self, _view, sink, *, layers):
++            self.sink = sink
++            assert layers == (1, 2)
++
++        def __enter__(self):
++            return self
++
++        def __call__(self, _ids):
++            calls.append("forward")
++            for layer in (1, 2):
++                if failure == "missing" and layer == 2:
++                    break
++                value = Residual()
++                references.append(weakref.ref(value))
++                self.sink.residual(layer, 0, value)
++            if failure == "forward":
++                raise RuntimeError("forward failed")
++
++        def __exit__(self, *_exc):
++            calls.append("exit")
++
++    monkeypatch.setattr(arch, "NativeCapture", FakeCapture)
++    view = object.__new__(arch.ArchitectureView)
++    view.num_layers = 2
++    was_enabled = gc.isenabled()
++    gc.disable()
++    try:
++        if failure is None:
++            result = view.native_residuals([3, 4], [1, 2])
++            assert set(result) == {1, 2}
++            assert all(
++                reference() is result[layer] for layer, reference in enumerate(references, 1)
++            )
++            del result
++        else:
++            expected = RuntimeError if failure == "forward" else ValueError
++            # Do not keep pytest's exception info: its traceback owns local arrays.
++            with pytest.raises(expected):
++                view.native_residuals([3, 4], [1, 2])
++        assert calls == ["forward", "exit"]
++        assert references
++        assert all(reference() is None for reference in references)
++    finally:
++        if was_enabled:
++            gc.enable()
