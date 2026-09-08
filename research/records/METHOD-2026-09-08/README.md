@@ -13,6 +13,16 @@ implying these stayed local; one of them was already moving.
 This record is the technique rather than the findings, because the technique is what transfers. The
 findings are about Gemma 3 4B; this is about how a small team stops itself believing things.
 
+> **If you read one entry, read the last one.** Seventeen of the eighteen errors here were caught by
+> a control on the number: deduplicate it, permute it, compare it to a baseline, ask it a boundary
+> question. The eighteenth could not be, because the number was correct — real, reproducible, and
+> agreeing with an independent derivation to three decimals. It was a measurement of the wrong
+> artefact, and no operation on the value reveals that. The only question that catches it is *what
+> is this a measurement of*, and it was answered by the person who owns the thing measured, minutes
+> before a machine was committed on it. **Precision is not evidence of relevance.** Every other
+> mechanism in this record assumes you are looking at the right object; that one assumption is the
+> one nothing below can check.
+
 ---
 
 ## The eight
