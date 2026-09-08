@@ -215,3 +215,46 @@ All three want the same thing and it is not more episodes. **A lens fitted at ag
 lengths, above the sliding window, is the only instrument that makes any of these three answerable**,
 and it is Codex's task 1. That is now three independent routes to the same conclusion, and none of
 them was the argument for it this morning.
+
+---
+
+## The deduplication rule, stated because two seats computing it differently nearly published a finding
+
+Two independent computations of the layer-24 distribution agreed on arguments throughout and
+differed on skeletons by seven points at rank 1. The asymmetry was the diagnosis: a sampling
+difference moves both rows, a **definitional** difference moves the row whose tokens repeat.
+
+**The rule, as used everywhere in this record.** Within an episode, take each turn's emitted call
+token sequence, and keep a turn only if that exact sequence has not appeared in an earlier turn.
+Deduplication is **per turn, keyed on the whole call**. A turn whose call differs by one character is
+kept in full.
+
+**The rejected alternative** keyed on the decision — a token and its predecessor, collapsed across
+turns. Skeleton tokens repeat identically across turns while arguments vary, so a token-level key
+deduplicates skeletons much harder and discards independent observations. Two different turns
+emitting the same punctuation after the same fence are two decisions in two contexts; only a turn
+**re-issuing an identical call** is the repetition the rule exists to remove. Recomputed under the
+per-turn rule, both seats' numbers agree exactly: 65 turns kept, 23 dropped.
+
+**Third time today a definitional difference nearly became a finding**, after the pooled-against-
+deduplicated commitment table and the flat-against-per-turn reading join. The common feature is that
+none was visible in the number itself.
+
+## The corrected characterisation
+
+"The argument is decided or nowhere" overstated the lower half. Under the settled rule:
+
+| | rank 1 | ranks 2–10 | beyond rank 1,000 |
+|---|---:|---:|---:|
+| call argument | **46.2%** | 19.7% | **11.2%** |
+| call skeleton | 31.8% | **36.9%** | 9.1% |
+
+**The bimodality is strong at the top of the distribution and slight at the bottom** — two points of
+separation in the far tail, not four. What stands is that **arguments are more often decided and
+skeletons more often almost-decided**: arguments lead on exactly right by 14.4 points, skeletons lead
+on nearly right by 17.2.
+
+**And the headline survives the rule change**, which is what matters most. Median-rank log2 ratios
+under the settled rule are **+3.80 at layer 21** and **+3.22 at layer 23**, against +3.03 and +2.77
+undeduplicated. Deduplication still strengthens the effect; only its size moved. That was the
+load-bearing claim and it did not depend on which key was used.
