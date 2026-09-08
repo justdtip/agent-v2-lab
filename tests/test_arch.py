@@ -81,6 +81,20 @@ class _HybridModel:
         self.lm_head = _Head()
 
 
+def _mask_of(view, masks: dict, kind: str):
+    """The mask the model hands the first block of ``kind``.
+
+    `view.masks` is keyed by **block index** since the architecture port, because Gemma builds two
+    masks and dispatches on the index, so two blocks of one kind can receive different masks and a
+    kind-keyed mapping cannot say which. On this hybrid every block of a kind still gets the same
+    mask, so the assertions below are unchanged in meaning; this is the one place that translates.
+    """
+    for index in range(view.num_layers):
+        if view.layer_kind(index) == kind:
+            return masks[index]
+    raise AssertionError(f"this decoder has no {kind} block")
+
+
 def _fp32_residual(view: ArchitectureView, ids: mx.array) -> mx.array:
     h = view.embed(ids)
     masks = view.masks(h, None)
@@ -89,11 +103,31 @@ def _fp32_residual(view: ArchitectureView, ids: mx.array) -> mx.array:
     return view.final_norm(h)
 
 
-def _assert_uncached_hybrid_traversal(calls: list[tuple[object, ...]], dtype: mx.Dtype) -> None:
-    assert calls[:2] == [
-        ("attention_mask", None, dtype),
-        ("ssm_mask", None, dtype),
+def _assert_uncached_hybrid_traversal(
+    calls: list[tuple[object, ...]], dtype: mx.Dtype, *, mask_dtype: mx.Dtype | None = None
+) -> None:
+    """The block traversal, and the mask construction that now happens inside the model's forward.
+
+    Since the architecture port, `view.masks` observes the model's own forward instead of calling
+    the mask constructors itself, so the log opens with a `native` entry and the constructors see
+    the **model's** embedding dtype rather than the caller's promoted residual. That is the point:
+    they are the model's constructors and it builds its masks the way it builds them. The view
+    casts an array mask to the residual's dtype before returning it, so a float32 loop still adds
+    a float32 mask; these fakes return sentinels, so the cast is not observable here.
+    """
+    mask_calls = [entry for entry in calls if entry[0] in ("attention_mask", "ssm_mask")]
+    expected_pair = [
+        ("attention_mask", None, mask_dtype or dtype),
+        ("ssm_mask", None, mask_dtype or dtype),
     ]
+    # **Two pairs, not one, and that is a real cost of the port.** `embed` and `masks` are each
+    # one observing forward, and a forward builds masks whether or not the caller wanted them, so
+    # `embed`'s pair is built and discarded. Correct but not free: on a long sequence the
+    # discarded attention mask is an N-squared allocation. The Chief's ruling was to pay the
+    # forward and never cache it, and to hoist at the call site if measurement ever says
+    # otherwise; this assertion is where that measurement would first show up as a change.
+    assert mask_calls == expected_pair * (len(mask_calls) // 2)
+    assert len(mask_calls) in (2, 4), "one pair per observing forward"
     assert [entry[1:5] for entry in calls if entry[0] == "block"] == [
         (0, True, "ssm-sentinel", None),
         (1, True, "ssm-sentinel", None),
@@ -116,7 +150,7 @@ def test_hybrid_native_diagnostic_preserves_bfloat16_and_matches_reference() -> 
     ids = mx.arange(64, dtype=mx.int32)[None, :]
 
     fp32_residual = _fp32_residual(view, ids)
-    _assert_uncached_hybrid_traversal(model.calls, mx.float32)
+    _assert_uncached_hybrid_traversal(model.calls, mx.float32, mask_dtype=mx.bfloat16)
     model.calls.clear()
 
     native_reference = model.model(ids)
@@ -445,10 +479,13 @@ def test_hidden_spans_match_the_library_route_on_the_full_sequence_path(cpu_stre
     forced = view.masks(h, sentinel_cache, hidden_spans=())
 
     assert offset == prefix.shape[1]
-    assert default["attention"] == "causal"
-    assert isinstance(forced["attention"], mx.array)
-    assert forced["attention"].dtype == mx.bool_
-    assert forced["attention"].shape == (scored.shape[1], offset + scored.shape[1])
+    assert _mask_of(view, default, "attention") == "causal"
+    assert isinstance(_mask_of(view, forced, "attention"), mx.array)
+    assert _mask_of(view, forced, "attention").dtype == mx.bool_
+    assert _mask_of(view, forced, "attention").shape == (
+        scored.shape[1],
+        offset + scored.shape[1],
+    )
 
     sentinel_logits = _run_cached(view, scored, sentinel_cache)
     array_logits = _run_cached(view, scored, array_cache, hidden_spans=())
@@ -474,9 +511,9 @@ def test_hidden_spans_match_the_library_route_at_a_cached_single_step(cpu_stream
     offset = sentinel_cache[3].offset
     h = view.embed(step)
     assert sentinel_cache[3].make_mask(1, return_array=True, window_size=None) is None
-    assert view.masks(h, sentinel_cache)["attention"] is None
+    assert _mask_of(view, view.masks(h, sentinel_cache), "attention") is None
 
-    forced = view.masks(h, sentinel_cache, hidden_spans=())["attention"]
+    forced = _mask_of(view, view.masks(h, sentinel_cache, hidden_spans=()), "attention")
     assert isinstance(forced, mx.array)
     assert forced.shape == (1, offset + 1)
     assert bool(mx.all(forced).item())
@@ -497,7 +534,9 @@ def test_hidden_spans_hide_exactly_the_named_columns_and_keep_causality(cpu_stre
     for queries, spans in (((2, 5, 6), ((2, 5), (7, 8))), ((4,), ((2, 5),))):
         ids = _tiny_ids(queries)
         length = ids.shape[1]
-        mask = view.masks(view.embed(ids), cache, hidden_spans=spans)["attention"]
+        mask = _mask_of(
+            view, view.masks(view.embed(ids), cache, hidden_spans=spans), "attention"
+        )
         rows = mx.arange(offset, offset + length)[:, None]
         columns = mx.arange(offset + length)[None]
         hidden = mx.zeros(columns.shape, dtype=mx.bool_)
@@ -534,8 +573,10 @@ def test_hidden_spans_leave_the_recurrent_mask_untouched(cpu_stream) -> None:
     for entry in cache[:3]:
         entry.prepare(lengths=[3])
 
-    default = view.masks(h, cache)["linear_attention"]
-    with_spans = view.masks(h, cache, hidden_spans=((1, 3),))["linear_attention"]
+    default = _mask_of(view, view.masks(h, cache), "linear_attention")
+    with_spans = _mask_of(
+        view, view.masks(h, cache, hidden_spans=((1, 3),)), "linear_attention"
+    )
     assert isinstance(default, mx.array)
     assert bool(mx.array_equal(default, with_spans).item())
 

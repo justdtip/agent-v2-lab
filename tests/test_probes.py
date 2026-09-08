@@ -230,6 +230,33 @@ class _ArchitectureText(nn.Module):
         self.mask_calls.append(("linear_attention", cache))
         return _SSM_MASK
 
+    def __call__(self, inputs, cache=None):
+        """A forward, mirroring ``Qwen3_5TextModel.__call__``.
+
+        This fake had none: it exposed the two mask constructors and nothing else, because the
+        view used to call them itself. Since the architecture port the view **observes** the
+        model's forward instead of reproducing it, so a stand-in for a model has to have one.
+        That is the right ripple rather than a cost: a fake with no forward was a fake of a mask
+        factory, and the view's job is to read a model.
+
+        The dispatch is the library's, on the block's own ``is_linear``, and each mask comes from
+        the constructor above so ``mask_calls`` still records what was asked for and with which
+        cache entry.
+        """
+        h = self.embed_tokens(inputs)
+        entries = [None] * len(self.layers) if cache is None else list(cache)
+        first_attention = next(
+            (index for index, block in enumerate(self.layers) if not block.is_linear), 0
+        )
+        first_linear = next(
+            (index for index, block in enumerate(self.layers) if block.is_linear), 0
+        )
+        attention_mask = self.create_attention_mask(h, entries[first_attention])
+        ssm_mask = self.create_ssm_mask(h, entries[first_linear])
+        for block, entry in zip(self.layers, entries, strict=True):
+            h = block(h, ssm_mask if block.is_linear else attention_mask, entry)
+        return self.norm(h)
+
 
 class _ArchitectureFakeBase(nn.Module):
     text: _ArchitectureText
@@ -464,7 +491,10 @@ def test_hybrid_architecture_view_uses_per_kind_masks_and_caches(variant) -> Non
         "linear_attention",
         "attention",
     ]
-    assert masks == {"attention": _ATTENTION_MASK, "linear_attention": _SSM_MASK}
+    # Keyed by block index since the architecture port: Gemma builds two masks and dispatches on
+    # the index, so two blocks of one kind can differ and a kind-keyed mapping cannot say which.
+    # On this hybrid the kinds still partition cleanly, which is what the mapping shows.
+    assert masks == {0: _SSM_MASK, 1: _SSM_MASK, 2: _SSM_MASK, 3: _ATTENTION_MASK}
     assert model.text.mask_calls[-2:] == [
         ("attention", caches[3]),
         ("linear_attention", caches[0]),
@@ -472,8 +502,8 @@ def test_hybrid_architecture_view_uses_per_kind_masks_and_caches(variant) -> Non
     for index, cache_i in enumerate(caches):
         h = view.run_block(index, h, masks, cache_i)
 
-    with pytest.raises(ValueError, match="wrong mask"):
-        view.run_block(0, view.embed(ids), {"linear_attention": None}, caches[0])
+    with pytest.raises(ValueError, match="missing mask for block"):
+        view.run_block(0, view.embed(ids), {1: None}, caches[0])
 
 
 @pytest.mark.parametrize("variant", ADAPTER_VARIANTS)
@@ -1734,6 +1764,9 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         # Added 2026-09-08 (issue 88): the declared residual band, so a run can say which pairs
         # its adapter depth covers without a second copy of the pairs beside the code.
         "probe_live_lens_pairs",
+        # Added 2026-09-08 (issue 86): the recorded answers to equal-distance partner ties. A
+        # ruling, not a rule, so it is declared rather than derived and travels with the run.
+        "probe_partner_tie_breaks",
         "probe_capture_dtype",
         "memory_budget_gib",
         "policies",

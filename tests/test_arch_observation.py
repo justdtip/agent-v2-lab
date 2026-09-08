@@ -82,8 +82,8 @@ def _view(module) -> SimpleNamespace:
     return SimpleNamespace(text_module=module, num_layers=len(module.layers))
 
 
-def _observe(module, **kwargs):
-    return ArchitectureView._observe_forward(_view(module), **kwargs)
+def _observe(module, ids="ids", **kwargs):
+    return ArchitectureView._observe_forward(_view(module), ids, **kwargs)
 
 
 def test_the_entry_transform_is_inherited_rather_than_reconstructed() -> None:
@@ -94,7 +94,7 @@ def test_the_entry_transform_is_inherited_rather_than_reconstructed() -> None:
     added or normalised instead would have been wrong differently with nothing to say so.
     """
     gemma = _GemmaShaped()
-    entry, _ = _observe(gemma, ids="ids")
+    entry, _ = _observe(gemma)
 
     assert entry == f"embed(ids)*{GEMMA_ENTRY_SCALE}", "what block 0 got, not what embed returned"
     assert entry != "embed(ids)"
@@ -102,7 +102,7 @@ def test_the_entry_transform_is_inherited_rather_than_reconstructed() -> None:
     # And on a family whose entry is the identity, the same call returns the embedding unchanged,
     # so the observation is not a Gemma special case.
     qwen = _QwenShaped()
-    assert _observe(qwen, ids="ids")[0] == "embed(ids)"
+    assert _observe(qwen)[0] == "embed(ids)"
 
 
 def test_masks_come_back_per_block_because_two_blocks_of_one_kind_can_differ() -> None:
@@ -112,7 +112,7 @@ def test_masks_come_back_per_block_because_two_blocks_of_one_kind_can_differ() -
     twelve would have taken one entry and eleven of them would have been wrong.
     """
     gemma = _GemmaShaped(blocks=12)
-    _, masks = _observe(gemma, ids="ids")
+    _, masks = _observe(gemma)
 
     assert set(masks) == set(range(12))
     globals_seen = {index for index, mask in masks.items() if mask.startswith("global")}
@@ -129,7 +129,7 @@ def test_the_models_own_cache_selection_is_inherited_not_reimplemented() -> None
     """
     gemma = _GemmaShaped(blocks=12)
     cache = [f"cache-{index}" for index in range(12)]
-    _, masks = _observe(gemma, ids="ids", cache=cache)
+    _, masks = _observe(gemma, cache=cache)
 
     assert masks[5] == "global(cache=cache-5)"
     assert masks[0] == "sliding(cache=cache-0)"
@@ -142,7 +142,7 @@ def test_the_proxy_forwards_attribute_access_or_it_changes_what_it_observes() ->
     a property of the proxy rather than of the model.
     """
     qwen = _QwenShaped(blocks=8)
-    _, masks = _observe(qwen, ids="ids")
+    _, masks = _observe(qwen)
 
     attention = {index for index, mask in masks.items() if mask == "attention"}
     assert attention == {3, 7}, "block i is attention when (i + 1) % 4 == 0"
@@ -159,7 +159,7 @@ def test_the_module_is_left_exactly_as_it_was_found() -> None:
     module = _Angry()
     before = list(module.layers)
     with pytest.raises(RuntimeError):
-        _observe(module, ids="ids")
+        _observe(module)
     assert module.layers == before and all(isinstance(b, _Block) for b in module.layers)
 
 
@@ -174,4 +174,4 @@ def test_a_decoder_that_does_not_iterate_its_own_layers_is_refused() -> None:
             return h
 
     with pytest.raises(ValueError, match="does not iterate its own layer list"):
-        _observe(_Partial(blocks=12), ids="ids")
+        _observe(_Partial(blocks=12))

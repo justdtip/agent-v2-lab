@@ -140,7 +140,7 @@ class ArchitectureView:
             token_ids = token_ids[None, :]
         if token_ids.ndim != 2:
             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
-        entry, _ = self._observe_forward(ids=token_ids)
+        entry, _ = self._observe_forward(token_ids)
         return entry.astype(mx.float32)
 
     def native_readout(self, h: Any) -> Any:
@@ -179,13 +179,29 @@ class ArchitectureView:
         """
         import mlx.core as mx
 
-        # A **dummy**, not ``h``. The mask constructors read shape, dtype and the cache and never
-        # the values, and Gemma applies its entry scale after the ``input_embeddings`` branch, so
-        # handing the real ``h`` in would return it multiplied by about fifty. Callers pass
-        # mid-network residuals here -- ``pre_norm_tail`` does -- and the value must not travel.
-        stand_in = mx.zeros(tuple(h.shape), dtype=h.dtype)
-        _, observed = self._observe_forward(embeddings=stand_in, cache=cache)
-        by_block = {index: observed[index] for index in range(self.num_layers)}
+        # Ids of the right length, not ``h``. The mask constructors read the sequence length and
+        # the cache and never the token values, so this observes exactly the masks the model
+        # would build for a sequence of this shape -- in the model's own embedding dtype, which
+        # is what inference uses and better than the caller's. Passing ``h`` itself would be
+        # wrong twice over: callers hand mid-network residuals to this method
+        # (``lens_fitting.jacobian.pre_norm_tail`` does), and Gemma would scale whatever it was
+        # given by about fifty and return it looking untouched.
+        stand_in = mx.zeros((1, int(h.shape[1])), dtype=mx.int32)
+        _, observed = self._observe_forward(stand_in, cache=cache)
+        # The model builds its masks in its own embedding dtype, which is right -- they are its
+        # masks. But a caller running the loop in float32 applies them to a float32 residual, and
+        # this method used to hand back masks built from the caller's own `h` and therefore in its
+        # dtype. An additive mask carried at a narrower precision than the stream it is added to
+        # is a silent precision change, so the content stays the model's and the dtype follows the
+        # residual. Sentinels and `None` pass through untouched.
+        by_block = {
+            index: (
+                observed[index].astype(h.dtype)
+                if isinstance(observed[index], mx.array)
+                else observed[index]
+            )
+            for index in range(self.num_layers)
+        }
         if hidden_spans is None:
             if record is not None:
                 attention_cache = self._first_cache(
@@ -436,7 +452,7 @@ class ArchitectureView:
                 captured[index + 1] = h
         return captured
 
-    def _observe_forward(self, *, ids: Any = None, embeddings: Any = None, cache: Any = None):
+    def _observe_forward(self, ids: Any, cache: Any = None):
         """Ask the model what it does before and between its blocks, instead of describing it.
 
         Runs the text module's own ``__call__`` with every block replaced by a proxy that records
@@ -456,11 +472,15 @@ class ArchitectureView:
         block's own ``is_linear`` while Gemma dispatches on the loop index. A proxy that answered
         neither would change the very masks it exists to observe.
 
-        **Never pass a mid-network residual as ``embeddings``.** Gemma applies its entry scale
-        *after* the ``input_embeddings`` branch, unconditionally, so a residual handed in that way
-        comes back multiplied by about fifty and looking untouched. Callers here pass either real
-        token ids, or a **dummy** whose values are irrelevant because only shape and dtype reach
-        the mask constructors. Nothing may pass a residual it intends to keep.
+        **Driven by token ids and never by ``input_embeddings``.** Two reasons, and the second is
+        the one that changed this design. Gemma applies its entry scale *after* the
+        ``input_embeddings`` branch, unconditionally, so a residual handed in that way comes back
+        multiplied by about fifty and looking untouched — a footgun for any caller holding a
+        mid-network residual, which ``pre_norm_tail`` does. And requiring that keyword narrows
+        what this can read: several stand-in decoders accept ids and nothing else, and a view that
+        cannot observe them is a view that cannot be tested without a checkpoint. Masks need only
+        a sequence length and a cache, so ids of the right length are enough and are what every
+        decoder takes.
         """
 
         module = self.text_module
@@ -487,10 +507,7 @@ class ArchitectureView:
         original = list(module.layers)
         try:
             module.layers = [_Watch(block, index) for index, block in enumerate(blocks)]
-            if ids is not None:
-                module(ids, cache)
-            else:
-                module(None, cache, input_embeddings=embeddings)
+            module(ids, cache)
         finally:
             module.layers = original
         if not entry or len(seen) != len(blocks):

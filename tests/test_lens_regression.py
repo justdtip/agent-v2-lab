@@ -77,6 +77,9 @@ def test_streams_once_per_sequence_with_disjoint_sums():
     sums, counts = reg.accumulate(view, rows)
     assert view.calls == [([1, 2], (1, 2, 3)), ([9], (1, 2, 3))]
     assert counts == {
+        # Which forward produced the residuals travels with the totals, so a fitted lens says
+        # it rather than depending on a caller to stamp it (the Gemma pivot's native source).
+        "residual_source": "hand_run",
         "fit": {"sequences": 1, "positions": 2},
         "held": {"sequences": 1, "positions": 1},
     }
@@ -91,7 +94,7 @@ def test_native_nonsymmetric_linear_recovery_and_all_layer_archive(tmp_path):
 
     from local_llm_lab.arch import ArchitectureView
     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
-    from local_llm_lab.pipeline.live_lens.instruments import LensMaps
+    from local_llm_lab.pipeline.live_lens.instruments import LensIdentity, LensMaps
 
     reg = api()
     native = ArchitectureView.from_model(tiny_model())
@@ -123,20 +126,29 @@ def test_native_nonsymmetric_linear_recovery_and_all_layer_archive(tmp_path):
     assert np.linalg.norm(recovered - known) / np.linalg.norm(known) < 0.08
     assert np.linalg.norm(recovered.T - known) > np.linalg.norm(recovered - known) * 2
     out = tmp_path / "tiny-agentic-regression.npz"
+    identity = LensIdentity("toy", "example/tiny", native.num_layers)
     metadata = write_lens(
         out,
         result.maps,
         hidden_size=d,
         num_layers=native.num_layers,
         metadata={"kind": "regression", "domain": "agentic"},
+        identity=identity,
     )
     loaded = LensMaps.load(
-        out, expected_sha256=metadata["npz_sha256"], hidden_size=d, num_layers=native.num_layers
+        out,
+        expected_sha256=metadata["npz_sha256"],
+        hidden_size=d,
+        num_layers=native.num_layers,
+        identity=identity,
     )
     assert set(loaded.maps) == set(range(1, native.num_layers))
     with np.load(out, allow_pickle=False) as archive:
-        assert set(archive.files) == {f"J{i}" for i in range(native.num_layers - 1)}
-        assert all(archive[k].dtype == np.float32 for k in archive.files)
+        # `identity` beside the maps: a lens says which model it was fitted on, and it goes
+        # inside the archive so the digest every reader pins covers it (issue 99).
+        maps = {f"J{i}" for i in range(native.num_layers - 1)}
+        assert set(archive.files) == maps | {"identity"}
+        assert all(archive[k].dtype == np.float32 for k in maps)
     probe = rng.normal(size=(4, d)).astype(np.float32)
     np.testing.assert_allclose(loaded.apply(probe, 1), probe @ recovered, atol=2e-6)
     assert all("held_out_uncentered_r2" in row for row in result.per_layer.values())

@@ -1082,6 +1082,23 @@ class _JLensInner(nn.Module):
         self.layers = [_JLensBlock(dim) for _ in range(n_layers)]
         self.norm = nn.RMSNorm(dim)
 
+    def __call__(self, inputs, cache=None):
+        """A forward, because the view now reads one rather than reproducing it.
+
+        This fake had the three attributes the view looks for and no way to run, which was
+        enough while `ArchitectureView` re-implemented the decoder loop itself. Since the
+        architecture port it observes the model's own forward, so a stand-in for a model needs
+        one. Dense: one mask for every block, which is what this shape means.
+        """
+        from mlx_lm.models.base import create_attention_mask
+
+        h = self.embed_tokens(inputs)
+        entries = [None] * len(self.layers) if cache is None else list(cache)
+        mask = create_attention_mask(h, entries[0])
+        for block, entry in zip(self.layers, entries, strict=True):
+            h = block(h, mask, entry)
+        return self.norm(h)
+
 
 class _JLensModel(nn.Module):
     """A fake tiny model with the ``model.{embed_tokens,layers,norm}`` shape jlens expects."""

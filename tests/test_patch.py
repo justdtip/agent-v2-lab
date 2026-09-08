@@ -2043,7 +2043,13 @@ def test_render_markdown_summarises_counterfactual_note_sources() -> None:
 # The fake below reproduces both: a newline merges into the following character, so
 # ``encode("\n" + x) != encode("\n") + encode(x)``.
 
-_FAKE_SPEC = SimpleNamespace(chat=SimpleNamespace(template_kwargs={}, thinking="on"))
+# `generation_prefix` is declared per model now, and `protocol.generation_suffix` reads it, so a
+# fake spec that omits it is a fake of a spec that cannot exist.
+_FAKE_SPEC = SimpleNamespace(
+    chat=SimpleNamespace(
+        template_kwargs={}, thinking="on", generation_prefix="<|im_start|>assistant\n"
+    )
+)
 
 
 class _MergingTokenizer:

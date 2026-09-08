@@ -237,7 +237,10 @@ def test_jlens_main_uses_registry_policy_actual_depth_and_selection_metadata(
         hf_id="fake/hf",
         policies={},
         probe_layer_fractions=(0.167, 0.333, 0.5, 0.667, 0.833, 1.0),
-        chat=SimpleNamespace(template_kwargs={}),
+        chat=SimpleNamespace(template_kwargs={}, generation_prefix="<|im_start|>assistant\n"),
+        # A real `ModelSpec` always answers `.probes`; a fake that does not is a fake of a spec
+        # that cannot exist, and the sweep reads the recorded tie-breaks from it (issue 86).
+        probes=SimpleNamespace(partner_tie_breaks={}),
     )
     model = object()
 
@@ -364,7 +367,12 @@ def test_jlens_rejects_depth_overflow_before_probe_execution(monkeypatch) -> Non
     from local_llm_lab.pipeline import evaluate, tasks
     from local_llm_lab.probes import guard, policies
 
-    selected = SimpleNamespace(hf_id="fake/hf", policies={}, probe_layer_fractions=(1.0,))
+    selected = SimpleNamespace(
+        hf_id="fake/hf",
+        policies={},
+        probe_layer_fractions=(1.0,),
+        probes=SimpleNamespace(partner_tie_breaks={}),
+    )
     model = object()
     task = SimpleNamespace(
         steps=[SimpleNamespace(action=SimpleNamespace(name="read_file", arguments={"path": "x"}))],
@@ -876,8 +884,11 @@ def test_the_4b_default_family_is_exp_003s_ten_layer_list() -> None:
     [
         (5, 4, "linear_attention", "attention"),
         (7, 8, "linear_attention", "attention"),
+        # Layer 4 is attention-written and in band; before the generalisation it took no
+        # partner at all, which is the clause this test exists for. Layer 8 is deliberately
+        # absent: it is the final layer, which `in_band_layers` reports rather than decides on,
+        # so it takes no partner for an honest reason and would test the band, not the rule.
         (4, 3, "attention", "linear_attention"),
-        (8, 7, "attention", "linear_attention"),
     ],
 )
 def test_partner_is_the_nearest_layer_of_the_opposite_kind_in_either_direction(
