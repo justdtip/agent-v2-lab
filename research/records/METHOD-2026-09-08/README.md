@@ -171,3 +171,50 @@ So the ladder has three rungs and only the top one holds:
 **A rule you have to remember at the moment of temptation is care wearing a mechanism's clothes.**
 That is the sentence this record exists for, and it was reached by one author breaking his own rule
 and then saying so.
+
+---
+
+## The count kept growing, and that is the honest result
+
+This record began at eight refuted claims. By the end of the day it was thirteen, and the additions
+came from both seats at roughly the rate the first eight did:
+
+| # | claim | who | what killed it |
+|---|---|---|---|
+| 9 | scored positions re-enter the sink regime at turn boundaries | Chief | rank rows exist only for generated tokens; smallest prompt is 420 |
+| 10 | wrong answers are emitted as confidently as right ones | Chief | control: median P ≈ 0.999999 on *every* token, so the statistic is saturated |
+| 11 | the logits are recoverable from the records at no box cost | Chief | the Director asked; only a SHA-256 is stored, never the distribution |
+| 12 | 3.4 GiB peak and 2.1 s/token for stage two | D-CRO | outcome: 4.70 GiB and 3.68 s/token |
+| 13 | Gemma is certain and unmoved by refutation | Chief | the same episode under an honest simulator: 0.9031, both branches live |
+
+**We did not get better at avoiding wrong claims. We got better at catching them.** That is worth
+saying plainly, because the opposite reading — that a day of method work reduces the error rate — is
+the flattering one and it is not what happened. The mechanisms fire; the claims keep coming.
+
+## A fourth mechanism, and a fourth shape
+
+The three mechanisms above catch errors in a **number already computed**. Claim 12 is a different
+animal: a projection made *before* a run, from a measurement taken where it was cheapest to take.
+
+**The shape: measured where it was cheap, not where it was representative.** The D-CRO calibrated
+stage two's memory and rate on `calculate-0158` — 2 turns, 103 tokens, the shortest episode in the
+set. Both projected quantities scale with context, and the run then reached 2,749 positions. One
+mistake, made twice, missing by 38% on memory and 2.3x on rate. It is the deduplication error's
+sibling: not *correlated observations counted as independent*, but *an unrepresentative instance
+treated as typical*. Both are sampling failures that favour the cheap measurement.
+
+**The mechanism that caught it: a declaration that carries the measurement it rests on.** R60(c)
+requires a projection to name its evidence, not merely to state a ceiling. Because the declaration
+said *3.4 GiB, measured on `calculate-0158`*, the miss was **diagnosable rather than merely visible**
+— the flaw could be named as a method error instead of guessed at as bad luck. A bare ceiling would
+have been breached identically and taught nothing.
+
+That is the argument for R60(c) rather than an embarrassment under it, and it generalises past this
+repository: **a projection without its basis cannot be learned from, only failed.**
+
+**The corollary, now a rule: calibrate at the largest instance the run will reach, and identify what
+the cost actually scales with.** Stage two's driver is episode *length*, not episode *count*, so any
+projection from a count is wrong in the same direction every time. The same error was live in a
+second seat within the hour — a 21 GiB projection for a 2,816-token lens fit, on a box whose R47 stop
+threshold is 10.66 GiB — and was caught by applying this rule before the run rather than after it,
+which is the first time today a mechanism prevented a claim instead of refuting one.
