@@ -262,3 +262,52 @@ spans are 37% to 60% verbatim repeats with 28% of their tokens in failed turns; 
 repeats with none. A cross-model statement about how calls are represented is comparing a span made
 mostly of fresh, successful actions against one made substantially of copies of a failing one. No
 lens correction reaches this, because it is a property of the corpus rather than of the instrument.
+
+---
+
+## What was addressed, and where
+
+Identifying was half the instruction. This is the other half, recorded so the register is not a list
+of complaints.
+
+| confound | disposition | where |
+|---|---|---|
+| `list_files` false empty | **fixed in code**, both simulators, full suite green | `020aa89` |
+| Base rate unfalsifiable at horizon one | null moved to horizons four and eight | `9a9880b` |
+| Span facets absent from the records | defined, emitted at write time; observation facet struck | `9a9880b` |
+| Primary comparison not identifiable | restated as call-argument against call-skeleton | `9a9880b` |
+| Composition dominated by one episode | per-episode computation, equal weight across episodes | `9a9880b` |
+| Repetitions pooled as a sample size | deduplication required before any n is quoted | `9a9880b` |
+| Window secondary wrongly declared void | count measured from the run, comparison proceeds | `9a9880b` |
+| `read-0108` aborted but counted | episode set corrected to eleven families | `9a9880b` |
+| Environment change breaks comparability | stated in advance, no figure crosses the stages | `9a9880b` |
+| R61 resting on a withdrawn figure | corrected to stand on the load average alone | `531ae6c` |
+| Window announced against a dead holder | R61(c), and `--holder-pid` landed by the D-CRO | `9f4785e`, `9c2fdee` |
+| Codex task 1 blocked by an unmeetable gate | gate resolved as met, duplication bound added | `a1ff0b0` |
+
+**Still open and owned elsewhere.** The residual layer offset, which geometry cannot settle and
+which must be read out of the fitting code. The layer-34 readout call. The pilot manifest's
+`opening_prompt_tokens`, measured from the wrong prompt. The regression fit's position-composition
+mismatch, where the hosted lens was never fitted above absolute position ~111 against a 1,024
+window, which is the strongest unexcluded alternative explanation for its depth trend.
+
+### The restatement that the audit earned
+
+The primary comparison changed because a control disproved my own prediction. I argued that
+stereotyped JSON should commit earlier in depth than prose, being more predictable. Measured across
+every episode, with the fixed point excluded so it could not contaminate its own baseline:
+
+| token class | n | at layer 24 | at layer 30 | median |
+|---|---:|---:|---:|---:|
+| argument-start | 128 | 1.6% | 79% | 30 |
+| all other tokens | 5,442 | 29% | 44% | 30 |
+
+Argument-start tokens commit **later**, not earlier. So the two halves of a call span sit at opposite
+ends of the depth range and move in opposite directions, and any single "call" figure averages them
+away. The comparison now varies the task-dependent content of an action against the convention that
+carries it, inside one syntactic object, which holds format and lens domain roughly fixed.
+
+**This is the transferable part.** Before comparing two spans through a lens, check that the spans
+are not compounds of populations that behave oppositely, and check the comparison against a control
+of the same syntactic kind rather than against a pooled background. Both checks changed a
+conclusion here, and neither needs our code or this model.
