@@ -1,0 +1,31 @@
+{
+ "native_64": {
+  "tokens": 64,
+  "max_abs": 0.0,
+  "max_rel": 0.0,
+  "scale": 85.0,
+  "dtype": "mlx.core.bfloat16"
+ },
+ "native_1400": {
+  "tokens": 1400,
+  "max_abs": 0.0,
+  "max_rel": 0.0,
+  "scale": 104.0,
+  "dtype": "mlx.core.bfloat16"
+ },
+ "control_64": {
+  "tokens": 64,
+  "max_abs": 0.0,
+  "max_rel": 0.0,
+  "scale": 85.0,
+  "dtype": "mlx.core.bfloat16"
+ },
+ "control_1400": {
+  "tokens": 1400,
+  "max_abs": 5.3125,
+  "max_rel": 0.05108173076923077,
+  "scale": 104.0,
+  "dtype": "mlx.core.bfloat16"
+ },
+ "peak_gib": 2.7030742801725864
+}

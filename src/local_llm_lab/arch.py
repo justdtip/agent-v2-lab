@@ -188,19 +188,8 @@ class ArchitectureView:
         # given by about fifty and return it looking untouched.
         stand_in = mx.zeros((1, int(h.shape[1])), dtype=mx.int32)
         _, observed = self._observe_forward(stand_in, cache=cache)
-        # The model builds its masks in its own embedding dtype, which is right -- they are its
-        # masks. But a caller running the loop in float32 applies them to a float32 residual, and
-        # this method used to hand back masks built from the caller's own `h` and therefore in its
-        # dtype. An additive mask carried at a narrower precision than the stream it is added to
-        # is a silent precision change, so the content stays the model's and the dtype follows the
-        # residual. Sentinels and `None` pass through untouched.
         by_block = {
-            index: (
-                observed[index].astype(h.dtype)
-                if isinstance(observed[index], mx.array)
-                else observed[index]
-            )
-            for index in range(self.num_layers)
+            index: _mask_matching(observed[index], h.dtype) for index in range(self.num_layers)
         }
         if hidden_spans is None:
             if record is not None:
@@ -330,7 +319,20 @@ class ArchitectureView:
         return self.text_module.norm(h).astype(mx.float32)
 
     def diagnostic_native_final_residual(self, ids: Any) -> Any:
-        """Replay the native no-cache residual loop without diagnostic dtype promotion."""
+        """Replay the native no-cache residual loop without diagnostic dtype promotion.
+
+        **This read ``embed_tokens`` directly and so never applied the entry transform.** The
+        pivot document listed it beside `embed` as the same omission and the first port fixed only
+        `embed`, so on Gemma this diagnostic disagreed with the model's own forward by 79 per cent
+        at 64 tokens -- below the sliding window, where no mask defect can appear, which is what
+        localised it to the entry rather than to the masks. It is the residual-equivalence gate's
+        own comparator, so it was the one place the omission would have been caught and the one
+        place it survived.
+
+        **One observation, not two.** The entry and the masks come from the same forward, which is
+        the Chief's hoist: the call site knows it needs both, so it asks once, rather than `embed`
+        and `masks` each paying a forward and one pair of masks being built and discarded.
+        """
         import mlx.core as mx
 
         token_ids = mx.array(ids).astype(mx.int32)
@@ -338,8 +340,11 @@ class ArchitectureView:
             token_ids = token_ids[None, :]
         if token_ids.ndim != 2:
             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
-        hidden = self.text_module.embed_tokens(token_ids)
-        masks = self.masks(hidden, None)
+        hidden, observed = self._observe_forward(token_ids)
+        masks = {
+            index: _mask_matching(observed[index], hidden.dtype)
+            for index in range(self.num_layers)
+        }
         for index, block in enumerate(self.blocks):
             hidden = block(hidden, mask=masks[index], cache=None)
         return self.text_module.norm(hidden)
@@ -441,8 +446,19 @@ class ArchitectureView:
             raise ValueError(
                 f"layers must be a non-empty sequence within [0, {self.num_layers}]; got {wanted}"
             )
-        h = self.embed(ids)
-        masks = self.masks(h, None)
+        # One observation for both, rather than `embed` and `masks` each paying a forward and one
+        # pair of masks being built and discarded (the Chief's hoist: a call site that knows it
+        # needs both asks once, which is a proof of the invariance rather than a claim about it).
+        import mlx.core as mx
+
+        token_ids = mx.array(ids).astype(mx.int32)
+        if token_ids.ndim == 1:
+            token_ids = token_ids[None, :]
+        entry, observed = self._observe_forward(token_ids)
+        h = entry.astype(mx.float32)
+        masks = {
+            index: _mask_matching(observed[index], h.dtype) for index in range(self.num_layers)
+        }
         captured: dict[int, Any] = {}
         if 0 in wanted:
             captured[0] = h
@@ -725,6 +741,30 @@ def _mask_shape(mask: Any) -> tuple[int, ...] | None:
     """
     shape = getattr(mask, "shape", None)
     return tuple(int(value) for value in shape) if shape is not None else None
+
+
+def _mask_matching(mask: Any, dtype: Any) -> Any:
+    """Give an **additive** mask the residual's precision, and never touch a boolean one.
+
+    Two mask forms come back from the library and they mean different things. An additive mask is
+    summed into the attention scores, so carrying it at a narrower precision than the stream it is
+    added to is a silent precision change -- that is the case this function exists for. A boolean
+    mask is a predicate, `True` meaning *attend*, and casting it to a float turns it into an
+    additive mask of ones and zeros: every position becomes attendable and the windowing is gone.
+
+    That is not hypothetical. An earlier version cast every array, and on Gemma 3 above its
+    sliding window -- the only place the two masks differ, and the only place a boolean array is
+    returned at all -- it destroyed the window: the residual at layer 1 diverged from the model's
+    own forward by 95 per cent. Below the window both masks are the string ``"causal"``, so no
+    array was cast and nothing showed. The defect was invisible at every length the tests used.
+
+    String sentinels and ``None`` pass through: they are routes, not arrays.
+    """
+    import mlx.core as mx
+
+    if not isinstance(mask, mx.array) or mask.dtype == mx.bool_:
+        return mask
+    return mask.astype(dtype)
 
 
 def _cache_offset(entry: Any | None) -> int:

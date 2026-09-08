@@ -780,3 +780,33 @@ def test_cached_logits_carry_the_record_out_of_the_scored_forward(cpu_stream) ->
     view.cached_logits(_tiny_ids((4,)), cache, hidden_spans=((2, 6),), record=record)
     assert record["attention_mask_route"] == "row constructed at a single step"
     assert record["hidden_spans"] == ((2, 6),)
+
+
+def test_a_boolean_mask_is_never_cast_and_an_additive_one_follows_the_residual() -> None:
+    """The defect that survived a green suite and a landed patch, in one assertion.
+
+    `masks` gives an additive mask the residual's precision, because carrying it narrower than the
+    stream it is summed into is a silent precision change. An earlier version cast **every** array,
+    and a boolean mask is a predicate: `True` means attend, so casting it to a float turns it into
+    an additive mask of ones and zeros and every position becomes attendable.
+
+    Nothing caught it. Below Gemma's sliding window both of its masks are the string `"causal"`, so
+    no array was cast; the boolean array appears only above 1,024 tokens, which no test reached.
+    On the real checkpoint at 1,400 tokens the residual at layer 1 diverged from the model's own
+    forward by 95 per cent, and at 64 tokens by 2 per cent, which is why length was the variable
+    that mattered and not the model.
+    """
+    from local_llm_lab.arch import _mask_matching
+
+    predicate = mx.array([[True, False], [True, True]])
+    kept = _mask_matching(predicate, mx.float32)
+    assert kept.dtype == mx.bool_, "a boolean mask is a predicate, not a small number"
+    assert mx.array_equal(kept, predicate)
+
+    additive = mx.array([[0.0, -1e9], [0.0, 0.0]], dtype=mx.bfloat16)
+    promoted = _mask_matching(additive, mx.float32)
+    assert promoted.dtype == mx.float32
+    assert float(promoted[0, 1].item()) == float(additive[0, 1].item())
+
+    for route in ("causal", None):
+        assert _mask_matching(route, mx.float32) is route, "a route is not an array"
