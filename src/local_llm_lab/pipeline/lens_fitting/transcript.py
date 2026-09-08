@@ -617,6 +617,7 @@ def read_transcript_corpus(manifest_path):
         raise ValueError("unsupported transcript corpus schema")
     _validate_identity(manifest["model_identity"], manifest["tokenizer"])
     captures = {}
+    seen_tasks = set()
     for source in manifest["sources"]:
         checked_bytes(source)
         if source["path"] in captures:
@@ -627,7 +628,12 @@ def read_transcript_corpus(manifest_path):
             or events[0]["provenance"].get("tokenizer") != manifest["tokenizer"]
         ):
             raise ValueError("source identity mismatch")
-        captures[source["path"]] = list(_turns(events))
+        source_turns = list(_turns(events))
+        task_ids = {begin["context"]["task_id"] for begin, _ in source_turns}
+        if task_ids & seen_tasks:
+            raise ValueError("duplicate trajectory across source records")
+        seen_tasks.update(task_ids)
+        captures[source["path"]] = source_turns
     for asset in manifest["tokenizer"]["files"]:
         checked_bytes(asset)
     flat = [

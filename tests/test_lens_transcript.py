@@ -242,3 +242,20 @@ def test_boolean_and_integer_arguments_are_not_identical_repeated_calls():
         for i, value in enumerate([True, 1, False, 0])
     ]
     assert t.transcript_acceptance([], turns)["repeated_runs"] == []
+
+
+def test_reader_rejects_same_episode_in_different_source_files(tmp_path):
+    source, spec, ident, tok_id = make_record(tmp_path)
+    path = tmp_path / "corpus.json"
+    t.build_transcript_corpus(
+        [source], Tokenizer(), spec, path, tokenizer_identity=tok_id, model_identity=ident
+    )
+    duplicate = tmp_path / "duplicate.jsonl"
+    duplicate.write_bytes(source.read_bytes())
+    manifest = json.loads(path.read_text())
+    manifest["sources"].append(t.file_record(duplicate))
+    manifest.pop("manifest_sha256")
+    manifest["manifest_sha256"] = t.digest(manifest)
+    path.write_bytes(t.encoded(manifest))
+    with pytest.raises(ValueError, match="duplicate trajectory"):
+        t.read_transcript_corpus(path)
