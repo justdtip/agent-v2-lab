@@ -331,3 +331,45 @@ def test_rendering_source_must_still_match_committed_fix(committed_rendering_gat
     (root / "src/local_llm_lab/pipeline/protocol.py").write_text("changed source")
     with pytest.raises(ValueError, match="checkout differs"):
         mod.verify_rendering_gate(gate)
+
+
+@pytest.mark.parametrize("changed", ["snapshot", "window"])
+def test_capture_rechecks_identity_and_window_before_complete_footer(
+    registered, monkeypatch, tmp_path, changed
+):
+    mod, path, data = registered
+    calls = []
+    finished = False
+
+    def window():
+        calls.append("window")
+        if finished and changed == "window":
+            raise ValueError("window ownership changed during run")
+        return tmp_path
+
+    def snapshot(*args):
+        calls.append("snapshot")
+        if finished and changed == "snapshot":
+            raise ValueError("snapshot changed during run")
+
+    def stage(**kwargs):
+        nonlocal finished
+        calls.append("run")
+        kwargs["output"].write_text(
+            json.dumps(
+                {"trajectories": [{"task_id": t["task_id"]} for t in data["cohorts"][0]["tasks"]]}
+            )
+        )
+        finished = True
+
+    monkeypatch.setattr(mod, "require_owned_window", window)
+    monkeypatch.setattr(mod, "verify_snapshot", snapshot)
+    monkeypatch.setattr(mod, "run_evaluation", stage)
+    record = tmp_path / "capture.jsonl"
+    with pytest.raises(ValueError, match="changed during run"):
+        mod.capture(
+            path, split="train", record=record, output=tmp_path / "evaluation.json", execute=True
+        )
+    events = [json.loads(line)["event"] for line in record.read_text().splitlines()]
+    assert events[-1] == {"kind": "end_record", "status": "aborted"}
+    assert calls[:4] == ["window", "snapshot", "window", "run"]

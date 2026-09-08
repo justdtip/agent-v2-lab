@@ -404,7 +404,6 @@ def transcript_acceptance(rows, turns, *, max_tokens):
                 generated = row["generated_mask"][position]
                 if (
                     generated
-                    and row["spans"][position] in ("note", "call")
                     and t in members
                     or not generated
                     and turn["step"] > 0
@@ -453,7 +452,7 @@ def transcript_acceptance(rows, turns, *, max_tokens):
         "repeated_runs": runs,
         "repeated_run_rule": (
             "consecutive canonical(name,arguments) equal calls; length>=2 includes first member; "
-            "member-turn generated note/call tokens and associated next-prompt newly owned "
+            "all scored member-turn generated tokens including formatting/special/template spans; associated next-prompt newly owned "
             "observation tokens including wrappers; initial system/task scaffold excluded; "
             "invalid actions break runs and remain in position denominators"
         ),

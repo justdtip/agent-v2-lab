@@ -226,7 +226,7 @@ def test_concentration_counts_member_generation_and_following_observations():
             "ids": [0] * 4,
             "score_positions": [0, 1, 2, 3],
             "generated_mask": [False, False, True, True],
-            "spans": ["observation", "observation", "note", "call"],
+            "spans": ["observation", "observation", "note", "template"],
         }
         for i in range(4)
     ]

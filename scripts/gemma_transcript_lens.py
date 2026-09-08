@@ -296,6 +296,11 @@ def capture(registration_path, *, split, record, output, execute=False):
         "capture_projection": registration["capture_projection"],
         "rendering_gate": registration["rendering_gate"],
         "capture_script": file_record(__file__),
+        "capture_runtime_overhead": (
+            "Successful-forward certification materializes returned native logits, including full "
+            "prefill logits the generator may otherwise discard; overhead is not assumed zero "
+            "and the source projection includes two full float32 logit buffers."
+        ),
     }
     record.parent.mkdir(parents=True, exist_ok=True)
     with TranscriptWriter(record, provenance) as writer:
@@ -320,6 +325,8 @@ def capture(registration_path, *, split, record, output, execute=False):
             t["task_id"] for t in cohort["tasks"]
         ]:
             raise ValueError("evaluation output cohort differs from registration")
+        require_owned_window()
+        verify_snapshot(registration, "gemma3-4b")
     return {
         "status": "captured",
         "split": split,
