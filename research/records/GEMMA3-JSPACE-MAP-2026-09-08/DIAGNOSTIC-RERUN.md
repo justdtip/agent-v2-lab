@@ -437,3 +437,69 @@ are counted the same way under both simulators, because they turn on the verdict
 text. That the modal failure is confident premature completion rather than any form of being stuck
 is a statement about the model that the pre-registration's strategy measurement does not reach, in
 any run. It should be measured beside it rather than instead of it.
+
+---
+
+## `update-0028` at all thirty-four layers, under the environment that tells the truth
+
+**Stage two, 2026-09-08. 24 turns, 1,050 tokens, loop detected, never searched, stuck from step 2.
+5,264.8 s. `episode_at_depth.py`, one row per decision, spans through the validated joiner.**
+
+**Capture does not perturb generation.** The falsification run took this task with no lens
+attached. All 24 actions are byte-identical between that run and this one. Greedy decoding plus a
+capture that only reads makes the trajectory reproducible, and now that is measured rather than
+assumed.
+
+### The alternation is not a symmetric two-cycle
+
+The model alternates `list_files("/")` and `list_files(".")` to the ceiling. Read at depth, the
+two branches are different decisions:
+
+| branch | n | layer where it first reaches rank 1 | rank at layer 23 | P(final), median | P(final), min |
+|---|---:|---:|---:|---:|---:|
+| `"."` | 12 | 24 (range 24 to 32) | 8 | 0.9988 | 0.8096 |
+| `"/"` | 12 | 33 (range 24 to 34) | 108 | 0.9031 | 0.8512 |
+
+**One branch is a layer-24 commitment. The other is decided in the last two layers, and carries a
+tenth of its mass elsewhere.** Every fork has its worst rank at layer 5, between 958 and 4,751.
+
+### Both branches are live at every fork
+
+At every `"/"` fork, `"."` is in the top ten from layer 23 or 24 onward. At every `"."` fork,
+`"/"` is in the top ten from layer 24 to 27 onward. The alternative is represented at the moment of
+choosing, in every one of the 24 turns, and the model takes the one it did not take last time.
+
+**This is the opposite of the fixed point under the lying simulator**, where `workspace` was absent
+from all 192 top-10 lists and the wrong opener sat at or above 0.9999969 in 22 of 24 forks. Told
+the truth, the model is not saturated: it holds two candidates, alternates between them, and its
+final probability on the `"/"` branch sits around 0.90. Twenty-three refutations do move this
+distribution. They do not move it toward the answer.
+
+### The escape route is represented, late, and rejected
+
+At the tool-name decision in each turn, `search` is in the top ten somewhere in the stack in every
+one of the 24 turns:
+
+| shallowest layer where `search` is a top-10 candidate | turns |
+|---:|---:|
+| 24 | 3 |
+| 29 or 30 | 2 |
+| 33 | 18 |
+| 34 only | 1 |
+
+So the route named in the model's own recovery rule is a candidate in its last one or two layers in
+three quarters of turns, and never below layer 24. It is not that the model never considers
+searching. It considers it at the end, every time, and does not do it.
+
+### What this changes
+
+The earlier finding — *certain, and the errors never reach its certainty* — was a property of the
+false-premise regime. Under an honest environment the same task produces a model that is uncertain,
+holds both wrong options and the right tool in candidacy, and still loops. The failure moved from
+"the alternative is not represented" to "the alternative is represented and not selected", which
+is a different object and a more tractable one. An intervention on this episode has a target that
+exists in the residual: `search` at layers 24 to 33 at the tool-name decision.
+
+Span counts for the episode: 546 note, 480 call skeleton, **24 call argument** — one per turn, the
+directory literal. The primary comparison has almost nothing to read here, because the model never
+writes anything but a single character as an argument.
