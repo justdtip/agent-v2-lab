@@ -113,3 +113,52 @@ tests the 18x these episodes reach. The layer-34 row is the model's own distribu
 every other row is a lens read. **Four passes in twelve agentic episodes**, so this is a map of
 attempts, and the equal-weight rule keeps the 24-turn looping episode at one twelfth rather than the
 20.0% of rank rows it supplies.
+
+---
+
+## The two statistics disagree at layer 24, and both are right
+
+The D-CRO computed the same comparison as a median-rank ratio; I computed it as a foreknowledge
+share. They agree everywhere except the layer that matters, so here they are on the same
+deduplicated rows:
+
+| layer | rank = 1, argument | rank = 1, skeleton | rank ≤ 10, argument | rank ≤ 10, skeleton | median argument | median skeleton |
+|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 0.000 | 0.000 | 0.001 | 0.037 | 10,275 | 1,194 |
+| 21 | 0.009 | 0.018 | 0.051 | 0.107 | 4,659 | 336 |
+| 23 | 0.024 | 0.090 | 0.101 | 0.269 | 797 | 86 |
+| **24** | **0.462** | **0.318** | **0.658** | **0.687** | 2 | 2 |
+| 25 | 0.597 | 0.465 | 0.815 | 0.814 | 1 | 2 |
+| 29 | 0.774 | 0.790 | 0.940 | 0.984 | 1 | 1 |
+
+**At layer 24 arguments are more often exactly right and less often within ten.** That is not a
+contradiction and neither statistic is a summary of the other: **the argument distribution at 24 is
+bimodal** — decided, or still far away — while the skeleton distribution is concentrated in the
+middle. Before 24 the skeleton leads on every statistic by one to two orders of magnitude.
+
+**Report both.** This is the same median-against-top-one disagreement that made an earlier boundary
+check unresolved rather than null, and it arrived independently in two seats' analyses of the same
+rows. A single headline statistic would have hidden the structure that is the finding.
+
+## The pre-registered extrapolation test cannot be run on this corpus
+
+Amendment 9 fixed a test of whether reading outside the lens's fitted position range costs accuracy,
+with the episode as the replication unit and a declared conflict, because I had predicted the
+direction. **It is uncomputable here, and structurally so.**
+
+| | episodes |
+|---|---:|
+| with any reading at positions 16–126 | **2 of 15** |
+| with both arms at n ≥ 30 | **2 of 15** — both chat |
+| agentic episodes with any in-range reading | **0 of 12** |
+
+Agentic prompts run to 500 tokens and beyond, and generation begins after the prompt, so **no agentic
+position is ever in range**. Every agentic reading in the map — all 325,000 of them — is an
+extrapolation, and the only in-range comparisons available are two short chat episodes, which is the
+n the pilot already had.
+
+**So the question of what the 3x-to-18x extrapolation costs is not answerable from this corpus at
+any scale.** It is not a matter of waiting for more episodes; more episodes of this kind add only
+out-of-range rows. **The only route is a lens fitted at agent-transcript context lengths**, which is
+Codex's task 1 and which replaces the extrapolation rather than measuring it. That moves task 1 from
+the critical path to the only path for this particular question.
