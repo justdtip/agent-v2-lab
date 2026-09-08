@@ -1128,3 +1128,44 @@ emptiness check at the point of filtering.
 
 Together these are why the port was accepted on evidence rather than on a passing number:
 `research/records/GEMMA3-PORT-ACCEPTANCE-2026-09-08/`.
+
+### R57 (2026-09-08, 14:40; the Director's ruling: a model's identity is its lineage, not its path)
+
+**"The model identity is the checkpoint only when we are testing the untrained model. When we are
+testing a checkpoint that represents further training to a downloaded base checkpoint, the registry
+should acknowledge this."** — the Director, on registry structure.
+
+A registry entry therefore carries three things that have been conflated in one `hf_id`:
+
+1. **The base checkpoint**, by its canonical upstream name, not by whichever local conversion is
+   loaded. Two conversions of the same download share a base.
+2. **What further training was applied**, if any. `none` for a base entry; for a trained one,
+   enough to identify it — kind, adapter, and the training amount.
+3. **The artefact to load**. That is a location, and a location is provenance, not identity.
+
+**Why this is stronger than comparing architecture and depth**, which is what the Chief proposed
+and the Director corrected: training does not change a model's family or its layer count, so an
+architecture-and-depth comparison would let **a lens fitted on a base checkpoint load silently
+against a fine-tuned one**. This programme measured on 2026-09-08 that full-depth LoRA moves every
+layer by about a fifth of its weight norm and that two arms' updates to shared layers are
+orthogonal (`research/records/DEPTH-WHY-2026-09-08/`). A lens is a map of residual geometry;
+training rewrites that geometry. The permissive rule would have permitted the reading and reported
+a match.
+
+**The three cases, and each is different.**
+
+- *Same base, same training, different artefact* — a lens fitted on official bf16 weights read
+  against our own 4-bit conversion of the same download. **Permitted, and the mismatch recorded**
+  in the manifest naming both checkpoints. Reconstruction error under quantisation is unmeasured,
+  which is a disclosure and not a refusal.
+- *Different base* — a Qwen lens onto Gemma. **Refused.** This is issue 99's original case.
+- *Same base, different training* — a base-fitted lens read against a trained checkpoint.
+  **Refused by default.** It must remain possible deliberately, because reading a trained model
+  through its base's lens shows what training moved and is one of the more interesting
+  measurements available; but it is a declared cross-condition read that stamps itself into the
+  record, never an accident of two entries agreeing on architecture.
+
+**Note what kind of rule this is.** The other rules recorded today were earned by a failure. This
+one was ruled before its first instance: every adapter this programme owns is Qwen's and the Gemma
+work is base-only, so nothing has yet been read wrongly. It is the cheapest form of a rule and the
+rarest.
