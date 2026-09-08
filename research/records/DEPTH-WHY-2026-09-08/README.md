@@ -149,3 +149,64 @@ It also yields a prediction worth writing down before the ablation runs: **if ar
 learned protocol-relevant directions much like arm 1's, arm A's top-eight slice should score
 well**, and its capability loss should be attributable to the layers below. That is the
 Director's hypothesis in falsifiable form, and the ablation tests it.
+
+---
+
+## The ablation ran, and it splits the question in two
+
+`armA-top8`, arm A's own adapter with layers 0-23 zeroed and layers 24-31 left exactly as trained,
+on the same nineteen tasks:
+
+| policy | passes of 19 |
+|---|---|
+| base, no adapter | 15 |
+| arm A, all 32 layers, as trained and evaluated | 5 |
+| **arm A's top eight alone, lower layers restored to base** | **11** |
+| arm 1, top eight *trained alone* | 18 |
+
+Nothing was retrained. The only change from the 5 is that twenty-four layers of learned weights
+were set to zero.
+
+### Finding 1: most of the damage is in the lower layers, and it is removable after the fact
+
+Full-depth training cost ten tasks against the base, from 15 to 5. **Zeroing the lower-layer
+changes recovers six of the ten**, with no retraining and no access to the training data. That is
+the Director's hypothesis confirmed and quantified: the majority of what full-depth training
+destroyed was destroyed in layers that had no business changing, and it was destroyed *additively*
+enough that deleting the change gets it back.
+
+### Finding 2: full-depth training also produced a worse top-layer solution
+
+The recovery stops at 11. Four tasks below the base remain, and **seven below the same eight layers
+trained on their own**. With the lower layers identical to base in both cases, the only difference
+between 11 and 18 is which update those eight layers received. Arm A's is worse.
+
+This is the weight-space orthogonality result cashed out functionally, and it settles the question
+that measurement could not. The two adapters did not merely reach different points; **arm A's top
+eight learned a worse solution than arm 1's, in the layers they share.** The plausible mechanism is
+co-adaptation: arm A's top layers were optimised against lower layers that were themselves moving,
+so they fit a moving target and ended up depending on it.
+
+### What follows for training, which is the point of asking
+
+**The benefit of restricting depth is not recoverable by pruning afterwards.** Post-hoc removal of
+the lower-layer updates buys 11 of a possible 18. The remaining seven exist only if the restriction
+is imposed *during* training, because the restriction is not only protecting the lower layers, it
+is changing the problem the upper layers solve. Depth restriction here is a better optimisation
+target, not merely a smaller blast radius.
+
+That is a statement about parameter-efficient fine-tuning in general, not about this model: **when
+adapting a model to a narrow behaviour, the layers you decline to train change what the layers you
+do train are able to learn.**
+
+### Technique
+
+**Post-hoc depth ablation.** Zero a trained adapter outside a depth band, change nothing else,
+evaluate. Two comparisons make it interpretable, and neither is optional: the *same* adapter
+unablated, which gives the damage attributable to the band, and an adapter *trained* under the same
+restriction, which separates "the restriction removed damage" from "the restriction produced a
+better solution". Without the second, finding 2 is invisible and the first result reads as a
+complete explanation.
+
+It needs no retraining, no training data, and no gradient. It transfers to any adapter expressible
+as per-module deltas and any model with an evaluation.
