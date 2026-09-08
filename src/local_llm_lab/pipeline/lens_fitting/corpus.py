@@ -442,6 +442,10 @@ def build_prose_corpus(
 def read_corpus(manifest_path: Path) -> list[dict]:
     """Validate all bound bytes and row invariants before exposing any sequence."""
     manifest = json.loads(Path(manifest_path).read_bytes())
+    if manifest.get("format") == "transcript-native-replay-v1":
+        from local_llm_lab.pipeline.lens_fitting.transcript import read_transcript_corpus
+
+        return read_transcript_corpus(manifest_path)
     digest = manifest.pop("manifest_sha256", None)
     if digest != _sha(_json_bytes(manifest)):
         raise ValueError("manifest hash mismatch")

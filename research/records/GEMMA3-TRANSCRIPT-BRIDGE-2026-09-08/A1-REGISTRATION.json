@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "stage": "A1",
+  "reference_model": "gemma3-4b-bf16",
+  "model_identity": {
+    "base": "google/gemma-3-4b-it",
+    "training": null,
+    "num_layers": 34
+  },
+  "hidden_size": 2560,
+  "reference_config_sha256": "d9fb6da67367cb47c34f94f2c8dc1e1f3339b4b7554a45bdf2dc894039cb4a21",
+  "tokenizer_sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+  "readout": {
+    "index": "model.safetensors.index.json",
+    "index_sha256": "939869951aab5cfb9f691c179830e70fd28d1d2832e7fca21c6f99f37ad9ff57",
+    "key": "language_model.model.embed_tokens.weight",
+    "shard": "model-00001-of-00002.safetensors",
+    "shard_sha256": "e6a38f837c7e9f463d2997231ba2b07d2c82b63a7925c3bd8f30ba7a68021765",
+    "convention": "raw tied embedding; no final RMSNorm, softcap, bias or softmax"
+  },
+  "lens": {
+    "path": "/Users/daniel.tipton/Desktop/An app/models/jlens/gemma-3-4b-it_jacobian_lens.npz",
+    "sha256": "a14ab264fc47de9c59b3183a8783a60ca6f1dee2ea635e88223d5b2d67b03193",
+    "fitting_precision": "bf16",
+    "stored_precision": "fp16 widened to fp32",
+    "fit_context_tokens": 128,
+    "scope_limit": "prose; cannot support sliding/global contrast"
+  },
+  "probe_layer": 18,
+  "wrong_probe_layer": 1,
+  "feature_id": 0,
+  "k": 10,
+  "dictionary": {
+    "repository": "google/gemma-scope-2-4b-it",
+    "revision": "3e94b68be95290aada5b7525cf431d3040f81bb1",
+    "suite": "resid_post_all",
+    "variant": "big",
+    "width": 16384,
+    "l0": 120,
+    "config": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/config.json",
+    "config_sha256": "6622dc7dd7b98a604bb40989efdacf09adb7a52f0383ed9e62c13cde20ee8d61",
+    "params": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/params.safetensors",
+    "params_sha256": "7a0ccb745bd06e4abdfb8929f1f6399209429d02594a849efead101e38262924",
+    "coordinate_convention": "gemma_scope2_raw_resid_post_no_rescale",
+    "scaling_evidence": "SAELens ee45e7406165ce267b33d33b7371bbb63ef24db8 Gemma 3 loader: raw w_dec, normalize_activations none"
+  },
+  "tolerances": {
+    "rtol": 0.0001,
+    "atol": 0.001,
+    "relative_l2_limit": 0.0001
+  },
+  "label_status": "unavailable_no_verified_dictionary_mapping",
+  "projected_peak_gib": 6.0,
+  "peak_basis": "FP32 W 2.686GB + D/JD/wrong-JD 0.504GB + two maps 0.052GB + independent FP64 J and two 4096-row scratch blocks 0.220GB + bounded BF16 input chunks and vocabulary ranking scratch. All other hosted maps freed before W load. Sum about3.5GB, with >2GiB allocator/BLAS/OS margin. No full vocabulary-by-features matrix. Benchmark records process peak before full run."
+}

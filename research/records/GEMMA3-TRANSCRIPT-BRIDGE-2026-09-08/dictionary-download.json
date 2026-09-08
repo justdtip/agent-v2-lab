@@ -1,0 +1,19 @@
+{
+  "repository": "google/gemma-scope-2-4b-it",
+  "revision": "3e94b68be95290aada5b7525cf431d3040f81bb1",
+  "files": [
+    {
+      "file": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/config.json",
+      "repo_path": "resid_post_all/layer_17_width_16k_l0_big/config.json",
+      "sha256": "6622dc7dd7b98a604bb40989efdacf09adb7a52f0383ed9e62c13cde20ee8d61",
+      "bytes": 248
+    },
+    {
+      "file": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/models/sae/gemma-scope-2-4b-it/resid_post_all/layer_17_width_16k_l0_big/params.safetensors",
+      "repo_path": "resid_post_all/layer_17_width_16k_l0_big/params.safetensors",
+      "sha256": "7a0ccb745bd06e4abdfb8929f1f6399209429d02594a849efead101e38262924",
+      "bytes": 335686016
+    }
+  ],
+  "download_scope": "exact config and params only; no examples or other dictionaries"
+}
