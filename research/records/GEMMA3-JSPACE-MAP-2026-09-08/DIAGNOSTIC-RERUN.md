@@ -274,3 +274,57 @@ readout does not measure. What the readout establishes is the absence itself. Th
 explanation is the Chief's and is recorded as one, because the difference between "the word was not
 available" and "the word had been excluded" is exactly the kind of thing a map should be asked to
 settle rather than told.
+
+---
+
+## The environment fix does not fix the episode, and the causal story is refuted
+
+**2026-09-08 11:05Z. One episode, no lens and no capture, fixed simulator, corrected rendering, 24
+steps, greedy, seed 20260902. 65.7 s. `environment_falsification.py`, result in
+`falsification.json`. Run because the Chief's account made a prediction that could fail.**
+
+The account was: `list_files("/")` returned a false empty, the model concluded the workspace was
+empty, and everything downstream followed from that. The prediction was that with `list_files`
+raising instead, the belief never forms and the episode behaves differently.
+
+**It behaves differently and fails identically, and the loop is tighter than before.**
+
+| | corrected rendering, lying simulator | corrected rendering, fixed simulator |
+|---|---|---|
+| turns | 24 | 24 |
+| distinct calls | 2 | 2 |
+| loop detected | yes | yes |
+| passed | no | no |
+| shape | `read_file` on one wrong path, 23 times | `list_files("/")` and `list_files(".")` alternating, 24 times |
+
+Every turn is now an error. The model never reaches a read at all, never tries `search_files` —
+which returns the true path — and never emits the literal the prompt gave it. It alternates two
+root guesses until the ceiling.
+
+**So the specific chain is wrong.** The false empty was a lie and removing it was right, but it was
+not what caused the failure. Told the truth, the model fails sooner and more completely.
+
+**What survives is the deeper thing the Chief had already written down and neither of us treated as
+the main finding: the environment has no discoverable root.** No tool lists the workspace top
+level. The exact string `workspace` cannot be found by inspection; it can only be guessed. The
+system prompt instructs the model to inspect state rather than guess paths — so it inspects, and
+under a truthful simulator it inspects forever, because inspection cannot reach the answer. The
+fix converted a confident falsehood into an honest refusal, and an honest refusal of an
+undiscoverable root still leaves the task unreachable by the route the prompt demands.
+
+**Consequences.**
+
+The register's causal paragraph needs revising, and its own "two questions nobody asked" section
+should be promoted: *does the environment have a discoverable root* is the finding, not a
+footnote to it.
+
+The fixed point's frozen records are untouched and remain what they were. This run deliberately
+writes its own directory and reads nothing from theirs. What it does change is the claim they
+support: the false premise is no longer the identified cause, so the belief-persistence framing
+above must be read as being about **a** false premise the environment installed, with the question
+of which one now open.
+
+And a note on the metric this run exposed. `longest_identical_run` is 1 here, because the loop is a
+two-cycle rather than a repetition. A loop measure that only counts consecutive identical calls
+misses an alternation, and the earlier tables in this record use exactly that measure. The loop
+detector caught it; my summary column would not have.
