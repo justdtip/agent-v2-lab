@@ -387,21 +387,22 @@ def build_prose_corpus(
     *,
     tokenizer_files: list[Path],
     download_descriptor: Path | None = None,
+    chunk_tokens: int = PROSE_CHUNK_TOKENS,
 ) -> dict:
     """Chunk each text source once into nonoverlapping fixed-size token windows."""
+    if type(chunk_tokens) is not int or chunk_tokens <= 0:
+        raise ValueError("prose chunk_tokens must be a positive integer")
     records = _sources(sources)
     identity = _tokenizer_identity(tokenizer, spec, tokenizer_files)
     rows, trailing = [], 0
     for source in records:
         text = _verify_file(source).decode("utf-8")
         ids, offsets = _encode(tokenizer, text)
-        tail = len(ids) % PROSE_CHUNK_TOKENS
+        tail = len(ids) % chunk_tokens
         source.update(tokens=len(ids), discarded_trailing_tokens=tail)
         trailing += tail
-        for step, start in enumerate(
-            range(0, len(ids) - PROSE_CHUNK_TOKENS + 1, PROSE_CHUNK_TOKENS)
-        ):
-            end = start + PROSE_CHUNK_TOKENS
+        for step, start in enumerate(range(0, len(ids) - chunk_tokens + 1, chunk_tokens)):
+            end = start + chunk_tokens
             chunk_offsets = offsets[start:end]
             rows.append(
                 {
@@ -431,7 +432,7 @@ def build_prose_corpus(
             "sources": records,
             "tokenizer": identity,
             "source_sequence_count": len(rows),
-            "chunk_tokens": PROSE_CHUNK_TOKENS,
+            "chunk_tokens": chunk_tokens,
             "dropped_rows": [],
             "discarded_trailing_tokens": trailing,
             "download_descriptor": descriptor,
@@ -459,8 +460,9 @@ def read_corpus(manifest_path: Path) -> list[dict]:
     seen: set[str] = set()
     expected_identities = []
     trailing = 0
-    if manifest["domain"] == "prose" and manifest.get("chunk_tokens") != PROSE_CHUNK_TOKENS:
-        raise ValueError("unsupported prose chunk size")
+    chunk_tokens = manifest.get("chunk_tokens")
+    if manifest["domain"] == "prose" and (type(chunk_tokens) is not int or chunk_tokens <= 0):
+        raise ValueError("prose chunk_tokens must be a positive integer")
     for source in sources:
         data = _verify_file(source)
         if manifest["domain"] == "agentic":
@@ -487,14 +489,14 @@ def read_corpus(manifest_path: Path) -> list[dict]:
                 type(tokens) is not int
                 or tokens < 0
                 or type(tail) is not int
-                or not 0 <= tail < PROSE_CHUNK_TOKENS
-                or tokens % PROSE_CHUNK_TOKENS != tail
+                or not 0 <= tail < chunk_tokens
+                or tokens % chunk_tokens != tail
             ):
                 raise ValueError("invalid prose source token/tail counts")
             trailing += tail
             expected_identities.extend(
-                (source["path"], step, step * PROSE_CHUNK_TOKENS)
-                for step in range(tokens // PROSE_CHUNK_TOKENS)
+                (source["path"], step, step * chunk_tokens)
+                for step in range(tokens // chunk_tokens)
             )
     if manifest["domain"] == "prose" and (
         type(manifest.get("discarded_trailing_tokens")) is not int
@@ -542,11 +544,11 @@ def read_corpus(manifest_path: Path) -> list[dict]:
             ):
                 raise ValueError("invalid prompt alignment")
         elif (
-            len(ids) != PROSE_CHUNK_TOKENS
+            len(ids) != chunk_tokens
             or row["n_prompt"] != 0
             or set(spans) - {"chat", "template"}
             or type(row["token_start"]) is not int
-            or row["token_start"] != row["step_index"] * PROSE_CHUNK_TOKENS
+            or row["token_start"] != row["step_index"] * chunk_tokens
         ):
             raise ValueError("invalid prose chunk")
     dropped = manifest["dropped_rows"]

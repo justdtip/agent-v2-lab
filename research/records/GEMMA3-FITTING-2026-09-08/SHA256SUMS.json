@@ -1,0 +1,17 @@
+{
+  "research/records/GEMMA3-FITTING-2026-09-08/FINDINGS-AND-TECHNIQUE.md": "17c1c2709cdd4c0d5499fed1d2c8b44fb260b5df7310e854476f5914b5446e17",
+  "research/records/GEMMA3-FITTING-2026-09-08/NEXT-RUN-PROTOCOL.md": "9bc4c0c47adba272cec77a0455a66685dddbb49b01969989a4d27b513a0830a7",
+  "research/records/GEMMA3-FITTING-2026-09-08/README.md": "b447f8a129421c532d308b664975f3307ca13a12dcced4708453af2ff9723881",
+  "research/records/GEMMA3-FITTING-2026-09-08/audit_inputs.py": "6b38188a0d94fbfa0bb903a58bb932c0a99100668f3de77305f9e19431ddcbc4",
+  "research/records/GEMMA3-FITTING-2026-09-08/cpu-tests.log": "075ca72bd3c733566e8b37c84bfcdb26ebaad93cb7e0a15d42d96d3ed9f0e0b4",
+  "research/records/GEMMA3-FITTING-2026-09-08/input-audit.json": "7f313b11b00b7fa2601ecb3dcd243cf63d140f6038525b9b93ba580563ce933c",
+  "research/records/GEMMA3-FITTING-2026-09-08/methods-checks.json": "4ad3c0a01649b9e4506b331e05a5d92d5df52e955b9feec5837ba02a88436c85",
+  "research/records/GEMMA3-FITTING-2026-09-08/reproduce_methods.py": "d25679e1cf9aaafd28119cc4801631a06a108bc30cadfad35c00e55453a0d7e7",
+  "research/records/GEMMA3-FITTING-2026-09-08/verification.json": "fd2934e076a1c5bfa3163be421131a4857fb571b9ac1c0b03985b98ad5dc523b",
+  "research/records/GEMMA3-FITTING-2026-09-08/verify_cpu.py": "6380d44301c46f4fa1a00e8332d9cc8d5b40d8e3cd2b01e6ed43bfb901309c86",
+  "src/local_llm_lab/pipeline/lens_fitting/corpus.py": "ee03f8833f8169184b24d38aa7987f62c33330b07f96fa6c1199b14a5b31723a",
+  "scripts/lens_corpus.py": "fd8dad6eb08ebbcb8e6b72001185a56b7c3eb3e2e482ba3f6eab5e800482fdde",
+  "tests/test_lens_corpus.py": "9e56b21e250ef5cae904194951312ed642e4011aeac4d0340a80aca83109c138",
+  "research/records/LENS-FIT-agentic-jacobian-2026-09-07/RETIRED.md": "3374e564b32940d7442f854b841b98918852f1c28b2d820d875e7ff37e5a78f0",
+  "research/records/GEMMA3-FITTING-2026-09-08/CORPUS-WINDOWS.patch": "28edb2f1d2d317217549539bf56b0e82558871a48d7f2740b47c1be6a4cc8e2e"
+}

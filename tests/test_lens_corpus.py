@@ -685,3 +685,96 @@ def test_pilot_rule_scope_and_legacy_manifest_compatibility(tmp_path, setup, dom
     expected = api().read_corpus(manifest)
     _rewrite_manifest(manifest, lambda m: m["pilot_exclusion"].pop("applies_to"))
     assert api().read_corpus(manifest) == expected
+
+
+@pytest.mark.parametrize("chunk_tokens", [128, 2048])
+def test_prose_explicit_window_length_roundtrips(tmp_path, setup, chunk_tokens):
+    """Gemma pivot: fit lengths on both sides of the window keep exact partition accounting."""
+    spec, tok, assets = setup
+    source = tmp_path / "text.txt"
+    source.write_text("a" * (5 * chunk_tokens + 6))
+    out = tmp_path / "manifest.json"
+    metadata = api().build_prose_corpus(
+        [source], tok, spec, out, tokenizer_files=assets, chunk_tokens=chunk_tokens
+    )
+    rows = api().read_corpus(out)
+    assert metadata["chunk_tokens"] == chunk_tokens
+    assert len(rows) == 5
+    assert [r["split"] for r in rows] == ["fit"] * 4 + ["held"]
+    assert [r["token_start"] for r in rows] == [i * chunk_tokens for i in range(5)]
+    assert all(len(r["ids"]) == chunk_tokens for r in rows)
+    assert [token for row in rows for token in row["ids"]] == [1] + [99] * (5 * chunk_tokens - 1)
+    assert metadata["discarded_trailing_tokens"] == 7
+    assert metadata["counts"]["held"]["tokens"] == chunk_tokens
+
+
+@pytest.mark.parametrize("chunk_tokens", [0, -1, True, 128.0, "128"])
+def test_prose_refuses_invalid_window_before_tokenizing(tmp_path, setup, chunk_tokens):
+    spec, tok, assets = setup
+    source = tmp_path / "text.txt"
+    source.write_text("sample")
+    out = tmp_path / "manifest.json"
+    with pytest.raises(ValueError, match="chunk"):
+        api().build_prose_corpus(
+            [source], tok, spec, out, tokenizer_files=assets, chunk_tokens=chunk_tokens
+        )
+    assert not tok.calls
+    assert not out.exists() and not out.with_suffix(".jsonl").exists()
+
+
+def test_prose_cli_forwards_explicit_window(tmp_path, setup, monkeypatch):
+    import importlib.util
+
+    spec, tok, assets = setup
+    module_spec = importlib.util.spec_from_file_location(
+        "corpus_cli", Path(__file__).resolve().parents[1] / "scripts/lens_corpus.py"
+    )
+    cli = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(cli)
+    monkeypatch.setattr(cli, "load_corpus_tokenizer", lambda *a, **kw: (tok, assets))
+    source = tmp_path / "text.txt"
+    source.write_text("a" * 650)
+    out = tmp_path / "manifest.json"
+    cli.main(
+        [
+            "--corpus",
+            "prose",
+            "--files",
+            str(source),
+            "--out",
+            str(out),
+            "--model",
+            spec.name,
+            "--prose-chunk-tokens",
+            "128",
+            "--local-files-only",
+        ]
+    )
+    assert json.loads(out.read_text())["chunk_tokens"] == 128
+    assert len(api().read_corpus(out)) == 5
+    with pytest.raises(SystemExit):
+        cli.main(
+            [
+                "--corpus",
+                "agentic",
+                "--evals",
+                str(source),
+                "--out",
+                str(tmp_path / "x.json"),
+                "--prose-chunk-tokens",
+                "128",
+            ]
+        )
+
+
+@pytest.mark.parametrize("chunk_tokens", [None, 0, -1, True, 1024.0, "1024"])
+def test_reader_rejects_rehashed_invalid_window_type(tmp_path, setup, chunk_tokens):
+    """A valid self-digest cannot make an invalid partition definition readable."""
+    manifest = _prose_manifest(tmp_path, setup)
+    metadata = json.loads(manifest.read_bytes())
+    metadata.pop("manifest_sha256")
+    metadata["chunk_tokens"] = chunk_tokens
+    metadata["manifest_sha256"] = api()._sha(api()._json_bytes(metadata))
+    manifest.write_bytes(api()._json_bytes(metadata))
+    with pytest.raises(ValueError, match="chunk"):
+        api().read_corpus(manifest)

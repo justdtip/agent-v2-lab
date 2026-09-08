@@ -1,0 +1,31 @@
+[
+  {
+    "command": [
+      "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+      "research/records/GEMMA3-FITTING-2026-09-08/reproduce_methods.py"
+    ],
+    "exit_code": 0,
+    "output": "methods-checks.json",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+      "research/records/GEMMA3-FITTING-2026-09-08/audit_inputs.py",
+      "--primary",
+      "/Users/daniel.tipton/Desktop/An app"
+    ],
+    "exit_code": 0,
+    "output": "input-audit.json",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+      "research/records/GEMMA3-FITTING-2026-09-08/verify_cpu.py"
+    ],
+    "exit_code": 0,
+    "output": "cpu-tests.log",
+    "stderr": ""
+  }
+]
