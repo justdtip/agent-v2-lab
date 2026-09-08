@@ -210,3 +210,61 @@ complete explanation.
 
 It needs no retraining, no training data, and no gradient. It transfers to any adapter expressible
 as per-module deltas and any model with an evaluation.
+
+---
+
+## The complementary slice, and the mechanism it exposes
+
+`armA-bottom24`, arm A's layers 0-23 exactly as trained with the top eight zeroed:
+
+| policy | passes of 19 | coherent to completion | loops | exhausted |
+|---|---|---|---|---|
+| base | 15 | — | 22 (of 180) | 32 (of 180) |
+| arm A, layers 0-23 only | **0** | **0.00** | 5 | 6 |
+| arm A, layers 24-31 only | 11 | 0.53 | 1 | 1 |
+| arm A, all 32 as trained | 5 | — | — | — |
+| arm 1, top eight trained alone | 18 | — | — | — |
+
+**Training the lower twenty-four layers on this data does not degrade the model, it destroys it.**
+Zero of nineteen, no coherent completion of any task, thirteen parse errors, three verbatim
+copies. This is the Director's hypothesis in its strongest form: the layers that had nothing
+task-specific to learn were the ones whose change was fatal.
+
+### The number that gives the mechanism
+
+Read the four rows in the right order. From base at 15, arm A's **lower-layer update alone takes
+it to 0** and its **upper-layer update alone takes it to 11**. Put both together and the result is
+**5** — *better* than the lower update alone.
+
+So arm A's top-eight update **improves a broken model from 0 to 5 and degrades a healthy one from
+15 to 11**. That is not a description of co-adaptation, it is a measurement of it. Those eight
+layers spent their capacity learning to compensate for the damage accumulating beneath them, which
+is why the update helps in the presence of that damage and hurts in its absence, and why it is
+seven tasks worse than the same eight layers trained over an intact backbone.
+
+The two findings compose into one account:
+
+1. Full-depth training destroys the lower layers. Deleting that damage afterwards recovers six of
+   the ten tasks lost.
+2. Full-depth training also spends the upper layers on compensating for it. That cost is **not**
+   recoverable afterwards, because the compensation is what those layers learned instead of the
+   task.
+
+### Why this is the answer to "why did restricting depth work"
+
+Not because it is a regulariser, and not only because it protects the lower layers. **Restricting
+depth removes the thing the upper layers would otherwise have to compensate for**, so their
+capacity goes to the task. The eleven-against-eighteen gap is the price of compensation and it is
+paid at training time, which is why no post-hoc surgery recovers it.
+
+### Technique, stated for transfer
+
+Ablate a trained adapter **both ways** and evaluate all four cells: neither band, each band alone,
+and both. The single-band ablation gives the damage attributable to a band. **The comparison
+between one band alone and both bands together gives the interaction**, and the interaction is
+where co-adaptation becomes visible — an update that helps in the presence of another update and
+hurts in its absence is compensating for it, and nothing in the weights says so. Add a fifth cell,
+an adapter *trained* under the restriction, to separate damage avoided from capacity freed.
+
+Five evaluations, no retraining, no gradients, no training data. Applicable to any adapter
+expressible as per-module deltas over a base checkpoint.
