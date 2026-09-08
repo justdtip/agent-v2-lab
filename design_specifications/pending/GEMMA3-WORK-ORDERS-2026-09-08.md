@@ -139,3 +139,70 @@ backward-readable and what becomes of the adapter-depth result.
 **Whether a trained Gemma agent is on the near path.** Every adapter we own is Qwen, and the
 programme's question is about a trained agent. If it is near, several deferred items become
 blockers.
+
+---
+
+## Amendment, on the Director's ruling of 2026-09-08: map the representations first
+
+**"I would like to map out internal representations first across a variety of tasks."** That is a
+ruling on the third open question and it settles two things.
+
+**No trained Gemma agent is on the near path.** Every deferred training item stays deferred: the
+floor recalibration, the launch envelope, the LoRA rank, the training preflight. And the tool-role
+question loses its training half for now, so **the provisional ruling becomes the operative one**:
+observations render as user turns. It reverts to provisional the day a supervised target is built.
+
+**The pilot's design changes, because "a variety of tasks" is a specification and the Qwen pilot's
+episode set was a convenience sample.** It covered nine of twelve families, chosen for length
+rather than for coverage.
+
+### The map has two axes and the first design under-resolved both
+
+**Depth: all 34 layers, not six.** The layer set is fixed at capture time — the records persist
+readouts and ranks, not residuals, so a different depth means another run of the model. Six layers
+were right for a comparison against the Qwen pilot and are wrong for a map, because the question a
+map answers is *where in depth* something happens. The lens carries maps for layers 1 to 33 and
+the final layer is the identity, so all 34 are available.
+
+**Variety: one episode per family, all twelve.** Chosen from the test split at difficulty 2, with
+task horizons from 2 to 14 steps, so the set spans short lookups and long multi-step
+reconciliations rather than clustering:
+
+```
+("test-read-0108-clean", 2)                ("test-search-0061-clean", 2)
+("test-calculate-0158-clean", 2)           ("test-list-0149-clean", 2)
+("test-synthesis-0039-clean", 2)           ("test-update-0028-clean", 2)
+("test-pointer_chain-0018-clean", 2)       ("test-cross_reference-0032-clean", 2)
+("test-conditional_update-0093-clean", 2)  ("test-batch_update-0166-clean", 2)
+("test-ledger_reconcile-0163-clean", 2)    ("test-aggregate_report-0167-clean", 2)
+```
+
+Keep the three chat episodes as the non-agentic contrast, including the long summary, because it
+is the only episode that exceeds the 1,024 sliding window and therefore the only place the
+sliding-against-global contrast is live at all.
+
+### Run it in two stages, and the first stage is not the map
+
+**Stage one, about fifty minutes: the same fifteen episodes at eight layers.** Not a result. It
+proves the whole path end to end — the registry entry, the cache guard, the generation prefix, the
+lens identity check, the rendering of observations as user turns, the record chain — on the real
+task set, at a cost we can afford to throw away. Read it only for whether the instrument worked.
+
+**Stage two, about three and a half hours: the same fifteen episodes at all 34 layers.** This is
+the map. Estimated from the Qwen pilot's measured rate of roughly twenty-four seconds per episode
+and layer; Gemma's vocabulary is six per cent larger and its hidden size identical, so the rate
+should carry. Peak memory about five gigabytes: the model at two and a half, the lens at
+eight-hundred-odd megabytes once expanded to float32, and the rank buffer at roughly six hundred.
+Comfortably under the declaration threshold, but announce the window for its duration.
+
+### The deliverable
+
+A heatmap of layer against task family, one panel per horizon, showing the share of emitted tokens
+whose competition rank is within ten in the lens distribution read that many positions earlier,
+with the final layer's value as the base rate. Thirty-four rows, twelve columns, three panels. The
+span facet stays as the second figure, and the Qwen pilot's six-layer profile remains comparable by
+restricting to its layers.
+
+**Pre-register the reading rules before any record is read**, as the house rule requires, and
+record which layers are global-attention (6, 12, 18, 24 and 30) so that contrast is stated in
+advance rather than found afterwards.
