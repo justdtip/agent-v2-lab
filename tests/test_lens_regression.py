@@ -178,3 +178,64 @@ def test_held_targets_select_alpha_instead_of_fit_error():
         direct = np.eye(2) * (10 / (1 + row["alpha"]))
         expected = np.sum((np.eye(2) - direct) ** 2)
         assert row["held_out_squared_error"] == pytest.approx(expected, rel=2e-6, abs=2e-6)
+
+
+def test_the_two_residual_sources_agree_exactly_on_a_model_whose_loop_is_correct():
+    """The substitution is demonstrated, not argued.
+
+    `view.residuals` re-runs the decoder through this repository's own loop; `native_residuals`
+    taps the model's forward. Where the loop describes the family correctly the two are the same
+    numbers, and a fit may take either. Where it does not -- Gemma 3, whose entry scale the loop
+    omits and whose second mask it does not build -- they differ, and `residual_source_agreement`
+    reports by how much at each layer, which is the architecture port's acceptance evidence.
+
+    A hybrid at toy width, so both mask kinds and both block kinds are exercised on the family
+    the loop was written for. Exact equality, not a tolerance: the same arithmetic in the same
+    order should give the same bits, and a tolerance here would hide the very drift this exists
+    to detect.
+    """
+    import mlx.core as mx
+    from test_live_lens_native import tiny_model
+
+    from local_llm_lab.arch import ArchitectureView
+
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    ids = mx.array([[1, 2, 3, 4, 5]])
+    layers = tuple(range(1, view.num_layers + 1))
+
+    loop = view.residuals(ids, layers)
+    native = view.native_residuals(ids, layers)
+
+    assert set(native) == set(loop)
+    for layer in layers:
+        assert native[layer].shape == loop[layer].shape == (1, 5, view.hidden_size)
+    assert view.residual_source_agreement(ids, layers) == dict.fromkeys(layers, 0.0)
+
+
+def test_a_fit_records_which_forward_produced_its_residuals():
+    """A fit whose residual source changed silently would be unattributable afterwards.
+
+    The numbers are the same shape from either producer and nothing else in the artifact would
+    say which forward made them, so the choice is explicit at the call site, refuses an unknown
+    name, and travels to the record inside `counts`.
+    """
+    from test_live_lens_native import tiny_model
+
+    from local_llm_lab.arch import ArchitectureView
+    from local_llm_lab.pipeline.lens_fitting import regression as reg
+
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    rows = [
+        {"split": "fit", "ids": [1, 2, 3]},
+        {"split": "held", "ids": [4, 5, 6]},
+    ]
+
+    for source in reg.RESIDUAL_SOURCES:
+        _, counts = reg.accumulate(view, rows, residual_source=source)
+        assert counts["residual_source"] == source
+        assert counts["fit"]["positions"] == 3 and counts["held"]["positions"] == 3
+
+    with pytest.raises(ValueError, match="residual_source must be one of"):
+        reg.accumulate(view, rows, residual_source="whatever_the_model_needs")

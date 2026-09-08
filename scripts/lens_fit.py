@@ -17,6 +17,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--layers", choices=("all",), default="all")
+    parser.add_argument(
+        "--residual-source",
+        choices=("hand_run", "native"),
+        default="hand_run",
+        help=(
+            "which forward produces the residuals a regression fit reads. `hand_run` is this "
+            "repository's decoder loop, which every Qwen fit used; `native` taps the model's own "
+            "forward and is what a family the loop does not yet describe needs. Explicit with no "
+            "default inference from the model, and recorded in the fit's provenance."
+        ),
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument(
         "--revision", default="main", help="Existing local Hub revision; offline only"
@@ -100,7 +111,12 @@ def main(argv: list[str] | None = None) -> int:
 
     validation = None
     if args.kind == "regression":
-        result = fit_regression(loaded.view, prepared.rows, progress=progress)
+        result = fit_regression(
+            loaded.view,
+            prepared.rows,
+            progress=progress,
+            residual_source=args.residual_source,
+        )
     else:
         write_record(
             args.record_dir / "runtime.json",
@@ -144,6 +160,9 @@ def main(argv: list[str] | None = None) -> int:
         "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
         "corpus_sequences_sha256": prepared.manifest["sequences"]["sha256"],
         "counts": result.counts,
+        # Top level as well as inside counts: a reader deciding whether two fits are comparable
+        # should not have to dig for the forward that produced them.
+        "residual_source": args.residual_source,
         "per_layer": result.per_layer,
         "lambda_grid": ALPHA_GRID,
         "penalty_rule": "alpha * mean_diag(total fit XTX) = n * lambda_per_position",

@@ -47,9 +47,38 @@ class SufficientStats:
         self.n += x.shape[0]
 
 
-def accumulate(view: Any, rows: Iterable[dict], *, progress: Callable | None = None) -> tuple:
-    """One uncached all-layer forward per sequence, separate fit and selection sums."""
+#: The two producers of the residual contract, named so a fit records which one it used.
+RESIDUAL_SOURCES = ("hand_run", "native")
+
+
+def accumulate(
+    view: Any,
+    rows: Iterable[dict],
+    *,
+    progress: Callable | None = None,
+    residual_source: str = "hand_run",
+) -> tuple:
+    """One uncached all-layer forward per sequence, separate fit and selection sums.
+
+    ``residual_source`` chooses the producer and is **explicit with no inference**, because a fit
+    whose residual source changed silently would be unattributable afterwards: the numbers are
+    the same shape either way and nothing in the artifact would say which forward made them. The
+    caller passes it and the caller records it.
+
+    ``"hand_run"`` is ``view.residuals``, this repository's own decoder loop, which is what every
+    Qwen fit used. ``"native"`` is ``view.native_residuals``, the model's own forward tapped
+    through capture, which inherits the entry transform and the mask construction rather than
+    reproducing them. On a model whose loop is correct the two agree exactly; on Gemma 3 they do
+    not until the architecture-view port lands, and ``view.residual_source_agreement`` is how a
+    caller checks which case it is in.
+    """
     import mlx.core as mx
+
+    if residual_source not in RESIDUAL_SOURCES:
+        raise ValueError(
+            f"residual_source must be one of {list(RESIDUAL_SOURCES)}; got {residual_source!r}"
+        )
+    produce = view.residuals if residual_source == "hand_run" else view.native_residuals
 
     d, depth = view.hidden_size, view.num_layers
     if d <= 0 or depth < 2:
@@ -60,11 +89,14 @@ def accumulate(view: Any, rows: Iterable[dict], *, progress: Callable | None = N
         for split in ("fit", "held")
     }
     counts = {split: {"sequences": 0, "positions": 0} for split in sums}
+    # Carried in the counts so it reaches the artifact by the same route the sequence and
+    # position totals do, rather than depending on a caller remembering to stamp it.
+    counts["residual_source"] = residual_source
     for number, row in enumerate(rows, 1):
         split, ids = row["split"], row["ids"]
         if split not in sums or not ids:
             raise ValueError("every sequence needs nonempty ids and fit/held membership")
-        residuals = view.residuals(ids, layers)
+        residuals = produce(ids, layers)
         if set(residuals) != set(layers) or any(
             h.shape != (1, len(ids), d) for h in residuals.values()
         ):
@@ -87,7 +119,7 @@ def accumulate(view: Any, rows: Iterable[dict], *, progress: Callable | None = N
                     "counts": {key: dict(value) for key, value in counts.items()},
                 }
             )
-    if any(not value["positions"] for value in counts.values()):
+    if any(not counts[split]["positions"] for split in sums):
         raise ValueError("both fit and held selection splits require positions")
     return sums, counts
 
@@ -159,13 +191,21 @@ class RegressionResult:
 
 
 def fit_regression(
-    view: Any, rows: Iterable[dict], *, progress: Callable | None = None
+    view: Any,
+    rows: Iterable[dict],
+    *,
+    progress: Callable | None = None,
+    residual_source: str = "hand_run",
 ) -> RegressionResult:
-    """Fit every nonfinal residual index and return hosted-orientation float32 maps."""
+    """Fit every nonfinal residual index and return hosted-orientation float32 maps.
+
+    ``residual_source`` is passed through and reaches the artifact in ``counts``, so a fitted
+    lens says which forward produced the residuals it was fitted on.
+    """
     import mlx.core as mx
 
     started = time.monotonic()
-    sums, counts = accumulate(view, rows, progress=progress)
+    sums, counts = accumulate(view, rows, progress=progress, residual_source=residual_source)
     maps, per_layer = {}, {}
     for layer in range(1, view.num_layers):
         layer_started = time.monotonic()

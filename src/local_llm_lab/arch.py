@@ -364,6 +364,83 @@ class ArchitectureView:
                 captured[index + 1] = h
         return captured
 
+    def native_residuals(self, ids: Any, layers: Sequence[int]) -> dict[int, Any]:
+        """The same residuals as :meth:`residuals`, from the model's **own** forward.
+
+        Identical contract -- ``{layer: (1, positions, hidden_size)}``, no cache, the final
+        layer taken after the last block and before the final norm -- and a different producer.
+        :meth:`residuals` re-runs the decoder through this class's own loop, which is where the
+        model-specific assumptions live: the entry transform, the mask construction, the mask
+        selection per block. This one taps the model's forward through :class:`NativeCapture`,
+        so all three are the model's.
+
+        **Why both exist.** On a family whose loop this class describes correctly the two agree
+        exactly, and the check below proves it rather than asserting it. On Gemma 3 they do not,
+        because the hand-run loop omits a ``sqrt(hidden_size)`` entry scale and builds one mask
+        where the model builds two; the native path inherits all of it and is correct today.
+        That disagreement is not a defect in this method -- it is the measurement the
+        architecture-view port has to close, and it is the port's acceptance evidence.
+
+        A fit that needs residuals and not derivatives can therefore run on Gemma now. Anything
+        that perturbs a residual and re-runs a tail still needs the loop, and still needs the
+        port.
+        """
+        import mlx.core as mx
+
+        wanted = sorted({int(layer) for layer in layers})
+        if not wanted or wanted[0] < 0 or wanted[-1] > self.num_layers:
+            raise ValueError(
+                f"layers must be a non-empty sequence within [0, {self.num_layers}]; got {wanted}"
+            )
+        token_ids = mx.array(ids).astype(mx.int32)
+        if token_ids.ndim == 1:
+            token_ids = token_ids[None, :]
+        if token_ids.ndim != 2 or token_ids.shape[0] != 1:
+            raise ValueError("native residuals take an unpadded batch of one")
+
+        captured: dict[int, Any] = {}
+
+        class _Collect:
+            """The sink protocol's three methods; only ``residual`` carries anything here."""
+
+            def residual(self, layer, offset, h):
+                captured[int(layer)] = h
+
+            def output(self, offset, ids, logits):
+                return None
+
+            def head(self, *args, **kwargs):  # pragma: no cover - head capture is off
+                return None
+
+        with NativeCapture(self, _Collect(), layers=tuple(wanted)) as wrapped:
+            wrapped(token_ids)
+        missing = set(wanted) - set(captured)
+        if missing:  # pragma: no cover - defensive; the tap emits every requested layer
+            raise ValueError(f"native capture emitted no residual for layers {sorted(missing)}")
+        return captured
+
+    def residual_source_agreement(
+        self, ids: Any, layers: Sequence[int]
+    ) -> dict[int, float]:
+        """Per-layer maximum absolute difference between the two residual producers.
+
+        Zero on every layer means this class's loop reproduces the model's forward exactly, and
+        substituting one for the other is a change of producer and not of result. Non-zero says
+        which layers the loop gets wrong and by how much, which is what the port's acceptance
+        reads.
+        """
+        import mlx.core as mx
+
+        loop = self.residuals(ids, layers)
+        native = self.native_residuals(ids, layers)
+        return {
+            layer: float(
+                mx.max(mx.abs(loop[layer].astype(mx.float32) - native[layer].astype(mx.float32)))
+                .item()
+            )
+            for layer in sorted(loop)
+        }
+
     def cached_logits(
         self,
         ids: Any,
