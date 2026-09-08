@@ -568,3 +568,54 @@ episode could not supply.
 What is measured is which tokens are in candidacy at which depth. Whether the schema is *causally*
 held there is what an intervention at layers 26 to 29 would test, and it is a better-posed
 experiment than any this episode's outcome alone would suggest.
+
+### The schema is visible while the model is reading, not only while it is writing
+
+**The Chief asked whether a donor exists for an intervention on this fork — a position where the
+model itself produces the Result. Looking for one found something better.**
+
+The final turn's prompt contains node 6's text. What the model predicts at each position, read at
+layer 34, which is its own output distribution and not a lens reading:
+
+| position | token being read | true next token | model's top predictions |
+|---:|---|---|---|
+| 1939 | `\n` | `Result` | **`Next`** `context` `next` `Node` |
+| 1940 | `Result` | `:` | `:` `\n` `.` |
+| 1941 | `:` | ` artifact` | ` File` ` success` ` file` |
+
+**At the newline before the field name, the model's most likely continuation is `Next` — and the
+node says `Result`.** Six preceding nodes carried a `Next` field at exactly that position, and the
+model expects a seventh. This is the same schema that later produces a fabricated `node-7-288.txt`,
+and it is visible **fifty tokens earlier, while the model is reading the evidence that should
+break it.**
+
+The row below it is weaker evidence and is recorded as such: not predicting ` artifact` after
+`Result:` is unremarkable, because the value is an arbitrary identifier no model would anticipate.
+It is the `Next`-for-`Result` substitution that carries the finding.
+
+**The donor does not exist in this episode**, which settles the Chief's question. No position in it
+puts the correct token first, including the one immediately preceding it in the input. Two options
+remain and they are not equivalent:
+
+- The residual **at** position 1942, where ` artifact` is being read. Captured at all 34 layers, same
+  turn, same context, 46 tokens from the fork — perfectly matched on everything except what it is.
+  It encodes *having just read* the token, not *being about to emit* it, and those are different
+  objects. Available, and not obviously the right vector.
+- A **direct question** against the same context. Nearly the same position, nearly the same context,
+  a different instruction. One short generation decides whether the model can produce
+  `artifact-93330` at all. **If it cannot, that is a larger result than the intervention it was
+  meant to enable**, and it costs one episode.
+
+The second is queued for after stage two, because the box holds one model load at a time.
+
+### Which half of this section is instrument-independent
+
+Two kinds of number appear above and they do not carry the same weight.
+
+**Exact, and independent of the lens:** `P(lab) = 0.775`, ` artifact` at rank 2, and every layer-34
+row in the table above. Layer 34 stores the model's own softmax; no lens map is applied there.
+
+**Lens reads, at roughly 21x the fitted range:** the layer-26-to-29 location-word band, ` artifact`
+entering at layer 31, and the whole depth structure. This episode runs to position 1,756 against a
+lens fitted at positions 16 to 126. That does not make them wrong. It does mean the depth structure
+is what a transcript-length lens fit would firm up, and the outcome numbers are not.
