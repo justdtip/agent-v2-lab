@@ -304,19 +304,35 @@ root guesses until the ceiling.
 **So the specific chain is wrong.** The false empty was a lie and removing it was right, but it was
 not what caused the failure. Told the truth, the model fails sooner and more completely.
 
-**What survives is the deeper thing the Chief had already written down and neither of us treated as
-the main finding: the environment has no discoverable root.** No tool lists the workspace top
-level. The exact string `workspace` cannot be found by inspection; it can only be guessed. The
-system prompt instructs the model to inspect state rather than guess paths — so it inspects, and
-under a truthful simulator it inspects forever, because inspection cannot reach the answer. The
-fix converted a confident falsehood into an honest refusal, and an honest refusal of an
-undiscoverable root still leaves the task unreachable by the route the prompt demands.
+**I then drew the wrong conclusion from this and it is corrected here rather than below.** I wrote
+that the environment has no discoverable root, and urged that it be promoted to the register's
+headline. It is false. No tool lists the workspace top level, which is what I checked, but
+`search_files` reaches the full true path from any of several words in the task's own prompt:
+
+| call | result |
+|---|---|
+| `search_files("config")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("0028")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("mode")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("workspace")` | `MATCHES: workspace/test/0028/config.ini` |
+
+Swept over the difficulty-2 test split, **165 of 180 tasks are reachable by a single search of a
+word taken from their own prompt**, 15 of 15 in every family except `calculate`, which has no files
+and needs no path. Reproduced independently by the Chief and here. And the route is named in the
+very rule the model was obeying: *if a tool returns an error, read it and recover: list or search
+to find the right path.*
+
+**So the finding is not that the model cannot find the workspace. It is that the model does not
+switch strategy under repeated unambiguous failure.** Twenty-four honest errors on two guesses,
+with the escape route in its own instructions and its own tool list, and it alternates the two
+rejected calls to the ceiling. That is a statement about the agent, measured under an environment
+that no longer lies to it — which is the thing that could not be said this morning.
 
 **Consequences.**
 
-The register's causal paragraph needs revising, and its own "two questions nobody asked" section
-should be promoted: *does the environment have a discoverable root* is the finding, not a
-footnote to it.
+The register's causal paragraph needs revising. My suggestion that its "no discoverable root"
+question be promoted to the headline was wrong and is withdrawn above; promoting it would have
+promoted something false.
 
 The fixed point's frozen records are untouched and remain what they were. This run deliberately
 writes its own directory and reads nothing from theirs. What it does change is the claim they
@@ -328,3 +344,18 @@ And a note on the metric this run exposed. `longest_identical_run` is 1 here, be
 two-cycle rather than a repetition. A loop measure that only counts consecutive identical calls
 misses an alternation, and the earlier tables in this record use exactly that measure. The loop
 detector caught it; my summary column would not have.
+
+
+### How the false zero happened, since it nearly went out as a refutation
+
+Checking the Chief's reachability claim, my first sweep reported **0 of 540 tasks reachable** and I
+was one step from sending it. The script called `Simulator.act`, which does not exist, inside a
+`try/except Exception: continue`. Every task raised, every task was scored unreachable, and the
+result was a clean table of zeros that agreed with what I already believed.
+
+Written down because it is the day's third instance of one shape: a broad aggregate that is more
+persuasive than the thing it is made of. The pooled commitment table, the flat reading join, and
+this. In each case the number was wrong in the direction of the hypothesis, and in each case what
+caught it was asking a question whose answer was known in advance — here, that a single task's
+search returns a path, which takes one call to check and which I ran only because the zero was too
+clean.
