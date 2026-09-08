@@ -1,0 +1,19 @@
+{
+  "seed": 20260902,
+  "held_count": 150,
+  "working_set_bytes": 19069665280,
+  "initial_peak_bytes": 8589934592,
+  "self_bounds": {
+    "atol": 0.0003,
+    "rtol": 0.003
+  },
+  "stability_bounds": {
+    "atol": 0.003,
+    "rtol": 0.03
+  },
+  "response_bounds": {
+    "atol": 0.01,
+    "rtol": 0.1
+  },
+  "step_coefficient": 0.03
+}

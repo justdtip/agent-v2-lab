@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +88,7 @@ def make_plan(
     held_count,
     working_set_bytes,
     initial_peak_bytes,
+    step_coefficient=None,
 ):
     layers = list(layers)
     if len(layers) < 3 or layers != list(range(1, max(layers) + 1)) or hidden_size <= 0:
@@ -101,7 +102,7 @@ def make_plan(
         raise ValueError("held sampling must cover the fit spans")
     # Shortest fit prompt bounds the full-sequence reference's operational cost.
     self_row = min({p["row"] for p in fit}, key=lambda i: (len(rows[i]["ids"]), i))
-    return dict(
+    plan = dict(
         schema_version=1,
         allocator_cache_limit_bytes=0,
         rows_sha256=digest(rows),
@@ -136,6 +137,20 @@ def make_plan(
         ),
     )
 
+    if step_coefficient is not None:
+        if not np.isfinite(step_coefficient) or step_coefficient <= 0:
+            raise ValueError("finite positive position-step coefficient required")
+        plan["step_coefficient"] = float(step_coefficient)
+        plan["epsilon"] = (
+            "float32: c * norm(selected position primal) / norm(one tangent); zero norm: stop"
+        )
+    return plan
+
+
+def position_step_kwargs(plan):
+    """Legacy plans replay unchanged; revised plans bind all four numerical stages."""
+    return {"step_coefficient": plan["step_coefficient"]} if "step_coefficient" in plan else {}
+
 
 def freeze_plan(path: Path, plan: dict) -> dict:
     frozen = dict(plan, plan_sha256=digest(plan))
@@ -169,6 +184,7 @@ def read_plan(path: Path, rows: list[dict]) -> dict:
         held_count=len(plan["held_positions"]),
         working_set_bytes=plan["working_set_bytes"],
         initial_peak_bytes=plan["initial_peak_bytes"],
+        **position_step_kwargs(plan),
     )
     if expected != payload:
         raise ValueError("plan does not match fixed protocol")
@@ -364,13 +380,27 @@ class PositionState:
     prefix_cache: Any
     epsilon: float
     primal_norm: float
+    step_coefficient: float = 0.01
 
 
-def prepare_position(view, ids, layer: int, position: int, *, guard=None) -> PositionState:
+def with_position_step(state, coefficient):
+    """§15: normalize by only the perturbed float32 position, preserving native state."""
+    selected = np.asarray(state.full_primal[0, state.position], dtype=np.float32)
+    norm = float(np.linalg.norm(selected))
+    if not np.isfinite([norm, coefficient]).all() or min(norm, coefficient) <= 0:
+        raise ValueError("finite positive selected-position norm and coefficient required")
+    return replace(
+        state, primal_norm=norm, epsilon=coefficient * norm, step_coefficient=float(coefficient)
+    )
+
+
+def prepare_position(
+    view, ids, layer: int, position: int, *, guard=None, step_coefficient=None
+) -> PositionState:
     """Cache the prefix through *all* blocks, derive current residual on a clone.
 
-    The full original sequence (including suffix) defines epsilon. Its residual
-    is also retained solely for the independent uncached reference calculation.
+    Legacy plans use the full-sequence norm. Revised §15 plans use only the
+    selected position. The full residual is retained for the uncached reference.
     """
     import mlx.core as mx
 
@@ -405,7 +435,8 @@ def prepare_position(view, ids, layer: int, position: int, *, guard=None) -> Pos
         h = view.run_block(index, h, masks, current_cache[index])
     mx.eval(h)
     _check_workload(guard, "prepare_current_primal")
-    return PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon, norm)
+    state = PositionState(view, layer, position, full, h.astype(mx.float32), cache, epsilon, norm)
+    return with_position_step(state, step_coefficient) if step_coefficient is not None else state
 
 
 def _directions(state, directions):
@@ -427,7 +458,14 @@ def reference_responses(state, directions, *, epsilon_scale=1.0, guard=None):
         raise ValueError("positive epsilon scale required")
     responses = []
     for number, (direction, norm) in enumerate(zip(directions, norms, strict=True)):
-        eps = float(finite_difference_steps(state.primal_norm, np.array([norm]), epsilon_scale)[0])
+        eps = float(
+            finite_difference_steps(
+                state.primal_norm,
+                np.array([norm]),
+                epsilon_scale,
+                coefficient=getattr(state, "step_coefficient", 0.01),
+            )[0]
+        )
         tangent = mx.zeros_like(state.full_primal)
         tangent[0, state.position] = mx.array(direction)
         plus = pre_norm_tail(state.view, state.layer, state.full_primal + eps * tangent)
@@ -460,7 +498,12 @@ def cached_responses(state, directions, *, mode, batch_size=8, epsilon_scale=1.0
     for start in range(0, len(directions), width):
         d = mx.array(directions[start : start + width])[:, None, :]
         eps = mx.array(
-            finite_difference_steps(state.primal_norm, norms[start : start + width], epsilon_scale)
+            finite_difference_steps(
+                state.primal_norm,
+                norms[start : start + width],
+                epsilon_scale,
+                coefficient=getattr(state, "step_coefficient", 0.01),
+            )
         )[:, None, None]
         primal = mx.broadcast_to(state.primal, d.shape)
         outputs = []
@@ -530,7 +573,12 @@ def self_check(view, rows, plan, *, batch_size=8):
     for layer in plan["self_layers"]:
         guard.context.update(layer=layer, mode="reference", epsilon_scale=1.0)
         state = prepare_position(
-            view, rows[plan["self_row"]]["ids"], layer, plan["self_position"], guard=guard
+            view,
+            rows[plan["self_row"]]["ids"],
+            layer,
+            plan["self_position"],
+            guard=guard,
+            **position_step_kwargs(plan),
         )
         guard("self_check_prepared")
         reference = reference_responses(state, directions, guard=guard)
@@ -716,7 +764,12 @@ def benchmark(view, rows, plan, proof, *, progress=None):
             guard.context.update(extreme=extreme, sample=sample)
             started = time.monotonic()
             state = prepare_position(
-                view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
+                view,
+                rows[sample["row"]]["ids"],
+                layer,
+                sample["position"],
+                guard=guard,
+                **position_step_kwargs(plan),
             )
             guard("benchmark_prepared")
             preparation_s = time.monotonic() - started
@@ -806,7 +859,12 @@ def fit_jacobian(view, rows, plan, proof, benchmark_report, *, progress=None):
         for sample in plan["fit_positions"]:
             guard.context["sample"] = sample
             state = prepare_position(
-                view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
+                view,
+                rows[sample["row"]]["ids"],
+                layer,
+                sample["position"],
+                guard=guard,
+                **position_step_kwargs(plan),
             )
             guard("fit_prepared")
             matrix = full_jacobian(
@@ -860,7 +918,8 @@ def prepare_plan(prepared, path, *, config_path=None):
     config_path supplies exactly seed, held_count, working_set_bytes,
     initial_peak_bytes and self/response/stability_bounds. The initial peak is a
     declared conservative envelope including model, full reference and caches.
-    Values exceeding the normal window stop here; no permission bypass exists.
+    An optional step_coefficient freezes the measured §15 position-local rule.
+    Values exceeding the normal memory window still stop here.
     """
     config = json.loads((Path(prepared.snapshot["snapshot_path"]) / "config.json").read_text())
     config = config.get("text_config", config)
@@ -876,8 +935,8 @@ def prepare_plan(prepared, path, *, config_path=None):
             "response_bounds",
             "stability_bounds",
         }
-        if set(parameters) != expected:
-            raise ValueError(f"plan config requires exactly {sorted(expected)}")
+        if set(parameters) - {"step_coefficient"} != expected:
+            raise ValueError(f"plan config requires {sorted(expected)}; optional step_coefficient")
         plan = make_plan(
             prepared.rows,
             layers=range(1, depth),
@@ -941,8 +1000,8 @@ def run_jacobian_stage(view, rows, plan, *, stage, record_dir, progress=None):
         raise
 
 
-def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0):
-    """The jlens full-primal rule, with an absolute zero-primal fallback."""
+def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0, *, coefficient=0.01):
+    """Direction-normalized step; caller supplies the frozen norm and coefficient."""
     norms = np.asarray(tangent_norms, dtype=np.float32)
     if (
         not np.isfinite(primal_norm)
@@ -951,7 +1010,10 @@ def finite_difference_steps(primal_norm, tangent_norms, epsilon_scale=1.0):
         or np.any(norms <= 0)
         or not np.isfinite(epsilon_scale)
         or epsilon_scale <= 0
+        or not np.isfinite(coefficient)
+        or coefficient <= 0
     ):
         raise ValueError("finite primal and positive tangent norms/epsilon scale required")
     steps = 0.01 * primal_norm / norms if primal_norm else np.full_like(norms, 0.01)
-    return steps * epsilon_scale
+    factor = epsilon_scale if coefficient == 0.01 else epsilon_scale * coefficient / 0.01
+    return steps * factor

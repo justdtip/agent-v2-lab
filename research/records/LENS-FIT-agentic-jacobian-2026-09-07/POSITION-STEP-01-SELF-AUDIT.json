@@ -1,0 +1,42 @@
+{
+  "status": "passed",
+  "comparisons": [
+    {
+      "layer": 1,
+      "mode": "restore",
+      "stability_failures": 0,
+      "agreement_failures": 0
+    },
+    {
+      "layer": 1,
+      "mode": "broadcast",
+      "stability_failures": 0,
+      "agreement_failures": 0
+    },
+    {
+      "layer": 16,
+      "mode": "restore",
+      "stability_failures": 0,
+      "agreement_failures": 0
+    },
+    {
+      "layer": 16,
+      "mode": "broadcast",
+      "stability_failures": 0,
+      "agreement_failures": 0
+    },
+    {
+      "layer": 31,
+      "mode": "restore",
+      "stability_failures": 0,
+      "agreement_failures": 0
+    },
+    {
+      "layer": 31,
+      "mode": "broadcast",
+      "stability_failures": 0,
+      "agreement_failures": 0
+    }
+  ],
+  "source_commit_verified": "dc269f053a7acb84f3f45638cd92c70b5c6df023"
+}

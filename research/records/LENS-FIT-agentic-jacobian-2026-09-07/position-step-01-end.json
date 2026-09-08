@@ -1,0 +1,8 @@
+{
+  "ended_utc": "2026-09-07T23:55:26.323531+00:00",
+  "exit_code": 0,
+  "reason": null,
+  "elapsed_s": 699.3129321250017,
+  "owned_child_exited": true,
+  "private_lock_remaining": false
+}

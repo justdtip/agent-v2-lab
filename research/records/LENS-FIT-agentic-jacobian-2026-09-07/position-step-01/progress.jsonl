@@ -1,0 +1,121 @@
+{"event": "load_started", "pid": 96776, "allocation_limit_bytes": 6442450944, "elapsed_s": 2.631466666003689}
+{"event": "sweep_started", "elapsed_s": 7.394038165999518}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.0001, "operation": "reference", "elapsed_s": 8.752390875000856}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.0001, "operation": "reference", "elapsed_s": 37.83916612499888}
+{"event": "measurement_started", "layer": 1, "coefficient": 5e-05, "operation": "reference", "elapsed_s": 37.8398200829979}
+{"event": "measurement_completed", "layer": 1, "coefficient": 5e-05, "operation": "reference", "elapsed_s": 67.36228758299694}
+{"event": "stability_completed", "layer": 1, "coefficient": 0.0001, "failed_coordinates": 32882, "max_error": 1.0685614570975304, "elapsed_s": 67.3641648749981}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.0003, "operation": "reference", "elapsed_s": 67.36473041599675}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.0003, "operation": "reference", "elapsed_s": 97.37703441600024}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.00015, "operation": "reference", "elapsed_s": 97.37782858299761}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.00015, "operation": "reference", "elapsed_s": 126.23150629099837}
+{"event": "stability_completed", "layer": 1, "coefficient": 0.0003, "failed_coordinates": 20536, "max_error": 0.2530232071876526, "elapsed_s": 126.23273366600188}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.001, "operation": "reference", "elapsed_s": 126.23334975000034}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.001, "operation": "reference", "elapsed_s": 155.88936070800264}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.0005, "operation": "reference", "elapsed_s": 155.89031424999848}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.0005, "operation": "reference", "elapsed_s": 187.4272469580028}
+{"event": "stability_completed", "layer": 1, "coefficient": 0.001, "failed_coordinates": 3282, "max_error": 0.06320154666900635, "elapsed_s": 187.42914895799913}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.003, "operation": "reference", "elapsed_s": 187.43011162499897}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.003, "operation": "reference", "elapsed_s": 219.87139162499807}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.0015, "operation": "reference", "elapsed_s": 219.8725371249966}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.0015, "operation": "reference", "elapsed_s": 251.02204087500286}
+{"event": "stability_completed", "layer": 1, "coefficient": 0.003, "failed_coordinates": 27, "max_error": 0.014986038208007812, "elapsed_s": 251.0235036660015}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.01, "operation": "reference", "elapsed_s": 251.024382333002}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.01, "operation": "reference", "elapsed_s": 285.7597279160036}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.005, "operation": "reference", "elapsed_s": 285.760981833002}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.005, "operation": "reference", "elapsed_s": 319.854163916003}
+{"event": "stability_completed", "layer": 1, "coefficient": 0.01, "failed_coordinates": 0, "max_error": 0.00562518835067749, "elapsed_s": 319.8562352079971}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.03, "operation": "reference", "elapsed_s": 319.8574088750029}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.03, "operation": "reference", "elapsed_s": 354.07067424999696}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.015, "operation": "reference", "elapsed_s": 354.07190825}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.015, "operation": "reference", "elapsed_s": 388.78517345800356}
+{"event": "stability_completed", "layer": 1, "coefficient": 0.03, "failed_coordinates": 0, "max_error": 0.012155294418334961, "elapsed_s": 388.7871671250032}
+{"event": "layer_completed", "layer": 1, "eligible": [0.03], "elapsed_s": 388.78839575000165}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.0001, "operation": "reference", "elapsed_s": 390.2106709579966}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.0001, "operation": "reference", "elapsed_s": 405.6805547499971}
+{"event": "measurement_started", "layer": 16, "coefficient": 5e-05, "operation": "reference", "elapsed_s": 405.6818238749984}
+{"event": "measurement_completed", "layer": 16, "coefficient": 5e-05, "operation": "reference", "elapsed_s": 419.8780635000003}
+{"event": "stability_completed", "layer": 16, "coefficient": 0.0001, "failed_coordinates": 21030, "max_error": 0.17458510398864746, "elapsed_s": 419.87967975000356}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.0003, "operation": "reference", "elapsed_s": 419.8808582499987}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.0003, "operation": "reference", "elapsed_s": 434.85714379099954}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.00015, "operation": "reference", "elapsed_s": 434.85877191599866}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.00015, "operation": "reference", "elapsed_s": 450.541270791}
+{"event": "stability_completed", "layer": 16, "coefficient": 0.0003, "failed_coordinates": 3568, "max_error": 0.03260087966918945, "elapsed_s": 450.54381129099784}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.001, "operation": "reference", "elapsed_s": 450.5458700829986}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.001, "operation": "reference", "elapsed_s": 466.4128990410027}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.0005, "operation": "reference", "elapsed_s": 466.4142647499975}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.0005, "operation": "reference", "elapsed_s": 482.4289810409973}
+{"event": "stability_completed", "layer": 16, "coefficient": 0.001, "failed_coordinates": 4, "max_error": 0.0173417329788208, "elapsed_s": 482.43085108300147}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.003, "operation": "reference", "elapsed_s": 482.432236790999}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.003, "operation": "reference", "elapsed_s": 498.0368127909969}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.0015, "operation": "reference", "elapsed_s": 498.03827425000054}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.0015, "operation": "reference", "elapsed_s": 511.4264806249994}
+{"event": "stability_completed", "layer": 16, "coefficient": 0.003, "failed_coordinates": 0, "max_error": 0.0038829147815704346, "elapsed_s": 511.42829862500366}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.01, "operation": "reference", "elapsed_s": 511.4297873749965}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.01, "operation": "reference", "elapsed_s": 526.664807166002}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.005, "operation": "reference", "elapsed_s": 526.6664636249989}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.005, "operation": "reference", "elapsed_s": 541.8313885829994}
+{"event": "stability_completed", "layer": 16, "coefficient": 0.01, "failed_coordinates": 0, "max_error": 0.0023706182837486267, "elapsed_s": 541.833455}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.03, "operation": "reference", "elapsed_s": 541.8350843750013}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.03, "operation": "reference", "elapsed_s": 557.1540022080007}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.015, "operation": "reference", "elapsed_s": 557.1558044999983}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.015, "operation": "reference", "elapsed_s": 573.2436999159981}
+{"event": "stability_completed", "layer": 16, "coefficient": 0.03, "failed_coordinates": 0, "max_error": 0.00202806293964386, "elapsed_s": 573.2457505830025}
+{"event": "layer_completed", "layer": 16, "eligible": [0.01, 0.03], "elapsed_s": 573.2475425000011}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.0001, "operation": "reference", "elapsed_s": 574.9173503749989}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.0001, "operation": "reference", "elapsed_s": 575.8009040410034}
+{"event": "measurement_started", "layer": 31, "coefficient": 5e-05, "operation": "reference", "elapsed_s": 575.8028812909979}
+{"event": "measurement_completed", "layer": 31, "coefficient": 5e-05, "operation": "reference", "elapsed_s": 576.6932051249969}
+{"event": "stability_completed", "layer": 31, "coefficient": 0.0001, "failed_coordinates": 19, "max_error": 0.01132020354270935, "elapsed_s": 576.6954643330027}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.0003, "operation": "reference", "elapsed_s": 576.6973968329985}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.0003, "operation": "reference", "elapsed_s": 577.5811633330013}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.00015, "operation": "reference", "elapsed_s": 577.5831265410015}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.00015, "operation": "reference", "elapsed_s": 578.4628872500034}
+{"event": "stability_completed", "layer": 31, "coefficient": 0.0003, "failed_coordinates": 0, "max_error": 0.00658746063709259, "elapsed_s": 578.4653227500021}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.001, "operation": "reference", "elapsed_s": 578.4672944159975}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.001, "operation": "reference", "elapsed_s": 579.7846113330015}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.0005, "operation": "reference", "elapsed_s": 579.7864753329995}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.0005, "operation": "reference", "elapsed_s": 581.6044385830028}
+{"event": "stability_completed", "layer": 31, "coefficient": 0.001, "failed_coordinates": 0, "max_error": 0.0018994957208633423, "elapsed_s": 581.6099912080026}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.003, "operation": "reference", "elapsed_s": 581.6151487500028}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.003, "operation": "reference", "elapsed_s": 583.3129584159979}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.0015, "operation": "reference", "elapsed_s": 583.3151424160023}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.0015, "operation": "reference", "elapsed_s": 584.9800256660019}
+{"event": "stability_completed", "layer": 31, "coefficient": 0.003, "failed_coordinates": 0, "max_error": 0.0005350988358259201, "elapsed_s": 584.9826314579987}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.01, "operation": "reference", "elapsed_s": 584.9847712080009}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.01, "operation": "reference", "elapsed_s": 586.245018540998}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.005, "operation": "reference", "elapsed_s": 586.2476543329976}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.005, "operation": "reference", "elapsed_s": 587.136506791001}
+{"event": "stability_completed", "layer": 31, "coefficient": 0.01, "failed_coordinates": 0, "max_error": 0.00015860982239246368, "elapsed_s": 587.1391195410033}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.03, "operation": "reference", "elapsed_s": 587.141475999997}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.03, "operation": "reference", "elapsed_s": 588.0230911250037}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.015, "operation": "reference", "elapsed_s": 588.025579000001}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.015, "operation": "reference", "elapsed_s": 588.9106009160023}
+{"event": "stability_completed", "layer": 31, "coefficient": 0.03, "failed_coordinates": 0, "max_error": 0.00034302473068237305, "elapsed_s": 588.9133542909985}
+{"event": "layer_completed", "layer": 31, "eligible": [0.001, 0.003, 0.01, 0.03], "elapsed_s": 588.9159277080034}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.03, "operation": "reference", "elapsed_s": 589.7925095410028}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.03, "operation": "reference", "elapsed_s": 623.1610676659984}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.015, "operation": "reference", "elapsed_s": 623.1636413329979}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.015, "operation": "reference", "elapsed_s": 649.9852195830026}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.03, "operation": "restore", "elapsed_s": 649.9881519159972}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.03, "operation": "restore", "elapsed_s": 651.4801064999992}
+{"event": "measurement_started", "layer": 1, "coefficient": 0.03, "operation": "broadcast", "elapsed_s": 651.4835114579982}
+{"event": "measurement_completed", "layer": 1, "coefficient": 0.03, "operation": "broadcast", "elapsed_s": 653.3361072499974}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.03, "operation": "reference", "elapsed_s": 655.1591262500006}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.03, "operation": "reference", "elapsed_s": 674.8060056250033}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.015, "operation": "reference", "elapsed_s": 674.8090902080003}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.015, "operation": "reference", "elapsed_s": 692.8095397500001}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.03, "operation": "restore", "elapsed_s": 692.8134905830011}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.03, "operation": "restore", "elapsed_s": 694.873807916003}
+{"event": "measurement_started", "layer": 16, "coefficient": 0.03, "operation": "broadcast", "elapsed_s": 694.8775471249974}
+{"event": "measurement_completed", "layer": 16, "coefficient": 0.03, "operation": "broadcast", "elapsed_s": 695.1328357500024}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.03, "operation": "reference", "elapsed_s": 696.8353065830015}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.03, "operation": "reference", "elapsed_s": 697.7496841660031}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.015, "operation": "reference", "elapsed_s": 697.7531270830004}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.015, "operation": "reference", "elapsed_s": 698.6731567910028}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.03, "operation": "restore", "elapsed_s": 698.676878833001}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.03, "operation": "restore", "elapsed_s": 698.9843544999967}
+{"event": "measurement_started", "layer": 31, "coefficient": 0.03, "operation": "broadcast", "elapsed_s": 698.9883354999984}
+{"event": "measurement_completed", "layer": 31, "coefficient": 0.03, "operation": "broadcast", "elapsed_s": 699.0460569159986}
+{"event": "sweep_finished", "status": "self_check_passed", "elapsed_s": 699.0507505409987}
+{"event": "done", "status": "self_check_passed", "peak_memory_bytes": 4151584296.0, "elapsed_s": 699.0547888750007}

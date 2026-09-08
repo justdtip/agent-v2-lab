@@ -1,0 +1,24 @@
+{
+  "started_utc": "2026-09-07T23:43:47.020130+00:00",
+  "owned_pid": 96776,
+  "wrapper_pid": 96773,
+  "command": [
+    "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+    "/Users/daniel.tipton/worktrees/lens-fitting/scripts/lens_position_step_diagnostic.py",
+    "--model",
+    "qwen35-4b",
+    "--corpus",
+    "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/qwen35-4b-agentic/manifest.json",
+    "--plan",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FIT-agentic-jacobian-2026-09-07/plan.json",
+    "--revision",
+    "32f3e8ecf65426fc3306969496342d504bfa13f3",
+    "--record-dir",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FIT-agentic-jacobian-2026-09-07/position-step-01",
+    "--registration",
+    "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FIT-agentic-jacobian-2026-09-07/POSITION-STEP-01-REGISTRATION.md",
+    "--allow-concurrent-run"
+  ],
+  "concurrent_authorized": true,
+  "private_lock": "/Users/daniel.tipton/worktrees/lens-fitting/research/records/LENS-FIT-agentic-jacobian-2026-09-07/position-step-01/.model-run.lock"
+}

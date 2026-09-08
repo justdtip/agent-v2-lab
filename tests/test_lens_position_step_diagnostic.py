@@ -98,3 +98,61 @@ def test_sweep_records_all_36_reference_measurements_and_six_cache_checks(tmp_pa
     for m in result["measurements"]:
         assert hashlib.sha256((tmp_path / m["file"]).read_bytes()).hexdigest() == m["file_sha256"]
     assert json.loads((tmp_path / "diagnostic.json").read_text())["status"] == result["status"]
+
+
+def test_production_position_rule_preserves_primals_and_propagates_coefficient():
+    from local_llm_lab.pipeline.lens_fitting import jacobian as j
+
+    original = state(np.array([[[3.0, 4.0], [600.0, 800.0]]], dtype=np.float32))
+    corrected = j.with_position_step(original, 0.03)
+    assert corrected.primal_norm == 5.0
+    assert corrected.epsilon == 0.15
+    assert corrected.step_coefficient == 0.03
+    assert corrected.full_primal is original.full_primal
+    assert corrected.primal is original.primal
+    assert corrected.prefix_cache is original.prefix_cache
+    assert j.finite_difference_steps(
+        corrected.primal_norm, [2.0], 0.5, coefficient=corrected.step_coefficient
+    )[0] == pytest.approx(0.0375)
+    for c in (0.0, float("nan"), -0.01):
+        with pytest.raises(ValueError):
+            j.with_position_step(original, c)
+
+
+def test_revised_plan_round_trip_binds_step_without_changing_samples(tmp_path):
+    from local_llm_lab.pipeline.lens_fitting import jacobian as j
+
+    rows = [
+        dict(
+            index=i,
+            source=f"source-{i}",
+            split=split,
+            ids=[1, 2, 3],
+            spans=["task", "task", "call"],
+        )
+        for i, split in enumerate(("fit", "held"))
+    ]
+    kwargs = dict(
+        layers=[1, 2, 3],
+        hidden_size=4,
+        corpus_sha256="corpus",
+        snapshot_sha256="snapshot",
+        seed=9,
+        self_bounds=dict(atol=0.0003, rtol=0.003),
+        response_bounds=dict(atol=0.01, rtol=0.1),
+        stability_bounds=dict(atol=0.003, rtol=0.03),
+        held_count=150,
+        working_set_bytes=10000,
+        initial_peak_bytes=1000,
+    )
+    old = j.make_plan(rows, **kwargs)
+    revised = j.make_plan(rows, **kwargs, step_coefficient=0.03)
+    assert old["fit_positions"] == revised["fit_positions"]
+    assert old["held_positions"] == revised["held_positions"]
+    assert old["self_bounds"] == revised["self_bounds"]
+    assert j.digest(old) != j.digest(revised)
+    path = tmp_path / "plan.json"
+    frozen = j.freeze_plan(path, revised)
+    assert j.read_plan(path, rows) == frozen
+    assert j.position_step_kwargs(frozen) == dict(step_coefficient=0.03)
+    assert j.position_step_kwargs(old) == {}

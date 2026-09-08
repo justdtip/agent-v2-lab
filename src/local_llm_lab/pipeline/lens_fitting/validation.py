@@ -59,6 +59,7 @@ def validate_maps(view, rows, maps, plan, benchmark_report, *, progress=None):
         WorkloadMemoryGuard,
         cached_responses,
         digest,
+        position_step_kwargs,
         prepare_position,
         require_benchmark,
         unit_directions,
@@ -99,7 +100,12 @@ def validate_maps(view, rows, maps, plan, benchmark_report, *, progress=None):
             guard.context.update(sample=sample, epsilon_scale=scale)
             if current != sample:
                 state = prepare_position(
-                    view, rows[sample["row"]]["ids"], layer, sample["position"], guard=guard
+                    view,
+                    rows[sample["row"]]["ids"],
+                    layer,
+                    sample["position"],
+                    guard=guard,
+                    **position_step_kwargs(plan),
                 )
                 guard("validation_prepared")
                 current = sample
