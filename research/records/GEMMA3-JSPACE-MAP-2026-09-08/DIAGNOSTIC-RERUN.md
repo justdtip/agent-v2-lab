@@ -844,3 +844,61 @@ The cap case is the same shape as this morning's step-ceiling confound one level
 chose, reached by the model, recorded as the model's limit. The step ceiling was found by comparing
 against the comparator's own configuration; this one is found by counting tokens per turn, which
 the records carry and no report reads.
+
+## The donor exists, and it says the failure is not knowledge
+
+**The Chief's test, run: ask the model directly, against the same context.**
+
+The question was appended to the final observation's own turn rather than added as a new one —
+Gemma's template enforces strict user/model alternation and the context already ends with a user
+turn, because observations render under the user role on this family. The same constraint that
+produced the rendering work, met again.
+
+| | |
+|---|---|
+| prompt | 2,000 tokens, the episode's own final context |
+| question | *"in the file you most recently read, what is the value of the Result field? Reply with exactly that value and nothing else"* |
+| answer | **`artifact-93330`** |
+| generated | 8 tokens |
+
+**Exactly right, first time, from the same context in which it answered with a fabricated path.**
+
+So the information was retrievable throughout. `artifact-93330` was in the model's context at the
+fork, it was never a candidate in any layer's top ten while the task was running, and one change of
+framing produces it immediately and exactly. **The failure is not that the model does not know. It
+is that executing the task does not reach what it knows.**
+
+That is a sharper statement than anything the map produced, and it needed one generation and no
+lens. It also settles the donor question in the affirmative: a residual at the position where this
+model emits `artifact` under a direct question, at a nearly identical context length, is available
+and is the best-matched donor the design could ask for.
+
+**The caveat that keeps it honest:** the direct question sits after the observation containing the
+answer, so it is a reading-comprehension question with the answer in context. That is precisely the
+point — the answer was equally in context during the task — but it does not show the model could
+have recalled the value without the text in front of it, and nothing here claims it.
+
+## The transcript fit's memory floor, measured
+
+**Because a 21 GiB projection is holding a Director's authorisation, and because this repository's
+last two projections were made from the cheapest instance.**
+
+One 2,816-token window, every layer's residual retained in float32, which is what a fit holds:
+
+| | |
+|---|---:|
+| residuals retained | 33 layers |
+| residual bytes | **0.886 GiB** |
+| MLX peak for the window | **2.817 GiB** |
+| R47 stop threshold | 10.66 GiB |
+| the projection under review | 21 GiB |
+
+**The measured floor is 2.8 GiB, an eighth of the projection and about a quarter of the stop
+threshold.** The residual figure matches the Chief's arithmetic exactly, which is the useful
+cross-check: their 0.886 GiB was derived and this is measured.
+
+So the 21 GiB is a **batching choice and not a floor.** At 2.8 GiB for one window there is room for
+a batch of three inside R47 with margin. The projection appears to have been made the way the
+stage-two memory declaration was — from a configuration rather than from the binding case — which
+is now the third instance of that error in this programme and the second caught by measuring
+instead of arguing.

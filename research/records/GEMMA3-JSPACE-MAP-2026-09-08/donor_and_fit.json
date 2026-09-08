@@ -1,0 +1,16 @@
+{
+ "donor_probe": {
+  "prompt_tokens": 2000,
+  "generated_tokens": 8,
+  "answer": "artifact-93330<end_of_turn>",
+  "contains_result": true,
+  "peak_gib": 2.916
+ },
+ "fit_calibration": {
+  "window_tokens": 2816,
+  "layers_retained": 33,
+  "residual_bytes_gib": 0.886,
+  "mlx_peak_gib": 2.817,
+  "r47_stop_threshold_gib": 10.66
+ }
+}
