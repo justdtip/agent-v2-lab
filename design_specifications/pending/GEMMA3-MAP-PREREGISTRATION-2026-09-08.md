@@ -631,3 +631,34 @@ is not true of most questions we could ask it.
 `search_files`: `cross_reference-0032`, which passed an 11-step chain, and `search-0061`, which failed.
 Calling it is not sufficient, and at one instance each way the positive case is weaker than I stated
 it. It remains the only documented recovery route and the only episode to solve a long chain used it.
+
+**Correction to amendment 10's class count, and the classes remain a partition.** The D-CRO reports
+five instances of class 2 across stage two's ten completed agentic episodes, not three, and one of
+them — `batch_update-0166` — **is** reachable by the strategy-switching measurement: it takes three
+consecutive errors without searching *and* terminates confidently with a wrong answer.
+
+So the class and the strategy measurement **overlap rather than partition**, and the earlier
+assertion of clean disjointness was made from the episodes that had been read closely, which is the
+same selection error as counting a class from its known instances. The four outcome classes are
+still a partition by construction — every episode is exactly one of passed, self-terminated-wrong,
+looped, exhausted — and the strategy measurement is a **second axis** that may co-occur with any of
+them. It is reported as an axis, never as a fifth class.
+
+**And the exception to the cross-run prohibition is real, but the test should be stronger than the
+one proposed.** `batch_update-0166` ran under the lying simulator at 8 layers and the fixed one at 34,
+and its seven actions are **byte-identical**. The D-CRO licenses comparison for that episode on the
+ground that it never calls `list_files` on an unsatisfiable directory, so the environment fix cannot
+reach it.
+
+That reasoning is sound and it requires knowing every way the two runs differ. **The byte-identical
+trajectory is the stronger evidence and the easier test**, because it demonstrates the absence of any
+difference rather than the absence of an enumerated one — including differences neither seat has
+thought of. So the rule is:
+
+> **An episode's outcome-level figures may be compared across the two runs if and only if its emitted
+> trajectory is byte-identical between them.** Checkable from the records, per episode, with no
+> rerun and no enumeration of what changed. Everything else stays under the blanket prohibition.
+
+**The same identity is also the third and strongest demonstration that capture does not perturb
+generation**: fourfold difference in captured depth, different simulator, identical trajectory token
+for token. Measured three times now, never assumed.
