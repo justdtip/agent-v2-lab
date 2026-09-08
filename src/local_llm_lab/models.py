@@ -89,6 +89,35 @@ class ChatSpec:
     #: builds a supervised target, because there the choice changes what is trained on, and the
     #: run's manifest has to say which role it used.
     observation_role: str = field(default="tool", kw_only=True)
+    #: How a tool observation is marked when it renders under a role that cannot mark it.
+    #: A format string over ``{content}`` and ``{name}``; **required** whenever
+    #: ``observation_role`` is not ``"tool"``, and unused otherwise.
+    #:
+    #: Re-roling alone loses a fact the role was carrying: *this text is a result of your last
+    #: action.* Qwen's template re-roles too — a tool message renders as a `user` turn there as
+    #: well — but wraps the content in `<tool_response>`, so the model can still tell. Without the
+    #: wrapper the observation is formally indistinguishable from the user's original instruction,
+    #: and the system prompt's own rules ("base each action on the latest tool result", "never
+    #: claim a write succeeded until a tool result confirms it") refer to a category the prompt
+    #: never marks.
+    observation_template: str = field(default="{content}", kw_only=True)
+    #: What the system prompt must tell the model about a re-roled observation. **Required**
+    #: whenever ``observation_role`` is not ``"tool"``, and unused otherwise.
+    #:
+    #: The wrapper marks each observation; this explains the convention once, and the two are not
+    #: substitutes. The Director's ruling of 2026-09-08: *observations should render in a manner
+    #: that teaches the model to understand what it is doing; a model executing a tool should not
+    #: assume that in doing so it responds to the user.* Under a template with no tool role the
+    #: episode is formally a two-party conversation — user, model, user, model — so every tool
+    #: call the model makes is answered by what the format calls a user turn. Without being told
+    #: otherwise the model is being taught, turn after turn, that a person replies to its actions,
+    #: and a model that believes that behaves conversationally: it re-acknowledges, re-reads and
+    #: restates instead of executing a plan. That is the shape stage one's transcripts have.
+    #:
+    #: A wrapper the model has never been told the meaning of is a marker without a key. The
+    #: model can only understand what it is doing if the prompt says what the format is doing
+    #: to it, so the convention is declared here, per family, beside the wrapper it explains.
+    observation_convention: str = field(default="", kw_only=True)
     max_think_tokens: int = 512
 
 
@@ -397,6 +426,8 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
             end_of_turn=_required_string(chat, "end_of_turn", source),
             generation_prefix=_required_string(chat, "generation_prefix", source),
             observation_role=str(chat.get("observation_role", "tool")),
+            observation_template=_observation_template(chat, source),
+            observation_convention=_observation_convention(chat, source),
             extra_stop_tokens=tuple(stops),
             max_think_tokens=_positive_int(
                 chat.get("max_think_tokens", 512), "chat.max_think_tokens", source
@@ -451,6 +482,52 @@ def _default_spec(hf_id: str) -> ModelSpec:
         memory_budget_gib=22.0,
         policies={},
     )
+
+
+def _observation_template(chat: dict[str, Any], source: str) -> str:
+    """How an observation marks itself, required exactly where the role cannot mark it.
+
+    Required rather than defaulted, because a default would be one family's convention inherited
+    by every other — which is how ChatML's assistant marker came to be hardcoded for every model
+    this repository has ever run. A family that re-roles observations states its own.
+    """
+    role = str(chat.get("observation_role", "tool"))
+    declared = chat.get("observation_template")
+    if role == "tool":
+        return "{content}"
+    if not isinstance(declared, str) or "{content}" not in declared:
+        raise ValueError(
+            f"{source}: chat.observation_template must be declared, and contain {{content}}, "
+            f"whenever observation_role is {role!r} rather than 'tool' — re-roling loses the "
+            "fact that the text is a tool result, and the content is the only channel left"
+        )
+    return declared
+
+
+def _observation_convention(chat: dict[str, Any], source: str) -> str:
+    """What the prompt tells the model the format is doing to it, required where it does anything.
+
+    Required on exactly the same condition as the wrapper and for a different reason. The wrapper
+    marks each observation; this says what the mark means and what the model should conclude from
+    a turn that the format calls the user's but that is in fact the workspace answering the model's
+    own last action.
+
+    Declared per family rather than written here, on the rule the wrapper established: a default
+    would be one family's convention inherited by every other, and this paragraph is more
+    model-specific than the wrapper, because it must name the format's own roles to be understood.
+    """
+    role = str(chat.get("observation_role", "tool"))
+    declared = chat.get("observation_convention")
+    if role == "tool":
+        return ""
+    if not isinstance(declared, str) or not declared.strip():
+        raise ValueError(
+            f"{source}: chat.observation_convention must be declared whenever observation_role "
+            f"is {role!r} rather than 'tool' — the wrapper marks the observation and this says "
+            "what the mark means, and a marker whose meaning the model was never told is not a "
+            "channel"
+        )
+    return declared.strip()
 
 
 def _training_lineage(value: Any, source: str) -> dict[str, Any] | None:

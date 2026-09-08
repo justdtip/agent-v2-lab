@@ -298,3 +298,189 @@ def test_build_prompt_with_a_wide_window_does_not_re_hide_observations() -> None
     )
     assert "3 line(s)" in wide  # the original stub, not a stub of the stub
     assert "1 line(s)" not in build_prompt(tokenizer, messages, keep_last=len(messages))
+
+
+def test_an_observation_is_marked_as_one_under_every_role_it_can_render_as() -> None:
+    """Re-roling loses a fact, and the content is the only channel left to carry it.
+
+    Gemma's template has no tool role, so an observation renders as a `user` turn. The first
+    version mapped the role and left the content bare, which made the observation **formally
+    indistinguishable from the user's original instruction** — and stage one is what that cost:
+    the model read the same file eight times running, and reissued a failing call eight times,
+    which is what a model does when it cannot tell that its own last action produced the text in
+    front of it.
+
+    Qwen re-roles too. Its template also renders a tool message as `user`, and wraps the content
+    in `<tool_response>`, so the role was never the difference — the marking was.
+
+    This once asserted that the two families carried the *same* marking, so that the pilot's two
+    panels would differ in the model rather than in what their prompts told them. The Director's
+    ruling of 2026-09-08 retires that goal: a rendering is not allowed to misdescribe the episode
+    in order to keep a comparison tidy. What is asserted now is the invariant that survives it —
+    an observation is marked as one under every role — and each family's marking is its own.
+    """
+    from local_llm_lab.models import ChatSpec, ModelSpec
+    from local_llm_lab.pipeline.protocol import _as_declared_roles
+
+    observation = {"role": "tool", "name": "read_file", "content": "FILES: a.txt"}
+
+    def spec_for(role: str, template: str) -> ModelSpec:
+        return ModelSpec(
+            name="fake",
+            hf_id="fake/fake",
+            family="fake",
+            chat=ChatSpec(
+                "unsupported",
+                {},
+                "<eot>",
+                (),
+                generation_prefix="<assistant>",
+                observation_role=role,
+                observation_template=template,
+            ),
+            lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+            train={},
+            cache_strategy="none",
+            probe_layer_fractions=(1.0,),
+            memory_budget_gib=1.0,
+            policies={},
+        )
+
+    native = _as_declared_roles([observation], spec_for("tool", "{content}"))
+    assert native == [observation], "a template with a tool role is left entirely alone"
+
+    reroled = _as_declared_roles(
+        [observation], spec_for("user", "<tool_response>\n{content}\n</tool_response>")
+    )
+    assert reroled == [
+        {"role": "user", "content": "<tool_response>\nFILES: a.txt\n</tool_response>"}
+    ]
+    assert "FILES: a.txt" in reroled[0]["content"], "the observation itself survives intact"
+    assert reroled[0]["content"] != observation["content"], "and is no longer bare"
+
+
+def test_a_model_that_reroles_observations_must_declare_how_they_are_marked(tmp_path) -> None:
+    """Required, not defaulted, because a default is one family's convention for every other.
+
+    That is exactly how ChatML's assistant marker came to be hardcoded for every model this
+    repository ran, and it raised on the first model whose template opened a turn differently.
+    """
+    import yaml
+
+    from local_llm_lab import models
+    from local_llm_lab.models import load_model_spec
+
+    document = _registry_mapping_for_observation_role()
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(models, "_REGISTRY_DIR", tmp_path)
+    try:
+        (tmp_path / "bare.yaml").write_text(yaml.safe_dump(document))
+        with pytest.raises(ValueError, match="observation_template must be declared"):
+            load_model_spec("bare")
+    finally:
+        monkey.undo()
+
+
+def _registry_mapping_for_observation_role() -> dict:
+    return {
+        "name": "bare",
+        "hf_id": "example/bare",
+        "family": "bare",
+        "chat": {
+            "thinking": "unsupported",
+            "template_kwargs": {},
+            "end_of_turn": "<eot>",
+            "generation_prefix": "<assistant>",
+            "observation_role": "user",
+            "extra_stop_tokens": [],
+        },
+        "lora": {"keys": "attention+mlp", "rank": 16, "scale": 32.0, "dropout": 0.0},
+        "train": {},
+        "cache": {"strategy": "none", "equivalence_verified": None},
+        "probes": {"layer_fractions": [0.5]},
+        "memory": {"budget_gib": 22},
+        "policies": {},
+    }
+
+
+def test_a_model_that_reroles_observations_must_also_declare_what_the_marking_means(
+    tmp_path,
+) -> None:
+    """The wrapper is a marker; a marker whose meaning the model was never told is not a channel.
+
+    Required on the same condition as the wrapper, for a different reason. Under a template with
+    no tool role the episode is formally a two-party conversation — user, model, user, model — so
+    every tool call the model makes is answered by what the format calls a user turn. Unaided, the
+    model is taught turn after turn that a person replies to its actions, which is a different
+    task from operating a workspace and observing the results of its own.
+    """
+    import yaml
+
+    from local_llm_lab import models
+    from local_llm_lab.models import load_model_spec
+
+    document = _registry_mapping_for_observation_role()
+    document["chat"]["observation_template"] = "<tool_response>\n{content}\n</tool_response>"
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(models, "_REGISTRY_DIR", tmp_path)
+    try:
+        (tmp_path / "bare.yaml").write_text(yaml.safe_dump(document))
+        with pytest.raises(ValueError, match="observation_convention must be declared"):
+            load_model_spec("bare")
+
+        document["chat"]["observation_convention"] = "   "
+        (tmp_path / "bare.yaml").write_text(yaml.safe_dump(document))
+        with pytest.raises(ValueError, match="observation_convention must be declared"):
+            load_model_spec("bare")
+
+        document["chat"]["observation_convention"] = "A wrapped turn is the workspace.\n"
+        (tmp_path / "bare.yaml").write_text(yaml.safe_dump(document))
+        assert load_model_spec("bare").chat.observation_convention == (
+            "A wrapped turn is the workspace."
+        ), "declared, and stripped, so the prompt does not gain a trailing blank line"
+    finally:
+        monkey.undo()
+
+
+def test_a_template_with_a_tool_role_carries_no_convention_even_if_one_is_written(
+    tmp_path,
+) -> None:
+    """The field is unused where the role marks the observation, and unused means absent.
+
+    A convention that survived on a ChatML family would put a paragraph about `<tool_response>`
+    turns into a prompt whose observations do not render that way, which is worse than silence.
+    """
+    import yaml
+
+    from local_llm_lab import models
+    from local_llm_lab.models import load_model_spec
+
+    document = _registry_mapping_for_observation_role()
+    document["chat"]["observation_role"] = "tool"
+    document["chat"]["observation_convention"] = "this should not reach any prompt"
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(models, "_REGISTRY_DIR", tmp_path)
+    try:
+        (tmp_path / "bare.yaml").write_text(yaml.safe_dump(document))
+        assert load_model_spec("bare").chat.observation_convention == ""
+    finally:
+        monkey.undo()
+
+
+def test_the_system_prompt_carries_the_convention_of_the_model_it_is_rendered_for() -> None:
+    """The convention is the registry's, so a family that declares none gets the prompt it had.
+
+    Both halves matter. Gemma's prompt has to explain the format to it, and Qwen's has to stay
+    byte-identical to what every existing Qwen number was produced under — a change there would
+    silently reprice the comparison this pilot exists to make.
+    """
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.protocol import system_prompt
+
+    gemma = load_model_spec("gemma3-4b")
+    rendered = system_prompt(spec=gemma)
+    assert rendered.endswith(gemma.chat.observation_convention)
+    assert SYSTEM_PROMPT in rendered, "the convention is added to the rules, never instead of them"
+
+    assert system_prompt(spec=load_model_spec("qwen35-4b")) == SYSTEM_PROMPT
+    assert system_prompt() == SYSTEM_PROMPT, "and no spec is the same as a spec that declares none"

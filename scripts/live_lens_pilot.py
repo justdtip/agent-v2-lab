@@ -8,7 +8,7 @@ final layer, foreknowledge ranks of every emitted token at horizons 1/4/8 per la
 forward hashes (exact replay), and the rendered prompt with its windowed messages per turn.
 Head capture is off in the pilot (item 3 is a separate, targeted run).
 
-    .venv/bin/python scripts/live_lens_pilot.py --out <dir> [--plan-only] [--max-steps 12]
+    .venv/bin/python scripts/live_lens_pilot.py --out <dir> [--plan-only] [--max-steps 24]
 """
 from __future__ import annotations
 
@@ -61,7 +61,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--layers", nargs="*", type=int, default=None, help="default: the band's attention members from the registry, plus the final layer")
-    ap.add_argument("--max-steps", type=int, default=12)
+    # 24, which is `runner.run_task`'s own default and the ceiling that produced every Qwen
+    # number this pilot is compared against. It was 12 for one run, and four of Gemma's eleven
+    # failures there were exhaustion — a harness limit half its comparator's height, read as the
+    # model's limit. A comparison against numbers made at 24 is not valid at 12.
+    ap.add_argument("--max-steps", type=int, default=24)
     ap.add_argument("--max-tokens", type=int, default=200)
     ap.add_argument("--chat-tokens", type=int, default=160)
     ap.add_argument("--top-k", type=int, default=10)
@@ -192,7 +196,7 @@ def main() -> None:
                     if spec.chat.observation_role != "tool"
                     else "the template's own tool role"
                 ),
-                "model_source": spec.source, "checkpoint": spec.hf_id,
+                "model_base": spec.base, "model_training": spec.training, "checkpoint": spec.hf_id,
                 "lens_path": str(args.lens), "band_declared": bool(band), "top_k": args.top_k, "max_steps": args.max_steps, "max_tokens": args.max_tokens,
                 "chat_tokens": args.chat_tokens, "seed": SEED, "episodes": []}
     print(json.dumps({"event": "loaded", "layers": layers, "band": band}), flush=True)

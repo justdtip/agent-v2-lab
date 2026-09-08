@@ -1,0 +1,49 @@
+{
+ "record_directory": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/18df6241-b6a2-4c3c-8b24-22cad2612a51/scratchpad/pilot/stage1",
+ "episodes": 11,
+ "identity_layer": 34,
+ "identity_layer_rank_1_fraction": 1.0,
+ "passed": true,
+ "layers": {
+  "11": {
+   "reads": 5316,
+   "median_rank": 1331.0,
+   "rank_1_fraction": 0.0039503386004514675
+  },
+  "12": {
+   "reads": 5316,
+   "median_rank": 1281.5,
+   "rank_1_fraction": 0.002257336343115124
+  },
+  "17": {
+   "reads": 5316,
+   "median_rank": 4128.5,
+   "rank_1_fraction": 0.0018811136192626034
+  },
+  "18": {
+   "reads": 5316,
+   "median_rank": 2698.5,
+   "rank_1_fraction": 0.004702784048156509
+  },
+  "23": {
+   "reads": 5316,
+   "median_rank": 249.0,
+   "rank_1_fraction": 0.08841234010534237
+  },
+  "24": {
+   "reads": 5316,
+   "median_rank": 3.0,
+   "rank_1_fraction": 0.3647479307750188
+  },
+  "30": {
+   "reads": 5316,
+   "median_rank": 1.0,
+   "rank_1_fraction": 0.7360797592174567
+  },
+  "34": {
+   "reads": 5316,
+   "median_rank": 1.0,
+   "rank_1_fraction": 1.0
+  }
+ }
+}

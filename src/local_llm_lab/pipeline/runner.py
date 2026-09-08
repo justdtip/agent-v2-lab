@@ -14,6 +14,7 @@ from local_llm_lab.pipeline.env import Fault, Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
+    system_prompt,
     assistant_message,
     build_prompt,
     parse_turn,
@@ -617,7 +618,7 @@ def run_task(
     if transcript is not None:
         transcript.start(task, label)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt(spec=spec)},
         {"role": "user", "content": task.prompt},
     ]
     # ``[:2]`` is the whole list, built two lines above, and it is written as a slice only to
