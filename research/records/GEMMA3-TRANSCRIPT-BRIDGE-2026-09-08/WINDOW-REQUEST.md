@@ -23,7 +23,7 @@ first 128-token sequence peaked at 9.658591 GiB, while repeated sequences later 
 12.443628 GiB. A first-row result alone cannot certify the absence of retention over a corpus.
 Exercise both split slots and repeated rows, with no quality outputs or lens writing.
 
-The narrow invocation is frozen in `R47-DIAGNOSTIC-PLAN.json`: **10.5 GiB projected peak**, only
+The narrow invocation is frozen in `R47-DIAGNOSTIC-PLAN-v2.json`: **10.5 GiB projected peak**, only
 for eight 128-token forwards using `split_spill`, without solving or writing a lens. The first
 four fit rows of the old run reached 9.960718 GiB. Retaining the inspected 128-to-512 tensor
 allowance, despite keeping this diagnostic at 128, gives 10.104273 GiB and leaves 0.395727 GiB

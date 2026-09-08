@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-09-08T14:35:33.793106+00:00",
+  "scope": "final affected integration after repeated-update qualification and gradual ladder; real MLX blocked in parent and child runtimes",
+  "pytest_exit_code": 0,
+  "outcomes": {
+    "passed": 244
+  },
+  "tests": [
+    "tests/test_native_residual_lifetime.py",
+    "tests/test_lens_regression_memory.py",
+    "tests/test_lens_memory_policy.py",
+    "tests/test_lens_regression_preflight.py",
+    "tests/test_lens_runtime.py",
+    "tests/test_lens_transcript.py",
+    "tests/test_gemma_transcript_lens.py",
+    "tests/test_evaluation_capture.py",
+    "tests/test_sae_bridge.py",
+    "tests/test_sae_bridge_io.py",
+    "tests/test_repository_rules.py::test_banned_model_constants_are_limited_to_approved_or_legacy_modules",
+    "tests/test_repository_rules.py::test_processes_are_started_only_through_the_spawn_helper"
+  ],
+  "source_sha256": {
+    "src/local_llm_lab/arch.py": "e43a0f2a0a00404c88579362ecd897660621bfb02fe397983d79e52e6cc2b30e",
+    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "a2f88937b32d946788e69200ffb7759f2bb6452f9ce77734d0bf5534b188b74b",
+    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py": "bf4ef8344b0f755f29bf8c1e0da0094fc883b79967e955ec277f2cd0538849cf",
+    "scripts/lens_regression_preflight.py": "0e6c21733290d3d3857ba813301b5c39a0b17ff339afda8df10bdf1dcc0d7612",
+    "scripts/lens_fit.py": "e5cba2b6bf36cabeacefb6d610d82dcd5fa1dbf60dad972029bc2bd1e2fb066c",
+    "scripts/gemma_transcript_lens.py": "01dbadbd137fc0b774e2693116f1f78891ed66364d94ad8bba8e8954d33b508a"
+  },
+  "test_sha256": {
+    "tests/test_native_residual_lifetime.py": "0bc9b9e389d06857a57efe0bf2a48ace538805a42055b79388e6ef91b7227a37",
+    "tests/test_lens_regression_memory.py": "60d9f03cafae426446b9815e79a2c01410fe8f82b1d3b52d954d2ea10fc5d1e8",
+    "tests/test_lens_memory_policy.py": "235cca8f698e8dfb6c500ceff5aac6afd8fbd89986b5f30066031de63abea21a",
+    "tests/test_lens_regression_preflight.py": "fba601f8644481b9f66596692745271c1e869aa3558737307d6979e0b7581b12",
+    "tests/test_lens_runtime.py": "9d1e6c4a27405be04badc19f52fde189ab4e811e7ec6b2c81c6ab2ed53b990e5",
+    "tests/test_lens_transcript.py": "fd9fbf429296566bf9a95342c533e9ffd5a3f5a3aa2be9d2c6091b65c101e524",
+    "tests/test_gemma_transcript_lens.py": "a95c5da4ec1c38ff72eefd36bf644b6af329783a06ec104003563d56149da6a4",
+    "tests/test_evaluation_capture.py": "5039814fe39588916820a07c385d10d55a9aa01dca416ac51da2053c7453cd6e",
+    "tests/test_sae_bridge.py": "c7f5ee11c8e8ccca3d9db19b51fb3f63dbb22f0073e5103e6b3f81f0288c5477",
+    "tests/test_sae_bridge_io.py": "8010d7ef517485144f37303c11401511e4447a91c9f713a36ccdcb0f5ad26cfe",
+    "tests/test_repository_rules.py": "ed847ed5622d891fbf11b8fcd189e3c87a64e339765af5b059828cf6fec3a7e5"
+  },
+  "native_checkpoint_execution": false,
+  "limitations": [
+    "Fake backend numerical equality is not real-checkpoint numerical equivalence.",
+    "No measured allocation or throughput for corrected runtime.",
+    "Capture has a before-load scalar cap gate, not a capture-specific measured-evidence validator."
+  ]
+}

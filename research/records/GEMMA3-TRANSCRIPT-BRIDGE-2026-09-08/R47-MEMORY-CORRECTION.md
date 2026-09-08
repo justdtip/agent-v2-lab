@@ -91,19 +91,20 @@ continue to apply.
 
 ## Source outcome and next diagnostic
 
-The correction is implemented through source commit `8b105f9`. **241 affected integration checks
-passed** with real MLX imports blocked in the parent and subprocesses. A final error-message
-amendment passed 26 focused checks; the two verification records bind their exact source hashes.
+The correction is implemented through source commit `26d5d47`. **244 affected integration checks
+passed** with real MLX imports blocked in the parent and subprocesses. `R47-SOURCE-VERIFICATION-v2.json` binds the exact final source hashes; earlier 241-check and
+26-check records remain as history.
 The residual-ownership tests failed before the fix and passed after it. Fake-array tests verify
 unchanged statistics, maps, masks and forward counts, plus one-split ownership and scratch cleanup.
 They do not establish native numerical equivalence or measured resource use.
 
-`R47-DIAGNOSTIC-PLAN.json` freezes the first 128-token, eight-forward diagnostic with a **10.5 GiB
+`R47-DIAGNOSTIC-PLAN-v2.json` freezes the first 128-token, eight-forward diagnostic with a **10.5 GiB
 engineering projection**, strictly below the recorded 10.656 GiB threshold. The old four-fit-row
 peak was 9.960718 GiB; retained dimensional allowance is 0.143555 GiB, leaving 0.395727 GiB for
 staging and unmeasured workspace. It assumes tested split-release behavior, not simultaneous
 split storage: the old first-held-row peak of 11.352926 GiB rules out that alternative. The plan
-qualifies no larger shape, solver, complete fit or capture run. It remains deferred until the
+qualifies no larger shape, solver, complete fit or capture run. Qualification also repeats four updates per split and includes 2,048 before 2,816.
+The diagnostic remains deferred until the
 Deputy actually releases the machine and a live owned window is announced.
 
 Capture now compares its registered projection with the device threshold before loading.
