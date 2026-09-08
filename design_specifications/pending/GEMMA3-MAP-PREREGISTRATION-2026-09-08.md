@@ -465,3 +465,27 @@ which commitment occurs**, read from the residual under both conditions: the lay
 emitted token first reaches rank 1 at the divergence position, compared against the argument-start
 control and against the fork's layer 23-to-24 step. Stage two produces it at all 34 layers and needs
 no further run.
+
+**Class 2 has a mechanism, not just a name.** Two instances, and the second shows the model is not
+failing to notice.
+
+*`pointer_chain-0018`* (D-CRO, `e9c970c`): the model follows seven `Next` pointers correctly, reaches
+a node carrying `Result: artifact-93330` and no `Next`, and answers with an invented eighth path in
+the chain's own naming convention. After seven turns of extracting a Next path it extracts an eighth
+where there is none.
+
+*`batch_update-0166`, corrected rendering*: the model is told `ERROR: old text not found` for
+worker-1 and again for worker-2. **Its notes record this accurately** — *"The old text was not found
+in worker-1.ini. Continuing to worker-2.ini"* — and it proceeds through the worker-0-to-worker-3
+template anyway, finishing `updated-and-verified=4` with one update actually applied.
+
+**The common mechanism: the model updates its beliefs about observations and not its plan.** The
+notes track reality; the actions track the schema. It is not a perception failure and not a memory
+failure — the evidence is registered in plain text and then does not reach the action. **The schema
+outlives the task that needed it.**
+
+This is the same family as the note/call divergence recorded this morning, restated there as *"the
+note states an intention the action space cannot express and the call does not implement"*. Three
+episodes now, across two failure classes, all showing a plan that survives its own disconfirmation.
+**Stage two records, per episode, whether any progress note contradicts the action emitted in the
+same turn**, which is computable from the record and needs no rerun.
