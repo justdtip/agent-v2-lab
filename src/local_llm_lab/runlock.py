@@ -1180,6 +1180,13 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
     opening.add_argument("--seat", required=True)
     opening.add_argument("--purpose", required=True)
     opening.add_argument("--minutes", type=float, required=True)
+    # Whose life the window should be read against, for seats whose shell does not outlive the
+    # command. The default parent is right for an interactive seat and for a launcher script,
+    # both of which persist for the block; it is wrong for a harness that runs each command in
+    # a shell it then discards, where the recorded holder is dead before anyone reads the file
+    # and the window reports itself orphaned from the moment it opens. Such a seat passes the
+    # pid of something that will actually live: the run it is about to start, or a sentinel.
+    opening.add_argument("--holder-pid", type=int, default=None)
     running = sub.add_parser("run")
     running.add_argument("--seat", required=True)
     running.add_argument("--purpose", required=True)
@@ -1197,11 +1204,20 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
         return 1
 
     if args.action == "announce":
-        # The parent, not this process: `announce` exits a second from now and a window naming a
-        # dead pid can never witness that it was orphaned. The shell that evals the export line
-        # is the thing whose life the window should be read against.
+        # The parent by default, not this process: `announce` exits a second from now and a
+        # window naming a dead pid can never witness that it was orphaned. The shell that evals
+        # the export line is normally the thing whose life the window should be read against.
+        #
+        # `--holder-pid` exists because that default has one class of caller it is wrong for, and
+        # the failure is silent. A seat whose harness runs every command in a fresh shell and
+        # then discards it records a parent that is already gone, so the window reads "holder not
+        # running" from the moment it opens -- indistinguishable, to any other seat, from a block
+        # that died and left its window behind. Observed on 2026-09-08 by a seat that is not an
+        # interactive terminal. Naming a longer-lived process is the caller's own knowledge and
+        # cannot be inferred here, which is why it is an argument rather than a cleverer default.
         try:
-            nonce = announce_window(args.seat, args.purpose, args.minutes, pid=os.getppid())
+            holder = os.getppid() if args.holder_pid is None else args.holder_pid
+            nonce = announce_window(args.seat, args.purpose, args.minutes, pid=holder)
         except RunLockBusy as error:
             return refuse("announce", error)
         print(f"export {WINDOW_HOLDER_ENV}={nonce}")

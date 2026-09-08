@@ -1566,3 +1566,75 @@ def test_a_child_killed_by_a_signal_becomes_the_shells_own_status(tmp_path) -> N
     )
     assert completed.returncode == 128 + signal.SIGTERM, completed.stderr
     assert not (state / runlock.WINDOW_RELATIVE_PATH).exists(), "and the window still ended"
+
+
+def test_announce_records_the_holder_a_caller_names_rather_than_a_shell_it_will_discard(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """The default parent is right for a seat whose shell persists, and wrong for one whose does not.
+
+    A harness that runs each command in a fresh shell and discards it records a parent that is
+    already dead, so the window reports "holder not running" from the moment it opens — which is
+    indistinguishable, to every other seat, from a block that died and left its window behind. The
+    orphan report is the one signal that says a slot can be reclaimed, and a false one costs more
+    than no signal at all.
+
+    Whether a given caller's parent will outlive the block is the caller's own knowledge and
+    cannot be inferred inside `announce`, so it is an argument.
+    """
+    path = tmp_path / ".box-window.json"
+    monkeypatch.setattr(runlock, "default_window_path", lambda: path)
+
+    dead = _a_pid_that_is_not_running()
+    runlock._window_cli(
+        [
+            "announce",
+            "--seat",
+            "deputy",
+            "--purpose",
+            "a block whose shell does not survive it",
+            "--minutes",
+            "30",
+            "--holder-pid",
+            str(os.getpid()),
+        ]
+    )
+    capsys.readouterr()
+    window = runlock.read_window(path)
+    assert window.pid == os.getpid()
+    assert window.holder_state == "running", "the named holder is alive and the window says so"
+
+    path.unlink()
+    runlock._window_cli(
+        [
+            "announce",
+            "--seat",
+            "deputy",
+            "--purpose",
+            "the same block, naming a holder that has gone",
+            "--minutes",
+            "30",
+            "--holder-pid",
+            str(dead),
+        ]
+    )
+    capsys.readouterr()
+    assert runlock.read_window(path).orphaned, (
+        "and a window naming a dead holder still reports orphaned, because the argument moves "
+        "which process is watched and never what the report is allowed to say"
+    )
+
+
+def _a_pid_that_is_not_running() -> int:
+    """A pid with no process behind it, found rather than assumed.
+
+    Picking a large constant would be a test that passes until the box happens to reach it.
+    """
+    for candidate in range(2**15 - 1, 2, -1):
+        try:
+            os.kill(candidate, 0)
+        except ProcessLookupError:
+            return candidate
+        except OSError:
+            continue
+    raise AssertionError("every pid in range is in use, which cannot happen")

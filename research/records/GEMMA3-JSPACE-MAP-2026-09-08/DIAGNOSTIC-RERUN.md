@@ -64,9 +64,24 @@ helps a model that cannot re-emit a path it was given.
 
 Its notes make the failure legible in a way an outcome cannot. From the third turn on, every note
 says a variant of *"The file still doesn't exist. I need to create it"* — and the action attached
-to that note is `read_file`, twenty-three times. **There is no tool that creates a file.** The
-model has formed an intention the toolset cannot express and emits an action that does not
-implement its own stated plan.
+to that note is `read_file`, twenty-three times. There is no tool in this workspace that creates a
+file.
+
+**That note is not a confabulation, and calling it one would have been the wrong finding.** The
+observation it follows reads `ERROR: file not found: /test/0028/config.ini`, so *"the file still
+doesn't exist"* is an accurate reading of what the model was handed, and *"I need to create it"* is
+a sound inference from it. The premise is false, not the reasoning. The CRO raised this distinction
+and it is settled here from the transcript rather than left open: the model reads its instrument
+correctly and reasons correctly from a corrupted path.
+
+**What remains after that correction is the divergence itself.** The stated plan is to create; the
+emitted call is a read; and the two do not implement each other, twenty-three times running.
+
+**And the corrupted path was never out of sight.** The literal `workspace/test/0028/config.ini`
+is present in the rendered prompt at every turn, including the last at 2,701 tokens — the task
+statement is in the opening turn and windowing never removes it. So this is not a memory failure
+and not an artefact of hiding old observations. The string the model needed was in front of it on
+every one of the twenty-four decisions, and a different string came out.
 
 ## What this hands the map
 
