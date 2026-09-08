@@ -1,0 +1,299 @@
+diff --git a/scripts/lens_fit.py b/scripts/lens_fit.py
+index 7e86a8d..1dc4b41 100644
+--- a/scripts/lens_fit.py
++++ b/scripts/lens_fit.py
+@@ -17,6 +17,17 @@ def main(argv: list[str] | None = None) -> int:
+     parser.add_argument("--model", required=True)
+     parser.add_argument("--corpus", type=Path, required=True)
+     parser.add_argument("--layers", choices=("all",), default="all")
++    parser.add_argument(
++        "--residual-source",
++        choices=("hand_run", "native"),
++        default="hand_run",
++        help=(
++            "which forward produces the residuals a regression fit reads. `hand_run` is this "
++            "repository's decoder loop, which every Qwen fit used; `native` taps the model's own "
++            "forward and is what a family the loop does not yet describe needs. Explicit with no "
++            "default inference from the model, and recorded in the fit's provenance."
++        ),
++    )
+     parser.add_argument("--out", type=Path, required=True)
+     parser.add_argument(
+         "--revision", default="main", help="Existing local Hub revision; offline only"
+@@ -99,7 +110,12 @@ def main(argv: list[str] | None = None) -> int:
+ 
+     validation = None
+     if args.kind == "regression":
+-        result = fit_regression(loaded.view, prepared.rows, progress=progress)
++        result = fit_regression(
++            loaded.view,
++            prepared.rows,
++            progress=progress,
++            residual_source=args.residual_source,
++        )
+     else:
+         write_record(
+             args.record_dir / "runtime.json",
+@@ -143,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
+         "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
+         "corpus_sequences_sha256": prepared.manifest["sequences"]["sha256"],
+         "counts": result.counts,
++        # Top level as well as inside counts: a reader deciding whether two fits are comparable
++        # should not have to dig for the forward that produced them.
++        "residual_source": args.residual_source,
+         "per_layer": result.per_layer,
+         "lambda_grid": ALPHA_GRID,
+         "penalty_rule": "alpha * mean_diag(total fit XTX) = n * lambda_per_position",
+diff --git a/src/local_llm_lab/arch.py b/src/local_llm_lab/arch.py
+index dc2eeda..cd5070a 100644
+--- a/src/local_llm_lab/arch.py
++++ b/src/local_llm_lab/arch.py
+@@ -364,6 +364,83 @@ class ArchitectureView:
+                 captured[index + 1] = h
+         return captured
+ 
++    def native_residuals(self, ids: Any, layers: Sequence[int]) -> dict[int, Any]:
++        """The same residuals as :meth:`residuals`, from the model's **own** forward.
++
++        Identical contract -- ``{layer: (1, positions, hidden_size)}``, no cache, the final
++        layer taken after the last block and before the final norm -- and a different producer.
++        :meth:`residuals` re-runs the decoder through this class's own loop, which is where the
++        model-specific assumptions live: the entry transform, the mask construction, the mask
++        selection per block. This one taps the model's forward through :class:`NativeCapture`,
++        so all three are the model's.
++
++        **Why both exist.** On a family whose loop this class describes correctly the two agree
++        exactly, and the check below proves it rather than asserting it. On Gemma 3 they do not,
++        because the hand-run loop omits a ``sqrt(hidden_size)`` entry scale and builds one mask
++        where the model builds two; the native path inherits all of it and is correct today.
++        That disagreement is not a defect in this method -- it is the measurement the
++        architecture-view port has to close, and it is the port's acceptance evidence.
++
++        A fit that needs residuals and not derivatives can therefore run on Gemma now. Anything
++        that perturbs a residual and re-runs a tail still needs the loop, and still needs the
++        port.
++        """
++        import mlx.core as mx
++
++        wanted = sorted({int(layer) for layer in layers})
++        if not wanted or wanted[0] < 0 or wanted[-1] > self.num_layers:
++            raise ValueError(
++                f"layers must be a non-empty sequence within [0, {self.num_layers}]; got {wanted}"
++            )
++        token_ids = mx.array(ids).astype(mx.int32)
++        if token_ids.ndim == 1:
++            token_ids = token_ids[None, :]
++        if token_ids.ndim != 2 or token_ids.shape[0] != 1:
++            raise ValueError("native residuals take an unpadded batch of one")
++
++        captured: dict[int, Any] = {}
++
++        class _Collect:
++            """The sink protocol's three methods; only ``residual`` carries anything here."""
++
++            def residual(self, layer, offset, h):
++                captured[int(layer)] = h
++
++            def output(self, offset, ids, logits):
++                return None
++
++            def head(self, *args, **kwargs):  # pragma: no cover - head capture is off
++                return None
++
++        with NativeCapture(self, _Collect(), layers=tuple(wanted)) as wrapped:
++            wrapped(token_ids)
++        missing = set(wanted) - set(captured)
++        if missing:  # pragma: no cover - defensive; the tap emits every requested layer
++            raise ValueError(f"native capture emitted no residual for layers {sorted(missing)}")
++        return captured
++
++    def residual_source_agreement(
++        self, ids: Any, layers: Sequence[int]
++    ) -> dict[int, float]:
++        """Per-layer maximum absolute difference between the two residual producers.
++
++        Zero on every layer means this class's loop reproduces the model's forward exactly, and
++        substituting one for the other is a change of producer and not of result. Non-zero says
++        which layers the loop gets wrong and by how much, which is what the port's acceptance
++        reads.
++        """
++        import mlx.core as mx
++
++        loop = self.residuals(ids, layers)
++        native = self.native_residuals(ids, layers)
++        return {
++            layer: float(
++                mx.max(mx.abs(loop[layer].astype(mx.float32) - native[layer].astype(mx.float32)))
++                .item()
++            )
++            for layer in sorted(loop)
++        }
++
+     def cached_logits(
+         self,
+         ids: Any,
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/regression.py b/src/local_llm_lab/pipeline/lens_fitting/regression.py
+index 3c3ca89..f51124a 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/regression.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/regression.py
+@@ -47,10 +47,39 @@ class SufficientStats:
+         self.n += x.shape[0]
+ 
+ 
+-def accumulate(view: Any, rows: Iterable[dict], *, progress: Callable | None = None) -> tuple:
+-    """One uncached all-layer forward per sequence, separate fit and selection sums."""
++#: The two producers of the residual contract, named so a fit records which one it used.
++RESIDUAL_SOURCES = ("hand_run", "native")
++
++
++def accumulate(
++    view: Any,
++    rows: Iterable[dict],
++    *,
++    progress: Callable | None = None,
++    residual_source: str = "hand_run",
++) -> tuple:
++    """One uncached all-layer forward per sequence, separate fit and selection sums.
++
++    ``residual_source`` chooses the producer and is **explicit with no inference**, because a fit
++    whose residual source changed silently would be unattributable afterwards: the numbers are
++    the same shape either way and nothing in the artifact would say which forward made them. The
++    caller passes it and the caller records it.
++
++    ``"hand_run"`` is ``view.residuals``, this repository's own decoder loop, which is what every
++    Qwen fit used. ``"native"`` is ``view.native_residuals``, the model's own forward tapped
++    through capture, which inherits the entry transform and the mask construction rather than
++    reproducing them. On a model whose loop is correct the two agree exactly; on Gemma 3 they do
++    not until the architecture-view port lands, and ``view.residual_source_agreement`` is how a
++    caller checks which case it is in.
++    """
+     import mlx.core as mx
+ 
++    if residual_source not in RESIDUAL_SOURCES:
++        raise ValueError(
++            f"residual_source must be one of {list(RESIDUAL_SOURCES)}; got {residual_source!r}"
++        )
++    produce = view.residuals if residual_source == "hand_run" else view.native_residuals
++
+     d, depth = view.hidden_size, view.num_layers
+     if d <= 0 or depth < 2:
+         raise ValueError("regression requires positive hidden size and nonfinal layers")
+@@ -60,11 +89,14 @@ def accumulate(view: Any, rows: Iterable[dict], *, progress: Callable | None = N
+         for split in ("fit", "held")
+     }
+     counts = {split: {"sequences": 0, "positions": 0} for split in sums}
++    # Carried in the counts so it reaches the artifact by the same route the sequence and
++    # position totals do, rather than depending on a caller remembering to stamp it.
++    counts["residual_source"] = residual_source
+     for number, row in enumerate(rows, 1):
+         split, ids = row["split"], row["ids"]
+         if split not in sums or not ids:
+             raise ValueError("every sequence needs nonempty ids and fit/held membership")
+-        residuals = view.residuals(ids, layers)
++        residuals = produce(ids, layers)
+         if set(residuals) != set(layers) or any(
+             h.shape != (1, len(ids), d) for h in residuals.values()
+         ):
+@@ -87,7 +119,7 @@ def accumulate(view: Any, rows: Iterable[dict], *, progress: Callable | None = N
+                     "counts": {key: dict(value) for key, value in counts.items()},
+                 }
+             )
+-    if any(not value["positions"] for value in counts.values()):
++    if any(not counts[split]["positions"] for split in sums):
+         raise ValueError("both fit and held selection splits require positions")
+     return sums, counts
+ 
+@@ -159,13 +191,21 @@ class RegressionResult:
+ 
+ 
+ def fit_regression(
+-    view: Any, rows: Iterable[dict], *, progress: Callable | None = None
++    view: Any,
++    rows: Iterable[dict],
++    *,
++    progress: Callable | None = None,
++    residual_source: str = "hand_run",
+ ) -> RegressionResult:
+-    """Fit every nonfinal residual index and return hosted-orientation float32 maps."""
++    """Fit every nonfinal residual index and return hosted-orientation float32 maps.
++
++    ``residual_source`` is passed through and reaches the artifact in ``counts``, so a fitted
++    lens says which forward produced the residuals it was fitted on.
++    """
+     import mlx.core as mx
+ 
+     started = time.monotonic()
+-    sums, counts = accumulate(view, rows, progress=progress)
++    sums, counts = accumulate(view, rows, progress=progress, residual_source=residual_source)
+     maps, per_layer = {}, {}
+     for layer in range(1, view.num_layers):
+         layer_started = time.monotonic()
+diff --git a/tests/test_lens_regression.py b/tests/test_lens_regression.py
+index e589661..934583d 100644
+--- a/tests/test_lens_regression.py
++++ b/tests/test_lens_regression.py
+@@ -178,3 +178,64 @@ def test_held_targets_select_alpha_instead_of_fit_error():
+         direct = np.eye(2) * (10 / (1 + row["alpha"]))
+         expected = np.sum((np.eye(2) - direct) ** 2)
+         assert row["held_out_squared_error"] == pytest.approx(expected, rel=2e-6, abs=2e-6)
++
++
++def test_the_two_residual_sources_agree_exactly_on_a_model_whose_loop_is_correct():
++    """The substitution is demonstrated, not argued.
++
++    `view.residuals` re-runs the decoder through this repository's own loop; `native_residuals`
++    taps the model's forward. Where the loop describes the family correctly the two are the same
++    numbers, and a fit may take either. Where it does not -- Gemma 3, whose entry scale the loop
++    omits and whose second mask it does not build -- they differ, and `residual_source_agreement`
++    reports by how much at each layer, which is the architecture port's acceptance evidence.
++
++    A hybrid at toy width, so both mask kinds and both block kinds are exercised on the family
++    the loop was written for. Exact equality, not a tolerance: the same arithmetic in the same
++    order should give the same bits, and a tolerance here would hide the very drift this exists
++    to detect.
++    """
++    import mlx.core as mx
++    from test_live_lens_native import tiny_model
++
++    from local_llm_lab.arch import ArchitectureView
++
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    ids = mx.array([[1, 2, 3, 4, 5]])
++    layers = tuple(range(1, view.num_layers + 1))
++
++    loop = view.residuals(ids, layers)
++    native = view.native_residuals(ids, layers)
++
++    assert set(native) == set(loop)
++    for layer in layers:
++        assert native[layer].shape == loop[layer].shape == (1, 5, view.hidden_size)
++    assert view.residual_source_agreement(ids, layers) == dict.fromkeys(layers, 0.0)
++
++
++def test_a_fit_records_which_forward_produced_its_residuals():
++    """A fit whose residual source changed silently would be unattributable afterwards.
++
++    The numbers are the same shape from either producer and nothing else in the artifact would
++    say which forward made them, so the choice is explicit at the call site, refuses an unknown
++    name, and travels to the record inside `counts`.
++    """
++    from test_live_lens_native import tiny_model
++
++    from local_llm_lab.arch import ArchitectureView
++    from local_llm_lab.pipeline.lens_fitting import regression as reg
++
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    rows = [
++        {"split": "fit", "ids": [1, 2, 3]},
++        {"split": "held", "ids": [4, 5, 6]},
++    ]
++
++    for source in reg.RESIDUAL_SOURCES:
++        _, counts = reg.accumulate(view, rows, residual_source=source)
++        assert counts["residual_source"] == source
++        assert counts["fit"]["positions"] == 3 and counts["held"]["positions"] == 3
++
++    with pytest.raises(ValueError, match="residual_source must be one of"):
++        reg.accumulate(view, rows, residual_source="whatever_the_model_needs")
