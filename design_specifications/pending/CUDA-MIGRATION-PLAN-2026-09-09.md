@@ -376,29 +376,52 @@ its own smoke test and on `adapter_delta` reading its output.
 
 ---
 
-## 8. Policy questions for the Director
+## 8. Policy questions, ruled by the Director (2026-09-09)
 
-The plan cannot decide these.
+The Director answered these in the document. His words are quoted; the consequence for the plan
+follows each.
 
-1. **One lock per box, or one per device?** `runlock` enforces one model load at a time because
-   unified memory is one pool. On a multi-GPU box, two loads on two devices do not contend for
-   memory but do for the CPU, the disk, and the timing of each other's runs (R61). My recommendation
-   is one window per **device set**, with R61's announcement carrying the device list, and the
-   suite's skip gate keyed on the devices a window names.
-2. **Which quantisation does the CUDA path run?** The map was read at MLX 4-bit. CUDA offers bf16
-   (matches the hosted lens; the bridge requires it) or bitsandbytes 4-bit (matches neither MLX's
-   scheme nor bf16). Recommendation: **bf16 as the CUDA reference**, and the MLX-4-bit-versus-CUDA-bf16
-   difference measured once on the golden episodes and recorded as the comparability bound. With
-   memory no longer the constraint, 4-bit's reason for existing on the laptop does not transfer.
-3. **Do the probes migrate?** Recommendation: no, except `patch.py`'s intervention core, until a
-   probe is ordered on Gemma. Fifteen thousand lines nobody has run on this model are not reuse.
-4. **Is the laptop MLX path kept?** Recommendation: yes, as the `[mlx]` extra, because it is the only
-   place the golden records can be regenerated and the only cross-check on CUDA determinism. The
-   cost is the shared base extraction in WS-A, ~40 lines.
-5. **The branch.** Proposed `cuda-migration` from `48db38f`. The plan lands on the current branch so
-   every seat reads it; code lands on the new one.
+1. **Locks.** *"1 model per device, training specifically on both if possible."* — **Ruled: one
+   model per device.** A window names the device set it holds; a training run may claim every
+   device present under one window; the suite's skip gate is keyed on the devices a window names,
+   not on the box.
 
----
+2. **Precision.** *"bf16. I want resolution."* — **Ruled: bf16 is the CUDA path, everywhere.** No
+   4-bit on CUDA. The MLX-4-bit-versus-CUDA-bf16 difference is measured once on the golden episodes
+   and recorded as the comparability bound for every number that crosses the two.
+
+3. **Training.** *"When we fine-tune, we will also be fine-tuning the actual model itself, rather
+   than applying LoRA adapters."* — **Ruled: full fine-tuning, not LoRA.** WS-C is rewritten below
+   (§12.2). The depth-expansion machinery is preserved; `adapter_delta.py` becomes a
+   checkpoint-delta reader over full weight differences, and the depth-why geometry (per-module
+   relative perturbation in quadrature) generalises to it unchanged.
+
+4. **Probes.** Not addressed; the recommendation stands — deferred except `patch.py`'s intervention
+   core, until a probe is ordered on Gemma.
+
+5. **The MLX path.** *"Yes. We keep it so we can keep doing experiments locally if needed. This is a
+   separate branch that will eventually be merged with the main one. I want to open a new branch
+   with every line of code so that we can reuse what we already have where applicable, and to
+   avoid introducing new conventions when we have existing implementations."* — **Ruled: MLX kept;
+   `cuda-migration` carries every line and merges back; reuse before invention.** A new convention
+   where an existing implementation exists is a defect in review.
+
+6. **The branch.** *"Agreed."* — `cuda-migration` from `2b7cba1`, which now also carries the
+   regression baseline (§11.2).
+
+7. **Where the work happens.** *"The idea is for us to implement this locally, then pull it onto
+   the remote server with the GPUs when we're ready. This is to minimize costs associated with
+   renting the server without using the thing we're renting it for. Because of this, I would like
+   us to be ultra-diligent because we won't be able to load cuda for testing until we actually
+   have the device. I don't expect a perfect implementation that immediately works for the first
+   time when we actually get the new device. I am, however, hoping for us to be able to
+   efficiently diagnose and resolve any issues we run into, because compute is not exactly
+   cheap."* — **Ruled: local-first, CPU torch as the development environment, and the first hour
+   on rented hardware is diagnostic by design.** §12.1.
+
+8. **Sequencing.** *"Fire off the other sessions' tasks, then provide me what I should give
+   codex. Make any necessary preparations beforehand."* — Done in this order; the seat orders and
+   Codex's brief are the companion documents to this plan.
 
 ## 9. Sequence
 
@@ -525,3 +548,70 @@ GPU and no migration. They are also exactly the things that quietly do not get f
 repository pivots. **The D-CRO closes them first and hands WS-D a complete evidence base.** WS-A
 starts on CPU torch the day it is installed; the two run in parallel because they are different
 seats, and neither waits on the other.
+
+---
+
+## 12. Local-first, and what the Director's rulings change
+
+### 12.1 CPU torch is the development environment; the remote's first hour is diagnostic by design
+
+Nothing CUDA can run until the device is rented, and the device costs money while it idles. So:
+
+- **Every workstream develops and validates on CPU torch in float32**, against the MLX golden
+  records, on this machine. What passes on CPU is recorded — gate by gate, at a commit — in a
+  manifest the branch carries, so that on the remote a failure is attributable to *the device
+  change* and nothing else.
+- **A remote diagnosis kit ships with the branch**: `scripts/acceptance_gates.py`, the seven §7
+  gates as one script that runs in minutes on a fresh device and stops at the first failing gate
+  with the number it saw and the number it expected. The first hour on rented hardware runs that,
+  not an experiment. Determinism settings (`torch.use_deterministic_algorithms`, attention kernel
+  pinned, dtype path recorded) are set by `device.py` and printed by the kit before the first gate.
+- **Expected differences are pre-declared, not discovered**: the CPU-fp32-versus-CUDA-bf16 delta on
+  the readout gate and the golden lens reads is projected from the MLX-4-bit-versus-CPU-fp32 delta
+  already measured locally, and a remote result outside that band is a defect, not a rounding
+  question.
+- **Ultra-diligence, operationalised**: no CUDA-path line lands without a CPU test that exercises
+  it; every device-dependent branch (`if device.type == "cuda"`) has a CPU test that proves the
+  other arm; and every memory-bearing knob is measured on the remote before the run that depends on
+  it (§10.2), with the declaration carrying the measurement.
+
+### 12.2 WS-C rewritten: full fine-tuning, multi-GPU when present, optional
+
+The Director rules that fine-tuning updates the model's own weights, not adapters. That changes the
+memory model and the tooling, and it simplifies the provenance.
+
+**Memory.** Full fine-tuning in bf16 with fp32 Adam states costs roughly `params × (2 + 2 + 8)`
+bytes plus activations: about **48 GB for 4B parameters** before activations, which fits one 80 GB
+device with gradient checkpointing and does not fit 24 GB; Gemma 3 27B does not fit one 80 GB device
+at all and needs sharding across several. So the training stream is **FSDP under `accelerate`**,
+which shards parameters, gradients and optimiser states across whatever devices exist and runs
+unsharded on one — "multi-GPU when present, not required" is the same code path with a different
+world size. CPU-offloaded optimiser states are the fallback rung for a device short of memory
+(§10.2's ladder). None of this is written by us: `accelerate` configures it and HF's `Trainer` or
+a minimal loop drives it.
+
+**What is ours and is preserved.** `depth_expansion.py` (adding layers and warming their output);
+the clipped optimiser; the checkpoint and validation cadence; the dataset manifest requirement; the
+training config schema in `configs/training/`. These move onto the torch loop as they are.
+
+**Provenance.** A full-fine-tuned checkpoint is a new `hf_checkpoint` with `base` and a
+`training_lineage` entry per R57; the identity a lens reads by lineage still holds. `adapter_delta.py`
+becomes `checkpoint_delta.py`: per-module relative perturbation `‖ΔW‖/‖W‖` in quadrature, the same
+quantity the depth-why record computed on LoRA, now over full weights. The top-8-layer result
+(training the lower layers destroyed the model) is the first thing to re-measure under full
+fine-tuning, because it is the programme's most consequential training finding and it was measured
+on adapters.
+
+**The `[mlx]` path keeps LoRA**, because that is what runs on the laptop and what every existing
+training record was made with. The two are different experiments and the registry says which.
+
+### 12.3 Seat orders and Codex's brief
+
+Companion documents, each naming files, interfaces, golden tests and budgets from this plan:
+
+- `CUDA-WS-A-CODEX-2026-09-09.md` — the torch seam and the graph-once estimator rewrite, for the
+  Director to relay.
+- `CUDA-WS-B-ORDER-2026-09-09.md` — generation, the `none` cache path, the golden harness.
+- `CUDA-WS-C-ORDER-2026-09-09.md` — full fine-tuning under FSDP, multi-GPU optional.
+- `CUDA-WS-D-ORDER-2026-09-09.md` — the lens un-port and the six extensions, for the D-CRO.
+- WS-E is the Chief's and needs no order.
