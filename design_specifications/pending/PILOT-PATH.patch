@@ -93,10 +93,19 @@ index cd1a803..dc2eeda 100644
              self._injected = False
          if self.injection is not None and self._offset > self.injection[1] and not self._injected:
 diff --git a/src/local_llm_lab/models.py b/src/local_llm_lab/models.py
-index ee66ff2..e07a9d3 100644
+index ee66ff2..7ab005c 100644
 --- a/src/local_llm_lab/models.py
 +++ b/src/local_llm_lab/models.py
-@@ -37,6 +37,18 @@ class ChatSpec:
+@@ -3,7 +3,7 @@
+ from __future__ import annotations
+ 
+ import re
+-from dataclasses import asdict, dataclass
++from dataclasses import asdict, dataclass, field
+ from pathlib import Path
+ from typing import Any, Literal
+ 
+@@ -37,6 +37,23 @@ class ChatSpec:
      template_kwargs: dict[str, Any]
      end_of_turn: str
      extra_stop_tokens: tuple[str, ...]
@@ -105,17 +114,22 @@ index ee66ff2..e07a9d3 100644
 +    #: ChatML's and asserted it, so every generation-side render raised on a model whose template
 +    #: opens a turn any other way. Gemma's is ``"<start_of_turn>model\n"``.
 +    #:
-+    #: The default is ChatML's and it is **not** where the guarantee lives. A registry file that
-+    #: omits the field fails at load, because the parser reads it with ``_required_string``; the
-+    #: default serves direct construction, which is test scaffolding. That distinction matters
-+    #: because this value is stamped into training manifests and into the lens corpus's tokenizer
-+    #: identity, which the prose stage re-derives and hash-compares, so a silently wrong one
-+    #: produces a self-consistently falsified corpus identity rather than an error.
-+    generation_prefix: str = "<|im_start|>assistant\n"
++    #: **Required, and keyword-only.** It had a ChatML default for one revision, so that the
++    #: dozen positional constructors in the tests kept working, and the Chief was right to
++    #: refuse it: a ChatML default on the one field whose purpose is to stop a ChatML value
++    #: being assumed is the same defect one level down. The parser's ``_required_string`` covers
++    #: registry files and nothing else, and ``_default_spec`` constructs this class directly,
++    #: which is precisely where ``<|im_end|>`` had been hiding.
++    #:
++    #: Keyword-only because removing a default from the middle of a signature would let every
++    #: positional constructor silently mis-assign, and the symptom would be a turn ending that
++    #: is some other field's value. Named, they fail to construct instead, which is a list of
++    #: sites rather than a bug.
++    generation_prefix: str = field(kw_only=True)
      max_think_tokens: int = 512
  
  
-@@ -275,6 +287,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
+@@ -275,6 +292,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
              thinking=thinking,
              template_kwargs=dict(template_kwargs),
              end_of_turn=_required_string(chat, "end_of_turn", source),
@@ -123,16 +137,24 @@ index ee66ff2..e07a9d3 100644
              extra_stop_tokens=tuple(stops),
              max_think_tokens=_positive_int(
                  chat.get("max_think_tokens", 512), "chat.max_think_tokens", source
-@@ -307,6 +320,9 @@ def _default_spec(hf_id: str) -> ModelSpec:
+@@ -307,7 +325,16 @@ def _default_spec(hf_id: str) -> ModelSpec:
          name=hf_id,
          hf_id=hf_id,
          family="unknown",
+-        chat=ChatSpec("unsupported", {}, "<|im_end|>", ()),
 +        # ChatML's markers, for a model nobody declared. They are a guess and the only honest
 +        # thing to say about them is that they are Qwen's; a run that reaches this path and is
 +        # not a ChatML model will render turns with another vocabulary's tokens.
-         chat=ChatSpec("unsupported", {}, "<|im_end|>", ()),
++        # ChatML's markers, for a model nobody declared. They are a guess, and the only
++        # honest thing to say about them is that they are Qwen's: a run that reaches this
++        # path on any other family renders turns with another vocabulary's tokens. Named
++        # rather than defaulted so this line is where a reader finds them.
++        chat=ChatSpec(
++            "unsupported", {}, "<|im_end|>", (), generation_prefix="<|im_start|>assistant\n"
++        ),
          lora=LoraSpec("attention+mlp", 16, 32.0, 0.0),
          train={},
+         cache_strategy="none",
 diff --git a/src/local_llm_lab/pipeline/protocol.py b/src/local_llm_lab/pipeline/protocol.py
 index 9fabcbd..833c207 100644
 --- a/src/local_llm_lab/pipeline/protocol.py
@@ -162,6 +184,71 @@ index 9fabcbd..833c207 100644
      if spec.chat.thinking == "off":
          return assistant + "<think>\n\n</think>\n\n"
      return assistant
+diff --git a/tests/test_branch.py b/tests/test_branch.py
+index 69e3f9d..d5b3feb 100644
+--- a/tests/test_branch.py
++++ b/tests/test_branch.py
+@@ -261,7 +261,9 @@ def _fake_spec(end_of_turn: str):
+         name="fake-branch",
+         hf_id="fake/branch",
+         family="fake",
+-        chat=ChatSpec("unsupported", {}, end_of_turn, ()),
++        chat=ChatSpec(
++            "unsupported", {}, end_of_turn, (), generation_prefix="<|im_start|>assistant\n"
++        ),
+         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+         train={},
+         cache_strategy="none",
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 755c494..0d27c76 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -572,7 +572,7 @@ def _training_model_spec() -> ModelSpec:
+         name="registry-name",
+         hf_id="registry/hf-id",
+         family="fake",
+-        chat=ChatSpec("unsupported", {}, "<eot>", ()),
++        chat=ChatSpec("unsupported", {}, "<eot>", (), generation_prefix="<|im_start|>assistant\n"),
+         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+         train={},
+         cache_strategy="none",
+diff --git a/tests/test_data.py b/tests/test_data.py
+index 2eee62f..47b3d0b 100644
+--- a/tests/test_data.py
++++ b/tests/test_data.py
+@@ -58,7 +58,7 @@ def _legacy_spec() -> ModelSpec:
+         name="legacy",
+         hf_id="legacy",
+         family="legacy",
+-        chat=ChatSpec("unsupported", {}, "<eot>", ()),
++        chat=ChatSpec("unsupported", {}, "<eot>", (), generation_prefix="<|im_start|>assistant\n"),
+         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+         train={},
+         cache_strategy="none",
+@@ -74,7 +74,13 @@ def _thinking_spec(mode: str) -> ModelSpec:
+         name=mode,
+         hf_id=mode,
+         family=mode,
+-        chat=ChatSpec(mode, {"enable_thinking": True}, "<eot>", ()),  # type: ignore[arg-type]
++        chat=ChatSpec(
++            mode,  # type: ignore[arg-type]
++            {"enable_thinking": True},
++            "<eot>",
++            (),
++            generation_prefix="<|im_start|>assistant\n",
++        ),
+         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+         train={},
+         cache_strategy="none",
+@@ -119,7 +125,7 @@ def _target_spec() -> ModelSpec:
+         name="target",
+         hf_id="target",
+         family="target",
+-        chat=ChatSpec("unsupported", {}, "<eot2>", ()),
++        chat=ChatSpec("unsupported", {}, "<eot2>", (), generation_prefix="<|im_start|>assistant\n"),
+         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+         train={},
+         cache_strategy="none",
 diff --git a/tests/test_live_lens_native.py b/tests/test_live_lens_native.py
 index e951f07..e95f4c7 100644
 --- a/tests/test_live_lens_native.py
@@ -209,7 +296,7 @@ index e951f07..e95f4c7 100644
 +    ):
 +        wrapped(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers])
 diff --git a/tests/test_models.py b/tests/test_models.py
-index 9299505..ca554de 100644
+index 9299505..4ed0902 100644
 --- a/tests/test_models.py
 +++ b/tests/test_models.py
 @@ -137,6 +137,7 @@ def _registry_mapping(evidence) -> dict:
@@ -220,7 +307,7 @@ index 9299505..ca554de 100644
              "extra_stop_tokens": [],
          },
          "lora": {"keys": "attention+mlp", "rank": 16, "scale": 32.0, "dropout": 0.0},
-@@ -399,3 +400,44 @@ def test_the_gemma_entry_is_what_stands_between_a_run_and_the_chatml_fallback()
+@@ -399,3 +400,49 @@ def test_the_gemma_entry_is_what_stands_between_a_run_and_the_chatml_fallback()
  
      assert fallback.chat.end_of_turn == "<|im_end|>", "the fallback is ChatML's, for any model"
      assert registered.chat.end_of_turn != fallback.chat.end_of_turn
@@ -241,10 +328,12 @@ index 9299505..ca554de 100644
 +    deleting the guard would convert a loud failure into a corpus identity that is falsified and
 +    self-consistent.
 +
-+    `ChatSpec` carries a ChatML default for direct construction, which is test scaffolding, and
-+    the guarantee lives in the parser instead: a registry file that omits the field fails to
-+    load. This asserts the parser, because the default would otherwise make the omission silent
-+    for exactly the file where it matters.
++    Two lines of defence, and the second exists because the first covers only one construction
++    path. The parser refuses a registry file that omits the field, which is asserted below. And
++    `ChatSpec` itself takes it **keyword-only with no default**, because a ChatML default on the
++    one field whose purpose is to stop a ChatML value being assumed is the same defect one level
++    down -- and `_default_spec` builds a `ChatSpec` directly, which is exactly where `<|im_end|>`
++    had been hiding.
 +    """
 +    import yaml
 +
@@ -259,9 +348,43 @@ index 9299505..ca554de 100644
 +        "reached only under `off`"
 +    )
 +
++    with pytest.raises(TypeError, match="generation_prefix"):
++        models.ChatSpec("unsupported", {}, "<eot>", ())  # type: ignore[call-arg]
++
 +    document = _registry_mapping(None)
 +    document["chat"].pop("generation_prefix")
 +    monkeypatch.setattr(models, "_REGISTRY_DIR", tmp_path)
 +    (tmp_path / "no-prefix.yaml").write_text(yaml.safe_dump(document))
 +    with pytest.raises(ValueError, match="generation_prefix"):
 +        load_model_spec("no-prefix")
+diff --git a/tests/test_preflight.py b/tests/test_preflight.py
+index 97c4d61..e2623e4 100644
+--- a/tests/test_preflight.py
++++ b/tests/test_preflight.py
+@@ -35,7 +35,13 @@ def _spec(*, memory_budget_gib: float = 1.0, train: dict[str, object] | None = N
+         name="fake-model",
+         hf_id="org/fake-model",
+         family="fake",
+-        chat=ChatSpec("off", {"chat_template": "fake"}, "<eot>", ()),
++        chat=ChatSpec(
++            "off",
++            {"chat_template": "fake"},
++            "<eot>",
++            (),
++            generation_prefix="<|im_start|>assistant\n",
++        ),
+         lora=LoraSpec("attention+mlp", 2, 4.0, 0.0),
+         train={"batch_size": 2, "max_seq_length": 5} if train is None else train,
+         cache_strategy="auto",
+diff --git a/tests/test_protocol.py b/tests/test_protocol.py
+index 7e63766..b7871eb 100644
+--- a/tests/test_protocol.py
++++ b/tests/test_protocol.py
+@@ -34,6 +34,7 @@ def _spec(mode: str) -> ModelSpec:
+             {"enable_thinking": mode != "off"} if mode != "unsupported" else {},
+             "<eot>",
+             (),
++            generation_prefix="<|im_start|>assistant\n",
+         ),
+         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
+         train={},

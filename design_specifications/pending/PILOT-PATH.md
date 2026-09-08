@@ -53,12 +53,22 @@ same value is stamped into training manifests and into the lens corpus's tokeniz
 the prose stage re-derives and hash-compares, so deleting the guard would turn a loud failure into
 a corpus identity that is falsified and self-consistent.
 
-**Where the guarantee lives, and where it does not.** The dataclass carries a ChatML default so
-direct construction keeps working — that is test scaffolding, and there are a dozen such call
-sites. The guarantee is in the parser: `_required_string` means a **registry file** that omits the
-field fails to load, and there is a test that removes the key from a synthetic registry document
-and asserts the refusal, because the default would otherwise make the omission silent for exactly
-the file where it matters.
+**Two lines of defence, after the Chief's ruling.** The first draft gave the dataclass a ChatML
+default so the eight positional constructors kept working, and the Chief refused it: *a ChatML
+default on the one field whose purpose is to stop a ChatML value being assumed is the same defect
+one level down.* Accepted, and the argument is stronger than the one I made — the parser covers
+registry files, and `_default_spec` builds a `ChatSpec` **directly**, which is precisely where
+`<|im_end|>` had been hiding all along.
+
+So the field is **required and keyword-only**. Keyword-only for the reason the ruling gives:
+removing a default from the middle of a signature would let every positional constructor silently
+mis-assign, and the symptom would be a turn ending that is some other field's value. Named, they
+fail to construct, which is a list of sites rather than a bug. Eight call sites now name it, and
+the test asserts both defences — `TypeError` from a positional construction, and the parser's
+refusal of a registry document with the key removed.
+
+`thinking` and `end_of_turn` were checked for the same shape and have none: neither carries a
+default, so neither can be assumed from one model. They stay positional.
 
 **What I left alone and why.** The empty thinking block, `<think>\n\n</think>\n\n`, is still a
 literal and still Qwen's. It is reached only under `thinking == "off"`, which no other registered
