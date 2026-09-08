@@ -47,7 +47,13 @@ A change in between-turn cache strategy requires renewed position/context verifi
 current capture path rejects turn-cache reuse explicitly, so it cannot silently inherit a future
 registry default. Covering this observed maximum also does not cover future reads above 2,815.
 
-## Resource correction: the larger context is not free
+## Historical resource proposal — withdrawn under R47
+
+The calculation below is retained to explain the superseded proposal. Comparing it with the
+registry's 22 GiB limit was wrong: the applicable ordinary threshold is 10.656 GiB. Its assumed
+full-vocabulary fitting buffers were also unsupported by the native residual path. Neither this
+21 GiB proposal nor the 14.5 GiB initial calibration or 16 GiB capture proposal authorizes a run.
+[R47-MEMORY-CORRECTION.md](R47-MEMORY-CORRECTION.md) supersedes their resource interpretation.
 
 The measured native bf16 128-token fit peaked at **12.4436 GiB**. The revised scalar estimate uses
 the same registered dimensions: residual width 2,560, vocabulary 262,208, 34 layers, eight attention
@@ -62,8 +68,9 @@ heads and FFN width 10,240. The scored block is half a context: **1,408 position
 | Two vocabulary-logit buffers, growth from 128 | 5.251282 |
 | **Baseline plus these terms** | **19.699765** |
 
-The provisional declaration is **21 GiB**, leaving 1.300235 GiB margin and remaining below the
-22 GiB registry budget. For scale, an extra BF16 gathered-row copy is 0.228271 GiB and sixteen
+The withdrawn declaration was **21 GiB**, leaving 1.300235 GiB arithmetic margin. Its comparison
+with the 22 GiB registry budget did not satisfy R47. For scale, an extra BF16 gathered-row copy is
+0.228271 GiB and sixteen
 FP32 solve matrices are 0.390625 GiB. Their simultaneous allocation is not asserted. The fixed
 fit/held statistics, 3.222656 GiB, are already present in the measured baseline and are not added
 twice. This is a source estimate, not a measured bound; native calibration can still refuse it.
@@ -72,10 +79,11 @@ For each full window, token-dependent terms increase 37.5% and quadratic attenti
 versus 2,048. The larger scored block can reduce the number of windows, so neither ratio predicts
 total elapsed time. Actual corpus shape and measured calibration determine the run projection.
 
-Capture remains **16 GiB**: its 8,192-token prompt bound and library prefill schedule have not
-changed. Initial 256/512 calibration remains **14.5 GiB**. The measured ladder projects each
-larger shape before execution, under the same 22 GiB cap. A resource refusal stops the run for a
-ruling; this amendment does not authorize bypassing it or taking another seat's machine window.
+Capture was estimated at **16 GiB** for its 8,192-token prompt bound and library prefill schedule.
+Initial 256/512 calibration was estimated at **14.5 GiB**. Both exceed R47 and are withdrawn.
+The ladder's existing next-size checks use 0.6 of the device working set; the earlier prose
+incorrectly described that as a 22 GiB cap. The correction adds protection before checkpoint
+loading and requires matching evidence for a full fit.
 
 ## Source verification
 

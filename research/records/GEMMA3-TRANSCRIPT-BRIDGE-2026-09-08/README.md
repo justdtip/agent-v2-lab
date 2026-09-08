@@ -76,6 +76,12 @@ published. No labels are borrowed across feature indices.
 
 ## Resources and remaining acceptance
 
+**R47 correction:** the previous 16 GiB capture, 14.5 GiB initial calibration and 21 GiB full-fit
+proposals are withdrawn as launch allowances. The current ordinary threshold is 10.656 GiB,
+derived from the machine's recommended working set, not the 22 GiB registry budget. See
+[R47-MEMORY-CORRECTION.md](R47-MEMORY-CORRECTION.md) for the fixed-statistics and residual-ownership
+findings and the explicit split-spill implementation. No new model run has started.
+
 No MLX import is needed for A1. The selected BF16 embedding is 262,208 by 2,560. Float32 W is
 2.69 GB, D and JD are about 0.168 GB each. The loader and independent reference add bounded
 scratch; loading every hosted map transiently adds about 0.865 GB. Never allocate the 17.2 GB

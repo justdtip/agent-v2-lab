@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "source_diagnosis_not_runtime_validation",
+  "source_run": "/Users/daniel.tipton/worktrees/gemma-lens-fitting/research/records/GEMMA3-REGRESSION-2026-09-08/run.log",
+  "source_run_sha256": "271cd8ecd58c14f106e78a2f85c75f63d8a8eff163db57737eb661b80f00d90d",
+  "source_snapshot_sha256": "107888c0f7d717d4357699e32077144ffce6d7665c5bd0a75dfd0d85e17f52ed",
+  "working_set_bytes": 19069665280,
+  "r47_fraction": 0.6,
+  "cap_gib": 10.656005859375,
+  "old_registered_allocation_cap_bytes": 15032385536,
+  "first_sequence_peak_gib": 9.658590639010072,
+  "accumulation_peak_gib": 12.443627851083875,
+  "first_peak_sequence": 1640,
+  "solver_peak_gib": [
+    12.443627851083875
+  ],
+  "matching_residual_sized_peak_increments": 42,
+  "one_bf16_capture_128_gib": 0.020751953125,
+  "weight_file_bytes": 7760584481,
+  "weight_memory_basis": "file-size proxy, not measured resident memory",
+  "both_split_statistics_gib": 3.22265625,
+  "one_split_statistics_gib": 1.611328125,
+  "one_layer_fit_held_pair_gib": 0.09765625,
+  "all_maps_gib": 0.8056640625,
+  "one_bf16_capture_2816_gib": 0.45654296875,
+  "selected_rows_2816_gib": 0.040283203125,
+  "no_native_execution": true,
+  "attribution_limit": "Python ownership defect is reproduced with fakes; its share of the real peak remains unmeasured."
+}

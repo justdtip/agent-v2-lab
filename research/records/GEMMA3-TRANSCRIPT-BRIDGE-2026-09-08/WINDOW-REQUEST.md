@@ -1,50 +1,63 @@
-# Queued request — not an active machine window
+# Deferred short calibration request — no active machine window
 
-Updated by the Director's position-coverage review: use `TRANSCRIPT-REGISTRATION-v3.json`,
-**2,816-token** fit windows, actual scored support through **position 2,749**, and the provisional
-**21 GiB** fit estimate. `POSITION-COVERAGE-AMENDMENT.md` gives the calculation and its limits.
+The Director's R47 correction supersedes the earlier 16 / 14.5 / 21 GiB proposals. They are all
+above **0.6 of the recommended working set**, currently **10.656 GiB**, and cannot be used as
+launch allowances. The registry's 22 GiB budget does not override that threshold. Historical
+`TRANSCRIPT-REGISTRATION-v3.json` remains an unlaunched protocol record; its memory numbers are
+withdrawn. See [R47-MEMORY-CORRECTION.md](R47-MEMORY-CORRECTION.md).
 
-Task 1 remains the critical path. Predecessor: the Deputy's all-layer stage-two map, observed
-holding PID 37593 at 2026-09-08T11:22:02Z with a 330-minute declaration. An expected end is not a
-release. No window has been announced or claimed by this work; wait for the actual handoff.
+The Deputy's stage-two map is the predecessor. The last observed declaration belongs to PID
+37593, opened at 2026-09-08T11:22:02Z and extended to 420 minutes. Neither an estimated finish
+time nor an empty filtered process search is a handoff. No window has been announced or claimed
+by this task. Model loads and native MLX tests wait for the actual release.
 
-## Serial sequence and projected peaks
+## First machine work
 
-1. Generate the three registered training cohorts through evaluation with explicit no reuse,
-   24 steps and 200 emitted tokens per turn. The capture ledger counts successful forwards and
-   records generated spans as tokens arrive. **Capture projection: 16 GiB**, conservative and
-   unmeasured, with its weight/cache/logit/attention terms in `TRANSCRIPT-REGISTRATION-v3.json`.
-   Cap prompts at 8,192 tokens and refuse oversized prompts before a forward; do not truncate them
-   to make the projection fit. Capture each cohort in its own process and fresh artifact paths.
-2. Freeze the corpus using the exact capture records. Inspect largest-episode share, identical-call
-   concentration, four generated spans, input-role counts, absolute-position distributions and
-   BOS composition. If concentration exceeds one third, stop for the Director. No resampling or
-   downweighting without a ruling. Also stop if actual FIT SCORED replay positions do not reach
-   2,749. A long input, held-only position or large configured cap cannot satisfy that requirement.
-3. Native masked resource calibration, all layers. **Initial 256/512 bound: 14.5 GiB.** Use suffix
-   windows whose scored tokens remain from the registered source row; an empty prefix mask is not
-   a valid calibration. Measure and project larger shapes before running them.
-4. BF16 and 4-bit regression fits on exactly the same frozen corpus, serially. **Provisional
-   2,816-token peak: 21 GiB**, derived from the 12.44 GiB native 128-token fit plus the changed
-   residual/logit/attention/mask buffers. This is not the measured launch allowance: calibration
-   must produce that before fitting under the 22 GiB registry resource limit. Select duration
-   from actual captured positions and measured calibration, then announce it.
-5. Paired per-layer precision comparison and records. Fit outputs must identify both exact
-   checkpoint snapshots, the same corpus hash and masks, native residual source and R57 identity.
-6. A1 convention diagnostic and benchmark in a separate CPU window if needed. **Projection:
-   6 GiB**, mostly the 2.69 GB FP32 readout, decoder products and bounded independent-reference
-   scratch. Start with the raw identity baseline; the norm-convention diagnostic remains distinct.
-   Measure 16 features before projecting the full readout, which now includes a direct pass as well
-   as the lensed pass. The old 150-second estimate is not a measurement of this implementation.
+Request a short diagnostic window, starting with one window in flight. The native residual API
+already enforces batch one; increasing a nonexistent batch setting is not the remedy. The
+corrected candidate clears residual ownership and streams fit/held statistics separately.
+
+Start with a fresh checkpoint load and a 128-token, batch-one diagnostic. Record load peak and
+post-load active/cache bytes, then forward/statistics/release phase allocation. The previous
+first 128-token sequence peaked at 9.658591 GiB, while repeated sequences later reached
+12.443628 GiB. A first-row result alone cannot certify the absence of retention over a corpus.
+Exercise both split slots and repeated rows, with no quality outputs or lens writing.
+
+Before invocation, commit the exact diagnostic inputs, corrected source hashes and inspected
+initial bound. The previous 14.5 GiB bound is invalid. A 10.5 GiB estimate was investigated:
+the old first-row peak plus illustrative 128-to-512 tensor growth totals about 9.802145 GiB,
+leaving 0.697855 GiB for unmeasured workspace. That is **not an established conservative bound**
+and is not a launch instruction. Smaller corrected-code measurements are needed before
+declaring larger shapes. A measured breach is a breach, not successful pre-launch protection.
+
+The regular fitting preflight still requires an honest initial bound and checks it before
+checkpoint loading. Each subsequent token length must pass a projection before its forward.
+Full fitting additionally requires matching successful calibration evidence, including the
+unchanged model, corpus, residual source, storage strategy, source files and scored/input
+workload. A window by itself cannot waive the cap.
+
+## Work after qualification
+
+1. Qualify transcript capture separately before its 72-task generation. The ledger materializes
+   logits, unlike residual fitting; a fit calibration does not certify capture memory. Keep
+   explicit no reuse, 24 steps, 200 generated tokens, and the registered token limits. Do not
+   shorten prompts or resample tasks to make a resource bound pass without recording the change.
+2. Freeze the exact corpus and enforce concentration, span and position gates. In particular,
+   actual FIT SCORED replay positions must reach 2,749; long inputs and held-only coverage do
+   not qualify. Fit windows remain capped at 2,816 and carry their original offsets and BOS facts.
+3. Calibrate the complete native masked split-spill fitting path separately for bf16 and 4-bit,
+   on the frozen workload. Include solve, disk transfer and artifact validation allowances.
+4. Run the two qualified fits serially, then the paired per-layer precision comparison. Announce
+   duration from the real corpus and measured timings. The earlier eight-hour estimate is a
+   planning estimate, not a measured duration of the revised implementation.
+5. A1 remains separate, with its own CPU window and measured feature-batch timing. This memory
+   correction does not alter the bridge's identity gate or normalization-convention diagnostic.
 
 ## Window ownership
 
-All invocations use the primary box-state directory
-`/Users/daniel.tipton/Desktop/An app`, even from the home worktree. `runlock run` records its own
-long-lived wrapper PID and closes the announcement in `finally`. If using `announce` directly,
-pass `--holder-pid` for a process that outlives the command. Read `runlock status` and confirm the
-holder says **running** before starting. The launch driver's own ownership/readback check runs
-before checkpoint access and again before accepting completion.
-
-No weights are downloaded for the transcript run: both converted checkpoints already exist.
-Native MLX tests are machine work too and stay out of another seat's window.
+Use the primary box-state directory `/Users/daniel.tipton/Desktop/An app`, including from the
+home worktree. A `runlock run` wrapper owns its lifetime and records closure in `finally`.
+If announcing directly, pass `--holder-pid` for a process that outlives the command. Read
+`runlock status` back and confirm the holder is running before starting. Ownership is checked
+before device queries or checkpoint access. No foreign lock is cleared and no foreign process
+is stopped.
