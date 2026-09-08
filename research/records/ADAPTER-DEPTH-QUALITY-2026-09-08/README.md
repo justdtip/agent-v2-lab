@@ -107,3 +107,62 @@ this reason and is recorded separately when it lands.
 - `paired_tally.py` — the reader and the rule; re-runs from a checkout with no `outputs/` tree.
 - `paired_tally.out.txt`, `summary.json` — its output as run.
 - `run-19.sh`, `run-full.sh` — the launching scripts, window announced and `end` trapped on exit.
+
+---
+
+## Appended: checkpoint 800 across the full 180-task test split
+
+**159 of 180 against the base's 123.** The margin the nineteen tasks could only call plausible is
+established here: 39 tasks the adapter wins, 3 the base wins, exact paired p = 5.6e-9, and the two
+Wilson intervals no longer overlap (0.828 to 0.922 against 0.612 to 0.747).
+
+Run 09:31 to 11:05 local, greedy, same harness, base reused from `outputs/agent-v2/evals/base-test.json`.
+
+### Every family the base is weak at moves, and nothing regresses
+
+| family | adapter | base | n |
+|---|---|---|---|
+| ledger_reconcile | 14 | 0 | 15 |
+| batch_update | 15 | 1 | 15 |
+| conditional_update | 5 | 1 | 15 |
+| calculate | 15 | 13 | 15 |
+| cross_reference | 15 | 13 | 15 |
+| aggregate_report | 5 | 5 | 15 |
+| read, search, synthesis, update, list, pointer_chain | 15 | 15 | 15 each |
+
+All three of the base's wins are aggregate_report, which is also the only family the adapter fails
+to improve. The six families the base already passes cleanly are untouched, so this is not a trade
+of one capability for another.
+
+### The training lowers every failure mode it was suspected of causing
+
+| | base | arm 1 @ 800 |
+|---|---|---|
+| passes | 123 | 159 |
+| failures | 57 | 21 |
+| "no finish call" | 37 | 18 |
+| exhausted | 32 | 7 |
+| loop detected | 22 | 4 |
+| integrity violations | 486 | 428 |
+| total turns | 1,714 | 1,372 |
+
+**A correction to the 19-task reading above.** That section named *truncated tool call* as a class
+new to arm 1, because the 800 checkpoint's single failure was one. On 180 tasks it is the **base's
+own dominant failure**, 37 of its 57, and the adapter halves it. The class was new to those
+nineteen tasks, not new to the model, and the earlier sentence should be read with this beside it.
+
+### What is left
+
+Twenty-one failures, in two families: aggregate_report with 10 and conditional_update with 10, plus
+one ledger_reconcile. Eighteen of the 21 are "no finish call". So the residue is not a reasoning
+failure spread across the suite; it is one behaviour, in the two families that need multi-step
+aggregation, and it is the behaviour the base is worst at.
+
+### On the timings, which are not comparable
+
+A Director-authorized lens diagnostic held the box alongside this run from 09:43:47 to 23:55Z,
+under a written registration that capped it at 6 GiB and preserved this run's lock and window. The
+per-task time went from a 23.3 s mean over the first 32 tasks to 135 s and 263 s for the two that
+straddled its load, and recovered afterwards. **The verdicts are unaffected**, because decoding is
+greedy and deterministic; the elapsed times in this run are not comparable with the 19-task run's,
+and `full_split_tally.py` reports no wall clock for that reason.

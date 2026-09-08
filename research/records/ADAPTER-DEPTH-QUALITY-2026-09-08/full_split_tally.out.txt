@@ -1,0 +1,21 @@
+
+=== arm 1 @ 800 rows on 180 tasks
+  passes            159  (88.3%, Wilson 0.828-0.922)
+  base passes       123  (68.3%, Wilson 0.612-0.747)
+  adapter wins      39   base wins 3   exact paired p = 5.63e-09
+  exhausted 7  loops 4  parse errors 11  integrity violations 428
+  by family (adapter / base / n):
+    ledger_reconcile     14 /  0 / 15   +14
+    batch_update         15 /  1 / 15   +14
+    conditional_update    5 /  1 / 15   +4
+    calculate            15 / 13 / 15   +2
+    cross_reference      15 / 13 / 15   +2
+    read                 15 / 15 / 15
+    search               15 / 15 / 15
+    synthesis            15 / 15 / 15
+    update               15 / 15 / 15
+    list                 15 / 15 / 15
+    pointer_chain        15 / 15 / 15
+    aggregate_report      5 /  5 / 15
+
+=== arm 1 @ 1,200 rows: not yet written (ckpt-0001200-full-test.json)
