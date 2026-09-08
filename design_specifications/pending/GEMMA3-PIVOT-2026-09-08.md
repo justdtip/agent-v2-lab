@@ -355,3 +355,84 @@ is cleaner and the top of the model is not truncated, and the two together answe
 depth profile is a property of Gemma 3 or of one size.
 
 Gemma Scope 2 covers both sizes at every layer, so nothing about that choice is foreclosed.
+
+---
+
+## 11. Corrections, and the reordering they force
+
+Appended rather than edited in, because three of these correct the sections above and one
+corrects a contradiction inside this document. The Deputy read the checkpoint's weight shapes
+rather than its config; the Chief verified each against the same files.
+
+**The vocabulary is 262,208, not the 262,144 in section 1.** The embedding on disk is
+`[262208, 2560]`. The smaller figure is MLX's dataclass default, which the multimodal wrapper
+overwrites before the text arguments are built. The size of the correction is trivial and its
+kind is not: anything token-denominated must come from the loaded view, never from a config
+field or a default.
+
+**The readout is tied, and the flag is set at load rather than at construction.** The checkpoint
+carries no `lm_head`. The text model's constructor sets the tie flag false and builds one; the
+weight sanitiser sets it true and removes the layer when the weights carry none. Anything that
+inspects the model before weights are loaded reads it backwards, and both `unembed` and
+`native_readout` branch on it.
+
+**The `text_config` is sparser than section 1 implies, and the defaults are load-bearing.** Head
+counts, head dimension, vocabulary, both RoPE bases, the norm epsilon, the pre-attention scalar
+and the window pattern are all absent and all supplied by MLX. The Deputy confirmed the injected
+head counts against the projection shapes: a query projection of `[2048, 2560]` over head
+dimension 256 gives eight query heads, and `[1024, 2560]` gives four key-value heads. Correct
+for this checkpoint, silently wrong for any other size.
+
+**A contradiction in this document, and section 6 is the wrong half.** Section 4 refutes the
+memory-envelope blocker on the ground that the footprint gate runs only under the training
+consumer and no caller in `src/` passes one. Section 6 then warns that the bare training indexes
+in preflight would crash a first Gemma run after the weights loaded. Both cannot be true, and the
+verified one is section 4: every `require_preflight` call site passes only a spec and a skip
+flag. **The key error cannot fire and no slot is at risk.** The registry entry still comes first,
+for the better reason the Deputy gives: without one, every Gemma run takes the fallback spec,
+which hands the model a ChatML turn ending and declares a cache strategy and a thinking mode with
+no record of why.
+
+### The reordering, and it is the useful part
+
+**Rotating caches are built on every run, not on long ones.** `make_cache` returns an ordinary
+cache only where the block index plus one divides by the pattern, which for 34 layers is five
+blocks, and a rotating cache for the other twenty-nine. So the capture guard's
+`type(c) is not KVCache` refuses on the first forward of the first turn. (Twenty-nine and five,
+not twenty-eight and six.)
+
+That looks like bad news and is good news, because of what it forces us to check. The refusal
+protects two different things and only one of them is real:
+
+- **Residual capture is safe under rotation.** It emits against `_offset`, the monotone
+  total-token counter, which a rotating cache maintains identically to an ordinary one. Verified
+  at the emit sites and at the offset-agreement check above the guard.
+- **Head capture is not.** The attention path maps a weight column index to an absolute source
+  position by identity. Under rotation a column is not its absolute position, and at most
+  `max_size` columns exist. That arithmetic is wrong and no widening of a type gate fixes it.
+
+So the correct change is narrow and provable: **accept a rotating cache when head capture is off,
+and keep refusing it when head capture is requested, with the column arithmetic named as the
+reason.** The first pilot runs with head capture off in any case.
+
+**Therefore the first reading does not need the multi-day port.** Section 3 already says the
+live-reading path is the exception, because capture wraps the model's own forward and inherits
+its masks and its entry transform; the ordering in section 6 did not follow its own finding. The
+corrected order:
+
+1. **The registry entry**, delivered, with a covering test so it is not the first registry file
+   the suite ignores.
+2. **The pilot path**, all small: the narrow cache guard; the generation prefix moved into the
+   chat specification with its assertion kept; the lens identity check; and the pilot script's
+   pinned constants replaced by arguments.
+3. **The pilot.** The first real reading of Gemma 3's intermediate representations during task
+   execution, which is the Director's stated priority, and it arrives days earlier this way.
+4. **The architecture-view port**, which the hand-run loop needs and which therefore gates lens
+   *fitting*, the Jacobian estimator and every claim resting on the sliding-against-global
+   contrast. Still the largest item, still landing as one change with its longer gate and its
+   negative control.
+5. Then the single-token sweep, the stop set, rotating-cache bookkeeping for head capture, and
+   issue 98 in its old place.
+
+The port has not become less important. It has stopped being in front of the thing the Director
+asked for.
