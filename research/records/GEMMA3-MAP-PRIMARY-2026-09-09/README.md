@@ -80,9 +80,30 @@ rather than repeat — resolves late, later than the convention that frames it. 
 depth at which a call token becomes predictable tracks whether the model is **retrieving or
 composing**, not whether the token is structure or content.
 
-**What would test it** is a contrast we already hold and have not run: argument tokens at equal prior
-occurrence, split by whether the surrounding call succeeded. Retrieval and composition should
-separate there and structure-versus-content should not.
+**I named a test for it, ran it, and my prediction failed.** The contrast: argument tokens at layer
+24 and equal prior occurrence, split by whether the surrounding call errored. I predicted that once
+prior occurrence is held fixed, call outcome would add nothing.
+
+| prior occurrences | succeeded | n | errored | n | difference |
+|---|---:|---:|---:|---:|---:|
+| 0 | 0.955 | 22 | 0.519 | 27 | **+0.436** |
+| 1–2 | — | 111 | — | 18 | cell too small |
+| 3–9 | 0.676 | 207 | 0.778 | 36 | −0.101 |
+| 10+ | 0.587 | 407 | 0.665 | 182 | −0.078 |
+
+**Call outcome does add something, and the sign is inconsistent.** At zero prior occurrence
+successful calls resolve far earlier; at three or more, errored calls resolve slightly earlier.
+
+**The test does not settle the reading in either direction, for two reasons I would rather state than
+argue past.** The large effect sits on the two smallest cells — 22 and 27 observations — which is the
+day's most familiar shape: the biggest number on the least data. And the small, consistent effect in
+the two well-populated buckets runs the wrong way for any account I can defend. A plausible
+explanation is residual repetition: near-identical repeated calls survive a deduplication keyed on
+byte-identical ones, and a repeated wrong argument is trivially predictable. That is a confound, not
+a finding.
+
+**So the retrieving-versus-composing reading stands as a reading and is untested.** What it needs is
+a contrast that separates repetition from composition directly, which this one does not.
 
 ## Limits carried from the pre-registration
 
