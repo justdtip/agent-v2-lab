@@ -45,7 +45,12 @@ def registered(tmp_path, monkeypatch):
     tokenizer = mod.tokenizer_identity_from_directory(Path(specs["gemma3-4b"].hf_id))
     registration = {
         "schema_version": 1,
-        "fitting_context_tokens": 2048,
+        "fitting_context_tokens": 2816,
+        "position_support": {
+            "target_max_position": 2749,
+            "reference_max_position": 2047,
+            "source": "Director review source",
+        },
         "format": mod.FORMAT,
         "producer_model": "gemma3-4b",
         "fit_models": list(mod.FIT_MODELS),
@@ -200,7 +205,8 @@ def test_freeze_uses_only_local_tokenizer_and_keeps_ruling_manifest(
         captures.append(source)
         provenance = {
             "registration": binding,
-            "fitting_context_tokens": 2048,
+            "fitting_context_tokens": 2816,
+            "position_support": data["position_support"],
             "cohort": cohort,
             "producer_snapshot": data["snapshots"]["gemma3-4b"],
             "evaluation": data["evaluation"],
@@ -237,7 +243,7 @@ def test_freeze_uses_only_local_tokenizer_and_keeps_ruling_manifest(
     assert result["status"] == "ruling_required"
     assert seen[0][0][0] == captures
     assert seen[0][0][1] is tokenizer
-    assert seen[0][1]["max_tokens"] == 2048
+    assert seen[0][1]["max_tokens"] == 2816
 
 
 def test_captured_task_prompt_must_match_registered_fingerprint(registered):
@@ -407,3 +413,19 @@ def test_environment_evidence_must_bind_environment_fix_revision(committed_rende
     record["commit"] = gate["landed_commit"]
     with pytest.raises(ValueError, match="required revision"):
         mod.verify_rendering_gate(gate)
+
+
+@pytest.mark.parametrize(
+    ("key", "bad"),
+    [
+        ("target_max_position", 2748),
+        ("target_max_position", True),
+        ("reference_max_position", 2046),
+    ],
+)
+def test_driver_requires_reviewed_position_support(registered, key, bad):
+    mod, path, data = registered
+    data["position_support"][key] = bad
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="position support"):
+        mod.read_registration(path)

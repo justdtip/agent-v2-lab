@@ -36,6 +36,7 @@ from local_llm_lab.pipeline.lens_fitting.transcript import (
     digest,
     file_record,
     read_transcript,
+    validate_position_support,
 )
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION, make_tasks, task_fingerprint
 from local_llm_lab.runlock import (
@@ -46,7 +47,7 @@ from local_llm_lab.runlock import (
 )
 from local_llm_lab.spawn import run
 
-FORMAT = "gemma-transcript-lens-registration-v2"
+FORMAT = "gemma-transcript-lens-registration-v3"
 FIT_MODELS = ("gemma3-4b-bf16", "gemma3-4b")
 EVALUATION = {
     "max_steps": 24,
@@ -186,13 +187,22 @@ def read_registration(path):
     if (
         registration.get("schema_version") != 1
         or registration.get("format") != FORMAT
-        or registration.get("fitting_context_tokens") != 2048
+        or registration.get("fitting_context_tokens") != 2816
         or type(registration.get("fitting_context_tokens")) is not int
         or registration.get("producer_model") != "gemma3-4b"
         or registration.get("fit_models") != list(FIT_MODELS)
         or registration.get("evaluation") != EVALUATION
     ):
         raise ValueError("unsupported transcript registration or evaluation settings")
+    support = validate_position_support(
+        registration.get("position_support"), max_tokens=registration["fitting_context_tokens"]
+    )
+    if (
+        support is None
+        or support["target_max_position"] != 2749
+        or support["reference_max_position"] != 2047
+    ):
+        raise ValueError("registration requires the reviewed target and reference position support")
     if registration.get("cohorts") != plan_cohorts():
         raise ValueError("registered cohort IDs/fingerprints differ from the fixed training cohort")
     ident = registration.get("model_identity")
@@ -307,6 +317,7 @@ def capture(registration_path, *, split, record, output, execute=False):
     provenance = {
         "registration": binding,
         "fitting_context_tokens": registration["fitting_context_tokens"],
+        "position_support": registration["position_support"],
         "model_identity": registration["model_identity"],
         "tokenizer": registration["tokenizer"],
         "producer_snapshot": registration["snapshots"]["gemma3-4b"],
@@ -403,7 +414,8 @@ def freeze(registration_path, *, captures, output):
             raise ValueError("capture has duplicate or unregistered training cohort")
         validate_captured_cohort(events, cohort)
         if (
-            provenance.get("fitting_context_tokens") != registration["fitting_context_tokens"]
+            provenance.get("position_support") != registration["position_support"]
+            or provenance.get("fitting_context_tokens") != registration["fitting_context_tokens"]
             or provenance.get("producer_snapshot") != registration["snapshots"]["gemma3-4b"]
             or provenance.get("evaluation") != registration["evaluation"]
             or provenance.get("capture_limits") != registration["capture_limits"]
@@ -425,6 +437,7 @@ def freeze(registration_path, *, captures, output):
         tokenizer_identity=registration["tokenizer"],
         model_identity=registration["model_identity"],
         max_tokens=registration["fitting_context_tokens"],
+        position_support=registration["position_support"],
     )
     return {
         "status": manifest["acceptance"]["status"],

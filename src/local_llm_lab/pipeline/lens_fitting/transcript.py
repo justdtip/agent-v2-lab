@@ -453,12 +453,71 @@ def _parsed_action(text):
     }
 
 
-def transcript_acceptance(rows, turns, *, max_tokens):
+def validate_position_support(request, *, max_tokens):
+    """Validate optional zero-based support requested by a hash-bound registration."""
+    if request is None:
+        return None
+    if not isinstance(request, dict) or set(request) != {
+        "target_max_position",
+        "reference_max_position",
+        "source",
+    }:
+        raise ValueError("position support requires target, historical reference and source")
+    target, reference = request["target_max_position"], request["reference_max_position"]
+    if (
+        type(target) is not int
+        or type(reference) is not int
+        or not 0 <= reference < target < max_tokens
+        or not isinstance(request["source"], str)
+        or not request["source"].strip()
+    ):
+        raise ValueError(
+            "position support requires integer zero-based positions below the context cap"
+        )
+    return request
+
+
+def _position_support_evidence(rows, request):
+    target, reference = request["target_max_position"], request["reference_max_position"]
+    maxima = {split: {"scored": None, "input": None} for split in ("fit", "held")}
+    fit_count = at_target = above_reference = 0
+    for row in rows:
+        positions = row["score_positions"]
+        group = maxima[row["split"]]
+        for scope, value in (
+            ("input", len(row["ids"]) - 1),
+            ("scored", max(positions) if positions else None),
+        ):
+            if value is not None:
+                group[scope] = value if group[scope] is None else max(group[scope], value)
+        if row["split"] == "fit":
+            fit_count += len(positions)
+            at_target += sum(position >= target for position in positions)
+            above_reference += sum(position > reference for position in positions)
+    return {
+        "request": request,
+        "position_basis": "zero-based indices in the actual fresh replay window; never original captured offsets",
+        "fit_scored_max_position": maxima["fit"]["scored"],
+        "fit_scored_at_or_above_target": at_target,
+        "fit_input_max_position": maxima["fit"]["input"],
+        "held_scored_max_position": maxima["held"]["scored"],
+        "held_input_max_position": maxima["held"]["input"],
+        "fit_scored_above_reference": {
+            "reference_max_position": reference,
+            "count": above_reference,
+            "denominator": fit_count,
+            "fraction": above_reference / fit_count if fit_count else None,
+        },
+    }
+
+
+def transcript_acceptance(rows, turns, *, max_tokens, position_support=None):
     """Amended Task 1 concentration gate, recomputable without a model forward.
 
     Invalid actions break runs; they are counted explicitly, never interpreted as
     identical null actions. No episode or repeating turn is silently removed.
     """
+    validate_position_support(position_support, max_tokens=max_tokens)
     members, runs = set(), []
     by_task = {}
     for index, turn in enumerate(turns):
@@ -544,7 +603,14 @@ def transcript_acceptance(rows, turns, *, max_tokens):
         reasons.append(
             "no agentic note/call skeleton/call argument/observation span exceeds ten percent of fitted positions"
         )
-    return {
+    coverage = None
+    if position_support is not None:
+        coverage = _position_support_evidence(rows, position_support)
+        if not coverage["fit_scored_at_or_above_target"]:
+            reasons.append(
+                "requested replay position support is not reached by fitted scored positions"
+            )
+    result = {
         "status": "ruling_required" if reasons else "passed",
         "reasons": reasons,
         "concentration": concentration,
@@ -568,13 +634,26 @@ def transcript_acceptance(rows, turns, *, max_tokens):
         ),
     }
 
+    if coverage is not None:
+        result["position_support"] = coverage
+    return result
+
 
 def build_transcript_corpus(
-    sources, tokenizer, spec, manifest_path, *, tokenizer_identity, model_identity, max_tokens
+    sources,
+    tokenizer,
+    spec,
+    manifest_path,
+    *,
+    tokenizer_identity,
+    model_identity,
+    max_tokens,
+    position_support=None,
 ):
     """Freeze exact consumed IDs and score first appearances once; no native execution."""
     if type(max_tokens) is not int or max_tokens <= 1024 or max_tokens % 2:
         raise ValueError("registered transcript context must be even and exceed the sliding window")
+    validate_position_support(position_support, max_tokens=max_tokens)
     _validate_identity(model_identity, tokenizer_identity)
     if model_identity != {
         "base": spec.base,
@@ -586,9 +665,18 @@ def build_transcript_corpus(
     if not records or len({r["path"] for r in records}) != len(records):
         raise ValueError("empty or duplicate transcript sources")
     seen_tasks = set()
+    support_seen = False
     for record in records:
         events = read_transcript(record["path"])
         provenance = events[0]["provenance"]
+        source_support = validate_position_support(
+            provenance.get("position_support"), max_tokens=max_tokens
+        )
+        if not support_seen and position_support is None:
+            position_support = source_support
+        support_seen = True
+        if encoded(source_support) != encoded(position_support):
+            raise ValueError("source position support differs from requested corpus support")
         if (
             provenance.get("fitting_context_tokens") != max_tokens
             or provenance.get("model_identity") != model_identity
@@ -695,7 +783,11 @@ def build_transcript_corpus(
             "convention": spec.chat.observation_convention,
         },
     }
-    manifest["acceptance"] = transcript_acceptance(rows, turns, max_tokens=max_tokens)
+    if position_support is not None:
+        manifest["position_support"] = position_support
+    manifest["acceptance"] = transcript_acceptance(
+        rows, turns, max_tokens=max_tokens, position_support=position_support
+    )
     manifest["manifest_sha256"] = digest(manifest)
     for record in records + tokenizer_identity["files"]:
         checked_bytes(record)
@@ -748,6 +840,9 @@ def read_transcript_corpus(manifest_path):
         != "local_llm_lab.pipeline.live_lens.session.SpanLabeller"
     ):
         raise ValueError("unsupported transcript corpus schema")
+    position_support = validate_position_support(
+        manifest.get("position_support"), max_tokens=max_tokens
+    )
     _validate_identity(manifest["model_identity"], manifest["tokenizer"])
     captures = {}
     seen_tasks = set()
@@ -756,6 +851,11 @@ def read_transcript_corpus(manifest_path):
         if source["path"] in captures:
             raise ValueError("duplicate transcript source")
         events = read_transcript(source["path"])
+        source_support = validate_position_support(
+            events[0]["provenance"].get("position_support"), max_tokens=max_tokens
+        )
+        if encoded(source_support) != encoded(position_support):
+            raise ValueError("source position support differs from manifest request")
         if (
             events[0]["provenance"].get("fitting_context_tokens") != max_tokens
             or events[0]["provenance"].get("model_identity") != manifest["model_identity"]
@@ -896,7 +996,9 @@ def read_transcript_corpus(manifest_path):
         if positions != sorted(set(positions)) or positions != turn["eligible_positions"]:
             raise ValueError("duplicated or missing transcript score ownership")
     if (
-        transcript_acceptance(rows, manifest["turns"], max_tokens=max_tokens)
+        transcript_acceptance(
+            rows, manifest["turns"], max_tokens=max_tokens, position_support=position_support
+        )
         != manifest["acceptance"]
     ):
         raise ValueError("transcript acceptance accounting mismatch")

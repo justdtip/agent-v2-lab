@@ -48,15 +48,22 @@ def identity(tmp_path):
     }
 
 
-def make_record(tmp_path, *, turns=5, long=False, tokenizer=None):
+def make_record(
+    tmp_path, *, turns=5, long=False, tokenizer=None, context_tokens=2048, position_support=None
+):
     tokenizer = Tokenizer() if tokenizer is None else tokenizer
     spec = load_model_spec("gemma3-4b")
     ident = {"base": spec.base, "training": None, "num_layers": 34}
     tok_id = identity(tmp_path)
     path = tmp_path / "capture.jsonl"
-    with t.TranscriptWriter(
-        path, {"model_identity": ident, "tokenizer": tok_id, "fitting_context_tokens": 2048}
-    ) as writer:
+    provenance = {
+        "model_identity": ident,
+        "tokenizer": tok_id,
+        "fitting_context_tokens": context_tokens,
+    }
+    if position_support is not None:
+        provenance["position_support"] = position_support
+    with t.TranscriptWriter(path, provenance) as writer:
         capture = t.TranscriptCapture(writer, materialize=lambda _: None)
         for step in range(turns):
             messages = [
@@ -426,3 +433,117 @@ def test_position_histograms_and_bos_distinguish_capture_from_fresh_replay(tmp_p
         == "all fitted scored positions"
     )
     assert "note" in manifest["acceptance"]["non_prose_span_check"]["eligible_counts"]
+
+
+def support_request():
+    return {
+        "target_max_position": 2749,
+        "reference_max_position": 2047,
+        "source": "Director review 2026-09-08; reported maximum across held map episodes",
+    }
+
+
+def support_fixture_rows(scored_position):
+    rows, turns = [], []
+    for i, split in enumerate(("fit", "fit", "fit", "held")):
+        turns.append({"task_id": f"train-read-{i:04d}-clean", "step": 0, "canonical_action": None})
+        rows.append(
+            {
+                "split": split,
+                "turn_index": i,
+                "ids": [0] * 2816,
+                "score_positions": [scored_position if split == "fit" else 2815],
+                "generated_mask": [True] * 2816,
+                "spans": ["call_skeleton"] * 2816,
+                "window_start": 9000,
+                "bos": t._bos_evidence([0] * 2816, None),
+            }
+        )
+    return rows, turns
+
+
+@pytest.mark.parametrize(("actual", "expected"), [(2748, "ruling_required"), (2749, "passed")])
+def test_position_support_uses_scored_replay_max_not_declared_cap_or_input(actual, expected):
+    rows, turns = support_fixture_rows(actual)
+    acceptance = t.transcript_acceptance(
+        rows, turns, max_tokens=2816, position_support=support_request()
+    )
+    assert acceptance["status"] == expected
+    report = acceptance["position_support"]
+    assert report["fit_scored_max_position"] == actual
+    assert report["fit_input_max_position"] == 2815
+    assert report["held_scored_max_position"] == 2815
+    assert report["held_input_max_position"] == 2815
+    assert report["fit_scored_at_or_above_target"] == (3 if actual == 2749 else 0)
+    assert report["fit_scored_above_reference"] == {
+        "reference_max_position": 2047,
+        "count": 3,
+        "denominator": 3,
+        "fraction": 1.0,
+    }
+
+
+def test_position_support_zero_based_last_index_and_strict_integer_validation():
+    request = support_request()
+    for bad in (True, 2816, -1):
+        with pytest.raises(ValueError, match="position support"):
+            t.validate_position_support({**request, "target_max_position": bad}, max_tokens=2816)
+    assert t.validate_position_support({**request, "target_max_position": 2815}, max_tokens=2816)
+
+
+def test_requested_position_support_roundtrip_and_lowered_target_tamper(tmp_path):
+    request = support_request()
+    source, spec, ident, tok_id = make_record(
+        tmp_path, long=True, context_tokens=2816, position_support=request
+    )
+    path = tmp_path / "corpus.json"
+    manifest = t.build_transcript_corpus(
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2816,
+    )
+    rows = t.read_transcript_corpus(path)
+    assert manifest["position_support"] == request
+    report = manifest["acceptance"]["position_support"]
+    assert report["fit_scored_max_position"] == 2815
+    assert report["fit_scored_at_or_above_target"] > 0
+    assert max(len(row["ids"]) for row in rows) == 2816
+    changed = json.loads(path.read_text())
+    changed["position_support"]["target_max_position"] = 2748
+    changed.pop("manifest_sha256")
+    changed["manifest_sha256"] = t.digest(changed)
+    path.write_bytes(t.encoded(changed))
+    with pytest.raises(ValueError, match="source position support"):
+        t.read_transcript_corpus(path)
+    with pytest.raises(ValueError, match="source position support"):
+        t.build_transcript_corpus(
+            [source],
+            Tokenizer(),
+            spec,
+            tmp_path / "changed.json",
+            tokenizer_identity=tok_id,
+            model_identity=ident,
+            max_tokens=2816,
+            position_support={**request, "target_max_position": 2748},
+        )
+
+
+def test_unrequested_legacy_position_support_leaves_output_unchanged(tmp_path):
+    source, spec, ident, tok_id = make_record(tmp_path)
+    path = tmp_path / "legacy.json"
+    manifest = t.build_transcript_corpus(
+        [source],
+        Tokenizer(),
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
+    )
+    assert "position_support" not in manifest
+    assert "position_support" not in manifest["acceptance"]
+    assert t.read_transcript_corpus(path)
