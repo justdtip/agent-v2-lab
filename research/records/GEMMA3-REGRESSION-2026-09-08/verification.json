@@ -1,0 +1,25 @@
+{
+  "completed_at_utc": "2026-09-08T04:00:33.861476+00:00",
+  "status": "passed",
+  "scope": "integrity, provenance, counts and registered selection; not scientific validity",
+  "model_imports": "forbidden",
+  "registered_files_unchanged": 15,
+  "artifact_sha256": "5634890169234cc014ad4cd96fdfd179b94511e217125f11f26f47aaceb88e17",
+  "artifact_bytes": 865083422,
+  "sidecar_sha256": "52aa8e904379e9ca2a5843c2323ec95d63d1dceb4b0f03a9cd076d418c7fc192",
+  "counts": {
+    "fit": {
+      "sequences": 1608,
+      "positions": 205824
+    },
+    "held": {
+      "sequences": 402,
+      "positions": 51456
+    }
+  },
+  "nonfinal_maps": 33,
+  "comparison_loader_checks": "hash, identity, all layers, dimensions and finiteness",
+  "grid_endpoint_selected_layers": 33,
+  "peak_memory_gib": 12.443627851083875,
+  "load_fit_save_seconds": 487.7657832499972
+}
