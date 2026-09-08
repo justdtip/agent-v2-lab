@@ -114,6 +114,43 @@ def project_time(rows, lengths, *, one_layer_solve_s, nonfinal_layers):
     }
 
 
+def validate_registration_source(path: Path, residual_source: str) -> None:
+    """Native preflight requires a JSON declaration matching the requested producer."""
+    from local_llm_lab.pipeline.lens_fitting.regression import RESIDUAL_SOURCES
+
+    if residual_source not in RESIDUAL_SOURCES:
+        raise ValueError("invalid residual_source")
+    try:
+        registration = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        if residual_source == "hand_run":
+            return  # Preserve the historical default with plain-text registrations.
+        raise ValueError("native registration must declare residual_source in JSON") from None
+    if not isinstance(registration, dict) or registration.get("residual_source") != residual_source:
+        raise ValueError("registration residual_source does not match requested producer")
+
+
+def calibration_rows(source: dict, tokens: int) -> list[dict]:
+    """Use a prefix of the full context and precisely its registered scored positions."""
+    from local_llm_lab.pipeline.lens_fitting.regression import validated_score_positions
+
+    if (
+        isinstance(tokens, bool)
+        or not isinstance(tokens, int)
+        or not 0 < tokens <= len(source["ids"])
+    ):
+        raise ValueError("calibration tokens must select a nonempty source prefix")
+    positions = validated_score_positions(source)
+    selected = (
+        {} if positions is None else {"score_positions": [i for i in positions if i < tokens]}
+    )
+    if positions is not None and not selected["score_positions"]:
+        raise ValueError("calibration prefix contains no scored positions")
+    return [
+        {"ids": source["ids"][:tokens], "split": split, **selected} for split in ("fit", "held")
+    ]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True)
@@ -122,6 +159,7 @@ def main(argv=None):
     parser.add_argument("--registration", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--initial-bound-gib", type=float, required=True)
+    parser.add_argument("--residual-source", choices=("hand_run", "native"), default="hand_run")
     args = parser.parse_args(argv)
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.lens_fitting.runtime import load_runtime, prepare_fit
@@ -130,12 +168,15 @@ def main(argv=None):
     if not math.isfinite(args.initial_bound_gib) or args.initial_bound_gib <= 0:
         parser.error("initial inspected bound must be positive and finite")
     registration_sha = file_sha256(args.registration)
+    validate_registration_source(args.registration, args.residual_source)
     prepared = prepare_fit(args.corpus, load_model_spec(args.model), args.planned_lens)
     maximum = max(len(row["ids"]) for row in prepared.rows)
     lengths = ladder(maximum)
     source = max((r for r in prepared.rows if r["split"] == "fit"), key=lambda r: len(r["ids"]))
     if len(source["ids"]) < maximum:
         parser.error("the maximum sequence is held; preflight needs a fit row reaching that size")
+    for tokens in lengths:
+        calibration_rows(source, tokens)  # Reject an unusable scoring prefix before model loading.
     args.report.parent.mkdir(parents=True, exist_ok=True)
     with args.report.open("x") as report:
 
@@ -151,6 +192,7 @@ def main(argv=None):
                 "model": prepared.snapshot,
                 "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
                 "registration_sha256": registration_sha,
+                "residual_source": args.residual_source,
                 "source_sha256": file_sha256(Path(__file__)),
                 "initial_bound_bytes": args.initial_bound_gib * 2**30,
                 "lengths": lengths,
@@ -201,16 +243,18 @@ def main(argv=None):
                 retained = None
                 mx.clear_cache()
                 mx.reset_peak_memory()
-                rows = [
-                    {"ids": source["ids"][:tokens], "split": split} for split in ("fit", "held")
-                ]
+                rows = calibration_rows(source, tokens)
                 started = time.perf_counter()
-                retained, _ = accumulate(loaded.view, rows)
+                retained, counts = accumulate(
+                    loaded.view, rows, residual_source=args.residual_source
+                )
                 elapsed = time.perf_counter() - started
                 return {
                     "tokens": tokens,
                     "peak_bytes": mx.get_peak_memory(),
                     "seconds_per_sequence": elapsed / len(rows),
+                    "residual_source": args.residual_source,
+                    "counts": counts,
                 }
 
             rows, stop = run_ladder(

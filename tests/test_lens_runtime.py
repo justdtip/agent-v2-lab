@@ -378,9 +378,7 @@ def test_invalid_artifact_does_not_publish(tmp_path, monkeypatch, issue):
         monkeypatch.setattr(artifacts, "MAX_NPZ_BYTES", 1)
     out = tmp_path / "tiny-prose-regression.npz"
     with pytest.raises(ValueError):
-        artifacts.write_lens(
-            out, maps, hidden_size=2, num_layers=2, metadata={}, identity=_TOY
-        )
+        artifacts.write_lens(out, maps, hidden_size=2, num_layers=2, metadata={}, identity=_TOY)
     assert not out.exists()
     assert not out.with_suffix(".json").exists()
 
@@ -498,3 +496,203 @@ def test_resource_snapshot_reports_device_share_without_native_import():
     assert api().resource_snapshot(array_api=backend) == dict(
         peak_memory_gib=1, working_set_share=0.25
     )
+
+
+@pytest.fixture
+def numpy_regression_backend(monkeypatch):
+    """Only tiny statistics tests use this substitute; no native module is imported."""
+    import sys
+    from types import ModuleType
+
+    package, core = ModuleType("mlx"), ModuleType("mlx.core")
+    for name in ("zeros", "sum", "float32", "array"):
+        setattr(core, name, getattr(np, name))
+    core.eval = lambda *args: None
+    package.core = core
+    monkeypatch.setitem(sys.modules, "mlx", package)
+    monkeypatch.setitem(sys.modules, "mlx.core", core)
+
+
+def test_masked_native_statistics_keep_full_context_and_report_scored_counts(
+    numpy_regression_backend,
+):
+    from local_llm_lab.pipeline.lens_fitting.regression import accumulate
+
+    calls, events = [], []
+
+    def native(ids, layers):
+        calls.append(list(ids))
+        x = np.array([[[i, 1] for i in ids]], dtype=np.float32)
+        return {1: x, 2: x * 3}
+
+    view = SimpleNamespace(hidden_size=2, num_layers=2, native_residuals=native)
+    rows = [dict(ids=[1, 100, 3], split=s, score_positions=[0, 2]) for s in ("fit", "held")]
+    sums, counts = accumulate(view, rows, residual_source="native", progress=events.append)
+    assert calls == [[1, 100, 3], [1, 100, 3]]
+    np.testing.assert_array_equal(sums["fit"][1].xtx, [[10, 4], [4, 2]])
+    np.testing.assert_array_equal(sums["fit"][1].xty, [[30, 12], [12, 6]])
+    assert sums["fit"][1].n == 2
+    assert counts["fit"] == dict(sequences=1, positions=2, scored_positions=2, input_positions=3)
+    assert counts["residual_source"] == events[0]["counts"]["residual_source"] == "native"
+    assert events[0]["counts"]["held"]["positions"] == 0
+
+
+@pytest.mark.parametrize("positions", [[], [1, 0], [0, 0], [-1], [3], [True], [1.0], None])
+def test_invalid_score_positions_refused_before_forward(numpy_regression_backend, positions):
+    from local_llm_lab.pipeline.lens_fitting.regression import accumulate
+
+    view = SimpleNamespace(
+        hidden_size=2,
+        num_layers=2,
+        native_residuals=lambda *a: pytest.fail("forward reached for invalid score mask"),
+    )
+    with pytest.raises(ValueError, match="score_positions"):
+        accumulate(
+            view,
+            [dict(ids=[1, 2, 3], split="fit", score_positions=positions)],
+            residual_source="native",
+        )
+
+
+def test_unmasked_statistics_keep_all_positions(numpy_regression_backend):
+    from local_llm_lab.pipeline.lens_fitting.regression import accumulate
+
+    def residuals(ids, layers):
+        x = np.array(ids, dtype=np.float32)[None, :, None]
+        return {1: x, 2: 2 * x}
+
+    view = SimpleNamespace(hidden_size=1, num_layers=2, residuals=residuals)
+    sums, counts = accumulate(view, [dict(ids=[2, 3], split=s) for s in ("fit", "held")])
+    assert sums["fit"][1].xtx.item() == 13
+    assert counts["fit"] == dict(sequences=1, positions=2, scored_positions=2, input_positions=2)
+
+
+def transcript_prepare_fixture(tmp_path, monkeypatch):
+    runtime = api()
+    spec = load_model_spec("gemma3-4b")
+    root = snapshot(tmp_path)
+    (root / "tokenizer.json").write_text('{"tokens": ["toy"]}')
+    assets = [{"name": "tokenizer.json", "sha256": runtime.file_sha256(root / "tokenizer.json")}]
+    identity = dict(snapshot_path=str(root), files=assets, hf_id=spec.hf_id)
+    monkeypatch.setattr(runtime, "resolve_snapshot", lambda *a, **k: identity)
+    monkeypatch.setattr(
+        runtime, "read_corpus", lambda p: [dict(ids=[1], split=s) for s in ("fit", "held")]
+    )
+    manifest = dict(
+        schema_version=2,
+        domain="agentic",
+        format="transcript-native-replay-v1",
+        model_hf_id="source-bf16-artifact",
+        model_identity=dict(base=spec.base, training=None, num_layers=3),
+        tokenizer=dict(assets=assets),
+        precision="bf16",
+    )
+    path = tmp_path / "transcript.json"
+    return runtime, spec, path, manifest
+
+
+def test_prepare_shared_precision_corpus_requires_identity_and_exact_tokenizer(
+    tmp_path, monkeypatch
+):
+    runtime, spec, path, manifest = transcript_prepare_fixture(tmp_path, monkeypatch)
+    path.write_text(json.dumps(manifest))
+    prepared = runtime.prepare_fit(path, spec, tmp_path / "gemma3-4b-agentic-regression.npz")
+    assert prepared.manifest["precision"] == "bf16"
+    assert prepared.manifest["model_hf_id"] == "source-bf16-artifact"
+    assert prepared.spec == spec
+
+
+@pytest.mark.parametrize(
+    "issue",
+    [
+        "missing_identity",
+        "missing_training",
+        "base",
+        "training",
+        "depth",
+        "tokenizer",
+        "extra_asset",
+        "missing_assets",
+    ],
+)
+def test_prepare_new_schema_refuses_identity_or_tokenizer_mismatch(tmp_path, monkeypatch, issue):
+    runtime, spec, path, manifest = transcript_prepare_fixture(tmp_path, monkeypatch)
+    if issue == "missing_identity":
+        del manifest["model_identity"]
+    elif issue == "missing_training":
+        del manifest["model_identity"]["training"]
+    elif issue == "base":
+        manifest["model_identity"]["base"] = "another/model"
+    elif issue == "training":
+        manifest["model_identity"]["training"] = {"run": "fine-tuned"}
+    elif issue == "depth":
+        manifest["model_identity"]["num_layers"] = 4
+    elif issue == "tokenizer":
+        manifest["tokenizer"]["assets"] = [{"name": "tokenizer.json", "sha256": "0" * 64}]
+    elif issue == "extra_asset":
+        manifest["tokenizer"]["assets"] = manifest["tokenizer"]["assets"] + [
+            {"name": "added_tokens.json", "sha256": "0" * 64}
+        ]
+    else:
+        del manifest["tokenizer"]["assets"]
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="identity|tokenizer"):
+        runtime.prepare_fit(path, spec, tmp_path / "gemma3-4b-agentic-regression.npz")
+
+
+def test_legacy_corpus_cannot_establish_training_identity(tmp_path, monkeypatch):
+    runtime = api()
+    spec = replace(load_model_spec("qwen35-4b"), training={"run": "trained"})
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps(dict(model_hf_id=spec.hf_id, domain="agentic")))
+    monkeypatch.setattr(
+        runtime, "read_corpus", lambda p: [dict(ids=[1], split=s) for s in ("fit", "held")]
+    )
+    monkeypatch.setattr(
+        runtime, "resolve_snapshot", lambda *a, **k: pytest.fail("snapshot reached")
+    )
+    with pytest.raises(ValueError, match="training"):
+        runtime.prepare_fit(path, spec, tmp_path / "qwen35-4b-agentic-regression.npz")
+
+
+@pytest.mark.parametrize("source_name,accepted", [("gemma3-4b", True), ("gemma3-4b-bf16", False)])
+def test_legacy_registry_alias_requires_same_artifact(tmp_path, monkeypatch, source_name, accepted):
+    runtime = api()
+    spec = load_model_spec("gemma3-4b")
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps(dict(model_hf_id=source_name, domain="agentic")))
+    monkeypatch.setattr(
+        runtime, "read_corpus", lambda p: [dict(ids=[1], split=s) for s in ("fit", "held")]
+    )
+    root = snapshot(tmp_path)
+    monkeypatch.setattr(runtime, "resolve_snapshot", lambda *a, **k: dict(snapshot_path=str(root)))
+    if accepted:
+        assert (
+            runtime.prepare_fit(path, spec, tmp_path / "gemma3-4b-agentic-regression.npz").spec
+            == spec
+        )
+    else:
+        with pytest.raises(ValueError, match="model"):
+            runtime.prepare_fit(path, spec, tmp_path / "gemma3-4b-agentic-regression.npz")
+
+
+def test_tokenizer_asset_hashes_exclude_precision_config_and_include_templates():
+    snapshot = dict(
+        files=[
+            dict(name=name, sha256="a" * 64, bytes=2)
+            for name in [
+                "config.json",
+                "model.safetensors",
+                "chat_templates/tool.jinja",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json",
+            ]
+        ]
+    )
+    assert [row["name"] for row in api().tokenizer_asset_hashes(snapshot)] == [
+        "chat_templates/tool.jinja",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ]

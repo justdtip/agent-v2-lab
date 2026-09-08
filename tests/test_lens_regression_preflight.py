@@ -205,7 +205,10 @@ def test_falsified_initial_bound_stops_before_second_calibration():
     assert stop["peak_bytes"] == 140
 
 
-def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypatch):
+@pytest.mark.parametrize("residual_source", ["hand_run", "native"])
+def test_solve_resets_peak_and_reports_successful_measurement(
+    tmp_path, monkeypatch, residual_source
+):
     """R47(b)/review: solve peak starts after forward and records measured+projected bytes."""
     import json
     import sys
@@ -226,7 +229,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypa
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", backend)
     prepared = SimpleNamespace(
-        rows=[dict(index=0, ids=[1] * 900, split="fit")],
+        rows=[dict(index=0, ids=[1] * 900, split="fit", score_positions=[0, 300, 899])],
         snapshot={},
         corpus_manifest_sha256="corpus",
     )
@@ -241,7 +244,10 @@ def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypa
         ),
     )
 
-    def accumulate(*args):
+    def accumulate(*args, **kwargs):
+        assert kwargs["residual_source"] == residual_source
+        for row in args[1]:
+            assert row["score_positions"] == [p for p in [0, 300, 899] if p < len(row["ids"])]
         calls.append("forward")
         return {"fit": {1: None}, "held": {1: None}}, {}
 
@@ -253,7 +259,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypa
     monkeypatch.setattr(regression, "accumulate", accumulate)
     monkeypatch.setattr(regression, "solve_layer", solve)
     registration = tmp_path / "registration.md"
-    registration.write_text("Declared bounds")
+    registration.write_text(json.dumps({"residual_source": residual_source}))
     report = tmp_path / "report.jsonl"
     assert (
         api().main(
@@ -270,6 +276,8 @@ def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypa
                 str(report),
                 "--initial-bound-gib",
                 str(200 / 2**30),
+                "--residual-source",
+                residual_source,
             ]
         )
         == 0
@@ -279,5 +287,43 @@ def test_solve_resets_peak_and_reports_successful_measurement(tmp_path, monkeypa
         for e in map(json.loads, report.read_text().splitlines())
         if e["event"] == "measured_solve"
     )
+    begin = json.loads(report.read_text().splitlines()[0])
+    assert begin["residual_source"] == residual_source
     assert event["peak_bytes"] == 50
     assert event["projected_peak_bytes"] == 74
+
+
+def test_calibration_rows_preserve_and_truncate_score_selection():
+    a = api()
+    source = dict(ids=[1, 2, 3, 4], score_positions=[1, 3], index=5, split="fit")
+    rows = a.calibration_rows(source, 3)
+    assert rows == [dict(ids=[1, 2, 3], score_positions=[1], split=s) for s in ("fit", "held")]
+    assert source["score_positions"] == [1, 3]
+    with pytest.raises(ValueError, match="scor"):
+        a.calibration_rows(source, 1)
+    with pytest.raises(ValueError):
+        a.calibration_rows(source, 5)
+    assert a.calibration_rows(dict(ids=[1, 2]), 1) == [
+        dict(ids=[1], split=s) for s in ("fit", "held")
+    ]
+
+
+@pytest.mark.parametrize(
+    "record,source,valid",
+    [
+        ('{"residual_source":"native"}', "native", True),
+        ('{"residual_source":"hand_run"}', "native", False),
+        ('{"residual_source":"native"}', "hand_run", False),
+        ("{}", "native", False),
+        ("Legacy bound", "native", False),
+        ("Legacy bound", "hand_run", True),
+    ],
+)
+def test_registration_residual_source_is_explicit_for_native(tmp_path, record, source, valid):
+    path = tmp_path / "registration.json"
+    path.write_text(record)
+    if valid:
+        api().validate_registration_source(path, source)
+    else:
+        with pytest.raises(ValueError, match="residual_source"):
+            api().validate_registration_source(path, source)

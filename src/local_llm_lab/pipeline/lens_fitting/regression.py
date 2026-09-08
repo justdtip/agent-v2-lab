@@ -10,6 +10,7 @@ import math
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Any
 
 import numpy as np
@@ -51,6 +52,27 @@ class SufficientStats:
 RESIDUAL_SOURCES = ("hand_run", "native")
 
 
+def validated_score_positions(row: dict) -> list[int] | None:
+    """Validate an optional selection without changing the context sent to the forward."""
+    if "score_positions" not in row:
+        return None
+    positions = row["score_positions"]
+    if (
+        not isinstance(positions, list)
+        or not positions
+        or any(
+            isinstance(i, (bool, np.bool_))
+            or not isinstance(i, Integral)
+            or i < 0
+            or i >= len(row["ids"])
+            for i in positions
+        )
+        or any(left >= right for left, right in zip(positions, positions[1:], strict=False))
+    ):
+        raise ValueError("score_positions must be nonempty sorted unique integer indices in bounds")
+    return [int(i) for i in positions]
+
+
 def accumulate(
     view: Any,
     rows: Iterable[dict],
@@ -88,7 +110,10 @@ def accumulate(
         split: {layer: SufficientStats.zeros(d) for layer in layers[:-1]}
         for split in ("fit", "held")
     }
-    counts = {split: {"sequences": 0, "positions": 0} for split in sums}
+    counts = {
+        split: {"sequences": 0, "positions": 0, "scored_positions": 0, "input_positions": 0}
+        for split in sums
+    }
     # Carried in the counts so it reaches the artifact by the same route the sequence and
     # position totals do, rather than depending on a caller remembering to stamp it.
     counts["residual_source"] = residual_source
@@ -96,6 +121,7 @@ def accumulate(
         split, ids = row["split"], row["ids"]
         if split not in sums or not ids:
             raise ValueError("every sequence needs nonempty ids and fit/held membership")
+        positions = validated_score_positions(row)
         residuals = produce(ids, layers)
         if set(residuals) != set(layers) or any(
             h.shape != (1, len(ids), d) for h in residuals.values()
@@ -103,20 +129,27 @@ def accumulate(
             raise ValueError(
                 "forward must return every requested (1, positions, hidden_size) residual"
             )
-        target = residuals[depth][0].astype(mx.float32)
+        selection = slice(None) if positions is None else mx.array(positions)
+        target = residuals[depth][0][selection].astype(mx.float32)
         for layer in layers[:-1]:
-            sums[split][layer].add(residuals[layer][0], target)
+            sums[split][layer].add(residuals[layer][0][selection], target)
         # Materialize before dropping the forward so lazy graphs cannot retain the corpus.
         mx.eval(*[a for s in sums[split].values() for a in (s.xtx, s.xty, s.yty)])
         del residuals, target
         counts[split]["sequences"] += 1
-        counts[split]["positions"] += len(ids)
+        scored = len(ids) if positions is None else len(positions)
+        counts[split]["positions"] += scored
+        counts[split]["scored_positions"] += scored
+        counts[split]["input_positions"] += len(ids)
         if progress:
             progress(
                 {
                     "event": "sequence",
                     "sequence": number,
-                    "counts": {key: dict(value) for key, value in counts.items()},
+                    "counts": {
+                        key: dict(value) if isinstance(value, dict) else value
+                        for key, value in counts.items()
+                    },
                 }
             )
     if any(not counts[split]["positions"] for split in sums):
@@ -185,7 +218,7 @@ def solve_layer(fit: SufficientStats, held: SufficientStats) -> tuple[np.ndarray
 class RegressionResult:
     maps: dict[int, np.ndarray]
     per_layer: dict[str, dict]
-    counts: dict[str, dict]
+    counts: dict[str, Any]
     elapsed_s: float
     peak_memory_gib: float
 

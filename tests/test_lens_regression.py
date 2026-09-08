@@ -80,8 +80,8 @@ def test_streams_once_per_sequence_with_disjoint_sums():
         # Which forward produced the residuals travels with the totals, so a fitted lens says
         # it rather than depending on a caller to stamp it (the Gemma pivot's native source).
         "residual_source": "hand_run",
-        "fit": {"sequences": 1, "positions": 2},
-        "held": {"sequences": 1, "positions": 1},
+        "fit": {"sequences": 1, "positions": 2, "scored_positions": 2, "input_positions": 2},
+        "held": {"sequences": 1, "positions": 1, "scored_positions": 1, "input_positions": 1},
     }
     np.testing.assert_array_equal(sums["fit"][1].xtx, [[5, 3], [3, 2]])
     np.testing.assert_array_equal(sums["held"][1].xtx, [[81, 9], [9, 1]])

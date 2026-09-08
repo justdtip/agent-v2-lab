@@ -16,7 +16,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-from local_llm_lab.models import ModelSpec
+from local_llm_lab.models import ModelSpec, base_of_artifact
 from local_llm_lab.pipeline.lens_fitting.artifacts import validate_output
 from local_llm_lab.pipeline.lens_fitting.corpus import read_corpus
 from local_llm_lab.pipeline.live_lens.instruments import file_sha256
@@ -143,6 +143,79 @@ def resolve_snapshot(spec: ModelSpec, *, revision: str = "main") -> dict:
     return snapshot_identity(directory, hf_id=spec.hf_id)
 
 
+TOKENIZER_ASSET_PATTERNS = (
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "added_tokens.json",
+    "tokenizer.model",
+    "vocab.json",
+    "vocab.txt",
+    "merges.txt",
+    "chat_template.jinja",
+    "*.tiktoken",
+    "tiktoken.model",
+    "chat_templates/*.jinja",
+)
+
+
+def tokenizer_asset_hashes(snapshot: dict) -> list[dict]:
+    """Exact tokenization assets from a hashed snapshot, excluding model precision config."""
+    return sorted(
+        [
+            {"name": row["name"], "sha256": row["sha256"]}
+            for row in snapshot.get("files", [])
+            if any(fnmatch(row["name"], pattern) for pattern in TOKENIZER_ASSET_PATTERNS)
+        ],
+        key=lambda row: row["name"],
+    )
+
+
+def _validate_transcript_identity(manifest: dict, spec: ModelSpec, snapshot: dict, config: dict):
+    source = manifest.get("model_identity")
+    if not isinstance(source, dict) or not {"base", "training", "num_layers"} <= source.keys():
+        raise ValueError("transcript model_identity must declare base, training and num_layers")
+    if (
+        not isinstance(source["base"], str)
+        or not source["base"]
+        or (source["training"] is not None and not isinstance(source["training"], dict))
+        or isinstance(source["num_layers"], bool)
+        or not isinstance(source["num_layers"], int)
+    ):
+        raise ValueError("invalid transcript model_identity")
+    depth = config.get("num_hidden_layers")
+    if source["num_layers"] <= 0 or not isinstance(depth, int) or isinstance(depth, bool):
+        raise ValueError("model identity requires a positive snapshot depth")
+    if (base_of_artifact(source["base"]), source["training"], source["num_layers"]) != (
+        base_of_artifact(spec.base),
+        spec.training,
+        depth,
+    ):
+        raise ValueError("corpus model identity does not match target base/training/depth")
+    tokenizer = manifest.get("tokenizer")
+    assets = tokenizer.get("assets") if isinstance(tokenizer, dict) else None
+    if (
+        not isinstance(assets, list)
+        or not assets
+        or any(
+            not isinstance(row, dict)
+            or set(row) != {"name", "sha256"}
+            or not isinstance(row["name"], str)
+            or not isinstance(row["sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", row["sha256"])
+            for row in assets
+        )
+    ):
+        raise ValueError("transcript tokenizer must declare exact nonempty asset hashes")
+    target = tokenizer_asset_hashes(snapshot)
+    if (
+        len({row["name"] for row in assets}) != len(assets)
+        or not target
+        or sorted(assets, key=lambda row: row["name"]) != target
+    ):
+        raise ValueError("corpus tokenizer asset hashes do not match target snapshot")
+
+
 @dataclass(frozen=True)
 class PreparedFit:
     spec: ModelSpec
@@ -168,8 +241,21 @@ def prepare_fit(
     manifest = json.loads(Path(corpus_path).read_bytes())
     if before != file_sha256(Path(corpus_path)):
         raise ValueError("corpus manifest changed during validation")
-    if manifest["model_hf_id"] != spec.hf_id:
-        raise ValueError("corpus model does not match requested model")
+    transcript = manifest.get("schema_version") == 2
+    if not transcript and spec.training is not None:
+        raise ValueError("legacy corpus cannot establish the requested training identity")
+    if not transcript and manifest["model_hf_id"] != spec.hf_id:
+        # Legacy manifests lack tokenization/lineage evidence for cross-precision reuse.
+        # Resolve registry aliases only when they identify this exact artifact.
+        from local_llm_lab.models import load_model_spec
+
+        source_spec = load_model_spec(manifest["model_hf_id"])
+        if (
+            source_spec.hf_id != spec.hf_id
+            or base_of_artifact(source_spec.base) != spec.base
+            or source_spec.training != spec.training
+        ):
+            raise ValueError("corpus model does not match requested model")
     if not rows or {row["split"] for row in rows} != {"fit", "held"}:
         raise ValueError("corpus needs both fit and held selection sequences")
     name = spec.name.replace("/", "--")
@@ -178,6 +264,8 @@ def prepare_fit(
     identity = resolve_snapshot(spec, revision=revision)
     config = json.loads((Path(identity["snapshot_path"]) / "config.json").read_bytes())
     text_config = config.get("text_config", config)
+    if transcript:
+        _validate_transcript_identity(manifest, spec, identity, text_config)
     vocab = text_config.get("vocab_size")
     if vocab is not None and any(token >= vocab for row in rows for token in row["ids"]):
         raise ValueError("corpus token exceeds the model vocabulary")
