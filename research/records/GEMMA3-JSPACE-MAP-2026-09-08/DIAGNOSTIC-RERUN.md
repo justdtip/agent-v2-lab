@@ -118,7 +118,7 @@ position before that token, and the record carries what each read layer had ther
 | forks in the episode | 24 |
 | where the emitted wrong token is already rank 1 | layer 24, at all 24 |
 | its rank one layer earlier, at 23 | 14 to 20 (twice lower: 6 and 2) |
-| forks where the correct `' "'` is in any layer's top-10 | 2, and only at layer 34 |
+| forks where the correct `' "'` is in any layer's top-10 | 24, and only at layer 34 |
 | forks where `workspace` is in any layer's top-10 | 0 |
 
 **The control, without which the first row means nothing.** Across the 1,149 other emitted tokens
@@ -129,11 +129,18 @@ and is unremarkable on its own — what is not unremarkable is that **every one 
 commits in the same 23-to-24 step, none earlier and none later**, while ordinary tokens scatter
 across five layers.
 
-**And the alternative is not there to be recovered.** `workspace` is absent from every read
-layer's top-10 at every fork. The `' "'` that would have kept the path correct reaches a top-10
-only twice, only at layer 34 — which is the identity, so that is the model's own output
-distribution rather than anything the map contributes. By the time the residual is read at all,
-the correct branch is not among the candidates.
+**The word is never a candidate; the punctuation that would have allowed it is, but only at the
+end.** `workspace` is absent from every read layer's top-10 at every one of the 24 forks — 192
+top-10 lists and it is in none of them. The `' "'` that would have opened a bare path is a
+different story and an earlier version of this record got it wrong: it is in the top-10 at **all
+24 forks, and only at layer 34**, where it sits directly behind the token that wins. Layer 34 is
+the identity, so that is the model's own output distribution: the correct opener is the runner-up
+in the model's own final decision, and it is not a candidate at any depth below.
+
+So the shape is not "the right branch was never live". It is narrower and stranger. At the moment
+of choosing, the alternative that keeps the path correct is present and beaten; the word the path
+actually needed is nowhere at all, at any depth. Whatever the residual carries about this path, it
+does not contain `workspace` in any form the readout can see.
 
 **Two limits, both real.** The top-10 is a narrow window and absence from it bounds the
 alternative's probability rather than proving it absent. And these twenty-four are one decision
@@ -177,3 +184,27 @@ rediscovering it as a result.
 So the early commitment at layer 24 is a property of **this fixed point**, not of wrong paths.
 Whether it generalises is a question for a corpus with more than one of them, which stage two
 would supply and this pair of runs does not.
+
+
+### A correction to this record's own method, and what it cost
+
+The first version of the table above said the correct opener appeared at 2 of 24 forks. It appears
+at all 24. The error was not in the reading of the result but in the join that produced it, and it
+is worth writing down because the failure is silent and the corpus invites it.
+
+**The record has two coordinate systems.** A `rank` row's position counts the turn's own stream, so
+the row at `p - 1` scores the token emitted at `p`, and it carries that token's id — which makes
+the alignment checkable rather than assumed. A `reading` row's position is the *forward's* offset,
+and with no cache across turns every turn re-encodes from zero, so **the same position occurs once
+per turn**. Keyed in one flat dictionary, later turns silently overwrite earlier ones and every
+lookup answers about the last turn instead of the one asked about.
+
+Every rank-based number in this record was checked against the rows' own token ids: 8,207 emitted
+tokens across every episode of both runs, zero mismatches. So the commitment layers, the
+argument-start baseline and the identity check are unaffected. The reading-based presence counts
+were not, and are now recomputed with readings grouped by turn.
+
+**The check that catches it is the identity, again.** At layer 34 the readout is the model's own
+distribution, so its top-1 must be the emitted token. Grouped by turn it is, for 100% of 1,173
+emissions. Keyed flat it was 4%. A join this wrong announces itself the moment a boundary
+condition is asked of it, which is the argument for having one.

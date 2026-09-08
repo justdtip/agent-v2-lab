@@ -39,9 +39,26 @@ CORRECT_WORD = (44484, "workspace")
 
 
 def read(path: str):
+    """Emitted tokens, per-layer top-k readings, and emitted-token ranks, each keyed correctly.
+
+    **The two coordinate systems are different and conflating them is silent.** A `rank` row's
+    position counts the turn's own stream, so the row at ``p - 1`` scores the token emitted at
+    ``p`` — and it carries that token's id, which is what makes the alignment checkable rather
+    than assumed. A `reading` row's position is the *forward's* offset, and with no cache across
+    turns every turn re-encodes from zero, so the same position occurs once per turn. Keyed
+    flat, later turns overwrite earlier ones and every lookup silently answers about the last
+    turn. This cost a published claim on 2026-09-08 before the layer-34 identity caught it.
+
+    Readings are written inside ``output()`` before that chunk's own `forward` row, so file order
+    assigns each run of them to a turn. The check that this is right is the identity: at the final
+    layer the readout is the model's own distribution, so its top-1 must be the emitted token, and
+    it is for 100% of them once grouped by turn against 4% when keyed flat.
+    """
     emitted: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
-    reading: dict[int, dict] = {}
+    reading: dict[int, dict[int, dict]] = collections.defaultdict(dict)
     rank: dict[int, dict[int, int]] = collections.defaultdict(dict)
+    ranked_token: dict[int, int] = {}
+    pending: list[dict] = []
     with open(path) as handle:
         for line in handle:
             try:
@@ -52,9 +69,24 @@ def read(path: str):
             if kind == "emitted":
                 emitted[event["turn"]].append((event["position"], event["token_id"]))
             elif kind == "reading":
-                reading[event["position"]] = {int(k): v for k, v in event["top"].items()}
+                pending.append(event)
+            elif kind == "forward":
+                for row in pending:
+                    reading[event["turn"]][row["position"]] = {
+                        int(k): v for k, v in row["top"].items()
+                    }
+                pending = []
             elif kind == "rank" and event.get("horizon") == 1:
                 rank[event["position"]][int(event["layer"])] = event["rank"]
+                ranked_token[event["position"]] = event["token_id"]
+
+    for turn in emitted:
+        for position, token in emitted[turn]:
+            if ranked_token.get(position - 1) not in (None, token):
+                raise ValueError(
+                    f"rank row at {position - 1} scores {ranked_token[position - 1]} but "
+                    f"{token} was emitted at {position}: the coordinate systems do not line up"
+                )
     return emitted, reading, rank
 
 
@@ -81,25 +113,26 @@ def main() -> int:
     for turn in sorted(emitted):
         for position, token in sorted(emitted[turn]):
             if token == FORK[0]:
-                forks.append(position - 1)
+                forks.append((turn, position - 1))
                 break
     if not forks:
         raise SystemExit(f"no turn in {args.record} emits {FORK[1]!r} at a path slot")
 
-    at_24 = [rank[d].get(24) for d in forks]
+    at_24 = [rank[d].get(24) for _, d in forks]
     quote_layers = [
-        [layer for layer in sorted(reading.get(d, {})) if CORRECT_QUOTE[0] in reading[d][layer]]
-        for d in forks
+        [layer for layer in sorted(reading[turn].get(d, {})) if CORRECT_QUOTE[0] in reading[turn][d][layer]]
+        for turn, d in forks
     ]
     word_anywhere = sum(
-        any(CORRECT_WORD[0] in ids for ids in reading.get(d, {}).values()) for d in forks
+        any(CORRECT_WORD[0] in ids for ids in reading[turn].get(d, {}).values())
+        for turn, d in forks
     )
 
     others = [
         position - 1
         for turn in emitted
         for position, _ in emitted[turn]
-        if (position - 1) in rank and (position - 1) not in set(forks)
+        if (position - 1) in rank and (position - 1) not in {d for _, d in forks}
     ]
     spread = collections.Counter(earliest_rank_one(rank[d]) for d in others)
 
@@ -107,7 +140,7 @@ def main() -> int:
         "record": args.record,
         "forks": len(forks),
         "fork_rank_1_at_layer_24": sum(1 for r in at_24 if r == 1),
-        "fork_rank_at_layer_23": [rank[d].get(23) for d in forks],
+        "fork_rank_at_layer_23": [rank[d].get(23) for _, d in forks],
         "correct_quote_in_top_k": sum(1 for layers in quote_layers if layers),
         "correct_quote_layers": sorted({layer for layers in quote_layers for layer in layers}),
         "correct_word_in_top_k": word_anywhere,
