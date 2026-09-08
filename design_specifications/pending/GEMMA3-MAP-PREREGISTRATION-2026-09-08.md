@@ -338,3 +338,57 @@ is not a gap this run can close.
 **The fix is a fit at agent-transcript context lengths**, which is Codex's task 1 and would replace an
 18x extrapolation with none. Stage two is not blocked on it — the map is worth having with the
 limitation stated — and no per-layer figure is published without the sentence.
+
+### 9. The extrapolation-cost test, pre-registered before stage two's records exist
+
+**Declared conflict.** The Chief proposed this hypothesis and predicted its direction. The pilot
+result agrees with that prediction. Everything below is therefore fixed **now**, while stage two is
+still generating and no data on which to tune it exists, because a Chief reframing the statistics of
+his own confirmed prediction after seeing the numbers is the tenth instance of this programme's own
+documented failure pattern.
+
+**The hypothesis, one sentence, directional, and already on the record in a message sent before the
+pilot test was run:** if extrapolating the lens beyond its fitted position range costs accuracy, the
+cost is larger at long horizons than at horizon one, because a long-range prediction leans on the
+transported representation while a next-token prediction leans on the identity.
+
+**Why it is one test and not ten.** The claim is about the **horizon-by-extrapolation interaction**,
+not about any cell. Testing ten cells and correcting for ten answers a different question — *which
+cell degrades* — that nobody asked. The pilot's Holm correction across ten was the right correction
+for the wrong hypothesis, and it under-reports evidence for the pre-specified one.
+
+**The statistic.** Per layer, `r_h = log2(median out-of-range rank / median in-range rank)` at horizons
+1 and 8, then the paired difference `d = r_8 - r_1`. One number per layer. The test is on the
+distribution of `d`.
+
+**Pilot values, for reference and not as evidence:**
+
+| layer | 11 | 18 | 23 | 24 | 30 | mean |
+|---|---:|---:|---:|---:|---:|---:|
+| `d` | +0.34 | +1.09 | +1.16 | +1.01 | +1.28 | **+0.98** |
+
+All five positive; the mean is a factor of 1.97 on the median rank.
+
+**The unit of replication is the episode, not the layer, and this is the binding constraint.** Five
+layers of one residual stream over two episodes are not five draws: they share positions, episodes and
+the stream itself. A layer-level sign test gives 1/32 and **that is an upper bound on the evidence,
+not the evidence.** With two episodes the honest n is two. This is the same error as claim 6 in
+`research/records/METHOD-2026-09-08/` — counting correlated observations as independent ones — and it
+is named here so it cannot be committed later by either seat.
+
+**So, fixed now:**
+
+1. The test is computed **per episode**, giving one `d` per (episode, layer). Episodes are the
+   replication unit and are aggregated with equal weight, per amendment 4.
+2. One pre-specified directional test on the episode-level mean of `d`, one-sided, no correction,
+   because there is one hypothesis.
+3. The per-layer table is published as description, never as five tests.
+4. **Confirming** is a positive episode-level mean `d` with an interval excluding zero. **Refuting**
+   is an interval containing zero or a negative mean. **Both outcomes are reportable and neither
+   blocks anything**; this test decides how loudly the extrapolation limitation is stated, not
+   whether the map is published.
+5. If it confirms, the deep-layer long-horizon readings are the least trustworthy in the map — and
+   layers 24 and 30 at horizon 8 are exactly where the fixed point commits and where the depth
+   gradient turns, so the penalty would be concentrated on every interesting result we have.
+
+**Nothing here changes what stage two computes.** It fixes how one already-planned analysis is read.
