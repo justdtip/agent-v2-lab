@@ -238,3 +238,43 @@ because the declaration carried its measurement, which is what R60(c) is for.
 Composition at 6 of 15: `update-0028` is 1,050 of 1,965 generated tokens, 53.4%, against the
 pre-run projection of 34.1% of rank rows. The equal-weight-per-episode rule was fixed before the run
 and handles it; the projection was the optimistic one.
+
+## Whether the reading-side readout is an instrument or a frequency counter
+
+**Measured because the Chief proposed abandoning it — "a top-k over a prompt the model has just
+been shown is dominated by what is in that prompt, and may not be a good instrument for this
+question at all." Both of us had had a comprehension-side claim dissolve, and the shared cause
+looked like context frequency.**
+
+Every reading position in the final turn of the eight complete stage-two episodes, at layer 34,
+which is the model's own distribution and involves no lens. Bucketed by how many times the true
+next token had already appeared earlier in that prompt:
+
+| times the true token appeared before | n | in the top ten | is top-1 |
+|---|---:|---:|---:|
+| 0 | 2,238 | 51.5% | 22.6% |
+| 1 to 2 | 1,843 | 82.4% | 59.3% |
+| 3 to 9 | 2,576 | 94.6% | 80.2% |
+| 10 or more | 3,918 | 96.8% | 83.1% |
+| all | 10,575 | 84.2% | 65.4% |
+
+**The Chief is right about the comparison and wrong about the instrument, and the numbers separate
+the two cleanly.**
+
+Right about the comparison: the gradient is enormous. A token seen ten times is in the top ten 97%
+of the time; one never seen, 52%. So contrasting a position whose true token has appeared 28 times
+against one whose true token has appeared **zero** times — which is exactly `context` against
+`Result` at the fork we both wrote up — is confounded before any schema is invoked. Both of our
+comprehension-side claims died on this and it is the same death.
+
+Wrong about the instrument: **51.5% in the top ten for a token that has never occurred, out of a
+vocabulary of 262,208, is not a frequency counter.** Chance is 0.004%. The readout carries real
+predictive content on unseen tokens; what it cannot do is support an uncontrolled comparison
+across positions of unequal token history.
+
+**The rule this earns, and it is a filter rather than an abandonment.** Any comparison of the
+reading-side readout between positions must match on the true token's prior occurrence count in
+that prompt, or the frequency gradient dominates the result. That is also the exact selection both
+of us independently proposed for the matched pass/fail pair — now with the reason quantified rather
+than suspected, and with a threshold: below about three prior occurrences the readout is
+substantially weaker, and that is where both of our claims sat.
