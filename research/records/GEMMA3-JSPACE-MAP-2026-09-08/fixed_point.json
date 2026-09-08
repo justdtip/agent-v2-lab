@@ -1,0 +1,45 @@
+{
+ "record": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/18df6241-b6a2-4c3c-8b24-22cad2612a51/scratchpad/pilot/fair/agentic-d2-update-0028.jsonl",
+ "forks": 24,
+ "fork_rank_1_at_layer_24": 24,
+ "fork_rank_at_layer_23": [
+  6,
+  2,
+  17,
+  14,
+  14,
+  18,
+  18,
+  17,
+  20,
+  20,
+  18,
+  17,
+  16,
+  16,
+  15,
+  16,
+  16,
+  16,
+  16,
+  15,
+  15,
+  14,
+  15,
+  15
+ ],
+ "correct_quote_in_top_k": 2,
+ "correct_quote_layers": [
+  34
+ ],
+ "correct_word_in_top_k": 0,
+ "other_tokens": 1149,
+ "other_earliest_rank_1": {
+  "18": 9,
+  "23": 183,
+  "24": 296,
+  "30": 408,
+  "34": 253
+ },
+ "other_median_rank_at_24": 2
+}
