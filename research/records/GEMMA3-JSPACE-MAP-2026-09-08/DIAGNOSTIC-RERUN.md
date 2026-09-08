@@ -798,3 +798,49 @@ failed to present it*, *did not do the work*, and *left the workspace wrong* —
 different findings about a model and are currently one number. That split is computable from the
 manifest with no rerun: the answer comparison above, plus whether the verdict's file-state check
 fired.
+
+## `aggregate_report-0167` dies on the token cap, in both runs
+
+**Stage two: 4 turns against an expert's 14, failed, no loop, not exhausted. Tokens generated per
+turn, against the `--max-tokens 200` ceiling:**
+
+| turn | tokens |
+|---:|---:|
+| 0 | 55 |
+| 1 | 58 |
+| 2 | 193 |
+| 3 | **200** |
+
+Turn 3 emits exactly the cap and produces **no parseable action** — the manifest records `null`. The
+episode ends because generation was truncated mid-call, not because the model finished or gave up.
+
+**The Chief found this same episode dying the same way in stage one**, where it emitted exactly 200
+tokens on its terminating turn against 48 to 57 elsewhere. It reproduces under the corrected
+rendering, the fixed simulator and the raised step ceiling. **This is a harness limit reached twice,
+not a model failure observed twice.**
+
+The substance before the truncation is worth one line: the model read `metric-0` only and then built
+a ten-term arithmetic expression from numbers that are not metric values — the observation text
+carries decoy `historical observation NNNNNN` figures — and the calculator refused it. So an
+incomplete survey is present here too, but the episode's *termination* is the cap.
+
+### The class splits four ways, not one
+
+Seven instances across stage two's twelve agentic-and-chat episodes. Sorted by what actually
+happened rather than by the verdict:
+
+| what happened | episodes |
+|---|---|
+| did the work, presented it in prose | `search-0061` |
+| answered correctly, left the workspace wrong | `batch_update-0166` |
+| **truncated by the token cap** | `aggregate_report-0167` |
+| did not do the work | `list-0149`, `pointer_chain-0018`, `conditional_update-0093`, `ledger_reconcile-0163` |
+
+**Four of seven are the failure the class name describes.** One succeeded, one lied about
+succeeding, and one was cut off by our own generation ceiling — and all three are currently a
+single number with the other four.
+
+The cap case is the same shape as this morning's step-ceiling confound one level down: a limit we
+chose, reached by the model, recorded as the model's limit. The step ceiling was found by comparing
+against the comparator's own configuration; this one is found by counting tokens per turn, which
+the records carry and no report reads.
