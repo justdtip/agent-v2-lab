@@ -1169,3 +1169,49 @@ a match.
 one was ruled before its first instance: every adapter this programme owns is Qwen's and the Gemma
 work is base-only, so nothing has yet been read wrongly. It is the cheapest form of a rule and the
 rarest.
+
+### R58 (2026-09-08, 15:00; a patch names the command that made it, because `git diff` omits new files)
+
+`scripts/stamp_lens_identity.py` was written, tested, and never landed. `LENS-IDENTITY.patch` was
+produced with `git diff`, **a new file is untracked, and `git diff` silently omits untracked
+files**. The patch applied cleanly and the suite passed, because nothing imports the script — only
+a refusal message names it, and a refusal that names a remedy which does not exist costs the reader
+their time before their doubt.
+
+**Neither a clean apply nor a green suite can detect this**, which puts it in the same family as
+the day's other failures: an instrument reporting success while missing the thing it was for.
+
+Two requirements follow.
+
+**Every patch document states the command that produced it**, in the document, verbatim. On
+2026-09-08 exactly one of thirty-nine did. A reader cannot otherwise know whether new files could
+be missing.
+
+**Use a command that includes new files.** `git add -A && git diff --cached`, or `git diff HEAD`
+after `git add -N`, or `git format-patch`. Never a bare `git diff` for a patch that is meant to
+carry a change in full.
+
+An audit on the day this was found turned up no second instance: all eight `scripts/` paths named
+anywhere in `src/` or `tests/` exist, and no imported `local_llm_lab` module is absent. The class
+is real and its population here was one.
+
+### R59 (2026-09-08, 15:00; the Deputy's diagnosis of a pattern in the Chief's rulings)
+
+Three checks the Chief ordered on 2026-09-08 were correct in aim and wrong in reach, and the
+Deputy named what they had in common better than the Chief did: **each reached for a property of
+the artefact when the question was about the thing the artefact represents.**
+
+- A **file path** was compared, when the question was which *model* a lens was fitted on.
+- A **registry name** was compared, when the question was which *model* an entry describes — and
+  our own two entries for one model carry different names.
+- A **block kind** was used to derive periodicity, when the question was whether the *decoder* has
+  a periodic structure — and Gemma's period is one of attention spans, not of module kinds.
+
+"Too coarse" and "too strict" are the symptoms. The handle is the direction of the error, and it is
+always the same direction: the artefact is what the code has in its hand, so it is what gets
+compared. **Before ruling that two things must match, name the thing the comparison is really
+about, and then ask whether the property being compared belongs to it or merely travels with it.**
+A path, a filename, a registry key and a module class all travel with a model without being one.
+
+The Director's R57 is this rule applied by someone who had it first: a model's identity is its
+lineage, not its path.
