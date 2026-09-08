@@ -659,3 +659,49 @@ frequency difference is exactly the sort of thing that makes a binary contrast l
 What would separate them: the same contrast on episodes matched for how often the schema token
 appears in context. That is a selection over stage two's completed set, and it costs nothing but
 waiting for the set to exist.
+
+## The wrong-answer-termination class has three instances and three mechanisms
+
+**`conditional_update-0093`, stage two: 5 turns against an expert's 10, failed, no loop, not
+exhausted, never stuck, never searched. The third instance of the modal class.**
+
+The task: read the policy file, **list and inspect every service file**, identify the service with
+the **highest** load, and if it exceeds the policy threshold change its mode. The directory holds a
+policy file and five services.
+
+| | |
+|---|---|
+| files the listing showed | policy.txt and service-0 through service-4 |
+| files the model read | **service-0 only** |
+| policy threshold | 67, never read |
+| loads | service-0: 82, service-1: 84, **service-2: 98**, service-3: 37 |
+| model's answer | `service-0:mode=throttled` |
+| correct answer | `service-2:mode=throttled` |
+
+It listed the directory, read the first service, modified it, verified the modification, and
+finished. **It never opened the policy file and never opened the other four services.**
+
+And the failure is precise rather than careless: service-0's load of 82 does exceed the threshold of
+67, so the action is locally defensible. **The model substituted a simpler predicate — the first
+service above threshold — for the one the task states, the highest.**
+
+### What the three instances share, and what they do not
+
+| episode | what it did |
+|---|---|
+| `pointer_chain-0018` | continued a schema past its own termination, fabricating an eighth node |
+| `batch_update-0166` | applied a four-step template while its notes accurately recorded two of the steps failing |
+| `conditional_update-0093` | substituted a simpler predicate for the one specified, acting on the first candidate rather than the maximum |
+
+**Shared: each finishes confidently having answered a nearby, easier question than the one asked,
+and each stops early rather than getting stuck.** None loops, none exhausts, none searches, none
+enters a repeated-failure state — so none is reachable by the strategy-switching measurement.
+
+**Not shared: the mechanism.** Perseveration of a schema, insensitivity of action to observation,
+and simplification of a predicate are three different failures. The class is real and it is
+**unified by its outcome rather than by its cause.**
+
+That matters for the pre-registration. Counting the class will count all three; explaining it will
+not, and a record that reports the count as though it had a mechanism would be claiming more than
+three episodes support. These readings are also interpretations of trajectories, not measurements
+of representations — the map has not been asked about any of them yet.
