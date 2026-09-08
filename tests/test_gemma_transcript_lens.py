@@ -254,3 +254,80 @@ def test_captured_task_prompt_must_match_registered_fingerprint(registered):
     }
     with pytest.raises(ValueError, match="fingerprint"):
         mod.validate_captured_cohort([event], cohort)
+
+
+@pytest.fixture
+def committed_rendering_gate(tmp_path, monkeypatch):
+    import hashlib
+    from types import SimpleNamespace
+
+    mod = driver()
+    primary, running = tmp_path / "primary", tmp_path / "running"
+    primary.mkdir()
+    running.mkdir()
+    monkeypatch.setattr(mod, "primary_worktree", lambda: primary)
+    monkeypatch.setattr(mod, "__file__", str(running / "scripts" / "driver.py"))
+    landed, ruling = "7d2a18a" + "0" * 33, "a1ff0b0" + "0" * 33
+    paths = [
+        "design_specifications/pending/CODEX-TASKS-2026-09-08.md",
+        "research/records/GEMMA3-JSPACE-MAP-2026-09-08/DIAGNOSTIC-RERUN.md",
+        "src/local_llm_lab/pipeline/protocol.py",
+        "configs/models/gemma3-4b.yaml",
+        "configs/models/gemma3-4b-bf16.yaml",
+    ]
+    blobs, records = {}, []
+    for relative in paths:
+        commit = ruling if relative.startswith("design_specifications/") else landed
+        blob = ("committed " + relative).encode()
+        blobs[commit + ":" + relative] = blob
+        for root in (primary, running):
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(blob)
+        records.append(
+            {
+                "path": str(primary / relative),
+                "commit": commit,
+                "sha256": hashlib.sha256(blob).hexdigest(),
+                "storage": "git_blob",
+            }
+        )
+
+    def git(argv, **kwargs):
+        if argv[3] == "rev-parse":
+            return SimpleNamespace(stdout=argv[4].removesuffix("^{commit}") + "\n")
+        if argv[3] == "merge-base":
+            return SimpleNamespace(returncode=0)
+        assert argv[3] == "show"
+        return SimpleNamespace(stdout=blobs[argv[4]])
+
+    monkeypatch.setattr(mod, "run", git)
+    return (
+        mod,
+        {"landed_commit": landed, "ruling_commit": ruling, "files": records},
+        primary,
+        running,
+    )
+
+
+def test_historical_rendering_evidence_survives_later_document_amendment(committed_rendering_gate):
+    mod, gate, primary, _ = committed_rendering_gate
+    report = primary / "research/records/GEMMA3-JSPACE-MAP-2026-09-08/DIAGNOSTIC-RERUN.md"
+    report.write_bytes(report.read_bytes() + b"\nLater analysis appended.")
+    mod.verify_rendering_gate(gate)
+
+
+def test_rendering_evidence_rejects_wrong_committed_blob_hash(committed_rendering_gate):
+    mod, gate, _, _ = committed_rendering_gate
+    gate["files"][1]["sha256"] = "f" * 64
+    with pytest.raises(ValueError, match="committed blob hash"):
+        mod.verify_rendering_gate(gate)
+
+
+@pytest.mark.parametrize("checkout", ["primary", "running"])
+def test_rendering_source_must_still_match_committed_fix(committed_rendering_gate, checkout):
+    mod, gate, primary, running = committed_rendering_gate
+    root = primary if checkout == "primary" else running
+    (root / "src/local_llm_lab/pipeline/protocol.py").write_text("changed source")
+    with pytest.raises(ValueError, match="checkout differs"):
+        mod.verify_rendering_gate(gate)

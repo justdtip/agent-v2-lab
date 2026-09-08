@@ -7,6 +7,7 @@ Capture requires --execute and a current window owned by this process's inherite
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -124,10 +125,11 @@ def verify_rendering_gate(gate):
         raise ValueError("rendering gate requires committed confirming evidence hashes")
     suffixes = set()
     for record in records:
-        path = Path(record["path"]).resolve(strict=True)
+        if record.get("storage") != "git_blob":
+            raise ValueError("rendering evidence must explicitly identify git_blob storage")
+        path = Path(record["path"]).resolve()
         relative = path.relative_to(root).as_posix()
         suffixes.add(relative)
-        data = checked_bytes(record)
         commit = record.get("commit")
         if commit not in commits.values():
             raise ValueError("rendering evidence commit is not one of the pinned gate commits")
@@ -136,11 +138,13 @@ def verify_rendering_gate(gate):
             capture_output=True,
             check=True,
         ).stdout
-        if blob != data:
-            raise ValueError("rendering evidence differs from its committed bytes")
+        if hashlib.sha256(blob).hexdigest() != record["sha256"]:
+            raise ValueError("rendering evidence committed blob hash mismatch")
         if relative.startswith(("src/", "configs/")):
+            if path.read_bytes() != blob:
+                raise ValueError("primary checkout differs from landed rendering evidence")
             running = Path(__file__).resolve().parents[1] / relative
-            if running.read_bytes() != data:
+            if running.read_bytes() != blob:
                 raise ValueError("running checkout differs from landed rendering evidence")
     required = {
         "design_specifications/pending/CODEX-TASKS-2026-09-08.md",
