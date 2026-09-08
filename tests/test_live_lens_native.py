@@ -247,3 +247,41 @@ def test_attention_only_mode_skips_head_projection_but_preserves_native_logits()
                        head_vectors=False) as wrapped:
         np.testing.assert_array_equal(np.array(wrapped(ids)), expected)
     assert rows == [None]
+
+
+def test_residual_capture_runs_on_a_rotating_cache_and_head_capture_refuses_one():
+    """The narrow gate: what rotation actually breaks, and what it does not.
+
+    Gemma 3's `make_cache` returns a `RotatingKVCache` for every block whose index plus one is
+    not divisible by six, which is 29 of its 34, on every run rather than only long ones. The
+    old exact-type check refused the whole model, and the two things behind that one check are
+    not the same risk.
+
+    Residual capture emits against `_offset`, the monotone token count, which a rotating cache
+    maintains identically (`cache.py`: `self.offset += keys.shape[2]`). Head capture reads
+    `cache.state[0]` and treats column *j* as absolute source position *j*, which rotation makes
+    false while leaving the arithmetic well-formed -- plausible per-head numbers against the
+    wrong positions, which is the failure mode worth refusing loudly.
+
+    A small `max_size` here so the cache genuinely rotates within the test's own sequence rather
+    than merely being of the rotating type.
+    """
+    from mlx_lm.models.cache import RotatingKVCache
+
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    ids = mx.array([[1, 2, 3, 4]])
+    baseline = np.array(model(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers]))
+
+    sink = Sink()
+    with NativeCapture(view, sink, layers=(3, 4)) as wrapped:
+        rotating = [RotatingKVCache(max_size=2) for _ in model.layers]
+        np.testing.assert_array_equal(np.array(wrapped(ids, cache=rotating)), baseline)
+    assert {layer for layer, _, _ in sink.residuals} == {3, 4}, "residuals still captured"
+    assert [entry[0] for entry in sink.logits] == [0], "and emitted against the monotone offset"
+
+    with (
+        NativeCapture(view, Sink(), layers=(3, 4), attention_blocks=(3,)) as wrapped,
+        pytest.raises(ValueError, match="column j to absolute source position j"),
+    ):
+        wrapped(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers])

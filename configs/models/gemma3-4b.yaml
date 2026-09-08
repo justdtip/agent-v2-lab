@@ -9,6 +9,8 @@ chat:
   # (eos_token_id: [1, 106], <eos> and <end_of_turn>). Appended as text by protocol.py,
   # branch.py and data.py; it is not a generation stop, which MLX takes from the config's id
   # set and which therefore needs nothing from us on this model.
+  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
+  generation_prefix: "<start_of_turn>model\n"
   end_of_turn: "<end_of_turn>"
   # Deliberately empty. The field is read by nothing outside models.py (issue 98), and Gemma's
   # terminators already reach the generation loop through the config, so a token here would be

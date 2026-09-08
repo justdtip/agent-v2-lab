@@ -666,10 +666,33 @@ class NativeCapture(AbstractContextManager):
         self._offset = int(entries[0].offset) if entries else 0
         if any(int(c.offset) != self._offset for c in entries):
             raise ValueError("attention caches disagree on the current position")
-        from mlx_lm.models.cache import KVCache
+        from mlx_lm.models.cache import KVCache, RotatingKVCache
 
-        if any(type(c) is not KVCache for c in entries):
-            raise ValueError("capture requires ordinary, unquantized KV caches")
+        # Two different things were behind one type check, and they are not the same risk.
+        #
+        # **Residual capture is safe under rotation.** It emits against ``self._offset``, the
+        # monotone count of tokens the model has seen, which a rotating cache maintains exactly
+        # as an ordinary one does; nothing in that path indexes a cache column.
+        #
+        # **Head capture is not.** It reads ``cache.state[0]`` and treats column *j* as absolute
+        # source position *j* (see the attention reconstruction below). Under rotation a column
+        # is not its position and at most ``max_size`` columns exist at all, so the same code
+        # would produce plausible per-head numbers against the wrong positions.
+        #
+        # Gemma 3 makes this the difference between running and not: ``make_cache`` returns a
+        # ``RotatingKVCache`` for every block whose index plus one is not divisible by six, which
+        # is 29 of its 34, on every run rather than only long ones. So the gate narrows to what
+        # it can actually justify rather than widening to a type.
+        if any(type(c) not in (KVCache, RotatingKVCache) for c in entries):
+            raise ValueError("capture requires unquantized KV caches")
+        if self.attention_blocks and any(type(c) is RotatingKVCache for c in entries):
+            raise ValueError(
+                "head capture cannot read a rotating KV cache: it maps weight column j to "
+                "absolute source position j, and under rotation a column is not its position "
+                "and only the last max_size of them exist. Residual capture is unaffected and "
+                "runs on a rotating cache; turn head capture off, or restrict it to the "
+                "global-attention blocks, whose caches do not rotate."
+            )
         if self._offset == 0:
             self._injected = False
         if self.injection is not None and self._offset > self.injection[1] and not self._injected:

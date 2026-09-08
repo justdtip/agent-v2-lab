@@ -572,7 +572,7 @@ def _training_model_spec() -> ModelSpec:
         name="registry-name",
         hf_id="registry/hf-id",
         family="fake",
-        chat=ChatSpec("unsupported", {}, "<eot>", ()),
+        chat=ChatSpec("unsupported", {}, "<eot>", (), generation_prefix="<|im_start|>assistant\n"),
         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
         train={},
         cache_strategy="none",

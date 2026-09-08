@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -37,6 +37,23 @@ class ChatSpec:
     template_kwargs: dict[str, Any]
     end_of_turn: str
     extra_stop_tokens: tuple[str, ...]
+    #: The marker the chat template emits to open an assistant turn under
+    #: ``add_generation_prompt``. Declared rather than assumed, because `protocol` hard-coded
+    #: ChatML's and asserted it, so every generation-side render raised on a model whose template
+    #: opens a turn any other way. Gemma's is ``"<start_of_turn>model\n"``.
+    #:
+    #: **Required, and keyword-only.** It had a ChatML default for one revision, so that the
+    #: dozen positional constructors in the tests kept working, and the Chief was right to
+    #: refuse it: a ChatML default on the one field whose purpose is to stop a ChatML value
+    #: being assumed is the same defect one level down. The parser's ``_required_string`` covers
+    #: registry files and nothing else, and ``_default_spec`` constructs this class directly,
+    #: which is precisely where ``<|im_end|>`` had been hiding.
+    #:
+    #: Keyword-only because removing a default from the middle of a signature would let every
+    #: positional constructor silently mis-assign, and the symptom would be a turn ending that
+    #: is some other field's value. Named, they fail to construct instead, which is a list of
+    #: sites rather than a bug.
+    generation_prefix: str = field(kw_only=True)
     max_think_tokens: int = 512
 
 
@@ -275,6 +292,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
             thinking=thinking,
             template_kwargs=dict(template_kwargs),
             end_of_turn=_required_string(chat, "end_of_turn", source),
+            generation_prefix=_required_string(chat, "generation_prefix", source),
             extra_stop_tokens=tuple(stops),
             max_think_tokens=_positive_int(
                 chat.get("max_think_tokens", 512), "chat.max_think_tokens", source
@@ -307,7 +325,16 @@ def _default_spec(hf_id: str) -> ModelSpec:
         name=hf_id,
         hf_id=hf_id,
         family="unknown",
-        chat=ChatSpec("unsupported", {}, "<|im_end|>", ()),
+        # ChatML's markers, for a model nobody declared. They are a guess and the only honest
+        # thing to say about them is that they are Qwen's; a run that reaches this path and is
+        # not a ChatML model will render turns with another vocabulary's tokens.
+        # ChatML's markers, for a model nobody declared. They are a guess, and the only
+        # honest thing to say about them is that they are Qwen's: a run that reaches this
+        # path on any other family renders turns with another vocabulary's tokens. Named
+        # rather than defaulted so this line is where a reader finds them.
+        chat=ChatSpec(
+            "unsupported", {}, "<|im_end|>", (), generation_prefix="<|im_start|>assistant\n"
+        ),
         lora=LoraSpec("attention+mlp", 16, 32.0, 0.0),
         train={},
         cache_strategy="none",

@@ -58,7 +58,7 @@ def _legacy_spec() -> ModelSpec:
         name="legacy",
         hf_id="legacy",
         family="legacy",
-        chat=ChatSpec("unsupported", {}, "<eot>", ()),
+        chat=ChatSpec("unsupported", {}, "<eot>", (), generation_prefix="<|im_start|>assistant\n"),
         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
         train={},
         cache_strategy="none",
@@ -74,7 +74,13 @@ def _thinking_spec(mode: str) -> ModelSpec:
         name=mode,
         hf_id=mode,
         family=mode,
-        chat=ChatSpec(mode, {"enable_thinking": True}, "<eot>", ()),  # type: ignore[arg-type]
+        chat=ChatSpec(
+            mode,  # type: ignore[arg-type]
+            {"enable_thinking": True},
+            "<eot>",
+            (),
+            generation_prefix="<|im_start|>assistant\n",
+        ),
         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
         train={},
         cache_strategy="none",
@@ -119,7 +125,7 @@ def _target_spec() -> ModelSpec:
         name="target",
         hf_id="target",
         family="target",
-        chat=ChatSpec("unsupported", {}, "<eot2>", ()),
+        chat=ChatSpec("unsupported", {}, "<eot2>", (), generation_prefix="<|im_start|>assistant\n"),
         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
         train={},
         cache_strategy="none",

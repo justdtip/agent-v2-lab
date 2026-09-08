@@ -137,6 +137,7 @@ def _registry_mapping(evidence) -> dict:
             "thinking": "unsupported",
             "template_kwargs": {},
             "end_of_turn": "<|im_end|>",
+            "generation_prefix": "<|im_start|>assistant\n",
             "extra_stop_tokens": [],
         },
         "lora": {"keys": "attention+mlp", "rank": 16, "scale": 32.0, "dropout": 0.0},
@@ -399,3 +400,49 @@ def test_the_gemma_entry_is_what_stands_between_a_run_and_the_chatml_fallback() 
 
     assert fallback.chat.end_of_turn == "<|im_end|>", "the fallback is ChatML's, for any model"
     assert registered.chat.end_of_turn != fallback.chat.end_of_turn
+
+
+def test_the_generation_prefix_is_declared_per_model_and_a_registry_file_cannot_omit_it(
+    tmp_path, monkeypatch
+) -> None:
+    """The blocker the Gemma pivot found, and the guard that keeps it from returning.
+
+    `protocol.generation_suffix` held ChatML's assistant marker as a literal and `build_prompt`
+    asserted the rendered prompt ends with it, so **every generation-side render raised** on a
+    model whose template opens a turn any other way. Gemma's opens with
+    `<start_of_turn>model\n`.
+
+    The assertion is deliberately kept: this value is stamped into training manifests and into
+    the lens corpus's tokenizer identity, which the prose stage re-derives and hash-compares, so
+    deleting the guard would convert a loud failure into a corpus identity that is falsified and
+    self-consistent.
+
+    Two lines of defence, and the second exists because the first covers only one construction
+    path. The parser refuses a registry file that omits the field, which is asserted below. And
+    `ChatSpec` itself takes it **keyword-only with no default**, because a ChatML default on the
+    one field whose purpose is to stop a ChatML value being assumed is the same defect one level
+    down -- and `_default_spec` builds a `ChatSpec` directly, which is exactly where `<|im_end|>`
+    had been hiding.
+    """
+    import yaml
+
+    from local_llm_lab import models
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.protocol import generation_suffix
+
+    assert load_model_spec("gemma3-4b").chat.generation_prefix == "<start_of_turn>model\n"
+    assert load_model_spec("qwen35-4b").chat.generation_prefix == "<|im_start|>assistant\n"
+    assert generation_suffix(load_model_spec("gemma3-4b")) == "<start_of_turn>model\n", (
+        "no thinking block: Gemma declares `unsupported`, and the empty-think literal is "
+        "reached only under `off`"
+    )
+
+    with pytest.raises(TypeError, match="generation_prefix"):
+        models.ChatSpec("unsupported", {}, "<eot>", ())  # type: ignore[call-arg]
+
+    document = _registry_mapping(None)
+    document["chat"].pop("generation_prefix")
+    monkeypatch.setattr(models, "_REGISTRY_DIR", tmp_path)
+    (tmp_path / "no-prefix.yaml").write_text(yaml.safe_dump(document))
+    with pytest.raises(ValueError, match="generation_prefix"):
+        load_model_spec("no-prefix")

@@ -34,6 +34,7 @@ def _spec(mode: str) -> ModelSpec:
             {"enable_thinking": mode != "off"} if mode != "unsupported" else {},
             "<eot>",
             (),
+            generation_prefix="<|im_start|>assistant\n",
         ),
         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
         train={},

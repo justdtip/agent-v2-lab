@@ -4,6 +4,8 @@ family: qwen3_5
 chat:
   thinking: "off"
   template_kwargs: {enable_thinking: false}
+  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
+  generation_prefix: "<|im_start|>assistant\n"
   end_of_turn: "<|im_end|>"
   extra_stop_tokens: ["<|endoftext|>"]
 lora:

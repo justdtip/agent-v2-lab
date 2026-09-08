@@ -261,7 +261,9 @@ def _fake_spec(end_of_turn: str):
         name="fake-branch",
         hf_id="fake/branch",
         family="fake",
-        chat=ChatSpec("unsupported", {}, end_of_turn, ()),
+        chat=ChatSpec(
+            "unsupported", {}, end_of_turn, (), generation_prefix="<|im_start|>assistant\n"
+        ),
         lora=LoraSpec("attention+mlp", 1, 1.0, 0.0),
         train={},
         cache_strategy="none",

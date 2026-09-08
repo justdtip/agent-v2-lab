@@ -288,8 +288,22 @@ def build_prompt(
 
 
 def generation_suffix(spec: ModelSpec) -> str:
-    """Return the template suffix that anchors the first generated assistant token."""
-    assistant = "<|im_start|>assistant\n"
+    """Return the template suffix that anchors the first generated assistant token.
+
+    The assistant marker is the registry's, not this module's. It was ChatML's literal here, and
+    the assertion in `build_prompt` meant every generation-side render raised on a model whose
+    template opens a turn any other way -- which is Gemma, and would have been every other
+    non-ChatML family.
+
+    **The assertion stays.** This value is stamped into training manifests and into the lens
+    corpus's tokenizer identity, which the prose stage re-derives and hash-compares; removing the
+    guard would turn a loud failure into a corpus identity that is falsified and self-consistent.
+
+    The empty thinking block is still a literal, and still Qwen's. It is reached only under
+    ``thinking == "off"``, a mode no other registered model declares, so it is left where a
+    reader can see it rather than generalised on one example.
+    """
+    assistant = spec.chat.generation_prefix
     if spec.chat.thinking == "off":
         return assistant + "<think>\n\n</think>\n\n"
     return assistant
