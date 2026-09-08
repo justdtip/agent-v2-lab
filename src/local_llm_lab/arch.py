@@ -581,12 +581,17 @@ class ArchitectureView:
             def head(self, *args, **kwargs):  # pragma: no cover - head capture is off
                 return None
 
-        with NativeCapture(self, _Collect(), layers=tuple(wanted)) as wrapped:
-            wrapped(token_ids)
-        missing = set(wanted) - set(captured)
-        if missing:  # pragma: no cover - defensive; the tap emits every requested layer
-            raise ValueError(f"native capture emitted no residual for layers {sorted(missing)}")
-        return captured
+        try:
+            with NativeCapture(self, _Collect(), layers=tuple(wanted)) as wrapped:
+                wrapped(token_ids)
+            missing = set(wanted) - set(captured)
+            if missing:  # pragma: no cover - defensive; the tap emits every requested layer
+                raise ValueError(f"native capture emitted no residual for layers {sorted(missing)}")
+            return dict(captured)
+        finally:
+            # Dynamic collector/wrapper classes can survive until cyclic GC. Only
+            # the returned mapping should retain residual arrays after this call.
+            captured.clear()
 
     def residual_source_agreement(
         self, ids: Any, layers: Sequence[int]
