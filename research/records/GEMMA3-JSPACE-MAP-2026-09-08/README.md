@@ -278,3 +278,60 @@ that prompt, or the frequency gradient dominates the result. That is also the ex
 of us independently proposed for the matched pass/fail pair — now with the reason quantified rather
 than suspected, and with a threshold: below about three prior occurrences the readout is
 substantially weaker, and that is where both of our claims sat.
+
+## The map: the pre-registered primary comparison
+
+**Stage two complete. Twelve of twelve families, fifteen episodes, nothing missing, 4.5 hours,
+534,990 rank rows, peak 4.70 GiB. Spans joined through `live_lens.spans`, whose assertions run
+before any faceted number exists.**
+
+**Call arguments against call skeleton, horizon 1, per layer** — the comparison the pre-registration
+was restated to, holding format constant and varying only whether the content is task-dependent:
+
+| layer | argument median rank | skeleton median rank | log2 ratio |
+|---:|---:|---:|---:|
+| 5 | 1,792 | 507 | +1.82 |
+| 10 | 1,186 | 474 | +1.33 |
+| 16 | 9,954 | 1,194 | **+3.06** |
+| 19 | 20,018 | 5,402 | +1.89 |
+| 21 | 4,636 | 570 | **+3.03** |
+| 23 | 785 | 115 | +2.77 |
+| **24** | **2** | **2** | **0.00** |
+| 25 | 1 | 2 | −1.00 |
+
+**Through the whole pre-collapse stack the task-dependent content is held one to two orders of
+magnitude further from the output than the convention that carries it, and the difference closes
+exactly at layer 24.** At 24 the arguments are also *more* often already decided than the skeleton —
+45.7% at rank 1 against 32.3% — having been eight times worse one layer earlier.
+
+### It survives both controls, and one of them strengthens it
+
+**Deduplicated** to one entry per distinct decision per episode, so a repeated call counts once:
+
+| layer | raw | deduplicated |
+|---:|---:|---:|
+| 16 | +3.06 | +2.73 |
+| 21 | +3.03 | **+3.82** |
+| 23 | +2.77 | **+4.14** |
+| 24 | 0.00 | 0.00 |
+
+The effect **grows** at the layers where it is largest. Repeated decisions were diluting it, not
+producing it — which is the opposite of what deduplication did to every other candidate finding in
+this programme.
+
+**Per episode**, 11 of 12 positive at layer 16, 10 of 12 at 21, 11 of 12 at 23, medians +3.17 to
++4.46. It is not carried by one episode.
+
+**The single exception is `update-0028`**, negative at every layer, and its cause is known: its
+twenty-four arguments are one character each, `"`, `/` and `.`, so its "task-dependent content" is
+more predictable than its scaffolding. The exception is the degenerate case rather than a
+counterexample.
+
+### What it is not
+
+Every reading sits above token position 126 and the lens was fitted at 16 to 126, so the whole table
+is an extrapolation of three to eighteen times, disclosed in full above. The comparison is a
+*correlation with depth*, not a causal claim: nothing here shows that layer 24 is where the model
+decides, only that it is where a readout trained toward the output stops distinguishing the two
+spans. And horizon 1 under greedy decoding saturates at the final layer by construction, which is
+why the null moved to horizons 4 and 8.

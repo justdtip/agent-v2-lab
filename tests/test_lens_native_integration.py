@@ -316,8 +316,8 @@ def test_the_final_layer_comparison_uses_the_captured_residual_and_not_the_logit
         with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
             original = session.residual
 
-            def corrupted(layer, hidden):
-                return original(layer, hidden + 3.0)
+            def corrupted(layer, offset, hidden):
+                return original(layer, offset, hidden + 3.0)
 
             session.residual = corrupted
             captured(mx.array([[1, 2, 3]]), cache=view.make_cache())
