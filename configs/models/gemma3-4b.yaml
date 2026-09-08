@@ -1,0 +1,54 @@
+name: gemma3-4b
+hf_id: google/gemma-3-4b-it
+family: gemma3
+chat:
+  # Gemma 3 has no thinking mode and no template switch for one.
+  thinking: "unsupported"
+  template_kwargs: {}
+  # tokenizer_config.json's eos_token, and the second of the two ids config.json declares
+  # (eos_token_id: [1, 106], <eos> and <end_of_turn>). Appended as text by protocol.py,
+  # branch.py and data.py; it is not a generation stop, which MLX takes from the config's id
+  # set and which therefore needs nothing from us on this model.
+  end_of_turn: "<end_of_turn>"
+  # Deliberately empty. The field is read by nothing outside models.py (issue 98), and Gemma's
+  # terminators already reach the generation loop through the config, so a token here would be
+  # a false entry in every provenance record this model writes.
+  extra_stop_tokens: []
+lora:
+  keys: auto
+  rank: 16
+  scale: 32.0
+  dropout: 0.0
+train:
+  # UNRULED. Training on Gemma is deferred and the Director's ruling of 2026-09-08 keeps it
+  # deferred: map the representations first. These values exist so no consumer meets a bare key
+  # error, and they are the Qwen recipe's, which is evidence about a different model. Nothing
+  # may cite them as a measured envelope for this one.
+  max_seq_length: 2688
+  batch_size: 1
+  grad_accumulation_steps: 1
+  learning_rate: 3.0e-5
+  grad_checkpoint: true
+cache:
+  # Explicit rather than `auto`. `none` for the first runs because 29 of the 34 per-block caches
+  # are RotatingKVCache (mlx_lm/models/gemma3_text.py make_cache: an ordinary KVCache only where
+  # the block index plus one divides by six) and no equivalence has been measured on this model.
+  # A reuse strategy is an equivalence claim and this model has no acceptance record behind one.
+  # UNRULED, and the first thing to revisit once a smoke test exists.
+  strategy: none
+  equivalence_verified: null
+probes:
+  # A depth convention rather than a model constant: the same six fractions every entry carries.
+  # On 34 layers they land on 6, 11, 17, 23, 28, 34.
+  layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
+  capture_dtype: native
+  # NOT DECLARED: live_lens_pairs and partner_tie_breaks. The band is a ruling and no ruling
+  # exists for this model. The periodicity that would derive it -- sliding_window_pattern, which
+  # this model's own config omits and MLX defaults to 6 -- has no home in this schema at all;
+  # that is the architecture port's to fix, not a field to add here.
+memory:
+  # A cap and a declaration of intent; preflight resolves min(this, the device's recommended
+  # working set) and records both (R32b). The same value as the 4B Qwen entry because it is the
+  # same box, not because it is the same model.
+  budget_gib: 22
+policies: {}

@@ -67,6 +67,25 @@ from local_llm_lab.models import load_model_spec
                 "grad_checkpoint": True,
             },
         ),
+        (
+            # The Gemma 3 pivot's registry entry. `unsupported` because Gemma has no thinking
+            # mode; `none` rather than `auto` because 29 of its 34 per-block caches rotate and
+            # no equivalence has been measured on this model, and a reuse strategy is an
+            # equivalence claim. The train block is UNRULED and exists so no consumer meets a
+            # bare key error; it is the Qwen recipe's values and is evidence about another model.
+            "gemma3-4b",
+            "google/gemma-3-4b-it",
+            "unsupported",
+            "none",
+            "auto",
+            {
+                "max_seq_length": 2688,
+                "batch_size": 1,
+                "grad_accumulation_steps": 1,
+                "learning_rate": 3.0e-5,
+                "grad_checkpoint": True,
+            },
+        ),
     ],
 )
 def test_model_spec_registry_values(
@@ -94,6 +113,7 @@ def test_model_spec_registry_values(
         ("qwen25-coder-3b", "trim"),
         ("qwen35-4b", "history"),
         ("qwen35-9b", "auto"),
+        ("gemma3-4b", "none"),
     ],
 )
 def test_registered_cache_declarations_start_without_equivalence_evidence(
@@ -237,7 +257,9 @@ def test_auto_cache_resolution_records_safe_branch(
     assert resolved.as_dict()["cache_strategy_reason"] == reason
 
 
-@pytest.mark.parametrize("name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"])
+@pytest.mark.parametrize(
+    "name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b", "gemma3-4b"]
+)
 def test_registered_probe_capture_dtype_is_native(name: str) -> None:
     """R18b: native block execution is the registry default for every registered model."""
     spec = load_model_spec(name)
@@ -314,7 +336,9 @@ def test_history_strategy_is_explicit_only_and_does_not_certify_a_checkpoint(mon
     assert auto.cache_strategy == "none"
 
 
-@pytest.mark.parametrize("name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"])
+@pytest.mark.parametrize(
+    "name", ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b", "gemma3-4b"]
+)
 def test_registry_budget_stays_the_declared_cap_the_device_resolves(name: str) -> None:
     """R32(b): the minimum is resolved at preflight, so the registry keeps its declared intent.
 
@@ -325,3 +349,53 @@ def test_registry_budget_stays_the_declared_cap_the_device_resolves(name: str) -
 
     assert spec.memory_budget_gib == 22.0
     assert not any("device" in field.name for field in fields(spec))
+
+
+def test_the_gemma_entry_declares_what_the_checkpoint_says_and_no_band() -> None:
+    """The pivot's Phase 0 entry, pinned against what was read from the official files.
+
+    Two values were checked against the **weight shapes** rather than against the config, because
+    Gemma 3's `text_config` is sparse enough that MLX's own defaults are load-bearing: the
+    embedding matrix is 262,208 rows and the query and key projections give 8 and 4 heads. Those
+    are properties of the checkpoint, not of this file, so they are not asserted here; what is
+    asserted is that this entry does not contradict them and does not invent what it cannot know.
+
+    The turn ending is Gemma's, not ChatML's, which is the whole reason the entry has to exist:
+    without it every Gemma run takes `_default_spec` and its `<|im_end|>`.
+
+    No band and no tie-breaks. The band is a ruling and none exists for this model, and the
+    periodicity that would derive it -- `sliding_window_pattern`, absent from Gemma's own config
+    and defaulted to 6 by MLX -- has no home in this schema at all. Adding a field for it here
+    would put a model constant in the registry that the architecture view should be reading from
+    the blocks.
+    """
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec("gemma3-4b")
+
+    assert spec.name == "gemma3-4b" and spec.family == "gemma3"
+    assert spec.chat.end_of_turn == "<end_of_turn>", "Gemma's turn ending, not ChatML's"
+    assert spec.chat.extra_stop_tokens == (), (
+        "declared empty on purpose: the field is read by nothing (issue 98) and Gemma's "
+        "terminators reach the generation loop from its own config"
+    )
+    assert spec.chat.template_kwargs == {}
+    assert spec.probes.live_lens_pairs == (), "no band ruling exists for this model"
+    assert spec.memory_budget_gib == 22.0
+    assert spec.probe_layer_fractions == (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
+
+
+def test_the_gemma_entry_is_what_stands_between_a_run_and_the_chatml_fallback() -> None:
+    """Why the entry comes first, stated as a test rather than as a claim in a document.
+
+    `load_model_spec` accepts a bare hf_id and synthesises a spec, and that fallback hands every
+    model ChatML's turn ending. A Gemma run without this entry would render every turn with a
+    token from another model's vocabulary, and nothing would say so.
+    """
+    from local_llm_lab.models import load_model_spec
+
+    fallback = load_model_spec("google/gemma-3-4b-it-not-registered")
+    registered = load_model_spec("gemma3-4b")
+
+    assert fallback.chat.end_of_turn == "<|im_end|>", "the fallback is ChatML's, for any model"
+    assert registered.chat.end_of_turn != fallback.chat.end_of_turn

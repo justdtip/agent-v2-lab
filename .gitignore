@@ -12,6 +12,11 @@ adapters/
 outputs/
 checkpoints/
 models/
+# ...but `models/` matches at any depth, so it silently swallowed the model registry. The three
+# entries there are tracked only because they predate the rule; `configs/models/gemma3-4b.yaml`
+# was invisible to `git status` until this line, which is how a registry entry gets written,
+# tested, and left out of the repository.
+!configs/models/
 
 
 .codex/coordination/*
