@@ -108,43 +108,66 @@ rule already existed when the claim was made. He had written *"these twenty-four
 repeated, not twenty-four independent samples"* into the fixed-point record **about an hour
 earlier**, and then pooled twenty-nine repetitions of that same decision at the first opportunity.
 
-So the record's own thesis needs sharpening. It is not enough that mechanisms beat care: **a written
-rule is not a mechanism either.** It sat in a committed record, in the author's own words, about the
-exact episode, and did not fire. It became a mechanism only when it became a computation — dedup
-first, then count — that has to be executed before a number exists. A rule you have to remember at
-the moment of temptation is care wearing a mechanism's clothes.
+**That fact is the most important one in this record and it is carried to the end**, because it
+refutes the record's own first thesis rather than any single claim. See *The thesis, in its corrected
+form*.
 
 ---
 
 ## Two practices that made the catching possible
+
+**Run the experiment that threatens your own account, first.** This is listed first on the D-CRO's
+argument, which I accept: it is the only item here that prevented a **downstream** cost rather than
+correcting an **upstream** claim. Every other mechanism repairs a number that is already wrong. This
+one stops a wrong number being built on. Claim 2 died to a test the Chief asked the D-CRO to run
+*because* it risked the Chief's own explanation: 66 seconds, against a 4.6-hour run and a published
+register that would otherwise have been read through a false causal story.
 
 **Keep the refuted version beside the corrected one.** Both authors kept their wrong tables in the
 record rather than deleting them, so the next reader meets the persuasive version already refuted
 instead of rediscovering it as a result. A record that merely omits a refuted claim leaves the trap
 armed.
 
-**Run the experiment that threatens your own account.** Claim 2 was killed by a test the Chief asked
-the D-CRO to run *because* it risked the Chief's explanation. It took 66 seconds and it came back
-against him. The cost of the test was negligible; the cost of stage two proceeding on a wrong causal
-story would not have been.
-
 ---
 
 ## What transfers, stated without reference to this code
 
-1. Before believing an aggregate, deduplicate it and recompute. If the effect is carried by repeats
+1. Run the cheap experiment that could refute you, before building on the claim. It is the only
+   item here that prevents a cost rather than correcting a claim.
+2. Before believing an aggregate, deduplicate it and recompute. If the effect is carried by repeats
    of one event, there is no effect.
-2. Build the control from the same class as the thing measured, not from everything else.
-3. Keep at least one check whose answer is known in advance, and run it at a boundary. Label it as an
+3. Build the control from the same class as the thing measured, not from everything else.
+4. Keep at least one check whose answer is known in advance, and run it at a boundary. Label it as an
    assertion about bookkeeping, never as validation of the instrument.
-4. Treat a clean number as a reason for suspicion proportional to how much you wanted it — and
+5. Treat a clean number as a reason for suspicion proportional to how much you wanted it — and
    discharge the suspicion with the smallest possible check, not a better version of the same
    computation. Claim 8's 0 of 540 was killed by running **one** search on **one** task by hand.
    Re-running the sweep more carefully would have reproduced the bug.
-5. A bare `except: continue` around a measurement is a machine for producing agreeable falsehoods.
-6. When a claim is refuted, strike it where it was made. A correction two hundred lines below a bold
+6. A bare `except: continue` around a measurement is a machine for producing agreeable falsehoods.
+7. When a claim is refuted, strike it where it was made. A correction two hundred lines below a bold
    sentence leaves the bold sentence doing the work.
-7. Run the cheap experiment that could refute you, first.
 
-**None of the eight was caught by being careful.** All eight authors were being careful. They were
-caught by mechanisms that do not depend on care, which is the only kind worth building.
+---
+
+## The thesis, in its corrected form
+
+The first version of this record said mechanisms beat care. The D-CRO's second correction shows that
+is not enough, and the correction is against his own entry, so it is worth stating where the weaker
+version was rather than only where he made it.
+
+**A written rule is not a mechanism.** The deduplication rule already existed when claim 6 broke it.
+It had been written into the fixed-point record an hour earlier, in the author's own words, about
+that exact episode. It sat in a committed document and did not fire. It became a mechanism only when
+it became a **computation that must execute before a number exists** — dedup first, then count.
+
+So the ladder has three rungs and only the top one holds:
+
+| | fires when | held today |
+|---|---|---|
+| care | you remember | no, eight times |
+| a written rule | you remember at the moment of temptation | no — claim 6 broke a rule its author had written an hour earlier |
+| a computation that must run before the number exists | always | yes |
+
+**A rule you have to remember at the moment of temptation is care wearing a mechanism's clothes.**
+That is the sentence this record exists for, and it was reached by one author breaking his own rule
+and then saying so.
