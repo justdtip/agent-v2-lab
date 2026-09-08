@@ -10,6 +10,11 @@ import numpy as np
 import pytest
 
 from local_llm_lab.models import load_model_spec
+from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
+
+#: The identity every toy lens in this file is fitted for (issue 99). Three layers because
+#: `write_lens` requires all and only the nonfinal maps, and these fixtures write two.
+_TOY = LensIdentity("toy", "example/tiny", 3)
 
 
 def api():
@@ -79,12 +84,24 @@ def test_output_refusal_is_exclusive_and_validates_every_layer(tmp_path):
     artifacts = importlib.import_module("local_llm_lab.pipeline.lens_fitting.artifacts")
     out = tmp_path / "tiny-agentic-regression.npz"
     with pytest.raises(ValueError, match="layers"):
-        artifacts.write_lens(out, {1: np.eye(2)}, hidden_size=2, num_layers=3, metadata={})
+        artifacts.write_lens(
+            out,
+            {1: np.eye(2)},
+            hidden_size=2,
+            num_layers=3,
+            metadata={},
+            identity=_TOY,
+        )
     assert not out.exists()
     out.with_suffix(".json").write_text("existing")
     with pytest.raises(FileExistsError):
         artifacts.write_lens(
-            out, {1: np.eye(2), 2: np.eye(2)}, hidden_size=2, num_layers=3, metadata={}
+            out,
+            {1: np.eye(2), 2: np.eye(2)},
+            hidden_size=2,
+            num_layers=3,
+            metadata={},
+            identity=_TOY,
         )
     assert not out.exists()
     assert out.with_suffix(".json").read_text() == "existing"
@@ -359,7 +376,9 @@ def test_invalid_artifact_does_not_publish(tmp_path, monkeypatch, issue):
         monkeypatch.setattr(artifacts, "MAX_NPZ_BYTES", 1)
     out = tmp_path / "tiny-prose-regression.npz"
     with pytest.raises(ValueError):
-        artifacts.write_lens(out, maps, hidden_size=2, num_layers=2, metadata={})
+        artifacts.write_lens(
+            out, maps, hidden_size=2, num_layers=2, metadata={}, identity=_TOY
+        )
     assert not out.exists()
     assert not out.with_suffix(".json").exists()
 

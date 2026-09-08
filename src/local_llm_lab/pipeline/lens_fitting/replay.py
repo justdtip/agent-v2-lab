@@ -19,7 +19,11 @@ from types import SimpleNamespace
 
 from local_llm_lab.forward import ForwardLedger, encode_prompt
 from local_llm_lab.pipeline.lens_fitting.runtime import resolve_snapshot
-from local_llm_lab.pipeline.live_lens.instruments import LensMaps, file_sha256
+from local_llm_lab.pipeline.live_lens.instruments import (
+    LensIdentity,
+    LensMaps,
+    file_sha256,
+)
 from local_llm_lab.pipeline.live_lens.session import (
     CaptureSession,
     LensReadout,
@@ -358,7 +362,12 @@ def prepare_replay(
     if identity_atlas is None and count not in selected:
         raise ValueError("new readings require final identity layer")
     lens = LensMaps.load(
-        lens_path, expected_sha256=lens_sha256, hidden_size=hidden, num_layers=count
+        lens_path,
+        expected_sha256=lens_sha256,
+        hidden_size=hidden,
+        num_layers=count,
+        # Issue 99: the snapshot's dimensions cannot separate two models of the same width.
+        identity=LensIdentity(spec.name, spec.hf_id, count),
     )
     readout_layers = set(selected)
     for record in identities:
@@ -595,6 +604,9 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
         expected_sha256=prepared.lens_sha256,
         hidden_size=loaded.view.hidden_size,
         num_layers=loaded.view.num_layers,
+        identity=LensIdentity(
+            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
+        ),
     )
     prepared.output.mkdir(parents=True, exist_ok=False)
     # Retain byte-identical historical metadata, isolated from new runtime provenance.

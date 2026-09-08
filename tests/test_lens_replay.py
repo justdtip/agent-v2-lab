@@ -11,6 +11,19 @@ import pytest
 from local_llm_lab.pipeline.live_lens.session import RecordWriter
 
 
+def _identity_bytes(name: str, hf_id: str, num_layers: int):
+    """The archive entry `LensMaps.load` reads for a lens's model identity (issue 99)."""
+    import numpy as _np
+
+    return _np.frombuffer(
+        json.dumps(
+            {"name": name, "hf_id": hf_id, "num_layers": int(num_layers)}, sort_keys=True
+        ).encode("utf-8"),
+        dtype=_np.uint8,
+    )
+
+
+
 def api():
     return importlib.import_module("local_llm_lab.pipeline.lens_fitting.replay")
 
@@ -348,7 +361,7 @@ def prepared_fixture(tmp_path, monkeypatch, *, identity=False):
         ],
     }
     lens = tmp_path / "lens.npz"
-    np.savez(lens, J0=np.eye(2))
+    np.savez(lens, J0=np.eye(2), identity=_identity_bytes("qwen35-4b", "example/tiny", 2))
     manifest["lens_sha256"] = module.file_sha256(lens)
     (source / "manifest.json").write_text(json.dumps(manifest))
     snapshot = tmp_path / "snapshot"
@@ -517,7 +530,11 @@ def test_attention_readout_dependencies_refused_during_preparation(
     (prepared.source / "manifest.json").write_text(json.dumps(manifest))
     config = Path(prepared.snapshot["snapshot_path"]) / "config.json"
     config.write_text(json.dumps({"hidden_size": 2, "num_hidden_layers": 4, "vocab_size": 5}))
-    np.savez(prepared.lens_path, **{f"J{i}": np.eye(2) for i in available})
+    np.savez(
+        prepared.lens_path,
+        identity=_identity_bytes("qwen35-4b", "example/tiny", 4),
+        **{f"J{i}": np.eye(2) for i in available},
+    )
     if len(available) == 3:
         module.prepare_replay(
             prepared.source,

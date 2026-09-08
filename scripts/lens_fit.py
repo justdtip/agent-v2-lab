@@ -80,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     loaded = load_runtime(prepared)
     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
     from local_llm_lab.pipeline.lens_fitting.regression import ALPHA_GRID, fit_regression
+    from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
 
     loaded.model.eval()
     allocator_cache = configure_allocator_cache()
@@ -182,6 +183,11 @@ def main(argv: list[str] | None = None) -> int:
         hidden_size=loaded.view.hidden_size,
         num_layers=loaded.view.num_layers,
         metadata=metadata,
+        # Issue 99: a lens we fit carries the model it was fitted on, inside the archive whose
+        # digest every later reader pins.
+        identity=LensIdentity(
+            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
+        ),
     )
     print(
         json.dumps(

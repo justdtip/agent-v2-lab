@@ -7,7 +7,12 @@ from pathlib import Path
 
 import numpy as np
 
-from local_llm_lab.pipeline.live_lens.instruments import LensMaps, file_sha256
+from local_llm_lab.pipeline.live_lens.instruments import (
+    LENS_IDENTITY_KEY,
+    LensIdentity,
+    LensMaps,
+    file_sha256,
+)
 
 MAX_NPZ_BYTES = 1_000_000_000
 
@@ -28,9 +33,24 @@ def validate_output(path: Path) -> Path:
 
 
 def write_lens(
-    path: Path, maps: dict[int, np.ndarray], *, hidden_size: int, num_layers: int, metadata: dict
+    path: Path,
+    maps: dict[int, np.ndarray],
+    *,
+    hidden_size: int,
+    num_layers: int,
+    metadata: dict,
+    identity: LensIdentity,
 ) -> dict:
-    """Validate complete maps before exclusive creation; partial writes remain evidence."""
+    """Validate complete maps before exclusive creation; partial writes remain evidence.
+
+    ``identity`` goes **inside** the archive, so the digest this function computes and every
+    caller pins covers it. The sidecar route exists only for lenses converted before the field
+    did (issue 99); nothing written here needs it.
+    """
+    if identity.num_layers != num_layers:
+        raise ValueError(
+            f"lens identity says {identity.num_layers} layers and the fit says {num_layers}"
+        )
     path = validate_output(path)
     expected = set(range(1, num_layers))
     if not expected or set(maps) != expected:
@@ -41,6 +61,9 @@ def write_lens(
         if a.shape != (hidden_size, hidden_size) or not np.isfinite(a).all():
             raise ValueError(f"invalid finite square lens map for layer {layer}")
         arrays[f"J{layer - 1}"] = a
+    arrays[LENS_IDENTITY_KEY] = np.frombuffer(
+        json.dumps(identity.as_dict(), sort_keys=True).encode("utf-8"), dtype=np.uint8
+    )
     # Reserve enough overhead for NumPy headers and ZIP directory entries.
     if sum(a.nbytes + 1024 for a in arrays.values()) >= MAX_NPZ_BYTES:
         raise ValueError("float32 lens archive must stay below 1 GB")
@@ -53,13 +76,18 @@ def write_lens(
             raise ValueError("lens archive exceeds 1 GB")
         sha = file_sha256(path)
         loaded = LensMaps.load(
-            path, expected_sha256=sha, hidden_size=hidden_size, num_layers=num_layers
+            path,
+            expected_sha256=sha,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            identity=identity,
         )
         if set(loaded.maps) != expected or any(
             not np.array_equal(loaded.maps[layer], arrays[f"J{layer - 1}"]) for layer in expected
         ):
             raise ValueError("LensMaps round-trip differs from fitted maps")
         result = metadata | {
+            "model": identity.as_dict(),
             "npz_sha256": sha,
             "layers": sorted(expected),
             "hidden_size": hidden_size,

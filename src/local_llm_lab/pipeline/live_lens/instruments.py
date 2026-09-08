@@ -22,6 +22,92 @@ def _digest(value: dict) -> str:
     ).hexdigest()
 
 
+#: The npz entry a stamped lens carries. Not a ``J<l>`` map, so ``LensMaps.load`` names it
+#: explicitly rather than rejecting it as an invalid map name.
+LENS_IDENTITY_KEY = "identity"
+
+
+class LensIdentityError(ValueError):
+    """A lens does not say which model it was fitted on, or says a different one (issue 99)."""
+
+
+@dataclass(frozen=True)
+class LensIdentity:
+    """Which model a lens was fitted against.
+
+    Three fields because two are not enough to separate the models this repository actually
+    holds. Qwen3.5-4B and Gemma 3 4B are **both 2560-dimensional**, so hidden size cannot tell
+    them apart; the Qwen lens covers layers 1 to 31 and Gemma has 34, so `1 <= 31 < 34` passes
+    every existing check and the wrong lens loads in silence. The layer count catches the
+    reverse direction by arithmetic and misses this one, which is worse than no guard, because
+    the direction it catches is the one nobody would take.
+    """
+
+    name: str
+    hf_id: str
+    num_layers: int
+
+    def as_dict(self) -> dict:
+        return {"name": self.name, "hf_id": self.hf_id, "num_layers": int(self.num_layers)}
+
+    @classmethod
+    def from_dict(cls, value: object) -> LensIdentity:
+        if not isinstance(value, dict):
+            raise LensIdentityError("lens identity must be a mapping")
+        try:
+            name, hf_id, layers = value["name"], value["hf_id"], value["num_layers"]
+        except (KeyError, TypeError) as error:
+            raise LensIdentityError(
+                "lens identity must carry name, hf_id and num_layers"
+            ) from error
+        if not isinstance(name, str) or not isinstance(hf_id, str):
+            raise LensIdentityError("lens identity name and hf_id must be strings")
+        if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
+            raise LensIdentityError("lens identity num_layers must be a positive integer")
+        return cls(name, hf_id, layers)
+
+    def describe(self) -> str:
+        return f"{self.name} ({self.hf_id}, {self.num_layers} layers)"
+
+
+def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:
+    """The identity the file itself carries, from the archive or from its digest-bound sidecar.
+
+    Two places, and the precedence is not a matter of taste. Inside the archive is stronger,
+    because the digest the caller already checks covers it, and that is where every lens written
+    from now on carries it. The sidecar exists for the two hosted lenses that were converted
+    before this field did: stamping them inside the npz would change bytes whose digest is
+    pinned in the pilot script and in a published record, so the stamp goes beside the file and
+    is bound to it by the sidecar's own ``npz_sha256``. A sidecar that names a different file is
+    not evidence about this one.
+    """
+    if LENS_IDENTITY_KEY in archive.files:
+        raw = archive[LENS_IDENTITY_KEY]
+        return LensIdentity.from_dict(json.loads(bytes(raw).decode("utf-8")))
+    sidecar = path.with_suffix(".json")
+    if not sidecar.exists():
+        raise LensIdentityError(
+            f"{path.name} carries no model identity and has no sidecar at {sidecar.name}. "
+            "A lens that does not say which model it was fitted on is refused, not warned "
+            "about: Qwen3.5-4B and Gemma 3 4B are both 2560-dimensional and the wrong lens "
+            "loads in silence. Stamp it with scripts/stamp_lens_identity.py."
+        )
+    meta = json.loads(sidecar.read_text())
+    if not isinstance(meta, dict) or "model" not in meta:
+        raise LensIdentityError(
+            f"{sidecar.name} carries no 'model' block. Stamp it with "
+            "scripts/stamp_lens_identity.py, which records the evidence for a retroactive stamp."
+        )
+    recorded = meta.get("npz_sha256")
+    if recorded != sha:
+        raise LensIdentityError(
+            f"{sidecar.name} records npz_sha256 {recorded}, but {path.name} hashes to {sha}. "
+            "The sidecar describes a different file, so its identity is not evidence about "
+            "this one."
+        )
+    return LensIdentity.from_dict(meta["model"])
+
+
 @dataclass(frozen=True)
 class FrozenPopulation:
     source_sha256: str
@@ -104,17 +190,39 @@ class LensMaps:
     sha256: str
     hidden_size: int
     num_layers: int
+    identity: LensIdentity | None = None
 
     @classmethod
     def load(
-        cls, path: Path, *, expected_sha256: str, hidden_size: int, num_layers: int
+        cls,
+        path: Path,
+        *,
+        expected_sha256: str,
+        hidden_size: int,
+        num_layers: int,
+        identity: LensIdentity,
     ) -> LensMaps:
+        """Load a lens, refusing one fitted on a different model (issue 99).
+
+        The digest check that was already here proves the file is the file the caller named. It
+        cannot prove the caller named the right file, and the caller is a person or a script
+        constant. ``identity`` is what the *view* says it is, and the lens has to agree.
+        """
         sha = file_sha256(path)
         if sha != expected_sha256:
             raise ValueError("lens file hash mismatch")
         maps = {}
         with np.load(path, allow_pickle=False) as archive:
+            stamped = _stamped_identity(path, archive, sha)
+            if stamped != identity:
+                raise LensIdentityError(
+                    f"lens {path.name} was fitted on {stamped.describe()}, and it is being "
+                    f"loaded against {identity.describe()}. Refusing: a lens of the right width "
+                    "on the wrong model produces ranks that look exactly like a finding."
+                )
             for name in archive.files:
+                if name == LENS_IDENTITY_KEY:
+                    continue
                 if not name.startswith("J") or not name[1:].isdigit():
                     raise ValueError(f"invalid lens map name: {name}")
                 layer = int(name[1:]) + 1
@@ -129,7 +237,7 @@ class LensMaps:
                 maps[layer] = a
         if not maps:
             raise ValueError("lens archive is empty")
-        return cls(maps, sha, hidden_size, num_layers)
+        return cls(maps, sha, hidden_size, num_layers, stamped)
 
     def apply(self, residual: np.ndarray, layer: int) -> np.ndarray:
         if residual.shape[-1] != self.hidden_size:

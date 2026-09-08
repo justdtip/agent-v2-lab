@@ -91,7 +91,12 @@ def main() -> None:
     import mlx.core as mx
     from local_llm_lab.pipeline.evaluate import load_policy, make_sampler
     from local_llm_lab.pipeline.runner import generate_turn_with_count, run_task
-    from local_llm_lab.pipeline.live_lens.instruments import LensMaps, read_band, file_sha256
+    from local_llm_lab.pipeline.live_lens.instruments import (
+        LensIdentity,
+        LensMaps,
+        file_sha256,
+        read_band,
+    )
     from local_llm_lab.pipeline.live_lens.session import CaptureSession, LensReadout, RecordWriter, read_record
 
     mx.set_cache_limit(2 * 2**30)
@@ -106,7 +111,11 @@ def main() -> None:
     band = read_band(REGISTRY, [view.layer_kind(i) for i in range(view.num_layers)])
     attention_members = tuple(p for pair in band for p in pair if view.layer_kind(p - 1) == "attention")
     layers = tuple(args.layers) if args.layers else attention_members + (view.num_layers,)
-    lens = LensMaps.load(LENS, expected_sha256=LENS_SHA, hidden_size=view.hidden_size, num_layers=view.num_layers)
+    # Issue 99: the spec says which model this is and the lens has to agree. The pinned
+    # constants above made a mismatch impossible by accident; this makes it impossible.
+    lens = LensMaps.load(LENS, expected_sha256=LENS_SHA, hidden_size=view.hidden_size,
+                         num_layers=view.num_layers,
+                         identity=LensIdentity(spec.name, spec.hf_id, view.num_layers))
     reader = LensReadout(view, lens)
     sampler = make_sampler(0.0)
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,

@@ -78,7 +78,17 @@ def prepared(tmp_path):
     corpus = tmp_path / "corpus.json"
     build_prose_corpus([source], tokenizer, spec, corpus, tokenizer_files=[asset])
     lens = tmp_path / "lens.npz"
-    np.savez(lens, J0=np.eye(2))
+    # Issue 99: a lens says which model it was fitted on, and this fixture's model is `spec`.
+    np.savez(
+        lens,
+        J0=np.eye(2),
+        identity=np.frombuffer(
+            json.dumps(
+                {"name": spec.name, "hf_id": spec.hf_id, "num_layers": 2}, sort_keys=True
+            ).encode("utf-8"),
+            dtype=np.uint8,
+        ),
+    )
     plan = prose.make_plan(corpus, spec, lens, lens_sha256=file_sha256(lens), tokenizer=tokenizer)
     return SimpleNamespace(
         spec=spec,
