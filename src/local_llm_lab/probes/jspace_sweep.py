@@ -681,6 +681,10 @@ def main() -> None:  # noqa: C901 - probe CLI orchestration
             # Absent, the family still runs and says in its own reason which tie it broke
             # without one, so an artifact can never present a fallback as a derivation.
             tie_breaks=spec.probes.partner_tie_breaks,
+            # Which partition this decoder alternates. A hybrid alternates block kinds; Gemma 3
+            # alternates attention spans with every block the same kind, and filtering by kind
+            # there leaves nothing opposite to pair with.
+            span_of=lambda index: view.attention_span(index),
         )
         # A hybrid whose period was never found is what cost the 4B sweep two GPU hours: it
         # logged ``hybrid_period=-``, swept the six registry fractions instead of the

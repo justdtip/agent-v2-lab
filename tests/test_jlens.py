@@ -989,7 +989,10 @@ def test_the_recorded_tie_break_is_asserted_as_a_ruling_and_not_derived() -> Non
     # And the rule string R34 quotes into every artifact says a ruling answers the tie, rather
     # than naming an index rule the record does not support.
     assert "recorded ruling" in jlens.LAYER_FAMILY_RULE
-    assert "opposite kind" in jlens.LAYER_FAMILY_RULE
+    assert "opposite class" in jlens.LAYER_FAMILY_RULE, (
+        "class rather than kind: Gemma alternates attention spans with every block one kind, so "
+        "a rule quoted into artifacts that says 'kind' is false about the model it describes"
+    )
     assert "lower index on a tie" not in jlens.LAYER_FAMILY_RULE
     assert "takes no partner" not in jlens.LAYER_FAMILY_RULE
 
@@ -1119,7 +1122,10 @@ def test_hybrid_period_is_absent_on_a_real_dense_backbone() -> None:
     period, source = jlens.hybrid_period(view)
 
     assert period is None
-    assert "linear-attention" in source, "a dash in an artifact must say why the period is absent"
+    assert "no alternation in kind or span" in source, (
+        "a dash in an artifact must say why the period is absent, and the sentence names what "
+        "was looked for and not found: both readings were tried, kinds and then spans"
+    )
 
 
 class _ContradictoryView:
@@ -1199,6 +1205,15 @@ class _HybridCliView(_CliView):
 
     def layer_kind(self, index):
         return self._kinds[index + 1]
+
+    def attention_span(self, index):
+        """`None`: this hybrid's blocks alternate by kind, so they carry no `is_sliding`.
+
+        A real `ArchitectureView` answers this, so a stand-in for one has to, and answering
+        truthfully makes this double the case that covers the kind path of the derivation.
+        """
+        del index
+        return None
 
 
 def test_jlens_default_layers_take_the_kind_matched_family(monkeypatch, tmp_path) -> None:
@@ -1323,3 +1338,79 @@ def test_the_conformance_block_names_the_two_readout_guards_apart() -> None:
     assert "EmptyFutureWindowError" in block["empty_future_window_policy"]
     assert "NoTailBlocksError" in block["final_layer_readout_policy"]
     assert "no decoder block remains" in block["final_layer_readout_policy"]
+
+
+def test_the_period_is_read_from_spans_where_a_decoder_has_only_one_block_kind() -> None:
+    """Gemma 3's period is six and it is a period of attention spans, not of block kinds.
+
+    `_structural_period` looked for a recurrent block, found none among Gemma's thirty-four
+    attention modules, and reported *"the backbone is dense and has no hybrid period"* — true of
+    the modules and false of the model. The consequence was not a wrong number but a wrong
+    sentence: the family took its degenerate path, derived no partners, and wrote *dense* into
+    every artifact it touched, which would have been the reason string on the representation map.
+
+    The derived family here is the pivot document's §2.3 prediction for 34 layers at period 6,
+    reached from the block structure rather than copied from the document.
+    """
+    spans = {index: ("global" if (index + 1) % 6 == 0 else "sliding") for index in range(34)}
+
+    class GemmaShaped:
+        blocks = list(range(34))
+
+        def layer_kind(self, index):
+            del index
+            return "attention"  # every Gemma block is an attention module, correctly
+
+        def attention_span(self, index):
+            return spans[index]
+
+    view = GemmaShaped()
+    period, source = jlens.hybrid_period(view)
+
+    assert period == 6
+    assert "by span" in source and "is_sliding" in source
+    assert "dense" not in source
+
+    selection = tuple(max(1, round(f * 34)) for f in (0.167, 0.333, 0.5, 0.667, 0.833, 1.0))
+    family = jlens.kind_matched_layer_family(
+        selection,
+        num_layers=34,
+        period=period,
+        period_source=source,
+        kind_of=lambda layer: "attention",
+        span_of=view.attention_span,
+    )
+
+    assert family.layers == (6, 11, 12, 17, 18, 23, 24, 28, 30, 34)
+    assert family.pairs == {11: 12, 17: 18, 23: 24, 28: 30}
+    assert family.unrecorded_ties == {}
+    assert "dense" not in family.reason
+    assert "full_attention_interval" not in family.reason, (
+        "Qwen's name for the period, and Gemma's configuration does not carry the concept at all"
+    )
+
+
+def test_a_decoder_with_one_kind_and_one_span_is_still_reported_uniform() -> None:
+    """The dense case is a real case and it must still be reported — after both readings.
+
+    EXP-001 §5 runs this code on a dense 3B as the R35 comparator, which has no two classes to
+    contrast at any comparable depth. The sentence should say that about the decoder's structure
+    without implying anything about its capability, and it should be reached by trying spans as
+    well as kinds rather than by trying kinds alone.
+    """
+
+    class Dense:
+        blocks = list(range(8))
+
+        def layer_kind(self, index):
+            del index
+            return "attention"
+
+        def attention_span(self, index):
+            del index
+            return None
+
+    period, source = jlens.hybrid_period(Dense())
+
+    assert period is None
+    assert "uniform" in source and "kind" in source and "span" in source

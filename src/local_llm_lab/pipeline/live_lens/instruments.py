@@ -33,41 +33,49 @@ class LensIdentityError(ValueError):
 
 @dataclass(frozen=True)
 class LensIdentity:
-    """Which model a lens was fitted against.
+    """Which **model** a lens was fitted against — not which checkpoint, and not which entry.
 
-    Three fields because two are not enough to separate the models this repository actually
-    holds. Qwen3.5-4B and Gemma 3 4B are **both 2560-dimensional**, so hidden size cannot tell
-    them apart; the Qwen lens covers layers 1 to 31 and Gemma has 34, so `1 <= 31 < 34` passes
-    every existing check and the wrong lens loads in silence. The layer count catches the
-    reverse direction by arithmetic and misses this one, which is worse than no guard, because
-    the direction it catches is the one nobody would take.
+    Two fields, and the change from three is a correction the Gemma pilot forced. It carried the
+    registry entry's name and its `hf_id`, and both are properties of a *file* rather than of a
+    model: `gemma3-4b` and `gemma3-4b-bf16` are two precisions of one model, and the pivot's own
+    ruling is that the pilot runs 4-bit while the hosted lens was fitted on bf16, with the
+    precision mismatch disclosed rather than avoided. An identity built from `hf_id` refused that
+    pairing — a true statement about the files and a false one about the experiment.
+
+    What it must still separate is what it was built for. Qwen3.5-4B and Gemma 3 4B are **both
+    2560-dimensional**, so hidden size cannot tell them apart; the Qwen lens covers layers 1 to 31
+    and Gemma has 34, so `1 <= 31 < 34` passes every check the loader made and the wrong lens
+    loads in silence. The layer count catches the reverse direction by arithmetic and misses this
+    one, which is worse than no guard, because the direction it catches is the one nobody takes.
+    `model` plus `num_layers` separates every pair this repository holds and does not separate two
+    precisions of one model, which is exactly the line.
     """
 
-    name: str
-    hf_id: str
+    model: str
     num_layers: int
 
     def as_dict(self) -> dict:
-        return {"name": self.name, "hf_id": self.hf_id, "num_layers": int(self.num_layers)}
+        return {"model": self.model, "num_layers": int(self.num_layers)}
 
     @classmethod
     def from_dict(cls, value: object) -> LensIdentity:
         if not isinstance(value, dict):
             raise LensIdentityError("lens identity must be a mapping")
         try:
-            name, hf_id, layers = value["name"], value["hf_id"], value["num_layers"]
+            # `hf_id` is the pre-correction spelling; a lens stamped before the model/checkpoint
+            # distinction existed named the model there, which is what it meant.
+            model = value["model"] if "model" in value else value["hf_id"]
+            layers = value["num_layers"]
         except (KeyError, TypeError) as error:
-            raise LensIdentityError(
-                "lens identity must carry name, hf_id and num_layers"
-            ) from error
-        if not isinstance(name, str) or not isinstance(hf_id, str):
-            raise LensIdentityError("lens identity name and hf_id must be strings")
+            raise LensIdentityError("lens identity must carry model and num_layers") from error
+        if not isinstance(model, str) or not model:
+            raise LensIdentityError("lens identity model must be a non-empty string")
         if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
             raise LensIdentityError("lens identity num_layers must be a positive integer")
-        return cls(name, hf_id, layers)
+        return cls(model, layers)
 
     def describe(self) -> str:
-        return f"{self.name} ({self.hf_id}, {self.num_layers} layers)"
+        return f"{self.model} ({self.num_layers} layers)"
 
 
 def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:

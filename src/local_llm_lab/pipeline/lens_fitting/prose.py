@@ -141,7 +141,7 @@ def make_plan(corpus_path, spec, lens_path, *, lens_sha256, tokenizer, revision=
         num_layers=dimensions["num_hidden_layers"],
         # Issue 99: the snapshot says which model this is; the lens has to agree. A digest
         # proves the file is the file the caller named, not that the caller named the right one.
-        identity=LensIdentity(spec.name, spec.hf_id, dimensions["num_hidden_layers"]),
+        identity=LensIdentity(spec.source, dimensions["num_hidden_layers"]),
     )
     if set(lens.maps) != set(range(1, dimensions["num_hidden_layers"])):
         raise ValueError("hosted lens must cover every intermediate layer")
@@ -394,9 +394,7 @@ def execute_plan(output, spec):
         expected_sha256=plan["lens_sha256"],
         hidden_size=loaded.view.hidden_size,
         num_layers=loaded.view.num_layers,
-        identity=LensIdentity(
-            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
-        ),
+        identity=LensIdentity(loaded.spec.source, loaded.view.num_layers),
     )
     _write(
         output / "runtime.json", {"lock_path": str(loaded.lock_path), "allocator_cache": allocator}

@@ -29,11 +29,18 @@ from local_llm_lab.pipeline.tasks import make_tasks  # noqa: E402
 SEED = 20260902  # the evaluation's seed (configs/agent_v2e_qwen35_4b.yaml); a task-set property
 
 # (task_id, difficulty): the test split's own ids; difficulty changes the content and the length.
+# One episode per family across all twelve, at difficulty 2, generated from the test split rather
+# than chosen (GEMMA3-WORK-ORDERS-2026-09-08). The Qwen pilot's set was a convenience sample: ten
+# episodes over nine families, picked for length, with one task appearing twice at two
+# difficulties. A map's variety axis has to be the families themselves, or the depth axis is being
+# read against whatever mixture happened to be to hand.
 AGENTIC = [
-    ("test-read-0000-clean", 0), ("test-list-0005-clean", 0), ("test-pointer_chain-0006-clean", 0),
-    ("test-search-0001-clean", 1), ("test-synthesis-0003-clean", 1), ("test-batch_update-0010-clean", 1),
-    ("test-update-0004-clean", 2), ("test-pointer_chain-0006-clean", 2), ("test-cross_reference-0008-clean", 2),
-    ("test-aggregate_report-0011-clean", 2),
+    ("test-read-0108-clean", 2), ("test-search-0061-clean", 2),
+    ("test-calculate-0158-clean", 2), ("test-list-0149-clean", 2),
+    ("test-synthesis-0039-clean", 2), ("test-update-0028-clean", 2),
+    ("test-pointer_chain-0018-clean", 2), ("test-cross_reference-0032-clean", 2),
+    ("test-conditional_update-0093-clean", 2), ("test-batch_update-0166-clean", 2),
+    ("test-ledger_reconcile-0163-clean", 2), ("test-aggregate_report-0167-clean", 2),
 ]
 
 
@@ -77,9 +84,19 @@ def main() -> None:
         ap.error(f"no registry file at {registry}")
 
     # the episode plan (no model): tasks resolved from the factory, prompts rendered for token counts
-    from huggingface_hub import snapshot_download
     from transformers import AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(snapshot_download(spec.hf_id, allow_patterns=["tokenizer*", "*.json"], local_files_only=True))
+    # A registry `hf_id` is either a Hugging Face repo id or, for a checkpoint converted in this
+    # repository, an absolute path the registry resolved against the project root. `AutoTokenizer`
+    # takes either; `snapshot_download` takes only the first and rejects a path with a repo-id
+    # validation error, which is what a local checkpoint hits.
+    source = spec.hf_id
+    if not Path(source).is_dir():
+        from huggingface_hub import snapshot_download
+
+        source = snapshot_download(
+            source, allow_patterns=["tokenizer*", "*.json"], local_files_only=True
+        )
+    tok = AutoTokenizer.from_pretrained(source)
     plan = []
     by_difficulty = {d: {t.task_id: t for t in make_tasks("test", 180, SEED, difficulty=d)} for d in (0, 1, 2)}
     for task_id, d in AGENTIC:
@@ -140,11 +157,18 @@ def main() -> None:
     # constants above made a mismatch impossible by accident; this makes it impossible.
     lens = LensMaps.load(args.lens, expected_sha256=args.lens_sha256,
                          hidden_size=view.hidden_size, num_layers=view.num_layers,
-                         identity=LensIdentity(spec.name, spec.hf_id, view.num_layers))
+                         identity=LensIdentity(spec.source, view.num_layers))
     reader = LensReadout(view, lens)
     sampler = make_sampler(0.0)
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
                 "registry_sha256": file_sha256(registry), "registry": str(registry),
+                "observation_role": spec.chat.observation_role,
+                "observation_role_status": (
+                    "provisional, reading only (Chief, 2026-09-08)"
+                    if spec.chat.observation_role != "tool"
+                    else "the template's own tool role"
+                ),
+                "model_source": spec.source, "checkpoint": spec.hf_id,
                 "lens_path": str(args.lens), "band_declared": bool(band), "top_k": args.top_k, "max_steps": args.max_steps, "max_tokens": args.max_tokens,
                 "chat_tokens": args.chat_tokens, "seed": SEED, "episodes": []}
     print(json.dumps({"event": "loaded", "layers": layers, "band": band}), flush=True)

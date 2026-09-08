@@ -8,6 +8,10 @@ name: gemma3-4b
 # 4-bit because the Qwen pilot ran 4-bit and the two-panel comparison is like for like only there.
 # `gemma3-4b-bf16` is the lens-fitting entry, since the hosted Jacobian lens was fitted on bf16.
 hf_id: models/gemma-3-4b-it-4bit
+# The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
+# entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted
+# on a model rather than on a file — so the lens identity check compares this and not the path.
+source: google/gemma-3-4b-it
 family: gemma3
 chat:
   # Gemma 3 has no thinking mode and no template switch for one.
@@ -19,6 +23,12 @@ chat:
   # set and which therefore needs nothing from us on this model.
   # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
   generation_prefix: "<start_of_turn>model\n"
+  # PROVISIONAL, for reading only (the Chief's ruling of 2026-09-08). Gemma's template has no
+  # tool role and enforces user/model alternation with an explicit raise, so an observation stops
+  # the render. Re-roling keeps a base-model reading inside the model's own distribution; it
+  # reverts to provisional the day anyone builds a supervised target here, and every run's
+  # manifest says which role it used.
+  observation_role: "user"
   end_of_turn: "<end_of_turn>"
   # Deliberately empty. The field is read by nothing outside models.py (issue 98), and Gemma's
   # terminators already reach the generation loop through the config, so a token here would be

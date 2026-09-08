@@ -367,7 +367,7 @@ def prepare_replay(
         hidden_size=hidden,
         num_layers=count,
         # Issue 99: the snapshot's dimensions cannot separate two models of the same width.
-        identity=LensIdentity(spec.name, spec.hf_id, count),
+        identity=LensIdentity(spec.source, count),
     )
     readout_layers = set(selected)
     for record in identities:
@@ -604,9 +604,7 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
         expected_sha256=prepared.lens_sha256,
         hidden_size=loaded.view.hidden_size,
         num_layers=loaded.view.num_layers,
-        identity=LensIdentity(
-            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
-        ),
+        identity=LensIdentity(loaded.spec.source, loaded.view.num_layers),
     )
     prepared.output.mkdir(parents=True, exist_ok=False)
     # Retain byte-identical historical metadata, isolated from new runtime provenance.

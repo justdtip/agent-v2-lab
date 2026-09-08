@@ -277,7 +277,7 @@ def build_prompt(
     compatibility_mode = spec is None
     resolved_spec = _compatibility_spec() if compatibility_mode else spec
     prompt = tokenizer.apply_chat_template(
-        window_messages(messages, keep_last),
+        _as_declared_roles(window_messages(messages, keep_last), resolved_spec),
         add_generation_prompt=generation,
         tokenize=False,
         **resolved_spec.chat.template_kwargs,
@@ -285,6 +285,29 @@ def build_prompt(
     if generation and not compatibility_mode and not prompt.endswith(generation_suffix(resolved_spec)):
         raise ValueError("chat template generation suffix does not match the model specification")
     return prompt
+
+
+def _as_declared_roles(messages: list[dict[str, Any]], spec: ModelSpec) -> list[dict[str, Any]]:
+    """Render tool observations under the role the model's template actually has.
+
+    Only the role changes, and only at the boundary: the trajectory, the transcript and every
+    record keep ``tool``, because that is what the observation *is*. What varies is what a given
+    template can express. Gemma 3's has branches for user, assistant and system only and enforces
+    strict alternation with an explicit ``raise_exception``, so an observation stops the render.
+
+    The ``name`` key goes with it. A template that has no tool role has no use for the tool's
+    name, and Gemma's would ignore it; leaving it on a user turn would put a key in the rendered
+    conversation that the model never sees described anywhere.
+    """
+    role = spec.chat.observation_role
+    if role == "tool":
+        return messages
+    return [
+        {"role": role, "content": message["content"]}
+        if message.get("role") == "tool"
+        else message
+        for message in messages
+    ]
 
 
 def generation_suffix(spec: ModelSpec) -> str:

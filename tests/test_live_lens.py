@@ -74,16 +74,16 @@ def _stamped_lens(directory, name, arrays, identity, *, in_archive=True, sidecar
     return path, sha
 
 
-QWEN = LensIdentity("qwen35-4b", "mlx-community/Qwen3.5-4B-MLX-4bit", 32)
-GEMMA = LensIdentity("gemma3-4b", "google/gemma-3-4b-it", 34)
+QWEN = LensIdentity("mlx-community/Qwen3.5-4B-MLX-4bit", 32)
+GEMMA = LensIdentity("google/gemma-3-4b-it", 34)
 
 
 def test_lens_orientation_identity_and_hash_verification(tmp_path):
     path, sha = _stamped_lens(
         tmp_path, "lens.npz", {"J0": np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float16)},
-        LensIdentity("toy", "toy/toy", 2),
+        LensIdentity("toy/toy", 2),
     )
-    identity = LensIdentity("toy", "toy/toy", 2)
+    identity = LensIdentity("toy/toy", 2)
     lens = LensMaps.load(
         path, expected_sha256=sha, hidden_size=2, num_layers=2, identity=identity
     )
@@ -117,8 +117,8 @@ def test_the_qwen_lens_is_refused_against_gemma_which_is_the_case_that_motivated
             path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA
         )
     message = str(error.value)
-    assert "qwen35-4b" in message and "gemma3-4b" in message, "both identities are named"
-    assert "mlx-community/Qwen3.5-4B-MLX-4bit" in message and "google/gemma-3-4b-it" in message
+    assert "mlx-community/Qwen3.5-4B-MLX-4bit" in message, "the lens names its own model"
+    assert "google/gemma-3-4b-it" in message, "and the model it is being loaded against"
 
     # And the same file against its own model is unchanged.
     lens = LensMaps.load(
@@ -243,3 +243,29 @@ def test_capture_record_is_deterministic_and_detects_tampering(tmp_path):
     paths[0].write_text(paths[0].read_text().replace('"position":9', '"position":8'))
     with pytest.raises(ValueError, match="hash"):
         read_record(paths[0])
+
+
+def test_two_precisions_of_one_model_share_a_lens_and_the_refusal_is_about_the_model() -> None:
+    """The correction the Gemma pilot forced, and the line the check has to hold.
+
+    The identity carried the registry entry's name and its `hf_id`, and both describe a **file**.
+    `gemma3-4b` and `gemma3-4b-bf16` are two precisions of one model; the pivot's ruling is that
+    the pilot runs 4-bit while the hosted lens was fitted on bf16, with the precision mismatch
+    disclosed rather than avoided. The old identity refused that pairing — true about the files,
+    false about the experiment — and it refused at the moment stage one tried to load its lens.
+
+    What must still be refused is a different model of the same width, which is what the check
+    exists for and what no other check catches.
+    """
+    from local_llm_lab.models import load_model_spec
+
+    four_bit = load_model_spec("gemma3-4b")
+    bf16 = load_model_spec("gemma3-4b-bf16")
+
+    assert four_bit.hf_id != bf16.hf_id, "different files"
+    assert four_bit.source == bf16.source == "google/gemma-3-4b-it", "one model"
+    assert LensIdentity(four_bit.source, 34) == LensIdentity(bf16.source, 34)
+    assert LensIdentity(four_bit.source, 34) != QWEN
+
+    qwen = load_model_spec("qwen35-4b")
+    assert qwen.source == qwen.hf_id, "unconverted checkpoints declare no separate source"

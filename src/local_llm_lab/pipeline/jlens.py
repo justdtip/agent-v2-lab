@@ -196,12 +196,12 @@ _CONFIG_SEARCH_DEPTH = 3
 IN_BAND_FRACTIONS: tuple[float, float] = (1 / 3, 5 / 6)
 #: Stated in every artifact so a reader can see how the kind-matched pairs were formed (R34).
 LAYER_FAMILY_RULE = (
-    "layer L is the residual after block L-1, and on a hybrid with "
-    f"{HYBRID_PERIOD_FIELD}=p that block is an attention block exactly when L % p == 0; for "
-    "each in-band layer, whichever kind wrote it, the kind-matched partner is the nearest "
-    "layer of the opposite kind and joins the sweep when it is not already there; an "
-    "equal-distance tie is answered by the recorded ruling for that layer, and a tie with no "
-    "ruling is reported rather than resolved"
+    "layer L is the residual after block L-1, and a decoder that alternates periodically with "
+    "period p distinguishes block L exactly when L % p == 0 -- by module kind on a hybrid, by "
+    "attention span on a model whose blocks are all one kind; for each in-band layer, whichever "
+    "class wrote it, the matched partner is the nearest layer of the opposite class and joins "
+    "the sweep when it is not already there; an equal-distance tie is answered by the recorded "
+    "ruling for that layer, and a tie with no ruling is reported rather than resolved"
 )
 
 
@@ -586,32 +586,65 @@ def hybrid_period(view: Any) -> tuple[int | None, str]:
     return None, structural_source
 
 
+#: The two structures a decoder periodically alternates, in the order they are tried. A block's
+#: **kind** is what module it is, and a hybrid alternates those. A block's **span** is how far its
+#: attention can see, and Gemma 3 alternates those with every module the same kind. Both are
+#: periodic in the same way -- one distinguished block every ``p`` -- and the layer family's whole
+#: purpose is to contrast the two classes at comparable depth, so either partition serves it.
+_PARTITIONS = (
+    ("kind", "layer_kind", RECURRENT_KIND, ATTENTION_KIND, "is_linear"),
+    ("span", "attention_span", "sliding", "global", "self_attn.is_sliding"),
+)
+
+
 def _structural_period(view: Any) -> tuple[int | None, str]:
-    """Invert ``is_linear`` over the view's own blocks; the source names which case applied."""
+    """Invert the decoder's own periodic structure; the source names which partition applied.
+
+    **Kind first, then span.** This read only kinds, and on Gemma 3 that produced *"no
+    linear-attention block, so the backbone is dense and has no hybrid period"* -- true of the
+    modules and false of the model. Gemma has a period of six; it is a period of attention spans
+    rather than of block kinds, every one of its thirty-four blocks being an attention module.
+    The consequence was not a wrong number but a wrong sentence: `kind_matched_layer_family` took
+    its degenerate path, derived no partners, and wrote *dense* into every artifact it touched.
+
+    A view answering neither is genuinely dense, and that is still reported -- but it is now
+    reported after both readings rather than after one.
+    """
     blocks = getattr(view, "blocks", None)
-    kind_of = getattr(view, "layer_kind", None)
-    if blocks is None or not callable(kind_of):
+    if blocks is None:
         # A view without blocks is a probe fake, not a model. The configuration walk is all
         # there is, and "unavailable" is the string those artifacts have always carried.
         return None, "unavailable"
-    try:
-        kinds = [str(kind_of(index)) for index in range(len(blocks))]
-    except (ValueError, IndexError, AttributeError, TypeError):  # pragma: no cover - defensive
+
+    tried: list[str] = []
+    for name, reader, common, distinguished, attribute in _PARTITIONS:
+        classify = getattr(view, reader, None)
+        if not callable(classify):
+            continue
+        try:
+            labels = [classify(index) for index in range(len(blocks))]
+        except (ValueError, IndexError, AttributeError, TypeError):  # pragma: no cover
+            continue
+        labels = [None if label is None else str(label) for label in labels]
+        if common not in labels or distinguished not in labels:
+            tried.append(name)
+            continue
+        first = labels.index(distinguished)
+        # ``(index + 1) % p != 0`` puts the distinguished blocks at p-1, 2p-1, ...; the first of
+        # them is at p-1, so the period is that index plus one. The same arithmetic for both
+        # partitions, which is why one function can read either.
+        return first + 1, (
+            f"view.blocks[{first}].{attribute} (first {distinguished} block by {name}; "
+            f"period = index + 1)"
+        )
+
+    if not tried:  # pragma: no cover - a view exposing neither reader
         return None, "unavailable"
-    if RECURRENT_KIND not in kinds:
-        return None, (
-            "view.blocks: no linear-attention block, so the backbone is dense and has no "
-            "hybrid period"
-        )
-    if ATTENTION_KIND not in kinds:
-        return None, (
-            "view.blocks: no attention block, so any hybrid period exceeds the decoder depth"
-        )
-    first = kinds.index(ATTENTION_KIND)
-    # ``is_linear = (index + 1) % p != 0`` puts the attention blocks at p-1, 2p-1, ...; the
-    # first of them is at p-1, so the period is that index plus one.
-    return first + 1, (
-        f"view.blocks[{first}].is_linear (first attention block; period = index + 1)"
+    return None, (
+        "view.blocks: no alternation in " + " or ".join(tried) + ", so the backbone is uniform "
+        "and has no period. Read as a statement about this decoder's structure and not about "
+        "its capability: a model with one module kind and one attention span has no two classes "
+        "to contrast at comparable depth."
     )
 
 
@@ -762,6 +795,7 @@ def kind_matched_layer_family(
     kind_of: Callable[[int], str] | None = None,
     derive: bool = True,
     tie_breaks: Mapping[int, int] | None = None,
+    span_of: Callable[[int], str | None] | None = None,
 ) -> LayerFamily:
     """EXP-001 §3.5's layer list: the selection plus its kind-matched partners, in one sweep.
 
@@ -825,17 +859,25 @@ def kind_matched_layer_family(
 
     band = in_band_layers(order, num_layers)
     grid = () if period is None else tuple(range(period, num_layers + 1, period))
-    if kind_of is not None:
+    off_grid = tuple(layer for layer in range(1, num_layers + 1) if layer not in set(grid))
+    # The period's own partition decides what "opposite" means, and it is not always the kind.
+    # On a hybrid the distinguished class is the attention **module**; on Gemma 3 every module is
+    # attention and the distinguished class is the **globally attending** block. Filtering by kind
+    # on Gemma emptied the opposite class entirely -- every block is attention, so nothing was
+    # recurrent -- and every in-band layer lost its partner while the grid itself stayed correct.
+    #
+    # The filter's purpose is unchanged: it exists so the configuration and the blocks cannot
+    # disagree silently about which blocks are distinguished. It now asks the reader that actually
+    # distinguishes them.
+    if span_of is not None and any(span_of(layer - 1) is not None for layer in grid):
+        grid = tuple(layer for layer in grid if span_of(layer - 1) == "global")
+        off_grid = tuple(layer for layer in off_grid if span_of(layer - 1) == "sliding")
+    elif kind_of is not None:
         grid = tuple(
             layer
             for layer in grid
             if _family_kind(layer, kind_of, period) != RECURRENT_KIND
         )
-    # The opposite-kind candidates for an attention-written layer: everything the period does
-    # not put on the grid, minus anything a view calls attention, for the same reason the grid
-    # itself is filtered -- the config and the blocks must not disagree silently.
-    off_grid = tuple(layer for layer in range(1, num_layers + 1) if layer not in set(grid))
-    if kind_of is not None:
         off_grid = tuple(
             layer
             for layer in off_grid
@@ -904,8 +946,10 @@ def kind_matched_layer_family(
         period_source=period_source,
         derived=True,
         reason=(
-            f"kind-matched partners derived from {HYBRID_PERIOD_FIELD}={period} "
-            f"({period_source})"
+            # The period, not the field that happens to declare it. `full_attention_interval` is
+            # Qwen's name for it and Gemma's config does not carry the concept under any name;
+            # the source below says which attribute of which block was actually read.
+            f"kind-matched partners derived from period={period} ({period_source})"
             + (
                 ""
                 if not unrecorded
@@ -1812,6 +1856,10 @@ def main() -> None:  # noqa: C901 - pre-existing probe CLI orchestration
             # Absent, the family still runs and says in its own reason which tie it broke
             # without one, so an artifact can never present a fallback as a derivation.
             tie_breaks=spec.probes.partner_tie_breaks,
+            # Which partition this decoder alternates. A hybrid alternates block kinds; Gemma 3
+            # alternates attention spans with every block the same kind, and filtering by kind
+            # there leaves nothing opposite to pair with.
+            span_of=lambda index: view.attention_span(index),
         )
         layers = list(family.layers)
         layer_kinds = dict(family.kinds)

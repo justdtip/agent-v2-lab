@@ -194,6 +194,17 @@ class _SweepView:
     def layer_kind(self, index):
         return "linear_attention" if (index + 1) % 4 else "attention"
 
+    def attention_span(self, index):
+        """A real `ArchitectureView` answers this, so a stand-in for one has to.
+
+        `None` here, and truthfully: these blocks are the library's own hybrid `DecoderLayer`,
+        which has no `is_sliding`, so the decoder alternates by kind and not by span. That makes
+        this double the case that exercises the **kind** path of the period derivation, with
+        Gemma's span path covered by the Gemma-shaped case beside it.
+        """
+        del index
+        return None
+
 
 class _SweepTokenizer:
     """One id per character, and a chat template that records the kwargs it was given."""

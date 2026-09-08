@@ -69,6 +69,17 @@ class ChatSpec:
     #: is some other field's value. Named, they fail to construct instead, which is a list of
     #: sites rather than a bug.
     generation_prefix: str = field(kw_only=True)
+    #: The role a tool observation renders under. ``"tool"`` where the template has that role,
+    #: which is every ChatML model here; ``"user"`` where it does not.
+    #:
+    #: Gemma 3's template has branches for user, assistant and system only, and enforces strict
+    #: user/model alternation with an explicit `raise_exception`, so an observation at an even
+    #: loop index stops the render. **Provisional, for reading only** (the Chief's ruling of
+    #: 2026-09-08): re-roling keeps a base-model reading inside the model's own distribution, and
+    #: the only thing at stake is prompt rendering. It reverts to provisional the day anyone
+    #: builds a supervised target, because there the choice changes what is trained on, and the
+    #: run's manifest has to say which role it used.
+    observation_role: str = field(default="tool", kw_only=True)
     max_think_tokens: int = 512
 
 
@@ -106,6 +117,16 @@ class ProbesSpec:
 class ModelSpec:
     name: str
     hf_id: str
+    #: The **model** this checkpoint is, as opposed to `hf_id`, which is where its weights live.
+    #: They differ whenever a checkpoint is converted: `models/gemma-3-4b-it-4bit` and
+    #: `models/gemma-3-4b-it-bf16` are two precisions of one model, `google/gemma-3-4b-it`.
+    #:
+    #: The distinction is not bookkeeping. A Jacobian lens is fitted on a **model**, and the
+    #: pivot's own ruling is that the pilot runs 4-bit while the hosted lens was fitted on bf16,
+    #: with the precision mismatch disclosed rather than avoided. An identity built from `hf_id`
+    #: refuses that pairing, which is a true statement about the files and a false one about the
+    #: experiment. Defaults to `hf_id`, which is right for every checkpoint we did not convert.
+    source: str
     family: str
     chat: ChatSpec
     lora: LoraSpec
@@ -319,12 +340,14 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     return ModelSpec(
         name=_required_string(raw, "name", source),
         hf_id=_resolve_checkpoint(_required_string(raw, "hf_id", source)),
+        source=str(raw.get("source") or _required_string(raw, "hf_id", source)),
         family=_required_string(raw, "family", source),
         chat=ChatSpec(
             thinking=thinking,
             template_kwargs=dict(template_kwargs),
             end_of_turn=_required_string(chat, "end_of_turn", source),
             generation_prefix=_required_string(chat, "generation_prefix", source),
+            observation_role=str(chat.get("observation_role", "tool")),
             extra_stop_tokens=tuple(stops),
             max_think_tokens=_positive_int(
                 chat.get("max_think_tokens", 512), "chat.max_think_tokens", source
@@ -357,6 +380,7 @@ def _default_spec(hf_id: str) -> ModelSpec:
     return ModelSpec(
         name=hf_id,
         hf_id=hf_id,
+        source=hf_id,
         family="unknown",
         # ChatML's markers, for a model nobody declared. They are a guess and the only honest
         # thing to say about them is that they are Qwen's; a run that reaches this path and is
