@@ -1,0 +1,627 @@
+diff --git a/scripts/lens_fit.py b/scripts/lens_fit.py
+index 7e86a8d..5fad110 100644
+--- a/scripts/lens_fit.py
++++ b/scripts/lens_fit.py
+@@ -80,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
+     loaded = load_runtime(prepared)
+     from local_llm_lab.pipeline.lens_fitting.artifacts import write_lens
+     from local_llm_lab.pipeline.lens_fitting.regression import ALPHA_GRID, fit_regression
++    from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
+ 
+     loaded.model.eval()
+     allocator_cache = configure_allocator_cache()
+@@ -182,6 +183,11 @@ def main(argv: list[str] | None = None) -> int:
+         hidden_size=loaded.view.hidden_size,
+         num_layers=loaded.view.num_layers,
+         metadata=metadata,
++        # Issue 99: a lens we fit carries the model it was fitted on, inside the archive whose
++        # digest every later reader pins.
++        identity=LensIdentity(
++            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
++        ),
+     )
+     print(
+         json.dumps(
+diff --git a/scripts/live_lens_pilot.py b/scripts/live_lens_pilot.py
+index 143f659..df33a36 100644
+--- a/scripts/live_lens_pilot.py
++++ b/scripts/live_lens_pilot.py
+@@ -91,7 +91,12 @@ def main() -> None:
+     import mlx.core as mx
+     from local_llm_lab.pipeline.evaluate import load_policy, make_sampler
+     from local_llm_lab.pipeline.runner import generate_turn_with_count, run_task
+-    from local_llm_lab.pipeline.live_lens.instruments import LensMaps, read_band, file_sha256
++    from local_llm_lab.pipeline.live_lens.instruments import (
++        LensIdentity,
++        LensMaps,
++        file_sha256,
++        read_band,
++    )
+     from local_llm_lab.pipeline.live_lens.session import CaptureSession, LensReadout, RecordWriter, read_record
+ 
+     mx.set_cache_limit(2 * 2**30)
+@@ -106,7 +111,11 @@ def main() -> None:
+     band = read_band(REGISTRY, [view.layer_kind(i) for i in range(view.num_layers)])
+     attention_members = tuple(p for pair in band for p in pair if view.layer_kind(p - 1) == "attention")
+     layers = tuple(args.layers) if args.layers else attention_members + (view.num_layers,)
+-    lens = LensMaps.load(LENS, expected_sha256=LENS_SHA, hidden_size=view.hidden_size, num_layers=view.num_layers)
++    # Issue 99: the spec says which model this is and the lens has to agree. The pinned
++    # constants above made a mismatch impossible by accident; this makes it impossible.
++    lens = LensMaps.load(LENS, expected_sha256=LENS_SHA, hidden_size=view.hidden_size,
++                         num_layers=view.num_layers,
++                         identity=LensIdentity(spec.name, spec.hf_id, view.num_layers))
+     reader = LensReadout(view, lens)
+     sampler = make_sampler(0.0)
+     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/artifacts.py b/src/local_llm_lab/pipeline/lens_fitting/artifacts.py
+index dce0407..7f4b0ce 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/artifacts.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/artifacts.py
+@@ -7,7 +7,12 @@ from pathlib import Path
+ 
+ import numpy as np
+ 
+-from local_llm_lab.pipeline.live_lens.instruments import LensMaps, file_sha256
++from local_llm_lab.pipeline.live_lens.instruments import (
++    LENS_IDENTITY_KEY,
++    LensIdentity,
++    LensMaps,
++    file_sha256,
++)
+ 
+ MAX_NPZ_BYTES = 1_000_000_000
+ 
+@@ -28,9 +33,24 @@ def validate_output(path: Path) -> Path:
+ 
+ 
+ def write_lens(
+-    path: Path, maps: dict[int, np.ndarray], *, hidden_size: int, num_layers: int, metadata: dict
++    path: Path,
++    maps: dict[int, np.ndarray],
++    *,
++    hidden_size: int,
++    num_layers: int,
++    metadata: dict,
++    identity: LensIdentity,
+ ) -> dict:
+-    """Validate complete maps before exclusive creation; partial writes remain evidence."""
++    """Validate complete maps before exclusive creation; partial writes remain evidence.
++
++    ``identity`` goes **inside** the archive, so the digest this function computes and every
++    caller pins covers it. The sidecar route exists only for lenses converted before the field
++    did (issue 99); nothing written here needs it.
++    """
++    if identity.num_layers != num_layers:
++        raise ValueError(
++            f"lens identity says {identity.num_layers} layers and the fit says {num_layers}"
++        )
+     path = validate_output(path)
+     expected = set(range(1, num_layers))
+     if not expected or set(maps) != expected:
+@@ -41,6 +61,9 @@ def write_lens(
+         if a.shape != (hidden_size, hidden_size) or not np.isfinite(a).all():
+             raise ValueError(f"invalid finite square lens map for layer {layer}")
+         arrays[f"J{layer - 1}"] = a
++    arrays[LENS_IDENTITY_KEY] = np.frombuffer(
++        json.dumps(identity.as_dict(), sort_keys=True).encode("utf-8"), dtype=np.uint8
++    )
+     # Reserve enough overhead for NumPy headers and ZIP directory entries.
+     if sum(a.nbytes + 1024 for a in arrays.values()) >= MAX_NPZ_BYTES:
+         raise ValueError("float32 lens archive must stay below 1 GB")
+@@ -53,13 +76,18 @@ def write_lens(
+             raise ValueError("lens archive exceeds 1 GB")
+         sha = file_sha256(path)
+         loaded = LensMaps.load(
+-            path, expected_sha256=sha, hidden_size=hidden_size, num_layers=num_layers
++            path,
++            expected_sha256=sha,
++            hidden_size=hidden_size,
++            num_layers=num_layers,
++            identity=identity,
+         )
+         if set(loaded.maps) != expected or any(
+             not np.array_equal(loaded.maps[layer], arrays[f"J{layer - 1}"]) for layer in expected
+         ):
+             raise ValueError("LensMaps round-trip differs from fitted maps")
+         result = metadata | {
++            "model": identity.as_dict(),
+             "npz_sha256": sha,
+             "layers": sorted(expected),
+             "hidden_size": hidden_size,
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/prose.py b/src/local_llm_lab/pipeline/lens_fitting/prose.py
+index aff2eb8..780b936 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/prose.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/prose.py
+@@ -22,7 +22,11 @@ from local_llm_lab.pipeline.lens_fitting.runtime import (
+     resource_snapshot,
+     snapshot_identity,
+ )
+-from local_llm_lab.pipeline.live_lens.instruments import LensMaps, file_sha256
++from local_llm_lab.pipeline.live_lens.instruments import (
++    LensIdentity,
++    LensMaps,
++    file_sha256,
++)
+ from local_llm_lab.pipeline.live_lens.session import CaptureSession, LensReadout, RecordWriter
+ 
+ PREFIX_TOKENS = 824
+@@ -135,6 +139,9 @@ def make_plan(corpus_path, spec, lens_path, *, lens_sha256, tokenizer, revision=
+         expected_sha256=lens_sha256,
+         hidden_size=dimensions["hidden_size"],
+         num_layers=dimensions["num_hidden_layers"],
++        # Issue 99: the snapshot says which model this is; the lens has to agree. A digest
++        # proves the file is the file the caller named, not that the caller named the right one.
++        identity=LensIdentity(spec.name, spec.hf_id, dimensions["num_hidden_layers"]),
+     )
+     if set(lens.maps) != set(range(1, dimensions["num_hidden_layers"])):
+         raise ValueError("hosted lens must cover every intermediate layer")
+@@ -387,6 +394,9 @@ def execute_plan(output, spec):
+         expected_sha256=plan["lens_sha256"],
+         hidden_size=loaded.view.hidden_size,
+         num_layers=loaded.view.num_layers,
++        identity=LensIdentity(
++            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
++        ),
+     )
+     _write(
+         output / "runtime.json", {"lock_path": str(loaded.lock_path), "allocator_cache": allocator}
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/replay.py b/src/local_llm_lab/pipeline/lens_fitting/replay.py
+index c07a118..11ad41a 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/replay.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/replay.py
+@@ -19,7 +19,11 @@ from types import SimpleNamespace
+ 
+ from local_llm_lab.forward import ForwardLedger, encode_prompt
+ from local_llm_lab.pipeline.lens_fitting.runtime import resolve_snapshot
+-from local_llm_lab.pipeline.live_lens.instruments import LensMaps, file_sha256
++from local_llm_lab.pipeline.live_lens.instruments import (
++    LensIdentity,
++    LensMaps,
++    file_sha256,
++)
+ from local_llm_lab.pipeline.live_lens.session import (
+     CaptureSession,
+     LensReadout,
+@@ -358,7 +362,12 @@ def prepare_replay(
+     if identity_atlas is None and count not in selected:
+         raise ValueError("new readings require final identity layer")
+     lens = LensMaps.load(
+-        lens_path, expected_sha256=lens_sha256, hidden_size=hidden, num_layers=count
++        lens_path,
++        expected_sha256=lens_sha256,
++        hidden_size=hidden,
++        num_layers=count,
++        # Issue 99: the snapshot's dimensions cannot separate two models of the same width.
++        identity=LensIdentity(spec.name, spec.hf_id, count),
+     )
+     readout_layers = set(selected)
+     for record in identities:
+@@ -595,6 +604,9 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
+         expected_sha256=prepared.lens_sha256,
+         hidden_size=loaded.view.hidden_size,
+         num_layers=loaded.view.num_layers,
++        identity=LensIdentity(
++            loaded.spec.name, loaded.spec.hf_id, loaded.view.num_layers
++        ),
+     )
+     prepared.output.mkdir(parents=True, exist_ok=False)
+     # Retain byte-identical historical metadata, isolated from new runtime provenance.
+diff --git a/src/local_llm_lab/pipeline/live_lens/instruments.py b/src/local_llm_lab/pipeline/live_lens/instruments.py
+index 124fc53..af62a59 100644
+--- a/src/local_llm_lab/pipeline/live_lens/instruments.py
++++ b/src/local_llm_lab/pipeline/live_lens/instruments.py
+@@ -22,6 +22,92 @@ def _digest(value: dict) -> str:
+     ).hexdigest()
+ 
+ 
++#: The npz entry a stamped lens carries. Not a ``J<l>`` map, so ``LensMaps.load`` names it
++#: explicitly rather than rejecting it as an invalid map name.
++LENS_IDENTITY_KEY = "identity"
++
++
++class LensIdentityError(ValueError):
++    """A lens does not say which model it was fitted on, or says a different one (issue 99)."""
++
++
++@dataclass(frozen=True)
++class LensIdentity:
++    """Which model a lens was fitted against.
++
++    Three fields because two are not enough to separate the models this repository actually
++    holds. Qwen3.5-4B and Gemma 3 4B are **both 2560-dimensional**, so hidden size cannot tell
++    them apart; the Qwen lens covers layers 1 to 31 and Gemma has 34, so `1 <= 31 < 34` passes
++    every existing check and the wrong lens loads in silence. The layer count catches the
++    reverse direction by arithmetic and misses this one, which is worse than no guard, because
++    the direction it catches is the one nobody would take.
++    """
++
++    name: str
++    hf_id: str
++    num_layers: int
++
++    def as_dict(self) -> dict:
++        return {"name": self.name, "hf_id": self.hf_id, "num_layers": int(self.num_layers)}
++
++    @classmethod
++    def from_dict(cls, value: object) -> LensIdentity:
++        if not isinstance(value, dict):
++            raise LensIdentityError("lens identity must be a mapping")
++        try:
++            name, hf_id, layers = value["name"], value["hf_id"], value["num_layers"]
++        except (KeyError, TypeError) as error:
++            raise LensIdentityError(
++                "lens identity must carry name, hf_id and num_layers"
++            ) from error
++        if not isinstance(name, str) or not isinstance(hf_id, str):
++            raise LensIdentityError("lens identity name and hf_id must be strings")
++        if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
++            raise LensIdentityError("lens identity num_layers must be a positive integer")
++        return cls(name, hf_id, layers)
++
++    def describe(self) -> str:
++        return f"{self.name} ({self.hf_id}, {self.num_layers} layers)"
++
++
++def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:
++    """The identity the file itself carries, from the archive or from its digest-bound sidecar.
++
++    Two places, and the precedence is not a matter of taste. Inside the archive is stronger,
++    because the digest the caller already checks covers it, and that is where every lens written
++    from now on carries it. The sidecar exists for the two hosted lenses that were converted
++    before this field did: stamping them inside the npz would change bytes whose digest is
++    pinned in the pilot script and in a published record, so the stamp goes beside the file and
++    is bound to it by the sidecar's own ``npz_sha256``. A sidecar that names a different file is
++    not evidence about this one.
++    """
++    if LENS_IDENTITY_KEY in archive.files:
++        raw = archive[LENS_IDENTITY_KEY]
++        return LensIdentity.from_dict(json.loads(bytes(raw).decode("utf-8")))
++    sidecar = path.with_suffix(".json")
++    if not sidecar.exists():
++        raise LensIdentityError(
++            f"{path.name} carries no model identity and has no sidecar at {sidecar.name}. "
++            "A lens that does not say which model it was fitted on is refused, not warned "
++            "about: Qwen3.5-4B and Gemma 3 4B are both 2560-dimensional and the wrong lens "
++            "loads in silence. Stamp it with scripts/stamp_lens_identity.py."
++        )
++    meta = json.loads(sidecar.read_text())
++    if not isinstance(meta, dict) or "model" not in meta:
++        raise LensIdentityError(
++            f"{sidecar.name} carries no 'model' block. Stamp it with "
++            "scripts/stamp_lens_identity.py, which records the evidence for a retroactive stamp."
++        )
++    recorded = meta.get("npz_sha256")
++    if recorded != sha:
++        raise LensIdentityError(
++            f"{sidecar.name} records npz_sha256 {recorded}, but {path.name} hashes to {sha}. "
++            "The sidecar describes a different file, so its identity is not evidence about "
++            "this one."
++        )
++    return LensIdentity.from_dict(meta["model"])
++
++
+ @dataclass(frozen=True)
+ class FrozenPopulation:
+     source_sha256: str
+@@ -104,17 +190,39 @@ class LensMaps:
+     sha256: str
+     hidden_size: int
+     num_layers: int
++    identity: LensIdentity | None = None
+ 
+     @classmethod
+     def load(
+-        cls, path: Path, *, expected_sha256: str, hidden_size: int, num_layers: int
++        cls,
++        path: Path,
++        *,
++        expected_sha256: str,
++        hidden_size: int,
++        num_layers: int,
++        identity: LensIdentity,
+     ) -> LensMaps:
++        """Load a lens, refusing one fitted on a different model (issue 99).
++
++        The digest check that was already here proves the file is the file the caller named. It
++        cannot prove the caller named the right file, and the caller is a person or a script
++        constant. ``identity`` is what the *view* says it is, and the lens has to agree.
++        """
+         sha = file_sha256(path)
+         if sha != expected_sha256:
+             raise ValueError("lens file hash mismatch")
+         maps = {}
+         with np.load(path, allow_pickle=False) as archive:
++            stamped = _stamped_identity(path, archive, sha)
++            if stamped != identity:
++                raise LensIdentityError(
++                    f"lens {path.name} was fitted on {stamped.describe()}, and it is being "
++                    f"loaded against {identity.describe()}. Refusing: a lens of the right width "
++                    "on the wrong model produces ranks that look exactly like a finding."
++                )
+             for name in archive.files:
++                if name == LENS_IDENTITY_KEY:
++                    continue
+                 if not name.startswith("J") or not name[1:].isdigit():
+                     raise ValueError(f"invalid lens map name: {name}")
+                 layer = int(name[1:]) + 1
+@@ -129,7 +237,7 @@ class LensMaps:
+                 maps[layer] = a
+         if not maps:
+             raise ValueError("lens archive is empty")
+-        return cls(maps, sha, hidden_size, num_layers)
++        return cls(maps, sha, hidden_size, num_layers, stamped)
+ 
+     def apply(self, residual: np.ndarray, layer: int) -> np.ndarray:
+         if residual.shape[-1] != self.hidden_size:
+diff --git a/tests/test_lens_prose.py b/tests/test_lens_prose.py
+index ca08d54..3445648 100644
+--- a/tests/test_lens_prose.py
++++ b/tests/test_lens_prose.py
+@@ -78,7 +78,17 @@ def prepared(tmp_path):
+     corpus = tmp_path / "corpus.json"
+     build_prose_corpus([source], tokenizer, spec, corpus, tokenizer_files=[asset])
+     lens = tmp_path / "lens.npz"
+-    np.savez(lens, J0=np.eye(2))
++    # Issue 99: a lens says which model it was fitted on, and this fixture's model is `spec`.
++    np.savez(
++        lens,
++        J0=np.eye(2),
++        identity=np.frombuffer(
++            json.dumps(
++                {"name": spec.name, "hf_id": spec.hf_id, "num_layers": 2}, sort_keys=True
++            ).encode("utf-8"),
++            dtype=np.uint8,
++        ),
++    )
+     plan = prose.make_plan(corpus, spec, lens, lens_sha256=file_sha256(lens), tokenizer=tokenizer)
+     return SimpleNamespace(
+         spec=spec,
+diff --git a/tests/test_lens_replay.py b/tests/test_lens_replay.py
+index 2c00c1b..d2227b9 100644
+--- a/tests/test_lens_replay.py
++++ b/tests/test_lens_replay.py
+@@ -11,6 +11,19 @@ import pytest
+ from local_llm_lab.pipeline.live_lens.session import RecordWriter
+ 
+ 
++def _identity_bytes(name: str, hf_id: str, num_layers: int):
++    """The archive entry `LensMaps.load` reads for a lens's model identity (issue 99)."""
++    import numpy as _np
++
++    return _np.frombuffer(
++        json.dumps(
++            {"name": name, "hf_id": hf_id, "num_layers": int(num_layers)}, sort_keys=True
++        ).encode("utf-8"),
++        dtype=_np.uint8,
++    )
++
++
++
+ def api():
+     return importlib.import_module("local_llm_lab.pipeline.lens_fitting.replay")
+ 
+@@ -348,7 +361,7 @@ def prepared_fixture(tmp_path, monkeypatch, *, identity=False):
+         ],
+     }
+     lens = tmp_path / "lens.npz"
+-    np.savez(lens, J0=np.eye(2))
++    np.savez(lens, J0=np.eye(2), identity=_identity_bytes("qwen35-4b", "example/tiny", 2))
+     manifest["lens_sha256"] = module.file_sha256(lens)
+     (source / "manifest.json").write_text(json.dumps(manifest))
+     snapshot = tmp_path / "snapshot"
+@@ -517,7 +530,11 @@ def test_attention_readout_dependencies_refused_during_preparation(
+     (prepared.source / "manifest.json").write_text(json.dumps(manifest))
+     config = Path(prepared.snapshot["snapshot_path"]) / "config.json"
+     config.write_text(json.dumps({"hidden_size": 2, "num_hidden_layers": 4, "vocab_size": 5}))
+-    np.savez(prepared.lens_path, **{f"J{i}": np.eye(2) for i in available})
++    np.savez(
++        prepared.lens_path,
++        identity=_identity_bytes("qwen35-4b", "example/tiny", 4),
++        **{f"J{i}": np.eye(2) for i in available},
++    )
+     if len(available) == 3:
+         module.prepare_replay(
+             prepared.source,
+diff --git a/tests/test_lens_runtime.py b/tests/test_lens_runtime.py
+index 6bdea5a..55e9ce0 100644
+--- a/tests/test_lens_runtime.py
++++ b/tests/test_lens_runtime.py
+@@ -10,6 +10,11 @@ import numpy as np
+ import pytest
+ 
+ from local_llm_lab.models import load_model_spec
++from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
++
++#: The identity every toy lens in this file is fitted for (issue 99). Three layers because
++#: `write_lens` requires all and only the nonfinal maps, and these fixtures write two.
++_TOY = LensIdentity("toy", "example/tiny", 3)
+ 
+ 
+ def api():
+@@ -79,12 +84,24 @@ def test_output_refusal_is_exclusive_and_validates_every_layer(tmp_path):
+     artifacts = importlib.import_module("local_llm_lab.pipeline.lens_fitting.artifacts")
+     out = tmp_path / "tiny-agentic-regression.npz"
+     with pytest.raises(ValueError, match="layers"):
+-        artifacts.write_lens(out, {1: np.eye(2)}, hidden_size=2, num_layers=3, metadata={})
++        artifacts.write_lens(
++            out,
++            {1: np.eye(2)},
++            hidden_size=2,
++            num_layers=3,
++            metadata={},
++            identity=_TOY,
++        )
+     assert not out.exists()
+     out.with_suffix(".json").write_text("existing")
+     with pytest.raises(FileExistsError):
+         artifacts.write_lens(
+-            out, {1: np.eye(2), 2: np.eye(2)}, hidden_size=2, num_layers=3, metadata={}
++            out,
++            {1: np.eye(2), 2: np.eye(2)},
++            hidden_size=2,
++            num_layers=3,
++            metadata={},
++            identity=_TOY,
+         )
+     assert not out.exists()
+     assert out.with_suffix(".json").read_text() == "existing"
+@@ -359,7 +376,9 @@ def test_invalid_artifact_does_not_publish(tmp_path, monkeypatch, issue):
+         monkeypatch.setattr(artifacts, "MAX_NPZ_BYTES", 1)
+     out = tmp_path / "tiny-prose-regression.npz"
+     with pytest.raises(ValueError):
+-        artifacts.write_lens(out, maps, hidden_size=2, num_layers=2, metadata={})
++        artifacts.write_lens(
++            out, maps, hidden_size=2, num_layers=2, metadata={}, identity=_TOY
++        )
+     assert not out.exists()
+     assert not out.with_suffix(".json").exists()
+ 
+diff --git a/tests/test_live_lens.py b/tests/test_live_lens.py
+index 9bca8d7..87e45f8 100644
+--- a/tests/test_live_lens.py
++++ b/tests/test_live_lens.py
+@@ -11,7 +11,13 @@ from pathlib import Path
+ import numpy as np
+ import pytest
+ 
+-from local_llm_lab.pipeline.live_lens.instruments import FrozenPopulation, LensMaps, read_band
++from local_llm_lab.pipeline.live_lens.instruments import (
++    FrozenPopulation,
++    LensIdentity,
++    LensIdentityError,
++    LensMaps,
++    read_band,
++)
+ from local_llm_lab.pipeline.live_lens.records import FutureRanks, transport_overlap
+ from local_llm_lab.pipeline.live_lens.validation import layer_verdict
+ 
+@@ -46,15 +52,124 @@ def test_band_comes_from_registry_and_is_verified_against_real_layer_kinds():
+         read_band(ROOT / "configs/models/qwen35-4b.yaml", kinds)
+ 
+ 
+-def test_lens_orientation_identity_and_hash_verification(tmp_path):
+-    path = tmp_path / "lens.npz"
+-    np.savez(path, J0=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float16))
++def _stamped_lens(directory, name, arrays, identity, *, in_archive=True, sidecar_sha=None):
++    """A lens on disk with its identity in the archive or in a digest-bound sidecar.
++
++    Both routes, because both exist for a reason: new lenses carry it inside the archive the
++    digest covers, and the two hosted lenses converted before the field existed carry it beside
++    the file so their published digests stay valid (issue 99).
++    """
++    path = directory / name
++    payload = dict(arrays)
++    if in_archive:
++        payload["identity"] = np.frombuffer(
++            json.dumps(identity.as_dict(), sort_keys=True).encode("utf-8"), dtype=np.uint8
++        )
++    np.savez(path, **payload)
+     sha = hashlib.sha256(path.read_bytes()).hexdigest()
+-    lens = LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=2)
++    if not in_archive:
++        path.with_suffix(".json").write_text(
++            json.dumps({"npz_sha256": sidecar_sha or sha, "model": identity.as_dict()})
++        )
++    return path, sha
++
++
++QWEN = LensIdentity("qwen35-4b", "mlx-community/Qwen3.5-4B-MLX-4bit", 32)
++GEMMA = LensIdentity("gemma3-4b", "google/gemma-3-4b-it", 34)
++
++
++def test_lens_orientation_identity_and_hash_verification(tmp_path):
++    path, sha = _stamped_lens(
++        tmp_path, "lens.npz", {"J0": np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float16)},
++        LensIdentity("toy", "toy/toy", 2),
++    )
++    identity = LensIdentity("toy", "toy/toy", 2)
++    lens = LensMaps.load(
++        path, expected_sha256=sha, hidden_size=2, num_layers=2, identity=identity
++    )
+     np.testing.assert_array_equal(lens.apply(np.array([5.0, 6.0]), 1), [17.0, 39.0])
+     np.testing.assert_array_equal(lens.apply(np.array([5.0, 6.0]), 2), [5.0, 6.0])
++    assert lens.identity == identity
+     with pytest.raises(ValueError, match="hash"):
+-        LensMaps.load(path, expected_sha256="0" * 64, hidden_size=2, num_layers=2)
++        LensMaps.load(
++            path, expected_sha256="0" * 64, hidden_size=2, num_layers=2, identity=identity
++        )
++
++
++def test_the_qwen_lens_is_refused_against_gemma_which_is_the_case_that_motivated_this(tmp_path):
++    """Issue 99, in the shape that actually happens: same width, fewer layers, silence.
++
++    Qwen3.5-4B and Gemma 3 4B are both 2560-dimensional. The Qwen lens covers layers 1 to 31 and
++    Gemma has 34, so every check that existed passes: the digest is the file's own, the maps are
++    square at the right width, and `1 <= 31 < 34` holds for every one of them. The lens loaded
++    and produced ranks that looked exactly like a finding.
++
++    Sizes here are toy and the shape is the real one: a lens whose layer count is *below* the
++    target's, which is the direction the old bound could not catch. The reverse direction failed
++    only by arithmetic, and a guard that catches the harmless direction is worse than no guard,
++    because it reads as protection.
++    """
++    maps = {f"J{i}": np.eye(2, dtype=np.float16) for i in range(31)}
++    path, sha = _stamped_lens(tmp_path, "qwen-lens.npz", maps, QWEN)
++
++    with pytest.raises(LensIdentityError) as error:
++        LensMaps.load(
++            path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA
++        )
++    message = str(error.value)
++    assert "qwen35-4b" in message and "gemma3-4b" in message, "both identities are named"
++    assert "mlx-community/Qwen3.5-4B-MLX-4bit" in message and "google/gemma-3-4b-it" in message
++
++    # And the same file against its own model is unchanged.
++    lens = LensMaps.load(
++        path, expected_sha256=sha, hidden_size=2, num_layers=32, identity=QWEN
++    )
++    assert set(lens.maps) == set(range(1, 32)) and lens.identity == QWEN
++
++
++def test_a_lens_with_no_identity_is_refused_and_told_how_to_get_one(tmp_path):
++    """Silent acceptance of an unidentified lens is the defect, so it is a refusal."""
++    path = tmp_path / "bare.npz"
++    np.savez(path, J0=np.eye(2, dtype=np.float16))
++    sha = hashlib.sha256(path.read_bytes()).hexdigest()
++
++    with pytest.raises(LensIdentityError, match="stamp_lens_identity"):
++        LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=2, identity=QWEN)
++
++    path.with_suffix(".json").write_text(json.dumps({"npz_sha256": sha}))
++    with pytest.raises(LensIdentityError, match="no 'model' block"):
++        LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=2, identity=QWEN)
++
++
++def test_a_sidecar_that_describes_another_file_is_not_evidence_about_this_one(tmp_path):
++    """The sidecar route is only as good as its binding, so the binding is checked.
++
++    A sidecar is editable independently of the archive it sits beside, which is exactly why it
++    carries the archive's digest. Without this check the retroactive route would be a way to
++    claim any identity for any file by editing one JSON key.
++    """
++    path, sha = _stamped_lens(
++        tmp_path, "hosted.npz", {"J0": np.eye(2, dtype=np.float16)}, QWEN,
++        in_archive=False, sidecar_sha="f" * 64,
++    )
++    with pytest.raises(LensIdentityError, match="different file"):
++        LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=32, identity=QWEN)
++
++
++def test_the_sidecar_route_loads_a_hosted_lens_whose_bytes_must_not_change(tmp_path):
++    """The two lenses converted before the field existed, without invalidating their digests."""
++    path, sha = _stamped_lens(
++        tmp_path, "hosted.npz", {"J0": np.eye(2, dtype=np.float16)}, QWEN, in_archive=False
++    )
++    lens = LensMaps.load(
++        path, expected_sha256=sha, hidden_size=2, num_layers=32, identity=QWEN
++    )
++    assert lens.identity == QWEN
++
++    with pytest.raises(LensIdentityError, match="fitted on"):
++        LensMaps.load(
++            path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA
++        )
+ 
+ 
+ def test_future_ranks_use_source_positions_and_censor_unseen_future():
