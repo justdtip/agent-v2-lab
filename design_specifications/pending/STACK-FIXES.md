@@ -1,3 +1,11 @@
+> **SUPERSEDED — do not apply.** The Chief landed the stack by another route and this patch is
+> for a landing that did not happen. Its work is in the tree as **3c8dac8**, verified there at
+> 1,985 passed with the window held. Applying this now would conflict.
+>
+> Kept rather than deleted because `design_specifications/pending/` is where the next implementer
+> looks, and a verified-looking patch that no longer applies is a trap. The reasoning below still
+> reads as the record of why each fix was the fix.
+
 # The 28 failures, fixed — and the whole suite green on the box for the first time today
 
 Patch: `design_specifications/pending/STACK-FIXES.patch`. **Apply last, after all six.** Nine
