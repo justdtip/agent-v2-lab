@@ -21,10 +21,12 @@ from local_llm_lab.models import load_model_spec  # noqa: E402
 from local_llm_lab.pipeline.protocol import build_prompt  # noqa: E402
 from local_llm_lab.pipeline.tasks import make_tasks  # noqa: E402
 
-LENS = REPO / "models/jlens/Qwen3.5-4B_jacobian_lens_n1000.npz"
-LENS_SHA = "381c089dcffead8147ee91f944496f468cce2c7d593e0a1b17230745055aea12"
-REGISTRY = REPO / "configs/models/qwen35-4b.yaml"
-SEED = 20260902  # the evaluation's seed (configs/agent_v2e_qwen35_4b.yaml)
+# The lens, its digest and the registry were module constants pinned to Qwen. That made a
+# `--model` change move nothing, and it was also the only thing standing between this script and
+# loading the Qwen lens onto another model of the same width (issue 99). Both are gone: the
+# registry is derived from `--model` so it can never name a different model than the run does,
+# and the lens must be named, because there is no defensible default now that two are on disk.
+SEED = 20260902  # the evaluation's seed (configs/agent_v2e_qwen35_4b.yaml); a task-set property
 
 # (task_id, difficulty): the test split's own ids; difficulty changes the content and the length.
 AGENTIC = [
@@ -59,9 +61,20 @@ def main() -> None:
     ap.add_argument("--plan-only", action="store_true")
     ap.add_argument("--only", nargs="*", default=None, help="episode labels to run")
     ap.add_argument("--model", default="qwen35-4b")
+    ap.add_argument("--lens", type=Path, required=True, help="the .npz lens for --model")
+    ap.add_argument("--lens-sha256", required=True, help="the lens digest this run pins")
+    ap.add_argument(
+        "--registry",
+        type=Path,
+        default=None,
+        help="default: configs/models/<model>.yaml, so it cannot name another model",
+    )
     args = ap.parse_args(); t0 = time.time()
     args.out.mkdir(parents=True, exist_ok=True)
     spec = load_model_spec(args.model)
+    registry = args.registry or (REPO / "configs/models" / f"{spec.name}.yaml")
+    if not registry.is_file():
+        ap.error(f"no registry file at {registry}")
 
     # the episode plan (no model): tasks resolved from the factory, prompts rendered for token counts
     from huggingface_hub import snapshot_download
@@ -108,18 +121,31 @@ def main() -> None:
     model, mtok, view, resolved = load_policy(spec, None)
     model.eval()
     assert resolved.cache_strategy == "none", resolved.cache_strategy
-    band = read_band(REGISTRY, [view.layer_kind(i) for i in range(view.num_layers)])
+    # A band is a ruling, and a model may have none. Where one is declared it is read and
+    # validated against the installed block kinds; where it is not, an explicit --layers is the
+    # only way to say what to read, and the manifest records that no band was consulted rather
+    # than leaving a reader to infer it from an empty list.
+    try:
+        band = read_band(registry, [view.layer_kind(i) for i in range(view.num_layers)])
+    except KeyError:
+        band = ()
+    if not band and not args.layers:
+        ap.error(
+            f"{registry.name} declares no probes.live_lens_pairs, so there is no band to take "
+            "layers from; pass --layers explicitly"
+        )
     attention_members = tuple(p for pair in band for p in pair if view.layer_kind(p - 1) == "attention")
     layers = tuple(args.layers) if args.layers else attention_members + (view.num_layers,)
     # Issue 99: the spec says which model this is and the lens has to agree. The pinned
     # constants above made a mismatch impossible by accident; this makes it impossible.
-    lens = LensMaps.load(LENS, expected_sha256=LENS_SHA, hidden_size=view.hidden_size,
-                         num_layers=view.num_layers,
+    lens = LensMaps.load(args.lens, expected_sha256=args.lens_sha256,
+                         hidden_size=view.hidden_size, num_layers=view.num_layers,
                          identity=LensIdentity(spec.name, spec.hf_id, view.num_layers))
     reader = LensReadout(view, lens)
     sampler = make_sampler(0.0)
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
-                "registry_sha256": file_sha256(REGISTRY), "top_k": args.top_k, "max_steps": args.max_steps, "max_tokens": args.max_tokens,
+                "registry_sha256": file_sha256(registry), "registry": str(registry),
+                "lens_path": str(args.lens), "band_declared": bool(band), "top_k": args.top_k, "max_steps": args.max_steps, "max_tokens": args.max_tokens,
                 "chat_tokens": args.chat_tokens, "seed": SEED, "episodes": []}
     print(json.dumps({"event": "loaded", "layers": layers, "band": band}), flush=True)
 
