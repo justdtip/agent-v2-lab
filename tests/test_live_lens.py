@@ -76,6 +76,9 @@ def _stamped_lens(directory, name, arrays, identity, *, in_archive=True, sidecar
 
 QWEN = LensIdentity("mlx-community/Qwen3.5-4B-MLX-4bit", 32)
 GEMMA = LensIdentity("google/gemma-3-4b-it", 34)
+GEMMA_TRAINED = LensIdentity(
+    "google/gemma-3-4b-it", 34, {"kind": "lora", "rows": 1200, "adapter": "outputs/x"}
+)
 
 
 def test_lens_orientation_identity_and_hash_verification(tmp_path):
@@ -263,9 +266,74 @@ def test_two_precisions_of_one_model_share_a_lens_and_the_refusal_is_about_the_m
     bf16 = load_model_spec("gemma3-4b-bf16")
 
     assert four_bit.hf_id != bf16.hf_id, "different files"
-    assert four_bit.source == bf16.source == "google/gemma-3-4b-it", "one model"
-    assert LensIdentity(four_bit.source, 34) == LensIdentity(bf16.source, 34)
-    assert LensIdentity(four_bit.source, 34) != QWEN
+    assert four_bit.base == bf16.base == "google/gemma-3-4b-it", "one base"
+    assert four_bit.training is bf16.training is None, "neither carries training"
+    assert LensIdentity(four_bit.base, 34, four_bit.training) == LensIdentity(
+        bf16.base, 34, bf16.training
+    )
+    assert LensIdentity(four_bit.base, 34, four_bit.training) != QWEN
 
     qwen = load_model_spec("qwen35-4b")
-    assert qwen.source == qwen.hf_id, "unconverted checkpoints declare no separate source"
+    assert qwen.base == qwen.hf_id, "an unconverted checkpoint is its own base"
+
+
+def test_training_separates_two_checkpoints_of_one_base(tmp_path) -> None:
+    """R57: a base and that base after training share family, depth and width, and are not one.
+
+    Nothing about the architecture separates them, and a Jacobian lens is a map of a model's
+    residual geometry, which training moves. This repository measured how much on 2026-09-08:
+    full-depth training shifted every one of thirty-two layers by about a fifth of its weight
+    norm, and two arms' updates to the layers they shared were orthogonal. An identity that
+    stopped at the base would call a base-fitted lens a match for a trained checkpoint.
+
+    Reading a trained model through its base's lens is a real measurement — it shows what training
+    moved — so this is a refusal to do it *by accident*, not a refusal to do it.
+    """
+    maps = {f"J{i}": np.eye(2, dtype=np.float16) for i in range(33)}
+    path, sha = _stamped_lens(tmp_path, "base-lens.npz", maps, GEMMA)
+
+    with pytest.raises(LensIdentityError) as error:
+        LensMaps.load(
+            path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA_TRAINED
+        )
+    assert "base" in str(error.value) and "trained" in str(error.value)
+
+    lens = LensMaps.load(
+        path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA
+    )
+    assert lens.identity == GEMMA
+
+
+def test_a_lens_naming_an_artifact_resolves_to_its_base_rather_than_being_rewritten(
+    tmp_path,
+) -> None:
+    """R60: the loader resolves, the artefact is not migrated, and its digest stays valid.
+
+    A lens stamped before the lineage rule carries an artefact path where the base belongs — a
+    property of a file. Rewriting the archive to fix that would invalidate a digest already
+    published in committed records, to restate something the registry knows. So the loader asks
+    the registry which base that artefact descends from.
+    """
+    from local_llm_lab.models import base_of_artifact, load_model_spec
+
+    bf16 = load_model_spec("gemma3-4b-bf16")
+    assert base_of_artifact(bf16.hf_id) == "google/gemma-3-4b-it"
+    assert base_of_artifact("gemma3-4b") == "google/gemma-3-4b-it", "an entry name resolves too"
+    assert base_of_artifact("someone/unknown") == "someone/unknown", (
+        "an unrecognised name reaches the comparison and is refused there with both names shown, "
+        "rather than being silently rewritten"
+    )
+
+    maps = {f"J{i}": np.eye(2, dtype=np.float16) for i in range(33)}
+    path = tmp_path / "old-stamp.npz"
+    np.savez(
+        path,
+        identity=np.frombuffer(
+            json.dumps({"hf_id": bf16.hf_id, "num_layers": 34}).encode("utf-8"), dtype=np.uint8
+        ),
+        **maps,
+    )
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    lens = LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA)
+    assert lens.identity == GEMMA, "the old spelling resolved to the base it names"

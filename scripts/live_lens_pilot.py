@@ -157,12 +157,36 @@ def main() -> None:
     # constants above made a mismatch impossible by accident; this makes it impossible.
     lens = LensMaps.load(args.lens, expected_sha256=args.lens_sha256,
                          hidden_size=view.hidden_size, num_layers=view.num_layers,
-                         identity=LensIdentity(spec.source, view.num_layers))
+                         identity=LensIdentity(spec.base, view.num_layers, spec.training))
     reader = LensReadout(view, lens)
     sampler = make_sampler(0.0)
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
                 "registry_sha256": file_sha256(registry), "registry": str(registry),
                 "observation_role": spec.chat.observation_role,
+                # The pre-registration requires the globally-attending layers recorded per layer,
+                # and neither Gemma entry declares a band, so `band` above is empty and carries no
+                # span information. This is where the map states its own secondary condition.
+                "attention_span": {str(x): view.attention_span(x - 1) for x in layers},
+                "secondary_comparison": {
+                    "attempted": False,
+                    "reasons": [
+                        "the hosted lens was fitted at 128 tokens, far below the 1,024 sliding "
+                        "window, so it carries no information about the sliding-global contrast",
+                        "only one episode puts any position past 1,024 at all, and the "
+                        "pre-registration forbids a claim from a single episode",
+                    ],
+                },
+                "lens_precision_mismatch": {
+                    "lens_fitted_on": "bfloat16 weights (hosted, neuronpedia/jacobian-lens)",
+                    "run_checkpoint": spec.hf_id,
+                    "same_base": spec.base,
+                    "note": (
+                        "permitted under R60 because the base and training match; the "
+                        "reconstruction difference between the two precisions is unmeasured and "
+                        "this line is present whether or not the precisions differ, so a reader "
+                        "never infers agreement from a missing line"
+                    ),
+                },
                 "observation_role_status": (
                     "provisional, reading only (Chief, 2026-09-08)"
                     if spec.chat.observation_role != "tool"
@@ -176,7 +200,26 @@ def main() -> None:
     for p in plan:
         path = args.out / f"{p['label']}.jsonl"
         if path.exists():
-            print(json.dumps({"event": "skip_existing", "label": p["label"]})); continue
+            # A record says whether it finished, in its own footer, and this used to skip on the
+            # file existing. Stage one found the consequence: a run that died mid-episode left a
+            # partial record, and the retry skipped it as though it had completed, so a truncated
+            # episode would have gone into the map silently. Refuse rather than overwrite — the
+            # writer creates exclusively, and a launcher that deletes records it finds
+            # inconvenient is a launcher with no records.
+            status = None
+            with path.open() as fh:
+                for line in fh:
+                    status = line
+            try:
+                status = json.loads(status)["event"].get("status") if status else None
+            except (ValueError, KeyError, TypeError):
+                status = None
+            if status == "complete":
+                print(json.dumps({"event": "skip_complete", "label": p["label"]})); continue
+            raise SystemExit(
+                f"{path} exists and its footer says {status!r}, not 'complete'. An unfinished "
+                "record is not a finished episode; remove it deliberately and re-run."
+            )
         t1 = time.monotonic(); mx.reset_peak_memory()
         entry = dict(p)
         with RecordWriter(path, {"model": spec.hf_id, "lens_sha256": lens.sha256, "episode": p, "layers": layers}) as write:

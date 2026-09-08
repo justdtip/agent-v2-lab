@@ -126,7 +126,7 @@ def test_native_nonsymmetric_linear_recovery_and_all_layer_archive(tmp_path):
     assert np.linalg.norm(recovered - known) / np.linalg.norm(known) < 0.08
     assert np.linalg.norm(recovered.T - known) > np.linalg.norm(recovered - known) * 2
     out = tmp_path / "tiny-agentic-regression.npz"
-    identity = LensIdentity("toy", "example/tiny", native.num_layers)
+    identity = LensIdentity("example/tiny", native.num_layers)
     metadata = write_lens(
         out,
         result.maps,

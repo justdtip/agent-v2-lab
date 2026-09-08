@@ -31,31 +31,62 @@ class LensIdentityError(ValueError):
     """A lens does not say which model it was fitted on, or says a different one (issue 99)."""
 
 
+def resolve_base(named: str) -> str:
+    """Turn whatever a lens names into the base checkpoint it descends from (R60).
+
+    A lens stamped before the lineage rule may carry an artefact path or a registry entry name
+    where the base belongs. Both are properties of a file. This resolves them by asking the
+    registry which base that artefact is a copy or conversion of, so **the loader does the
+    resolving and the artefact is never rewritten** — Codex's fitted lens carries an absolute
+    local path and its digest is published in four committed records, and a migration would
+    invalidate every one of them to restate something the registry already knows.
+
+    Anything the registry does not recognise is returned unchanged, which is right: an upstream
+    repository id is already a base, and an unknown string should reach the comparison and be
+    refused there with both names shown, rather than be silently rewritten here.
+    """
+    from local_llm_lab.models import base_of_artifact
+
+    return base_of_artifact(named)
+
+
 @dataclass(frozen=True)
 class LensIdentity:
-    """Which **model** a lens was fitted against — not which checkpoint, and not which entry.
+    """What a lens **is** a map of, as opposed to what merely travels with it (R60).
 
-    Two fields, and the change from three is a correction the Gemma pilot forced. It carried the
-    registry entry's name and its `hf_id`, and both are properties of a *file* rather than of a
-    model: `gemma3-4b` and `gemma3-4b-bf16` are two precisions of one model, and the pivot's own
-    ruling is that the pilot runs 4-bit while the hosted lens was fitted on bf16, with the
-    precision mismatch disclosed rather than avoided. An identity built from `hf_id` refused that
-    pairing — a true statement about the files and a false one about the experiment.
+    A Jacobian lens is a map of a particular model's residual geometry. What determines whether
+    it fits a model is the **base checkpoint** it descends from, the **training** applied on top,
+    and the decoder's **depth** — hidden size is checked separately, against the maps themselves.
+    What travels with a lens and decides nothing: the filesystem path of the artefact it was
+    fitted from, a local registry name, the stored precision, the file's digest.
 
-    What it must still separate is what it was built for. Qwen3.5-4B and Gemma 3 4B are **both
-    2560-dimensional**, so hidden size cannot tell them apart; the Qwen lens covers layers 1 to 31
-    and Gemma has 34, so `1 <= 31 < 34` passes every check the loader made and the wrong lens
-    loads in silence. The layer count catches the reverse direction by arithmetic and misses this
-    one, which is worse than no guard, because the direction it catches is the one nobody takes.
-    `model` plus `num_layers` separates every pair this repository holds and does not separate two
-    precisions of one model, which is exactly the line.
+    The Director's rule, and it is a positive statement of what three earlier attempts got wrong
+    by reaching for a property of the artefact when the question was about the model: *if the lens
+    ontologically fits, and the only thing preventing it from loading is essentially a metadata
+    mismatch, we should modify to allow loading.*
+
+    So the loader decides on the first list and **records** the second. Two precisions of one base
+    load, and the difference goes in the manifest. A Qwen lens against Gemma has a different base
+    and is refused, which is the case issue 99 was filed for and the one no other check catches: at
+    2560 dimensions and 31 maps against 34 layers, every check the loader used to make passed.
+
+    ``training`` is what separates a base checkpoint from that checkpoint after further training,
+    which share family, depth and width. This repository measured what training does to the
+    geometry a lens maps: every one of thirty-two layers moved by about a fifth of its weight norm.
+    A base-fitted lens read against a trained model is a real and interesting measurement — it
+    shows what training moved — but it is a declared cross-condition read, never two entries
+    agreeing on architecture.
     """
 
-    model: str
+    base: str
     num_layers: int
+    training: dict | None = None
 
     def as_dict(self) -> dict:
-        return {"model": self.model, "num_layers": int(self.num_layers)}
+        recorded: dict = {"base": self.base, "num_layers": int(self.num_layers)}
+        if self.training is not None:
+            recorded["training"] = self.training
+        return recorded
 
     @classmethod
     def from_dict(cls, value: object) -> LensIdentity:
@@ -64,18 +95,27 @@ class LensIdentity:
         try:
             # `hf_id` is the pre-correction spelling; a lens stamped before the model/checkpoint
             # distinction existed named the model there, which is what it meant.
-            model = value["model"] if "model" in value else value["hf_id"]
+            # Two older spellings are read, because a lens stamped before this field existed
+            # still names the model in the place it had: `model`, then `hf_id`. Both may hold a
+            # local artefact path rather than a base, which `resolve_base` below turns into the
+            # base the registry says that artefact is a conversion of — the loader resolving,
+            # rather than the artefact being rewritten and its published digest invalidated.
+            base = value.get("base") or value.get("model") or value["hf_id"]
             layers = value["num_layers"]
         except (KeyError, TypeError) as error:
-            raise LensIdentityError("lens identity must carry model and num_layers") from error
-        if not isinstance(model, str) or not model:
-            raise LensIdentityError("lens identity model must be a non-empty string")
+            raise LensIdentityError("lens identity must carry base and num_layers") from error
+        if not isinstance(base, str) or not base:
+            raise LensIdentityError("lens identity base must be a non-empty string")
+        training = value.get("training")
+        if training is not None and not isinstance(training, dict):
+            raise LensIdentityError("lens identity training must be a mapping or absent")
         if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
             raise LensIdentityError("lens identity num_layers must be a positive integer")
-        return cls(model, layers)
+        return cls(resolve_base(base), layers, training or None)
 
     def describe(self) -> str:
-        return f"{self.model} ({self.num_layers} layers)"
+        trained = "base" if self.training is None else f"trained: {sorted(self.training)}"
+        return f"{self.base} ({self.num_layers} layers, {trained})"
 
 
 def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:

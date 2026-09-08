@@ -14,7 +14,7 @@ from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
 
 #: The identity every toy lens in this file is fitted for (issue 99). Three layers because
 #: `write_lens` requires all and only the nonfinal maps, and these fixtures write two.
-_TOY = LensIdentity("toy", "example/tiny", 3)
+_TOY = LensIdentity("example/tiny", 3)
 
 
 def api():
@@ -347,7 +347,9 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
     assert progress_event["working_set_share"] == 0.1
     metadata = json.loads(out.with_suffix(".json").read_bytes())
     assert metadata["lambda_grid"] == [0.001, 0.01, 0.1, 1, 10]
-    assert metadata["model"]["hf_id"] == spec.hf_id
+    # The lens records the lineage it was fitted on, not the artefact it was fitted from:
+    # the artefact is where the weights were, and two conversions of one base share a lens (R60).
+    assert metadata["model"]["base"] == spec.base
     assert metadata["layers"] == [1, 2]
     assert "share trajectories" in metadata["held_split_role"]
     assert "not measured" in metadata["generalisation_evaluation"]

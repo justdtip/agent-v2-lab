@@ -84,7 +84,7 @@ def prepared(tmp_path):
         J0=np.eye(2),
         identity=np.frombuffer(
             json.dumps(
-                {"name": spec.name, "hf_id": spec.hf_id, "num_layers": 2}, sort_keys=True
+                {"base": spec.base, "num_layers": 2}, sort_keys=True
             ).encode("utf-8"),
             dtype=np.uint8,
         ),

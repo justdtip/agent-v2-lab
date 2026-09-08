@@ -13,7 +13,11 @@ hf_id: models/gemma-3-4b-it-bf16
 # The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
 # entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted
 # on a model rather than on a file — so the lens identity check compares this and not the path.
-source: google/gemma-3-4b-it
+base: google/gemma-3-4b-it
+# No further training: this is the base checkpoint itself, converted. Stated rather than omitted,
+# because a lens fitted on a base and read against a trained checkpoint of the same base is a
+# different reading and the identity has to be able to say so (R57).
+training_lineage: {}
 family: gemma3
 chat:
   thinking: "unsupported"
