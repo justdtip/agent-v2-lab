@@ -69,3 +69,25 @@ restored it fails.
 
 The `ruff format` diff, as you ruled. Nothing in the format-only hunks is mine, and I checked
 rather than assumed: the hunk list stops at line 1051 and the amendment begins at 1366.
+
+---
+
+## Appended after the Chief's approval: the docstring note, taken
+
+The Chief approved for landing with one note and no change required: after the five-second grace a
+child that ignores its signal is left running with the window closed, and the docstring called that
+outcome worse than either alternative without saying why it is safe.
+
+Taken, because it is the more accurate sentence and the patch had not landed. The `relay` docstring
+now says what protects the box in that case: **the child holds the model-run lock itself**, through
+`load_weights`, so the interlock is intact whatever happens to the window. The window is a
+declaration of intent between seats; the lock is the interlock. Closing an intent whose wrapper is
+already dying is honest, and leaving it open is the failure this verb exists to prevent.
+
+The clause about "worse than either" is replaced rather than extended, because it was the wrong
+reason for the right design: the signal is relayed because it was meant for the command, not only
+for the wrapper around it.
+
+`WINDOW-RUN-amended.patch` is regenerated. **The Chief's review was of the previous file**, so this
+one hunk — the `relay` docstring, no executable line touched — is new since it. 57 tests in
+`test_runlock.py` pass again on the regenerated patch and `ruff check` is clean.

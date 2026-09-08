@@ -1,5 +1,5 @@
 diff --git a/src/local_llm_lab/runlock.py b/src/local_llm_lab/runlock.py
-index ad14fa4..a365021 100644
+index ad14fa4..0c84eb3 100644
 --- a/src/local_llm_lab/runlock.py
 +++ b/src/local_llm_lab/runlock.py
 @@ -57,13 +57,14 @@ import threading
@@ -139,7 +139,7 @@ index ad14fa4..a365021 100644
      }
      try:
          _write_lock(target, payload)
-@@ -1026,6 +1086,73 @@ def load_weights(hf_id: str, **kwargs: Any) -> tuple[Any, Any]:
+@@ -1026,6 +1086,80 @@ def load_weights(hf_id: str, **kwargs: Any) -> tuple[Any, Any]:
      return load(hf_id, **kwargs)
  
  
@@ -174,8 +174,15 @@ index ad14fa4..a365021 100644
 +        ``finally`` does not run on ``SIGTERM`` or ``SIGHUP``: the default disposition ends the
 +        process without unwinding, so a killed wrapper would leave its window exactly as the
 +        CLI's ``announce`` left the one that cost the group eight hours. This is the shape
-+        ``_install_signal_release`` already uses for the lock, with the child added, because a
-+        wrapper that released the slot and left the command running would be worse than either.
++        ``_install_signal_release`` already uses for the lock, with the child added, because the
++        signal was meant for the command and not only for the wrapper around it.
++
++        **What happens to a child that ignores its signal.** After the grace it is left running
++        and the window closes anyway, which sounds like the failure above and is not: that child
++        holds the model-run lock itself, through ``load_weights``, so the box stays protected by
++        the mechanism that was always the real one. The window is a declaration of intent
++        between seats and the lock is the interlock; closing an intent whose wrapper is already
++        dying is honest, and leaving it open would put us back to a window nobody holds.
 +        """
 +        if child is not None and child.poll() is None:
 +            with suppress(ProcessLookupError, OSError):
@@ -213,7 +220,7 @@ index ad14fa4..a365021 100644
  def _window_cli(argv: Sequence[str] | None = None) -> int:
      """``python -m local_llm_lab.runlock announce|end|status`` (issue 95).
  
-@@ -1046,16 +1173,48 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
+@@ -1046,16 +1180,48 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
      opening.add_argument("--seat", required=True)
      opening.add_argument("--purpose", required=True)
      opening.add_argument("--minutes", type=float, required=True)
@@ -263,7 +270,7 @@ index ad14fa4..a365021 100644
      if args.action == "extend":
          token = os.environ.get(WINDOW_HOLDER_ENV, "")
          if not token or not extend_window(token, args.minutes):
-@@ -1079,7 +1238,17 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
+@@ -1079,7 +1245,17 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
          print("window closed")
          return 0
      held = read_window()
