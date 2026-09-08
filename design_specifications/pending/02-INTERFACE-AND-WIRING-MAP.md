@@ -1101,5 +1101,17 @@ it was a float32 promotion against a bfloat16 forward, and none of it was interp
 residual's norm. Report relative, or report absolute **with** the norm. This applies to every
 number this repository calls an agreement, an error or a discrepancy.
 
+**R56(e) — a control must patch the path the gate actually runs through, and a refactor moves that
+path without breaking the control visibly.** The port's negative control patched `masks`. Then the
+Chief's hoist was applied, so `diagnostic_native_final_residual` observes once and **no longer calls
+`masks` at all** — and the control went on passing, silently, because it was patching a method that
+had left the path. An optimisation disarmed the instrument that proves the thing it optimised, and
+nothing failed. Neither the person who ruled for the hoist nor the person who wrote the control
+noticed; it surfaced only because the control's *number* was checked against the uncontrolled one
+and found identical to the last bit. So: after any change to the code a control patches — and a
+hoist, an inline, a rename or a caching change all count — **re-demonstrate that the control still
+bites** before quoting the gate. A control is code and it rots like code, except that its rot is
+silent by construction, because a disarmed control reports success.
+
 Together these are why the port was accepted on evidence rather than on a passing number:
 `research/records/GEMMA3-PORT-ACCEPTANCE-2026-09-08/`.
