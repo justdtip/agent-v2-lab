@@ -29,10 +29,22 @@ from local_llm_lab.pipeline.runner import (
 from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
 
 
-def test_registered_models_include_all_three_backbones() -> None:
+def test_the_registry_lists_every_declared_backbone() -> None:
+    """A literal list, so adding a model is a deliberate edit here rather than a silent one.
+
+    It was three names and is four: `gemma3-4b` landed with the Gemma pivot. This test is in a
+    file that reaches the model library, so it was skipped under the window that verified that
+    landing and the tree was red until this line moved. The skip count in a run's summary is the
+    coverage statement, not a footnote.
+    """
     from local_llm_lab.models import registered_models
 
-    assert registered_models() == ["qwen25-coder-3b", "qwen35-4b", "qwen35-9b"]
+    assert registered_models() == [
+        "gemma3-4b",
+        "qwen25-coder-3b",
+        "qwen35-4b",
+        "qwen35-9b",
+    ]
 
 
 def test_raw_legacy_hf_id_uses_qwen25_compatibility_defaults() -> None:
