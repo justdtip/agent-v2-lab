@@ -32,10 +32,38 @@ nothing and the model is told the workspace is empty. Reproduced on the real tas
 lists the workspace top level, so a model must guess the string `workspace` exactly, and every near
 miss is answered with a confident, false "empty".
 
-In the corrected re-run of `update-0028` the model's **first** call is `list_files("/")`. It is told
-the workspace is empty. It then writes, correctly, that there is no configuration file, and
-concludes it must create one. No tool creates a file, so it loops. **Every subsequent turn is sound
-reasoning from a false observation that our environment supplied.**
+### The exchange, verbatim, from the model's own context at turn 2
+
+Read the system prompt's third line first, because it is the part that stings.
+
+> **[system]** ... Rules:
+> - Inspect state with tools instead of guessing paths, file names, or values.
+>
+> **[user]** In `workspace/test/0028/config.ini`, change mode from fast to audit. Inspect the file
+> first, re-read it to verify, and report it as `mode=<target>`.
+>
+> **[assistant]** Progress note: Need to inspect the configuration file to see its current mode.
+> `{"name": "list_files", "arguments": {"directory": "/"}}`
+>
+> **[tool]** `FILES: (none)`
+>
+> **[assistant]** Progress note: The file list is empty, so there is no configuration file to
+> inspect. I need to create a configuration file to test.
+> `{"name": "read_file", "arguments": {"path": "/test/0028/config.ini"}}`
+>
+> **[tool]** `ERROR: file not found: /test/0028/config.ini`
+
+**We told the model to inspect rather than guess. It inspected. The instrument lied. We then
+recorded the outcome as the model's failure.** Every subsequent turn is sound reasoning from a
+false observation that our environment supplied.
+
+**This also explains the dropped path component, which had no explanation before.** `list_files("/")`
+returned without an error, which tells the model that `/` is a real directory in this workspace. The
+prompt's `workspace/` then reads naturally as the name of the sandbox rather than as a path
+component, so the file becomes `/test/0028/config.ini`. That is a coherent inference from the
+evidence available, and our environment supplied the evidence. It is why the token `workspace` is
+absent from every read layer's top-10 at every fork: the model was not failing to recall the string,
+it had already ruled the string out as a directory name, correctly, on our authority.
 
 This violates a rule already written in our own wiring map, R56(f). It is a cheap fix: raise on a
 directory that cannot match, exactly as `read_file` does.
