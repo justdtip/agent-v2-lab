@@ -46,7 +46,7 @@ from local_llm_lab.runlock import (
 )
 from local_llm_lab.spawn import run
 
-FORMAT = "gemma-transcript-lens-registration-v1"
+FORMAT = "gemma-transcript-lens-registration-v2"
 FIT_MODELS = ("gemma3-4b-bf16", "gemma3-4b")
 EVALUATION = {
     "max_steps": 24,
@@ -103,7 +103,13 @@ def tokenizer_identity_from_directory(directory):
 def verify_rendering_gate(gate):
     root = primary_worktree()
     commits = {}
-    for key, prefix in (("landed_commit", "7d2a18a"), ("ruling_commit", "a1ff0b0")):
+    for key, prefix in (
+        ("landed_commit", "7d2a18a"),
+        ("ruling_commit", "a1ff0b0"),
+        ("environment_commit", "020aa89"),
+        ("second_amendment_commit", "ec4b9d1"),
+        ("span_commit", "2edad6e"),
+    ):
         supplied = gate.get(key, "")
         if not isinstance(supplied, str) or not supplied.startswith(prefix):
             raise ValueError("registration must bind the landed rendering fix and amended ruling")
@@ -123,6 +129,14 @@ def verify_rendering_gate(gate):
     records = gate.get("files", [])
     if not records:
         raise ValueError("rendering gate requires committed confirming evidence hashes")
+    expected_revisions = {
+        "design_specifications/pending/CODEX-TASKS-2026-09-08.md": commits[
+            "second_amendment_commit"
+        ],
+        "src/local_llm_lab/pipeline/env.py": commits["environment_commit"],
+        "src/local_llm_lab/agent_tasks.py": commits["environment_commit"],
+        "src/local_llm_lab/pipeline/live_lens/session.py": commits["span_commit"],
+    }
     suffixes = set()
     for record in records:
         if record.get("storage") != "git_blob":
@@ -131,6 +145,10 @@ def verify_rendering_gate(gate):
         relative = path.relative_to(root).as_posix()
         suffixes.add(relative)
         commit = record.get("commit")
+        if relative in expected_revisions and commit != expected_revisions[relative]:
+            raise ValueError(
+                "environment/span/amendment evidence is not bound to its required revision"
+            )
         if commit not in commits.values():
             raise ValueError("rendering evidence commit is not one of the pinned gate commits")
         blob = run(
@@ -150,6 +168,9 @@ def verify_rendering_gate(gate):
         "design_specifications/pending/CODEX-TASKS-2026-09-08.md",
         "research/records/GEMMA3-JSPACE-MAP-2026-09-08/DIAGNOSTIC-RERUN.md",
         "src/local_llm_lab/pipeline/protocol.py",
+        "src/local_llm_lab/pipeline/env.py",
+        "src/local_llm_lab/agent_tasks.py",
+        "src/local_llm_lab/pipeline/live_lens/session.py",
         "configs/models/gemma3-4b.yaml",
         "configs/models/gemma3-4b-bf16.yaml",
     }

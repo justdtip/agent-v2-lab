@@ -48,7 +48,8 @@ def identity(tmp_path):
     }
 
 
-def make_record(tmp_path, *, turns=5, long=False):
+def make_record(tmp_path, *, turns=5, long=False, tokenizer=None):
+    tokenizer = Tokenizer() if tokenizer is None else tokenizer
     spec = load_model_spec("gemma3-4b")
     ident = {"base": spec.base, "training": None, "num_layers": 34}
     tok_id = identity(tmp_path)
@@ -73,9 +74,9 @@ def make_record(tmp_path, *, turns=5, long=False):
                 task_id="train-read-0000-clean", step=step, keep_last=2, messages=messages
             )
             with capture.generation(
-                lambda *_a, **_k: None, Tokenizer(), prompt, turn_cache=None
+                lambda *_a, **_k: None, tokenizer, prompt, turn_cache=None
             ) as model:
-                model(Inputs(Tokenizer().encode(prompt)))
+                model(Inputs(tokenizer.encode(prompt)))
                 capture.emitted(ord("n"))
                 model(Inputs([ord("n")]))
                 capture.emitted(ord("!"))  # emitted, not consumed
@@ -226,7 +227,9 @@ def test_concentration_counts_member_generation_and_following_observations():
             "ids": [0] * 4,
             "score_positions": [0, 1, 2, 3],
             "generated_mask": [False, False, True, True],
-            "spans": ["observation", "observation", "note", "template"],
+            "spans": ["observation", "observation", "note", "call_skeleton"],
+            "window_start": 0,
+            "bos": t._bos_evidence([0] * 4, None),
         }
         for i in range(4)
     ]
@@ -323,3 +326,103 @@ def test_context_length_must_match_frozen_source_registration(tmp_path):
     path.write_bytes(t.encoded(manifest))
     with pytest.raises(ValueError, match="source identity"):
         t.read_transcript_corpus(path)
+
+
+def test_generated_facets_reuse_shared_span_labeller_at_capture_and_read(tmp_path):
+    pieces = [
+        "Inspect first.",
+        '```json\n{"name":"read_file","arguments":{',
+        '"path":',
+        ' "/work',
+        'space"}}\n```',
+    ]
+
+    class PieceTokenizer:
+        bos_token = None
+        bos_token_id = None
+
+        def encode(self, text, **kwargs):
+            return [999]
+
+        def decode(self, ids):
+            return "".join(pieces[i] for i in ids)
+
+    tokenizer = PieceTokenizer()
+    labels, _, _ = t._generated_labels(tokenizer, list(range(len(pieces))))
+    assert labels == ["note", "call_skeleton", "call_skeleton", "call_argument", "call_argument"]
+    chat, _, _ = t._generated_labels(tokenizer, list(range(len(pieces))), kind="chat")
+    assert chat == ["chat_prose"] * len(pieces)
+    record = tmp_path / "facets.jsonl"
+    with t.TranscriptWriter(record, {}) as writer:
+        capture = t.TranscriptCapture(writer, materialize=lambda _: None)
+        capture.set_context(task_id="train-read-0000-clean", step=0, messages=[])
+        with capture.generation(
+            lambda *_a, **_k: None, tokenizer, "prompt", turn_cache=None
+        ) as model:
+            model(Inputs([999]))
+            for token in range(len(pieces)):
+                capture.emitted(token)
+                model(Inputs([token]))
+    events = t.read_transcript(record)
+    assert [e["span"] for e in events if e["kind"] == "emitted"] == labels
+    assert list(t._turns(events))[0][0]["emitted_spans"] == labels
+    malformed, _, _ = t._generated_labels(tokenizer, [0, 1, 2, 3])
+    assert malformed[-1] == "call_argument"
+
+
+def test_position_histograms_and_bos_distinguish_capture_from_fresh_replay(tmp_path):
+    class BosTokenizer(Tokenizer):
+        bos_token_id = 1
+
+        def encode(self, text, **kwargs):
+            return [1] + super().encode(text, **kwargs)
+
+        def __call__(self, text, **kwargs):
+            return {
+                "input_ids": self.encode(text),
+                "offset_mapping": [(0, 0)] + [(i, i + 1) for i in range(len(text))],
+            }
+
+    tokenizer = BosTokenizer()
+    source, spec, ident, tok_id = make_record(tmp_path, long=True, tokenizer=tokenizer)
+    path = tmp_path / "corpus.json"
+    manifest = t.build_transcript_corpus(
+        [source],
+        tokenizer,
+        spec,
+        path,
+        tokenizer_identity=tok_id,
+        model_identity=ident,
+        max_tokens=2048,
+    )
+    rows = t.read_transcript_corpus(path)
+    assert any(
+        row["window_start"] > 0 and not row["bos"]["starts_with_captured_bos"] for row in rows
+    )
+    assert all(row["bos"]["inserted_bos_tokens"] == 0 for row in rows)
+    assert all(
+        row["original_position_range"]
+        == [row["window_start"], row["window_start"] + len(row["ids"])]
+        for row in rows
+    )
+    assert all(row["replay_position_range"] == [0, len(row["ids"])] for row in rows)
+    for group in manifest["counts"].values():
+        for scope, denominator in [("scored", group["positions"]), ("all_input", group["tokens"])]:
+            hist = group["position_distributions"][scope]
+            assert sum(hist["original_captured_offsets"].values()) == denominator
+            assert sum(hist["actual_replay_positions"].values()) == denominator
+        assert sum(group["generated_spans"].values()) == group["generated"]
+        assert sum(group["input_spans"].values()) + group["generated"] == group["positions"]
+        assert "observation" not in group["generated_spans"]
+    fit = manifest["counts"]["fit"]
+    assert fit["bos"]["scored_bos_positions"] == 1
+    assert (
+        max(map(int, fit["position_distributions"]["scored"]["original_captured_offsets"])) > 2047
+    )
+    assert max(map(int, fit["position_distributions"]["scored"]["actual_replay_positions"])) <= 2047
+    assert "not asserted native RoPE" in manifest["position_policy"]
+    assert (
+        manifest["acceptance"]["non_prose_span_check"]["denominator"]
+        == "all fitted scored positions"
+    )
+    assert "note" in manifest["acceptance"]["non_prose_span_check"]["eligible_counts"]

@@ -268,16 +268,28 @@ def committed_rendering_gate(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "primary_worktree", lambda: primary)
     monkeypatch.setattr(mod, "__file__", str(running / "scripts" / "driver.py"))
     landed, ruling = "7d2a18a" + "0" * 33, "a1ff0b0" + "0" * 33
+    environment, amendment, span = "020aa89" + "0" * 33, "ec4b9d1" + "0" * 33, "2edad6e" + "0" * 33
     paths = [
         "design_specifications/pending/CODEX-TASKS-2026-09-08.md",
         "research/records/GEMMA3-JSPACE-MAP-2026-09-08/DIAGNOSTIC-RERUN.md",
         "src/local_llm_lab/pipeline/protocol.py",
+        "src/local_llm_lab/pipeline/env.py",
+        "src/local_llm_lab/agent_tasks.py",
+        "src/local_llm_lab/pipeline/live_lens/session.py",
         "configs/models/gemma3-4b.yaml",
         "configs/models/gemma3-4b-bf16.yaml",
     ]
     blobs, records = {}, []
     for relative in paths:
-        commit = ruling if relative.startswith("design_specifications/") else landed
+        commit = (
+            amendment
+            if relative.startswith("design_specifications/")
+            else environment
+            if relative in ("src/local_llm_lab/pipeline/env.py", "src/local_llm_lab/agent_tasks.py")
+            else span
+            if relative.endswith("live_lens/session.py")
+            else landed
+        )
         blob = ("committed " + relative).encode()
         blobs[commit + ":" + relative] = blob
         for root in (primary, running):
@@ -304,7 +316,14 @@ def committed_rendering_gate(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "run", git)
     return (
         mod,
-        {"landed_commit": landed, "ruling_commit": ruling, "files": records},
+        {
+            "landed_commit": landed,
+            "ruling_commit": ruling,
+            "files": records,
+            "environment_commit": environment,
+            "second_amendment_commit": amendment,
+            "span_commit": span,
+        },
         primary,
         running,
     )
@@ -373,3 +392,18 @@ def test_capture_rechecks_identity_and_window_before_complete_footer(
     events = [json.loads(line)["event"] for line in record.read_text().splitlines()]
     assert events[-1] == {"kind": "end_record", "status": "aborted"}
     assert calls[:4] == ["window", "snapshot", "window", "run"]
+
+
+def test_environment_and_second_amendment_gate_cannot_be_omitted(committed_rendering_gate):
+    mod, gate, _, _ = committed_rendering_gate
+    gate.pop("environment_commit")
+    with pytest.raises(ValueError, match="landed rendering fix"):
+        mod.verify_rendering_gate(gate)
+
+
+def test_environment_evidence_must_bind_environment_fix_revision(committed_rendering_gate):
+    mod, gate, _, _ = committed_rendering_gate
+    record = next(row for row in gate["files"] if row["path"].endswith("pipeline/env.py"))
+    record["commit"] = gate["landed_commit"]
+    with pytest.raises(ValueError, match="required revision"):
+        mod.verify_rendering_gate(gate)

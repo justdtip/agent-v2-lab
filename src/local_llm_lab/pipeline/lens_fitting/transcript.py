@@ -14,15 +14,27 @@ from pathlib import Path
 from local_llm_lab.agent_protocol import ActionParseError
 from local_llm_lab.forward import ForwardLedger, encode_prompt
 from local_llm_lab.pipeline.lens_fitting.corpus import (
-    _assistant_ranges,
     _labels,
     _training_id,
     _validate_offsets,
 )
+from local_llm_lab.pipeline.live_lens.session import SpanLabeller
 from local_llm_lab.pipeline.protocol import _as_declared_roles, parse_turn, system_prompt
 
-FORMAT = "transcript-native-replay-v1"
-SPANS = ("system", "task", "observation", "note", "call", "template")
+FORMAT = "transcript-native-replay-v2"
+GENERATED_SPANS = ("note", "call_skeleton", "call_argument", "chat_prose")
+INPUT_SPANS = ("system", "task", "observation", "assistant_history", "template")
+SPANS = INPUT_SPANS + GENERATED_SPANS
+BOS_POLICY = (
+    "Preserve captured IDs exactly; never prepend BOS to replay windows, including "
+    "mid-transcript windows, so replay retains model-seen tokenization rather than "
+    "introducing a new document-initial signal."
+)
+POSITION_POLICY = (
+    "Original positions are zero-based captured token offsets within each generation turn, "
+    "not asserted native RoPE positions. Replay positions are zero-based fresh-window indices. "
+    "All-input histograms include repeated context; scored histograms count each owned position once."
+)
 REPLAY_CAVEAT = (
     "Native replay of captured token IDs in fresh windows of the registered context length; generation forward "
     "partitions, longer context, and absolute position origins are not preserved. "
@@ -146,10 +158,16 @@ class TranscriptCapture:
             raise ValueError("transcript capture requires one active turn and no cache reuse")
         self.ledger = ForwardLedger(encode_prompt(tokenizer, prompt))
         self.tokenizer = tokenizer
+        self.labeller = SpanLabeller("agentic")
+        self.decoded = ""
         self.turn += 1
         self.active = True
         self.write(
-            "begin_turn", prompt=prompt, prompt_ids=self.ledger.prompt_ids, context=self.context
+            "begin_turn",
+            prompt=prompt,
+            prompt_ids=self.ledger.prompt_ids,
+            context=self.context,
+            bos_token_id=getattr(tokenizer, "bos_token_id", None),
         )
         success = False
         try:
@@ -169,7 +187,14 @@ class TranscriptCapture:
         if not self.active:
             raise ValueError("emission outside capture")
         self.ledger.emitted(token)
-        self.write("emitted", token=token)
+        decoded = self.tokenizer.decode(self.ledger.generated)
+        if not decoded.startswith(self.decoded):
+            raise ValueError(
+                "continuation decode is not prefix-stable; explicit alignment required"
+            )
+        piece = decoded[len(self.decoded) :]
+        self.write("emitted", token=token, text=piece, span=self.labeller.feed(piece))
+        self.decoded = decoded
 
 
 def _turns(events):
@@ -186,6 +211,12 @@ def _turns(events):
             if type(step) is not int or step != task_steps.get(task_id, -1) + 1:
                 raise ValueError("non-contiguous source task steps")
             task_steps[task_id] = step
+            bos = event.get("bos_token_id")
+            if "bos_token_id" not in event or (
+                bos is not None and (type(bos) is not int or bos < 0)
+            ):
+                raise ValueError("capture requires an explicit tokenizer BOS ID or null")
+            labeller, pieces, emitted_spans = SpanLabeller("agentic"), [], []
             current = (event, ForwardLedger(event["prompt_ids"]))
             previous_turn = event["turn"]
         elif current is None or event.get("turn") != previous_turn:
@@ -194,6 +225,11 @@ def _turns(events):
             current[1].record(event["offset"], event["ids"])
         elif kind == "emitted":
             current[1].emitted(event["token"])
+            piece = event.get("text")
+            if not isinstance(piece, str) or event.get("span") != labeller.feed(piece):
+                raise ValueError("captured generated span differs from shared SpanLabeller")
+            pieces.append(piece)
+            emitted_spans.append(event["span"])
         elif kind == "end_turn":
             begin, ledger = current
             if (
@@ -205,7 +241,18 @@ def _turns(events):
                 raise ValueError("incomplete transcript forward ledger")
             if not isinstance(event.get("emitted_text"), str):
                 raise ValueError("source turn requires decoded actual emissions")
-            begin = {**begin, "emitted_text": event["emitted_text"]}
+            if event["emitted_text"] != "".join(pieces):
+                raise ValueError("emitted token pieces differ from full source decode")
+            cursor, emitted_offsets = 0, []
+            for piece in pieces:
+                emitted_offsets.append([cursor, cursor + len(piece)])
+                cursor += len(piece)
+            begin = {
+                **begin,
+                "emitted_text": event["emitted_text"],
+                "emitted_spans": emitted_spans,
+                "emitted_offsets": emitted_offsets,
+            }
             yield begin, ledger
             current = None
         else:
@@ -215,6 +262,8 @@ def _turns(events):
 
 
 def _prompt_alignment(tokenizer, spec, begin):
+    if begin["bos_token_id"] != getattr(tokenizer, "bos_token_id", None):
+        raise ValueError("capture BOS identity differs from the frozen tokenizer")
     text, ids = begin["prompt"], begin["prompt_ids"]
     bos = getattr(tokenizer, "bos_token", None)
     alignment = tokenizer(
@@ -261,7 +310,7 @@ def _prompt_semantics(spec, begin, offsets):
             raise ValueError("cannot align rendered message to captured prompt")
         end, role = start + len(content), message["role"]
         if role == "assistant":
-            ranges.extend(_assistant_ranges(content, start))
+            ranges.append((start, end, "assistant_history"))
         else:
             label = {"system": "system", "user": "task", "tool": "observation"}[role]
             ranges.append((start, end, label))
@@ -293,10 +342,11 @@ def _prompt_semantics(spec, begin, offsets):
     return labels, owned, audit
 
 
-def _generated_labels(tokenizer, tokens):
+def _generated_labels(tokenizer, tokens, *, kind="agentic"):
     # Generation is bounded by evaluation max_tokens (200). Prefix decoding is confined
     # to the continuation, never performed across the growing prompt history.
-    text, offsets = "", []
+    text, offsets, labels = "", [], []
+    labeller = SpanLabeller(kind)
     for end in range(1, len(tokens) + 1):
         decoded = tokenizer.decode(tokens[:end])
         if not decoded.startswith(text):
@@ -304,8 +354,9 @@ def _generated_labels(tokenizer, tokens):
                 "continuation decode is not prefix-stable; explicit alignment required"
             )
         offsets.append([len(text), len(decoded)])
+        labels.append(labeller.feed(decoded[len(text) :]))
         text = decoded
-    return _labels(offsets, _assistant_ranges(text, 0)), text, offsets
+    return labels, text, offsets
 
 
 def _window_rule(max_tokens):
@@ -313,6 +364,17 @@ def _window_rule(max_tokens):
         "context_tokens": max_tokens,
         "max_scored_block_tokens": max_tokens // 2,
         "policy": "end at scored block end; retain maximal available preceding context",
+    }
+
+
+def _bos_evidence(ids, token_id):
+    return {
+        "token_id": token_id,
+        "starts_with_captured_bos": token_id is not None and ids[0] == token_id,
+        "bos_positions": [
+            i for i, token in enumerate(ids) if token_id is not None and token == token_id
+        ],
+        "inserted_bos_tokens": 0,
     }
 
 
@@ -324,6 +386,21 @@ def _counts(rows, *, max_tokens):
             "positions": 0,
             "spans": dict.fromkeys(SPANS, 0),
             "generated": 0,
+            "generated_spans": dict.fromkeys(GENERATED_SPANS, 0),
+            "input_spans": dict.fromkeys(INPUT_SPANS, 0),
+            "position_distributions": {
+                scope: {
+                    kind: {} for kind in ("original_captured_offsets", "actual_replay_positions")
+                }
+                for scope in ("scored", "all_input")
+            },
+            "bos": {
+                "rows_starting_with_captured_bos": 0,
+                "rows_starting_without_bos": 0,
+                "input_bos_positions": 0,
+                "scored_bos_positions": 0,
+                "inserted_bos_tokens": 0,
+            },
             "positions_beyond_1024": 0,
             "full_context_rows": 0,
             "short_rows": 0,
@@ -335,7 +412,29 @@ def _counts(rows, *, max_tokens):
         c["sequences"] += 1
         c["tokens"] += len(row["ids"])
         c["full_context_rows" if len(row["ids"]) == max_tokens else "short_rows"] += 1
+        bos = row["bos"]
+        c["bos"][
+            "rows_starting_with_captured_bos"
+            if bos["starts_with_captured_bos"]
+            else "rows_starting_without_bos"
+        ] += 1
+        c["bos"]["input_bos_positions"] += len(bos["bos_positions"])
+        for scope, positions in (
+            ("scored", row["score_positions"]),
+            ("all_input", range(len(row["ids"]))),
+        ):
+            for i in positions:
+                for kind, value in (
+                    ("original_captured_offsets", row["window_start"] + i),
+                    ("actual_replay_positions", i),
+                ):
+                    histogram = c["position_distributions"][scope][kind]
+                    histogram[str(value)] = histogram.get(str(value), 0) + 1
         for i in row["score_positions"]:
+            if i in bos["bos_positions"]:
+                c["bos"]["scored_bos_positions"] += 1
+            facet = "generated_spans" if row["generated_mask"][i] else "input_spans"
+            c[facet][row["spans"][i]] += 1
             c["positions"] += 1
             c["spans"][row["spans"][i]] += 1
             c["generated"] += int(row["generated_mask"][i])
@@ -440,15 +539,26 @@ def transcript_acceptance(rows, turns, *, max_tokens):
         reasons.append("no fitted position actually exceeds the 1024-token sliding window")
     if not any(
         10 * counts["fit"]["spans"][span] > fit["positions"]
-        for span in ("observation", "note", "call")
+        for span in ("observation", "note", "call_skeleton", "call_argument")
     ):
         reasons.append(
-            "no agentic note/call/observation span exceeds ten percent of fitted positions"
+            "no agentic note/call skeleton/call argument/observation span exceeds ten percent of fitted positions"
         )
     return {
         "status": "ruling_required" if reasons else "passed",
         "reasons": reasons,
         "concentration": concentration,
+        "non_prose_span_check": {
+            "denominator": "all fitted scored positions",
+            "positions": fit["positions"],
+            "eligible_counts": {
+                name: counts["fit"]["spans"][name]
+                for name in ("observation", "note", "call_skeleton", "call_argument")
+            },
+            "note_scope": "Linguistic prose, retained as the originally eligible agentic progress-note facet.",
+            "generated_only_denominator": counts["fit"]["generated"],
+            "generated_only_counts": counts["fit"]["generated_spans"],
+        },
         "repeated_runs": runs,
         "repeated_run_rule": (
             "consecutive canonical(name,arguments) equal calls; length>=2 includes first member; "
@@ -497,7 +607,7 @@ def build_transcript_corpus(
             labels, generated_text, generated_offsets = _generated_labels(
                 tokenizer, ledger.generated
             )
-            if generated_text != begin["emitted_text"]:
+            if generated_text != begin["emitted_text"] or labels != begin["emitted_spans"]:
                 raise ValueError("source emission decode differs from corpus tokenizer")
             ids = ledger.tokens[: n_prompt + consumed]
             spans.extend(labels[:consumed])
@@ -511,6 +621,7 @@ def build_transcript_corpus(
                     "task_id": context["task_id"],
                     "step": context["step"],
                     "prompt_tokens": n_prompt,
+                    "bos_token_id": begin["bos_token_id"],
                     "consumed_emitted": consumed,
                     "emitted_unconsumed": len(ledger.generated) - consumed,
                     "consumed_unemitted": ledger.offset - n_prompt - consumed,
@@ -539,6 +650,9 @@ def build_transcript_corpus(
                         "turn_index": turn_index,
                         "step_index": context["step"],
                         "window_start": start,
+                        "original_position_range": [start, end],
+                        "replay_position_range": [0, end - start],
+                        "bos": _bos_evidence(ids[start:end], begin["bos_token_id"]),
                         "split": split,
                         "domain": "agentic",
                         "ids": ids[start:end],
@@ -568,6 +682,9 @@ def build_transcript_corpus(
         "sequences": {"path": str(sequences_path), "sha256": hashlib.sha256(data).hexdigest()},
         "counts": _counts(rows, max_tokens=max_tokens),
         "replay_caveat": REPLAY_CAVEAT,
+        "bos_policy": BOS_POLICY,
+        "position_policy": POSITION_POLICY,
+        "generated_span_classifier": "local_llm_lab.pipeline.live_lens.session.SpanLabeller",
         "split_rule": "every fifth source turn held; before windowing; trajectories may overlap",
         "score_rule": "initial prompt once; new observation wrapper/content once; consumed emitted tokens once",
         "window_rule": _window_rule(max_tokens),
@@ -625,6 +742,10 @@ def read_transcript_corpus(manifest_path):
         or max_tokens % 2
         or manifest.get("window_rule") != _window_rule(max_tokens)
         or manifest.get("replay_caveat") != REPLAY_CAVEAT
+        or manifest.get("bos_policy") != BOS_POLICY
+        or manifest.get("position_policy") != POSITION_POLICY
+        or manifest.get("generated_span_classifier")
+        != "local_llm_lab.pipeline.live_lens.session.SpanLabeller"
     ):
         raise ValueError("unsupported transcript corpus schema")
     _validate_identity(manifest["model_identity"], manifest["tokenizer"])
@@ -681,6 +802,7 @@ def read_transcript_corpus(manifest_path):
             or turn["task_id"] != begin["context"]["task_id"]
             or turn["step"] != begin["context"]["step"]
             or turn["prompt_tokens"] != n
+            or turn["bos_token_id"] != begin["bos_token_id"]
             or turn["consumed_emitted"] != consumed
             or turn["emitted_unconsumed"] != len(ledger.generated) - consumed
             or turn["consumed_unemitted"] != ledger.offset - n - consumed
@@ -693,6 +815,8 @@ def read_transcript_corpus(manifest_path):
         ):
             raise ValueError("source emitted action differs from corpus action audit")
         generated_offsets = turn["generated_offsets"]
+        if generated_offsets != begin["emitted_offsets"]:
+            raise ValueError("generated boundaries differ from captured token pieces")
         # Empty decode offsets are allowed for special tokens; all offsets must be
         # contiguous prefixes and bounded by the recorded decoded continuation.
         previous = 0
@@ -710,9 +834,13 @@ def read_transcript_corpus(manifest_path):
             previous = pair[1]
         if previous != len(turn["generated_text"]):
             raise ValueError("incomplete generated boundary audit")
-        spans.extend(
-            _labels(generated_offsets, _assistant_ranges(turn["generated_text"], 0))[:consumed]
-        )
+        labeller = SpanLabeller("agentic")
+        generated_labels = [
+            labeller.feed(turn["generated_text"][a:b]) for a, b in generated_offsets
+        ]
+        if generated_labels != begin["emitted_spans"]:
+            raise ValueError("generated boundary labels differ from captured SpanLabeller facets")
+        spans.extend(generated_labels[:consumed])
         owned.extend(range(n, n + consumed))
         if owned != turn["eligible_positions"] or audit != turn["prompt_boundary_audit"]:
             raise ValueError("semantic score ownership audit mismatch")
@@ -747,6 +875,9 @@ def read_transcript_corpus(manifest_path):
             or row["source"] != turn["source"]
             or row["task_id"] != turn["task_id"]
             or row["step_index"] != turn["step"]
+            or row["original_position_range"] != [start, start + len(ids)]
+            or row["replay_position_range"] != [0, len(ids)]
+            or row["bos"] != _bos_evidence(ids, turn["bos_token_id"])
             or not 0 < len(ids) <= max_tokens
             or ids != ids_by_turn[t][start : start + len(ids)]
             or row["spans"] != spans_by_turn[t][start : start + len(ids)]
