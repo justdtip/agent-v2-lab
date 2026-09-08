@@ -1262,9 +1262,19 @@ protocol rather than an R47 breach, since R47's literal terms were met.
 **R61 — heavy work announces a window whether or not it loads a model.** The lock and the window
 were both built to prevent a second model load, and neither says anything about a job that
 saturates the machine without loading one. On 2026-09-08 a five-agent audit that correctly took no
-lock drove the load average to 43 and changed another seat's wall-clock measurements by a factor of
-two and a half. The seat that ran it was following the rule as written and still spoiled a
-measurement, which makes this a hole in the mechanism rather than a lapse by anyone.
+lock drove the load average to 43 while another seat was timing a run. The seat that ran it was
+following the rule as written and still spoiled a measurement, which makes this a hole in the
+mechanism rather than a lapse by anyone.
+
+*Correction, CRO, 2026-09-08.* This rule was first written quoting a factor of two and a half for
+the damage to that seat's wall-clock. **That figure is withdrawn by the seat that produced it** —
+the laptop suspended during the same run, so contention and suspension cannot be separated and no
+contamination factor is recoverable from it. The timings from that run are uninterpretable rather
+than inflated by a known amount, and nothing downstream may quote a number derived from them. The
+rule stands on the load average of 43 alone, which needs no comparator: a machine at 43 on twelve
+cores is not a machine anyone else can measure on. Withdrawing the figure strengthens the rule
+rather than weakening it, because the hole was never in the size of the damage but in the fact that
+a correctly-behaved seat could do damage at all.
 
 `announce_window` is already independent of `hold_model_run_lock`, so nothing new has to be built:
 a job that will occupy the machine announces, with its purpose and expected minutes, and a seat
@@ -1280,3 +1290,32 @@ step counts, loop detections and failure shapes, and records the overlap window 
 The corollary bites the other way too: **a timing is never evidence unless the machine's state
 during it is known**, which is why R47's projections and this rule's announcements are the same
 mechanism doing two jobs.
+
+**R61(c) — a window names a process that will outlive it, or it is worse than no window.**
+`announce_window` takes the holder pid as an argument precisely because the obvious default was
+wrong, and its docstring says so: the CLI's `announce` exits a second after it writes, so it passes
+`os.getppid()` — the interactive shell that exports the token and stays alive to hold it. That
+assumption is true for a seat at a terminal and false for every seat driven by a tool harness,
+where each command runs in a fresh shell that is gone before the next one starts. On 2026-09-08 the
+CRO announced a 75-minute window this way and `runlock status` reported *"holder pid 67432: not
+running — this window has no live holder"* from the moment it opened.
+
+The failure is worse than the absence it replaces. A missing window says the box is free, which is
+checkable. A window with a dead holder says the box is held by someone who has crashed, and R45
+gives a reader no safe move: clearing another seat's state is forbidden, so they either stand off a
+free machine or override a mechanism they were told never to override. This is the same shape as
+R45(c) — a seat idling beside an idle box because our own bookkeeping told it something untrue —
+and it is the second instance in one day.
+
+So: **a seat whose shell does not persist must announce against a process that does, and must check
+`runlock status` after announcing and see `running` before it starts work.** `runlock announce`
+now takes `--holder-pid` for exactly this, landed by the D-CRO the same hour: the default parent
+stays right for an interactive seat and for a launcher script, and a harness-driven seat names
+something that will actually live — the run it is about to start, or a sentinel held for the
+window's duration. The CRO's audit that day used the latter, spawned for the window and ended with
+it.
+
+The flag removes the difficulty but not the obligation, because nothing in the mechanism can tell a
+caller that the pid it passed was a good one. **The check is the rule.** A seat announces, then
+reads `runlock status` back and sees `running` before it starts work. Announcing is not holding,
+and a mechanism that reports its own state is only useful to someone who looks.

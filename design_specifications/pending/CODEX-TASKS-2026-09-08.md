@@ -43,6 +43,35 @@ when it executes a tool the person answers and its next output is a reply. Rollo
 that rendering would bake the handicap into the lens permanently, and no later fix would reach it.
 The Deputy is running the confirming test now. Wait for it.
 
+### Amendment, CRO, 2026-09-08: the gate is met. Start.
+
+The test has run and the fix has landed. **It did not restore performance**, and the gate above is
+worded in a way that would read as still-closed, so it is resolved here explicitly rather than left
+to interpretation.
+
+| episode | steps | distinct calls | longest run of one call | loop | pass |
+|---|---|---|---|---|---|
+| batch_update-0166 | 12 → 7 | 4 → 7 | 8 → 1 | yes → no | no → no |
+| ledger_reconcile-0163 | 12 → 9 | 5 → 8 | 8 → 2 | yes → no | no → no |
+| update-0028 | 12 → 24 | 4 → 2 | 5 → 23 | no → yes | no → no |
+
+Repetition collapsed in two episodes, which then self-terminated early; the third became a
+23-repeat loop. None passed.
+
+**"Shown to work" meant the defect is gone, not that the model succeeds.** The gate exists to stop
+a *rendering handicap* being baked into a lens corpus — a prompt that told the model the person
+answers when it executes a tool. That defect is gone, and the behavioural change is large and in
+the predicted direction: the repetition the old rendering produced is not there any more. Requiring
+task success instead would forbid ever fitting a lens on a model that fails, which is the opposite
+of this programme's premise. **We map attempts, not completions.** Proceed.
+
+**What the result changes about your corpus, which is not nothing.** Episode length moved by a
+factor of three in both directions, so the span composition of rollouts under the corrected
+rendering will not resemble stage one's. That is the point, and it is why the acceptance below now
+carries a duplication bound: an episode that repeats one identical call 23 times contributes
+positions in bulk that are near-copies of each other, and a corpus dominated by those is a lens
+fitted on one wrong call. Report the composition; do not silently accept it.
+
 ### Fit both precisions, and treat the difference as a result
 
 Fit on **`gemma3-4b-bf16`** and again on **`gemma3-4b`** (4-bit), same corpus, same estimator.
@@ -60,6 +89,11 @@ it per R56(d).
 
 - Per-span position counts in the manifest, and at least one span other than prose above ten per
   cent.
+- **A duplication bound.** Report the share of fitted positions contributed by the single largest
+  episode, and the share falling inside runs of an identical repeated tool call. If either exceeds
+  a third, say so plainly in the manifest and stop for a ruling rather than fitting through it.
+  This criterion exists because of the 23-repeat episode above; it did not exist when this order
+  was first written.
 - Context length above 1,024 recorded, with the count of positions that actually exceed it.
 - Both precisions fitted, their per-layer difference reported relative.
 - The identity block per R57: base checkpoint, training applied (none), depth. It must load under
