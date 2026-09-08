@@ -127,12 +127,15 @@ def evaluate_tasks(
     quiet: bool = False,
     use_cache: bool = True,
     log: RunLog | None = None,
+    capture: Any | None = None,
 ) -> list[Trajectory]:
     """Run every task under one loaded policy, carrying its model context into each rollout.
 
     ``log`` is optional so the function stays callable from a test or a notebook without a
     run directory; when given, it receives one progress event per task (R26(g)).
     """
+    if capture is not None and use_cache:
+        raise ValueError("evaluation capture requires use_cache=False")
     sampler = make_sampler(temperature)
     stream = None if quiet else sys.stdout
     trajectories = []
@@ -153,6 +156,7 @@ def evaluate_tasks(
             faults=STRESS_FAULTS if stress else None,
             transcript=transcript,
             use_cache=use_cache,
+            **({"capture": capture} if capture is not None else {}),
         )
         trajectory.difficulty = task.difficulty
         trajectory.horizon = task.horizon  # for the scale-free first-event fraction (coherence.py)
@@ -507,10 +511,13 @@ def run_evaluation(
     seed: int = 20260902,
     difficulty: int | None = None,
     family_quotas: dict[str, int] | None = None,
+    capture: Any | None = None,
 ) -> dict[str, Any]:
     # R26(a): the log opens before the RNG seeding and the policy load, so a run that dies
     # loading weights still leaves run.log and events.jsonl beside the evaluation it never
     # wrote. The evaluation artifact is a file, so the run directory is its parent.
+    if capture is not None and use_cache:
+        raise ValueError("evaluation capture requires use_cache=False")
     output = Path(output)
     log = RunLog.open(
         output.parent,
@@ -558,6 +565,7 @@ def run_evaluation(
             quiet=quiet,
             use_cache=use_cache,
             log=log,
+            **({"capture": capture} if capture is not None else {}),
         )
         summary = summarize(trajectories, max_steps=max_steps)
         summary.update(
