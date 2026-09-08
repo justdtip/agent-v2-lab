@@ -441,15 +441,57 @@ Deduplicated per turn, layers 21 and 23, as log2 of the argument median over the
 | 800–1200 | +5.38 | +4.77 | 195 | 9 |
 | 1200+ | **+2.22** | **+2.26** | 769 | 6 |
 
-**The effect is present in every band and roughly halves above position 1,200.**
+**WITHDRAWN as a position finding.** The halving above 1,200 is token-history composition. Positions
+above 1,200 are late in long episodes, so their tokens have been seen far more often, and the two
+spans are affected unequally: **81.7% of argument tokens there have 10 or more prior occurrences
+against 47.0% of skeleton tokens**, where the gap is small or reversed. At matched history there is
+no monotone fall with position and the middle band is the largest in every cell. The Chief found it;
+it reproduces here exactly.
 
 **And it is not the loop episode.** Excluding `update-0028` changes the first two bands by at most
 0.31 and the 1200+ band **not at all** — identical to three decimals, same n. Its twenty-four turns
 deduplicate to two, both early, so it contributes nothing above position 800. The deduplication rule
 is doing exactly what it was written for.
 
-**What the halving means cannot be settled here.** Greater extrapolation degrading both arms toward
-noise would shrink the gap; so would a composition difference between the six episodes long enough
-to reach those positions. This corpus cannot separate them, which is the amendment-9 obstacle
-arriving from a third direction — and it is the most direct motivation yet for a lens fitted at
-transcript length, where the question becomes measurable instead of confounded.
+**And the transcript fit's motivation is untouched, on a better footing.** It never rested on
+observed degradation. It rests on no agentic reading being inside the fitted range at all, which is
+structural and cannot be explained away by composition — a stronger argument than a halving would
+have been.
+
+### The headline against the same control, which it survives and which sharpens it
+
+The band claim died on token history, so the primary comparison was put to the same test. Prior
+occurrences of each token in its own turn's prompt, deduplicated:
+
+| span | 0 | 1–2 | 3–9 | 10+ |
+|---|---:|---:|---:|---:|
+| call argument | 4.4% | 11.1% | 21.4% | **63.2%** |
+| call skeleton | 5.0% | 24.2% | 39.6% | 31.3% |
+
+**log2 argument/skeleton median rank at matched history:**
+
+| layer | 0 | 1–2 | 3–9 | 10+ |
+|---:|---:|---:|---:|---:|
+| 16 | +1.97 | +3.60 | +2.75 | +0.76 |
+| 21 | **+3.80** | **+5.53** | **+3.92** | **−2.02** |
+| 23 | +4.03 | +5.04 | +3.59 | −0.59 |
+| n (argument) | 54 | 138 | 265 | 784 |
+
+**The effect is not a composition artefact and the pooling if anything understates it.** Arguments
+are 63.2% high-history and that is the one stratum where they do *better*, so the pooled +3.80 at
+layer 21 is a mixture that already includes the reversing stratum.
+
+**And it is not the tautology it could have been.** "Arguments are harder because they are novel"
+would predict the gap vanishing at matched history. At **zero prior occurrences** — both spans
+equally novel — arguments still sit **+3.80** further from the output at layer 21 and **+4.03** at
+23. Argument content is held further even when the scaffolding it is compared against is equally
+unseen.
+
+**What is new is the reversal.** At ten or more prior occurrences the sign flips: a heavily repeated
+argument is *closer* to the output than the convention carrying it, −2.02 at layer 21. So the
+finding is about **novelty within the argument span**, not about arguments as a category. A path
+repeated fifteen times is trivially predictable; the scaffolding is moderately so; a fresh path is
+the hardest thing the model emits.
+
+That is a better statement of the map's primary result than the pooled number, and it is only
+visible because a control killed a neighbouring claim first.
