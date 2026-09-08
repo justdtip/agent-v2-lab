@@ -131,3 +131,41 @@ to that score, at that layer, under that averaging convention. It is not a token
 causal derivative, and not evidence of a workspace, a maintained state, or flexible access. The
 derivation is unusually careful about this and the artifacts should inherit its care rather than its
 vocabulary.
+
+---
+
+## Amendment: which dictionary, on the Director's authorisation to download
+
+**Authorised: one sparse dictionary, downloaded. And take the every-layer suite, not the one whose
+configuration is already on disk.**
+
+Codex reports finding a layer-18 configuration cached with no weights beside it. That file is an
+**artefact of the Chief's exploratory inspection this morning** — a single 248-byte `config.json`
+pulled while sizing the repository — and not a considered choice of dictionary. Downloading its
+weights would be following a footprint.
+
+The repository holds two different things at the residual site:
+
+| path | layers available | width | one file |
+|---|---|---|---|
+| `resid_post/` — a single-layer deep dive | **only 9, 17, 22, 29** | 16k and others, 52 variants | — |
+| `resid_post_all/` — the every-layer suite | **0 to 33, all 34** | 16k | **335.7 MB** |
+| `resid_post_all/` at the wide setting | 0 to 33 | 262k | 5,370.8 MB |
+
+**Take `resid_post_all`, 16k width.** The deep dive exists at four layers only and therefore cannot
+support a readout across the map's layer set at all; and mixing a deep-dive dictionary at one layer
+with the all-layer suite at others would confound every across-layer comparison the bridge is for.
+Declare the sparsity variant once and use **the same one at every layer**, because sparsity changes
+every quantity downstream and a mixed set is not a series.
+
+The 262k width is 5.4 GB per layer and is not a first pass.
+
+**Start at Gemma Scope layer 17, which is this repository's probe layer 18.** It sits inside the
+map's layer set, and it is also one of the four deep-dive layers, so a later cross-check between the
+two suites is possible there and nowhere else. That is worth having at no cost.
+
+**And Codex is right about R61**, which the Chief failed to find because it is written inside a
+section rather than under its own heading. Heavy work announces a window whether or not it loads a
+model. The download is network and disk and needs none; the small numerical checks need none; the
+full matrix readout at roughly 150 seconds per layer does, and it must wait for a free box and be
+announced with a projected peak per R60(c). The Deputy holds the box at the time of writing.

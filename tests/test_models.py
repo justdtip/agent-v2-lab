@@ -12,7 +12,8 @@ import yaml
 from local_llm_lab import models
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import load_model_spec
-from local_llm_lab.project import PROJECT_ROOT
+from local_llm_lab.project import PROJECT_ROOT  # noqa: F401
+from local_llm_lab.runlock import box_state_root as _box_state_root
 
 
 @pytest.mark.parametrize(
@@ -73,7 +74,7 @@ from local_llm_lab.project import PROJECT_ROOT
             # The bf16 twin, for lens fitting: the hosted Jacobian lens was fitted on bf16 weights
             # and a comparison against it should not also be a comparison of precisions.
             "gemma3-4b-bf16",
-            str(PROJECT_ROOT / "models/gemma-3-4b-it-bf16"),
+            str((_box_state_root() / "models/gemma-3-4b-it-bf16").resolve()),
             "unsupported",
             "none",
             "auto",
@@ -92,7 +93,7 @@ from local_llm_lab.project import PROJECT_ROOT
             # equivalence claim. The train block is UNRULED and exists so no consumer meets a
             # bare key error; it is the Qwen recipe's values and is evidence about another model.
             "gemma3-4b",
-            str(PROJECT_ROOT / "models/gemma-3-4b-it-4bit"),
+            str((_box_state_root() / "models/gemma-3-4b-it-4bit").resolve()),
             "unsupported",
             "none",
             "auto",
@@ -482,7 +483,6 @@ def test_a_local_checkpoint_resolves_against_the_project_root_not_the_working_di
     repo id has no prefix and passes through untouched, which the Qwen entries assert above.
     """
     from local_llm_lab.models import load_model_spec
-    from local_llm_lab.project import PROJECT_ROOT
 
     monkeypatch.chdir(tmp_path)
 
@@ -491,7 +491,28 @@ def test_a_local_checkpoint_resolves_against_the_project_root_not_the_working_di
         ("gemma3-4b-bf16", "models/gemma-3-4b-it-bf16"),
     ):
         resolved = load_model_spec(name).hf_id
-        assert resolved == str(PROJECT_ROOT / directory)
+        assert resolved == str((_box_state_root() / directory).resolve())
         assert Path(resolved).is_absolute(), "a loader must not have to guess where this is"
 
+    assert load_model_spec("qwen35-4b").hf_id == "mlx-community/Qwen3.5-4B-MLX-4bit"
+
+
+def test_a_local_checkpoint_resolves_to_the_primary_checkout_not_the_running_one() -> None:
+    """A converted checkpoint is a shared artefact, like the lock and the window.
+
+    `models/` is git-ignored and exists once, in the primary checkout, so a worktree resolving
+    against its own root finds nothing — which is exactly what happened the first time this ran
+    from one. That is the box window's own bug before `box_state_root`, from the same cause and
+    fixed by the same reader, and the third instance today of behaviour that depended on where a
+    process was standing.
+    """
+    from pathlib import Path
+
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.runlock import box_state_root
+
+    resolved = Path(load_model_spec("gemma3-4b").hf_id)
+
+    assert resolved.is_absolute()
+    assert resolved == (box_state_root() / "models/gemma-3-4b-it-4bit").resolve()
     assert load_model_spec("qwen35-4b").hf_id == "mlx-community/Qwen3.5-4B-MLX-4bit"

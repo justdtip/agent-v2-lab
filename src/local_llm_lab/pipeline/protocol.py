@@ -97,11 +97,34 @@ def render_tools(tools: list[dict[str, Any]] = TOOL_SPECS) -> str:
     return "\n".join(lines)
 
 
-def system_prompt(tools: list[dict[str, Any]] = TOOL_SPECS) -> str:
-    """Rules, turn format, and the rendered tool list."""
-    return f"{RULES}\n\n{render_tools(tools)}"
+def system_prompt(
+    tools: list[dict[str, Any]] = TOOL_SPECS, *, spec: "ModelSpec | None" = None
+) -> str:
+    """Rules, turn format, the rendered tool list, and the model's own observation convention.
+
+    The convention is a property of the model's chat format, so it comes from the registry and is
+    absent for every family whose template has a `tool` role. Where it is present it is the last
+    section, closest to the conversation it describes: it tells the model that a turn the format
+    marks as the user's may be the workspace answering the model's own last call, which is a thing
+    the model cannot infer from a wrapper it was never given the key to.
+    """
+    convention = "" if spec is None else spec.chat.observation_convention
+    sections = [RULES, render_tools(tools)]
+    if convention:
+        sections.append(convention)
+    return "\n\n".join(sections)
 
 
+#: The convention-free prompt, which is the whole prompt for every ChatML family here.
+#:
+#: **Boundary, stated because it is not visible from the constant.** `build_rows` (training
+#: targets), `build_pairs` (branch pairs) and jlens's probe-context builder all use this rather
+#: than a spec-aware render, and none of them takes a spec. That is correct today and only today:
+#: Gemma is the sole family declaring a convention, and its `train:` block is UNRULED with
+#: training deferred by the Director's ruling of 2026-09-08. The day anyone builds a supervised
+#: target on a re-roling family, those three have to take the spec, or training will teach a
+#: prompt that inference does not use. Named here so that day starts from a note rather than a
+#: discrepancy.
 SYSTEM_PROMPT = system_prompt()
 
 
@@ -295,15 +318,31 @@ def _as_declared_roles(messages: list[dict[str, Any]], spec: ModelSpec) -> list[
     template can express. Gemma 3's has branches for user, assistant and system only and enforces
     strict alternation with an explicit ``raise_exception``, so an observation stops the render.
 
-    The ``name`` key goes with it. A template that has no tool role has no use for the tool's
-    name, and Gemma's would ignore it; leaving it on a user turn would put a key in the rendered
-    conversation that the model never sees described anywhere.
+    **The marking has to survive the re-roling**, and the first version of this dropped it. It
+    mapped the role and kept the content bare, so a Gemma observation rendered as an ordinary user
+    turn: formally indistinguishable from the user's original instruction, with nothing to say the
+    text was the result of the model's own last action. Stage one is what that costs — the model
+    read the same file eight times in a row, and reissued a failing call eight times, which is
+    what a model does when it cannot tell that its action already produced the text in front of
+    it. Qwen's template re-roles too, to `user`, and wraps the content in `<tool_response>`; the
+    role was never the difference.
+
+    So the content carries what the role did, through the registry's declared
+    ``observation_template``, and the ``name`` key goes because a template with no tool role has
+    no field for it — the wrapper is the only channel left, and what goes in it is the model's own
+    declaration rather than a convention inherited from whichever family came first.
     """
     role = spec.chat.observation_role
     if role == "tool":
         return messages
+    wrapper = spec.chat.observation_template
     return [
-        {"role": role, "content": message["content"]}
+        {
+            "role": role,
+            "content": wrapper.format(
+                content=message["content"], name=message.get("name", "tool")
+            ),
+        }
         if message.get("role") == "tool"
         else message
         for message in messages

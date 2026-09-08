@@ -2047,7 +2047,10 @@ def test_render_markdown_summarises_counterfactual_note_sources() -> None:
 # fake spec that omits it is a fake of a spec that cannot exist.
 _FAKE_SPEC = SimpleNamespace(
     chat=SimpleNamespace(
-        template_kwargs={}, thinking="on", generation_prefix="<|im_start|>assistant\n"
+        template_kwargs={},
+        thinking="on",
+        generation_prefix="<|im_start|>assistant\n",
+        observation_role="tool",
     )
 )
 

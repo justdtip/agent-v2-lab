@@ -1,0 +1,78 @@
+{
+ "control": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/18df6241-b6a2-4c3c-8b24-22cad2612a51/scratchpad/pilot/stage1",
+ "run": "/private/tmp/claude-501/-Users-daniel-tipton-Desktop-An-app/18df6241-b6a2-4c3c-8b24-22cad2612a51/scratchpad/pilot/fair",
+ "episodes": {
+  "agentic-d2-batch_update-0166": {
+   "control": {
+    "steps": 12,
+    "distinct_calls": 4,
+    "most_repeated_call": 8,
+    "longest_repeated_cycle": 4,
+    "success": false,
+    "loop_detected": true,
+    "exhausted": true,
+    "generated_tokens": 629,
+    "seconds": 571.4
+   },
+   "run": {
+    "steps": 7,
+    "distinct_calls": 7,
+    "most_repeated_call": 1,
+    "longest_repeated_cycle": 0,
+    "success": false,
+    "loop_detected": false,
+    "exhausted": false,
+    "generated_tokens": 459,
+    "seconds": 253.6
+   }
+  },
+  "agentic-d2-ledger_reconcile-0163": {
+   "control": {
+    "steps": 12,
+    "distinct_calls": 5,
+    "most_repeated_call": 8,
+    "longest_repeated_cycle": 4,
+    "success": false,
+    "loop_detected": true,
+    "exhausted": true,
+    "generated_tokens": 829,
+    "seconds": 475.6
+   },
+   "run": {
+    "steps": 9,
+    "distinct_calls": 8,
+    "most_repeated_call": 2,
+    "longest_repeated_cycle": 0,
+    "success": false,
+    "loop_detected": false,
+    "exhausted": false,
+    "generated_tokens": 567,
+    "seconds": 392.8
+   }
+  },
+  "agentic-d2-update-0028": {
+   "control": {
+    "steps": 12,
+    "distinct_calls": 4,
+    "most_repeated_call": 5,
+    "longest_repeated_cycle": 4,
+    "success": false,
+    "loop_detected": false,
+    "exhausted": true,
+    "generated_tokens": 772,
+    "seconds": 381.1
+   },
+   "run": {
+    "steps": 24,
+    "distinct_calls": 2,
+    "most_repeated_call": 23,
+    "longest_repeated_cycle": 11,
+    "success": false,
+    "loop_detected": true,
+    "exhausted": true,
+    "generated_tokens": 1173,
+    "seconds": 1341.9
+   }
+  }
+ }
+}

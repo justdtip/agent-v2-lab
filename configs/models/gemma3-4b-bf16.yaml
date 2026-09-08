@@ -13,7 +13,11 @@ hf_id: models/gemma-3-4b-it-bf16
 # The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
 # entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted
 # on a model rather than on a file — so the lens identity check compares this and not the path.
-source: google/gemma-3-4b-it
+base: google/gemma-3-4b-it
+# No further training: this is the base checkpoint itself, converted. Stated rather than omitted,
+# because a lens fitted on a base and read against a trained checkpoint of the same base is a
+# different reading and the identity has to be able to say so (R57).
+training_lineage: {}
 family: gemma3
 chat:
   thinking: "unsupported"
@@ -26,6 +30,37 @@ chat:
   # reverts to provisional the day anyone builds a supervised target here, and every run's
   # manifest says which role it used.
   observation_role: "user"
+  # How the observation says what it is, since the `user` role cannot.
+  #
+  # This was Qwen's bare `<tool_response>` wrapper, chosen so that the two panels of the pilot's
+  # comparison differed in the model and not in what their prompts said. The Director's ruling of
+  # 2026-09-08 overrides that choice, and it is the stronger argument: *observations should render
+  # in a manner that teaches the model to understand what it is doing; a model executing a tool
+  # should not assume that in doing so it responds to the user.* Matching Qwen's wrapper kept the
+  # comparison tidy by rendering Gemma's episodes in a way that misdescribes them.
+  #
+  # So the wrapper now names the call it answers. `{name}` is the tool the model itself just
+  # invoked, which is precisely the relation the `tool` role used to carry and the one a bare
+  # wrapper leaves the model to guess. The cost is real and is recorded rather than avoided: the
+  # two panels no longer render observations identically, so a difference between them is no
+  # longer attributable to the model alone.
+  observation_template: "<tool_response tool=\"{name}\">\n{content}\n</tool_response>"
+  # What the prompt tells the model the format is doing to it. The wrapper marks each observation;
+  # this gives the model the key to the mark, and neither works without the other.
+  #
+  # Gemma's template renders an episode as a strict two-party conversation — user, model, user,
+  # model — so every tool call the model makes is followed by what the format calls a user turn.
+  # Unaided, the model is taught turn after turn that a person answers its actions, and a model
+  # that believes that behaves conversationally: it re-acknowledges, re-reads and restates rather
+  # than executing a plan. Stage one's transcripts have exactly that shape, including one episode
+  # that re-read a missing file four times in twelve turns without ever trying the path its own
+  # search had returned.
+  observation_convention: |
+    Tool results in this chat format: this format has no separate role for tool results, so a
+    result reaches you in a turn the format marks as the user's. A turn wrapped in
+    <tool_response> is not the user speaking. It is the workspace reporting what your own last
+    tool call returned. Read it as the result of your action and continue your task rather than
+    replying to it.
   end_of_turn: "<end_of_turn>"
   extra_stop_tokens: []
 lora:

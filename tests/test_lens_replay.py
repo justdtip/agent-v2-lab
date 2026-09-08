@@ -11,14 +11,17 @@ import pytest
 from local_llm_lab.pipeline.live_lens.session import RecordWriter
 
 
-def _identity_bytes(name: str, hf_id: str, num_layers: int):
-    """The archive entry `LensMaps.load` reads for a lens's model identity (issue 99)."""
+def _identity_bytes(base: str, num_layers: int):
+    """The archive entry `LensMaps.load` reads for a lens's lineage (issue 99, R57, R60).
+
+    The **base** and not the artefact. These fixtures override a spec's `hf_id` to a temporary
+    path, which under the lineage rule says *a different artefact of the same base* — so a lens
+    for that spec is stamped with the base the registry gives, not with the path.
+    """
     import numpy as _np
 
     return _np.frombuffer(
-        json.dumps(
-            {"name": name, "hf_id": hf_id, "num_layers": int(num_layers)}, sort_keys=True
-        ).encode("utf-8"),
+        json.dumps({"base": base, "num_layers": int(num_layers)}, sort_keys=True).encode("utf-8"),
         dtype=_np.uint8,
     )
 
@@ -361,7 +364,7 @@ def prepared_fixture(tmp_path, monkeypatch, *, identity=False):
         ],
     }
     lens = tmp_path / "lens.npz"
-    np.savez(lens, J0=np.eye(2), identity=_identity_bytes("qwen35-4b", "example/tiny", 2))
+    np.savez(lens, J0=np.eye(2), identity=_identity_bytes("mlx-community/Qwen3.5-4B-MLX-4bit", 2))
     manifest["lens_sha256"] = module.file_sha256(lens)
     (source / "manifest.json").write_text(json.dumps(manifest))
     snapshot = tmp_path / "snapshot"
@@ -532,7 +535,7 @@ def test_attention_readout_dependencies_refused_during_preparation(
     config.write_text(json.dumps({"hidden_size": 2, "num_hidden_layers": 4, "vocab_size": 5}))
     np.savez(
         prepared.lens_path,
-        identity=_identity_bytes("qwen35-4b", "example/tiny", 4),
+        identity=_identity_bytes("mlx-community/Qwen3.5-4B-MLX-4bit", 4),
         **{f"J{i}": np.eye(2) for i in available},
     )
     if len(available) == 3:

@@ -228,3 +228,60 @@ against runs 24, which is `run_task`'s own default. Four of Gemma's eleven failu
 exhaustion. A comparison against numbers made at 24 is not valid at 12, and this is the plainer
 confound: it was found by looking at the harness rather than at the model, after a subtler
 hypothesis had already been written up.
+
+---
+
+## The test ran. The account is supported in behaviour and refuted in outcome.
+
+Three diagnostic episodes re-run with the observation rendered as a tool result and the step
+ceiling raised from twelve to the evaluation's twenty-four, against stage one as the control.
+
+| episode | control: unmarked, ceiling 12 | run: marked, ceiling 24 |
+|---|---|---|
+| `batch_update-0166` | 12 steps, 4 distinct calls, top repeated **8x**, exhausted | 7 steps, **7 distinct**, top repeated **1x**, **not exhausted** |
+| `ledger_reconcile-0163` | 12 steps, 5 distinct, top repeated **8x**, exhausted | 9 steps, **8 distinct**, top repeated **2x**, **not exhausted** |
+| `update-0028` | 12 steps, 4 distinct, top repeated 5x, exhausted | **24 steps, 2 distinct, top repeated 23x**, loop, exhausted |
+
+**None of the three succeeded.**
+
+### What is established
+
+**In two of three episodes the repetition is gone.** Both had been re-issuing one call eight times;
+both now issue almost entirely distinct calls, and both **stop on their own** rather than running to
+the ceiling. That is the specific behaviour the Director's account predicted would change: a model
+that had been acting as though each of its actions were answered by a person began acting as though
+it were executing a plan. The change is large and it is in the predicted direction.
+
+**And it did not make the model able to do the tasks.** All three still fail. So the two things are
+separate: the rendering was making Gemma behave wrongly, and correcting it reveals a model that
+behaves reasonably and is still not good enough at these tasks. Neither half should be reported
+without the other.
+
+### The counter-case, and what it costs to leave unattributed
+
+`update-0028` became markedly worse: two distinct calls across twenty-four steps, the top one issued
+twenty-three times, a hard two-state cycle. **This cannot be attributed**, because the run changed
+two things and the marked-only arm at ceiling twelve produced no usable record. The available
+reading is that raising the ceiling gave a model already prone to cycling more room to cycle, which
+would mean the ceiling is not purely a handicap — but that is a hypothesis with one episode behind
+it and no arm to separate it.
+
+**The missing arm is cheap and should be run**: marked, ceiling twelve, this episode alone. Until
+then the register carries this as unattributed rather than as evidence either way.
+
+### Consequence for the map
+
+Run it with the fix. The map then reads a model that behaves sensibly and fails, which the
+pre-registration already declares as its subject — attempts, not completions. What must change is
+that the record says the failures are now ordinary task failures rather than the conversational
+repetition stage one measured, because a reader comparing the two maps would otherwise attribute
+the difference to the model.
+
+### And the Chief's account was half right, which is the useful half to state
+
+The Chief proposed the missing tool-result marker as the cause and was corrected by the Director,
+whose framing was that the rendering teaches the model a false account of what it is doing. The
+result supports the Director's framing specifically: what changed is not accuracy but **conduct**,
+and it changed in the way a construal error predicts and a missing-label error does not. A model
+given a label it lacked would answer better; a model told what kind of exchange it is in behaves
+differently. It behaved differently and answered no better.

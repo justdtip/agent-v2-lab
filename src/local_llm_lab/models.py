@@ -40,10 +40,19 @@ _LOCAL_CHECKPOINT_PREFIX = "models/"
 
 
 def _resolve_checkpoint(hf_id: str) -> str:
-    """Absolute path for a local checkpoint; a Hugging Face repo id unchanged."""
+    """Absolute path for a local checkpoint; a Hugging Face repo id unchanged.
+
+    Resolved against the **primary checkout**, not the running one. A converted checkpoint is a
+    shared artefact like the lock and the window: `models/` is git-ignored and exists once, in the
+    primary, so a worktree resolving against its own root finds nothing. That is the same failure
+    the box window had before `box_state_root`, from the same cause, and it is fixed the same way
+    and by the same reader.
+    """
     if not hf_id.startswith(_LOCAL_CHECKPOINT_PREFIX):
         return hf_id
-    return str((Path(__file__).resolve().parents[2] / hf_id).resolve())
+    from local_llm_lab.runlock import box_state_root
+
+    return str((box_state_root() / hf_id).resolve())
 
 
 @dataclass(frozen=True)
@@ -80,6 +89,35 @@ class ChatSpec:
     #: builds a supervised target, because there the choice changes what is trained on, and the
     #: run's manifest has to say which role it used.
     observation_role: str = field(default="tool", kw_only=True)
+    #: How a tool observation is marked when it renders under a role that cannot mark it.
+    #: A format string over ``{content}`` and ``{name}``; **required** whenever
+    #: ``observation_role`` is not ``"tool"``, and unused otherwise.
+    #:
+    #: Re-roling alone loses a fact the role was carrying: *this text is a result of your last
+    #: action.* Qwen's template re-roles too — a tool message renders as a `user` turn there as
+    #: well — but wraps the content in `<tool_response>`, so the model can still tell. Without the
+    #: wrapper the observation is formally indistinguishable from the user's original instruction,
+    #: and the system prompt's own rules ("base each action on the latest tool result", "never
+    #: claim a write succeeded until a tool result confirms it") refer to a category the prompt
+    #: never marks.
+    observation_template: str = field(default="{content}", kw_only=True)
+    #: What the system prompt must tell the model about a re-roled observation. **Required**
+    #: whenever ``observation_role`` is not ``"tool"``, and unused otherwise.
+    #:
+    #: The wrapper marks each observation; this explains the convention once, and the two are not
+    #: substitutes. The Director's ruling of 2026-09-08: *observations should render in a manner
+    #: that teaches the model to understand what it is doing; a model executing a tool should not
+    #: assume that in doing so it responds to the user.* Under a template with no tool role the
+    #: episode is formally a two-party conversation — user, model, user, model — so every tool
+    #: call the model makes is answered by what the format calls a user turn. Without being told
+    #: otherwise the model is being taught, turn after turn, that a person replies to its actions,
+    #: and a model that believes that behaves conversationally: it re-acknowledges, re-reads and
+    #: restates instead of executing a plan. That is the shape stage one's transcripts have.
+    #:
+    #: A wrapper the model has never been told the meaning of is a marker without a key. The
+    #: model can only understand what it is doing if the prompt says what the format is doing
+    #: to it, so the convention is declared here, per family, beside the wrapper it explains.
+    observation_convention: str = field(default="", kw_only=True)
     max_think_tokens: int = 512
 
 
@@ -117,16 +155,22 @@ class ProbesSpec:
 class ModelSpec:
     name: str
     hf_id: str
-    #: The **model** this checkpoint is, as opposed to `hf_id`, which is where its weights live.
-    #: They differ whenever a checkpoint is converted: `models/gemma-3-4b-it-4bit` and
-    #: `models/gemma-3-4b-it-bf16` are two precisions of one model, `google/gemma-3-4b-it`.
+    #: The **base checkpoint** these weights descend from, by its canonical upstream name.
+    #: `hf_id` is where the artefact lives; this is what it is a copy or a conversion of.
+    #: `models/gemma-3-4b-it-4bit` and `models/gemma-3-4b-it-bf16` are two precisions of one
+    #: base, `google/gemma-3-4b-it`. Defaults to `hf_id` for a checkpoint we did not convert.
+    base: str = field(default="", kw_only=True)
+    #: What further training was applied on top of ``base``, or ``None`` for the base model
+    #: itself. Part of the identity and not provenance: R57, on the Director's ruling.
     #:
-    #: The distinction is not bookkeeping. A Jacobian lens is fitted on a **model**, and the
-    #: pivot's own ruling is that the pilot runs 4-bit while the hosted lens was fitted on bf16,
-    #: with the precision mismatch disclosed rather than avoided. An identity built from `hf_id`
-    #: refuses that pairing, which is a true statement about the files and a false one about the
-    #: experiment. Defaults to `hf_id`, which is right for every checkpoint we did not convert.
-    source: str
+    #: A base checkpoint and that checkpoint after training have the same family, the same depth
+    #: and the same width, so nothing about the architecture separates them — and a Jacobian lens
+    #: is a map of a model's residual geometry, which training moves. This repository measured how
+    #: much on 2026-09-08: full-depth training shifted every one of thirty-two layers by about a
+    #: fifth of its weight norm, and two arms' updates to the layers they shared were orthogonal.
+    #: An identity that omitted this would let a base-fitted lens read a trained model and call it
+    #: a match.
+    training: dict[str, Any] | None = field(default=None, kw_only=True)
     family: str
     chat: ChatSpec
     lora: LoraSpec
@@ -145,6 +189,18 @@ class ModelSpec:
     # R18: native block execution during capture is the default; the float32 block path is for
     # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
     probe_capture_dtype: Literal["native", "float32"] = "native"
+
+    def __post_init__(self) -> None:
+        """An unconverted checkpoint is its own base, stated once here.
+
+        `base` is required in the *registry* — `_model_spec_from_mapping` always supplies it — and
+        defaulted in the dataclass, because a `ModelSpec` built directly with only an `hf_id` is
+        describing a checkpoint nobody converted, and for that checkpoint the artefact and the
+        base are the same thing. Making every direct constructor repeat the id would be noise, and
+        leaving it empty would put a falsy base into an identity comparison.
+        """
+        if not self.base:
+            object.__setattr__(self, "base", self.hf_id)
 
     @property
     def probes(self) -> ProbesSpec:
@@ -233,6 +289,27 @@ class ResolvedSpec:
             "snapshot_revision": self.snapshot_revision,
             "jvp_method": self.jvp_method,
         }
+
+
+def base_of_artifact(named: str) -> str:
+    """The base checkpoint a named artefact descends from, or the name unchanged.
+
+    ``named`` may be a base already (an upstream repository id), a registry entry name, or the
+    resolved path of a local conversion. The registry is what knows the relation, so a reader of
+    an old lens does not have to and the lens does not have to be rewritten (R60).
+
+    Unknown names pass through untouched. That is deliberate: an unrecognised string should reach
+    the identity comparison and be refused there, with both names shown, rather than be quietly
+    turned into something else here.
+    """
+    for name in registered_models():
+        try:
+            spec = load_model_spec(name)
+        except ValueError:  # pragma: no cover - a malformed entry is its own error elsewhere
+            continue
+        if named in (name, spec.hf_id, spec.base):
+            return spec.base
+    return named
 
 
 def registered_models() -> list[str]:
@@ -340,7 +417,8 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     return ModelSpec(
         name=_required_string(raw, "name", source),
         hf_id=_resolve_checkpoint(_required_string(raw, "hf_id", source)),
-        source=str(raw.get("source") or _required_string(raw, "hf_id", source)),
+        base=str(raw.get("base") or raw.get("source") or _required_string(raw, "hf_id", source)),
+        training=_training_lineage(raw.get("training_lineage"), source),
         family=_required_string(raw, "family", source),
         chat=ChatSpec(
             thinking=thinking,
@@ -348,6 +426,8 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
             end_of_turn=_required_string(chat, "end_of_turn", source),
             generation_prefix=_required_string(chat, "generation_prefix", source),
             observation_role=str(chat.get("observation_role", "tool")),
+            observation_template=_observation_template(chat, source),
+            observation_convention=_observation_convention(chat, source),
             extra_stop_tokens=tuple(stops),
             max_think_tokens=_positive_int(
                 chat.get("max_think_tokens", 512), "chat.max_think_tokens", source
@@ -380,7 +460,8 @@ def _default_spec(hf_id: str) -> ModelSpec:
     return ModelSpec(
         name=hf_id,
         hf_id=hf_id,
-        source=hf_id,
+        base=hf_id,
+        training=None,
         family="unknown",
         # ChatML's markers, for a model nobody declared. They are a guess and the only honest
         # thing to say about them is that they are Qwen's; a run that reaches this path and is
@@ -401,6 +482,70 @@ def _default_spec(hf_id: str) -> ModelSpec:
         memory_budget_gib=22.0,
         policies={},
     )
+
+
+def _observation_template(chat: dict[str, Any], source: str) -> str:
+    """How an observation marks itself, required exactly where the role cannot mark it.
+
+    Required rather than defaulted, because a default would be one family's convention inherited
+    by every other — which is how ChatML's assistant marker came to be hardcoded for every model
+    this repository has ever run. A family that re-roles observations states its own.
+    """
+    role = str(chat.get("observation_role", "tool"))
+    declared = chat.get("observation_template")
+    if role == "tool":
+        return "{content}"
+    if not isinstance(declared, str) or "{content}" not in declared:
+        raise ValueError(
+            f"{source}: chat.observation_template must be declared, and contain {{content}}, "
+            f"whenever observation_role is {role!r} rather than 'tool' — re-roling loses the "
+            "fact that the text is a tool result, and the content is the only channel left"
+        )
+    return declared
+
+
+def _observation_convention(chat: dict[str, Any], source: str) -> str:
+    """What the prompt tells the model the format is doing to it, required where it does anything.
+
+    Required on exactly the same condition as the wrapper and for a different reason. The wrapper
+    marks each observation; this says what the mark means and what the model should conclude from
+    a turn that the format calls the user's but that is in fact the workspace answering the model's
+    own last action.
+
+    Declared per family rather than written here, on the rule the wrapper established: a default
+    would be one family's convention inherited by every other, and this paragraph is more
+    model-specific than the wrapper, because it must name the format's own roles to be understood.
+    """
+    role = str(chat.get("observation_role", "tool"))
+    declared = chat.get("observation_convention")
+    if role == "tool":
+        return ""
+    if not isinstance(declared, str) or not declared.strip():
+        raise ValueError(
+            f"{source}: chat.observation_convention must be declared whenever observation_role "
+            f"is {role!r} rather than 'tool' — the wrapper marks the observation and this says "
+            "what the mark means, and a marker whose meaning the model was never told is not a "
+            "channel"
+        )
+    return declared.strip()
+
+
+def _training_lineage(value: Any, source: str) -> dict[str, Any] | None:
+    """What training sits on top of the base, as a mapping, or ``None`` for a base model.
+
+    ``None`` and ``{}`` are the same statement — *no training* — and both are written that way so
+    a reader never has to decide whether an empty block means "none" or "not recorded". Anything
+    else must be a mapping, because a bare string cannot say what kind of training, how much, and
+    from which adapter, and those are what separate two trained checkpoints of one base.
+    """
+    if value is None or value == {}:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{source}: training_lineage must be a mapping describing the training applied, or "
+            "absent for a base checkpoint"
+        )
+    return dict(value)
 
 
 def _mapping(raw: dict[str, Any], key: str, source: str) -> dict[str, Any]:

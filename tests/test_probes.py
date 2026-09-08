@@ -1767,6 +1767,10 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         # Added 2026-09-08 (issue 86): the recorded answers to equal-distance partner ties. A
         # ruling, not a rule, so it is declared rather than derived and travels with the run.
         "probe_partner_tie_breaks",
+        # Added 2026-09-08 (R57, R60): a lens is a map of a model's residual geometry, so the
+        # identity is the base checkpoint and the training on top of it, not the artefact loaded.
+        "base",
+        "training",
         "probe_capture_dtype",
         "memory_budget_gib",
         "policies",
