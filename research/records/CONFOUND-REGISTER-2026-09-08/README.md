@@ -311,3 +311,104 @@ carries it, inside one syntactic object, which holds format and lens domain roug
 are not compounds of populations that behave oppositely, and check the comparison against a control
 of the same syntactic kind rather than against a pooled background. Both checks changed a
 conclusion here, and neither needs our code or this model.
+
+---
+
+## The falsification, which came back against me
+
+The fix was worth making and my causal claim was too strong. Both halves are settled by one episode
+run under the fixed simulator by the D-CRO at my request, precisely because it risked my own account.
+
+`update-0028`, 24 steps, corrected rendering, fixed environment, greedy, 65.7 s:
+
+| | before the fix | after the fix |
+|---|---|---|
+| distinct calls | 2 | 2 |
+| the calls | `read_file("/test/0028/config.ini")` x 23 | `list_files("/")` x 12, `list_files(".")` x 12 |
+| observations | `ERROR: file not found` | `ERROR: directory not found` — honest |
+| ever names `workspace` | no | **no** |
+| passes | no | **no** |
+
+**What the fix did.** The false belief is gone. The model is no longer told the workspace is empty,
+so it no longer writes "there is no configuration file, I need to create it", and the `read_file`
+loop it produced does not occur. The note/call divergence that looked like confabulation this morning
+does not appear at all. That defect was real and this closes it.
+
+**What the fix did not do, and what I claimed it would.** I wrote above that the model ruled the token
+`workspace` out as a directory name "correctly, on our authority", and that this explained its absence
+from every read layer's top-10 at every fork. **That is refuted.** Given twenty-four turns, honest
+errors on both of its guesses twelve times each, and the literal string `workspace/test/0028/config.ini`
+in its prompt throughout, the model never once tries `workspace`. It alternates two rejected guesses
+until the ceiling. Our false observation was not what kept the right answer out of the candidate set.
+
+**So the D-CRO's finding is stronger than mine and mine was the one that needed correcting.** Their
+observation that `workspace` is absent from all 192 top-10 lists is a property of the model, not an
+artefact of the environment we now know was lying. It survives the removal of the lie.
+
+**The finding that replaces my explanation**, and it is cleaner than what it replaces because it now
+has a control: *Gemma does not extract a directory name from a path supplied in its prompt, and
+rejecting its alternatives does not cause it to look for one.* Twenty-four honest rejections change
+nothing. This is a statement about the model, made under an environment that no longer misleads it,
+and it is the first thing in this programme that is both about Gemma and not about our instruments.
+
+**One metric weakness this exposes.** `longest_identical_run` is 1 while `loop_detected` is true,
+because a two-cycle defeats a longest-identical-run counter. We have been quoting that column in the
+comparison table all day. A model alternating two failing calls is looping as surely as one repeating
+a single call, and the column would have read as a clean recovery.
+
+---
+
+## Ruling: the root is reachable, and stage two proceeds
+
+The D-CRO put the blocking question well: if the workspace entry point cannot be found by inspection,
+then eleven families of episodes are all measuring one navigation failure and the map is a map of
+that. It is the right question and it decides whether stage two is worth running at all. Settled with
+data.
+
+**The entry point is reachable, in one call, using a word from the task's own prompt.** On the failing
+task:
+
+| call | result |
+|---|---|
+| `search_files("config")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("0028")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("mode")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("workspace")` | `MATCHES: workspace/test/0028/config.ini` |
+
+Any of four obvious words returns the full true path immediately, including the literal string the
+model needed and never produced.
+
+**Across the whole benchmark: 165 of 180 tasks are reachable by a single search of a word taken from
+the prompt.** The 15 that are not are the entire `calculate` family, which has no files and needs no
+path. **Every task with a workspace has a reachable workspace.**
+
+**And the system prompt names the route, in the rule the model was obeying when it failed:**
+
+> - Inspect state with tools instead of guessing paths, file names, or values.
+> - If a tool returns an error, read it and recover: **list or search** to find the right path, use an
+>   available tool, or retry a transient failure.
+> - `search_files(query: string)`: Find virtual files whose path or content contains a query.
+
+**So the correction runs the other way from the one I drafted an hour ago.** I was about to promote
+"the environment has no discoverable root" from a closing question to the headline. It is not true.
+The root is discoverable by the documented recovery, in one call, on every task that has one. What
+`update-0028` shows is that the model, given twenty-four honest errors on two guesses, never takes the
+recovery its own instructions name and its own tool list describes.
+
+**That is a finding about the model and it is the sharper one.** Not "it cannot find the workspace"
+but "it does not switch strategy under repeated unambiguous failure". The distinction matters because
+the first would indict our benchmark and the second is a property of the agent, measured under an
+environment that no longer lies to it, with the escape route in front of it the whole time.
+
+**Stage two proceeds.** Two grounds. The navigation the map would supposedly be measuring is
+available, documented and cheap, so failing it is a choice the model makes rather than a wall we
+built. And outside `update-0028` the corpus does not show this failure: 50 path arguments across the
+other ten episodes produced 2 errors, neither by this mechanism, and `pointer_chain-0018` copied 10 of
+10 paths out of observations correctly. **One episode fails this way. It is an outlier, not the
+population**, which is the same rule the D-CRO and I have now both been caught by in one day.
+
+**What stage two must record because of this.** Per episode, whether `search_files` was ever called,
+and whether the episode entered a repeated-failure state without calling it. If that turns out to be
+common across families, the map is measuring strategy switching and should say so in those words. If
+it stays confined to one episode, it is an outlier and the map is unaffected. **Either way it is
+recorded before the run rather than argued after it.**

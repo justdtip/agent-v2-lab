@@ -274,3 +274,88 @@ readout does not measure. What the readout establishes is the absence itself. Th
 explanation is the Chief's and is recorded as one, because the difference between "the word was not
 available" and "the word had been excluded" is exactly the kind of thing a map should be asked to
 settle rather than told.
+
+---
+
+## The environment fix does not fix the episode, and the causal story is refuted
+
+**2026-09-08 11:05Z. One episode, no lens and no capture, fixed simulator, corrected rendering, 24
+steps, greedy, seed 20260902. 65.7 s. `environment_falsification.py`, result in
+`falsification.json`. Run because the Chief's account made a prediction that could fail.**
+
+The account was: `list_files("/")` returned a false empty, the model concluded the workspace was
+empty, and everything downstream followed from that. The prediction was that with `list_files`
+raising instead, the belief never forms and the episode behaves differently.
+
+**It behaves differently and fails identically, and the loop is tighter than before.**
+
+| | corrected rendering, lying simulator | corrected rendering, fixed simulator |
+|---|---|---|
+| turns | 24 | 24 |
+| distinct calls | 2 | 2 |
+| loop detected | yes | yes |
+| passed | no | no |
+| shape | `read_file` on one wrong path, 23 times | `list_files("/")` and `list_files(".")` alternating, 24 times |
+
+Every turn is now an error. The model never reaches a read at all, never tries `search_files` —
+which returns the true path — and never emits the literal the prompt gave it. It alternates two
+root guesses until the ceiling.
+
+**So the specific chain is wrong.** The false empty was a lie and removing it was right, but it was
+not what caused the failure. Told the truth, the model fails sooner and more completely.
+
+**I then drew the wrong conclusion from this and it is corrected here rather than below.** I wrote
+that the environment has no discoverable root, and urged that it be promoted to the register's
+headline. It is false. No tool lists the workspace top level, which is what I checked, but
+`search_files` reaches the full true path from any of several words in the task's own prompt:
+
+| call | result |
+|---|---|
+| `search_files("config")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("0028")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("mode")` | `MATCHES: workspace/test/0028/config.ini` |
+| `search_files("workspace")` | `MATCHES: workspace/test/0028/config.ini` |
+
+Swept over the difficulty-2 test split, **165 of 180 tasks are reachable by a single search of a
+word taken from their own prompt**, 15 of 15 in every family except `calculate`, which has no files
+and needs no path. Reproduced independently by the Chief and here. And the route is named in the
+very rule the model was obeying: *if a tool returns an error, read it and recover: list or search
+to find the right path.*
+
+**So the finding is not that the model cannot find the workspace. It is that the model does not
+switch strategy under repeated unambiguous failure.** Twenty-four honest errors on two guesses,
+with the escape route in its own instructions and its own tool list, and it alternates the two
+rejected calls to the ceiling. That is a statement about the agent, measured under an environment
+that no longer lies to it — which is the thing that could not be said this morning.
+
+**Consequences.**
+
+The register's causal paragraph needs revising. My suggestion that its "no discoverable root"
+question be promoted to the headline was wrong and is withdrawn above; promoting it would have
+promoted something false.
+
+The fixed point's frozen records are untouched and remain what they were. This run deliberately
+writes its own directory and reads nothing from theirs. What it does change is the claim they
+support: the false premise is no longer the identified cause, so the belief-persistence framing
+above must be read as being about **a** false premise the environment installed, with the question
+of which one now open.
+
+And a note on the metric this run exposed. `longest_identical_run` is 1 here, because the loop is a
+two-cycle rather than a repetition. A loop measure that only counts consecutive identical calls
+misses an alternation, and the earlier tables in this record use exactly that measure. The loop
+detector caught it; my summary column would not have.
+
+
+### How the false zero happened, since it nearly went out as a refutation
+
+Checking the Chief's reachability claim, my first sweep reported **0 of 540 tasks reachable** and I
+was one step from sending it. The script called `Simulator.act`, which does not exist, inside a
+`try/except Exception: continue`. Every task raised, every task was scored unreachable, and the
+result was a clean table of zeros that agreed with what I already believed.
+
+Written down because it is the day's third instance of one shape: a broad aggregate that is more
+persuasive than the thing it is made of. The pooled commitment table, the flat reading join, and
+this. In each case the number was wrong in the direction of the hypothesis, and in each case what
+caught it was asking a question whose answer was known in advance — here, that a single task's
+search returns a path, which takes one call to check and which I ran only because the zero was too
+clean.

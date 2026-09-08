@@ -168,3 +168,111 @@ layer, under that averaging convention. It is not a token probability, not a cau
 not evidence of a workspace, a maintained state or flexible access. Write the records so that the
 finding, the technique and our implementation are separable, per the Director's standard: the
 technique is the part that transfers and it is the part usually left implicit.
+
+---
+
+## Second amendment, CRO, 2026-09-08, after the confound audit
+
+Seven audited surfaces have changed things in all three tasks. Read this before starting, and read
+the register at `research/records/CONFOUND-REGISTER-2026-09-08/README.md` for the reasoning.
+
+### A second hard dependency on task 1, of exactly the same kind as the first
+
+**Do not generate rollouts until you are on `020aa89` or later.** `list_files` answered a directory
+it could not match with `FILES: (none)` rather than an error. Workspace paths carry no leading
+slash, so `list_files("/")`, `list_files(".")`, `list_files("./")` and `list_files("/workspace")` all
+told the model the workspace was empty. There is also no discoverable root: no tool lists the
+workspace top level, so the model must guess the string `workspace` exactly.
+
+This was not hypothetical. In the corrected re-run of `update-0028` the model's first call is
+`list_files("/")`, it is told the workspace is empty, and its remaining twenty-three turns are sound
+reasoning from that falsehood. Our own system prompt tells the model to inspect rather than guess; it
+inspected, and the instrument lied.
+
+**Rollouts generated before this fix would bake an environment defect into a lens permanently, and no
+later fix would reach it.** That is the same argument as the rendering gate and it binds the same way.
+Both simulators now raise `directory not found: <the caller's own string>`.
+
+### The span definitions changed, and your manifest must use the new ones
+
+The pre-registration amendment at `9a9880b` redefines the spans, because the old set could not be
+computed and one facet was empty by construction. Your acceptance criterion asked for per-span
+position counts; these are the spans:
+
+- **note** — from the start of the turn to the opening fence, exclusive.
+- **call skeleton** — the fence, key names, punctuation and tool name: everything inside the fence
+  fixed by the calling convention.
+- **call argument** — the task-dependent values inside the fence: path, query, expression,
+  replacement text.
+- **chat prose** — all generated tokens in a chat episode.
+
+**The observation facet is struck.** Rank rows exist only for generated tokens and observations are
+never generated, so it can never be populated.
+
+**Why this matters to a fitting corpus and not only to the map.** These two classes behave in
+opposite directions. Measured across every episode, argument-start tokens commit at layer 30 with
+1.6% at layer 24, against 29% at layer 24 for ordinary tokens — **later, not earlier**. A corpus that
+records "call" as one span averages two populations that disagree. Record all four separately.
+
+### The position-composition trap, which is the audit's largest unremarked finding
+
+`GEMMA3-LENS-2026-09-08/convergence.csv` reports `n_valid_positions = 111` for every one of 546
+prompts. So the hosted lens's 60,606 positions are **all document-initial and BOS-led**. Your prose
+fit's corpus manifest has `template: 1` on the fit span and `0` on the held span, which is exactly one
+BOS in 257,280 tokens: 2,009 of 2,010 windows start mid-sentence.
+
+**"Both fits at 128 tokens" is true of window length and false of position composition**, and this is
+a live alternative explanation for the depth trend in your comparison, not a footnote. It also bounds
+the hosted lens hard: it was never fitted above absolute position ~111, against a 1,024 sliding
+window, while the map reads transcripts to position 2,298.
+
+**So your new fit must record, in the manifest, the distribution of absolute positions it was fitted
+at** — not just the window length. Decide deliberately whether sequences carry BOS, state which you
+chose, and say why. This is the mistake that is invisible afterwards and it has already cost us one
+comparison.
+
+### Two smaller corrections to your regression record
+
+Ridge selection is **uninformative about the optimum**: held error is strictly increasing in alpha at
+33 of 33 layers and 5 of 5 candidates, so the grid brackets no minimum anywhere. It is informative
+that the problem is not variance-limited. Say the second, not the first.
+
+`relative_difference_to_hosted` is algebraically `sqrt(r² + 1 − 2r·cos)` with `r` the norm ratio,
+verified to 4.4e-16, so it is not independent evidence. Against a trivial baseline of two unrelated
+maps at the observed norms, **52.1% of its depth trend is norm drift**. At layer 1 the optimal rescale
+is 0.0073, so the reported 3.7441 is 99.96% a size mismatch. The identity-boundary effect, by
+contrast, inflates the *level* and not the trend: identity-partialled cosine still spans 0.702 of the
+raw 0.857, so **82% of the cosine trend survives**.
+
+### Task 3 is substantially rewritten — read the second amendment in the bridge order
+
+`2e58964`. In short: **there are no published labels for the dictionary we chose, at any of its 34
+layers.** Neuronpedia's residual labels index `resid_post/layer_17_width_16k_l0_medium`, confirmed by
+the endpoint's own `hfFolderId` field, and `l0_medium` does not exist anywhere in `resid_post_all`.
+Index matching is forbidden: same-index decoder cosine is a real 0.672 mean against a 0.013
+different-seed control, but 18% of features sit below 0.2, so it would silently fabricate about one
+pairing in five.
+
+**What replaces it is better.** `examples.safetensors` ships with the chosen dictionary at every layer
+and carries `top_tokens` and `top_logits` at [16384, 10], a thousand activating examples per feature,
+and the corpus they index. Right dictionary, no mapping, no third party.
+
+**And it gives A1 a correctness check to build first.** A1 with `J_L` replaced by the identity is
+`top_k(W d_i)`, which is precisely what the shipped `top_logits` is. Compute the overlap before
+anything else: it catches a wrong decoder orientation, a wrong unembedding, or a tokenizer indexing
+error, none of which any other check in the bridge would reveal. The **gap** between `top_k(W d_i)`
+and `top_k(W J_L d_i)` is then the quantity the bridge exists to measure.
+
+**Two operational notes.** A folder-level pull is 1.15 GB per layer, 3.4x the budgeted figure; fetch
+`params.safetensors` and `config.json` by name and take `examples.safetensors` only at layers you
+interpret. And **verify downloads by hash, never by length**: the deep-dive and every-layer 16k
+dictionaries are both exactly 335,686,016 bytes with byte-identical headers, differing first at byte
+385, so a mis-targeted download lands a file of exactly the right size.
+
+### On announcing your window
+
+R61(c) at `9f4785e`. `runlock announce` records `os.getppid()`, which is right for an interactive
+shell and wrong for a harness that discards the shell after each command — such a window reports
+itself orphaned from the moment it opens, which is worse than no window because orphaned is the one
+signal that lets another seat reclaim a slot. `announce` now takes `--holder-pid`. Whichever you use,
+**read `runlock status` back and see `running` before you start.** Announcing is not holding.
