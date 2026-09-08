@@ -166,3 +166,51 @@ per-task time went from a 23.3 s mean over the first 32 tasks to 135 s and 263 s
 straddled its load, and recovered afterwards. **The verdicts are unaffected**, because decoding is
 greedy and deterministic; the elapsed times in this run are not comparable with the 19-task run's,
 and `full_split_tally.py` reports no wall clock for that reason.
+
+---
+
+## Appended: checkpoint 1,200 across the full split, and a correction to this record's answer
+
+**175 of 180. The best checkpoint is 1,200, not 800, and the one-line answer above is wrong.**
+
+| on 180 tasks | base | 800 rows | 1,200 rows |
+|---|---|---|---|
+| passes | 123 | 159 | **175** |
+| adapter wins / base wins | — | 39 / 3 | **53 / 1** |
+| exact paired p | — | 5.6e-9 | **6.1e-15** |
+| Wilson 95% | 0.612–0.747 | 0.828–0.922 | 0.937–0.988 |
+| loop failures | 20 | 2 | 2 |
+| exhausted | 32 | 7 | 2 |
+| tool errors | 273 | 18 | 17 |
+| clean rate | 0.683 | 0.872 | 0.972 |
+| turns taken | 1,714 | 1,372 | 1,334 |
+
+1,200 beats 800 on 20 tasks and loses on 4. It fixes the two families 800 could not: aggregate
+report 5 → 14 where 800 stayed at 5, and conditional update 1 → 15 where 800 reached only 5. Its
+five failures are three ledger reconciliations, one aggregate report and `test-update-0004-clean`.
+
+### Why the earlier answer was wrong
+
+Both checkpoints passed 18 of the divergence 19, and the tie was broken on the kind of the single
+failure: 1,200's was a verbatim re-issue run to the step ceiling, read here as arm A's dominant
+pathology returning at the later checkpoint.
+
+On 180 tasks the `update` family is 14 of 15 for 1,200, and that task is one of five failures in
+the whole split. The lock-in was real and isolated, not a pathology spreading.
+
+**The standard was available and was not applied.** The section above says the nineteen tasks
+could not establish a *margin* at p = 0.375, and the section after it ranks two checkpoints on a
+*single task's* failure mode, which is weaker evidence still. The honest answer at the time was
+that the two were not separated.
+
+Read back on the full-split files, the nineteen tasks give base 15, 800 18, 1,200 18 — exactly the
+figures published from the shorter runs. Nothing is inconsistent; the set simply could not
+separate the two checkpoints.
+
+### What stands
+
+Everything about the depth restriction. The top-8 adapter beats its base decisively at both
+checkpoints, no family regresses at 800, and every failure mode the training was suspected of
+causing is lower than the base's at both. And more training on the restricted depth kept improving
+monotonically — exhaustion 7 → 2, clean rate 0.872 → 0.972, turns still falling — so arm 1 was
+still descending at 1,200 rows.

@@ -127,5 +127,146 @@
       "test-aggregate_report-0143-clean",
       "test-aggregate_report-0155-clean"
     ]
+  },
+  {
+    "name": "arm 1 @ 1,200 rows",
+    "n": 180,
+    "passes": 175,
+    "base_passes": 123,
+    "adapter_wins": 53,
+    "base_wins": 1,
+    "exact_paired_p": 6.106226635438361e-15,
+    "wilson": [
+      0.9366310435917371,
+      0.9880780538051526
+    ],
+    "base_wilson": [
+      0.6121496060714819,
+      0.7468551023296635
+    ],
+    "exhausted": 2,
+    "loops": 4,
+    "parse_errors": 0,
+    "integrity_violations": 185,
+    "by_family": {
+      "aggregate_report": {
+        "n": 15,
+        "adapter": 14,
+        "base": 5
+      },
+      "batch_update": {
+        "n": 15,
+        "adapter": 15,
+        "base": 1
+      },
+      "calculate": {
+        "n": 15,
+        "adapter": 15,
+        "base": 13
+      },
+      "conditional_update": {
+        "n": 15,
+        "adapter": 15,
+        "base": 1
+      },
+      "cross_reference": {
+        "n": 15,
+        "adapter": 15,
+        "base": 13
+      },
+      "ledger_reconcile": {
+        "n": 15,
+        "adapter": 12,
+        "base": 0
+      },
+      "list": {
+        "n": 15,
+        "adapter": 15,
+        "base": 15
+      },
+      "pointer_chain": {
+        "n": 15,
+        "adapter": 15,
+        "base": 15
+      },
+      "read": {
+        "n": 15,
+        "adapter": 15,
+        "base": 15
+      },
+      "search": {
+        "n": 15,
+        "adapter": 15,
+        "base": 15
+      },
+      "synthesis": {
+        "n": 15,
+        "adapter": 15,
+        "base": 15
+      },
+      "update": {
+        "n": 15,
+        "adapter": 14,
+        "base": 15
+      }
+    },
+    "adapter_wins_tasks": [
+      "test-aggregate_report-0023-clean",
+      "test-aggregate_report-0035-clean",
+      "test-aggregate_report-0047-clean",
+      "test-aggregate_report-0059-clean",
+      "test-aggregate_report-0071-clean",
+      "test-aggregate_report-0083-clean",
+      "test-aggregate_report-0095-clean",
+      "test-aggregate_report-0119-clean",
+      "test-aggregate_report-0167-clean",
+      "test-batch_update-0010-clean",
+      "test-batch_update-0022-clean",
+      "test-batch_update-0034-clean",
+      "test-batch_update-0058-clean",
+      "test-batch_update-0070-clean",
+      "test-batch_update-0082-clean",
+      "test-batch_update-0094-clean",
+      "test-batch_update-0106-clean",
+      "test-batch_update-0118-clean",
+      "test-batch_update-0130-clean",
+      "test-batch_update-0142-clean",
+      "test-batch_update-0154-clean",
+      "test-batch_update-0166-clean",
+      "test-batch_update-0178-clean",
+      "test-calculate-0014-clean",
+      "test-calculate-0170-clean",
+      "test-conditional_update-0009-clean",
+      "test-conditional_update-0021-clean",
+      "test-conditional_update-0033-clean",
+      "test-conditional_update-0045-clean",
+      "test-conditional_update-0057-clean",
+      "test-conditional_update-0069-clean",
+      "test-conditional_update-0093-clean",
+      "test-conditional_update-0105-clean",
+      "test-conditional_update-0117-clean",
+      "test-conditional_update-0129-clean",
+      "test-conditional_update-0141-clean",
+      "test-conditional_update-0153-clean",
+      "test-conditional_update-0165-clean",
+      "test-conditional_update-0177-clean",
+      "test-cross_reference-0044-clean",
+      "test-cross_reference-0104-clean",
+      "test-ledger_reconcile-0007-clean",
+      "test-ledger_reconcile-0019-clean",
+      "test-ledger_reconcile-0031-clean",
+      "test-ledger_reconcile-0043-clean",
+      "test-ledger_reconcile-0055-clean",
+      "test-ledger_reconcile-0079-clean",
+      "test-ledger_reconcile-0091-clean",
+      "test-ledger_reconcile-0103-clean",
+      "test-ledger_reconcile-0115-clean",
+      "test-ledger_reconcile-0151-clean",
+      "test-ledger_reconcile-0163-clean",
+      "test-ledger_reconcile-0175-clean"
+    ],
+    "base_wins_tasks": [
+      "test-update-0004-clean"
+    ]
   }
 ]
