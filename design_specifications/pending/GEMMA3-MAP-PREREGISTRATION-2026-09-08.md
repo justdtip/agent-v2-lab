@@ -141,3 +141,149 @@ probe layer N+1, and the lens carries maps on the same index. **The checkpoint d
 Scope was trained on Google's unquantised weights; the map runs our 4-bit conversion. So the
 quantisation mismatch already disclosed for the lens is, for the SAE bridge, not a disclosure but a
 **failed precondition**. Any composition work must be done on the bf16 entry.
+
+---
+
+## Amendment, Chief, 2026-09-08, before stage two runs and before any stage-two record exists
+
+Seven audited surfaces found five things in this document that would not have measured what it says
+they measure. The house rule bars amendment once a record is read, so all of it is settled here.
+Every change below is forced by evidence gathered since the document was written, and each names it.
+
+### 1. The base rate is degenerate at the primary horizon, so the null moves
+
+**What was written.** Foreknowledge is reported "with the final layer's value as the base rate on
+every row", and the map is a null if "shares at every non-final layer sit within the final layer's
+base rate".
+
+**Why it fails.** Sampling is greedy. The final layer's lens is the identity, so at horizon one the
+emitted token *is* that layer's argmax by construction: rank 1 for 5,760 of 5,760 emitted tokens,
+exactly 100.00%. A base rate of 100% cannot be exceeded, so every possible outcome sits "within" it
+and the null is true whatever the model does. **At horizon one the pre-registered null is not a
+falsifiable statement.**
+
+**Fixed.** The null is evaluated at **horizons four and eight only**, where the final layer's base
+rates are 19.1% and 10.2%. At horizon one the final layer is recorded as the identity check it
+actually is, not as a base rate, and no null is claimed there. The primary comparison stays at
+horizon one — it compares two spans against each other, not against the base rate — but it may not
+be described as exceeding or falling within any base rate.
+
+### 2. The span facets do not exist in the records, so they are defined here
+
+**What was written.** Results are "faceted by span — note, call, observation, chat prose".
+
+**Why it fails.** No record row carries a span label. Rank rows hold position, layer, horizon, token
+id, rank and probability, and nothing else, and no note/call segmentation exists in this document or
+in the code. The boundary would therefore have been chosen after the records were read, which is the
+exact thing a pre-registration exists to prevent. The observation facet is worse than undefined: it
+is **empty by construction**, because rank rows are emitted only for generated tokens and
+observations are never generated.
+
+**Fixed.** The observation facet is struck; it can never be populated by this instrument. The
+remaining spans are defined now, in terms of the model's output and not of our parser:
+
+- **note** — generated tokens from the start of the turn up to and excluding the opening fence.
+- **call skeleton** — the fence, the key names, the punctuation and the tool name: every generated
+  token inside the fence whose value is fixed by the calling convention rather than by the task.
+- **call argument** — the generated tokens inside the fence that carry a task-dependent value: the
+  path, the query, the expression, the replacement text.
+- **chat prose** — all generated tokens in a chat episode.
+
+The segmentation is emitted into the record at write time as a per-position label, so that the facet
+is a property of the data rather than of a later analysis.
+
+### 3. The primary comparison is restated, because the original is not identifiable
+
+**What was written.** "Within agentic episodes, the share at horizon one in *call* spans against
+*note* spans, per layer. Calls are where the model commits to an action; notes are where it
+deliberates. If commitment is visible earlier in depth than deliberation, that is the first thing
+this instrument can say about how the model completes a task."
+
+**Why it fails.** Three reasons, each sufficient.
+
+*Format entropy.* Call spans are stereotyped fenced JSON, 17 of a median 36 tokens fixed
+scaffolding, against free English in notes. "Calls are read earlier than notes" cannot be separated
+from "JSON is more predictable than English". The lens compounds it in the same direction: it was
+fitted on prose, so it is nearer in-domain on notes than on calls.
+
+*The sign is already known and it is the wrong way round.* The one existing run has **note above
+call at every non-final layer** — 0.4822 against 0.3815 at layer 24. The hypothesis as written is
+contradicted by the only data we have, in the direction the confound predicts.
+
+*Pooling destroys the effect.* The D-CRO's argument-start control, built across every episode:
+
+| token class | n | at layer 24 | at layer 30 | median |
+|---|---:|---:|---:|---:|
+| argument-start, excluding `update-0028` | 128 | 1.6% | 79% | 30 |
+| all other tokens, excluding `update-0028` | 5,442 | 29% | 44% | 30 |
+
+Argument-start tokens commit **later** than ordinary tokens, not earlier, and they sit at the
+opposite end of the depth range from the scaffolding they are pooled with. A single "call" number
+averages two populations that behave in opposite directions.
+
+**Fixed.** The primary comparison is **call argument spans against call skeleton spans, at horizon
+one, per layer** — a contrast between two token classes inside the same syntactic object, produced
+in the same turn, under the same format. It holds format, position and lens domain roughly fixed and
+varies what the pre-registration actually cares about: whether the task-dependent content of an
+action is represented at a different depth from the convention that carries it.
+
+Note against call is retained as a **secondary, descriptive** reading, reported with the skeleton
+and argument shares printed separately beside it, and it carries no claim about deliberation or
+commitment.
+
+### 4. Composition is bounded before the run, not described after it
+
+**Why.** Projected at the corrected rendering, `update-0028` alone contributes 34.1% of stage two's
+rank rows, the top three episodes 61.0%, and the top four 70.9%. That episode is 24 steps with two
+distinct calls, one of them repeated 23 times. An unweighted pooled statistic over positions would
+be a statement about that loop.
+
+**Fixed.** Every reported figure is computed **per episode first and then aggregated across episodes
+with equal weight**, so no episode's contribution scales with its length. The per-episode values are
+published beside the aggregate. Where a figure cannot be computed per episode, it is not reported.
+
+**And a rule the D-CRO's own record earned the hard way.** A decision the model repeats is one
+observation, not many. Twenty-three identical calls are twenty-three copies of one commitment, and
+pooling them produced a clean, false 24-against-30 result that dissolved on deduplication to n=5
+against n=13. **No count over positions may be quoted as a sample size without deduplicating
+byte-identical repeated decisions within an episode.** This applies to the fixed point in
+`update-0028` above all, precisely because it is the most persuasive thing in the corpus.
+
+### 5. The window-conditioned secondary is live, and was wrongly declared void
+
+**What was written.** The comparison "is restricted to positions beyond the sliding window and is
+void without them."
+
+**Why it failed.** It was not void. `live_lens_pilot.py:176-181` hardcodes that only one episode puts
+any position past 1,024, a figure derived from opening prompt lengths. Measured from the records:
+**8 of 14 episodes** qualify, covering 26,336 of 106,322 reading positions (24.77%) and 3,140 of
+5,760 emitted tokens (54.5%), with a maximum position of 2,298. Under the corrected rendering the
+share rises further.
+
+**Fixed.** The qualifying count is **computed from the run's own positions and recorded in the
+manifest**, never asserted in advance. The comparison proceeds. The caveat that the lens was fitted
+at 128 tokens against a 1,024 window stands unchanged and is the binding limitation on it.
+
+### 6. The episode set is eleven families, not twelve
+
+`agentic-d2-read-0108` was skipped as complete though its own record footer reads
+`"status": "aborted"`, and it now sits in `pilot/quarantine/` and is absent from the manifest. Stage
+one covers **11 of 12 families** and no reader of the artefact could have told. Stage two runs into
+a clean directory, and the manifest records the family count it actually achieved rather than the
+one it intended.
+
+### 7. What the environment fix does to comparability, stated rather than discovered
+
+`list_files` answered an unsatisfiable directory with `FILES: (none)` rather than an error, which
+manufactured `update-0028`'s failure outright and is fixed at `020aa89`. Stage two therefore runs
+against a **different environment** from stage one, on top of the different rendering. Outcomes are
+not comparable between the two stages and no figure may be carried across them. This is the same
+trade already accepted for the rendering fix and for the same reason: a corpus gathered under an
+instrument known to be wrong cannot be repaired afterwards.
+
+**One consequence for the fixed point.** Under the fixed simulator the model's opening
+`list_files("/")` now returns an error rather than a false empty, so the belief that produced the
+23-repeat loop may not form at all. The fixed point may simply not be there in stage two. That is
+the correct outcome and not a loss, but it means **any validation that depends on that fork must be
+performed against the stage-one and corrected-rendering records already on disk**, which are frozen,
+and not assumed to reappear.
