@@ -87,3 +87,57 @@ The globally-attending layers, the span facets, the horizons, the primary compar
 condition and the null are all fixed by this document. The layer set for the map is all
 thirty-four. The episode set is the twelve family-stratified task ids and three chat episodes named
 in `GEMMA3-WORK-ORDERS-2026-09-08.md`.
+
+---
+
+## Amendment: three cautions from the SAE/J-lens derivation, 2026-09-08
+
+From a formal derivation supplied by the Director. Each was checked numerically before being
+adopted; each bears on a number this map will publish.
+
+**A low lens reading does not imply a low causal effect.** The hosted lens is an *averaged*
+Jacobian. Writing the context-specific Jacobian as `K(w)` and the average as `J`, the deviation
+`D = K - J` gives `E[K'K] = J'J + E[D'D]`, hence `||J.d|| <= E||K(w).d||` for every direction `d`.
+Averaging can cancel a causal sensitivity entirely: with `K = I` and `K = -I` equally likely, `J`
+is zero while every individual `K` preserves the norm. **Verified.** So a low foreknowledge share
+at a layer is evidence about the averaged geometry and **not** evidence that the residual there
+has little causal influence on the output. Any null this map reports must be stated in those terms.
+
+**Positions within an episode are not independent samples.** Any interval or test quoted from this
+map must be computed over episodes, not over the 106,322 reading rows. Token-level resampling
+inside an episode does not create independent draws, and an interval that treats it as if it did
+is overconfident by roughly the square root of the positions per episode. The map has fifteen
+episodes; that is the sample size for every claim it makes.
+
+**"Unexplained" is not "outside the workspace".** If any J-space occupancy figure is ever reported
+beside these readings, it carries this caution: the residual left by a sparse fit at budget `k` can
+itself lie inside the cone at that budget. With dictionary `[e1, e2]`, `k = 1` and `h = (2, 1)`,
+the fit is `(2, 0)` and the residual `(0, 1)` is itself a cone member. **Verified.** A residual
+means unexplained *by this fit at this budget*, and nothing more.
+
+### And a correction to the Chief's own proposal of this morning
+
+The Chief proposed composing the lens with Gemma Scope 2's decoder directions, so that each sparse
+feature acquires a token-level readout. That composition is **exact** and it stands: applying a
+linear readout to the exact sparse identity `h = b + Dz + e` gives `Lh = Lb + LDz + Le`, so the
+signed quantity `z_i * (L D)_{v,i}` is that feature's contribution to that lens score, with the
+whole error carried by `L.e`.
+
+**What it does not give, and the Chief was not careful to separate, is a decomposition of the
+residual's occupancy of J-space.** Two reasons, both verified. Decomposing each decoder direction
+independently into J directions and summing does not yield the sparse fit of their sum: with
+dictionary and decoder both the identity in two dimensions and `k = 1`, feature-wise decomposition
+gives `(2, 1)` where the sparse fit of the same vector is `(2, 0)`. And energy is not additive over
+a non-orthogonal dictionary, so a per-feature share of `||h||^2` is not a partition and can exceed
+one. **A feature's contribution to a score and a feature's share of the geometry are different
+quantities and must not be reported in the same units.**
+
+### A precondition we do not currently meet
+
+The derivation requires the sparse dictionary and the J dictionary to refer to the **same residual
+hook, layer, coordinate scaling and model checkpoint** before their vectors may be combined. Layer
+and hook align: Gemma Scope's residual site is the output of block N, which is this repository's
+probe layer N+1, and the lens carries maps on the same index. **The checkpoint does not.** Gemma
+Scope was trained on Google's unquantised weights; the map runs our 4-bit conversion. So the
+quantisation mismatch already disclosed for the lens is, for the SAE bridge, not a disclosure but a
+**failed precondition**. Any composition work must be done on the bf16 entry.
