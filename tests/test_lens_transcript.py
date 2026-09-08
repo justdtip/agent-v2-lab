@@ -230,3 +230,15 @@ def test_reader_retains_a_complete_corpus_that_requires_ruling(tmp_path):
     assert manifest["acceptance"]["status"] == "ruling_required"
     assert manifest["acceptance"]["concentration"]["fit"]["largest_episode_share"] == 1
     assert t.read_transcript_corpus(path)
+
+
+def test_boolean_and_integer_arguments_are_not_identical_repeated_calls():
+    turns = [
+        {
+            "task_id": "train-read-0000-clean",
+            "step": i,
+            "canonical_action": {"name": "read_file", "arguments": {"offset": value}},
+        }
+        for i, value in enumerate([True, 1, False, 0])
+    ]
+    assert t.transcript_acceptance([], turns)["repeated_runs"] == []

@@ -369,7 +369,7 @@ def transcript_acceptance(rows, turns):
             if (
                 current
                 and action is not None
-                and action == turns[current[-1]]["canonical_action"]
+                and encoded(action) == encoded(turns[current[-1]]["canonical_action"])
                 and turns[index]["step"] == turns[current[-1]]["step"] + 1
             ):
                 current.append(index)
