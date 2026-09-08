@@ -4,6 +4,11 @@ Status: amended source implemented and verified with 190 small checks, native im
 No new model rollout, transcript fit or full dictionary readout has started. The Deputy's
 stage-two map holds the machine; Task 1 generation remains next in our lane after that window.
 
+**Later position-coverage amendment:** the pending fit now targets **2,816 tokens**, with an
+actual fit-scored position requirement of **2,749**. See `POSITION-COVERAGE-AMENDMENT.md` and
+`TRANSCRIPT-REGISTRATION-v3.json`. The earlier 2,048-token registrations and 190-check verification
+below are retained as historical evidence; the new source checks are recorded separately.
+
 ## Finding, technique, implementation
 
 **Finding so far.** The existing agentic corpus builder would drop turns longer than its cap,

@@ -88,14 +88,22 @@ def main():
         "producer_model": "gemma3-4b",
         "fit_models": list(driver["FIT_MODELS"]),
         "model_identity": {"base": "google/gemma-3-4b-it", "training": None, "num_layers": 34},
-        "fitting_context_tokens": 2048,
+        "fitting_context_tokens": 2816,
+        "position_support": {
+            "target_max_position": 2749,
+            "reference_max_position": 2047,
+            "source": (
+                "Director review 2026-09-08; supplied audited maximum across held map episodes. "
+                "Zero-based generation-turn positions; actual corpus coverage still unmeasured."
+            ),
+        },
         "tokenizer_directory": model.hf_id,
         "tokenizer": tokenizer,
         "snapshots": {"gemma3-4b": fourbit, "gemma3-4b-bf16": bf16},
         "cohorts": driver["plan_cohorts"](),
         "evaluation": driver["EVALUATION"],
         "rendering_gate": {**gates, "files": evidence},
-        "amends": "TRANSCRIPT-REGISTRATION.json; unlaunched v1, preserved",
+        "amends": "TRANSCRIPT-REGISTRATION-v2.json; unlaunched 2048-token plan, preserved",
         "capture_limits": {"max_prompt_tokens": 8192, "max_forward_tokens": 8393},
         "capture_projection": {
             "peak_gib": 16.0,
@@ -113,16 +121,19 @@ def main():
         },
         "residual_source": "native",
         "initial_fit_calibration_bound_gib": 14.5,
-        "provisional_full_fit_peak_gib": 18.5,
+        "provisional_full_fit_peak_gib": 21.0,
         "fit_projection_basis": (
-            "Prior BF16 native128 fit measured12.44GiB. At2048, conservatively add about0.67GB "
-            "for all34 FP32 residual streams,0.35GB for masked row/cast arrays,0.27GB for "
-            "two full attention matrices,0.16GB FFN growth,and4.03GB for two FP32 logits "
-            "buffers beyond the128 baseline. Total about17.55GiB; round up18.5GiB. "
+            "Prior BF16 native128 fit measured12.4436GiB. At2816, add0.871582GiB for34 "
+            "FP32 residual streams beyond128,0.456543GiB for1408 scored-row FP32 arrays, "
+            "0.471680GiB for two attention buffers beyond128,0.205078GiB for two FFN buffers "
+            "and5.251282GiB for two vocabulary-logit buffers beyond128. Component estimate "
+            "19.699765GiB; round up21.0GiB, leaving1.300235GiB margin. An extra BF16 gather "
+            "copy0.228271GiB and16 FP32 solve matrices0.390625GiB fit in this allowance. "
+            "Fixed fit/held sufficient statistics3.222656GiB are already in the128 baseline. "
             "Some output graphs are pruned and fused buffers may not coexist; this is an "
             "unmeasured upper estimate, not claimed actual peak. The256/512 calibration "
             "starts at14.5GiB using the same growth calculation at512 with margin. "
-            "Native masked calibration then measures512/1024/2048 and projects each "
+            "Native masked calibration then measures512/1024/2816 and projects each "
             "larger size before launch under the22GiB registry budget. Its measured "
             "projection is mandatory before the combined two-precision fit window."
         ),
@@ -131,7 +142,7 @@ def main():
             "not an active reservation"
         ),
     }
-    path = RECORD / "TRANSCRIPT-REGISTRATION-v2.json"
+    path = RECORD / "TRANSCRIPT-REGISTRATION-v3.json"
     with path.open("x") as stream:
         json.dump(registration, stream, indent=2, allow_nan=False)
         stream.write("\n")

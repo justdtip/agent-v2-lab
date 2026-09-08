@@ -1,0 +1,48 @@
+{
+  "utc": "2026-09-08T12:27:15.893718+00:00",
+  "source_commit": "82d4417",
+  "scope": "position coverage amendment; affected integration checks, not a native suite",
+  "result": {
+    "passed": 113,
+    "failed": 0,
+    "exit_code": 0
+  },
+  "test_files": [
+    "tests/test_lens_transcript.py",
+    "tests/test_gemma_transcript_lens.py",
+    "tests/test_lens_runtime.py",
+    "tests/test_lens_regression_preflight.py",
+    "tests/test_evaluation_capture.py"
+  ],
+  "static_checks": [
+    "banned model constants",
+    "process creation through spawn helper"
+  ],
+  "native_guard": "Parent meta-path finder rejects mlx/mlx_lm; failing mlx and mlx_lm packages placed first on subprocess PYTHONPATH; neither real native module loaded",
+  "coverage_controls": [
+    "fit scored2748 fails even with2816-token input, held2815 and large originaloffset",
+    "fit scored2749 passes endpoint check",
+    "rehashing a lowered requested target does not bypass source binding",
+    "legacy corpora without optional target retain readback"
+  ],
+  "independent_source_review": "no actionable findings",
+  "ruff": "passed",
+  "diff_check": "passed",
+  "registration": {
+    "path": "TRANSCRIPT-REGISTRATION-v3.json",
+    "sha256": "d2f9eb5bb07d688240320de47f1e5135fcacc3bc035b04014c00e97e84219ede",
+    "inspection": "passed, no model load"
+  },
+  "source_sha256": {
+    "scripts/gemma_transcript_lens.py": "1f28af4bca50deddea270d6d39ae2a8d72a1ddb80a7fd4fdfcba327a8115503a",
+    "src/local_llm_lab/pipeline/lens_fitting/transcript.py": "ecedeeb57caedc3ee80e6f97895f3ac70014ce4eaaf1b80b2fbaaf12a75dd4e6",
+    "tests/test_gemma_transcript_lens.py": "8098e0f1cbfd3586bdc8464d3620efcd272406dce1b4cee2e37cf163683bc5e2",
+    "tests/test_lens_transcript.py": "fd9fbf429296566bf9a95342c533e9ffd5a3f5a3aa2be9d2c6091b65c101e524"
+  },
+  "unrun": [
+    "rollout corpus actualpositiondistribution",
+    "native resource calibration",
+    "both precision fits",
+    "real bridge numericalchecks"
+  ]
+}
