@@ -747,3 +747,54 @@ consecutive errors without ever searching, **and** terminates confidently with a
 The correction does not change the reading that the class is unified by outcome rather than by
 mechanism. It does change its size — five of ten agentic episodes — and it removes a clean
 disjointness I had asserted from four episodes and should not have.
+
+## The class is misnamed for a third of its members
+
+**Six instances now, all ten agentic episodes of stage two read. Comparing each answer against the
+expected one under the harness's own normalisation, which strips Markdown fencing and terminal
+punctuation:**
+
+| episode | answered | expected | contains it |
+|---|---|---|---|
+| `search-0061` | the status of key-test-0061-916 is blocked | blocked | **yes** |
+| `batch_update-0166` | updated-and-verified=4 | updated-and-verified=4 | **exact match** |
+| `list-0149` | task-complete | milestone-534 | no |
+| `pointer_chain-0018` | lab/test/0018/chain/node-7-288.txt | artifact-93330 | no |
+| `conditional_update-0093` | service-0:mode=throttled | service-2:mode=throttled | no |
+| `ledger_reconcile-0163` | 277 | approved_total=498 | no |
+
+**Two of the six are not wrong-answer failures at all, and they fail in opposite directions.**
+
+`search-0061` **did the task correctly.** It searched, found the file, read the Status field, and
+reported `blocked` — inside a sentence. The harness requires the normalised answer to equal the
+expected one, so a correct result in prose scores as a failure. This is a presentation failure.
+
+`batch_update-0166` **gave the exactly correct answer string** and its verdict is still False, so
+the failure is not the answer. It applied one of four updates and three `replace_text` calls
+errored, so the workspace is wrong. It said the right thing and did the wrong thing.
+
+**So the class contains at least one episode where the model succeeded at the task and one where it
+reported success it had not achieved, and both are counted identically.** The name
+"wrong-answer termination" is accurate for four of six.
+
+### The mechanism tally, now that all six are read
+
+| episode | mechanism |
+|---|---|
+| `search-0061` | correct work, answer wrapped in prose |
+| `list-0149` | unrequested write, then answered `task-complete` rather than the content it had already read |
+| `pointer_chain-0018` | schema continued past its termination |
+| `conditional_update-0093` | incomplete survey: 1 of 5 items |
+| `ledger_reconcile-0163` | incomplete survey: 2 of 6 items |
+| `batch_update-0166` | action insensitive to the observations its own notes recorded |
+
+**Five mechanisms across six instances, and the only recurrence is the incomplete survey.** Both
+survey failures act on a prefix of the required set and then proceed with full confidence, and in
+both cases the listing that showed the full set was already in context.
+
+**What this does to the class as a pre-registration unit.** It counts cleanly and it does not mean
+what its name says. If it is to be reported, it needs splitting at minimum into *did the work and
+failed to present it*, *did not do the work*, and *left the workspace wrong* — which are three
+different findings about a model and are currently one number. That split is computable from the
+manifest with no rerun: the answer comparison above, plus whether the verdict's file-state check
+fired.
