@@ -1,0 +1,267 @@
+diff --git a/configs/models/gemma3-4b.yaml b/configs/models/gemma3-4b.yaml
+index 3807a0c..df45aca 100644
+--- a/configs/models/gemma3-4b.yaml
++++ b/configs/models/gemma3-4b.yaml
+@@ -9,6 +9,8 @@ chat:
+   # (eos_token_id: [1, 106], <eos> and <end_of_turn>). Appended as text by protocol.py,
+   # branch.py and data.py; it is not a generation stop, which MLX takes from the config's id
+   # set and which therefore needs nothing from us on this model.
++  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
++  generation_prefix: "<start_of_turn>model\n"
+   end_of_turn: "<end_of_turn>"
+   # Deliberately empty. The field is read by nothing outside models.py (issue 98), and Gemma's
+   # terminators already reach the generation loop through the config, so a token here would be
+diff --git a/configs/models/qwen25-coder-3b.yaml b/configs/models/qwen25-coder-3b.yaml
+index 52d82ee..d54a5c5 100644
+--- a/configs/models/qwen25-coder-3b.yaml
++++ b/configs/models/qwen25-coder-3b.yaml
+@@ -4,6 +4,8 @@ family: qwen2_5
+ chat:
+   thinking: unsupported
+   template_kwargs: {}
++  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
++  generation_prefix: "<|im_start|>assistant\n"
+   end_of_turn: "<|im_end|>"
+   extra_stop_tokens: ["<|endoftext|>"]
+ lora:
+diff --git a/configs/models/qwen35-4b.yaml b/configs/models/qwen35-4b.yaml
+index 7ddd309..ef709f0 100644
+--- a/configs/models/qwen35-4b.yaml
++++ b/configs/models/qwen35-4b.yaml
+@@ -4,6 +4,8 @@ family: qwen3_5
+ chat:
+   thinking: "off"
+   template_kwargs: {enable_thinking: false}
++  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
++  generation_prefix: "<|im_start|>assistant\n"
+   end_of_turn: "<|im_end|>"
+   extra_stop_tokens: ["<|endoftext|>"]
+ lora:
+diff --git a/configs/models/qwen35-9b.yaml b/configs/models/qwen35-9b.yaml
+index dc6a124..44d850e 100644
+--- a/configs/models/qwen35-9b.yaml
++++ b/configs/models/qwen35-9b.yaml
+@@ -4,6 +4,8 @@ family: qwen3_5
+ chat:
+   thinking: "off"
+   template_kwargs: {enable_thinking: false}
++  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
++  generation_prefix: "<|im_start|>assistant\n"
+   end_of_turn: "<|im_end|>"
+   extra_stop_tokens: ["<|endoftext|>"]
+ lora:
+diff --git a/src/local_llm_lab/arch.py b/src/local_llm_lab/arch.py
+index cd1a803..dc2eeda 100644
+--- a/src/local_llm_lab/arch.py
++++ b/src/local_llm_lab/arch.py
+@@ -666,10 +666,33 @@ class NativeCapture(AbstractContextManager):
+         self._offset = int(entries[0].offset) if entries else 0
+         if any(int(c.offset) != self._offset for c in entries):
+             raise ValueError("attention caches disagree on the current position")
+-        from mlx_lm.models.cache import KVCache
+-
+-        if any(type(c) is not KVCache for c in entries):
+-            raise ValueError("capture requires ordinary, unquantized KV caches")
++        from mlx_lm.models.cache import KVCache, RotatingKVCache
++
++        # Two different things were behind one type check, and they are not the same risk.
++        #
++        # **Residual capture is safe under rotation.** It emits against ``self._offset``, the
++        # monotone count of tokens the model has seen, which a rotating cache maintains exactly
++        # as an ordinary one does; nothing in that path indexes a cache column.
++        #
++        # **Head capture is not.** It reads ``cache.state[0]`` and treats column *j* as absolute
++        # source position *j* (see the attention reconstruction below). Under rotation a column
++        # is not its position and at most ``max_size`` columns exist at all, so the same code
++        # would produce plausible per-head numbers against the wrong positions.
++        #
++        # Gemma 3 makes this the difference between running and not: ``make_cache`` returns a
++        # ``RotatingKVCache`` for every block whose index plus one is not divisible by six, which
++        # is 29 of its 34, on every run rather than only long ones. So the gate narrows to what
++        # it can actually justify rather than widening to a type.
++        if any(type(c) not in (KVCache, RotatingKVCache) for c in entries):
++            raise ValueError("capture requires unquantized KV caches")
++        if self.attention_blocks and any(type(c) is RotatingKVCache for c in entries):
++            raise ValueError(
++                "head capture cannot read a rotating KV cache: it maps weight column j to "
++                "absolute source position j, and under rotation a column is not its position "
++                "and only the last max_size of them exist. Residual capture is unaffected and "
++                "runs on a rotating cache; turn head capture off, or restrict it to the "
++                "global-attention blocks, whose caches do not rotate."
++            )
+         if self._offset == 0:
+             self._injected = False
+         if self.injection is not None and self._offset > self.injection[1] and not self._injected:
+diff --git a/src/local_llm_lab/models.py b/src/local_llm_lab/models.py
+index ee66ff2..e07a9d3 100644
+--- a/src/local_llm_lab/models.py
++++ b/src/local_llm_lab/models.py
+@@ -37,6 +37,18 @@ class ChatSpec:
+     template_kwargs: dict[str, Any]
+     end_of_turn: str
+     extra_stop_tokens: tuple[str, ...]
++    #: The marker the chat template emits to open an assistant turn under
++    #: ``add_generation_prompt``. Declared rather than assumed, because `protocol` hard-coded
++    #: ChatML's and asserted it, so every generation-side render raised on a model whose template
++    #: opens a turn any other way. Gemma's is ``"<start_of_turn>model\n"``.
++    #:
++    #: The default is ChatML's and it is **not** where the guarantee lives. A registry file that
++    #: omits the field fails at load, because the parser reads it with ``_required_string``; the
++    #: default serves direct construction, which is test scaffolding. That distinction matters
++    #: because this value is stamped into training manifests and into the lens corpus's tokenizer
++    #: identity, which the prose stage re-derives and hash-compares, so a silently wrong one
++    #: produces a self-consistently falsified corpus identity rather than an error.
++    generation_prefix: str = "<|im_start|>assistant\n"
+     max_think_tokens: int = 512
+ 
+ 
+@@ -275,6 +287,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
+             thinking=thinking,
+             template_kwargs=dict(template_kwargs),
+             end_of_turn=_required_string(chat, "end_of_turn", source),
++            generation_prefix=_required_string(chat, "generation_prefix", source),
+             extra_stop_tokens=tuple(stops),
+             max_think_tokens=_positive_int(
+                 chat.get("max_think_tokens", 512), "chat.max_think_tokens", source
+@@ -307,6 +320,9 @@ def _default_spec(hf_id: str) -> ModelSpec:
+         name=hf_id,
+         hf_id=hf_id,
+         family="unknown",
++        # ChatML's markers, for a model nobody declared. They are a guess and the only honest
++        # thing to say about them is that they are Qwen's; a run that reaches this path and is
++        # not a ChatML model will render turns with another vocabulary's tokens.
+         chat=ChatSpec("unsupported", {}, "<|im_end|>", ()),
+         lora=LoraSpec("attention+mlp", 16, 32.0, 0.0),
+         train={},
+diff --git a/src/local_llm_lab/pipeline/protocol.py b/src/local_llm_lab/pipeline/protocol.py
+index 9fabcbd..833c207 100644
+--- a/src/local_llm_lab/pipeline/protocol.py
++++ b/src/local_llm_lab/pipeline/protocol.py
+@@ -288,8 +288,22 @@ def build_prompt(
+ 
+ 
+ def generation_suffix(spec: ModelSpec) -> str:
+-    """Return the template suffix that anchors the first generated assistant token."""
+-    assistant = "<|im_start|>assistant\n"
++    """Return the template suffix that anchors the first generated assistant token.
++
++    The assistant marker is the registry's, not this module's. It was ChatML's literal here, and
++    the assertion in `build_prompt` meant every generation-side render raised on a model whose
++    template opens a turn any other way -- which is Gemma, and would have been every other
++    non-ChatML family.
++
++    **The assertion stays.** This value is stamped into training manifests and into the lens
++    corpus's tokenizer identity, which the prose stage re-derives and hash-compares; removing the
++    guard would turn a loud failure into a corpus identity that is falsified and self-consistent.
++
++    The empty thinking block is still a literal, and still Qwen's. It is reached only under
++    ``thinking == "off"``, a mode no other registered model declares, so it is left where a
++    reader can see it rather than generalised on one example.
++    """
++    assistant = spec.chat.generation_prefix
+     if spec.chat.thinking == "off":
+         return assistant + "<think>\n\n</think>\n\n"
+     return assistant
+diff --git a/tests/test_live_lens_native.py b/tests/test_live_lens_native.py
+index e951f07..e95f4c7 100644
+--- a/tests/test_live_lens_native.py
++++ b/tests/test_live_lens_native.py
+@@ -247,3 +247,41 @@ def test_attention_only_mode_skips_head_projection_but_preserves_native_logits()
+                        head_vectors=False) as wrapped:
+         np.testing.assert_array_equal(np.array(wrapped(ids)), expected)
+     assert rows == [None]
++
++
++def test_residual_capture_runs_on_a_rotating_cache_and_head_capture_refuses_one():
++    """The narrow gate: what rotation actually breaks, and what it does not.
++
++    Gemma 3's `make_cache` returns a `RotatingKVCache` for every block whose index plus one is
++    not divisible by six, which is 29 of its 34, on every run rather than only long ones. The
++    old exact-type check refused the whole model, and the two things behind that one check are
++    not the same risk.
++
++    Residual capture emits against `_offset`, the monotone token count, which a rotating cache
++    maintains identically (`cache.py`: `self.offset += keys.shape[2]`). Head capture reads
++    `cache.state[0]` and treats column *j* as absolute source position *j*, which rotation makes
++    false while leaving the arithmetic well-formed -- plausible per-head numbers against the
++    wrong positions, which is the failure mode worth refusing loudly.
++
++    A small `max_size` here so the cache genuinely rotates within the test's own sequence rather
++    than merely being of the rotating type.
++    """
++    from mlx_lm.models.cache import RotatingKVCache
++
++    model = tiny_model()
++    view = ArchitectureView.from_model(model)
++    ids = mx.array([[1, 2, 3, 4]])
++    baseline = np.array(model(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers]))
++
++    sink = Sink()
++    with NativeCapture(view, sink, layers=(3, 4)) as wrapped:
++        rotating = [RotatingKVCache(max_size=2) for _ in model.layers]
++        np.testing.assert_array_equal(np.array(wrapped(ids, cache=rotating)), baseline)
++    assert {layer for layer, _, _ in sink.residuals} == {3, 4}, "residuals still captured"
++    assert [entry[0] for entry in sink.logits] == [0], "and emitted against the monotone offset"
++
++    with (
++        NativeCapture(view, Sink(), layers=(3, 4), attention_blocks=(3,)) as wrapped,
++        pytest.raises(ValueError, match="column j to absolute source position j"),
++    ):
++        wrapped(ids, cache=[RotatingKVCache(max_size=2) for _ in model.layers])
+diff --git a/tests/test_models.py b/tests/test_models.py
+index 9299505..ca554de 100644
+--- a/tests/test_models.py
++++ b/tests/test_models.py
+@@ -137,6 +137,7 @@ def _registry_mapping(evidence) -> dict:
+             "thinking": "unsupported",
+             "template_kwargs": {},
+             "end_of_turn": "<|im_end|>",
++            "generation_prefix": "<|im_start|>assistant\n",
+             "extra_stop_tokens": [],
+         },
+         "lora": {"keys": "attention+mlp", "rank": 16, "scale": 32.0, "dropout": 0.0},
+@@ -399,3 +400,44 @@ def test_the_gemma_entry_is_what_stands_between_a_run_and_the_chatml_fallback()
+ 
+     assert fallback.chat.end_of_turn == "<|im_end|>", "the fallback is ChatML's, for any model"
+     assert registered.chat.end_of_turn != fallback.chat.end_of_turn
++
++
++def test_the_generation_prefix_is_declared_per_model_and_a_registry_file_cannot_omit_it(
++    tmp_path, monkeypatch
++) -> None:
++    """The blocker the Gemma pivot found, and the guard that keeps it from returning.
++
++    `protocol.generation_suffix` held ChatML's assistant marker as a literal and `build_prompt`
++    asserted the rendered prompt ends with it, so **every generation-side render raised** on a
++    model whose template opens a turn any other way. Gemma's opens with
++    `<start_of_turn>model\n`.
++
++    The assertion is deliberately kept: this value is stamped into training manifests and into
++    the lens corpus's tokenizer identity, which the prose stage re-derives and hash-compares, so
++    deleting the guard would convert a loud failure into a corpus identity that is falsified and
++    self-consistent.
++
++    `ChatSpec` carries a ChatML default for direct construction, which is test scaffolding, and
++    the guarantee lives in the parser instead: a registry file that omits the field fails to
++    load. This asserts the parser, because the default would otherwise make the omission silent
++    for exactly the file where it matters.
++    """
++    import yaml
++
++    from local_llm_lab import models
++    from local_llm_lab.models import load_model_spec
++    from local_llm_lab.pipeline.protocol import generation_suffix
++
++    assert load_model_spec("gemma3-4b").chat.generation_prefix == "<start_of_turn>model\n"
++    assert load_model_spec("qwen35-4b").chat.generation_prefix == "<|im_start|>assistant\n"
++    assert generation_suffix(load_model_spec("gemma3-4b")) == "<start_of_turn>model\n", (
++        "no thinking block: Gemma declares `unsupported`, and the empty-think literal is "
++        "reached only under `off`"
++    )
++
++    document = _registry_mapping(None)
++    document["chat"].pop("generation_prefix")
++    monkeypatch.setattr(models, "_REGISTRY_DIR", tmp_path)
++    (tmp_path / "no-prefix.yaml").write_text(yaml.safe_dump(document))
++    with pytest.raises(ValueError, match="generation_prefix"):
++        load_model_spec("no-prefix")
