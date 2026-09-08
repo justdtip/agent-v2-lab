@@ -149,3 +149,71 @@ together. Both are independently correct, so neither is worth holding back to pr
 comparison, but the consequence is that the re-run tests whether Gemma can do these tasks when
 fairly presented — not which of the two errors mattered. Attribution between them is a cheap
 follow-up if the result makes it interesting.
+
+---
+
+## Amendment, 09:20Z: the marking alone was tried, and the loops stayed
+
+Before the Director's correction arrived, the marking-only version ran: observations re-roled to
+`user` and wrapped in a bare `<tool_response>`, no convention paragraph, ceiling still at 12.
+One episode completed, `agentic-d2-update-0028`, against stage one's control for the same task.
+
+**It changed nothing that matters.** The trajectory is the same loop and not a milder one: read a
+path, list an empty directory, search, read the same path again, four times over twelve turns.
+Neither run succeeds, neither detects the loop, and both exhaust.
+
+The mechanism is in both transcripts and is worth stating on its own, because it is sharper than
+"the model is confused". `search_files` returns
+
+```
+MATCHES: workspace/test/0028/config.ini
+```
+
+and the model's next call reads `/workspace/test/0028/config.ini`, with a leading slash it
+supplied itself, which does not resolve. It never once tries the string the observation handed it.
+The model is not failing to find the file. It is failing to use the result as a source of fact,
+and re-deriving the path from its own earlier guess instead — which is what the Director's framing
+predicts a model does when it believes it is in a conversation rather than reading its own
+instrument.
+
+That run is kept, superseded, at `pilot/superseded/marking-only-12-steps/`, because it is the only
+run that isolates the marking from the ceiling, and the run that replaces it changes both.
+
+**Its timings are worthless and the directory says so.** The laptop suspended mid-run. The episode
+took 940 s against the control's 381 s for slightly less work, and a second episode was writing at
+about 360 bytes per second against the control's 33,000 when it was stopped. Nothing about the
+cost of this rendering should be read from those figures.
+
+## What landed
+
+In the registry, per family, as the Director's ruling requires:
+
+- `chat.observation_template` now names the call the observation answers:
+  `<tool_response tool="{name}">…</tool_response>`. It was a bare wrapper matching Qwen's, chosen
+  so the pilot's two panels rendered observations identically. That choice is retired: a rendering
+  does not get to misdescribe the episode in order to keep a comparison tidy. **The cost is real
+  and is recorded rather than avoided** — the two panels no longer render observations the same
+  way, so a difference between them is no longer attributable to the model alone.
+- `chat.observation_convention` is new and required on exactly the same condition as the wrapper:
+  whenever the role is not `tool`. It is the paragraph the system prompt carries telling the model
+  that a turn the format marks as the user's may be the workspace answering its own last call.
+  The wrapper marks each observation; this gives the model the key to the mark. A marker whose
+  meaning the model was never told is not a channel.
+
+In code, only the plumbing: `protocol.system_prompt` takes the spec and appends the family's
+convention, and `runner.run_task` renders the system message through it. Qwen's prompt is
+byte-identical to what every existing Qwen number was produced under, asserted by a test.
+
+**A boundary that is not visible from the code.** The three training-row builders — `build_rows`,
+`trajectory_rows` and jlens's probe-context builder — still render the convention-free prompt, and
+none of them takes a spec. That is correct today and only today, because Gemma is the sole family
+declaring a convention and its training is deferred. The day anyone builds a supervised target on
+a re-roling family, those three take the spec or training teaches a prompt inference does not use.
+
+## The ceiling, which was the larger error
+
+The pilot ran `--max-steps 12`. The evaluation that produced the Qwen numbers it is compared
+against runs 24, which is `run_task`'s own default. Four of Gemma's eleven failures were
+exhaustion. A comparison against numbers made at 24 is not valid at 12, and this is the plainer
+confound: it was found by looking at the harness rather than at the model, after a subtler
+hypothesis had already been written up.
