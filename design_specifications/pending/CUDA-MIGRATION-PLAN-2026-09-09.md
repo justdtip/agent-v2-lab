@@ -464,3 +464,64 @@ scaffolding are size-free.
 **A larger model is therefore a registry entry and a re-measurement, not a code change**, and a
 smaller GPU is a different rung on the same ladder. That is the property the Director asked for,
 and it is cheaper to build in now than to retrofit after the first out-of-memory on a 27B fit.
+
+---
+
+## 11. Two dependencies the D-CRO found, a correction to 6.6, and the pre-hardware bridge
+
+### 11.1 6.6 is verified sound, and it has a cost the plan did not state
+
+The D-CRO checked the second-moment extension mechanically rather than accepting it. Upstream
+materialises `grad` as `[dim_batch, seq_len, d_model]` before averaging over positions, and the sum
+over output dimensions **decomposes across passes** — `(KᵀK)[i,j] = Σ_d K[d,i]K[d,j]` with each pass
+owning a disjoint set of `d` — so one `einsum('bpi,bpj->ij', g, g)` accumulated per pass gives the
+exact second moment with one `d×d` accumulator per layer. Forty lines is right.
+
+**What it costs, now in the §10.2 table where it belongs:** it scales as `n_positions × d_model³`.
+At the hosted recipe's 111 valid positions that is 3.7 TFLOP per prompt, about a minute over 546
+prompts at ~50 TFLOPS; at transcript length it is 94 TFLOP per prompt, about seventeen minutes.
+Memory is **+0.81 GiB** for 33 fp32 accumulators, and it lands on exactly the budget `dim_batch` is
+chosen against.
+
+**And the expectation must be declared, for the same reason ν is.** `E[KᵀK] = JᵀJ + E[ΔᵀΔ]` is exact,
+but *what the expectation ranges over* — source position within a prompt, prompt within the corpus,
+or both pooled — changes what the cancellation ratio claims. Within-prompt and between-prompt
+variance are different statements about a lens's trustworthiness, and "self-reported cancellation"
+reads as the pooled one. **The artefact records which, and reports the within-prompt and
+between-prompt terms separately**, fixed before anything is computed.
+
+### 11.2 The golden baseline is not on the branch
+
+`GEMMA3-REGRESSION-2026-09-08` — the per-layer comparison against the hosted lens that WS-D's golden
+test is defined against — exists only on `codex/gemma-lens-fitting`, four commits ahead of the tree
+at `0fc04f9`, never merged. Neither `main` nor `cuda-migration` holds it. **It lands on
+`cuda-migration` before WS-D has a baseline to be golden against**; the Chief is bringing it over.
+
+### 11.3 There is no torch on this machine, and that is a bridge rather than a wall
+
+`import torch` fails in the venv. So nothing in WS-A, WS-B or WS-D's adapter can be **executed** here
+as written, and the D-CRO's rule stands: anything handed over before it can run is marked
+*unexecuted*, and today has shown what unexecuted claims cost.
+
+But torch runs on this machine without a GPU — CPU, and MPS on Apple silicon — and the bf16 Gemma
+checkpoint is on disk. **That is the pre-hardware execution environment for the seam.** Gate steps
+1 through 4 (structural discovery, `residual_source_agreement` with its negative control, the
+layer-34 identity, the readout gate with both controls) and the lens un-port can all run on CPU in
+**float32**, which is a *cleaner* validation of the code paths than CUDA bf16 would be: it removes
+kernel selection and precision from the comparison against MLX, so a disagreement is a defect and
+not a rounding question. CUDA then becomes a device change on validated code, and the bf16-versus-fp32
+difference is measured once as a known quantity rather than confounded with the port.
+
+**So the device abstraction covers `{mlx, cpu, mps, cuda}` from the start**, not `{mlx, cuda}`.
+Installing a CPU/MPS torch into the venv is a change to the environment every seat shares and is the
+Director's call; it is one command and it is the single action that converts the plan from
+unexecutable-until-hardware into executable today.
+
+### 11.4 Sequencing, corrected on the D-CRO's recommendation
+
+Stage two's records are the entire evidence base for every §6 item, and the outstanding analyses on
+them — the stratified reads, the truncation outcome, the verdict reason vectors — need no torch, no
+GPU and no migration. They are also exactly the things that quietly do not get finished when a
+repository pivots. **The D-CRO closes them first and hands WS-D a complete evidence base.** WS-A
+starts on CPU torch the day it is installed; the two run in parallel because they are different
+seats, and neither waits on the other.
