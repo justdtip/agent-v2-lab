@@ -251,7 +251,9 @@ def guard_runtime_event(event, qualification, *, require_window=None):
     cap = qualification["cap_bytes"]
     if peak > min(cap, qualification["qualified_peak_bytes"]):
         raise ValueError(
-            "measured memory breach; stop before further work (not first-spike prevention)"
+            "measured memory breach; stop before further work (not first-spike prevention): "
+            f"peak_bytes={peak}, qualified_peak_bytes={qualification['qualified_peak_bytes']}, "
+            f"cap_bytes={cap}"
         )
     if event.get("phase") in ("solve_start", "artifact_start"):
         envelope = qualification["full_fit_envelope"]

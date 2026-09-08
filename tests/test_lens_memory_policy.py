@@ -237,7 +237,7 @@ def test_runtime_measured_breach_prevents_next_forward_and_artifact():
 
     qualification = {"cap_bytes": 60, "qualified_peak_bytes": 55}
     calls = []
-    with pytest.raises(ValueError, match="measured memory breach"):
+    with pytest.raises(ValueError, match="peak_bytes=56, qualified_peak_bytes=55, cap_bytes=60"):
         guard_runtime_event(
             {"phase": "after_statistics_eval", "peak_memory_bytes": 56}, qualification
         )
