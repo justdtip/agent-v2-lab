@@ -119,3 +119,33 @@ line. Getting this wrong scales every number by the rank.
 `adapter_geometry.py` beside this file, which loads no model and runs beside a job. The slices were
 built by zeroing tensors outside the band and copying the adapter configuration unchanged, so the
 loader sees the same structure and a zero delta is exactly no change.
+
+---
+
+## A third reading, weaker than the first two, with one sharp consequence
+
+Both arms' updates were read in token space by taking the leading left singular vectors of the
+delta for the modules that write into the residual stream, scaling by the learned final norm and
+projecting through the tied unembedding. This asks what a trained update *can* write, not what it
+does write on any input, so it is suggestive rather than evidential.
+
+At layer 31 both arms' leading directions land on the protocol's own vocabulary. Arm A's top
+direction reads `update / Update / 更新 / {"`; arm 1's second reads ` ``` / approved / values /
+update`. At layer 27 both have a direction reading `plan / Plan / planning`. Several other
+directions are multilingual noise, which is what a delta of effective rank twelve should give:
+the leading direction carries only ten to fifteen per cent of the mass, so reading the top one is
+weak by construction.
+
+**The sharp consequence is methodological, and it changes how the orthogonality result above
+should be read.** Two updates whose weight-space cosine is indistinguishable from random
+nonetheless write toward the same token families. A 2,560-dimensional residual read through a
+248,320-token unembedding is many-to-one, so orthogonal weight directions can carry the same
+function. **Weight-space orthogonality is therefore not evidence of functional difference**, and
+the earlier finding must be stated as what it is: the two solutions share no weight-space
+structure, which rules out arm A having learned arm 1's solution *by the same route*, and says
+nothing about whether they compute the same thing.
+
+It also yields a prediction worth writing down before the ablation runs: **if arm A's top layers
+learned protocol-relevant directions much like arm 1's, arm A's top-eight slice should score
+well**, and its capability loss should be attributable to the layers below. That is the
+Director's hypothesis in falsifiable form, and the ablation tests it.
