@@ -489,3 +489,37 @@ note states an intention the action space cannot express and the call does not i
 episodes now, across two failure classes, all showing a plan that survives its own disconfirmation.
 **Stage two records, per episode, whether any progress note contradicts the action emitted in the
 same turn**, which is computable from the record and needs no rerun.
+
+**And the mechanism has three stages, not one.** The D-CRO found the schema active while the model
+*reads* (`7d7eff4`). I objected that it might be a correct prior — six of seven preceding nodes
+carried `Next` at that slot, so predicting `Next` is what a calibrated model should do. **The data
+answers the objection against me.**
+
+At the newline before node 6's field name, layer 34 — the model's own distribution, no lens:
+
+| rank | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| token | `Next` | `context` | `next` | `Node` | `text` | `Context` | `Last` | `New` | `lab` | ` Next` |
+
+**`Result` — the token actually there, with a 1-in-7 empirical precedent in this very episode — is
+not among the ten.** It ranks below `lab`, `New` and `Last`, which have no precedent at that slot at
+all. A calibrated 1-in-7 belief sits comfortably in a top ten. This is not a prior; the alternative
+has been excluded.
+
+So the three stages, each measured at layer 34 and therefore instrument-independent:
+
+1. **Before the evidence**, the schema is held so strongly that the actual continuation is not one of
+   ten candidates.
+2. **On the evidence**, comprehension works: having read `Result`, the model's top prediction is `:`.
+   It is not blind, and "it did not notice" is ruled out by the model's own distribution.
+3. **Fifty tokens later**, it emits `lab/test/0018/chain/node-7-288.txt` — a path in the schema's
+   naming convention, for a chain that has ended.
+
+**The middle stage is what makes this more than a prior failure.** The model registers the deviation
+correctly and acts on the schema regardless. "Updates its beliefs about observations and not its
+plan" survives, and gains a stage in front of it: the plan also shapes what it expects to read.
+
+**What is still open and needs the replay.** These are ranks, not probabilities, because reading rows
+store top-k ids only. *How much* mass the schema holds — whether `Next` sits at 0.4 or 0.99 — is the
+quantity that would separate a strong prior from a fixed one, and it is exactly what the targeted
+replay recovers. This is now the best-motivated use of that replay.
