@@ -503,3 +503,68 @@ exists in the residual: `search` at layers 24 to 33 at the tool-name decision.
 Span counts for the episode: 546 note, 480 call skeleton, **24 call argument** — one per turn, the
 directory literal. The primary comparison has almost nothing to read here, because the model never
 writes anything but a single character as an argument.
+
+---
+
+## `pointer_chain-0018`: the wrong kind of answer is decided before the wrong answer
+
+**Stage two, all 34 layers. 9 turns, 482 tokens, failed, no loop, not exhausted, never stuck,
+never searched. The first stage-two instance of the modal failure class — terminated on its own
+with a wrong answer — read at full depth.**
+
+**The navigation is perfect.** The task says: begin at node 0, follow the Next path in each node,
+and when a node contains a Result field report that Result exactly. The model reads node 0 through
+node 6 in order, following each Next correctly, seven reads with no error and no repetition.
+
+Node 6 says:
+
+```
+Node: final
+Result: artifact-93330
+```
+
+No Next field. **The model answers `lab/test/0018/chain/node-7-288.txt`** — a file that does not
+exist, in the chain's own naming convention, invented after the chain has explicitly ended.
+
+So this is not a navigation failure and not a retrieval failure. **After seven turns of extracting a
+Next path, the model extracts an eighth Next path where there is none, and reports it as the
+answer.** The schema it has been executing outlives the task that needed it.
+
+### Where that happens in the stack
+
+At the content fork — the token where `lab` was emitted and `artifact` was wanted — the top
+candidates by layer:
+
+| layers | what the model is choosing among |
+|---|---|
+| 19 to 23 | punctuation and closing quotes: `.",` `"},` `)"` `{}".` |
+| 24 to 25 | `{}".` `)"` `Information` `filename` |
+| **26 to 29** | **`filename` `Analysis` `Located` `Here` `The` `Location`** |
+| 30 | `lab` `Lab` `laboratory` — the path branch enters |
+| **31** | **`artifact` enters, immediately behind `lab`** |
+| 32 to 34 | both in the top four |
+
+**The wrong kind of answer is settled about five layers before the wrong answer itself.** By layers
+26 to 29 the model has committed to *reporting a location* — `filename`, `Located`, `Location` —
+and the choice between the path and the Result has not yet been made. The correct content becomes a
+candidate only at layer 31, three layers from the end.
+
+### And this is the softest decision in the corpus
+
+| | |
+|---|---|
+| P(`lab`), the model's own output | **0.775** |
+| rank of `artifact` at the final layer | **2** |
+| rank of `lab` at layer 23 | 21,462 |
+| rank of `lab` at layer 24 | 590 |
+
+Against `update-0028`'s forks at 0.90 to 0.9999999, this is close to a coin flip with the correct
+answer as runner-up. **It is the first target in this programme where the right answer is live, near,
+and unsaturated**, which is exactly the condition the intervention design needs and the one that
+episode could not supply.
+
+**A caution on the layer-26-to-29 reading.** Those are the top-10 lists of a lens readout, and
+"the model has committed to reporting a location" is an interpretation of them, not a measurement.
+What is measured is which tokens are in candidacy at which depth. Whether the schema is *causally*
+held there is what an intervention at layers 26 to 29 would test, and it is a better-posed
+experiment than any this episode's outcome alone would suggest.
