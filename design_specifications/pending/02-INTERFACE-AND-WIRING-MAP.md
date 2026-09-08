@@ -1069,3 +1069,37 @@ The Deputy's recurrence-exponent sweep breached R47 on its last row: the unrolle
 The Deputy's shell inventory all evening was `lsof -c python | grep -i libmlx`. `lsof -c` matches the command name case-sensitively, and the venv's interpreter resolves to the framework binary `.../Python.framework/.../MacOS/Python`, so the filter returned "clear" while a holder existed; the lock module's `running_model_processes()` saw the holder and refused the launch, twice. R45's lesson was already that a model process is detected by `libmlx.dylib` being mapped and never by its name; this clause applies it to the shell. Rule: every seat's pre-launch inventory, in the launching command, is `runlock.running_model_processes()` (or the CLI that calls it), whose match is by mapped library and whose exclusion is by the caller's own lineage and process group; `lsof -c python`, `pgrep -f python` and every name-based idiom are not inventories. The announced-window practice of the same evening stands beside this: it covers the gap between a correct inventory and the lock, which is what refused Codex; the blind grep is what refused the Deputy.
 
 **R45(c) — box state is read from disk at the moment of acting, never from a message.** A launch, a teardown, or a suite that can reach MLX reads `outputs/.box-window.json`, the lock, and `running_model_processes()` in the same command that acts, and acts on what it finds. A message about the box, however recent and from whichever seat, is a claim about the past; the file is the present. On the morning of 2026-09-08 a teardown instruction that was correct when written reached the Deputy six minutes later, after the window it named had been cleared and Codex's had opened; the Deputy read the disk first and nothing was torn down. The mirror of this rule for a seat taking a gap: announce your own window in the command that runs the suite, with `end` trapped on the shell's exit, so the gap is held by a file rather than by the belief that it is free. (Proposed by the Deputy, 2026-09-08; adopted by the Chief.) Clause, 2026-09-08 09:05: the disk is the authority on the box's **state**, not on **permission**. R45(c) stops a seat acting on a stale claim that the box is busy or free; an empty file is not a licence that was withheld. A block the Director or the Chief has held stays held while the file says free, until the word that releases it. (The Deputy's clause, adopted.)
+
+### R56 (2026-09-08, 13:50; what makes a gate evidence, from the three ways one failed today)
+
+**R56(a) — a gate whose comparator shares the defect it is gating measures nothing, and it reports
+zero.** The Deputy's sentence, kept in their words. On 2026-09-08 the residual gate compared the
+hand-run loop against `diagnostic_native_final_residual`, and the entry-transform omission the port
+was fixing lived in **both**, so the gate compared a broken loop against itself and passed. The one
+place the defect would have been caught is the one place it survived. When choosing a comparator,
+ask what it shares with the thing it checks, and prefer a comparator that comes from somewhere
+else entirely — the model's own forward, a published artifact, a second implementation — over one
+that is nearby and convenient.
+
+**R56(b) — a gate's inputs must exceed every length scale in the model it gates.** The same day's
+residual gate ran on a prompt padded to 64 tokens against a model whose sliding window is 1,024.
+Below a window, a windowed mask and a global mask are the same mask, so **no mask defect could ever
+have appeared in that gate**, and the one that existed cost 95 per cent relative error at the first
+layer the moment a real sequence was run. Length scales to check before setting a gate's inputs:
+attention window, cache capacity, chunk size, any period, and the shortest sequence that exercises
+each. A gate below them is not a weak gate, it is a gate that cannot fail.
+
+**R56(c) — a gate without a negative control that bites is not evidence, and the control must be
+shown to bite in the regime the gate runs in.** The port's control — every block handed the first
+block's mask — changes nothing below the window and 5.1 per cent above it. Had it been demonstrated
+only at 64 tokens it would have passed and proved the gate blind rather than sound. A control
+demonstrated in the wrong regime is worse than none, because it is cited.
+
+**R56(d) — an absolute difference is not an acceptance unless the quantity's own scale is quoted
+beside it.** The first Gemma acceptance returned 181,895 and nearly read as a failing port; most of
+it was a float32 promotion against a bfloat16 forward, and none of it was interpretable without the
+residual's norm. Report relative, or report absolute **with** the norm. This applies to every
+number this repository calls an agreement, an error or a discrepancy.
+
+Together these are why the port was accepted on evidence rather than on a passing number:
+`research/records/GEMMA3-PORT-ACCEPTANCE-2026-09-08/`.
