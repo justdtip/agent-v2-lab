@@ -228,8 +228,12 @@ incident.
 
 **What I told the Director.** "Authorise Codex's transcript fit at batch 4. That configuration
 measures at about 5.5 GiB, half the stop threshold." Both halves were false. **Nothing measured
-5.5 GiB**; it was my arithmetic. **No batch-4 configuration exists**; the fitter is batch one only
-(`regression.py:201`). I said "measures" about a number I had projected, four hours after writing a
+5.5 GiB**; it was my arithmetic. **No batch-4 configuration exists.** I cited `regression.py:201` as hardcoding `batch_size=1`; the
+D-CRO found no batching concept in the fitter at all, and both are half right. The string is there in
+Codex's worktree — as a **manifest annotation** inside `counts.update(batch_size=1, ...)`, a label
+describing the run for a later reader. It is not a parameter and nothing reads it. The fitter
+accumulates row by row through `accumulate(view, rows, ...)`. So "a batching choice" named a lever
+that does not exist, and my citation of the line was a grep hit read as a setting. I said "measures" about a number I had projected, four hours after writing a
 rule that a projection must carry the measurement it rests on.
 
 **What was actually measured, and of what.** The D-CRO's calibration ran `NativeCapture` with a sink
