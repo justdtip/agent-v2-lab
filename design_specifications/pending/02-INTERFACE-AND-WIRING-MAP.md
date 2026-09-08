@@ -1215,3 +1215,46 @@ A path, a filename, a registry key and a module class all travel with a model wi
 
 The Director's R57 is this rule applied by someone who had it first: a model's identity is its
 lineage, not its path.
+
+### R60 (2026-09-08, 15:20; the Director's rulings on lens ontology, precedent, and what a declaration carries)
+
+**R60(a) — Lens Ontology decides whether a lens loads.** The Director: *"if the lens ontologically
+fits, and the only thing preventing it from loading is essentially a metadata mismatch, we should
+modify to allow loading. Whenever such a decision is made, the motivating factor is Lens Ontology."*
+
+A lens is a map of a particular model's residual geometry at particular layers. What it **is** is
+fixed by the model whose geometry it maps — the base checkpoint, any training applied on top
+(R57), the decoder's depth and its width. What merely **travels with it** is the filesystem path
+of the artefact it was fitted from, the local name of a registry entry, the precision the maps were
+stored in, and the digest of the file.
+
+**So the loader decides on the ontology and records the metadata.** Where the ontology matches and
+only metadata differs, the load is permitted and the difference is written into the run's record.
+Where the ontology differs — a different base, or training applied to one and not the other — the
+load is refused, and R57's third case governs the deliberate exception.
+
+The immediate consequence, and the reason this ruling is cheap: **Codex's fitted lens does not need
+its archive rewritten.** Its identity blob carries an absolute local path where a model belongs.
+Under this rule the loader resolves that artefact to the base it is a conversion of — which the
+registry now declares — and compares bases. The published digest stays valid, the four committed
+records that cite it stay true, and nothing is migrated. A metadata repair that invalidates a
+published digest is the more expensive answer to a question that was never about the metadata.
+
+This is R59 stated as a positive rule rather than as a diagnosis of three failures.
+
+**R60(b) — the 128-token context is not precedent.** The Director: *"I don't want to set this as
+the standard because actual agent traces will be longer."* The choice was made to match the hosted
+lens's own fitting length so the two could be compared like for like, which was correct for that
+purpose and for no other. Recorded as a dated amendment to the Director's earlier answer of 1,024,
+justified by comparator matching and **explicitly non-precedential**: the next fit, the next model
+and any fit intended to be read on agent transcripts choose their context from the transcripts, not
+from a comparator.
+
+**R60(c) — a declaration under R47 carries a projected peak and the measurement it rests on; a
+ceiling is not a projection.** A ceiling says *I will stop if I exceed this*. A projection says *I
+expect this much, on this evidence*. Only the second can be checked against the outcome afterwards,
+and only the second makes a seat reason about the run before starting it. R47(b) already requires a
+projection for a sweep over sizes; this extends the same requirement to a fixed-shape run above the
+threshold. Codex's regression fit declared a 14 GiB ceiling, peaked at 12.44 GiB (0.70 of the
+working set), and carried no projection — which is a departure from that seat's own registered
+protocol rather than an R47 breach, since R47's literal terms were met.
