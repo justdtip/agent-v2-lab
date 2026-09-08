@@ -95,8 +95,44 @@ class ArchitectureView:
             return _LINEAR_ATTENTION_KIND
         return _ATTENTION_KIND
 
+    def attention_span(self, index: int) -> str | None:
+        """Which mask the model hands this block: ``"global"``, ``"sliding"``, or ``None``.
+
+        **Beside :meth:`layer_kind`, deliberately not inside it.** ``layer_kind`` answers what
+        module the block is, and that answer is written into ``ResolvedSpec.layer_types`` in every
+        recorded manifest and gates attention capture, which refuses any block whose kind is not
+        ``attention``. Widening it to carry the window would reinterpret every existing record and
+        refuse five Gemma blocks in six.
+
+        This answers what the block can *see*, which is a property of the mask and not of the
+        module. On Gemma the two are orthogonal: every block is ``attention``, and five in six are
+        ``sliding``. ``None`` where the family hands every block the same mask, which is every
+        model this repository ran before Gemma.
+
+        Read from the attention module's own ``is_sliding`` where it exists
+        (``gemma3_text.py:55``), so this reports what the model dispatches on rather than a rule
+        rederived from a period.
+        """
+        block_index = self._validate_block_index(index)
+        attention = getattr(self.blocks[block_index], "self_attn", None)
+        sliding = getattr(attention, "is_sliding", None)
+        if not isinstance(sliding, bool):
+            return None
+        return "sliding" if sliding else "global"
+
     def embed(self, ids: Any) -> Any:
-        """Return the layer-zero residual as a batched float32 activation."""
+        """Return the layer-zero residual as a batched float32 activation.
+
+        **The model's own layer-zero residual, observed rather than reconstructed.** This used to
+        be ``embed_tokens(ids)``, which is the residual only on a family whose entry transform is
+        the identity. Gemma 3 multiplies the embedding by ``sqrt(hidden_size)``, about 50.6 at
+        2560, rounded through bfloat16 first, so the reconstruction was out by a factor of fifty
+        on every layer of every reading. A family that adds or normalises instead would have been
+        wrong differently, and nothing here would have said so.
+
+        One observing forward: whatever the model does before its first block has been done by the
+        time the first block is called, so this inherits it without naming it.
+        """
         import mlx.core as mx
 
         token_ids = mx.array(ids).astype(mx.int32)
@@ -104,7 +140,8 @@ class ArchitectureView:
             token_ids = token_ids[None, :]
         if token_ids.ndim != 2:
             raise ValueError(f"token ids must have one or two dimensions; got {token_ids.ndim}")
-        return self.text_module.embed_tokens(token_ids).astype(mx.float32)
+        entry, _ = self._observe_forward(ids=token_ids)
+        return entry.astype(mx.float32)
 
     def native_readout(self, h: Any) -> Any:
         """Apply the installed norm and unembedding without altering native precision."""
@@ -140,25 +177,54 @@ class ArchitectureView:
         spans were *requested* would leave a reader unable to tell which code path produced the
         number in front of them -- and the two come apart precisely when something is wrong.
         """
-        entries = self._cache_entries(cache)
-        attention_cache = self._first_cache(entries, _ATTENTION_KIND)
-        linear_cache = self._first_cache(entries, _LINEAR_ATTENTION_KIND)
+        import mlx.core as mx
+
+        # A **dummy**, not ``h``. The mask constructors read shape, dtype and the cache and never
+        # the values, and Gemma applies its entry scale after the ``input_embeddings`` branch, so
+        # handing the real ``h`` in would return it multiplied by about fifty. Callers pass
+        # mid-network residuals here -- ``pre_norm_tail`` does -- and the value must not travel.
+        stand_in = mx.zeros(tuple(h.shape), dtype=h.dtype)
+        _, observed = self._observe_forward(embeddings=stand_in, cache=cache)
+        by_block = {index: observed[index] for index in range(self.num_layers)}
         if hidden_spans is None:
-            attention_mask = self._attention_mask(h, attention_cache)
             if record is not None:
+                attention_cache = self._first_cache(
+                    self._cache_entries(cache), _ATTENTION_KIND
+                )
                 record["attention_mask_route"] = "model helper, unmodified"
                 record["hidden_spans"] = ()
                 record["query_tokens"] = int(h.shape[1])
                 record["cache_offset"] = _cache_offset(attention_cache)
-                record["attention_mask_shape"] = _mask_shape(attention_mask)
-        else:
-            attention_mask = self._span_masked_attention(
-                h, attention_cache, hidden_spans, record
+                record["attention_mask_shape"] = _mask_shape(
+                    by_block[self._first_attention_block()]
+                )
+            return by_block
+
+        # Span masking hides key columns from attention blocks only, because EXP-002's whole
+        # measurement is the asymmetry between an attention path and a recurrent one. On a family
+        # where every block is attention there is no asymmetry to measure, and applying it to all
+        # of them would answer a different question in the same artifact.
+        kinds = {self.layer_kind(index) for index in range(self.num_layers)}
+        if _LINEAR_ATTENTION_KIND not in kinds:
+            raise ValueError(
+                "hidden_spans measures the asymmetry between an attention path and a recurrent "
+                "one, and this decoder has no recurrent block; the span-masked experiment is "
+                "deferred on a dense backbone rather than silently applied to every block"
             )
+        entries = self._cache_entries(cache)
+        attention_cache = self._first_cache(entries, _ATTENTION_KIND)
+        masked = self._span_masked_attention(h, attention_cache, hidden_spans, record)
         return {
-            _ATTENTION_KIND: attention_mask,
-            _LINEAR_ATTENTION_KIND: self._ssm_mask(h, linear_cache),
+            index: masked if self.layer_kind(index) == _ATTENTION_KIND else by_block[index]
+            for index in range(self.num_layers)
         }
+
+    def _first_attention_block(self) -> int:
+        """The lowest block the view calls attention; for the record's shape field only."""
+        for index in range(self.num_layers):
+            if self.layer_kind(index) == _ATTENTION_KIND:
+                return index
+        return 0
 
     def _span_masked_attention(
         self,
@@ -226,14 +292,20 @@ class ArchitectureView:
         masks: dict[str, Any],
         cache_i: Any | None,
     ) -> Any:
-        """Run one block with the mask selected for that block's attention kind."""
+        """Run one block with the mask the model itself hands that block.
+
+        Keyed by **block index**, not by kind. Kind was enough while every family built one mask
+        per kind; Gemma builds a global mask and a windowed one and dispatches on the index, so
+        two blocks of the same kind get different masks and a kind-keyed mapping cannot say which.
+        """
         import mlx.core as mx
 
         block_index = self._validate_block_index(index)
-        kind = self.layer_kind(block_index)
-        if kind not in masks:
-            raise ValueError(f"missing {kind!r} mask for block {block_index}")
-        return self.blocks[block_index](h, mask=masks[kind], cache=cache_i).astype(mx.float32)
+        if block_index not in masks:
+            raise ValueError(f"missing mask for block {block_index}")
+        return self.blocks[block_index](
+            h, mask=masks[block_index], cache=cache_i
+        ).astype(mx.float32)
 
     def final_norm(self, h: Any) -> Any:
         """Apply the decoder's final norm and return a float32 activation."""
@@ -253,7 +325,7 @@ class ArchitectureView:
         hidden = self.text_module.embed_tokens(token_ids)
         masks = self.masks(hidden, None)
         for index, block in enumerate(self.blocks):
-            hidden = block(hidden, mask=masks[self.layer_kind(index)], cache=None)
+            hidden = block(hidden, mask=masks[index], cache=None)
         return self.text_module.norm(hidden)
 
     def unembed(self, h: Any) -> Any:
@@ -363,6 +435,70 @@ class ArchitectureView:
             if index + 1 in wanted:
                 captured[index + 1] = h
         return captured
+
+    def _observe_forward(self, *, ids: Any = None, embeddings: Any = None, cache: Any = None):
+        """Ask the model what it does before and between its blocks, instead of describing it.
+
+        Runs the text module's own ``__call__`` with every block replaced by a proxy that records
+        the tensor and the mask it was handed and returns the tensor unchanged. Nothing is
+        computed: no attention, no MLP. What comes back is ``(first_input, {block index: mask})``.
+
+        **Why observe rather than reimplement.** Everything before the first block has run by the
+        time the first proxy is called -- the embedding lookup, Gemma 3's ``sqrt(hidden_size)``
+        entry scale rounded through bfloat16 (``gemma3_text.py:190``), any future family's entry
+        transform -- and every mask the model would build has been built by the model's own code
+        from its own cache selection. Gemma builds two, a global one from ``cache[pattern - 1]``
+        and a windowed one from ``cache[0]``, and dispatches on the block index; Qwen builds one
+        per block kind and dispatches on ``layer.is_linear`` (``qwen3_5.py:268-273``). Neither is
+        described here.
+
+        **The proxy forwards attribute access to the real block**, because Qwen dispatches on the
+        block's own ``is_linear`` while Gemma dispatches on the loop index. A proxy that answered
+        neither would change the very masks it exists to observe.
+
+        **Never pass a mid-network residual as ``embeddings``.** Gemma applies its entry scale
+        *after* the ``input_embeddings`` branch, unconditionally, so a residual handed in that way
+        comes back multiplied by about fifty and looking untouched. Callers here pass either real
+        token ids, or a **dummy** whose values are irrelevant because only shape and dtype reach
+        the mask constructors. Nothing may pass a residual it intends to keep.
+        """
+
+        module = self.text_module
+        blocks = list(module.layers)
+        seen: dict[int, Any] = {}
+        entry: list[Any] = []
+
+        class _Watch:
+            """A block-shaped proxy that records and computes nothing."""
+
+            def __init__(self, inner, index):
+                self._inner = inner
+                self._index = index
+
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+            def __call__(self, x, mask=None, cache=None, *args, **kwargs):
+                if not entry:
+                    entry.append(x)
+                seen[self._index] = mask
+                return x
+
+        original = list(module.layers)
+        try:
+            module.layers = [_Watch(block, index) for index, block in enumerate(blocks)]
+            if ids is not None:
+                module(ids, cache)
+            else:
+                module(None, cache, input_embeddings=embeddings)
+        finally:
+            module.layers = original
+        if not entry or len(seen) != len(blocks):
+            raise ValueError(
+                f"the decoder ran {len(seen)} of {len(blocks)} blocks under observation; its "
+                "forward does not iterate its own layer list, so this view cannot read it"
+            )
+        return entry[0], seen
 
     def native_residuals(self, ids: Any, layers: Sequence[int]) -> dict[int, Any]:
         """The same residuals as :meth:`residuals`, from the model's **own** forward.
