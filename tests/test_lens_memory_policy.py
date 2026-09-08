@@ -64,6 +64,7 @@ def evidence(tmp_path):
             "qualification_binding": expected,
             "initial_bound_bytes": 50,
             "mode": "qualification",
+            "repetitions_per_split": 4,
             "lengths": [256, 512, 1024],
         },
         {"event": "loaded", "load_peak_bytes": 20, "resident_bytes": 20, "statistics_bytes": 32},
@@ -74,6 +75,7 @@ def evidence(tmp_path):
                 "peak_bytes": 45,
                 "projected_peak_bytes": 50 if n < 1024 else 58.5,
                 "scored_positions_per_sequence": n // 2,
+                "counts": {"fit": {"sequences": 4}, "held": {"sequences": 4}},
             }
             for n in (256, 512, 1024)
         ],
@@ -270,3 +272,16 @@ def test_late_observed_peak_under_cap_is_part_of_qualified_ceiling(tmp_path):
     from local_llm_lab.pipeline.lens_fitting.memory_policy import guard_runtime_event
 
     guard_runtime_event({"phase": "after_statistics_eval", "peak_memory_bytes": 119}, qualified)
+
+
+@pytest.mark.parametrize("changed", ["declaration", "actual_fit", "actual_held"])
+def test_two_forward_evidence_cannot_qualify(tmp_path, changed):
+    expected, events, path, write = evidence(tmp_path)
+    if changed == "declaration":
+        events[0]["repetitions_per_split"] = 1
+    else:
+        split = changed.removeprefix("actual_")
+        next(e for e in events if e["event"] == "measured")["counts"][split]["sequences"] = 1
+    write()
+    with pytest.raises(ValueError, match="four"):
+        validate_evidence(path, expected, 200)

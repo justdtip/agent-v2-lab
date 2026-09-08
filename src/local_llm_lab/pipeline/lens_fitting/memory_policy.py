@@ -72,7 +72,12 @@ def ladder(maximum: int) -> list[int]:
         return sorted(
             {n for n in (max(1, maximum // 4), max(2, maximum // 2), maximum) if n <= maximum}
         )
-    return sorted({256, 512, *(n for n in (1024, maximum) if n <= maximum)})
+    sizes = {maximum}
+    size = 256
+    while size <= maximum:
+        sizes.add(size)
+        size *= 2
+    return sorted(sizes)
 
 
 def project_peak(rows: list[dict], tokens: int, *, fixed_bytes: float) -> float:
@@ -171,11 +176,21 @@ def validate_evidence(path, expected, working_set_bytes):
     begin = events[0]
     if begin.get("mode") != "qualification":
         raise ValueError("diagnostic preflight cannot qualify a full fit")
+    if type(begin.get("repetitions_per_split")) is not int or begin["repetitions_per_split"] != 4:
+        raise ValueError("qualification requires four repetitions per split")
     check_projection(begin["initial_bound_bytes"], working_set_bytes)
     measured = [e for e in events if e.get("event") == "measured"]
     canonical = ladder(max(r["input"] for r in expected["workload"]))
     if begin["lengths"] != canonical or [e["tokens"] for e in measured] != canonical:
         raise ValueError("preflight ladder is incomplete")
+    for row in measured:
+        counts = row.get("counts", {})
+        if any(
+            type(counts.get(split, {}).get("sequences")) is not int
+            or counts[split]["sequences"] != 4
+            for split in ("fit", "held")
+        ):
+            raise ValueError("calibration did not measure four sequences per split")
     solves = [e for e in events if e.get("event") == "measured_solve"]
     loads = [e for e in events if e.get("event") == "loaded"]
     if len(solves) != 1 or len(loads) != 1:

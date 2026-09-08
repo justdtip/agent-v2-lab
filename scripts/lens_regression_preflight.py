@@ -201,9 +201,7 @@ def main(argv=None):
                 ),
                 "statistics_storage": args.statistics_storage,
                 "mode": "diagnostic" if args.diagnostic_tokens is not None else "qualification",
-                "diagnostic_repetitions_per_split": 4
-                if args.diagnostic_tokens is not None
-                else None,
+                "repetitions_per_split": 4,
                 "model": prepared.snapshot,
                 "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
                 "registration_sha256": registration_sha,
@@ -221,7 +219,7 @@ def main(argv=None):
                     else "legacy unmasked source prefix"
                 ),
                 "purpose": (
-                    "two copies of one fit row exercise both statistics slots; "
+                    "four repetitions per split exercise initialized statistics updates; "
                     "no held data or quality output"
                 ),
                 "buffer_cap": (
@@ -280,8 +278,7 @@ def main(argv=None):
                 mx.reset_peak_memory()
                 require_owned_window()
                 rows = calibration_rows(source, tokens)
-                if args.diagnostic_tokens is not None:
-                    rows = rows * 4
+                rows = rows * 4
                 shape_scratch = Path(scratch) / str(tokens)
                 shape_scratch.mkdir()
 

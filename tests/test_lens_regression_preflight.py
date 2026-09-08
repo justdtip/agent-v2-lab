@@ -45,6 +45,7 @@ def test_ladder_uses_actual_maximum_and_never_extends_the_corpus():
     assert a.ladder(900) == [256, 512, 900]
     assert a.ladder(1024) == [256, 512, 1024]
     assert a.ladder(2044) == [256, 512, 1024, 2044]
+    assert a.ladder(2816) == [256, 512, 1024, 2048, 2816]
     assert a.ladder(100) == [25, 50, 100]
     assert a.ladder(128) == [32, 64, 128]
     assert a.ladder(2) == [1, 2]
@@ -260,11 +261,16 @@ def test_solve_resets_peak_and_reports_successful_measurement(
         assert all(not prior.exists() for prior in point_directories)
         point_directories.append(point)
         (point / "retained-stats").write_text("fake statistics")
+        assert len(args[1]) == 8
+        assert all(sum(row["split"] == split for row in args[1]) == 4 for split in ("fit", "held"))
         for row in args[1]:
             start = 900 - len(row["ids"])
             assert row["score_positions"] == [p - start for p in [0, 300, 899] if p >= start]
         calls.append("forward")
-        return {"fit": {1: None}, "held": {1: None}}, {}
+        return {"fit": {1: None}, "held": {1: None}}, {
+            "fit": {"sequences": 4},
+            "held": {"sequences": 4},
+        }
 
     def solve(*args):
         assert (point_directories[-1] / "retained-stats").is_file()
@@ -307,6 +313,7 @@ def test_solve_resets_peak_and_reports_successful_measurement(
     )
     begin = json.loads(report.read_text().splitlines()[0])
     assert begin["residual_source"] == residual_source
+    assert begin["repetitions_per_split"] == 4
     assert begin["source_input_positions"] == 900
     assert begin["source_scored_positions"] == 3
     assert begin["calibration_window_rule"].startswith("suffix ending at registered source end")

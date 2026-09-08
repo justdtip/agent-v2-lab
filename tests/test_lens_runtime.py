@@ -367,6 +367,7 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
                 "peak_bytes": 2**30,
                 "projected_peak_bytes": projected,
                 "scored_positions_per_sequence": tokens,
+                "counts": {split: {"sequences": 4} for split in ("fit", "held")},
             }
         )
     envelope = {
@@ -385,6 +386,7 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
                 {
                     "event": "begin",
                     "mode": "qualification",
+                    "repetitions_per_split": 4,
                     "qualification_binding": bound,
                     "initial_bound_bytes": initial,
                     "lengths": [256, 512, 1024],
