@@ -1,0 +1,43 @@
+{
+  "status": "exact_arithmetic_checks_passed",
+  "scope": "analytical examples; no checkpoint or native tensor library",
+  "nonlinear_value_vs_derivative": {
+    "function": "y=x^3",
+    "x": [
+      -2,
+      -1,
+      1,
+      2
+    ],
+    "unregularized_value_regression": "17/5",
+    "mean_derivative": "15/2"
+  },
+  "causal_value_vs_future_derivative": {
+    "function": "y1=x1; y2=x1+x2",
+    "x": [
+      [
+        -1,
+        -1
+      ],
+      [
+        -1,
+        1
+      ],
+      [
+        1,
+        -1
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "same_position_value_regression": "1",
+    "mean_source_sum_target_derivative": "3/2"
+  },
+  "recurrence": {
+    "function": "s[t]=s[t-1]/2+x[t]; initial state 0",
+    "whole_and_correct_cached_derivative": "1/2",
+    "wrong_prefix_cache_misses_output_change": "1/8"
+  }
+}

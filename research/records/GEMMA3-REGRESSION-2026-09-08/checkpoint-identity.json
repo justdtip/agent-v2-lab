@@ -1,0 +1,49 @@
+{
+  "hf_id": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-bf16",
+  "resolved_revision": null,
+  "snapshot_path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-bf16",
+  "snapshot_sha256": "107888c0f7d717d4357699e32077144ffce6d7665c5bd0a75dfd0d85e17f52ed",
+  "files": [
+    {
+      "name": "chat_template.jinja",
+      "sha256": "7de1c58e208eda46e9c7f86397df37ec49883aeece39fb961e0a6b24088dd3c4",
+      "bytes": 1532
+    },
+    {
+      "name": "config.json",
+      "sha256": "d9fb6da67367cb47c34f94f2c8dc1e1f3339b4b7554a45bdf2dc894039cb4a21",
+      "bytes": 775
+    },
+    {
+      "name": "generation_config.json",
+      "sha256": "fd9324becc53c4be610db39e13a613006f09fd6ef71a95fb6320dc33157490a3",
+      "bytes": 215
+    },
+    {
+      "name": "model-00001-of-00002.safetensors",
+      "sha256": "e6a38f837c7e9f463d2997231ba2b07d2c82b63a7925c3bd8f30ba7a68021765",
+      "bytes": 5338068786
+    },
+    {
+      "name": "model-00002-of-00002.safetensors",
+      "sha256": "6522ed33ab081ee217df37cd795a515c4bed5bb23eef0947c1ef53296c1be91a",
+      "bytes": 2422515695
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "sha256": "939869951aab5cfb9f691c179830e70fd28d1d2832e7fca21c6f99f37ad9ff57",
+      "bytes": 45758
+    },
+    {
+      "name": "tokenizer.json",
+      "sha256": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+      "bytes": 33384567
+    },
+    {
+      "name": "tokenizer_config.json",
+      "sha256": "e8d2a8cd75e50a9112fed9e92680732dca8b8928895c7d2bb1e9bfc5031c6eec",
+      "bytes": 744
+    }
+  ],
+  "identity_basis": "exact config, model*.safetensors, indices and runtime assets"
+}

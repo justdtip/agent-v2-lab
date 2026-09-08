@@ -98,7 +98,10 @@ def main(argv: list[str] | None = None) -> int:
 
     def enrich(event):
         counts = event.get("counts", {})
-        tokens = event.get("tokens_done", sum(c.get("positions", 0) for c in counts.values()))
+        tokens = event.get(
+            "tokens_done",
+            sum(counts.get(split, {}).get("positions", 0) for split in ("fit", "held")),
+        )
         return {
             **event,
             "elapsed_s": time.monotonic() - started,
@@ -157,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         "kind": args.kind,
         "domain": prepared.manifest["domain"],
         "model": loaded.snapshot | {"name": loaded.spec.name},
+        "checkpoint": loaded.snapshot,
         "corpus_manifest_sha256": prepared.corpus_manifest_sha256,
         "corpus_sequences_sha256": prepared.manifest["sequences"]["sha256"],
         "counts": result.counts,

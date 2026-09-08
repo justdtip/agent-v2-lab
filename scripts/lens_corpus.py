@@ -14,6 +14,7 @@ from pathlib import Path
 
 from local_llm_lab.models import load_model_spec
 from local_llm_lab.pipeline.lens_fitting.corpus import (
+    PROSE_CHUNK_TOKENS,
     build_agentic_corpus,
     build_prose_corpus,
     download_prose,
@@ -35,7 +36,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--download-prose", action="store_true")
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--dataset-revision", default="main")
+    parser.add_argument(
+        "--prose-chunk-tokens",
+        type=int,
+        help=f"prose window length, recorded in the manifest (default: {PROSE_CHUNK_TOKENS})",
+    )
     args = parser.parse_args(argv)
+    if args.prose_chunk_tokens is not None and (
+        args.corpus != "prose" or args.prose_chunk_tokens <= 0
+    ):
+        parser.error("--prose-chunk-tokens requires prose and a positive integer")
     if args.corpus == "agentic":
         if not args.evals or args.files or args.download_prose:
             parser.error("agentic requires --evals and does not accept prose inputs")
@@ -68,6 +78,9 @@ def main(argv: list[str] | None = None) -> None:
             args.out,
             tokenizer_files=files,
             download_descriptor=descriptor,
+            chunk_tokens=(
+                PROSE_CHUNK_TOKENS if args.prose_chunk_tokens is None else args.prose_chunk_tokens
+            ),
         )
     print(
         json.dumps(

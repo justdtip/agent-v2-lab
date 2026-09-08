@@ -116,7 +116,10 @@ def accumulate(
                 {
                     "event": "sequence",
                     "sequence": number,
-                    "counts": {key: dict(value) for key, value in counts.items()},
+                    "counts": {
+                        key: dict(value) if isinstance(value, dict) else value
+                        for key, value in counts.items()
+                    },
                 }
             )
     if any(not counts[split]["positions"] for split in sums):
