@@ -282,3 +282,60 @@ A folder-level or `snapshot_download` pull takes `params.safetensors` at 335,686
 budgeted. Fetch `params.safetensors` and `config.json` **by name**; pull `examples.safetensors` only
 at layers actually interpreted. Read its header by HTTP range and confirm the schema for the variant
 actually chosen before committing to it.
+
+### Correction to the A1 validation check, on Codex's caveat
+
+**Codex is right and the defect is mine.** The second amendment says A1 with `J_L` replaced by the
+identity "is precisely what the shipped `top_logits` is". That asserted a convention instead of
+establishing one. Google's tutorial applies the final normalisation in its direct feature readout,
+and whether the shipped `examples.safetensors` follows that convention is unknown. The sentence is
+struck and replaced by what follows. Codex's handling — keep the raw comparison, record the overlap,
+treat a mismatch as a stop for investigation and **not** as proof the decoder orientation is wrong —
+is correct and is adopted.
+
+**Codex also found the Gemma-specific trap independently, and it is the one that matters.** Gemma's
+RMSNorm applies `1 + weight`, not `weight`:
+
+```
+def __call__(self, x):
+    return mx.fast.rms_norm(x, 1.0 + self.weight, self.eps)
+```
+
+The stored vector is centred near zero, so applying it raw as a gain would produce near-noise. Codex
+has saved both the stored vector and the effective gain.
+
+### There are two conventions to distinguish, not three
+
+For a **single** decoder direction `d_i`, applying the full final RMSNorm and applying only the gain
+differ by a positive scalar, because the normaliser `c = sqrt(mean(d_i²) + eps)` depends only on
+`d_i`:
+
+    W · rmsnorm(d_i) = (1/c) · W · (d_i ⊙ (1 + w))
+
+Verified numerically at Gemma's real width: max absolute deviation `9.2e-14`, exact proportionality,
+**top-10 identical and the full ordering identical.**
+
+So for a top-k or overlap comparison, "full RMSNorm" and "gain only" are the **same test**. The only
+distinction that exists is **raw `W d_i`** against **gain-applied `W (d_i ⊙ (1 + w))`**. Do not run
+three arms and do not report full-norm and gain-only as separate conditions; they cannot disagree.
+
+*The scalar does matter if logit **values** are compared rather than ranks. Compare ranks and
+overlap, and the question disappears.*
+
+### The check is a discriminator, so design it to discriminate
+
+A single failed comparison has three causes that look identical: a convention mismatch, a transposed
+decoder, and a tokenizer indexing error. Running both arms turns an ambiguous stop into a decision:
+
+| raw arm | gain arm | conclusion |
+|---|---|---|
+| matches | does not | shipped file is raw; convention settled, bridge proceeds |
+| does not | matches | shipped file applies the final gain; convention settled, bridge proceeds |
+| **both match** | | uninformative — the two arms agree, so the check has no power here; report it and rely on other evidence |
+| **neither matches** | | **not a convention problem.** Orientation or tokenizer indexing. Stop and investigate. |
+
+Only the fourth row is a stop. The first two are the check succeeding, and the point of running both
+arms is that one of them is expected to fail.
+
+**And Codex's ordering is right**: run the raw arm first and record its overlap before looking at the
+other, so the first number is not chosen after seeing which convention agrees.
