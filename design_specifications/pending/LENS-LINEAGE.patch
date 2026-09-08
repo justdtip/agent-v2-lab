@@ -1,0 +1,545 @@
+diff --git a/configs/models/gemma3-4b-bf16.yaml b/configs/models/gemma3-4b-bf16.yaml
+index d871ad0..8b2c9bf 100644
+--- a/configs/models/gemma3-4b-bf16.yaml
++++ b/configs/models/gemma3-4b-bf16.yaml
+@@ -13,7 +13,11 @@ hf_id: models/gemma-3-4b-it-bf16
+ # The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
+ # entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted
+ # on a model rather than on a file — so the lens identity check compares this and not the path.
+-source: google/gemma-3-4b-it
++base: google/gemma-3-4b-it
++# No further training: this is the base checkpoint itself, converted. Stated rather than omitted,
++# because a lens fitted on a base and read against a trained checkpoint of the same base is a
++# different reading and the identity has to be able to say so (R57).
++training_lineage: {}
+ family: gemma3
+ chat:
+   thinking: "unsupported"
+diff --git a/configs/models/gemma3-4b.yaml b/configs/models/gemma3-4b.yaml
+index ab2b00d..3768183 100644
+--- a/configs/models/gemma3-4b.yaml
++++ b/configs/models/gemma3-4b.yaml
+@@ -11,7 +11,11 @@ hf_id: models/gemma-3-4b-it-4bit
+ # The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
+ # entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted
+ # on a model rather than on a file — so the lens identity check compares this and not the path.
+-source: google/gemma-3-4b-it
++base: google/gemma-3-4b-it
++# No further training: this is the base checkpoint itself, converted. Stated rather than omitted,
++# because a lens fitted on a base and read against a trained checkpoint of the same base is a
++# different reading and the identity has to be able to say so (R57).
++training_lineage: {}
+ family: gemma3
+ chat:
+   # Gemma 3 has no thinking mode and no template switch for one.
+diff --git a/scripts/lens_fit.py b/scripts/lens_fit.py
+index de63bf0..21960cc 100644
+--- a/scripts/lens_fit.py
++++ b/scripts/lens_fit.py
+@@ -204,7 +204,9 @@ def main(argv: list[str] | None = None) -> int:
+         metadata=metadata,
+         # Issue 99: a lens we fit carries the model it was fitted on, inside the archive whose
+         # digest every later reader pins.
+-        identity=LensIdentity(loaded.spec.source, loaded.view.num_layers),
++        identity=LensIdentity(
++            loaded.spec.base, loaded.view.num_layers, loaded.spec.training
++        ),
+     )
+     print(
+         json.dumps(
+diff --git a/scripts/live_lens_pilot.py b/scripts/live_lens_pilot.py
+index f2f46da..ae815e4 100644
+--- a/scripts/live_lens_pilot.py
++++ b/scripts/live_lens_pilot.py
+@@ -157,7 +157,7 @@ def main() -> None:
+     # constants above made a mismatch impossible by accident; this makes it impossible.
+     lens = LensMaps.load(args.lens, expected_sha256=args.lens_sha256,
+                          hidden_size=view.hidden_size, num_layers=view.num_layers,
+-                         identity=LensIdentity(spec.source, view.num_layers))
++                         identity=LensIdentity(spec.base, view.num_layers, spec.training))
+     reader = LensReadout(view, lens)
+     sampler = make_sampler(0.0)
+     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
+diff --git a/src/local_llm_lab/models.py b/src/local_llm_lab/models.py
+index c4addfc..bffbf8c 100644
+--- a/src/local_llm_lab/models.py
++++ b/src/local_llm_lab/models.py
+@@ -117,16 +117,22 @@ class ProbesSpec:
+ class ModelSpec:
+     name: str
+     hf_id: str
+-    #: The **model** this checkpoint is, as opposed to `hf_id`, which is where its weights live.
+-    #: They differ whenever a checkpoint is converted: `models/gemma-3-4b-it-4bit` and
+-    #: `models/gemma-3-4b-it-bf16` are two precisions of one model, `google/gemma-3-4b-it`.
++    #: The **base checkpoint** these weights descend from, by its canonical upstream name.
++    #: `hf_id` is where the artefact lives; this is what it is a copy or a conversion of.
++    #: `models/gemma-3-4b-it-4bit` and `models/gemma-3-4b-it-bf16` are two precisions of one
++    #: base, `google/gemma-3-4b-it`. Defaults to `hf_id` for a checkpoint we did not convert.
++    base: str = field(default="", kw_only=True)
++    #: What further training was applied on top of ``base``, or ``None`` for the base model
++    #: itself. Part of the identity and not provenance: R57, on the Director's ruling.
+     #:
+-    #: The distinction is not bookkeeping. A Jacobian lens is fitted on a **model**, and the
+-    #: pivot's own ruling is that the pilot runs 4-bit while the hosted lens was fitted on bf16,
+-    #: with the precision mismatch disclosed rather than avoided. An identity built from `hf_id`
+-    #: refuses that pairing, which is a true statement about the files and a false one about the
+-    #: experiment. Defaults to `hf_id`, which is right for every checkpoint we did not convert.
+-    source: str
++    #: A base checkpoint and that checkpoint after training have the same family, the same depth
++    #: and the same width, so nothing about the architecture separates them — and a Jacobian lens
++    #: is a map of a model's residual geometry, which training moves. This repository measured how
++    #: much on 2026-09-08: full-depth training shifted every one of thirty-two layers by about a
++    #: fifth of its weight norm, and two arms' updates to the layers they shared were orthogonal.
++    #: An identity that omitted this would let a base-fitted lens read a trained model and call it
++    #: a match.
++    training: dict[str, Any] | None = field(default=None, kw_only=True)
+     family: str
+     chat: ChatSpec
+     lora: LoraSpec
+@@ -146,6 +152,18 @@ class ModelSpec:
+     # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
+     probe_capture_dtype: Literal["native", "float32"] = "native"
+ 
++    def __post_init__(self) -> None:
++        """An unconverted checkpoint is its own base, stated once here.
++
++        `base` is required in the *registry* — `_model_spec_from_mapping` always supplies it — and
++        defaulted in the dataclass, because a `ModelSpec` built directly with only an `hf_id` is
++        describing a checkpoint nobody converted, and for that checkpoint the artefact and the
++        base are the same thing. Making every direct constructor repeat the id would be noise, and
++        leaving it empty would put a falsy base into an identity comparison.
++        """
++        if not self.base:
++            object.__setattr__(self, "base", self.hf_id)
++
+     @property
+     def probes(self) -> ProbesSpec:
+         """The ``probes:`` block under the specs' own names; a view, not stored state."""
+@@ -235,6 +253,27 @@ class ResolvedSpec:
+         }
+ 
+ 
++def base_of_artifact(named: str) -> str:
++    """The base checkpoint a named artefact descends from, or the name unchanged.
++
++    ``named`` may be a base already (an upstream repository id), a registry entry name, or the
++    resolved path of a local conversion. The registry is what knows the relation, so a reader of
++    an old lens does not have to and the lens does not have to be rewritten (R60).
++
++    Unknown names pass through untouched. That is deliberate: an unrecognised string should reach
++    the identity comparison and be refused there, with both names shown, rather than be quietly
++    turned into something else here.
++    """
++    for name in registered_models():
++        try:
++            spec = load_model_spec(name)
++        except ValueError:  # pragma: no cover - a malformed entry is its own error elsewhere
++            continue
++        if named in (name, spec.hf_id, spec.base):
++            return spec.base
++    return named
++
++
+ def registered_models() -> list[str]:
+     """Return registry names in deterministic lexicographic order."""
+     return sorted(path.stem for path in _REGISTRY_DIR.glob("*.yaml"))
+@@ -340,7 +379,8 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
+     return ModelSpec(
+         name=_required_string(raw, "name", source),
+         hf_id=_resolve_checkpoint(_required_string(raw, "hf_id", source)),
+-        source=str(raw.get("source") or _required_string(raw, "hf_id", source)),
++        base=str(raw.get("base") or raw.get("source") or _required_string(raw, "hf_id", source)),
++        training=_training_lineage(raw.get("training_lineage"), source),
+         family=_required_string(raw, "family", source),
+         chat=ChatSpec(
+             thinking=thinking,
+@@ -380,7 +420,8 @@ def _default_spec(hf_id: str) -> ModelSpec:
+     return ModelSpec(
+         name=hf_id,
+         hf_id=hf_id,
+-        source=hf_id,
++        base=hf_id,
++        training=None,
+         family="unknown",
+         # ChatML's markers, for a model nobody declared. They are a guess and the only honest
+         # thing to say about them is that they are Qwen's; a run that reaches this path and is
+@@ -403,6 +444,24 @@ def _default_spec(hf_id: str) -> ModelSpec:
+     )
+ 
+ 
++def _training_lineage(value: Any, source: str) -> dict[str, Any] | None:
++    """What training sits on top of the base, as a mapping, or ``None`` for a base model.
++
++    ``None`` and ``{}`` are the same statement — *no training* — and both are written that way so
++    a reader never has to decide whether an empty block means "none" or "not recorded". Anything
++    else must be a mapping, because a bare string cannot say what kind of training, how much, and
++    from which adapter, and those are what separate two trained checkpoints of one base.
++    """
++    if value is None or value == {}:
++        return None
++    if not isinstance(value, dict):
++        raise ValueError(
++            f"{source}: training_lineage must be a mapping describing the training applied, or "
++            "absent for a base checkpoint"
++        )
++    return dict(value)
++
++
+ def _mapping(raw: dict[str, Any], key: str, source: str) -> dict[str, Any]:
+     value = raw.get(key)
+     if not isinstance(value, dict):
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/prose.py b/src/local_llm_lab/pipeline/lens_fitting/prose.py
+index 1c346b8..e637109 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/prose.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/prose.py
+@@ -141,7 +141,7 @@ def make_plan(corpus_path, spec, lens_path, *, lens_sha256, tokenizer, revision=
+         num_layers=dimensions["num_hidden_layers"],
+         # Issue 99: the snapshot says which model this is; the lens has to agree. A digest
+         # proves the file is the file the caller named, not that the caller named the right one.
+-        identity=LensIdentity(spec.source, dimensions["num_hidden_layers"]),
++        identity=LensIdentity(spec.base, dimensions["num_hidden_layers"], spec.training),
+     )
+     if set(lens.maps) != set(range(1, dimensions["num_hidden_layers"])):
+         raise ValueError("hosted lens must cover every intermediate layer")
+@@ -394,7 +394,9 @@ def execute_plan(output, spec):
+         expected_sha256=plan["lens_sha256"],
+         hidden_size=loaded.view.hidden_size,
+         num_layers=loaded.view.num_layers,
+-        identity=LensIdentity(loaded.spec.source, loaded.view.num_layers),
++        identity=LensIdentity(
++            loaded.spec.base, loaded.view.num_layers, loaded.spec.training
++        ),
+     )
+     _write(
+         output / "runtime.json", {"lock_path": str(loaded.lock_path), "allocator_cache": allocator}
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/replay.py b/src/local_llm_lab/pipeline/lens_fitting/replay.py
+index 142f555..e1a785b 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/replay.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/replay.py
+@@ -367,7 +367,7 @@ def prepare_replay(
+         hidden_size=hidden,
+         num_layers=count,
+         # Issue 99: the snapshot's dimensions cannot separate two models of the same width.
+-        identity=LensIdentity(spec.source, count),
++        identity=LensIdentity(spec.base, count, spec.training),
+     )
+     readout_layers = set(selected)
+     for record in identities:
+@@ -604,7 +604,9 @@ def run_replay(prepared: PreparedReplay, loaded, *, progress=None, allocator_cac
+         expected_sha256=prepared.lens_sha256,
+         hidden_size=loaded.view.hidden_size,
+         num_layers=loaded.view.num_layers,
+-        identity=LensIdentity(loaded.spec.source, loaded.view.num_layers),
++        identity=LensIdentity(
++            loaded.spec.base, loaded.view.num_layers, loaded.spec.training
++        ),
+     )
+     prepared.output.mkdir(parents=True, exist_ok=False)
+     # Retain byte-identical historical metadata, isolated from new runtime provenance.
+diff --git a/src/local_llm_lab/pipeline/live_lens/instruments.py b/src/local_llm_lab/pipeline/live_lens/instruments.py
+index 23973e7..531a745 100644
+--- a/src/local_llm_lab/pipeline/live_lens/instruments.py
++++ b/src/local_llm_lab/pipeline/live_lens/instruments.py
+@@ -31,31 +31,62 @@ class LensIdentityError(ValueError):
+     """A lens does not say which model it was fitted on, or says a different one (issue 99)."""
+ 
+ 
++def resolve_base(named: str) -> str:
++    """Turn whatever a lens names into the base checkpoint it descends from (R60).
++
++    A lens stamped before the lineage rule may carry an artefact path or a registry entry name
++    where the base belongs. Both are properties of a file. This resolves them by asking the
++    registry which base that artefact is a copy or conversion of, so **the loader does the
++    resolving and the artefact is never rewritten** — Codex's fitted lens carries an absolute
++    local path and its digest is published in four committed records, and a migration would
++    invalidate every one of them to restate something the registry already knows.
++
++    Anything the registry does not recognise is returned unchanged, which is right: an upstream
++    repository id is already a base, and an unknown string should reach the comparison and be
++    refused there with both names shown, rather than be silently rewritten here.
++    """
++    from local_llm_lab.models import base_of_artifact
++
++    return base_of_artifact(named)
++
++
+ @dataclass(frozen=True)
+ class LensIdentity:
+-    """Which **model** a lens was fitted against — not which checkpoint, and not which entry.
+-
+-    Two fields, and the change from three is a correction the Gemma pilot forced. It carried the
+-    registry entry's name and its `hf_id`, and both are properties of a *file* rather than of a
+-    model: `gemma3-4b` and `gemma3-4b-bf16` are two precisions of one model, and the pivot's own
+-    ruling is that the pilot runs 4-bit while the hosted lens was fitted on bf16, with the
+-    precision mismatch disclosed rather than avoided. An identity built from `hf_id` refused that
+-    pairing — a true statement about the files and a false one about the experiment.
+-
+-    What it must still separate is what it was built for. Qwen3.5-4B and Gemma 3 4B are **both
+-    2560-dimensional**, so hidden size cannot tell them apart; the Qwen lens covers layers 1 to 31
+-    and Gemma has 34, so `1 <= 31 < 34` passes every check the loader made and the wrong lens
+-    loads in silence. The layer count catches the reverse direction by arithmetic and misses this
+-    one, which is worse than no guard, because the direction it catches is the one nobody takes.
+-    `model` plus `num_layers` separates every pair this repository holds and does not separate two
+-    precisions of one model, which is exactly the line.
++    """What a lens **is** a map of, as opposed to what merely travels with it (R60).
++
++    A Jacobian lens is a map of a particular model's residual geometry. What determines whether
++    it fits a model is the **base checkpoint** it descends from, the **training** applied on top,
++    and the decoder's **depth** — hidden size is checked separately, against the maps themselves.
++    What travels with a lens and decides nothing: the filesystem path of the artefact it was
++    fitted from, a local registry name, the stored precision, the file's digest.
++
++    The Director's rule, and it is a positive statement of what three earlier attempts got wrong
++    by reaching for a property of the artefact when the question was about the model: *if the lens
++    ontologically fits, and the only thing preventing it from loading is essentially a metadata
++    mismatch, we should modify to allow loading.*
++
++    So the loader decides on the first list and **records** the second. Two precisions of one base
++    load, and the difference goes in the manifest. A Qwen lens against Gemma has a different base
++    and is refused, which is the case issue 99 was filed for and the one no other check catches: at
++    2560 dimensions and 31 maps against 34 layers, every check the loader used to make passed.
++
++    ``training`` is what separates a base checkpoint from that checkpoint after further training,
++    which share family, depth and width. This repository measured what training does to the
++    geometry a lens maps: every one of thirty-two layers moved by about a fifth of its weight norm.
++    A base-fitted lens read against a trained model is a real and interesting measurement — it
++    shows what training moved — but it is a declared cross-condition read, never two entries
++    agreeing on architecture.
+     """
+ 
+-    model: str
++    base: str
+     num_layers: int
++    training: dict | None = None
+ 
+     def as_dict(self) -> dict:
+-        return {"model": self.model, "num_layers": int(self.num_layers)}
++        recorded: dict = {"base": self.base, "num_layers": int(self.num_layers)}
++        if self.training is not None:
++            recorded["training"] = self.training
++        return recorded
+ 
+     @classmethod
+     def from_dict(cls, value: object) -> LensIdentity:
+@@ -64,18 +95,27 @@ class LensIdentity:
+         try:
+             # `hf_id` is the pre-correction spelling; a lens stamped before the model/checkpoint
+             # distinction existed named the model there, which is what it meant.
+-            model = value["model"] if "model" in value else value["hf_id"]
++            # Two older spellings are read, because a lens stamped before this field existed
++            # still names the model in the place it had: `model`, then `hf_id`. Both may hold a
++            # local artefact path rather than a base, which `resolve_base` below turns into the
++            # base the registry says that artefact is a conversion of — the loader resolving,
++            # rather than the artefact being rewritten and its published digest invalidated.
++            base = value.get("base") or value.get("model") or value["hf_id"]
+             layers = value["num_layers"]
+         except (KeyError, TypeError) as error:
+-            raise LensIdentityError("lens identity must carry model and num_layers") from error
+-        if not isinstance(model, str) or not model:
+-            raise LensIdentityError("lens identity model must be a non-empty string")
++            raise LensIdentityError("lens identity must carry base and num_layers") from error
++        if not isinstance(base, str) or not base:
++            raise LensIdentityError("lens identity base must be a non-empty string")
++        training = value.get("training")
++        if training is not None and not isinstance(training, dict):
++            raise LensIdentityError("lens identity training must be a mapping or absent")
+         if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
+             raise LensIdentityError("lens identity num_layers must be a positive integer")
+-        return cls(model, layers)
++        return cls(resolve_base(base), layers, training or None)
+ 
+     def describe(self) -> str:
+-        return f"{self.model} ({self.num_layers} layers)"
++        trained = "base" if self.training is None else f"trained: {sorted(self.training)}"
++        return f"{self.base} ({self.num_layers} layers, {trained})"
+ 
+ 
+ def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:
+diff --git a/tests/test_lens_prose.py b/tests/test_lens_prose.py
+index 3445648..cfea68f 100644
+--- a/tests/test_lens_prose.py
++++ b/tests/test_lens_prose.py
+@@ -84,7 +84,7 @@ def prepared(tmp_path):
+         J0=np.eye(2),
+         identity=np.frombuffer(
+             json.dumps(
+-                {"name": spec.name, "hf_id": spec.hf_id, "num_layers": 2}, sort_keys=True
++                {"base": spec.base, "num_layers": 2}, sort_keys=True
+             ).encode("utf-8"),
+             dtype=np.uint8,
+         ),
+diff --git a/tests/test_lens_regression.py b/tests/test_lens_regression.py
+index e056091..c4a4a66 100644
+--- a/tests/test_lens_regression.py
++++ b/tests/test_lens_regression.py
+@@ -126,7 +126,7 @@ def test_native_nonsymmetric_linear_recovery_and_all_layer_archive(tmp_path):
+     assert np.linalg.norm(recovered - known) / np.linalg.norm(known) < 0.08
+     assert np.linalg.norm(recovered.T - known) > np.linalg.norm(recovered - known) * 2
+     out = tmp_path / "tiny-agentic-regression.npz"
+-    identity = LensIdentity("toy", "example/tiny", native.num_layers)
++    identity = LensIdentity("example/tiny", native.num_layers)
+     metadata = write_lens(
+         out,
+         result.maps,
+diff --git a/tests/test_lens_replay.py b/tests/test_lens_replay.py
+index d2227b9..b615752 100644
+--- a/tests/test_lens_replay.py
++++ b/tests/test_lens_replay.py
+@@ -11,14 +11,17 @@ import pytest
+ from local_llm_lab.pipeline.live_lens.session import RecordWriter
+ 
+ 
+-def _identity_bytes(name: str, hf_id: str, num_layers: int):
+-    """The archive entry `LensMaps.load` reads for a lens's model identity (issue 99)."""
++def _identity_bytes(base: str, num_layers: int):
++    """The archive entry `LensMaps.load` reads for a lens's lineage (issue 99, R57, R60).
++
++    The **base** and not the artefact. These fixtures override a spec's `hf_id` to a temporary
++    path, which under the lineage rule says *a different artefact of the same base* — so a lens
++    for that spec is stamped with the base the registry gives, not with the path.
++    """
+     import numpy as _np
+ 
+     return _np.frombuffer(
+-        json.dumps(
+-            {"name": name, "hf_id": hf_id, "num_layers": int(num_layers)}, sort_keys=True
+-        ).encode("utf-8"),
++        json.dumps({"base": base, "num_layers": int(num_layers)}, sort_keys=True).encode("utf-8"),
+         dtype=_np.uint8,
+     )
+ 
+@@ -361,7 +364,7 @@ def prepared_fixture(tmp_path, monkeypatch, *, identity=False):
+         ],
+     }
+     lens = tmp_path / "lens.npz"
+-    np.savez(lens, J0=np.eye(2), identity=_identity_bytes("qwen35-4b", "example/tiny", 2))
++    np.savez(lens, J0=np.eye(2), identity=_identity_bytes("mlx-community/Qwen3.5-4B-MLX-4bit", 2))
+     manifest["lens_sha256"] = module.file_sha256(lens)
+     (source / "manifest.json").write_text(json.dumps(manifest))
+     snapshot = tmp_path / "snapshot"
+@@ -532,7 +535,7 @@ def test_attention_readout_dependencies_refused_during_preparation(
+     config.write_text(json.dumps({"hidden_size": 2, "num_hidden_layers": 4, "vocab_size": 5}))
+     np.savez(
+         prepared.lens_path,
+-        identity=_identity_bytes("qwen35-4b", "example/tiny", 4),
++        identity=_identity_bytes("mlx-community/Qwen3.5-4B-MLX-4bit", 4),
+         **{f"J{i}": np.eye(2) for i in available},
+     )
+     if len(available) == 3:
+diff --git a/tests/test_lens_runtime.py b/tests/test_lens_runtime.py
+index 55e9ce0..fe189c8 100644
+--- a/tests/test_lens_runtime.py
++++ b/tests/test_lens_runtime.py
+@@ -14,7 +14,7 @@ from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
+ 
+ #: The identity every toy lens in this file is fitted for (issue 99). Three layers because
+ #: `write_lens` requires all and only the nonfinal maps, and these fixtures write two.
+-_TOY = LensIdentity("toy", "example/tiny", 3)
++_TOY = LensIdentity("example/tiny", 3)
+ 
+ 
+ def api():
+@@ -347,7 +347,9 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
+     assert progress_event["working_set_share"] == 0.1
+     metadata = json.loads(out.with_suffix(".json").read_bytes())
+     assert metadata["lambda_grid"] == [0.001, 0.01, 0.1, 1, 10]
+-    assert metadata["model"]["hf_id"] == spec.hf_id
++    # The lens records the lineage it was fitted on, not the artefact it was fitted from:
++    # the artefact is where the weights were, and two conversions of one base share a lens (R60).
++    assert metadata["model"]["base"] == spec.base
+     assert metadata["layers"] == [1, 2]
+     assert "share trajectories" in metadata["held_split_role"]
+     assert "not measured" in metadata["generalisation_evaluation"]
+diff --git a/tests/test_live_lens.py b/tests/test_live_lens.py
+index 6d9d71b..0e837cd 100644
+--- a/tests/test_live_lens.py
++++ b/tests/test_live_lens.py
+@@ -76,6 +76,9 @@ def _stamped_lens(directory, name, arrays, identity, *, in_archive=True, sidecar
+ 
+ QWEN = LensIdentity("mlx-community/Qwen3.5-4B-MLX-4bit", 32)
+ GEMMA = LensIdentity("google/gemma-3-4b-it", 34)
++GEMMA_TRAINED = LensIdentity(
++    "google/gemma-3-4b-it", 34, {"kind": "lora", "rows": 1200, "adapter": "outputs/x"}
++)
+ 
+ 
+ def test_lens_orientation_identity_and_hash_verification(tmp_path):
+@@ -263,9 +266,74 @@ def test_two_precisions_of_one_model_share_a_lens_and_the_refusal_is_about_the_m
+     bf16 = load_model_spec("gemma3-4b-bf16")
+ 
+     assert four_bit.hf_id != bf16.hf_id, "different files"
+-    assert four_bit.source == bf16.source == "google/gemma-3-4b-it", "one model"
+-    assert LensIdentity(four_bit.source, 34) == LensIdentity(bf16.source, 34)
+-    assert LensIdentity(four_bit.source, 34) != QWEN
++    assert four_bit.base == bf16.base == "google/gemma-3-4b-it", "one base"
++    assert four_bit.training is bf16.training is None, "neither carries training"
++    assert LensIdentity(four_bit.base, 34, four_bit.training) == LensIdentity(
++        bf16.base, 34, bf16.training
++    )
++    assert LensIdentity(four_bit.base, 34, four_bit.training) != QWEN
+ 
+     qwen = load_model_spec("qwen35-4b")
+-    assert qwen.source == qwen.hf_id, "unconverted checkpoints declare no separate source"
++    assert qwen.base == qwen.hf_id, "an unconverted checkpoint is its own base"
++
++
++def test_training_separates_two_checkpoints_of_one_base(tmp_path) -> None:
++    """R57: a base and that base after training share family, depth and width, and are not one.
++
++    Nothing about the architecture separates them, and a Jacobian lens is a map of a model's
++    residual geometry, which training moves. This repository measured how much on 2026-09-08:
++    full-depth training shifted every one of thirty-two layers by about a fifth of its weight
++    norm, and two arms' updates to the layers they shared were orthogonal. An identity that
++    stopped at the base would call a base-fitted lens a match for a trained checkpoint.
++
++    Reading a trained model through its base's lens is a real measurement — it shows what training
++    moved — so this is a refusal to do it *by accident*, not a refusal to do it.
++    """
++    maps = {f"J{i}": np.eye(2, dtype=np.float16) for i in range(33)}
++    path, sha = _stamped_lens(tmp_path, "base-lens.npz", maps, GEMMA)
++
++    with pytest.raises(LensIdentityError) as error:
++        LensMaps.load(
++            path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA_TRAINED
++        )
++    assert "base" in str(error.value) and "trained" in str(error.value)
++
++    lens = LensMaps.load(
++        path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA
++    )
++    assert lens.identity == GEMMA
++
++
++def test_a_lens_naming_an_artifact_resolves_to_its_base_rather_than_being_rewritten(
++    tmp_path,
++) -> None:
++    """R60: the loader resolves, the artefact is not migrated, and its digest stays valid.
++
++    A lens stamped before the lineage rule carries an artefact path where the base belongs — a
++    property of a file. Rewriting the archive to fix that would invalidate a digest already
++    published in committed records, to restate something the registry knows. So the loader asks
++    the registry which base that artefact descends from.
++    """
++    from local_llm_lab.models import base_of_artifact, load_model_spec
++
++    bf16 = load_model_spec("gemma3-4b-bf16")
++    assert base_of_artifact(bf16.hf_id) == "google/gemma-3-4b-it"
++    assert base_of_artifact("gemma3-4b") == "google/gemma-3-4b-it", "an entry name resolves too"
++    assert base_of_artifact("someone/unknown") == "someone/unknown", (
++        "an unrecognised name reaches the comparison and is refused there with both names shown, "
++        "rather than being silently rewritten"
++    )
++
++    maps = {f"J{i}": np.eye(2, dtype=np.float16) for i in range(33)}
++    path = tmp_path / "old-stamp.npz"
++    np.savez(
++        path,
++        identity=np.frombuffer(
++            json.dumps({"hf_id": bf16.hf_id, "num_layers": 34}).encode("utf-8"), dtype=np.uint8
++        ),
++        **maps,
++    )
++    sha = hashlib.sha256(path.read_bytes()).hexdigest()
++
++    lens = LensMaps.load(path, expected_sha256=sha, hidden_size=2, num_layers=34, identity=GEMMA)
++    assert lens.identity == GEMMA, "the old spelling resolved to the base it names"
