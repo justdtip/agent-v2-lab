@@ -319,8 +319,16 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
     fake_fit = regression.fit_regression
 
     def fit_with_progress(*args, **kwargs):
+        assert kwargs["residual_source"] == "native"
         kwargs["progress"](
-            {"event": "sequence", "counts": {"fit": {"positions": 5}, "held": {"positions": 2}}}
+            {
+                "event": "sequence",
+                "counts": {
+                    "fit": {"positions": 5, "input_positions": 50},
+                    "held": {"positions": 2, "input_positions": 20},
+                    "residual_source": "native",
+                },
+            }
         )
         return fake_fit(*args, **kwargs)
 
@@ -338,6 +346,8 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
         str(manifest),
         "--out",
         str(out),
+        "--residual-source",
+        "native",
     ]
     assert main(argv) == 0
     progress_event = json.loads(capsys.readouterr().out.splitlines()[0])
@@ -349,7 +359,14 @@ def test_complete_cli_sidecar_and_output_refusal_without_weights(tmp_path, monke
     assert metadata["lambda_grid"] == [0.001, 0.01, 0.1, 1, 10]
     # The lens records the lineage it was fitted on, not the artefact it was fitted from:
     # the artefact is where the weights were, and two conversions of one base share a lens (R60).
-    assert metadata["model"]["base"] == spec.base
+    assert metadata["model"] == {"base": spec.base, "num_layers": 3}
+    assert metadata["snapshot"] == identity
+    assert metadata["model_name"] == spec.name
+    assert metadata["residual_source"] == "native"
+    from local_llm_lab.pipeline.live_lens.instruments import LENS_IDENTITY_KEY
+
+    with np.load(out, allow_pickle=False) as archive:
+        assert json.loads(bytes(archive[LENS_IDENTITY_KEY])) == metadata["model"]
     assert metadata["layers"] == [1, 2]
     assert "share trajectories" in metadata["held_split_role"]
     assert "not measured" in metadata["generalisation_evaluation"]
