@@ -7,7 +7,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-# Training artifacts can be large.
+# Training artifacts can be large. NOTE: a bare `name/` matches a directory of that name at ANY
+# depth, not only at the root, which is how `models/` came to swallow `configs/models/` and very
+# nearly lost a registry entry that worked locally and was absent from the repository. Anyone
+# adding a directory called `adapters`, `checkpoints`, `models` or `outputs` anywhere in the tree
+# loses it silently; anchor a new rule with a leading slash unless depth-free is what you mean.
 adapters/
 outputs/
 checkpoints/
@@ -22,5 +26,11 @@ models/
 .codex/coordination/*
 !.codex/coordination/project.yaml
 
-# Live-lens pilot records: the plain JSONL stays local; the gzipped copies are the committed record.
-research/records/LIVE-LENS-PILOT-*/*.jsonl
+# Live-lens pilot records: the plain JSONL stays local; the gzipped copies are the committed
+# record. Every plain file has a tracked `.gz` beside it (13 of 13 for the 2026-09-07 pilot), so
+# the evidence is in the repository at 19 MB rather than 66 MB, not merely on one disk.
+#
+# The pattern is deliberately generic. It was `LIVE-LENS-PILOT-*`, which no future pilot's
+# directory would have matched: a `GEMMA3-LIVE-LENS-PILOT-*` run would have committed its plain
+# JSONL at full size while the Qwen pilot's stayed compressed, which is the worst of both rules.
+research/records/*LIVE-LENS-PILOT-*/*.jsonl
