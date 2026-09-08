@@ -705,3 +705,45 @@ That matters for the pre-registration. Counting the class will count all three; 
 not, and a record that reports the count as though it had a mechanism would be claiming more than
 three episodes support. These readings are also interpretations of trajectories, not measurements
 of representations — the map has not been asked about any of them yet.
+
+### `batch_update-0166` twice, and a correction to the class count
+
+**Stage two ran this episode under the fixed simulator at 34 layers. The corrected-rendering run ran
+it under the lying simulator at 8 layers. The seven actions are byte-identical.**
+
+That is the third demonstration that capture does not perturb generation, and the strongest: the two
+runs differ in captured depth by a factor of four and in the simulator, and produce the same
+trajectory token for token. It also identifies a **licensed exception** to the rule that no figure
+crosses the two runs. The prohibition holds by default because the rendering and the environment
+both changed — but this episode never calls `list_files` on an unsatisfiable directory, so the
+environment fix cannot reach it, and its outcome-level figures are comparable with a stated reason.
+
+**A near-miss worth recording.** The two manifests appeared to disagree on the strategy fields: the
+earlier run showed `repeated_failure_step: None` against stage two's `5`. The earlier run simply
+**predates those fields** and the key is absent; a missing key printed as `None` and read as a
+measurement. Recomputed from that run's own steps with the same function, every field matches stage
+two exactly. Absent and measured-as-none are different, which is the same distinction the readout
+gate makes between a missing figure and a passing one.
+
+### The class count was wrong and is corrected here
+
+I reported the wrong-answer-termination class as three instances, and that none was reachable by the
+strategy-switching measurement. Both were wrong: I was counting only the episodes I had read closely.
+
+Across stage two's ten completed agentic episodes the class holds **five**:
+
+| episode | stuck at | never searched while stuck |
+|---|---:|---|
+| `search-0061` | — | no |
+| `list-0149` | — | no |
+| `pointer_chain-0018` | — | no |
+| `conditional_update-0093` | — | no |
+| **`batch_update-0166`** | **step 5** | **yes** |
+
+So **four of five** sit outside the strategy-switching measurement, not five of five, and the class
+and the measurement overlap rather than partition. `batch_update-0166` is in both: it takes three
+consecutive errors without ever searching, **and** terminates confidently with a wrong answer.
+
+The correction does not change the reading that the class is unified by outcome rather than by
+mechanism. It does change its size — five of ten agentic episodes — and it removes a clean
+disjointness I had asserted from four episodes and should not have.
