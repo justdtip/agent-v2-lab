@@ -169,3 +169,116 @@ section rather than under its own heading. Heavy work announces a window whether
 model. The download is network and disk and needs none; the small numerical checks need none; the
 full matrix readout at roughly 150 seconds per layer does, and it must wait for a free box and be
 announced with a projected peak per R60(c). The Deputy holds the box at the time of writing.
+
+---
+
+## Second amendment: the labels. Chief, on the Director's source audit, 2026-09-08
+
+The dictionary choice is unchanged. What changes is everything this order promised to print beside a
+feature. The Director's audit found that Neuronpedia's layer-17 labels describe the deep dive rather
+than the ordered every-layer suite, and ruled that labels are unavailable unless an exact mapping is
+found, since matching feature numbers alone would produce false pairings. **That is confirmed, and
+the limitation is broader than it was stated.**
+
+### What is true, all of it fetched or read
+
+**Neuronpedia says so itself, in a machine-readable field.** The feature endpoint for
+`gemma-3-4b-it/17-gemmascope-2-res-16k` returns, inside its own `source` object,
+`hfFolderId: "resid_post/layer_17_width_16k_l0_medium"`. The provenance pointer is published; the
+audit is confirmed by the source rather than inferred from layer numbers.
+
+**There are no published labels for `resid_post_all` at any layer at all.** Three independent
+confirmations: SAELens's registry covers `resid_post_all` for layers 0–33 with **zero** Neuronpedia
+bindings, while all twelve residual bindings sit in the deep-dive release at 9, 17, 22 and 29;
+probing the API returns 200 at exactly those four layers and 404 at every other layer of 0–33; and
+Neuronpedia serves a 65k residual source, a width that exists **only** under `resid_post/`. So the
+chosen dictionary is unlabelled at all thirty-four of its layers, not merely at layer 17.
+
+**The sparsity does not match and cannot be made to.** Neuronpedia labels `l0_medium`, declared
+`l0: 60`. `resid_post_all` ships only `l0_small` at 20 and `l0_big` at 120, and there is **no
+`l0_medium` anywhere in `resid_post_all`, at any layer or width**. The labelled configuration is not
+a different run of the same setting; it is a setting the chosen suite never published.
+
+**File size will not tell the two apart, and this is a trap worth naming.** The controlled pair —
+same declared hook `model.layers.17.output`, same width 16384, same `jump_relu`, same `l0: 20` —
+are both exactly **335,686,016 bytes** with byte-identical 384-byte headers, and first differ at
+byte 385, the opening of `b_dec`. Identical size is forced by shared shape and dtype. **A
+mis-targeted download lands a file of exactly the right size.** Verify by hash, never by length.
+
+**Where a label does exist it is an unscored machine guess.** `explanationModelName` is
+`gemini-2.5-flash-lite`, `scores` is empty, and coverage is partial at roughly 92.5% on a 40-index
+sample. A caution on top: the base and instruction-tuned label *texts* were identical at 14 of 14
+sampled indices despite being records on SAEs trained on different models. That is unexplained.
+**Do not cite base/instruct label agreement as evidence of anything.**
+
+**A labelled every-layer suite does exist for this model, at the wrong site.** `transcoder_all`
+covers layers 0–33 complete, with labels, at `blocks.N.hook_mlp_out`. It reads the MLP output, so
+the identity `Lh = Lb + (LD)z + Le` at the residual does not apply and it is not a substitute. It is
+recorded here so that "no labelled every-layer dictionary exists" is not entered as a finding, since
+that is false.
+
+### The one measured result that looked like a route, and why it is not
+
+Reading decoder rows by HTTP byte range, 768 features sampled across the index range, same-index
+decoder cosine between the deep-dive and every-layer 16k dictionaries at layer 17:
+
+| comparison | mean cosine | notes |
+|---|---:|---|
+| deep dive vs every-layer, same index | **0.672** | median 0.850, 71% above 0.5, 43% above 0.9 |
+| the repository's own different-seed control | **0.013** | 0 of 256 nearest-neighbour hits |
+
+So the indices are **not** arbitrary relative to each other, and the alignment survives across layers.
+The likely reason is shared initialisation lineage rather than a shared run.
+
+**It still does not open a label route, for two reasons that are each sufficient.** Eighteen per cent
+of features sit below 0.2 cosine, so index-matching would silently fabricate roughly **one pairing in
+five** — exactly the false pairings the Director's rule forbids, and silent because the other four in
+five would look right. And the aligned pair measured is `small` against `small`, **neither of which
+is labelled**: the labels are on `l0_medium`, which has no counterpart in the chosen suite at all.
+
+### What survives, and it is the better instrument
+
+**The dictionary ships its own interpretability evidence.** `examples.safetensors`, read by HTTP range
+without downloading it, carries `top_tokens` and `top_logits` at [16384, 10], `bottom_tokens` and
+`bottom_logits` at [16384, 10], `activations`, `seq_ids` and `positions` at [16384, 1000],
+`feature_frequencies` at [16384], and a token corpus `tokens` at [236963, 512]. **Right dictionary,
+every layer, no mapping, no third party.** This file, not Neuronpedia, is A1's companion.
+
+**And it hands A1 a free correctness check nobody asked for.** A1 computes `L d_i = W J_L d_i` and
+keeps its top tokens. Replace `J_L` with the identity and A1 becomes `top_k(W d_i)`, which is what
+the shipped `top_logits` already is. Compare the two and report the overlap. That catches a wrong
+decoder orientation, a wrong unembedding, or a tokenizer indexing error — none of which the layer
+mismatch would reveal, and all of which would otherwise be invisible. **The gap between
+`top_k(W d_i)` and `top_k(W J_L d_i)` is then the quantity the bridge exists to measure: what the
+Jacobian adds over the direct path.**
+
+### The rule, stated so it cannot be misapplied
+
+**Labels are unavailable for this dictionary. The label field ships as `unlabelled`, with the reason
+recorded verbatim in the artifact:** *no Neuronpedia source maps to `resid_post_all`; the residual
+labels index `resid_post/layer_17_width_16k_l0_medium`, a different training run at a sparsity this
+suite never published.*
+
+**A description we generate is not a published label and no artifact may present it as one.** Where
+A1's own top-token readout is printed, it is headed as ours, and it records the layer it was read
+from. This distinction is the whole of the Director's rule and it survives even a perfect mapping.
+
+### What changes in the order's own text
+
+- **Stage A1, "and sets that beside the feature's published auto-interpretation label"** — struck.
+- **Stage A2, "these *labelled* features are active"** — the word is withdrawn. It becomes: *these
+  features are active, these two are what push toward it, and here is what each pushes toward read
+  from this layer*, each feature named by suite path and index.
+- **First amendment, "a later cross-check between the two suites is possible there and nowhere else.
+  That is worth having at no cost"** — both halves false. The deep dive exists at hook layers 9, 17,
+  22 and 29, all inside `resid_post_all`'s range, so the cross-check is available at four layers,
+  this repository's probe layers 10, 18, 23 and 30. And it costs a second 335.7 MB download of a
+  dictionary the bridge does not otherwise use.
+
+### Cost correction, which is 3.4x
+
+A folder-level or `snapshot_download` pull takes `params.safetensors` at 335,686,016 B **and**
+`examples.safetensors` at 815,733,608 B, so **1.15 GB per layer** against the 335.7 MB this order
+budgeted. Fetch `params.safetensors` and `config.json` **by name**; pull `examples.safetensors` only
+at layers actually interpreted. Read its header by HTTP range and confirm the schema for the variant
+actually chosen before committing to it.
