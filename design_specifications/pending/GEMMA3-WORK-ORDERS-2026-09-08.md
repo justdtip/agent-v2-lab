@@ -206,3 +206,62 @@ restricting to its layers.
 **Pre-register the reading rules before any record is read**, as the house rule requires, and
 record which layers are global-attention (6, 12, 18, 24 and 30) so that contrast is stated in
 advance rather than found afterwards.
+
+---
+
+## Gemma Scope 2 and the lens: compose them, do not merely label with them
+
+The Director's observation that Gemma Scope gives pre-understood features to map to is right, and
+there is a sharper composition available than labelling. Verified against the repository, not
+researched.
+
+**`google/gemma-scope-2-4b-it` is our exact model.** Its config names
+`model_name: google/gemma-3-4b-it`. Three sites at every one of the 34 layers, in the `*_all`
+directories: the residual stream after each block, the attention output, and the MLP output.
+JumpReLU dictionaries at widths from 16,384 to a million, at three sparsity levels. One
+16k residual dictionary is 336 MB; the whole repository is 4.65 TB, so downloads are per layer and
+per site, never wholesale.
+
+**The layer conventions align, which is the first thing that had to be true.** The residual
+dictionary's hook is `model.layers.N.output`, the output of block N, which under this project's
+writer convention is probe layer N+1 — the same residual the lens reads through its `J{N}` key.
+So a dictionary and a lens map at the same index describe the same vector space.
+
+### The composition
+
+A dictionary's decoder rows are feature directions in the residual space at a layer. The lens is a
+map from that space into the final space, read through the model's own unembedding. **Apply the
+lens to the feature directions.** Every feature then acquires a token-level readout: what this
+feature, seen from this layer, pushes the output toward. Set that beside the feature's published
+auto-interpretation label and each dictionary entry carries both a human description and a
+verbalisation, derived independently.
+
+During a task the reading changes in kind. Instead of *the residual at layer 18 predicts this
+token*, it becomes *layer 18 is running these labelled features, and these two are what push
+toward that token.* That is the map the Director asked for, with the axis of interpretation the
+lens alone cannot supply.
+
+**It is exact where it matters.** The lens applied to a feature direction is not an approximation;
+it is the lens's own linear action on that vector. The only approximation is the dictionary's
+decomposition of the residual into features, and that one is measurable as reconstruction error
+rather than assumed.
+
+**It needs no model.** It is a product of two matrices we hold, so it runs off-box, in parallel
+with the mapping run, and competes for nothing.
+
+### Caveats to record, not to discover later
+
+- The dictionaries were trained on Google's unquantised weights and we run a 4-bit conversion.
+  The reconstruction error under quantisation is unmeasured, and it matters more for a dictionary
+  than for a lens, because sparsity is a threshold on activations and a threshold is exactly what
+  quantisation noise moves. Measure it at one layer before any claim rests on a feature being
+  inactive.
+- Our lens was fitted at 128 tokens, so the feature readouts inherit that fit's accuracy.
+- The attention-output and MLP-output dictionaries answer which sublayer *wrote* a feature. That
+  is a circuit question, and a lens is structurally incapable of it. Worth having, after the map.
+
+### Order
+
+The map first, because it says which layers are worth 336 MB and a matmul. Then the composition at
+those layers. Owner: Codex, alongside the lens validation, since it is the same matrices and the
+same skill, and it blocks on nothing.
