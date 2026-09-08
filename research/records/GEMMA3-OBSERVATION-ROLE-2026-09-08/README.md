@@ -95,3 +95,57 @@ templates and reading them side by side; the difference is visible in seconds an
 Declare the substitute marking in the model registry rather than hardcoding it, so the next family
 states its own instead of inheriting one model's convention — which is how ChatML's assistant
 marker came to be hardcoded for every model in this repository.
+
+---
+
+## Amendment: the Director's correction, and a confound the Chief missed
+
+Two corrections arrived after this record was written, and both make it smaller than it claimed.
+
+**The step ceiling, which is the simpler confound and was missed.** The pilot runs twelve steps.
+The evaluation that produced Qwen's comparison numbers runs twenty-four. **Four of Gemma's eleven
+failures are exhaustion at a ceiling half the height its comparator was given.** That accounts for
+more of the gap than the rendering does, and it was visible in the manifest before any hypothesis
+was needed. Looking for a subtle cause without first checking the obvious one is the error, and it
+is worse than the subtle one it found. The re-run raises the ceiling to twenty-four.
+
+**The Director's correction to the framing, which is the more important half.** This record framed
+the defect as an information-channel problem: the `tool` role carried facts, the template cannot
+express the role, move the facts into the content. His framing:
+
+> *Observations should render in a manner that teaches the model to understand what it is doing. A
+> model executing a tool should not assume that in doing so it responds to the user.*
+
+Under the current rendering, a Gemma episode is a strict two-party conversation — user, model,
+user, model — so every tool call the model makes is followed by what is formally **a user turn**.
+The model is taught, turn after turn, that *when it executes a tool, the person answers*, and that
+its next output is a reply to that person rather than the next step of its own work. That is a
+different task from *you are operating a workspace and observing the results of your own actions*.
+
+**It also predicts the failures better than the missing-label account did.** A model that believes
+the user speaks after each of its actions behaves conversationally: it re-acknowledges, re-reads,
+restates and confirms. Re-reading one file eight times and re-issuing one call eight times is what
+a model does when it thinks it is in a dialogue rather than executing a plan. The label account
+explains that the model is confused; this one explains the shape of the confusion.
+
+**So the fix is not a prefix string.** The observation must present as the environment's response
+to the model's own action, and **the system prompt must teach the convention**, because the
+template forces the user role and the model cannot infer why. Both belong in the model registry
+rather than in code, so the next family declares its own instead of inheriting Gemma's.
+
+**And the technique section above is correspondingly wrong where it says the other half of the job
+is carrying the discarded role's information into the content.** That is necessary and not
+sufficient. The full statement:
+
+> **When a model's chat template cannot express a role your protocol uses, moving the message to a
+> role the template does have changes what the model is being taught about the interaction, not
+> only what it is being told. Ask what the substitute role implies about who is speaking and what
+> the model's next turn is for, and where the implication is false, say so explicitly in the
+> content and in the system prompt. A role is not a label on a message; it is a claim about the
+> structure of the exchange.**
+
+**A note on what the re-run can and cannot say.** It changes the ceiling and the rendering
+together. Both are independently correct, so neither is worth holding back to preserve a clean
+comparison, but the consequence is that the re-run tests whether Gemma can do these tasks when
+fairly presented — not which of the two errors mattered. Attribution between them is a cheap
+follow-up if the result makes it interesting.
