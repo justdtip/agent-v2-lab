@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ import yaml
 from local_llm_lab import models
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import load_model_spec
+from local_llm_lab.project import PROJECT_ROOT
 
 
 @pytest.mark.parametrize(
@@ -68,13 +70,29 @@ from local_llm_lab.models import load_model_spec
             },
         ),
         (
+            # The bf16 twin, for lens fitting: the hosted Jacobian lens was fitted on bf16 weights
+            # and a comparison against it should not also be a comparison of precisions.
+            "gemma3-4b-bf16",
+            str(PROJECT_ROOT / "models/gemma-3-4b-it-bf16"),
+            "unsupported",
+            "none",
+            "auto",
+            {
+                "max_seq_length": 2688,
+                "batch_size": 1,
+                "grad_accumulation_steps": 1,
+                "learning_rate": 3.0e-5,
+                "grad_checkpoint": True,
+            },
+        ),
+        (
             # The Gemma 3 pivot's registry entry. `unsupported` because Gemma has no thinking
             # mode; `none` rather than `auto` because 29 of its 34 per-block caches rotate and
             # no equivalence has been measured on this model, and a reuse strategy is an
             # equivalence claim. The train block is UNRULED and exists so no consumer meets a
             # bare key error; it is the Qwen recipe's values and is evidence about another model.
             "gemma3-4b",
-            "google/gemma-3-4b-it",
+            str(PROJECT_ROOT / "models/gemma-3-4b-it-4bit"),
             "unsupported",
             "none",
             "auto",
@@ -446,3 +464,34 @@ def test_the_generation_prefix_is_declared_per_model_and_a_registry_file_cannot_
     (tmp_path / "no-prefix.yaml").write_text(yaml.safe_dump(document))
     with pytest.raises(ValueError, match="generation_prefix"):
         load_model_spec("no-prefix")
+
+
+def test_a_local_checkpoint_resolves_against_the_project_root_not_the_working_directory(
+    tmp_path, monkeypatch
+) -> None:
+    """A registry path must name the same file from a worktree as from the repository root.
+
+    `models/gemma-3-4b-it-4bit` is a relative path, and a stage that resolved it from wherever the
+    process happened to be standing would work from the repository root and fail everywhere else.
+    That is the shape of two separate faults this project hit in one day — a `trap` holding a
+    relative interpreter path across a `cd`, and this — so the registry resolves it once, at load,
+    against the project root.
+
+    The prefix is what marks it, not a filesystem probe: a spec whose meaning depends on what
+    happens to exist on the disk it is read from is the same defect one level up. A Hugging Face
+    repo id has no prefix and passes through untouched, which the Qwen entries assert above.
+    """
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.project import PROJECT_ROOT
+
+    monkeypatch.chdir(tmp_path)
+
+    for name, directory in (
+        ("gemma3-4b", "models/gemma-3-4b-it-4bit"),
+        ("gemma3-4b-bf16", "models/gemma-3-4b-it-bf16"),
+    ):
+        resolved = load_model_spec(name).hf_id
+        assert resolved == str(PROJECT_ROOT / directory)
+        assert Path(resolved).is_absolute(), "a loader must not have to guess where this is"
+
+    assert load_model_spec("qwen35-4b").hf_id == "mlx-community/Qwen3.5-4B-MLX-4bit"

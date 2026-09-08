@@ -12,12 +12,25 @@ for that, because below the window Gemma's two masks are identical and no mask d
 The negative control breaks the dispatch and must move the long number and leave the short one.
 """
 from __future__ import annotations
-import json, sys
+
+import sys as _sys
+
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is the record of the architecture-view port's acceptance on "
+        "2026-09-08, not a launcher. It loads a 4B checkpoint and takes the model-run lock. "
+        "Re-run it deliberately with --i-am-a-record, inside an announced box window."
+    )
+
+import json
+import sys
+
 sys.path.insert(0, "/Users/daniel.tipton/Desktop/An app/src")
 
 
 def main() -> int:
     import mlx.core as mx
+
     from local_llm_lab.arch import ArchitectureView
     from local_llm_lab.runlock import load_weights
 

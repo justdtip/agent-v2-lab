@@ -18,6 +18,16 @@ only demonstration that this instrument can see what the pre-port one could not.
 
 from __future__ import annotations
 
+import sys as _sys
+
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is the record of the architecture-view port's acceptance on "
+        "2026-09-08, not a launcher. It loads a 4B checkpoint and takes the model-run lock. "
+        "Re-run it deliberately with --i-am-a-record, inside an announced box window."
+    )
+
+
 import json
 import sys
 from pathlib import Path

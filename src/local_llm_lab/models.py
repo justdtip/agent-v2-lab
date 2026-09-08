@@ -29,6 +29,21 @@ NATIVE_PREFILL_STEP_SIZE = 2048
 _CAPTURE_DTYPES = frozenset({"native", "float32"})
 _DEFAULT_PROBE_FRACTIONS = (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
 _REGISTRY_DIR = Path(__file__).resolve().parents[2] / "configs" / "models"
+#: A registry `hf_id` starting with this names a checkpoint **in this repository** rather than a
+#: Hugging Face repo, and is resolved against the project root when the spec is loaded.
+#:
+#: An explicit prefix rather than "does this path happen to exist": a spec whose meaning depends on
+#: the filesystem it is read on is the same class of defect as behaviour that depends on where a
+#: process is standing, and every stage that resolved a bare `models/...` from its own working
+#: directory would work from the repository root and fail from a worktree or a scratch directory.
+_LOCAL_CHECKPOINT_PREFIX = "models/"
+
+
+def _resolve_checkpoint(hf_id: str) -> str:
+    """Absolute path for a local checkpoint; a Hugging Face repo id unchanged."""
+    if not hf_id.startswith(_LOCAL_CHECKPOINT_PREFIX):
+        return hf_id
+    return str((Path(__file__).resolve().parents[2] / hf_id).resolve())
 
 
 @dataclass(frozen=True)
@@ -303,7 +318,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
 
     return ModelSpec(
         name=_required_string(raw, "name", source),
-        hf_id=_required_string(raw, "hf_id", source),
+        hf_id=_resolve_checkpoint(_required_string(raw, "hf_id", source)),
         family=_required_string(raw, "family", source),
         chat=ChatSpec(
             thinking=thinking,

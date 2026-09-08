@@ -1,0 +1,45 @@
+name: gemma3-4b-bf16
+# Our own conversion of Google's authenticated weights, made on this box under one window and
+# verified text-only: no vision configuration and zero vision tensors (provenance at e029857).
+# `models/` marks it as a checkpoint in this repository; the registry resolves it against the
+# project root, so a stage running from a worktree finds the same file as one running from here.
+#
+# The bf16 entry exists so lens fitting is not also a comparison of precisions: the hosted
+# Jacobian lens was fitted on bf16 weights. The 4-bit entry `gemma3-4b` is the pilot's and the
+# evaluation's, because the Qwen pilot ran 4-bit and the two-panel comparison is like for like
+# only there. The two are otherwise identical and that is the point — a run's provenance names
+# exactly which one ran.
+hf_id: models/gemma-3-4b-it-bf16
+family: gemma3
+chat:
+  thinking: "unsupported"
+  template_kwargs: {}
+  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
+  generation_prefix: "<start_of_turn>model\n"
+  end_of_turn: "<end_of_turn>"
+  extra_stop_tokens: []
+lora:
+  keys: auto
+  rank: 16
+  scale: 32.0
+  dropout: 0.0
+train:
+  # UNRULED, and training on Gemma stays deferred under the Director's ruling of 2026-09-08.
+  # These exist so no consumer meets a bare key error; they are the Qwen recipe's values and are
+  # evidence about a different model.
+  max_seq_length: 2688
+  batch_size: 1
+  grad_accumulation_steps: 1
+  learning_rate: 3.0e-5
+  grad_checkpoint: true
+cache:
+  # `none` for the first runs: 29 of the 34 per-block caches rotate and no equivalence has been
+  # measured on this model. A reuse strategy is an equivalence claim. UNRULED.
+  strategy: none
+  equivalence_verified: null
+probes:
+  layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
+  capture_dtype: native
+memory:
+  budget_gib: 22
+policies: {}

@@ -1,5 +1,13 @@
 name: gemma3-4b
-hf_id: google/gemma-3-4b-it
+# Our own 4-bit conversion of Google's authenticated weights, made on this box and verified
+# text-only (provenance at e029857). `models/` marks it as a checkpoint in this repository and the
+# registry resolves it against the project root, so a stage running from a worktree finds the same
+# file. It was `google/gemma-3-4b-it`, the multimodal bf16 source, which would have pulled a vision
+# tower this programme does not use.
+#
+# 4-bit because the Qwen pilot ran 4-bit and the two-panel comparison is like for like only there.
+# `gemma3-4b-bf16` is the lens-fitting entry, since the hosted Jacobian lens was fitted on bf16.
+hf_id: models/gemma-3-4b-it-4bit
 family: gemma3
 chat:
   # Gemma 3 has no thinking mode and no template switch for one.

@@ -32,15 +32,21 @@ from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
 def test_the_registry_lists_every_declared_backbone() -> None:
     """A literal list, so adding a model is a deliberate edit here rather than a silent one.
 
-    It was three names and is four: `gemma3-4b` landed with the Gemma pivot. This test is in a
-    file that reaches the model library, so it was skipped under the window that verified that
-    landing and the tree was red until this line moved. The skip count in a run's summary is the
-    coverage statement, not a footnote.
+    It was three names, then four when `gemma3-4b` landed with the Gemma pivot, and is five now
+    that the bf16 twin exists: 4-bit for the pilot and the evaluation, bf16 for lens fitting,
+    because the hosted Jacobian lens was fitted on bf16 and a comparison against it should not
+    also be a comparison of precisions.
+
+    This test is in a file that reaches the model library, so it was skipped under the window that
+    verified the four-name landing and the tree was red until that line moved. The skip count in a
+    run's summary is the coverage statement, not a footnote. It caught the fifth name the same
+    afternoon, which is the test doing its job rather than being in the way.
     """
     from local_llm_lab.models import registered_models
 
     assert registered_models() == [
         "gemma3-4b",
+        "gemma3-4b-bf16",
         "qwen25-coder-3b",
         "qwen35-4b",
         "qwen35-9b",
