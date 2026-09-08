@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "source_commit": "8b105f9",
+  "verified_at": "2026-09-08T13:55:51.286498+00:00",
+  "previous_integration": {
+    "path": "R47-SOURCE-VERIFICATION.json",
+    "sha256": "15f8a46da1f7efc879cc7870370a65ae9a7f568ffb1bd42d4382d53f983807d8",
+    "passed": 241
+  },
+  "followup": "Include measured peak and both thresholds in the runtime breach error; arithmetic/control flow unchanged.",
+  "changed_source": [
+    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py"
+  ],
+  "changed_tests": [
+    "tests/test_lens_memory_policy.py"
+  ],
+  "targeted_outcomes": {
+    "passed": 26
+  },
+  "pytest_exit_code": 0,
+  "source_sha256": {
+    "src/local_llm_lab/arch.py": "e43a0f2a0a00404c88579362ecd897660621bfb02fe397983d79e52e6cc2b30e",
+    "src/local_llm_lab/pipeline/lens_fitting/regression.py": "a2f88937b32d946788e69200ffb7759f2bb6452f9ce77734d0bf5534b188b74b",
+    "src/local_llm_lab/pipeline/lens_fitting/memory_policy.py": "823bf822791fce22dfc6d45272ab79df94e772d6882028db74087a3baa6aa0a5",
+    "scripts/lens_regression_preflight.py": "048218a1f8959283e25898872b8cfba0c5979ba86f139d4d9a180ccabeaeeba5",
+    "scripts/lens_fit.py": "e5cba2b6bf36cabeacefb6d610d82dcd5fa1dbf60dad972029bc2bd1e2fb066c",
+    "scripts/gemma_transcript_lens.py": "01dbadbd137fc0b774e2693116f1f78891ed66364d94ad8bba8e8954d33b508a"
+  },
+  "test_sha256": {
+    "tests/test_native_residual_lifetime.py": "0bc9b9e389d06857a57efe0bf2a48ace538805a42055b79388e6ef91b7227a37",
+    "tests/test_lens_regression_memory.py": "60d9f03cafae426446b9815e79a2c01410fe8f82b1d3b52d954d2ea10fc5d1e8",
+    "tests/test_lens_memory_policy.py": "9c9d36bf2c255f7fb395f850d71fe53d6bdd3a4ff146a21380efac6bf9f61c40",
+    "tests/test_lens_regression_preflight.py": "0ea4c7bb370cc73a6f3891eca7904999148a4aae0733a455894c0103e151a26c",
+    "tests/test_lens_runtime.py": "614f6dd9e19d6e9adb30b841c41086c73696fcff71e0b9dec0dea2ac0909f985",
+    "tests/test_lens_transcript.py": "fd9fbf429296566bf9a95342c533e9ffd5a3f5a3aa2be9d2c6091b65c101e524",
+    "tests/test_gemma_transcript_lens.py": "a95c5da4ec1c38ff72eefd36bf644b6af329783a06ec104003563d56149da6a4",
+    "tests/test_evaluation_capture.py": "5039814fe39588916820a07c385d10d55a9aa01dca416ac51da2053c7453cd6e",
+    "tests/test_sae_bridge.py": "c7f5ee11c8e8ccca3d9db19b51fb3f63dbb22f0073e5103e6b3f81f0288c5477",
+    "tests/test_sae_bridge_io.py": "8010d7ef517485144f37303c11401511e4447a91c9f713a36ccdcb0f5ad26cfe",
+    "tests/test_repository_rules.py": "ed847ed5622d891fbf11b8fcd189e3c87a64e339765af5b059828cf6fec3a7e5"
+  },
+  "native_checkpoint_execution": false
+}

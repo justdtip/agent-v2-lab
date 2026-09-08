@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "status": "deferred_until_actual_machine_handoff",
+  "source_commit": "8b105f9",
+  "residual_source": "native",
+  "statistics_storage": "split_spill",
+  "model": "gemma3-4b-bf16",
+  "batch_size": 1,
+  "diagnostic_tokens": 128,
+  "fit_repetitions": 4,
+  "held_repetitions": 4,
+  "sequence_order": "fit_then_held_stable",
+  "initial_bound_gib": 10.5,
+  "reference_cap_gib": 10.656005859375,
+  "r47_fraction": 0.6,
+  "source_verification": {
+    "path": "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-SOURCE-VERIFICATION-final.json",
+    "sha256": "9176db2aa71667438ed85a35e00f561cdd96f91584b1a34413010cee30eb03dd"
+  },
+  "corpus": {
+    "path": "/Users/daniel.tipton/worktrees/gemma-lens-fitting/data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json",
+    "sha256": "91ae8f6d5e716b0fda6a9c727d97437c756c688ee9ac056329bcd85942ec2148"
+  },
+  "selection": "first longest fit row (index0); unchanged exact128tokenIDs; repeated fourtimes in each split",
+  "bound_basis": {
+    "old_four_fit_row_peak_gib": 9.960717940703034,
+    "old_first_held_row_peak_gib": 11.352926330640912,
+    "retained_growth_allowance_gib": 0.1435546875,
+    "anchor_plus_allowance_gib": 10.104272628203034,
+    "remaining_margin_gib": 0.395727371796966,
+    "one_fp32_spill_staging_matrix_gib": 0.0244140625,
+    "interpretation": "Engineering projection only. Retain the inspected128-to512 tensor allowance although shape stays128. Remaining margin includes one-at-a-time spill staging. Assumes tested collector release and one-resident-split storage remove the old simultaneous-split overlap. No predicted savings deducted from the four-row anchor."
+  },
+  "temporary_statistics_disk_gib": 3.22265625,
+  "requested_window_minutes": 10,
+  "purpose": "allocation and retention diagnostic; no solver, quality output or lens artifact",
+  "requires": [
+    "actual Deputy release",
+    "live owned primary window",
+    "compare source and corpus hashes to this plan before invocation",
+    "before-load cap recheck and per-phase breach stops"
+  ],
+  "not_qualified": [
+    "larger token lengths",
+    "memory statistics strategy",
+    "full fit",
+    "transcript capture"
+  ],
+  "native_execution_started": false,
+  "argv_inside_owned_window": [
+    "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/scripts/lens_regression_preflight.py",
+    "--model",
+    "gemma3-4b-bf16",
+    "--corpus",
+    "/Users/daniel.tipton/worktrees/gemma-lens-fitting/data/lens-fitting/gemma3-4b-bf16-prose-128/manifest.json",
+    "--planned-lens",
+    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-diagnostic-unused.npz",
+    "--registration",
+    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-PLAN.json",
+    "--report",
+    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08/R47-DIAGNOSTIC-128.run.jsonl",
+    "--initial-bound-gib",
+    "10.5",
+    "--residual-source",
+    "native",
+    "--statistics-storage",
+    "split_spill",
+    "--diagnostic-tokens",
+    "128",
+    "--scratch-parent",
+    "/Users/daniel.tipton/worktrees/gemma-transcript-bridge/research/records/GEMMA3-TRANSCRIPT-BRIDGE-2026-09-08"
+  ]
+}

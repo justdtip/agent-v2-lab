@@ -23,12 +23,18 @@ first 128-token sequence peaked at 9.658591 GiB, while repeated sequences later 
 12.443628 GiB. A first-row result alone cannot certify the absence of retention over a corpus.
 Exercise both split slots and repeated rows, with no quality outputs or lens writing.
 
-Before invocation, commit the exact diagnostic inputs, corrected source hashes and inspected
-initial bound. The previous 14.5 GiB bound is invalid. A 10.5 GiB estimate was investigated:
-the old first-row peak plus illustrative 128-to-512 tensor growth totals about 9.802145 GiB,
-leaving 0.697855 GiB for unmeasured workspace. That is **not an established conservative bound**
-and is not a launch instruction. Smaller corrected-code measurements are needed before
-declaring larger shapes. A measured breach is a breach, not successful pre-launch protection.
+The narrow invocation is frozen in `R47-DIAGNOSTIC-PLAN.json`: **10.5 GiB projected peak**, only
+for eight 128-token forwards using `split_spill`, without solving or writing a lens. The first
+four fit rows of the old run reached 9.960718 GiB. Retaining the inspected 128-to-512 tensor
+allowance, despite keeping this diagnostic at 128, gives 10.104273 GiB and leaves 0.395727 GiB
+for spill staging and unmeasured workspace. A single FP32 staging matrix is 0.024414 GiB.
+
+This is an evidence-based engineering projection, not a measured peak or a guaranteed upper
+bound. The old first held row reached 11.352926 GiB with both splits resident; the new bound
+depends on the tested split-release behavior and cannot authorize the legacy memory strategy.
+Before invocation, compare the frozen source and corpus hashes, confirm the actual handoff and
+live owned window, and recheck the current device threshold. Larger shapes require new evidence.
+A measured breach is a breach, not successful pre-launch protection.
 
 The regular fitting preflight still requires an honest initial bound and checks it before
 checkpoint loading. Each subsequent token length must pass a projection before its forward.

@@ -57,7 +57,7 @@ during a layer solve. It requires about **3.222656 GiB** of temporary statistics
 **6.445313 GiB** of total statistics write/read traffic per fit, excluding small headers.
 Saving CPU arrays alone would not achieve the same reduction on a unified-memory laptop.
 
-## Implementation plan and acceptance
+## Implementation and acceptance
 
 - Repair collector ownership without adding a forward, changing the model graph, or changing
   its evaluation schedule. Cover normal completion and errors with actual-method fake tests.
@@ -88,6 +88,28 @@ estimate is certified before the corpus sizes and revised pipeline timings are m
 The corpus gates are unchanged: actual fitted replay positions must reach 2,749; a larger cap
 does not count as coverage. Concentration, span, BOS, source-offset and precision requirements
 continue to apply.
+
+## Source outcome and next diagnostic
+
+The correction is implemented through source commit `8b105f9`. **241 affected integration checks
+passed** with real MLX imports blocked in the parent and subprocesses. A final error-message
+amendment passed 26 focused checks; the two verification records bind their exact source hashes.
+The residual-ownership tests failed before the fix and passed after it. Fake-array tests verify
+unchanged statistics, maps, masks and forward counts, plus one-split ownership and scratch cleanup.
+They do not establish native numerical equivalence or measured resource use.
+
+`R47-DIAGNOSTIC-PLAN.json` freezes the first 128-token, eight-forward diagnostic with a **10.5 GiB
+engineering projection**, strictly below the recorded 10.656 GiB threshold. The old four-fit-row
+peak was 9.960718 GiB; retained dimensional allowance is 0.143555 GiB, leaving 0.395727 GiB for
+staging and unmeasured workspace. It assumes tested split-release behavior, not simultaneous
+split storage: the old first-held-row peak of 11.352926 GiB rules out that alternative. The plan
+qualifies no larger shape, solver, complete fit or capture run. It remains deferred until the
+Deputy actually releases the machine and a live owned window is announced.
+
+Capture now compares its registered projection with the device threshold before loading.
+It does **not** have a capture-specific measured-evidence validator. The withdrawn 16 GiB
+projection fails that comparison. A new bound must be justified or measured separately;
+lowering the number merely to pass is not qualification.
 
 ## Evidence
 
