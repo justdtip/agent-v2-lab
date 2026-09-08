@@ -1,0 +1,180 @@
+{
+  "status": "input_audit_only_no_model_execution",
+  "source_head": "415de219a9a539a67d5ca3e8045bc328c174a285",
+  "primary_head": "9869788af6b9dc6f27f76cdcf6c24e69a12f8962",
+  "work_order_sha256": "93903eb2f84bab74c55f80da4e504207106f77950c830a98fc7a882e273bf38f",
+  "legacy_corpora_reader_check": {
+    "agentic": {
+      "manifest_sha256": "e85795b69a20c877787893ec30662f3995d58322dfc674519f786eb75de5d3e0",
+      "rows": 518,
+      "model_hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "counts": {
+        "fit": {
+          "sequences": 418,
+          "spans": {
+            "call": 88213,
+            "chat": 0,
+            "note": 13452,
+            "observation": 128819,
+            "system": 157168,
+            "task": 24417,
+            "template": 46122
+          },
+          "tokens": 458191
+        },
+        "held": {
+          "sequences": 100,
+          "spans": {
+            "call": 19564,
+            "chat": 0,
+            "note": 3988,
+            "observation": 29565,
+            "system": 37600,
+            "task": 5904,
+            "template": 10249
+          },
+          "tokens": 106870
+        }
+      }
+    },
+    "prose": {
+      "manifest_sha256": "02f7f818ce3aba2c57a229cde28e92f8a9375b9bdbe0c6db401be3b3105477b4",
+      "rows": 255,
+      "model_hf_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "counts": {
+        "fit": {
+          "sequences": 204,
+          "spans": {
+            "call": 0,
+            "chat": 208896,
+            "note": 0,
+            "observation": 0,
+            "system": 0,
+            "task": 0,
+            "template": 0
+          },
+          "tokens": 208896
+        },
+        "held": {
+          "sequences": 51,
+          "spans": {
+            "call": 0,
+            "chat": 52224,
+            "note": 0,
+            "observation": 0,
+            "system": 0,
+            "task": 0,
+            "template": 0
+          },
+          "tokens": 52224
+        }
+      }
+    }
+  },
+  "prose_source": {
+    "path": "/Users/daniel.tipton/worktrees/lens-fitting/data/lens-fitting/wikitext-validation/wikitext-103-raw-v1.validation.txt",
+    "sha256": "a42356f6a8ff1d25daf25ec9db49e10a537c265581b61c74604bb63231dee719",
+    "dataset_revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "dataset_split": "validation"
+  },
+  "gemma_tokenizer_preview": {
+    "tokenizer_sha256": "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795",
+    "revision": "093f9f388b31de276ce2de164bdc2081324b9767",
+    "tokens": 257291,
+    "add_special_tokens": true,
+    "ids_sha256": "1befcb737f11b5c2c48efcaad56fae13f4a762d7205900b6af4ec713f0c38cf8",
+    "candidate_partitions": {
+      "128": {
+        "windows": 2010,
+        "fit": 1608,
+        "held": 402,
+        "discarded_tail_tokens": 11
+      },
+      "1024": {
+        "windows": 251,
+        "fit": 201,
+        "held": 50,
+        "discarded_tail_tokens": 267
+      },
+      "2048": {
+        "windows": 125,
+        "fit": 100,
+        "held": 25,
+        "discarded_tail_tokens": 1291
+      }
+    },
+    "scope": "plain-text tokenizer.json preview, no registry identity or chat render certification"
+  },
+  "pilot_prompt_whitespace": [
+    {
+      "id": "system",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-read-0108-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-search-0061-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-calculate-0158-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-list-0149-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-synthesis-0039-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-update-0028-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-pointer_chain-0018-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-cross_reference-0032-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-conditional_update-0093-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-batch_update-0166-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-ledger_reconcile-0163-clean",
+      "leading": 0,
+      "trailing": 0
+    },
+    {
+      "id": "test-aggregate_report-0167-clean",
+      "leading": 0,
+      "trailing": 0
+    }
+  ],
+  "whitespace_scope": "initial system and twelve agentic task prompts only; generated turns, observations and chat require later audit",
+  "pending_dependencies": {
+    "gemma_registry_present": true,
+    "note": "architecture port, identity guard, official conversions and conformance evidence must be checked again before any fit"
+  }
+}

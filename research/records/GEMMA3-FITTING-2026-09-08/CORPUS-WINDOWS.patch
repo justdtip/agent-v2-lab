@@ -1,0 +1,163 @@
+diff --git a/scripts/lens_corpus.py b/scripts/lens_corpus.py
+index 56a44ea..da09094 100644
+--- a/scripts/lens_corpus.py
++++ b/scripts/lens_corpus.py
+@@ -16,0 +17 @@ from local_llm_lab.pipeline.lens_fitting.corpus import (
++    PROSE_CHUNK_TOKENS,
+@@ -37,0 +39,5 @@ def main(argv: list[str] | None = None) -> None:
++    parser.add_argument(
++        "--prose-chunk-tokens",
++        type=int,
++        help=f"prose window length, recorded in the manifest (default: {PROSE_CHUNK_TOKENS})",
++    )
+@@ -38,0 +45,4 @@ def main(argv: list[str] | None = None) -> None:
++    if args.prose_chunk_tokens is not None and (
++        args.corpus != "prose" or args.prose_chunk_tokens <= 0
++    ):
++        parser.error("--prose-chunk-tokens requires prose and a positive integer")
+@@ -70,0 +81,3 @@ def main(argv: list[str] | None = None) -> None:
++            chunk_tokens=(
++                PROSE_CHUNK_TOKENS if args.prose_chunk_tokens is None else args.prose_chunk_tokens
++            ),
+diff --git a/src/local_llm_lab/pipeline/lens_fitting/corpus.py b/src/local_llm_lab/pipeline/lens_fitting/corpus.py
+index af9c847..fb3489a 100644
+--- a/src/local_llm_lab/pipeline/lens_fitting/corpus.py
++++ b/src/local_llm_lab/pipeline/lens_fitting/corpus.py
+@@ -389,0 +390 @@ def build_prose_corpus(
++    chunk_tokens: int = PROSE_CHUNK_TOKENS,
+@@ -391,0 +393,2 @@ def build_prose_corpus(
++    if type(chunk_tokens) is not int or chunk_tokens <= 0:
++        raise ValueError("prose chunk_tokens must be a positive integer")
+@@ -398 +401 @@ def build_prose_corpus(
+-        tail = len(ids) % PROSE_CHUNK_TOKENS
++        tail = len(ids) % chunk_tokens
+@@ -401,4 +404,2 @@ def build_prose_corpus(
+-        for step, start in enumerate(
+-            range(0, len(ids) - PROSE_CHUNK_TOKENS + 1, PROSE_CHUNK_TOKENS)
+-        ):
+-            end = start + PROSE_CHUNK_TOKENS
++        for step, start in enumerate(range(0, len(ids) - chunk_tokens + 1, chunk_tokens)):
++            end = start + chunk_tokens
+@@ -434 +435 @@ def build_prose_corpus(
+-            "chunk_tokens": PROSE_CHUNK_TOKENS,
++            "chunk_tokens": chunk_tokens,
+@@ -462,2 +463,3 @@ def read_corpus(manifest_path: Path) -> list[dict]:
+-    if manifest["domain"] == "prose" and manifest.get("chunk_tokens") != PROSE_CHUNK_TOKENS:
+-        raise ValueError("unsupported prose chunk size")
++    chunk_tokens = manifest.get("chunk_tokens")
++    if manifest["domain"] == "prose" and (type(chunk_tokens) is not int or chunk_tokens <= 0):
++        raise ValueError("prose chunk_tokens must be a positive integer")
+@@ -490,2 +492,2 @@ def read_corpus(manifest_path: Path) -> list[dict]:
+-                or not 0 <= tail < PROSE_CHUNK_TOKENS
+-                or tokens % PROSE_CHUNK_TOKENS != tail
++                or not 0 <= tail < chunk_tokens
++                or tokens % chunk_tokens != tail
+@@ -496,2 +498,2 @@ def read_corpus(manifest_path: Path) -> list[dict]:
+-                (source["path"], step, step * PROSE_CHUNK_TOKENS)
+-                for step in range(tokens // PROSE_CHUNK_TOKENS)
++                (source["path"], step, step * chunk_tokens)
++                for step in range(tokens // chunk_tokens)
+@@ -545 +547 @@ def read_corpus(manifest_path: Path) -> list[dict]:
+-            len(ids) != PROSE_CHUNK_TOKENS
++            len(ids) != chunk_tokens
+@@ -549 +551 @@ def read_corpus(manifest_path: Path) -> list[dict]:
+-            or row["token_start"] != row["step_index"] * PROSE_CHUNK_TOKENS
++            or row["token_start"] != row["step_index"] * chunk_tokens
+diff --git a/tests/test_lens_corpus.py b/tests/test_lens_corpus.py
+index 76127e6..207a544 100644
+--- a/tests/test_lens_corpus.py
++++ b/tests/test_lens_corpus.py
+@@ -687,0 +688,93 @@ def test_pilot_rule_scope_and_legacy_manifest_compatibility(tmp_path, setup, dom
++
++
++@pytest.mark.parametrize("chunk_tokens", [128, 2048])
++def test_prose_explicit_window_length_roundtrips(tmp_path, setup, chunk_tokens):
++    """Gemma pivot: fit lengths on both sides of the window keep exact partition accounting."""
++    spec, tok, assets = setup
++    source = tmp_path / "text.txt"
++    source.write_text("a" * (5 * chunk_tokens + 6))
++    out = tmp_path / "manifest.json"
++    metadata = api().build_prose_corpus(
++        [source], tok, spec, out, tokenizer_files=assets, chunk_tokens=chunk_tokens
++    )
++    rows = api().read_corpus(out)
++    assert metadata["chunk_tokens"] == chunk_tokens
++    assert len(rows) == 5
++    assert [r["split"] for r in rows] == ["fit"] * 4 + ["held"]
++    assert [r["token_start"] for r in rows] == [i * chunk_tokens for i in range(5)]
++    assert all(len(r["ids"]) == chunk_tokens for r in rows)
++    assert [token for row in rows for token in row["ids"]] == [1] + [99] * (5 * chunk_tokens - 1)
++    assert metadata["discarded_trailing_tokens"] == 7
++    assert metadata["counts"]["held"]["tokens"] == chunk_tokens
++
++
++@pytest.mark.parametrize("chunk_tokens", [0, -1, True, 128.0, "128"])
++def test_prose_refuses_invalid_window_before_tokenizing(tmp_path, setup, chunk_tokens):
++    spec, tok, assets = setup
++    source = tmp_path / "text.txt"
++    source.write_text("sample")
++    out = tmp_path / "manifest.json"
++    with pytest.raises(ValueError, match="chunk"):
++        api().build_prose_corpus(
++            [source], tok, spec, out, tokenizer_files=assets, chunk_tokens=chunk_tokens
++        )
++    assert not tok.calls
++    assert not out.exists() and not out.with_suffix(".jsonl").exists()
++
++
++def test_prose_cli_forwards_explicit_window(tmp_path, setup, monkeypatch):
++    import importlib.util
++
++    spec, tok, assets = setup
++    module_spec = importlib.util.spec_from_file_location(
++        "corpus_cli", Path(__file__).resolve().parents[1] / "scripts/lens_corpus.py"
++    )
++    cli = importlib.util.module_from_spec(module_spec)
++    module_spec.loader.exec_module(cli)
++    monkeypatch.setattr(cli, "load_corpus_tokenizer", lambda *a, **kw: (tok, assets))
++    source = tmp_path / "text.txt"
++    source.write_text("a" * 650)
++    out = tmp_path / "manifest.json"
++    cli.main(
++        [
++            "--corpus",
++            "prose",
++            "--files",
++            str(source),
++            "--out",
++            str(out),
++            "--model",
++            spec.name,
++            "--prose-chunk-tokens",
++            "128",
++            "--local-files-only",
++        ]
++    )
++    assert json.loads(out.read_text())["chunk_tokens"] == 128
++    assert len(api().read_corpus(out)) == 5
++    with pytest.raises(SystemExit):
++        cli.main(
++            [
++                "--corpus",
++                "agentic",
++                "--evals",
++                str(source),
++                "--out",
++                str(tmp_path / "x.json"),
++                "--prose-chunk-tokens",
++                "128",
++            ]
++        )
++
++
++@pytest.mark.parametrize("chunk_tokens", [None, 0, -1, True, 1024.0, "1024"])
++def test_reader_rejects_rehashed_invalid_window_type(tmp_path, setup, chunk_tokens):
++    """A valid self-digest cannot make an invalid partition definition readable."""
++    manifest = _prose_manifest(tmp_path, setup)
++    metadata = json.loads(manifest.read_bytes())
++    metadata.pop("manifest_sha256")
++    metadata["chunk_tokens"] = chunk_tokens
++    metadata["manifest_sha256"] = api()._sha(api()._json_bytes(metadata))
++    manifest.write_bytes(api()._json_bytes(metadata))
++    with pytest.raises(ValueError, match="chunk"):
++        api().read_corpus(manifest)
