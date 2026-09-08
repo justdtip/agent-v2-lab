@@ -213,6 +213,16 @@ def main() -> None:
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,
                 "registry_sha256": file_sha256(registry), "registry": str(registry),
                 "observation_role": spec.chat.observation_role,
+                # Where the span facet actually lives, stated because a later reader cannot
+                # see it from the rows. The label is written on `emitted` rows; the primary
+                # comparison is computed over `rank` rows, which carry no span. So the facet
+                # is **derived by a validated join, not recorded**, and the join is the thing
+                # that has to be trusted. It is checkable at both ends -- a rank row carries
+                # the id of the token it scores, and the row count is an exact product of
+                # tokens, layers and horizons -- and `live_lens.spans` asserts both before any
+                # faceted number exists. Writing the label onto rank rows as well is the
+                # better fix and belongs in the next run rather than in a relaunch of this one.
+                "span_facet": "derived from emitted rows by validated join; rank rows carry no span label",
                 # Stated rather than asserted. The repository's convention is that layer L is the
                 # output of block L-1, and orientation is confirmed empirically. What is not
                 # settled is whether the hosted lens was fitted under the same convention: its

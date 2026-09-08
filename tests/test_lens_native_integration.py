@@ -226,3 +226,98 @@ def test_a_chat_episode_labels_every_token_prose_and_malformed_output_still_labe
     labels = [broken.feed(piece) for piece in ("note", "```", 'json {"path": "a', "\\", '"')]
     assert len(labels) == 5, "an unterminated string does not stop the labelling"
     assert "call_argument" in labels
+
+
+def test_the_final_layer_gate_fires_at_decode_and_not_only_at_prefill(tmp_path):
+    """Where 98% of the gate's observations come from, it must still be able to fail.
+
+    Stage two records `final_readout_max_abs_error` on every forward: exactly 0.0 at all 608
+    decode steps and 0.4375 to 0.75 at the 13 prefills. Bit-identical agreement at decode is the
+    strongest validation of the tap this programme has, *provided the comparison is real there* —
+    and the existing negative control only ever drove a single prefill call, so it proved the gate
+    can fail at prefill and said nothing about the branch supplying almost all the evidence.
+
+    The Chief asked the question and it is the right one: a clean number is a reason for suspicion
+    proportional to how much you wanted it. So the skew here is withheld until prefill is over and
+    applied only to decode rows, which fails if and only if the gate runs at decode.
+    """
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    layers = (view.num_layers,)
+    lens = LensMaps(
+        {layer: np.eye(view.hidden_size, dtype=np.float32) for layer in range(1, view.num_layers)},
+        "tiny-identity-fixture",
+        view.hidden_size,
+        view.num_layers,
+    )
+
+    class SkewedAfterPrefill(LensReadout):
+        """Correct for the first `spare` final-layer reads, wrong afterwards.
+
+        The prefill's rows are consumed first, so the skew lands on the decode step and nowhere
+        else. If the gate only compared at prefill this readout would never be caught.
+        """
+
+        def __init__(self, view, lens, spare):
+            super().__init__(view, lens)
+            self.remaining = spare
+
+        def logits(self, residual, layer):
+            value = super().logits(residual, layer)
+            if layer != self.view.num_layers:
+                return value
+            if self.remaining > 0:
+                self.remaining -= 1
+                return value
+            return value + 5.0
+
+    prompt = [1, 2, 3]
+    tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kwargs: prompt)
+    readout = SkewedAfterPrefill(view, lens, spare=len(prompt))
+    session = CaptureSession(view, readout, lambda row: None, layers=layers, top_k=3)
+    session.set_context(kind="chat", messages=[{"role": "user", "content": "first"}])
+
+    with pytest.raises(ValueError, match="disagrees with the model's own logits"):
+        with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
+            cache = view.make_cache()
+            logits = captured(mx.array([prompt]), cache=cache)
+            assert readout.remaining == 0, "the prefill consumed exactly the unskewed reads"
+            token = int(mx.argmax(logits[0, -1]).item())
+            captured(mx.array([[token]]), cache=cache)
+
+
+def test_the_final_layer_comparison_uses_the_captured_residual_and_not_the_logits_it_checks(
+    tmp_path,
+):
+    """The other half of the same worry: 0.0 could mean agreement or mean comparing a thing to itself.
+
+    If the gate compared the model's logits against a value derived from those same logits, exact
+    agreement would be trivially true and the gate would have no power anywhere. It does not: the
+    checked value comes from the captured layer-34 residual through the readout's identity branch,
+    which is a different array reached by a different computation.
+
+    Asserted by making the *residual* wrong while leaving the readout correct. A tap on the wrong
+    tensor is the defect this is really guarding against, and it must be caught.
+    """
+    model = tiny_model()
+    view = ArchitectureView.from_model(model)
+    layers = (view.num_layers,)
+    lens = LensMaps(
+        {layer: np.eye(view.hidden_size, dtype=np.float32) for layer in range(1, view.num_layers)},
+        "tiny-identity-fixture",
+        view.hidden_size,
+        view.num_layers,
+    )
+    tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kwargs: [1, 2, 3])
+    session = CaptureSession(view, LensReadout(view, lens), lambda row: None, layers=layers, top_k=3)
+    session.set_context(kind="chat", messages=[{"role": "user", "content": "first"}])
+
+    with pytest.raises(ValueError, match="disagrees with the model's own logits"):
+        with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
+            original = session.residual
+
+            def corrupted(layer, hidden):
+                return original(layer, hidden + 3.0)
+
+            session.residual = corrupted
+            captured(mx.array([[1, 2, 3]]), cache=view.make_cache())

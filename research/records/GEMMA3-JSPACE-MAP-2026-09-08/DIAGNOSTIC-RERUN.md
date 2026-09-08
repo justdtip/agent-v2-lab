@@ -148,6 +148,34 @@ and is unremarkable on its own — what is not unremarkable is that **every one 
 commits in the same 23-to-24 step, none earlier and none later**, while ordinary tokens scatter
 across five layers.
 
+**And "beaten" understates it by orders of magnitude, which the record said before the model's own
+probabilities were read.** The final layer stores the model's own softmax, so the fork's confidence
+is already in these records:
+
+| | P(wrong opener) |
+|---|---:|
+| lowest of the 24 forks (turn 1) | 0.9890071 |
+| turn 0 | 0.9998727 |
+| at or above 0.9999969 | **22 of 24 forks** |
+| turn 23 | 1.0000000, saturating float32 |
+
+**Twenty-three unambiguous refutations do not move the distribution.** "The model does not switch
+strategy under repeated unambiguous failure" was compatible with a flat distribution, a
+self-reinforcing one, or one moving too slowly to matter. It is none of those: the model is not
+uncertain and choosing wrongly. It is certain, and the errors never reach its certainty. At the
+late forks the correct opener sits behind by up to seven orders of magnitude, which is not a near
+miss and must not be read as one.
+
+**It is saturation and not a trend, and the difference matters.** Turn 2 is 0.9999998 and turn 3 is
+0.9999969, so the series is not monotone and no hardening slope exists to fit. The Chief caught
+that in an agent's write-up before it entered a record. The claim is stronger without the slope,
+because a slope would have invited a test and a confound.
+
+**Consequence for any intervention, decided before the compute rather than after.** An experiment
+on this fixed point must **stratify by the model's own confidence**. Fork 1 at 0.989 is the only
+soft target in the episode; forks 15 to 23 are saturated. Flipping fork 1 and reporting success
+would measure the fork where flipping was cheap.
+
 **The word is never a candidate; the punctuation that would have allowed it is, but only at the
 end.** `workspace` is absent from every read layer's top-10 at every one of the 24 forks — 192
 top-10 lists and it is in none of them. The `' "'` that would have opened a bare path is a
