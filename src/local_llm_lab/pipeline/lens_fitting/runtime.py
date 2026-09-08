@@ -242,6 +242,24 @@ def prepare_fit(
     if before != file_sha256(Path(corpus_path)):
         raise ValueError("corpus manifest changed during validation")
     transcript = manifest.get("schema_version") == 2
+    if transcript:
+        # read_corpus has already recomputed and checked the complete acceptance record.
+        # Keep the launch boundary fail-closed, even before snapshot resolution/hashing.
+        acceptance = manifest.get("acceptance")
+        if (
+            not isinstance(acceptance, dict)
+            or not {"status", "reasons", "concentration", "repeated_run_rule"} <= acceptance.keys()
+            or acceptance["status"] != "passed"
+            or acceptance["reasons"] != []
+            or not isinstance(acceptance["repeated_run_rule"], str)
+            or not acceptance["repeated_run_rule"]
+            or not isinstance(acceptance["concentration"], dict)
+            or any(
+                not isinstance(acceptance["concentration"].get(split), dict)
+                for split in ("fit", "held", "combined")
+            )
+        ):
+            raise ValueError("transcript acceptance has not passed; a ruling is required")
     if not transcript and spec.training is not None:
         raise ValueError("legacy corpus cannot establish the requested training identity")
     if not transcript and manifest["model_hf_id"] != spec.hf_id:

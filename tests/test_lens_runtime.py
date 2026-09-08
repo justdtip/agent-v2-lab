@@ -586,6 +586,12 @@ def transcript_prepare_fixture(tmp_path, monkeypatch):
         model_identity=dict(base=spec.base, training=None, num_layers=3),
         tokenizer=dict(assets=assets),
         precision="bf16",
+        acceptance={
+            "status": "passed",
+            "reasons": [],
+            "repeated_run_rule": "declared",
+            "concentration": {"fit": {}, "held": {}, "combined": {}},
+        },
     )
     path = tmp_path / "transcript.json"
     return runtime, spec, path, manifest
@@ -696,3 +702,34 @@ def test_tokenizer_asset_hashes_exclude_precision_config_and_include_templates()
         "tokenizer.json",
         "tokenizer_config.json",
     ]
+
+
+@pytest.mark.parametrize(
+    "acceptance",
+    [
+        None,
+        {},
+        {"status": "passed"},
+        {
+            "status": "ruling_required",
+            "reasons": ["concentration exceeds cap"],
+            "concentration": {"fit": {}, "held": {}, "combined": {}},
+            "repeated_run_rule": "declared",
+        },
+        {
+            "status": "passed",
+            "reasons": ["unresolved"],
+            "concentration": {"fit": {}, "held": {}, "combined": {}},
+            "repeated_run_rule": "declared",
+        },
+    ],
+)
+def test_transcript_acceptance_refused_before_snapshot(tmp_path, monkeypatch, acceptance):
+    runtime, spec, path, manifest = transcript_prepare_fixture(tmp_path, monkeypatch)
+    manifest["acceptance"] = acceptance
+    path.write_text(json.dumps(manifest))
+    monkeypatch.setattr(
+        runtime, "resolve_snapshot", lambda *a, **k: pytest.fail("snapshot reached")
+    )
+    with pytest.raises(ValueError, match="acceptance|ruling"):
+        runtime.prepare_fit(path, spec, tmp_path / "gemma3-4b-agentic-regression.npz")
