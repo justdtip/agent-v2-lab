@@ -41,6 +41,15 @@ cache:
 probes:
   # Residual pairs from the recorded band ruling; verify against installed block kinds.
   live_lens_pairs: [[12, 13], [16, 17], [19, 20], [23, 24], [27, 28]]
+  # Recorded answers where two candidate partners sit at equal depth from an in-band layer.
+  # A tie-break is a ruling, never a rule the code can derive, so only ties something actually
+  # ruled on appear here. One does: EXP-003 chose 17 over 15 for layer 16 by balancing the
+  # family's two kind groups on mean depth (EXP-003-DISTANCE-CURVE-QWEN35-4B.md:99-112,
+  # 2026-09-05 19:38; carried by R41e, which corrected R41b's 15). The band needs no entry --
+  # each of its five recurrent members has a unique nearest attention layer -- and writing
+  # answers here for ties nobody ruled on is the failure this field exists to prevent. An
+  # unrecorded tie is reported by `kind_matched_layer_family`, never silently resolved.
+  partner_tie_breaks: {16: 17}
   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
   # R18: native block execution during capture; float32 only on the J-lens tail.
   capture_dtype: native

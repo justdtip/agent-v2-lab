@@ -677,6 +677,10 @@ def main() -> None:  # noqa: C901 - probe CLI orchestration
             period_source=period_source,
             kind_of=lambda layer: probe_layer_kind(view, layer),
             derive=selection.source != "cli",
+            # The recorded ruling for any equal-distance tie, from the registry (issue 86).
+            # Absent, the family still runs and says in its own reason which tie it broke
+            # without one, so an artifact can never present a fallback as a derivation.
+            tie_breaks=spec.probes.partner_tie_breaks,
         )
         # A hybrid whose period was never found is what cost the 4B sweep two GPU hours: it
         # logged ``hybrid_period=-``, swept the six registry fractions instead of the

@@ -777,89 +777,210 @@ def test_kind_matched_family_reproduces_the_4b_sweep_from_its_own_configuration(
     depth = args.num_hidden_layers
     selection = resolve_layers(None, load_model_spec("qwen35-4b"), depth)
 
+    spec = load_model_spec("qwen35-4b")
     family = jlens.kind_matched_layer_family(
         selection.indices,
         num_layers=depth,
         period=args.full_attention_interval,
         kind_of=kinds.get,
+        tie_breaks=spec.probes.partner_tie_breaks,
     )
 
-    attention = tuple(layer for layer, kind in kinds.items() if kind == "attention")
+    def expected_partner(layer: int) -> int:
+        """Nearest of the opposite kind, with the registry's ruling on an equal-distance tie.
+
+        Opposite kind in *either* direction (EXP-003 line 93): under the band four of five
+        primaries are attention-written, and the superseded clause left every one of them
+        unpaired. The tie is looked up, never computed -- see the ruling test below.
+        """
+        opposite = [
+            candidate
+            for candidate, kind in kinds.items()
+            if kind != kinds[layer]
+        ]
+        nearest = min(abs(candidate - layer) for candidate in opposite)
+        tied = [candidate for candidate in opposite if abs(candidate - layer) == nearest]
+        ruled = spec.probes.partner_tie_breaks.get(layer)
+        return ruled if len(tied) > 1 and ruled in tied else min(tied)
+
     expected_partners = tuple(
         sorted(
             {
-                min(attention, key=lambda candidate: (abs(candidate - layer), candidate))
+                expected_partner(layer)
                 for layer in jlens.in_band_layers(selection.indices, depth)
-                if kinds[layer] != "attention"
             }
+            - set(selection.indices)
         )
     )
     assert family.partners == expected_partners
+    assert family.unrecorded_ties == {}, "the 4B's one tie is ruled on"
     assert family.layers == tuple(sorted(set(selection.indices) | set(expected_partners)))
     assert len(family.layers) == len(selection.indices) + len(expected_partners)
     assert all(1 <= layer <= depth for layer in family.layers)
     assert family.kinds == {layer: kinds[layer] for layer in family.layers}
     assert family.period == args.full_attention_interval
 
-    # §3.5 structurally: an in-band layer written by a recurrent block is paired with an
-    # attention-written layer nearer than one hybrid period; an in-band layer that is itself
-    # an attention output takes no partner.
+    # §3.5 as EXP-003 generalised it: *every* in-band layer is paired with a layer of the
+    # opposite kind nearer than one hybrid period, whichever kind wrote the layer itself.
     for layer in family.in_band:
         assert family.roles[layer] == "primary"
-        if kinds[layer] == "attention":
-            assert layer not in family.pairs
-        else:
-            partner = family.pairs[layer]
-            assert kinds[partner] == "attention"
-            assert 0 < abs(partner - layer) < family.period
-            assert family.roles[partner] in ("partner", "primary")
+        partner = family.pairs[layer]
+        assert kinds[partner] != kinds[layer], "the partner is the opposite kind, both ways"
+        assert 0 < abs(partner - layer) < family.period
+        assert family.roles[partner] in ("partner", "primary")
     for layer in family.partners:
         assert family.roles[layer] == "partner"
     assert set(family.primary_layers) == set(family.in_band) | set(family.partners)
 
 
-def test_the_4b_default_family_is_the_pre_registered_nine_layer_list() -> None:
-    """C4 (issue #62): pin EXP-001 §3.5's list as a literal, beside the derivation above.
+def test_the_4b_default_family_is_exp_003s_ten_layer_list() -> None:
+    """C4 (issue #62), updated by issue 86: the literal, beside the derivation above.
 
-    The derivation test computes its expectation from the two sources the code itself reads --
-    the library's layer-kind rule and the registry's fractions -- which is the stronger test of
-    the derivation but is blind to a change in those sources: move the fractions and the
-    expectation moves with them. This one is blind to nothing, because the nine layers are
-    written down. Together they fail on a change in either source and on a change in both that
-    happens to agree, which is what §3.5 pre-registers.
+    The derivation test computes its expectation from the sources the code itself reads, which
+    is the stronger test of the derivation but is blind to a change in those sources: move the
+    fractions and the expectation moves with them. This one is blind to nothing, because the
+    layers are written down. Together they fail on a change in either source and on a change in
+    both that happens to agree.
+
+    **Ten layers, not nine.** The nine-layer list was EXP-001 §3.5's, recorded when layer 16
+    took no partner because the superseded clause exempted attention-written layers. EXP-003
+    generalised the pairing at 19:38 on 2026-09-05 and nothing updated this function or this
+    pin for it; 17 joins the family, and EXP-001's own recorded family is untouched, because
+    under the rule it was recorded with the tie never arose.
     """
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.probes.policies import resolve_layers
 
     args = _hybrid_args()
     depth = args.num_hidden_layers
-    selection = resolve_layers(None, load_model_spec("qwen35-4b"), depth)
+    spec = load_model_spec("qwen35-4b")
+    selection = resolve_layers(None, spec, depth)
 
     family = jlens.kind_matched_layer_family(
         selection.indices,
         num_layers=depth,
         period=args.full_attention_interval,
         kind_of=_library_layer_kinds(args).get,
+        tie_breaks=spec.probes.partner_tie_breaks,
     )
 
-    assert family.layers == (5, 11, 12, 16, 20, 21, 27, 28, 32)
-    assert family.partners == (12, 20, 28)
-    assert family.pairs == {11: 12, 21: 20, 27: 28}
+    assert family.layers == (5, 11, 12, 16, 17, 20, 21, 27, 28, 32)
+    assert family.partners == (12, 17, 20, 28)
+    assert family.pairs == {11: 12, 16: 17, 21: 20, 27: 28}
     assert family.in_band == (11, 16, 21, 27)
+    assert family.unrecorded_ties == {}
 
 
-@pytest.mark.parametrize(("layer", "expected"), [(5, 4), (6, 4), (7, 8)])
-def test_partner_is_the_nearest_opposite_kind_layer_and_the_lower_index_on_a_tie(
-    layer: int, expected: int
+@pytest.mark.parametrize(
+    ("layer", "expected", "kind", "partner_kind"),
+    [
+        (5, 4, "linear_attention", "attention"),
+        (7, 8, "linear_attention", "attention"),
+        (4, 3, "attention", "linear_attention"),
+        (8, 7, "attention", "linear_attention"),
+    ],
+)
+def test_partner_is_the_nearest_layer_of_the_opposite_kind_in_either_direction(
+    layer: int, expected: int, kind: str, partner_kind: str
 ) -> None:
-    """Smaller depth difference wins; an exact tie takes the lower index."""
-    family = jlens.kind_matched_layer_family((layer,), num_layers=8, period=4)
+    """Smaller depth difference wins, and an attention-written layer takes a partner too.
+
+    The last two cases are the ones the superseded clause got wrong. It read *an in-band layer
+    that is itself an attention output takes no partner*, which was true of EXP-001 §3.5's
+    fractions and false of everything derived after EXP-003 generalised it -- under the 4B's
+    band, four of five primaries are attention-written.
+    """
+    family = jlens.kind_matched_layer_family(
+        (layer,), num_layers=8, period=4, tie_breaks={4: 3, 8: 7}
+    )
 
     assert family.pairs == {layer: expected}
     assert family.partners == (expected,)
     assert family.layers == tuple(sorted((layer, expected)))
-    assert family.kinds[expected] == "attention"
-    assert family.kinds[layer] == "linear_attention"
+    assert family.kinds[layer] == kind
+    assert family.kinds[expected] == partner_kind
+
+
+def test_a_tie_with_no_recorded_ruling_is_broken_to_the_lower_index_and_said_so() -> None:
+    """The failure this field exists for: a fallback presented as a derivation.
+
+    Layer 6 on an 8-layer period-4 model sits two from 4 and two from 8. Nothing has ruled on
+    that tie, so the family still resolves -- a sweep must not die of a tie -- but it names the
+    layer and both candidates, in the structured field and in the reason string that R34 quotes
+    into every artifact.
+    """
+    family = jlens.kind_matched_layer_family((6,), num_layers=8, period=4)
+
+    assert family.pairs == {6: 4}
+    assert family.unrecorded_ties == {6: (4, 8)}
+    assert "no recorded ruling" in family.reason and "6 between 4 and 8" in family.reason
+    assert family.as_dict()["unrecorded_ties"] == {"6": [4, 8]}
+
+    ruled = jlens.kind_matched_layer_family((6,), num_layers=8, period=4, tie_breaks={6: 8})
+    assert ruled.pairs == {6: 8} and ruled.unrecorded_ties == {}
+    assert "no recorded ruling" not in ruled.reason
+
+
+def test_the_bands_five_pairs_come_out_of_this_function_not_a_second_derivation() -> None:
+    """Issue 86's acceptance, and the reason issue 80 need not write the band down twice.
+
+    Given the band's five recurrent members, the function returns exactly the five pairs the
+    registry declares. No tie arises: each of those layers has a unique nearest attention
+    layer one step away. The tie-break matters for EXP-001's fractions, where the primary at
+    16 is attention-written, and not for the band at all -- which is why the registry records
+    one ruling rather than four, and why a reader should not infer the other three.
+    """
+    from local_llm_lab.models import load_model_spec
+
+    args = _hybrid_args()
+    depth = args.num_hidden_layers
+    spec = load_model_spec("qwen35-4b")
+    kinds = _library_layer_kinds(args)
+    recurrent_members = tuple(
+        sorted({layer for pair in spec.probes.live_lens_pairs for layer in pair}
+               - {layer for layer, kind in kinds.items() if kind == "attention"})
+    )
+    assert recurrent_members == (13, 17, 19, 23, 27)
+
+    family = jlens.kind_matched_layer_family(
+        recurrent_members,
+        num_layers=depth,
+        period=args.full_attention_interval,
+        kind_of=kinds.get,
+        tie_breaks=spec.probes.partner_tie_breaks,
+    )
+
+    derived = tuple(sorted(tuple(sorted(pair)) for pair in family.pairs.items()))
+    assert derived == spec.probes.live_lens_pairs
+    assert family.unrecorded_ties == {}
+
+
+def test_the_recorded_tie_break_is_asserted_as_a_ruling_and_not_derived() -> None:
+    """A ruling with its source named, which is the only honest form this can take.
+
+    EXP-003 chose 17 over 15 for layer 16 by balancing the family's two kind groups on mean
+    depth (19.0 / 19.0 under 17 against 19.0 / 18.5 under 15), a measurement on *that* family.
+    Applied to the band the same criterion ranks the recorded answer first but does not single
+    it out, so a test that recomputed it would agree with the record by luck -- which is how
+    the lower-index rule survived here for months while disagreeing with the record.
+
+    So this asserts the ruling, names where it is written, and fails when the registry and the
+    ruling move apart. It deliberately derives nothing.
+    """
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec("qwen35-4b")
+    assert spec.probes.partner_tie_breaks == {16: 17}, (
+        "EXP-003-DISTANCE-CURVE-QWEN35-4B.md:99-112, 2026-09-05 19:38, carried by R41e, "
+        "which corrected R41b's 15"
+    )
+
+    # And the rule string R34 quotes into every artifact says a ruling answers the tie, rather
+    # than naming an index rule the record does not support.
+    assert "recorded ruling" in jlens.LAYER_FAMILY_RULE
+    assert "opposite kind" in jlens.LAYER_FAMILY_RULE
+    assert "lower index on a tie" not in jlens.LAYER_FAMILY_RULE
+    assert "takes no partner" not in jlens.LAYER_FAMILY_RULE
 
 
 @pytest.mark.parametrize(

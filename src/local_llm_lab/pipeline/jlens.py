@@ -118,7 +118,7 @@ import json
 import statistics
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -198,9 +198,10 @@ IN_BAND_FRACTIONS: tuple[float, float] = (1 / 3, 5 / 6)
 LAYER_FAMILY_RULE = (
     "layer L is the residual after block L-1, and on a hybrid with "
     f"{HYBRID_PERIOD_FIELD}=p that block is an attention block exactly when L % p == 0; for "
-    "each in-band layer the kind-matched partner is the nearest such layer (smaller depth "
-    "difference first, lower index on a tie) and joins the sweep when it is not already "
-    "there; an in-band layer that is itself an attention output takes no partner"
+    "each in-band layer, whichever kind wrote it, the kind-matched partner is the nearest "
+    "layer of the opposite kind and joins the sweep when it is not already there; an "
+    "equal-distance tie is answered by the recorded ruling for that layer, and a tie with no "
+    "ruling is reported rather than resolved"
 )
 
 
@@ -719,6 +720,12 @@ class LayerFamily:
     period_source: str
     derived: bool
     reason: str
+    #: In-band layers whose partner tie had no recorded answer, with the two candidates that
+    #: tied. Empty on every family that carries a ruling for each of its ties. Non-empty is not
+    #: an error and does not stop a sweep -- it is the sentence an artifact has to carry, so
+    #: nobody reads a fallback as a derivation (issue 86). Defaulted because the degenerate and
+    #: verbatim families reach no tie at all.
+    unrecorded_ties: dict[int, tuple[int, int]] = field(default_factory=dict)
 
     @property
     def primary_layers(self) -> tuple[int, ...]:
@@ -739,6 +746,10 @@ class LayerFamily:
             "derived": self.derived,
             "rule": LAYER_FAMILY_RULE,
             "reason": self.reason,
+            "unrecorded_ties": {
+                str(layer): list(candidates)
+                for layer, candidates in self.unrecorded_ties.items()
+            },
         }
 
 
@@ -750,6 +761,7 @@ def kind_matched_layer_family(
     period_source: str = "unavailable",
     kind_of: Callable[[int], str] | None = None,
     derive: bool = True,
+    tie_breaks: Mapping[int, int] | None = None,
 ) -> LayerFamily:
     """EXP-001 §3.5's layer list: the selection plus its kind-matched partners, in one sweep.
 
@@ -761,11 +773,27 @@ def kind_matched_layer_family(
     is that block's kind (R34). On a hybrid with ``full_attention_interval = p`` the block
     that wrote ``L`` is an attention block exactly when ``L % p == 0``, so the layers written
     by attention are the multiples of ``p`` within ``[1, num_layers]``. For each in-band
-    layer, the kind-matched partner is the nearest layer on that grid -- smaller depth
-    difference first, lower index on a tie -- and it joins the sweep when it is not already
-    there. An in-band layer that is *itself* on the grid is already an attention output and
-    takes no partner, which is what EXP-001 §3.5 records for the 4B's middle and final
-    fractions. Where a view supplies kinds, a grid layer it calls recurrent is not used as a
+    layer, **whichever kind wrote it**, the kind-matched partner is the nearest layer of the
+    *opposite* kind, and it joins the sweep when it is not already there.
+
+    Pairing in either direction is EXP-003's generalisation (line 93, 2026-09-05 19:38) of
+    what §3.5 recorded, and this function did not follow it for eight months of rulings. §3.5
+    was written against the six registry fractions, where the in-band attention layers happened
+    to need no partner; under the band four of five primaries are attention-written, so the
+    original clause -- *an in-band layer that is itself an attention output takes no partner*
+    -- left 16, 20, 24 and 28 unpaired and the band underivable from this function.
+
+    **The tie-break is recorded, not derived, and this function does not pretend otherwise.**
+    Where two candidates sit at equal distance, ``tie_breaks`` supplies the answer the ruling
+    gave for that layer. EXP-003 chose 17 over 15 for layer 16 by balancing the family's two
+    kind groups on mean depth, a measurement on that family; applied to the band the same
+    criterion ranks the recorded answer first but does not single it out, so any code that
+    *derived* a tie-break would agree with the record by luck -- which is exactly how the
+    lower-index rule survived here while disagreeing with the record. A tie with no ruling is
+    resolved to the lower index **and reported** in ``unrecorded_ties``, so the artifact says
+    so rather than presenting a fallback as a derivation.
+
+    Where a view supplies kinds, a candidate whose kind contradicts the period is not used as a
     partner, so the config and the blocks cannot disagree silently.
 
     Where no opposite kind exists -- a dense backbone with no period at all, a period of one
@@ -803,6 +831,16 @@ def kind_matched_layer_family(
             for layer in grid
             if _family_kind(layer, kind_of, period) != RECURRENT_KIND
         )
+    # The opposite-kind candidates for an attention-written layer: everything the period does
+    # not put on the grid, minus anything a view calls attention, for the same reason the grid
+    # itself is filtered -- the config and the blocks must not disagree silently.
+    off_grid = tuple(layer for layer in range(1, num_layers + 1) if layer not in set(grid))
+    if kind_of is not None:
+        off_grid = tuple(
+            layer
+            for layer in off_grid
+            if _family_kind(layer, kind_of, period) == RECURRENT_KIND
+        )
     reason = _degenerate_reason(period, num_layers, len(grid))
     if reason is not None:
         return LayerFamily(
@@ -821,8 +859,23 @@ def kind_matched_layer_family(
     layers = list(order)
     partners: list[int] = []
     pairs: dict[int, int] = {}
+    unrecorded: dict[int, tuple[int, int]] = {}
+    recorded = dict(tie_breaks or {})
     for layer in band:
-        partner = min(grid, key=lambda candidate: (abs(candidate - layer), candidate))
+        candidates = off_grid if layer in set(grid) else grid
+        if not candidates:
+            continue
+        nearest = min(abs(candidate - layer) for candidate in candidates)
+        tied = tuple(
+            candidate for candidate in candidates if abs(candidate - layer) == nearest
+        )
+        if len(tied) == 1:
+            partner = tied[0]
+        elif recorded.get(layer) in tied:
+            partner = recorded[layer]
+        else:
+            partner = min(tied)
+            unrecorded[layer] = (min(tied), max(tied))
         if partner == layer:
             continue
         pairs[layer] = partner
@@ -853,7 +906,17 @@ def kind_matched_layer_family(
         reason=(
             f"kind-matched partners derived from {HYBRID_PERIOD_FIELD}={period} "
             f"({period_source})"
+            + (
+                ""
+                if not unrecorded
+                else "; ties with no recorded ruling, broken to the lower index and reported: "
+                + ", ".join(
+                    f"{layer} between {low} and {high}"
+                    for layer, (low, high) in sorted(unrecorded.items())
+                )
+            )
         ),
+        unrecorded_ties=unrecorded,
     )
 
 
@@ -1745,6 +1808,10 @@ def main() -> None:  # noqa: C901 - pre-existing probe CLI orchestration
             period_source=period_source,
             kind_of=lambda layer: probe_layer_kind(view, layer),
             derive=selection.source != "cli",
+            # The recorded ruling for any equal-distance tie, from the registry (issue 86).
+            # Absent, the family still runs and says in its own reason which tie it broke
+            # without one, so an artifact can never present a fallback as a derivation.
+            tie_breaks=spec.probes.partner_tie_breaks,
         )
         layers = list(family.layers)
         layer_kinds = dict(family.kinds)

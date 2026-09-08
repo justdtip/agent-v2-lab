@@ -82,6 +82,9 @@ class ProbesSpec:
     #: the installed block kinds are known; this is the declaration itself, for readers that
     #: only need to say which pairs a thing covers (issue 88).
     live_lens_pairs: tuple[tuple[int, int], ...]
+    #: Recorded answers to equal-distance partner ties, in-band layer to its partner (issue 86).
+    #: A ruling, not a rule: the code consults it and reports any tie it does not cover.
+    partner_tie_breaks: dict[int, int]
 
 
 @dataclass(frozen=True)
@@ -99,6 +102,9 @@ class ModelSpec:
     #: The declared residual band as 1-based pairs (R41e). Defaulted because every existing
     #: caller constructs a spec without it and a band is not required of a model.
     probe_live_lens_pairs: tuple[tuple[int, int], ...] = ()
+    #: Recorded partner tie-breaks (issue 86). Defaulted for the same reason as the band: a
+    #: model with no tie, or no ruling on one, declares none and the family reports the tie.
+    probe_partner_tie_breaks: dict[int, int] = field(default_factory=dict)
     cache_equivalence_verified: dict[str, str] | None = None
     # R18: native block execution during capture is the default; the float32 block path is for
     # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
@@ -110,6 +116,7 @@ class ModelSpec:
         return ProbesSpec(
             layer_fractions=self.probe_layer_fractions,
             live_lens_pairs=self.probe_live_lens_pairs,
+            partner_tie_breaks=dict(self.probe_partner_tie_breaks),
             capture_dtype=self.probe_capture_dtype,
         )
 
@@ -272,6 +279,16 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     fractions = tuple(float(fraction) for fraction in fractions_raw)
     if any(not 0 < fraction <= 1 for fraction in fractions):
         raise ValueError(f"{source}: probes.layer_fractions must be within (0, 1]")
+    tie_breaks_raw = probes.get("partner_tie_breaks", {})
+    if not isinstance(tie_breaks_raw, dict):
+        raise ValueError(f"{source}: probes.partner_tie_breaks must be a mapping")
+    if any(
+        isinstance(key, bool) or not isinstance(key, int) or isinstance(value, bool)
+        or not isinstance(value, int)
+        for key, value in tie_breaks_raw.items()
+    ):
+        raise ValueError(f"{source}: probes.partner_tie_breaks must map layers to layers")
+    tie_breaks = {int(key): int(value) for key, value in tie_breaks_raw.items()}
     capture_dtype = probes.get("capture_dtype", "native")
     if capture_dtype not in _CAPTURE_DTYPES:
         raise ValueError(f"{source}: probes.capture_dtype must be one of {sorted(_CAPTURE_DTYPES)}")
@@ -313,6 +330,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
         probe_live_lens_pairs=tuple(
             (int(pair[0]), int(pair[1])) for pair in probes.get("live_lens_pairs", ())
         ),
+        probe_partner_tie_breaks=tie_breaks,
         probe_capture_dtype=capture_dtype,
         memory_budget_gib=float(memory.get("budget_gib")),
         policies=dict(policies),
