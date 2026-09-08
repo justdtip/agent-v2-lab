@@ -413,3 +413,54 @@ The plan cannot decide these.
 **Codex through the Director:** WS-A in full, and 6.3 (the `vjp`/`vmap` rewrite and the sharded
 merge), which are the two places where a plausible number can be wrong in a way no control on the
 number reveals.
+
+---
+
+## 10. Size- and memory-adaptive by construction, because the 80 GB card is not guaranteed
+
+The Director may have an 80 GB GPU and may not. The design must therefore be **agnostic to layer
+count and parameter count**, and must **pivot to less memory without a redesign**. Three rules, and
+the machinery for each already exists in some form.
+
+### 10.1 Nothing in source names a dimension
+
+The view reads `num_layers`, `hidden_size` and `vocab_size` from the model (`arch.py:53-57`); the
+global-attention layers are read from the model's own dispatch, never from a period; lens artefacts
+key maps by layer index; the regression accumulators are sized from `view.hidden_size`. **WS-E's
+first check is a grep for hardcoded dimensions in `src/`**, and any hit is a defect to fix before
+the branch takes code. Records and configs may name a model's dimensions — that is provenance — but
+no code path may assume them.
+
+### 10.2 Every memory-bearing choice is measured on the target device and then chosen, not set
+
+The R47 machinery in `jacobian.py` (`memory_gate`, `WorkloadMemoryGuard`, `benchmark`) projects a
+workload and **stops** if the projection exceeds 0.6 of the working set. On CUDA it is extended to
+**choose**: measure one unit of work at the largest context the run will reach (R60(c)), then pick
+the largest batch that fits under the R47 fraction of `torch.cuda.mem_get_info()` on the device the
+run will use. The free variables, by workstream:
+
+| workstream | the knob | measured unit | fallback ladder if the projection does not fit |
+|---|---|---|---|
+| WS-D Jacobian (6.3) | cotangent batch (`dim_batch`) | one prompt, one backward, at the fit's context length | halve `dim_batch` → fit **source-layer bands** (0–k, k–N) with the graph held from the band's first layer, upstream's `start_graph_at` → accumulate on CPU |
+| WS-D regression | prompts in flight | one window through `native_residuals` | one window at a time (the fitter already accumulates row by row) → accumulators on CPU (`d×d` float32, never differentiated) |
+| WS-C training | micro-batch, sequence cap, checkpointing | one step at the sequence cap | gradient checkpointing on → micro-batch 1 with accumulation → `device_map="auto"` with `max_memory` and **CPU offload**, which runs anything at the cost of speed |
+| WS-B capture | none: one sequence, no reuse | the longest golden episode (2,749 positions) | the map runs on any device that holds the model; if it does not, `device_map` shards the model |
+| all | the model itself | load | bf16 on one device → `device_map="auto"` across devices → 8-bit/4-bit only as a **declared** precision change with the comparability bound re-measured |
+
+**The declaration carries the measurement and the choice.** A run's window announces the device,
+the measured unit cost, the chosen batch and the projected peak, so a miss is diagnosable as a
+method error and not bad luck — which is the lesson of the stage-two memory declaration and the
+21 GiB projection, both from yesterday.
+
+### 10.3 Arbitrary parameter count: what scales and what does not
+
+For a model with `N` layers and hidden `d`, the objects that grow: the model (`device_map` handles
+it), the retained graph for the Jacobian (source-layer bands bound it to a fraction of `N`), the
+accumulators (`2 × N × d² × 4` bytes; ~14 GB at Gemma 3 27B's 61 layers and 5,376 hidden — fine on
+80 GB, CPU-resident otherwise), and the lens artefact itself (`N × d² × 2` bytes at float16;
+~3.5 GB at 27B). Nothing else scales with the model. The records, the contract, the harness and the
+scaffolding are size-free.
+
+**A larger model is therefore a registry entry and a re-measurement, not a code change**, and a
+smaller GPU is a different rung on the same ladder. That is the property the Director asked for,
+and it is cheaper to build in now than to retrofit after the first out-of-memory on a 27B fit.
