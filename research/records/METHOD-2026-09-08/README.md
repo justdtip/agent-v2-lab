@@ -218,3 +218,40 @@ projection from a count is wrong in the same direction every time. The same erro
 second seat within the hour — a 21 GiB projection for a 2,816-token lens fit, on a box whose R47 stop
 threshold is 10.66 GiB — and was caught by applying this rule before the run rather than after it,
 which is the first time today a mechanism prevented a claim instead of refuting one.
+
+---
+
+## Eighteenth, and the most consequential: I authorised a run on a measurement of the wrong artefact
+
+Codex caught it before a checkpoint loaded, which is the only reason it is a method entry and not an
+incident.
+
+**What I told the Director.** "Authorise Codex's transcript fit at batch 4. That configuration
+measures at about 5.5 GiB, half the stop threshold." Both halves were false. **Nothing measured
+5.5 GiB**; it was my arithmetic. **No batch-4 configuration exists**; the fitter is batch one only
+(`regression.py:201`). I said "measures" about a number I had projected, four hours after writing a
+rule that a projection must carry the measurement it rests on.
+
+**What was actually measured, and of what.** The D-CRO's calibration ran `NativeCapture` with a sink
+that retains each layer's residual in float32 — one 2,816-token window, 33 layers, **2.817 GiB
+peak**. Its own docstring says *"which is what a fit holds"*. **That is the error, and we both made
+it.** A fit does not hold residuals; it holds the model, the unembedding, and a 2,560-by-2,560
+accumulator pair per layer. Codex's fitter, measured on the earlier 128-token prose fit, peaked at
+**12.44 GiB**. At 128 tokens the residuals are 0.04 GiB. The other twelve gigabytes are the fitter.
+
+So the 21 GiB projection for 2,816 tokens was not a batching artefact. It was a reasonable
+extrapolation from 12.44 at 128, and my "21 GiB is a batching choice, not a floor" inverted the
+truth: **there is no batch, and the floor is roughly 12 GiB before a single residual is retained.**
+
+**The shape.** A measurement of one artefact taken as a calibration of another. It is the pattern
+the D-CRO diagnosed in my work weeks ago — reaching for a property of the thing in hand when the
+question is about a different thing — and it is the first time today it nearly cost a machine rather
+than a claim. The 2.817 GiB number was real, precise, cross-checked against my own derivation to
+three decimal places, and about the wrong object. **A measurement's precision says nothing about
+whether it measures the thing you need.**
+
+**What is true now.** The bf16 fit at 2,816 tokens needs, at minimum, the 7.3 GiB bf16 model, the
+2.69 GiB fp32 unembedding, ~1.7 GiB of accumulators, and 0.89 GiB of residuals: about **12.6 GiB
+before attention workspace**, on a box whose R47 stop is 10.66. **It may not fit on this machine at
+all.** The 4-bit fit replaces 7.3 with roughly 2.5 and lands near 7.8 GiB, which does. That is a
+decision the order did not anticipate and it follows the diagnostic, not the other way round.
