@@ -173,10 +173,26 @@ rank version: the expert's token is inside the layer-34 top ten at the divergenc
 episodes, so a rank proxy has data. It is still a proxy for confidence, with the same weakness one
 level down, and it is still an output-side quantity, so the Director's objection applies to it too.
 
-**If the probability is wanted, it comes from a targeted replay, not a rerun.** Each `forward` row
-records `input_ids`, `offset`, `logits_shape` and **`logits_sha256`**. So a replay of the prefix up to
-a single divergence position reproduces that forward's logits and **proves itself bit-exact against
-the recorded hash before any new number is read**. Nine failed episodes means roughly nine such
-positions, not 247 forwards per episode. That is a check whose answer is known in advance, guarding a
-measurement that is otherwise unverifiable — which is the mechanism this programme has spent the day
-learning to insist on.
+**If the probability is wanted, it comes from a targeted replay — and a replay costs box time.**
+
+*Corrected by the Director, who asked whether forward passes are actually recorded.* I had written
+that the quantity is "recomputable from the records" at "no extra box time", repeating the D-CRO's
+phrasing without checking it. **That is wrong.** What a `forward` row stores is
+`['argmax', 'final_readout_max_abs_error', 'input_ids', 'kind', 'logits_sha256', 'logits_shape', 'offset', 'turn']`.
+The logits themselves are **not** stored — a distribution over 262,208 tokens is 1.0 MB per forward
+and only its 64-character SHA-256 is kept. No KV cache is stored either. **A hash lets a replay prove
+itself; it does not let anyone skip the compute.**
+
+What *is* recoverable without the model is the exact input: `begin_turn` carries `prompt_ids` and the
+full `context`, and each forward carries its `input_ids`. So the replay does not have to regenerate a
+trajectory — it can feed the recorded ids directly.
+
+**The honest cost.** One model load, the run lock, an announced window, and a forward over the prefix
+at roughly nine divergence positions. Minutes of compute, not hours, and far cheaper than
+regenerating fifteen episodes with lens capture. But it is box time and it must be scheduled, not
+waved through as free.
+
+**What the hash buys is verification, and that is worth having on its own.** The replay reproduces the
+recorded `logits_sha256` or it is not the same computation, so the measurement is checked against a
+known answer before any new number is read — the mechanism this programme has spent the day learning
+to insist on. That was the defensible half of my claim. The free half was not.
