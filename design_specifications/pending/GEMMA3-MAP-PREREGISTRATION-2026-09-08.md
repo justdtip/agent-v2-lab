@@ -589,3 +589,45 @@ that a top-k over a just-seen prompt "may not be a good instrument for this ques
 too strong and it is now measured. The readout carries real predictive content on unseen tokens; what
 it cannot support is an uncontrolled comparison across unequal history. **The rule is a filter, not
 an abandonment.**
+
+**Class 2 is unified by outcome and not by mechanism, and I withdraw the claim that a second instance
+gave it one.** The D-CRO's third instance (`318db85`) settles it. `conditional_update-0093` reads one
+of five service files, never opens the policy file holding the threshold, and throttles the first
+service it sees — whose load of 82 does exceed the threshold of 67, so the action is locally
+defensible. It substituted *first above threshold* for *the highest*.
+
+| episode | mechanism |
+|---|---|
+| `pointer_chain-0018` | schema continued past its own termination |
+| `batch_update-0166` | action insensitive to an observation its notes recorded correctly |
+| `conditional_update-0093` | predicate simplified: first candidate rather than the maximum |
+
+Perseveration, observation-insensitivity and predicate simplification are not one thing. **The class
+counts cleanly and explains nothing**, and that is written here so the count is never read as a
+mechanism.
+
+**And the one shared property we thought we had does not survive measurement either.** "Each stops
+early rather than getting stuck" is true against the 24-step ceiling and false against the expert:
+
+| episode | turns | expert horizon | difference |
+|---|---:|---:|---:|
+| `search-0061` | 5 | 3 | **+2** |
+| `list-0149` | 4 | 3 | **+1** |
+| `pointer_chain-0018` | 9 | 8 | **+1** |
+| `conditional_update-0093` | 5 | 10 | **−5** |
+| `batch_update-0166` | 7 | 14 | **−7** |
+
+Three of five take *more* steps than the expert; two stop far short. So the class is heterogeneous on
+mechanism **and** on effort, and the outcome level has now failed twice to find structure in it.
+
+**Which is the argument for putting it to the map first, ahead of the fork.** Three episodes that
+fail three different ways while looking identical at the outcome level is precisely the case where a
+representation-level measurement can say something an outcome-level one cannot. If the map finds a
+shared signature across them, that is evidence for one mechanism at a level the outcome cannot reach;
+if it finds three, the class is a bucket and we will know. **Either result is worth the map**, which
+is not true of most questions we could ask it.
+
+**One caution on the escape route, since I built on it.** Two of ten agentic episodes called
+`search_files`: `cross_reference-0032`, which passed an 11-step chain, and `search-0061`, which failed.
+Calling it is not sufficient, and at one instance each way the positive case is weaker than I stated
+it. It remains the only documented recovery route and the only episode to solve a long chain used it.
