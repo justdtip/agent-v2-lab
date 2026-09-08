@@ -66,3 +66,51 @@ under 4-bit weights. It says nothing about whether layers 23 and 24 *cause* the 
 final-layer probability is the model's output, so this is a statement about what the model concludes,
 not about where or how it concludes it. That question needs an intervention, and we have not run one
 on Gemma's internals.
+
+---
+
+## What this fixes in the intervention design, before one is ordered
+
+The D-CRO raised the right objection to the injection seam: it is additive, single-layer,
+single-position, so it steers rather than ablates, and against a distribution at 1 − 10⁻⁷ the
+magnitude needed may be large enough that the arm stops being a perturbation. That is correct and it
+is quantifiable rather than a matter of taste.
+
+**How much work each fork actually demands.** The logit gap an intervention must close is
+`ln(p / (1-p))`:
+
+| fork | P(wrong) | gap to close |
+|---:|---:|---:|
+| 1 — the softest | 0.9890071 | **4.50 nats** |
+| 0 | 0.9998727 | 8.97 nats |
+| 3 | 0.9999969 | 12.68 nats |
+| 2 | 0.9999998 | 15.42 nats |
+| 23 — saturated | ≥ 0.9999999 | **16.12 nats** |
+
+**A fixed-magnitude steering arm is therefore not one experiment. It is a perturbation at fork 1 and
+a sledgehammer at fork 23, differing by 3.6x in the work required**, and a design that applies one
+magnitude across forks would report a flip rate that is a map of the confidence profile rather than
+of anything causal.
+
+### Two design rules, fixed now
+
+**1. The dependent variable is the minimum perturbation that flips, not whether a fixed one does.**
+Report, per fork, the smallest multiple of the injected direction that changes the emitted token. A
+binary flip rate under a fixed magnitude confounds the intervention with the saturation; a threshold
+is graded, is comparable across forks, and its *shape against the confidence profile* is the actual
+finding. If the required magnitude tracks the logit gap exactly, the intervention is doing nothing
+the output distribution does not already say. If it departs from that curve, the departure is the
+result.
+
+**2. The perturbation is a donor difference, not a synthetic direction.** The seam takes an arbitrary
+delta at a position, so `delta = h_donor − h_target` is expressible, which makes it activation
+patching in additive clothing. Using the residual from another fork — or from a run where the model
+emitted the correct opener — keeps the perturbation inside the distribution the model actually
+produces. **A synthetic steering vector large enough to close 16 nats is not a statement about the
+representation; it is a statement about how hard you pushed.** A donor difference is scaled in units
+the model itself generates, which is what makes the threshold in rule 1 interpretable.
+
+**What the seam still cannot do.** It cannot ablate, so it tests sufficiency and never necessity: it
+can show the fixed point is movable and not what the representation was carrying. That limit is
+structural, it is not fixed by either rule above, and any record from this arm states it rather than
+letting "we changed the output" read as "we found the cause".
