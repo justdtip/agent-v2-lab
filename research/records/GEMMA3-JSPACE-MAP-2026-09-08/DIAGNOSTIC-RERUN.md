@@ -49,18 +49,37 @@ rather than the `approved_total=277` line the prompt asked for.
 person were answering it and started executing a plan — and then failed at the plan, which is a
 different and more tractable failure than not being able to proceed at all.
 
-## The third got worse, and it is the sharpest finding of the day
+## The third got worse, and the reason turned out to be ours
 
 `update-0028`'s prompt gives the path verbatim: *In `workspace/test/0028/config.ini`, change mode
-from fast to audit.* Four expert steps: read, replace, re-read, finish.
+from fast to audit.* Four expert steps: read, replace, re-read, finish. The corrected run reads
+`/test/0028/config.ini` instead — a dropped component and an added slash — and then issues that
+identical call twenty-three times running.
 
-Stage one's model read `/workspace/test/0028/config.ini` — the given path with a leading slash it
-added itself — and never recovered. The corrected run reads `/test/0028/config.ini`, which drops a
-component **and** adds the slash, and then issues that identical call twenty-three times running.
+**This section said the model regenerates paths rather than copying them. That is refuted and the
+sentence is struck.** Per-call path fidelity is indistinguishable between the two models: Gemma
+54/67 at 0.806, Qwen base 1,127/1,400 at 0.805. Only the error *shape* differs, and every leading
+slash in the whole Gemma corpus belongs to this one task.
 
-**Gemma does not copy a literal path. It regenerates one, and the regeneration is wrong.**
-Everything downstream is a consequence of that single corrupted string, and no amount of ceiling
-helps a model that cannot re-emit a path it was given.
+**What actually happened is in the model's own context at turn 2**, and the environment is the
+author of it:
+
+> **[system]** Rules: Inspect state with tools instead of guessing paths, file names, or values.
+> **[user]** In `workspace/test/0028/config.ini`, change mode from fast to audit.
+> **[assistant]** Progress note: Need to inspect the configuration file to see its current mode.
+> `{"name": "list_files", "arguments": {"directory": "/"}}`
+> **[tool]** `FILES: (none)`
+> **[assistant]** Progress note: The file list is empty, so there is no configuration file to
+> inspect. I need to create a configuration file to test.
+> `{"name": "read_file", "arguments": {"path": "/test/0028/config.ini"}}`
+
+`list_files` answered an unsatisfiable directory with an empty listing rather than an error, so the
+model was told the workspace was empty. It had been instructed to inspect rather than guess. It
+inspected. **The premise it reasoned from was false and we supplied it**, and this repository then
+recorded the resulting loop as the model's failure. The Chief's fix is at `020aa89`: both
+simulators now raise `directory not found`, echoing the caller's own string.
+
+Everything downstream is a consequence of that turn, not of a copying defect.
 
 Its notes make the failure legible in a way an outcome cannot. From the third turn on, every note
 says a variant of *"The file still doesn't exist. I need to create it"* — and the action attached
@@ -208,3 +227,50 @@ were not, and are now recomputed with readings grouped by turn.
 distribution, so its top-1 must be the emitted token. Grouped by turn it is, for 100% of 1,173
 emissions. Keyed flat it was 4%. A join this wrong announces itself the moment a boundary
 condition is asked of it, which is the argument for having one.
+### Re-read after the confound register: the false premise was ours
+
+**Amended 2026-09-08 after the Chief's audit found the cause. The reading above stands and its
+subject changes.**
+
+`list_files` answered an unsatisfiable directory with `FILES: (none)` rather than an error.
+Workspace paths carry no leading slash, so every rooted guess matched nothing and the model was
+told the workspace was empty. `read_file` errors honestly; `list_files` did not. And there is no
+discoverable root: no tool lists the workspace top level, so the exact string `workspace` had to be
+guessed and every near miss was answered with a confident falsehood.
+
+**The corrected run's `update-0028` opens with `list_files("/")` and is told the workspace is
+empty.** Stage one's opens with a failed read and then `list_files("/workspace/test/0028")`, and is
+told the same. Everything downstream — *"there is no configuration file"*, *"I need to create it"*,
+the twenty-three repetitions — follows from an observation this repository manufactured.
+
+So the sentence *"Gemma does not copy a literal path, it regenerates one"* is not supported by this
+episode. The leading slash is **consistent with the belief the environment installed**: the model
+had been told the root was `/` and that it was empty. What looked like a copying defect is a
+correct inference from a false premise, one level further out than the previous amendment placed
+it. The Chief has fixed both simulators so that `list_files` raises, echoing the caller's own
+string.
+
+**The fork finding is not weakened by this and is better posed because of it.** The measurements
+are unchanged — the commitment at layer 24, the argument-start baseline it is read against, the
+absence of `workspace` from all 192 top-10 lists. What changes is the subject.
+
+It is no longer *the model cannot re-emit a string*. It is: **a false premise installed by the
+environment at turn 0 still fully determines the representation twenty-three turns later, and the
+alternative it ruled out never returns to candidacy at any read depth.** That is a question about
+how long a belief persists and how completely it closes off what it excludes, and it is a better
+interpretability target than the one it replaces because every part of it is identified — the
+premise, the turn it entered, the moment of commitment, and the absent alternative.
+
+**And it may explain the one row that was always the strongest, though this part is an
+interpretation and not a measurement.** The Chief's reading: `list_files("/")` returned without an
+error, which tells the model that `/` is a real directory here, so the prompt's `workspace/` reads
+as the name of the sandbox rather than as a path component, and the file becomes
+`/test/0028/config.ini`. On that account `workspace` is absent from all 192 top-10 lists **because
+the model had already ruled it out as a directory name, correctly, on our authority** — not
+because it could not recall the string.
+
+That is coherent and it is a claim about the model's reasoning inferred from its outputs, which the
+readout does not measure. What the readout establishes is the absence itself. The
+explanation is the Chief's and is recorded as one, because the difference between "the word was not
+available" and "the word had been excluded" is exactly the kind of thing a map should be asked to
+settle rather than told.

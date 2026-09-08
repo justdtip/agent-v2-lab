@@ -133,10 +133,22 @@ class CaptureSession:
         audit_modulus=23,
         audit_seed=0,
         retain_logits=False,
+        final_readout_gate=None,
     ):
         if not 0 < top_k <= view.vocab_size or audit_modulus < 1:
             raise ValueError("invalid top-k or audit sampling modulus")
         self.view, self.readout, self.emit = view, readout, emit
+        #: How far the readout may disagree with the model's own logits at the final layer, in
+        #: absolute logit units, before the run is refused. The map there is the identity, so a
+        #: disagreement is the residual tap or the unembedding and not a fitted quantity.
+        #:
+        #: The default is deliberately loose and is a **tripwire, not a tolerance**: it catches a
+        #: wrong tap, a transposed unembedding or a missed norm, all of which move logits by
+        #: whole units, and it does not pretend to a precision nobody has measured on this model.
+        #: Every forward records its own figure as `final_readout_max_abs_error`, so the gate can
+        #: be tightened onto observed behaviour rather than guessed at now — which is the same
+        #: mistake as an absolute difference published without the quantity's own scale.
+        self.final_readout_gate = 1.0 if final_readout_gate is None else float(final_readout_gate)
         self.layers = tuple(sorted(set(layers)))
         self.attention_blocks = tuple(sorted(set(attention_blocks)))
         self.top_k, self.audit_modulus, self.audit_seed = top_k, audit_modulus, audit_seed
@@ -181,7 +193,11 @@ class CaptureSession:
             audit_seed=self.audit_seed,
             rank_horizons=self.ranks.horizons,
             distribution_capacity=self.ranks.capacity,
-            readout_precision="fp32 intermediate maps; native final identity",
+            readout_precision=(
+                "fp32 intermediate maps; final layer reports the model's own softmax and is "
+                "checked against the readout's identity branch every forward"
+            ),
+            final_readout_gate=self.final_readout_gate,
         )
         completed = False
         try:
@@ -251,26 +267,56 @@ class CaptureSession:
         if set(self._residuals) != set(self.layers):
             raise ValueError("native path did not capture every requested layer")
         # The next forward can precede the yield. Score only tokens actually yielded, below.
+        # The final layer's distribution stays the model's own softmax, because that is what a
+        # reader of a layer-34 row should be able to assume it is. What changes below is that the
+        # readout path is *also* run there and compared against it.
+        #
+        # It used to be only substituted. That made the layer-34 rank-1 rate a statement about
+        # decoding and position bookkeeping and nothing else -- no lens map, no residual tap, no
+        # unembedding -- while the record and a published visualisation both described it as the
+        # instrument proving itself. The CRO found it by reading this function. Run for real, the
+        # identity branch of `LensReadout.logits` exercises the residual tap and
+        # `view.native_readout`, so agreement with the native logits is a genuine end-to-end
+        # check of everything the readout does except the fitted maps themselves.
+        final = self.view.num_layers
+        # `None` and `0.0` are different statements and the field carries both: no readout means
+        # the check did not run, and a reader must never take a missing figure for a passing one.
+        # A session constructed without a readout is the native-only path, which can ask for the
+        # final layer alone and has nothing to compare against.
+        checkable = self.readout is not None and final in self._residuals
+        error = 0.0 if checkable else None
         for local in range(len(ids)):
             position = offset + local
-            probabilities = {
-                layer: (
-                    np.array(mx.softmax(logits[0, local].astype(mx.float32)))
-                    if layer == self.view.num_layers
-                    else self.readout(h[0, local], layer)
-                )
-                for layer, h in self._residuals.items()
-            }
+            probabilities = {}
+            for layer, h in self._residuals.items():
+                if layer == final:
+                    native = logits[0, local].astype(mx.float32)
+                    if checkable:
+                        through_readout = self.readout.logits(h[0, local], layer)
+                        error = max(
+                            error, float(mx.max(mx.abs(through_readout - native)).item())
+                        )
+                    probabilities[layer] = np.array(mx.softmax(native))
+                else:
+                    probabilities[layer] = self.readout(h[0, local], layer)
             self.ranks.capture(position, probabilities)
             self._write(
                 "reading",
                 position=position,
                 top={str(layer): top_tokens(p, self.top_k) for layer, p in probabilities.items()},
             )
+        if checkable and error > self.final_readout_gate:
+            raise ValueError(
+                f"the readout disagrees with the model's own logits at the final layer by "
+                f"{error:.3g}, above the gate of {self.final_readout_gate:.3g}. At layer "
+                f"{final} the map is the identity, so this is the residual tap or the "
+                "unembedding, and every reading below it is suspect"
+            )
         record = {
             "logits_sha256": _logit_hash(logits),
             "logits_shape": list(logits.shape),
             "argmax": np.array(mx.argmax(logits, axis=-1)).tolist(),
+            "final_readout_max_abs_error": error,
         }
         if self.retain_logits:
             record["logits"] = np.array(logits.astype(mx.float32)).tolist()
