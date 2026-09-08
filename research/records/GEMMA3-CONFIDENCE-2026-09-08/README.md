@@ -1,4 +1,14 @@
-# Gemma is not uncertain and wrong. It is certain, and stays certain, through twenty-three refutations
+# Gemma is certain under a false premise, and uncertain without one — and loops either way
+
+> **SCOPE CORRECTION, later the same day, at the top rather than at the bottom.** The finding below
+> was measured under the **lying simulator**, and it is a property of that regime rather than of the
+> model. The D-CRO has since read the same episode at all 34 layers under the **fixed** simulator
+> (`cac8532`), and the result inverts: the model is *uncertain*, holds both wrong options
+> simultaneously, considers the escape route every single turn, and loops anyway. Read this section
+> as "what a false premise does to the distribution", not as "how Gemma behaves". The inversion is
+> recorded at the end and it is the more important result.
+
+## The original finding, scoped: under a false premise, certainty is total and immovable
 
 **2026-09-08, Chief.** The first result of this programme that is about Gemma's internal state rather
 than about our instruments. It cost no box time: it is arithmetic over a record already on disk.
@@ -196,3 +206,70 @@ waved through as free.
 recorded `logits_sha256` or it is not the same computation, so the measurement is checked against a
 known answer before any new number is read — the mechanism this programme has spent the day learning
 to insist on. That was the defensible half of my claim. The free half was not.
+
+---
+
+# The inversion: told the truth, the model is uncertain, holds both wrong options, and still loops
+
+**D-CRO, `cac8532`, `update-0028` at all 34 layers under the fixed simulator.** This is the more
+important half of the record and it overturns the framing above.
+
+**A free validation first.** All 24 actions are byte-identical to the no-capture falsification run,
+so capture does not perturb greedy generation. Measured, not assumed.
+
+**The alternation is not a symmetric two-cycle.** Read at depth the two branches are different
+decisions:
+
+| branch | rank 1 first at | rank at layer 23 | P(final) median | P(final) min |
+|---|---:|---:|---:|---:|
+| `"."` | layer 24 | 8 | 0.9988 | 0.81 |
+| `"/"` | **layer 33** | 108 | **0.9031** | 0.85 |
+
+One branch is a layer-24 commitment. The other is decided in the last two layers and carries a tenth
+of its mass elsewhere.
+
+**Both branches are live at every fork.** At every `"/"` fork, `"."` is in the top ten from layer 23
+or 24 onward; at every `"."` fork, `"/"` from 24 to 27 onward. All 24 turns. **The alternative is
+represented at the moment of choosing, and the model takes the one it did not take last time.**
+
+**And the escape route is represented, late, and rejected.** At the tool-name decision `search` is a
+top-10 candidate somewhere in the stack in **all 24 turns** — at layer 33 in 18 of them, at 29 to 30
+in 2, as shallow as 24 in 3, never below 24. The model considers searching in its last one or two
+layers, every turn, and does not do it.
+
+## What this does to the finding above
+
+**"Certain, and the errors never reach its certainty" was a property of the false-premise regime.**
+Under the lie the wrong opener sat at ≥0.9999969 at 22 of 24 forks and `workspace` was absent from
+all 192 top-10 lists. Under the truth the same task produces 0.9031 median on one branch with both
+alternatives live. **Twenty-three refutations do move this distribution. They simply do not move it
+toward the answer.** That is a better sentence than mine and a different phenomenon.
+
+**One caveat the inversion needs, which does not weaken it.** The two measurements are not the same
+decision. Under the lie I measured the first token of a `read_file` *path* argument; under the truth
+the D-CRO measured the first token of a `list_files` *directory* argument. Both are call-argument
+first-token decisions, so they are the same *class*, but they are different instances with different
+tools. The regime is the most plausible explanation for the difference and it is not the only one,
+and a clean version would compare the same decision under both simulators. That comparison is
+available — the lying run's own `list_files("/")` at turn 0 — and has not been made.
+
+## What it does to the intervention design
+
+**The target has moved and improved.** It was "the alternative is not represented anywhere in the
+stack", which is nearly impossible to intervene on: there is nothing to point a donor difference at.
+It is now **"the alternative is represented and not selected"**, and `search` at layers 24 to 33 at
+the tool-name decision *exists in the residual*. The donor-difference design from the section above
+now has a concrete direction and a concrete layer band to work in.
+
+**The confidence stratification matters more, not less.** The `"/"` branch at 0.90 is soft
+everywhere; the `"."` branch at 0.999 is hard; and they alternate turn by turn. So an experiment that
+does not stratify would sample a mixture of soft and hard targets that alternates with turn parity —
+which is worse than the saturation problem the rule was written for.
+
+## And one thing for the primary comparison
+
+This episode contributes **24 call-argument tokens, one per turn, each a single character**. The
+restated primary comparison has almost nothing to read here. Worth knowing before the equal-weight
+aggregate treats it as one full episode alongside episodes carrying fifty times the argument content:
+equal weighting protects against a long episode dominating, and it does not make a thin episode
+informative.
