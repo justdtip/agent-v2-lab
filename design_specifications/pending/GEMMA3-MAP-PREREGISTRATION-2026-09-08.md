@@ -490,6 +490,23 @@ episodes now, across two failure classes, all showing a plan that survives its o
 **Stage two records, per episode, whether any progress note contradicts the action emitted in the
 same turn**, which is computable from the record and needs no rerun.
 
+> **WITHDRAWN, and the withdrawal is itself corrected. Read this whole block as a hypothesis with a
+> confound attached, not as a result.** The D-CRO's within-episode control (`2264ad7`) showed `Next`
+> is top-1 at three consecutive newlines, and at the first two the true token is ordinary filler, so
+> `Next` is a diffuse late-record expectation and not a substitution at the decisive moment. I then
+> showed the true token ranks 2 at those filler positions and outside ten only at the terminal one,
+> which relocates the claim rather than killing it. **Then the frequency confound killed the
+> relocated version too:** in the final prompt before that position, `context` occurs 28 times,
+> `Next` 9, and **`Result` zero**. A model favouring a token seen 28 times over one seen never needs
+> no schema. Not separable within this episode. What separates it is a selection over stage two's
+> completed set for episodes whose terminal field token appears in context beforehand.
+>
+> **What survives is generation-side and confound-free**: the model emitted a path in the schema's
+> naming convention after reading a node with no `Next`, and `batch_update-0166` recorded two
+> failures accurately in its notes and completed its template anyway. The comprehension-side story
+> dissolved twice, which may mean a top-k over a prompt the model was just shown is dominated by
+> what is in that prompt and is a poor instrument for this question.
+
 **And the mechanism has three stages, not one.** The D-CRO found the schema active while the model
 *reads* (`7d7eff4`). I objected that it might be a correct prior — six of seven preceding nodes
 carried `Next` at that slot, so predicting `Next` is what a calibrated model should do. **The data
