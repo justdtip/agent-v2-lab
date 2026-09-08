@@ -164,3 +164,51 @@ at 2,000 tokens is resting on an instrument validated to 126 and spot-checked to
 **The honest statement for anything stage two publishes:** the lens is used outside its fitted
 position range for 97.5% of reads and for 100% of the primary comparison; the one available
 boundary check finds no degradation at 2x and nothing tests 18x.
+
+### The boundary check corrected, and the differential test that replaces it
+
+**The Chief's three objections to the check above are correct and it is downgraded to a spot-check
+with its limits stated.** In particular one I should have seen in my own printed table:
+
+**It confounds position with context.** Out-of-range reads sit later in the sequence and have more
+context, which makes next-token prediction easier independently of the lens. Degradation and an
+easier task push opposite ways and a level comparison cannot separate them.
+
+**Its two statistics disagree where it matters.** At layer 11 the median *improves* out of range,
+715 against 886, while the rank-1 share *falls*, 1.0% against 1.4%. At layer 23 the same split, 22
+against 34 and 13.3% against 23.1%. Median and top-1 measure different parts of the distribution
+and they point opposite ways at exactly the shallow depths the map's interesting claims live at.
+They agree only at 24 and 30, where both are near saturation. **A check whose two statistics
+disagree is unresolved, not null.** I printed both and read them as agreement.
+
+**And 2x is not 18x.** No in-range comparison exists at any real depth of context, and this run
+cannot produce one.
+
+**The differential test survives the confound**, because both arms sit at the same positions: if
+extrapolation damages the transported representation, a longer-range prediction should suffer more
+than a next-token one, which leans on the identity. Same two chat episodes, split at 126, by
+horizon, as log2 of the out-of-range median over the in-range median — positive means out-of-range
+is worse:
+
+| layer | horizon 1 | horizon 8 |
+|---:|---:|---:|
+| 11 | −0.31 | +0.03 |
+| 18 | +0.35 | **+1.44** |
+| 23 | −0.63 | +0.53 |
+| 24 | +0.00 | **+1.01** |
+| 30 | +0.00 | **+1.28** |
+
+**The sign flips in the predicted direction and all five layers agree at horizon 8**, where
+out-of-range medians run one to two and a half times worse. At horizon 1 the directions are mixed,
+which is what the context advantage would produce.
+
+**It is suggestive and it is not established, and the distinction is the whole point.** Permutation
+tests on the median ratio give p = 0.026 at layer 30 and 0.071 at layer 18; the rest are far from
+significance. Ten tests were run, so nothing survives a Holm correction — 0.026 × 10 is 0.26. The
+five agreeing signs are worth something and less than they look, because the layers share positions,
+episodes and a residual stream and are not independent draws.
+
+**So the honest statement is that the only evidence bearing on whether the extrapolation matters
+points at "it does, at long horizons and at depth", and is too weak to act on.** It is recorded
+because it is the sole measurement that exists on the question, and because writing it up as a
+result would be the day's tenth instance of the pattern in `METHOD-2026-09-08`.
