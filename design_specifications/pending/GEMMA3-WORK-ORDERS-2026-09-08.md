@@ -302,3 +302,65 @@ deletion.
 model-agnostic terms — depth as a fraction, layer kind by its role rather than its library flag,
 spans by their function in the protocol — so the same rules apply unchanged to 12B and to the next
 family. A rule that names a layer index is a rule that does not transfer.
+
+---
+
+## Two corrections from Codex, and the first is to the Chief's own transferable claim
+
+Codex's preparation record (`GEMMA3-FITTING-2026-09-08/FINDINGS-AND-TECHNIQUE.md`, branch
+`codex/lens-fitting`, 5eab827) corrects two statements above. Both are accepted, and the first
+matters most because it is the very statement this document held up as the model of a transferable
+finding.
+
+### 1. What the hybrid actually showed, stated correctly
+
+**The Chief wrote:** *recurrent state makes a finite-difference reference ambiguous, so an
+all-attention model admits Jacobian methods that a hybrid does not.*
+
+**That is too strong, and Codex is right to refuse it.** What the Qwen work observed was that *our
+cached shortcut* disagreed with *our uncached reference*, and that the disagreement could not be
+separated from step-size and numerical-scale effects. Two distinct causes were being run together:
+the dependence of a perturbation's effect on the *intervention history* that produced the cached
+state, and the numerics of the step rule. Neither says a Jacobian is unavailable on a recurrent
+model. An uncached full-sequence Jacobian is perfectly well defined there; it is only more
+expensive.
+
+**The transferable statement, corrected:** *where a model's per-position state is a lossless record
+of its prefix, the cached and the uncached finite-difference references coincide by construction,
+so the cheap cached path needs no validation. Where the state is a lossy fixed-size summary, they
+do not, so the cached path must be validated against the uncached one or abandoned.* That is a
+claim about when a cost-saving shortcut is safe, which is the useful and portable form. The
+earlier version was a claim about which architectures admit an entire method, which is not what
+was measured.
+
+The correction is worth more than the original claim, and it is a good illustration of the rule
+this document sets: the technique section is where over-generalisation shows up, because a finding
+stated at the wrong scope reads as a bigger result and transfers as a wrong one.
+
+### 2. The lens validation was ill-posed as ordered
+
+**The Chief ordered:** fit our own regression lens at every layer and compare it with the hosted
+Jacobian lens; *agreement is evidence our path is sound, and disagreement localises to a layer.*
+
+**That is not a validation, because the two estimate different things.** A regression lens is
+fitted to minimise prediction error on a corpus. A Jacobian lens is the local linearisation of the
+tail. They can disagree while both are correct, so disagreement cannot diagnose a fitting defect
+and agreement is weaker evidence than it looks.
+
+**Corrected order.** The validation is like against like: **our Jacobian fit against the hosted
+Jacobian lens**, same estimand, same corpus family, differences attributable to fitting length and
+precision rather than to method. The regression-against-Jacobian comparison stays, but as a
+**measurement about the model** — where a fitted linear predictor and a local linearisation of the
+tail coincide, and where they part — which is a finding worth having and is not a check on our
+implementation.
+
+### Also from that record, and worth naming as the transfer test working
+
+The corpus sampling rule was re-run under Gemma's tokenizer and yields **50 held windows of 1,024
+tokens against Qwen's 51**. The rule transferred unchanged; only the count moved. That is exactly
+the shape this programme is testing for, and it is the first instance of it measured rather than
+asserted.
+
+Codex's sequencing is correct and stands: no Gemma fit until the architecture port has produced
+conformance evidence and the official bf16 conversion exists. The conversion is the Chief's, and it
+needs the machine.
