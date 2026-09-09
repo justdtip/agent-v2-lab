@@ -1,0 +1,110 @@
+{
+  "basis": "pinned entry-point replay with synthetic lens stand-ins, not device evidence",
+  "different_artifact_same_declaration": {
+    "outcome": "refused",
+    "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. a pairing is registered at layer 1, but it measured a different pair -- lens_sha256: measured 'cdbd024319bd09bdf1004c0eb69e3ed4a2880745862994e65337f3b531ee1987', this reading '75cbd6536399826be0c8d10eac9115d8ac4c8e3ffd0bdeb3161c03e42e2cd931'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+  },
+  "empty_table": {
+    "outcome": "refused",
+    "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. no cross-path pairing is registered at layer 1 of 'google/gemma-3-4b-it'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+  },
+  "field_controls": [
+    {
+      "changed": "refused",
+      "field": "fit_dtype",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "fit_width",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "capture_dtype",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "capture_width",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "lens_side",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "nu_sha256",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "lens_sha256",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "positions",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "reduction",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "endpoint",
+      "missing": "refused"
+    },
+    {
+      "changed": "refused",
+      "field": "context_tokens",
+      "missing": "refused"
+    }
+  ],
+  "fixture_matrix_json_sha256": {
+    "A": "cdbd024319bd09bdf1004c0eb69e3ed4a2880745862994e65337f3b531ee1987",
+    "B": "75cbd6536399826be0c8d10eac9115d8ac4c8e3ffd0bdeb3161c03e42e2cd931"
+  },
+  "lens_without_archive_hash": {
+    "outcome": "refused",
+    "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. the reading does not declare ['lens_sha256'], and an undeclared field cannot match a measured one; the caller supplies its own provenance. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+  },
+  "matching_artifact_and_declaration": {
+    "outcome": "accepted",
+    "result": 1
+  },
+  "no_capture": {
+    "outcome": "accepted",
+    "result": 1
+  },
+  "old_registration_without_archive_hash": {
+    "outcome": "refused",
+    "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. the registered pairing does not identify its pair, so it measures nothing: anchor_sensitivity.json: google/gemma-3-4b-it.measured_pairings[1].pair must carry exactly ['fit_dtype', 'fit_width', 'capture_dtype', 'capture_width', 'lens_side', 'nu_sha256', 'lens_sha256', 'positions', 'reduction', 'endpoint', 'context_tokens']; missing ['lens_sha256']. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+  },
+  "order_commit": "93f227f791478ac7f38a78db5c9b97e6dcdb194e",
+  "same_artifact_different_declaration": {
+    "outcome": "refused",
+    "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. a pairing is registered at layer 1, but it measured a different pair -- nu_sha256: measured '58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67', this reading '9b709637579c64f50defcc375b15a8aa8482e822a99f9f514fd3a00b6783bc03'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+  },
+  "same_path": {
+    "outcome": "accepted",
+    "result": 1
+  },
+  "schema_version": 1,
+  "shared_declaration_sha256": "58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67",
+  "shipped_measured_pairings": 0,
+  "source_commit": "a2c877e65f3ce1079af5bb5cc01b060e87184024",
+  "sources_verified": 5,
+  "unexecuted": [
+    "real pairing registration",
+    "real A2",
+    "checkpoint load",
+    "model forward",
+    "native pytest"
+  ],
+  "verdict": "C1 closed on metadata fixtures; no new finding"
+}

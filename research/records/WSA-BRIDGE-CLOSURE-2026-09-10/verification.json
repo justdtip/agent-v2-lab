@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "basis": "executed local metadata fixtures, no model evidence",
+  "verdict": "C1 closed",
+  "sources_match_git": 5,
+  "source_mutations_refused": 5,
+  "reproduces_exactly": true,
+  "relocated_copy_reproduces": true,
+  "changed_pairing_fields_refused": 11,
+  "missing_pairing_fields_refused": 11,
+  "entry_point_identity_controls": "passed",
+  "no_capture_and_same_path": "passed",
+  "ruff_F_E9": "All checks passed!",
+  "git_diff_check": "passed",
+  "model_or_pytest_imports": false,
+  "check_sha256": "9b7902e8aeb8a34ea39df852099447b2483d9a7206a616214e294c7f666cc496",
+  "reviewer_parent": "c55752fa855ace440a311ca997b27949b7ece84b",
+  "unexecuted": [
+    "model forward",
+    "checkpoint load",
+    "native pytest",
+    "real A2",
+    "real pairing registration"
+  ]
+}
