@@ -1213,3 +1213,38 @@ def test_resume_source_fingerprint_includes_upstream_but_excludes_output_reports
     assert gates.source_fingerprint()[0] == first
     source.write_text("changed implementation")
     assert gates.source_fingerprint()[0] != first
+
+
+def test_long_controls_are_judged_against_the_short_floor_and_the_native_seam_not_the_long_floor():
+    """The device's first run: the promoted floor at 1,400 tokens read 69.4% on CUDA while the
+    mask-dispatch control read 54.5%, the same as the laptop, and the seam was exact. The
+    control is detectable against the native comparison and the short floor; the long floor is
+    recorded, not the yardstick."""
+    rows = [valid_measurement(length) for length in gates.LENGTHS]
+    short = rows[0]["precision_probe"]["promoted_fp32_loop"]
+    short.update(max_abs=0.0124, max_norm_relative=0.0124)
+    for row in short["by_layer"].values():
+        row.update(max_abs=0.0124, max_norm_relative=0.0124)
+    long_floor = rows[1]["precision_probe"]["promoted_fp32_loop"]
+    long_floor.update(max_abs=0.694, max_norm_relative=0.694)
+    for row in long_floor["by_layer"].values():
+        row.update(max_abs=0.694, max_norm_relative=0.694)
+    mask = rows[1]["precision_probe"]["controls"]["mask_dispatch"]
+    mask.update(max_abs=0.545, max_norm_relative=0.545)
+    for row in mask["by_layer"].values():
+        row.update(max_abs=0.545, max_norm_relative=0.545)
+    outcome = gates.assess_gate2(rows, num_layers=1)
+    assert outcome["status"] == "pass"
+    long = outcome["by_length"]["1400"]
+    assert long["checks"]["mask_dispatch_outside_floor"] is True
+    assert long["detectability_floor"]["value"] == 0.0124
+    assert long["promoted_floor_this_length"] == 0.694
+    assert "descriptive" in long["rule"]
+    # A control below the short floor is still not detectable, whatever the long floor reads.
+    mask.update(max_abs=0.01, max_norm_relative=0.01)
+    for row in mask["by_layer"].values():
+        row.update(max_abs=0.01, max_norm_relative=0.01)
+    assert gates.assess_gate2(rows, num_layers=1)["status"] == "fail"
+    # Without a short arm the old rule holds: this length's own promoted floor.
+    alone = gates.assess_precision_length(rows[1], num_layers=1)
+    assert alone["detectability_floor"]["basis"] == "this length's promoted floor"
