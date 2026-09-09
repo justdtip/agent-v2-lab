@@ -2,13 +2,13 @@
   "budget": {
     "epsilon_sub_derived": 0.25,
     "epsilon_sub_final": 0.25,
-    "hours_at_derived": 6.621197911348039e-06,
+    "hours_at_derived": 9.08983293629717e-06,
     "hours_bought": 100.0,
-    "hours_final": 6.621197911348039e-06,
+    "hours_final": 9.08983293629717e-06,
     "loosened": false,
     "n_at_derived": 77,
     "n_final": 77,
-    "rate_per_hour": 46517262.30265981,
+    "rate_per_hour": 33884011.08782828,
     "reason": "within budget at the derived tolerance"
   },
   "decoding": {
@@ -19,7 +19,7 @@
   },
   "derived_from": {
     "pilot_row_count": 40,
-    "pilot_rows_sha256": "410da54e6f93a3bb0229b163015fb2a9421e761f1ae2493d009e0f8d79d78ff9"
+    "pilot_rows_sha256": "3e85f3bceea9ab17777cec27e36569b4b6ffc211fa321e45ba9ae103da538bc1"
   },
   "rules": {
     "budget": "over budget loosens epsilon_sub and writes both numbers; never fewer diagnostics, never no control",

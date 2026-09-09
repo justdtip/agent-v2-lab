@@ -65,31 +65,51 @@ def test_the_false_listing_is_well_formed_and_contradicts_the_truth_in_each_arm(
     pair = family.make_existence_pairs("fx", 1, 1, seed=9)[0]
     truthful_e = Simulator.for_task(pair.exists).execute(pair.exists.steps[0].action)
     truthful_a = Simulator.for_task(pair.absent).execute(pair.absent.steps[0].action)
-    false_e = family.false_listing(pair.exists, arm="E")
-    false_a = family.false_listing(pair.absent, arm="A")
+    false_e = family.false_listing(pair.exists, arm="E", target=pair.target)
+    false_a = family.false_listing(pair.absent, arm="A", target=pair.target)
 
     for text in (false_e, false_a):
         assert text.startswith("FILES: ") and not text.startswith("ERROR")
     assert pair.target in truthful_e and pair.target not in false_e
-    assert pair.target not in truthful_a
-    assert "summary-" in false_a and false_a != truthful_a
-    # Same directory, same distractors: only the target's presence is lied about.
+    # The absent arm's false listing names *the pair's* target — the file every diagnostic reads —
+    # and not a recovered stand-in. The first draft listed `summary-00.md` here, which no
+    # diagnostic reads, so the falsification was invisible to D4 (the Chief's review, edit 1).
+    assert pair.target not in truthful_a and pair.target in false_a
     listed = set(false_e.split(": ", 1)[1].split(", "))
     assert listed == set(truthful_e.split(": ", 1)[1].split(", ")) - {pair.target}
+    with pytest.raises(ValueError, match="arm must be"):
+        family.false_listing(pair.exists, arm="X", target=pair.target)
 
 
 def test_a_false_observation_is_applied_by_the_environment_before_validation() -> None:
     pair = family.make_existence_pairs("fx", 1, 0, seed=2)[0]
-    falsified = family.with_false_observation(pair.exists, arm="E")
+    falsified = family.with_false_observation(pair.exists, arm="E", target=pair.target)
     sim = Simulator.for_task(falsified)
     first = sim.execute(falsified.steps[0].action)
 
-    assert first == family.false_listing(pair.exists, arm="E")
+    assert first == family.false_listing(pair.exists, arm="E", target=pair.target)
     assert pair.target not in first, "the model is told the file is not there"
     assert falsified.variant == "false_observation"
     assert falsified.faults[0].call_index == 0
     # A second listing is truthful: the fault is at one call index, like every other fault.
     assert pair.target in sim.execute(falsified.steps[0].action)
+
+
+def test_a_falsified_absent_arm_reads_as_present_to_the_diagnostics() -> None:
+    """The half of the instrument that scored nothing before edit 1: the diagnostics must see the
+    false listing as a state observation saying the target is present."""
+    from local_llm_lab.pipeline.state_programme import diagnostics as dx
+    from local_llm_lab.pipeline.state_programme.run import ScriptedPolicy, run_episode
+
+    pair = family.make_existence_pairs("fx", 1, 0, seed=4)[0]
+    falsified = family.with_false_observation(pair.absent, arm="A", target=pair.target)
+    row = run_episode(falsified, ScriptedPolicy())
+    ctx = dx.Context.from_trajectory(row["steps"], target=pair.target, directory=pair.directory)
+
+    index = ctx.state_observation_index()
+    assert index == 0
+    assert pair.target in ctx.steps[index]["observation"], "read as present"
+    assert dx.score(ctx)["D4"] is not None, "D4 is scorable on a falsified absent episode"
 
 
 def test_the_rate_is_applied_per_arm_with_a_seed_and_reported_per_episode() -> None:

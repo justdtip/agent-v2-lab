@@ -36,9 +36,25 @@ def append_row(path: Path, row: dict[str, Any]) -> None:
 
 
 def read_rows(path: Path) -> list[dict[str, Any]]:
+    """Every row, or a refusal naming the line.
+
+    A crash mid-append leaves a partial trailing line, and a resume that met it with a bare decode
+    error would not say which row to repair.
+    """
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"{path}:{number}: partial or corrupt row ({error.msg} at column {error.colno}); "
+                "an append was interrupted. Remove that line and resume."
+            ) from None
+    return rows
 
 
 def digest(path: Path) -> str:
@@ -87,7 +103,14 @@ def write_readme(directory: Path) -> Path:
     if estimands is not None:
         lines += ["", "## Estimands *(estimands.json)*", "", "| estimand | distance | tolerance | passes |", "|---|---:|---:|---|"]
         for name, e in estimands["estimands"].items():
-            lines.append(f"| {name} | {_fmt(e['distance'])} | {_fmt(e['tolerance'])} | {e['passes']} |")
+            if e.get("untestable"):
+                verdict = "untestable (degenerate tolerance)"
+            elif not e.get("measured", True):
+                verdict = "not measured (no scorable row)"
+            else:
+                verdict = str(e["passes"])
+            shown = "—" if e["distance"] is None else _fmt(e["distance"])
+            lines.append(f"| {name} | {shown} | {_fmt(e['tolerance'])} | {verdict} |")
         lines.append(f"\nLevel: {estimands['level']}")
     lines += ["", "The pilot is not a result and its numbers are not findings. Every figure above names the file it was read from."]
     target = directory / "README.md"

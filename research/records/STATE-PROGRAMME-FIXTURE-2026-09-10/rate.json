@@ -1,7 +1,7 @@
 {
   "basis": "measured-here",
   "episodes": 40,
-  "episodes_per_hour": 46517262.30265981,
-  "hours": 8.598958326426024e-07,
+  "episodes_per_hour": 33884011.08782828,
+  "hours": 1.1804977839346975e-06,
   "mode": "greedy"
 }

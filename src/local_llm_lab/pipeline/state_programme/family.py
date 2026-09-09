@@ -151,26 +151,28 @@ def make_existence_pairs(
 # ------------------------------------------------------------------ the reliability instrument
 
 
-def false_listing(task: Task, *, arm: str) -> str:
-    """A well-formed ``list_files`` result that is false about the target, for the given arm."""
-    target = _target_of(task) if arm == "E" else _absent_target(task)
+def false_listing(task: Task, *, arm: str, target: str) -> str:
+    """A well-formed ``list_files`` result that is false about ``target``, for the given arm.
+
+    ``target`` is the pair's, passed through by the caller and never recovered from the task. The
+    first draft parsed it out of the expert's note and listed ``summary-00.md`` in the absent arm,
+    a file no diagnostic reads, so the falsification there was invisible to D4 and to the gap that
+    defines ε_pred: half the instrument scored nothing. A review found it rather than a test, which
+    is why the test now asserts ``target in false_listing(..., arm="A")`` and that a falsified
+    absent-arm row's state observation reads as *present* to the diagnostics.
+    """
     directory = target.rsplit("/", 1)[0]
     truthful = sorted(path for path in task.files if path.startswith(directory + "/"))
-    listed = [p for p in truthful if p != target] if arm == "E" else sorted({*truthful, target})
+    if arm == "E":
+        listed = [p for p in truthful if p != target]
+    elif arm == "A":
+        listed = sorted({*truthful, target})
+    else:
+        raise ValueError(f"arm must be 'E' or 'A'; got {arm!r}")
     return "FILES: " + ", ".join(listed)
 
 
-def _absent_target(task: Task) -> str:
-    """The path the absent arm's target *would* have: recoverable from the expert's listing note."""
-    note = task.steps[0].thought
-    directory = note.split("list ", 1)[1].split(",", 1)[0]
-    root_dir = next(p for p in task.files if p.rsplit("/", 1)[-1] == "scratch.txt").rsplit("/", 1)[0]
-    if root_dir.rsplit("/", 1)[-1] != directory:
-        raise ValueError("the absent arm's directory does not match its note")
-    return f"{root_dir}/summary-00.md"
-
-
-def with_false_observation(task: Task, *, arm: str, at_call: int = 0) -> Task:
+def with_false_observation(task: Task, *, arm: str, target: str, at_call: int = 0) -> Task:
     """Attach the false listing as a :class:`Fault` at ``at_call`` (the listing call, by default).
 
     The fault is the environment, applied before validation; the message is a result the model
@@ -180,7 +182,7 @@ def with_false_observation(task: Task, *, arm: str, at_call: int = 0) -> Task:
     return replace(
         task,
         variant="false_observation",
-        faults=(Fault(call_index=at_call, message=false_listing(task, arm=arm)),),
+        faults=(Fault(call_index=at_call, message=false_listing(task, arm=arm, target=target)),),
     )
 
 
@@ -196,9 +198,8 @@ def apply_reliability(
     for pair in pairs:
         for arm, task in pair.arms():
             falsify = rng.random() < rate
-            rows.append(
-                (pair.pair_id, arm, with_false_observation(task, arm=arm) if falsify else task, falsify)
-            )
+            chosen = with_false_observation(task, arm=arm, target=pair.target) if falsify else task
+            rows.append((pair.pair_id, arm, chosen, falsify))
     return rows
 
 

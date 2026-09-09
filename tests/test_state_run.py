@@ -107,11 +107,66 @@ def test_estimands_are_distances_with_tolerances_and_the_stub_says_it_is_a_stub(
     out = tmp_path / "rec"
     _fixture_run(out)
     e = json.loads((out / "estimands.json").read_text())
-    assert set(e["estimands"]) == {"substitution", "specificity", "reuse", "predictive"}
-    assert all({"distance", "tolerance", "passes"} <= set(v) for v in e["estimands"].values())
+    assert set(e["estimands"]) == {"substitution", "specificity", "reuse", "predictive", "dynamic"}
+    keys = {"distance", "tolerance", "rows", "measured", "untestable", "passes"}
+    assert all(keys <= set(v) for v in e["estimands"].values())
     assert "coefficient table" in e["level"]
     rows = read_rows(out / "main" / "rows.jsonl")
     assert all(r.get("wrapper") == "stub" for r in rows if r["condition"] != "base")
+
+
+def test_the_main_run_carries_the_reliability_arm_so_a_contradiction_can_exist(tmp_path) -> None:
+    """Edit 2, part one: without this no main row carried a contradiction and the predictive
+    estimand was reported from no rows as a pass that could not fail."""
+    out = tmp_path / "rec"
+    _fixture_run(out)
+    rows = read_rows(out / "main" / "rows.jsonl")
+    arms = {r["arm"] for r in rows if r["condition"] == "base"}
+    assert arms == {"E", "A", "RE", "RA"}
+    base = [r for r in rows if r["condition"] == "base"]
+    assert any(r["falsified"] for r in base if r["arm"] in ("RE", "RA"))
+    assert all(r["falsified"] is False for r in base if r["arm"] in ("E", "A"))
+
+
+def test_a_zero_tolerance_is_untestable_and_a_missing_row_is_not_measured_never_a_pass(tmp_path):
+    """Edit 2, parts two and three. On a scripted policy the pilot's update never varies, so
+    epsilon_pred is exactly zero and the predictive estimand must say untestable, not pass."""
+    out = tmp_path / "rec"
+    _fixture_run(out)
+    e = json.loads((out / "estimands.json").read_text())["estimands"]
+    assert e["predictive"]["tolerance"] == 0.0
+    assert e["predictive"]["untestable"] is True and e["predictive"]["passes"] is None
+    assert "never varied" in e["predictive"]["reason"]
+    # Nothing in the record is a pass at zero, and no unmeasured estimand is a pass.
+    for name, est in e.items():
+        if est["tolerance"] == 0.0 or not est["measured"]:
+            assert est["passes"] is None, name
+    from local_llm_lab.pipeline.state_programme.run import _estimand
+    empty = _estimand(None, 0.25, rows=0)
+    assert empty == {"distance": None, "tolerance": 0.25, "rows": 0, "measured": False,
+                     "untestable": False, "passes": None}
+    assert _estimand(0.1, 0.25, rows=3)["passes"] is True
+    assert _estimand(0.3, 0.25, rows=3)["passes"] is False
+
+
+def test_read_rows_refuses_a_partial_trailing_line_by_number(tmp_path) -> None:
+    path = tmp_path / "rows.jsonl"
+    path.write_text('{"a": 1}\n{"b": 2}\n{"c": 3, "trunc')
+    with pytest.raises(ValueError, match=r"rows.jsonl:3: partial or corrupt row"):
+        read_rows(path)
+
+
+def test_a_non_fixture_preflight_refuses_an_unpinned_device(tmp_path, monkeypatch) -> None:
+    """The device driver's third obligation: device.pin() precedes preflight."""
+    from local_llm_lab import device
+
+    monkeypatch.setattr(device, "describe", lambda: {"determinism": "UNPINNED", "python": "x"})
+    inputs = dict(registry_name="r", checkpoint_digest="d", lens_identity={"base": "b"},
+                  dictionary_layers={"1": "h"}, wrapper_version="w", decoding="greedy",
+                  temperature=None, seed=1, fault_rate=0.1, fault_seed=1)
+    with pytest.raises(ValueError, match="UNPINNED"):
+        sp.preflight(root=ROOT, fixture=False, **inputs)
+    assert sp.preflight(root=ROOT, fixture=True, **inputs)["device"]["determinism"] == "UNPINNED"
 
 
 def test_the_readme_is_written_from_the_files_and_names_each_ones_source(tmp_path) -> None:
@@ -123,6 +178,7 @@ def test_the_readme_is_written_from_the_files_and_names_each_ones_source(tmp_pat
     assert "not a result" in text
     n = json.loads((out / "preregistration.json").read_text())["tolerances"]["n"]
     assert f"| `n` | {n} |" in text
+    assert "untestable (degenerate tolerance)" in text
 
 
 def test_sampled_decoding_is_refused_by_name_until_it_is_built(tmp_path, capsys) -> None:

@@ -274,3 +274,39 @@ refusing by line number beats a bare decode error. Both can land with the edits 
 
 D10's two-file maker stays the next task, as the amendment says. After the two edits: pathspec
 commit on `cuda-ws-d`, and the merge is rebuilt and tested again before it is pushed.
+
+**Both edits landed, D-CRO, 2026-09-10, with one change to a decision the review accepted.**
+
+Edit 1: `false_listing` and `with_false_observation` take the pair's `target`; the note parsing is
+deleted; the test asserts `pair.target in false_listing(..., arm="A")` and that a falsified
+absent-arm row's state observation reads as present to the diagnostics, with D4 scorable there.
+
+Edit 2: the main run carries the reliability arm at the manifest's rate in both arms, as rows
+`RE`/`RA` with `falsified` on every base row; `estimands()` reports five estimands, each in one of
+three states — `measured: false` with no scorable row, `untestable: true` at a tolerance of exactly
+zero with the reason *degenerate: the pilot's update never varied*, or a pass/fail — and only the
+third can pass. `dynamic` is D7–D9 after the contradiction, contrasted across `RE` and `RA`.
+
+**The change: ε_pred's belief update is fitted per arm, not pooled.** The review accepted decision
+3 as "a Bernoulli on D4 across halves of the reliability arm". Regenerating the record showed why
+that is the wrong statistic: pooled across `RE` and `RA`, D4 among falsified episodes read 0.43
+under a scripted expert that never varies, because the two arms' truthful answers differ — told
+absent when present the expert still reads and reports the file, told present when absent it
+finishes "no summary" — and the pooled Bernoulli was measuring the arm mix and calling it the
+update. Its split-half gap then varied with the draw, so ε_pred was the sampling noise of a
+composition and the predictive row read as a measured pass at 0.019 against 0.059 on a policy
+that had not updated anything. Per arm, the expert is constant, the gap is exactly zero, the
+tolerance is degenerate and the row says **untestable**, as the review required; with a model it
+varies for the right reason. `split_half_log_loss_gap` takes the larger arm's gap, and the
+predictive distance is the larger arm's log-loss gap between the pilot's fitted Bernoulli and the
+main run's falsified episodes. If the Chief prefers the pooled form, the pooled record above is
+the argument against it.
+
+The non-blocking two also landed: a non-fixture preflight refuses a `describe()` reading of
+`UNPINNED` (the driver's third obligation, `device.pin` before preflight), and `read_rows` refuses
+a partial trailing line by number.
+
+Regenerated fixture record: predictive **untestable (degenerate tolerance)**; dynamic **not measured
+(no scorable row)**, because only the exists arm meets a contradiction under a scripted expert;
+substitution, specificity and reuse pass by construction against the stub, as before. 46 state
+tests; the full suite exits 0 on the branch.

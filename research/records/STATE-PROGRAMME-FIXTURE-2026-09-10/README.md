@@ -3,7 +3,7 @@
 Decoding mode: `greedy` — estimand: context-averaged outcome frequency over the task distribution (one outcome per context) *(manifest.json)*
 Fixture run: `True` *(manifest.json)*
 
-**Rate**: 46517262.30266 episodes/hour, measured over 40 episodes in mode `greedy` *(rate.json)*
+**Rate**: 33884011.08783 episodes/hour, measured over 40 episodes in mode `greedy` *(rate.json)*
 **Pilot rows**: 40 *(pilot/rows.jsonl)*
 
 ## Pre-registration *(preregistration.json)*
@@ -23,13 +23,14 @@ Dropped: D2 — the state does not reach it: bound on |contrast| is 0.0000 ≤ 0
 
 Budget: within budget — within budget at the derived tolerance
 
-**Main rows**: 25 *(main/rows.jsonl)*
+**Main rows**: 50 *(main/rows.jsonl)*
 
 ## Estimands *(estimands.json)*
 
 | estimand | distance | tolerance | passes |
 |---|---:|---:|---|
-| predictive | 0.00000 | 0.00000 | True |
+| dynamic | — | 0.00000 | not measured (no scorable row) |
+| predictive | 0.00000 | 0.00000 | untestable (degenerate tolerance) |
 | reuse | 0.00000 | 0.25000 | True |
 | specificity | 0.00000 | 0.16667 | True |
 | substitution | 0.00000 | 0.25000 | True |

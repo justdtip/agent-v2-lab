@@ -138,6 +138,13 @@ def preflight(
         raise ValueError(f"decoding must be one of {sorted(ESTIMANDS)}; got {decoding!r}")
     if decoding == "greedy" and temperature not in (None, 0.0):
         raise ValueError("greedy decoding carries no temperature; a temperature is the sampled mode's")
+    reading = device.describe()
+    if not fixture and reading.get("determinism") != "pinned":
+        raise ValueError(
+            "preflight stops: device.describe() reads UNPINNED. The device driver calls "
+            "device.pin() before preflight; a run whose determinism is not set is not resumable "
+            "on its own key."
+        )
     return {
         "schema_version": 1, "fixture": fixture, "registry_name": registry_name,
         "checkpoint_digest": checkpoint_digest, "lens_identity": lens_identity,
@@ -145,7 +152,7 @@ def preflight(
         "decoding": {"mode": decoding, "temperature": temperature, "seed": seed,
                      "estimand": ESTIMANDS[decoding]},
         "faults": {"rate": fault_rate, "seed": fault_seed},
-        "device": device.describe(), "tree_content_digest": tree_content_digest(root),
+        "device": reading, "tree_content_digest": tree_content_digest(root),
     }
 
 
@@ -188,24 +195,50 @@ def pilot(
 # ------------------------------------------------------------------------------- stage 2
 
 
+def _bernoulli_log_loss(p: float, scores: list[float]) -> float:
+    p = min(max(p, 1e-6), 1 - 1e-6)
+    return -sum(s * math.log(p) + (1 - s) * math.log(1 - p) for s in scores) / len(scores)
+
+
+def falsified_d4(rows: list[dict[str, Any]]) -> dict[str, list[float]]:
+    """D4 in the falsified episodes of the reliability arm, **per arm**.
+
+    Per arm and never pooled: the belief update under a false result is a different quantity in
+    each arm — told absent when present, does the model still report the file; told present when
+    absent, does it now report it — and the two arms' truthful answers differ. A pooled Bernoulli
+    measured the arm mix and called it the update: on a scripted expert it read 0.43 and varied
+    across halves with the draw, so ε_pred was the sampling noise of a composition, not of a
+    policy. Per arm the expert is constant, the gap is exactly zero, and the estimand is untestable
+    for the right reason; with a model it varies for the right reason.
+    """
+    out: dict[str, list[float]] = {"RE": [], "RA": []}
+    for r in rows:
+        if r["arm"] in out and r.get("falsified") and r["scores"]["D4"] is not None:
+            out[r["arm"]].append(r["scores"]["D4"])
+    return out
+
+
 def split_half_log_loss_gap(rows: list[dict[str, Any]]) -> float:
-    """The noise floor of the pilot's own fitted belief update: fit a Bernoulli on D4 in each half
-    of the reliability arm, score log loss on the other half, and take the gap between halves."""
-    scored = [r["scores"]["D4"] for r in rows if r["arm"].startswith("R") and r["scores"]["D4"] is not None]
-    if len(scored) < 4:
-        return 0.0
-    half = len(scored) // 2
-    a, b = scored[:half], scored[half:]
+    """The noise floor of the pilot's own fitted belief update: per arm, fit a Bernoulli on D4 in
+    each half of the falsified episodes, score log loss on the other half, take the gap; report
+    the larger arm's gap. An arm with fewer than four falsified episodes contributes zero, which
+    the record shows as a degenerate tolerance rather than hiding."""
+    gaps = []
+    for scored in falsified_d4(rows).values():
+        if len(scored) < 4:
+            continue
+        half = len(scored) // 2
+        a, b = scored[:half], scored[half:]
+        gaps.append(abs(_bernoulli_log_loss(sum(a) / len(a), b) - _bernoulli_log_loss(sum(b) / len(b), a)))
+    return max(gaps, default=0.0)
 
-    def loss(fit: list[float], score: list[float]) -> float:
-        p = min(max(sum(fit) / len(fit), 1e-6), 1 - 1e-6)
-        return -sum(s * math.log(p) + (1 - s) * math.log(1 - p) for s in score) / len(score)
 
-    return abs(loss(a, b) - loss(b, a))
+def pilot_bernoulli(rows: list[dict[str, Any]]) -> dict[str, float | None]:
+    return {arm: (sum(s) / len(s) if s else None) for arm, s in falsified_d4(rows).items()}
 
 
 def derive_tolerances(rows: list[dict[str, Any]], *, seed: int) -> tol.Table:
-    by_arm = {"E": {}, "A": {}}
+    by_arm: dict[str, dict[str, list[float | None]]] = {"E": {}, "A": {}}
     for row in rows:
         if row["arm"] in by_arm:
             for name, value in row["scores"].items():
@@ -251,17 +284,31 @@ def main_run(
             f"differ: {differing}. A modified tree resumes only its own records."
         )
     done = {(r["pair_id"], r["arm"], r["condition"]) for r in existing}
+    pairs = list(pairs)
     for pair in pairs:
         for arm, task in pair.arms():
             if (pair.pair_id, arm, "base") not in done:
                 row = run_episode(task, policy)
-                row.update(pair_id=pair.pair_id, arm=arm, condition="base",
+                row.update(pair_id=pair.pair_id, arm=arm, condition="base", falsified=False,
                            scores=_score_row(row, pair), resume_key=key, resume_parts=parts)
                 append_row(rows_path, row)
+    # The reliability arm, at the manifest's rate in both arms. The predictive and dynamic
+    # estimands exist only after a contradiction; without this no main row carried one, and they
+    # were reported from no rows as a pass that could not fail.
+    faults = manifest["faults"]
+    by_pair = {p.pair_id: p for p in pairs}
+    for pair_id, arm, task, falsified in apply_reliability(
+        pairs, rate=faults["rate"], seed=faults["seed"]
+    ):
+        if (pair_id, f"R{arm}", "base") not in done:
+            row = run_episode(task, policy)
+            row.update(pair_id=pair_id, arm=f"R{arm}", condition="base", falsified=falsified,
+                       scores=_score_row(row, by_pair[pair_id]), resume_key=key, resume_parts=parts)
+            append_row(rows_path, row)
         for condition in ("substitution", "control", "reuse"):
             if (pair.pair_id, "A", condition) not in done:
                 row = wrapper(condition, pair.absent, "A")
-                row.update(pair_id=pair.pair_id, arm="A", condition=condition,
+                row.update(pair_id=pair.pair_id, arm="A", condition=condition, falsified=False,
                            scores=_score_row(row, pair), resume_key=key, resume_parts=parts)
                 append_row(rows_path, row)
     return rows_path
@@ -272,40 +319,87 @@ def _mean(values: list[float | None]) -> float | None:
     return sum(seen) / len(seen) if seen else None
 
 
+def _estimand(distance: float | None, tolerance: float, *, rows: int) -> dict[str, Any]:
+    """One estimand as a record. Three states, and only one of them can be a pass.
+
+    ``measured: false`` when no scorable row exists: a distance from no rows is not a distance.
+    ``untestable: true`` when the tolerance is exactly zero: the pilot's update never varied, so
+    the tolerance is degenerate and nothing can be within it or outside it. Neither is a pass.
+    """
+    if distance is None or rows == 0:
+        return {"distance": None, "tolerance": tolerance, "rows": rows, "measured": False,
+                "untestable": False, "passes": None}
+    if tolerance == 0.0:
+        return {"distance": distance, "tolerance": 0.0, "rows": rows, "measured": True,
+                "untestable": True, "passes": None,
+                "reason": "degenerate: the pilot's update never varied, so epsilon is zero"}
+    return {"distance": distance, "tolerance": tolerance, "rows": rows, "measured": True,
+            "untestable": False, "passes": distance <= tolerance}
+
+
 def estimands(directory: Path) -> Path:
     """Distances between arm means over the retained diagnostics, at the level the seal fixes."""
     sealed = require_seal(directory)
     t = sealed["tolerances"]
     rows = read_rows(directory / "main" / "rows.jsonl")
+    pilot_rows = read_rows(directory / "pilot" / "rows.jsonl")
     retained = t["retained"]
 
-    def means(arm: str, condition: str) -> dict[str, float | None]:
-        sel = [r for r in rows if r["arm"] == arm and r["condition"] == condition]
-        return {d: _mean([r["scores"][d] for r in sel]) for d in retained}
+    def select(arm: str, condition: str) -> list[dict[str, Any]]:
+        return [r for r in rows if r["arm"] == arm and r["condition"] == condition]
 
-    reference, absent = means("E", "base"), means("A", "base")
-    sub, ctrl, reuse = means("A", "substitution"), means("A", "control"), means("A", "reuse")
+    def means(sel: list[dict[str, Any]], names: list[str]) -> dict[str, float | None]:
+        return {d: _mean([r["scores"].get(d) for r in sel]) for d in names}
 
-    def distance(x: dict, y: dict) -> float:
-        pairs_ = [(x[d], y[d]) for d in retained if x[d] is not None and y[d] is not None]
-        return max((abs(a - b) for a, b in pairs_), default=float("nan"))
+    def distance(x: dict, y: dict) -> tuple[float | None, int]:
+        pairs_ = [(x[d], y[d]) for d in x if x[d] is not None and y.get(d) is not None]
+        return (max(abs(a - b) for a, b in pairs_) if pairs_ else None, len(pairs_))
 
-    dyn = [r for r in rows if r["arm"] == "A" and r["condition"] == "base"]
-    d_pred = _mean([r["scores"].get("D8") for r in dyn])
+    reference = means(select("E", "base"), retained)
+    absent = means(select("A", "base"), retained)
+    sub, ctrl, reuse = (means(select("A", c), retained) for c in ("substitution", "control", "reuse"))
+
+    # Predictive: the belief update in falsified main episodes, scored against the pilot's fitted
+    # Bernoulli, as a log-loss gap, the same quantity epsilon_pred was derived from.
+    main_falsified = falsified_d4(rows)
+    p_pilot = pilot_bernoulli(pilot_rows)
+    per_arm = []
+    for arm, scored in main_falsified.items():
+        if scored and p_pilot.get(arm) is not None:
+            p_main = sum(scored) / len(scored)
+            per_arm.append(abs(_bernoulli_log_loss(p_pilot[arm], scored)
+                               - _bernoulli_log_loss(p_main, scored)))
+    predictive_distance = max(per_arm) if per_arm else None
+    predictive_rows = sum(len(s) for s in main_falsified.values()) if per_arm else 0
+    # Dynamic: D7-D9 after the contradiction, contrasted across the reliability arm's two halves.
+    dynamic_names = ["D7", "D8", "D9"]
+    dyn_e = means(select("RE", "base"), dynamic_names)
+    dyn_a = means(select("RA", "base"), dynamic_names)
+    dyn_distance, dyn_rows = distance(dyn_e, dyn_a)
+
+    d_sub, n_sub = distance(sub, reference)
+    d_ctrl, n_ctrl = distance(ctrl, absent)
+    d_reuse, n_reuse = distance(reuse, reference)
     out = {
-        "substitution": {"distance": distance(sub, reference), "tolerance": t["epsilon_sub"]},
-        "specificity": {"distance": distance(ctrl, absent), "tolerance": t["epsilon_perp"]},
-        "reuse": {"distance": distance(reuse, reference), "tolerance": t["epsilon_reuse"]},
-        "predictive": {"distance": 0.0 if d_pred is None else abs(d_pred - (reference.get("D8") or 0.0)),
-                        "tolerance": t["epsilon_pred"]},
+        "substitution": _estimand(d_sub, t["epsilon_sub"], rows=n_sub),
+        "specificity": _estimand(d_ctrl, t["epsilon_perp"], rows=n_ctrl),
+        "reuse": _estimand(d_reuse, t["epsilon_reuse"], rows=n_reuse),
+        "predictive": _estimand(predictive_distance, t["epsilon_pred"], rows=predictive_rows),
+        "dynamic": _estimand(dyn_distance, t["epsilon_dyn"], rows=dyn_rows),
     }
-    for e in out.values():
-        e["passes"] = (e["distance"] == e["distance"]) and e["distance"] <= e["tolerance"]
     payload = {
-        "schema_version": 1, "level": "J-space vectors (diagnostic means); never a coefficient table",
-        "retained": retained, "arm_means": {"E_base": reference, "A_base": absent,
-                                             "A_substitution": sub, "A_control": ctrl, "A_reuse": reuse},
-        "estimands": out, "rows": len(rows),
+        "schema_version": 2,
+        "level": "J-space vectors (diagnostic means); never a coefficient table",
+        "retained": retained,
+        "arm_means": {"E_base": reference, "A_base": absent, "A_substitution": sub,
+                      "A_control": ctrl, "A_reuse": reuse, "RE_dynamic": dyn_e, "RA_dynamic": dyn_a},
+        "pilot_bernoulli_d4_falsified": p_pilot,
+        "estimands": out,
+        "rows": len(rows),
+        "rule": (
+            "an estimand with no scorable row is measured: false; a zero tolerance is untestable; "
+            "neither is a pass"
+        ),
     }
     return write_json(directory / "estimands.json", payload)
 
@@ -364,5 +458,6 @@ def scripted_wrapper(policy: Policy, pairs: Iterable[ExistencePair]) -> Wrapper:
 
 
 __all__ = ["ESTIMANDS", "Policy", "ScriptedPolicy", "Wrapper", "WrapperFactory", "derive_tolerances", "estimands",
-           "main_run", "pilot", "preflight", "resume_key", "run", "run_episode",
+           "falsified_d4", "main_run", "pilot", "pilot_bernoulli", "preflight", "resume_key", "run",
+           "run_episode",
            "scripted_wrapper", "split_half_log_loss_gap", "tree_content_digest"]
