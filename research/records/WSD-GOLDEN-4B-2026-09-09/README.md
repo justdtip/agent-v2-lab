@@ -152,3 +152,78 @@ layer that forced it, are in `manifest.json` and were written before the run.
 Timings are wall clock on a shared card and carry `basis: shared-card` where the runbook requires it;
 the per-process allocated peaks — 43.9 GiB exact, 10.25 GiB finite difference — are per-process and
 stay valid.
+
+---
+
+## 8. The Chief's three standing questions, answered from the record and the artefact
+
+Asked after row one was read. **No card time**: (a) and (b) are repository and manifest reads, (c) is
+a CPU `numpy` read of an artefact already on disk. The GPU was at 1 MiB before and after.
+
+### (a) The laptop's finite-difference estimator ran in **float32**, and that changes what row one says about the MLX lenses
+
+`lens_fitting/jacobian.py` promotes before it perturbs: `full = full.astype(mx.float32)`,
+`h.astype(mx.float32)` in `PositionState`, directions and responses `np.float32`, and its own
+recorded parameter string says so in as many words —
+`epsilon="float32: 0.01 * norm(full sequence primal) / norm(one tangent); zero primal: 0.01"`.
+
+So every finite-difference lens this programme has ever fitted was fitted **on the promoted path**,
+on a 4-bit checkpoint, in float32. Row one ran **native bf16**. Under the arithmetic-path definition
+this record itself introduced, those are not the same estimator, and row one is therefore not
+evidence about the MLX-fitted lenses at all: it is the first measurement of a *different* one. The
+comparison that would speak to those lenses is a float32 finite difference against a float32 exact,
+which is the matched-precision pair the Chief has since specified.
+
+### (b) The two valid positions of 128 are the **declared subset**, not the mask
+
+They are the order's own declaration — *"two positions per row, index 8 and the row's last
+position"* — implemented by a `two_positions` selector passed identically to both estimators, so
+upstream's `valid_position_mask` never ran and `skip_first` never applied. `n_valid: 2` in the
+manifest is the selector's output and nothing about `max_seq_len=128` or a long episode.
+
+The thin basis is therefore a property of the declared design rather than an accident, and it is a
+real constraint on §6.2: a per-row Jacobian averaged over two source positions estimates the
+position-averaged object from two samples of it. Widening it is a change to the declaration and to
+the cost — the estimator's forwards scale linearly in the position count, so ten positions is five
+times the run.
+
+### (c) Nothing rounded to zero: **0 exactly-zero columns of 84,480**
+
+A direction whose response was exactly zero at both selected positions leaves its column exactly
+zero, because the accumulator is only ever incremented by that direction's own delta. Across all 33
+layers and all 2,560 directions: **none**. The reading that the response fell below bf16 resolution
+and rounded away is refused by the artefact.
+
+What the artefact does show is that the map is systematically **too small**, monotonically less so
+with depth:
+
+| repo layer | median column norm, FD | median column norm, exact | ‖FD‖ / ‖exact‖ |
+|---:|---:|---:|---:|
+| 1 | 56.1 | 272.9 | **0.185** |
+| 5 | 20.8 | 139.4 | 0.131 |
+| 13 | 3.34 | 10.69 | 0.320 |
+| 21 | 1.94 | 2.30 | 0.539 |
+| 33 | 1.07 | 1.09 | **0.756** |
+
+Ratio across all layers: 0.128 to 0.756. A map at a fifth of the reference's norm with a cosine of
+0.015 is not a response lost to rounding — a lost response gives a zero column, and there are none.
+It is the signature of a **compressed** response, which is what a saturating nonlinearity returns to
+a displacement far outside its linear neighbourhood.
+
+**That supports the Director's reading over mine and over the Chief's.** The step is 1% of the
+Frobenius norm of the *whole sequence's* residual array, applied to a *single coordinate* of a
+*single position*. At layer 0 that is ε = 101.6 against a per-position residual norm of about 898
+and a typical coordinate magnitude of about 17.8 — so the coordinate moves by **5.7 times its own
+size** while the vector's norm moves 11%. The global figure sounds small and the local displacement
+is enormous, and the compression is exactly what one would expect of it.
+
+It also explains the depth gradient without appealing to precision: ε grows with the residual norm,
+but so does the local structure, and the number of nonlinear blocks the displacement must traverse
+falls from 33 to 1. Fewer blocks, less compounding.
+
+**What this implies for the control, stated as a design note and not as a decision.** A step defined
+relative to the coordinate being perturbed — or to the position's own residual norm — would test the
+linear regime that the estimator assumes. Separating that from precision needs the matched-precision
+pair the Chief has specified, and the two can be crossed in one sweep: step rule × precision, at one
+shallow layer and one deep. That is the Chief's and the consulting mathematician's to settle; the
+measurement above is offered as an input to it, not as a conclusion.
