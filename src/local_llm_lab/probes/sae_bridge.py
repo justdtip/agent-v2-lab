@@ -243,6 +243,93 @@ def decode(dictionary: JumpReLUDictionary, z: np.ndarray) -> np.ndarray:
     return np.asarray(z, dtype=np.float32) @ dictionary.w_dec + dictionary.b_dec
 
 
+# ------------------------------------------------------------------------------------ budget
+
+
+def reconstruction_budget(
+    dictionary: JumpReLUDictionary, residuals: np.ndarray, *, dominance: float
+) -> dict[str, Any]:
+    """Per-site residual share ``|e| / |h|`` and active-feature count, against a declared budget.
+
+    ``residuals`` is ``(sites, hidden)``: one row per position the bridge would decompose. For
+    each, ``e = h - decode(encode(h))`` is what the dictionary did not explain, and its share of
+    ``|h|`` is the quantity ``decompose_position`` refuses to rank on when it exceeds
+    ``dominance``. This reports the distribution of that share over the set, and how many of the
+    sites the bridge would decline, so a set of real activations can be judged before any
+    per-site table is drawn. ``dominance`` is an input and is echoed, never chosen here.
+    """
+    if not 0.0 < float(dominance) <= 1.0:
+        raise ValueError(f"dominance must be in (0, 1], not {dominance!r}")
+    H = np.asarray(residuals, dtype=np.float32)
+    if H.ndim != 2 or H.shape[1] != dictionary.hidden_size:
+        raise ValueError(
+            f"residuals must be (sites, {dictionary.hidden_size}), not {tuple(H.shape)}"
+        )
+    z = encode(dictionary, H)
+    e = H - decode(dictionary, z)
+    h_norm = np.linalg.norm(H, axis=1)
+    if not np.all(h_norm > 0):
+        raise ValueError("a zero residual has no share to report")
+    share = np.linalg.norm(e, axis=1) / h_norm
+    active = (z > 0).sum(axis=1)
+    over = share > float(dominance)
+    q = [0.0, 0.25, 0.5, 0.75, 1.0]
+    return {
+        "dominance": float(dominance),
+        "sites": int(H.shape[0]),
+        "residual_share": share,
+        "active_features": active,
+        "rankable": ~over,
+        "share_over_dominance": float(over.mean()),
+        "residual_share_quantiles": {str(x): float(v) for x, v in zip(q, np.quantile(share, q), strict=True)},
+        "active_features_quantiles": {
+            str(x): int(v) for x, v in zip(q, np.quantile(active, q), strict=True)
+        },
+    }
+
+
+# ------------------------------------------------------------------------------ intervention
+
+
+def intervention_parts(dictionary: JumpReLUDictionary, *, dtype: Any, device: Any = "cpu"):
+    """The three things ``sae_intervention.SAEIntervention`` takes, in its own column convention.
+
+    The wrapper's contract, from its docstring: ``decoder`` is ``[residual, feature]``, which for
+    a stored ``w_dec`` of ``(width, hidden)`` is the transpose; ``bias`` is supplied separately and
+    never folded in; and the encoder callable returns a vector in the residual's dtype and device.
+    Dictionary precision is the caller's declared choice, made here: the encoder computes in
+    ``dtype`` and casts its result back to the residual's, so a bfloat16 residual gets a bfloat16
+    code and the record can say what precision the code was formed in. Torch is imported here and
+    not at module level; everything else in this module is numpy.
+
+    Returns ``(encoder, decoder, bias, declared)`` where ``declared`` is the provenance to record.
+    """
+    import torch
+
+    def tensor(a: np.ndarray):
+        # The raw reader hands back read-only views of the file's bytes; torch wants its own copy.
+        return torch.as_tensor(np.array(a, dtype=np.float32, copy=True), dtype=dtype, device=device)
+
+    w_enc, b_enc, threshold = tensor(dictionary.w_enc), tensor(dictionary.b_enc), tensor(dictionary.threshold)
+    decoder, bias = tensor(dictionary.w_dec.T), tensor(dictionary.b_dec)
+
+    def encoder(h):
+        pre = h.to(dtype=dtype) @ w_enc + b_enc
+        z = torch.relu(pre) * (pre > threshold).to(dtype)
+        return z.to(dtype=h.dtype, device=h.device)
+
+    declared = {
+        "decoder_layout": "[residual, feature]: the stored w_dec (width, hidden) transposed",
+        "bias": "b_dec, supplied separately, never folded into the decoder",
+        "encoder": "jump_relu, relu(pre) * (pre > threshold)",
+        "dictionary_precision": str(dtype).replace("torch.", ""),
+        "device": str(device),
+        "code_dtype": "the residual's, cast on return",
+        "params_sha256": dictionary.sha256,
+    }
+    return encoder, decoder, bias, declared
+
+
 # --------------------------------------------------------------------------------- alignment
 
 
@@ -262,8 +349,55 @@ def layer_for_hook(hook_point: str) -> int:
     return int(found.group(1)) + 1
 
 
-def hook_alignment(dictionary: JumpReLUDictionary, lens: Any) -> int:
-    """The lens layer this dictionary reads, refusing a lens with no map there."""
+def dictionary_base(dictionary: JumpReLUDictionary) -> str:
+    """The base checkpoint the dictionary's config says it was trained on, resolved as a lens is.
+
+    Gemma Scope configs carry ``model_name``. It goes through the same registry resolution the
+    lens identity went through, so a registry name, a local conversion path and an upstream id
+    all compare as the base they descend from. A config that names no model is refused: nothing
+    else in the dictionary says which model it fits, and width and depth agree between a base
+    checkpoint and that checkpoint after further training.
+    """
+    from local_llm_lab.models import base_of_artifact
+
+    named = dictionary.config.get("model_name")
+    if not isinstance(named, str) or not named:
+        raise ValueError(
+            f"dictionary {dictionary.source or dictionary.sha256[:12]!r} names no model in its "
+            "config (`model_name`); it cannot be aligned to a lens"
+        )
+    return base_of_artifact(named)
+
+
+def hook_alignment(dictionary: JumpReLUDictionary, lens: Any, *, base: str | None = None) -> int:
+    """The lens layer this dictionary reads, refusing a lens that is not of the same model.
+
+    Three things are compared and any disagreement refuses: the dictionary's ``model_name``,
+    the lens identity's base, and, when the bridge runs from a registry entry, that entry's
+    ``base``. Layer and hidden size are checked too, but they are the checks a dictionary
+    trained on a different checkpoint of the same architecture passes.
+    """
+    dict_base = dictionary_base(dictionary)
+    identity = getattr(lens, "identity", None)
+    if identity is None or not getattr(identity, "base", None):
+        raise ValueError(
+            f"lens carries no identity, so it cannot be confirmed to map {dict_base!r}, the "
+            "model the dictionary names"
+        )
+    if identity.base != dict_base:
+        raise ValueError(
+            f"dictionary was trained on {dict_base!r} and the lens maps {identity.base!r}; "
+            "same width and depth do not make them the same model"
+        )
+    if base is not None:
+        from local_llm_lab.models import base_of_artifact
+
+        entry_base = base_of_artifact(base)
+        if entry_base != dict_base:
+            raise ValueError(
+                f"the registry entry descends from {entry_base!r}; dictionary and lens are of "
+                f"{dict_base!r}"
+            )
     layer = layer_for_hook(dictionary.hook_point)
     if layer not in lens.maps:
         raise ValueError(

@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
 from local_llm_lab.probes import sae_bridge as B
 
 HIDDEN, WIDTH, VOCAB, K = 16, 24, 40, 5
@@ -26,6 +27,9 @@ A2_WIDTH = 8  # fewer features than dimensions, so an orthonormal decoder exists
 
 
 # ---------------------------------------------------------------------------------- fixtures
+
+
+FIXTURE_MODEL = "fixture/base-it"
 
 
 def _write_dictionary(
@@ -38,6 +42,7 @@ def _write_dictionary(
     orthonormal: bool = False,
     biases: bool = True,
     threshold: tuple[float, float] = (0.5, 2.0),
+    model_name: str = FIXTURE_MODEL,
 ) -> tuple[Path, Path]:
     from safetensors.numpy import save_file
 
@@ -62,6 +67,7 @@ def _write_dictionary(
     save_file(tensors, str(params))
     config.write_text(json.dumps({
         "hf_hook_point_in": f"model.layers.{block}.output",
+        "model_name": model_name,
         "hf_hook_point_out": f"model.layers.{block}.output",
         "width": width, "architecture": "jump_relu", "l0": 4, "type": "sae",
     }))
@@ -131,7 +137,7 @@ def _write_checkpoint(
 class _Lens:
     """The attributes of ``LensMaps`` the bridge touches, with random distinct orthogonal maps."""
 
-    def __init__(self, layers: int, seed: int = 2):
+    def __init__(self, layers: int, seed: int = 2, base: str | None = FIXTURE_MODEL):
         rng = np.random.default_rng(seed)
         self.maps = {
             L: np.linalg.qr(rng.normal(size=(HIDDEN, HIDDEN)))[0].astype(np.float32)
@@ -140,7 +146,7 @@ class _Lens:
         self.hidden_size = HIDDEN
         self.num_layers = layers
         self.sha256 = "fixture"
-        self.identity = None
+        self.identity = None if base is None else LensIdentity(base=base, num_layers=layers)
         self.storage_dtype = ("float32",)
 
 
@@ -471,3 +477,163 @@ def test_the_real_dictionary_hook_is_a_layer_the_real_lens_carries() -> None:
     # The archive keys J{L-1}: the map the loader hands back at `layer` is the archive's J{block}.
     with np.load(lens_npz, allow_pickle=False) as a:
         np.testing.assert_array_equal(lens.maps[layer], a[f"J{block}"].astype(np.float32))
+
+
+# ------------------------------------------------------------------------------ intervention
+
+
+def test_intervention_parts_meet_the_wrapper_contract(parts):
+    torch = pytest.importorskip("torch")
+    from local_llm_lab.sae_intervention import SAEIntervention
+
+    d, _, _ = parts
+    encoder, decoder, bias, declared = B.intervention_parts(d, dtype=torch.float32)
+    # Column convention: [residual, feature], the stored matrix transposed; bias separate.
+    assert tuple(decoder.shape) == (d.hidden_size, d.width)
+    assert torch.equal(decoder, torch.as_tensor(np.ascontiguousarray(d.w_dec.T)))
+    assert torch.equal(bias, torch.as_tensor(d.b_dec.copy()))
+    assert declared["dictionary_precision"] == "float32"
+    assert declared["params_sha256"] == d.sha256
+
+    rng = np.random.default_rng(3)
+    h_np = (rng.standard_normal(d.hidden_size) * 4).astype(np.float32)
+    h = torch.as_tensor(h_np)
+    # The encoder callable agrees with the numpy reference encode, and does not touch its input.
+    z = encoder(h)
+    assert z.dtype == h.dtype and z.device == h.device
+    np.testing.assert_allclose(z.numpy(), B.encode(d, h_np), rtol=1e-5, atol=1e-5)
+    assert torch.equal(h, torch.as_tensor(h_np))
+
+    # A bfloat16 residual gets a bfloat16 code, formed in the declared float32.
+    z16 = encoder(h.to(torch.bfloat16))
+    assert z16.dtype == torch.bfloat16
+
+    # The real wrapper accepts the parts and the edit lands on the chosen feature.
+    feature = int(np.argmax(B.encode(d, h_np)))
+    target = torch.tensor([float(z[feature]) + 2.0])
+    edit = SAEIntervention(encoder, decoder, bias, features=(feature,), target_values=target)
+    replaced = edit(h)
+    expected = h + decoder[:, feature] * 2.0
+    torch.testing.assert_close(replaced, expected)
+    record = edit.diagnostic_record()
+    assert record["features"] == [feature] and record["basis"] == "measured-here"
+
+
+def test_intervention_parts_refuse_nothing_but_record_precision(parts):
+    torch = pytest.importorskip("torch")
+    d, _, _ = parts
+    _, decoder, _, declared = B.intervention_parts(d, dtype=torch.bfloat16)
+    assert decoder.dtype == torch.bfloat16
+    assert declared["dictionary_precision"] == "bfloat16"
+
+
+# ------------------------------------------------------------------------- model identity
+
+
+def test_a_dictionary_of_another_checkpoint_of_the_same_width_is_refused(tmp_path: Path) -> None:
+    """The pt-against-it case: same family, depth and width, a different model."""
+    params, config = _write_dictionary(tmp_path / "pt", model_name="fixture/base-pt")
+    d = B.load_dictionary(params, config)
+    expected = "trained on 'fixture/base-pt' and the lens maps 'fixture/base-it'"
+    with pytest.raises(ValueError, match=expected):
+        B.hook_alignment(d, _Lens(layers=12))
+
+
+def test_a_dictionary_that_names_no_model_is_refused(tmp_path: Path) -> None:
+    params, config = _write_dictionary(tmp_path / "anon")
+    raw = json.loads(config.read_text())
+    del raw["model_name"]
+    config.write_text(json.dumps(raw))
+    d = B.load_dictionary(params, config)
+    with pytest.raises(ValueError, match="names no model"):
+        B.hook_alignment(d, _Lens(layers=12))
+
+
+def test_a_lens_without_identity_cannot_be_aligned(parts) -> None:
+    d, _, _ = parts
+    with pytest.raises(ValueError, match="carries no identity"):
+        B.hook_alignment(d, _Lens(layers=12, base=None))
+
+
+def test_the_registry_entry_is_the_third_party_to_the_identity_check(parts) -> None:
+    d, _, lens = parts
+    assert B.hook_alignment(d, lens, base=FIXTURE_MODEL) == B.layer_for_hook(d.hook_point)
+    with pytest.raises(ValueError, match="registry entry descends from 'fixture/base-pt'"):
+        B.hook_alignment(d, lens, base="fixture/base-pt")
+
+
+def test_the_real_dictionary_names_the_registry_base_the_lens_resolves_to() -> None:
+    """A registry name, its hf id and its base all resolve to one string, the one a lens carries."""
+    from local_llm_lab.models import base_of_artifact, load_model_spec, registered_models
+
+    for name in registered_models():
+        spec = load_model_spec(name)
+        assert base_of_artifact(name) == base_of_artifact(spec.hf_id) == spec.base
+
+
+# --------------------------------------------------------- intervention: decode and identity
+
+
+def test_intervention_decoder_agrees_with_numpy_decode_and_preserves_the_residual(a2_parts):
+    torch = pytest.importorskip("torch")
+    from local_llm_lab.sae_intervention import SAEIntervention
+
+    d, _, _ = a2_parts
+    encoder, decoder, bias, _ = B.intervention_parts(d, dtype=torch.float32)
+    rng = np.random.default_rng(11)
+    z_np = np.abs(rng.standard_normal(d.width)).astype(np.float32)
+    # decode agreement to float32: the wrapper's `decoder @ z + bias` is the numpy decode.
+    np.testing.assert_allclose(
+        (decoder @ torch.as_tensor(z_np) + bias).numpy(), B.decode(d, z_np), rtol=1e-5, atol=1e-5
+    )
+    # residual preservation through the adapter: the edit changes the code where asked and
+    # leaves the dictionary's reconstruction error exactly where it was.
+    h_np = (B.decode(d, z_np) + 0.05 * rng.standard_normal(d.hidden_size)).astype(np.float32)
+    h = torch.as_tensor(h_np)
+    z = encoder(h)
+    feature = int(torch.argmax(z))
+    target = torch.tensor([float(z[feature]) + 1.5])
+    edit = SAEIntervention(encoder, decoder, bias, features=(feature,), target_values=target)
+    replaced = edit(h)
+    z_new = z.clone()
+    z_new[feature] = target[0]
+    epsilon_before = h - bias - decoder @ z
+    epsilon_after = replaced - bias - decoder @ z_new
+    torch.testing.assert_close(epsilon_after, epsilon_before, rtol=1e-5, atol=1e-5)
+    assert not torch.equal(replaced, h)
+
+
+# ------------------------------------------------------------------- reconstruction budget
+
+
+def test_reconstruction_budget_reports_share_active_and_the_declined_fraction(a2_parts):
+    d, _, _ = a2_parts
+    rng = np.random.default_rng(5)
+    # Sites the dictionary explains exactly: codes above threshold through the tied orthonormal
+    # decoder. Sites it cannot explain at all: vectors in the decoder's orthogonal complement.
+    z = np.abs(rng.standard_normal((6, d.width))).astype(np.float32) + 1.0
+    explained = B.decode(d, z)
+    Q, _ = np.linalg.qr(rng.standard_normal((d.hidden_size, d.hidden_size)))
+    complement = Q[:, d.width:].T[:4].astype(np.float32)
+    complement -= (complement @ d.w_dec.T) @ d.w_dec  # exact projection out of the span
+    sites = np.vstack([explained, complement])
+    out = B.reconstruction_budget(d, sites, dominance=0.5)
+    assert out["dominance"] == 0.5 and out["sites"] == 10
+    np.testing.assert_allclose(out["residual_share"][:6], 0.0, atol=1e-5)
+    np.testing.assert_allclose(out["residual_share"][6:], 1.0, atol=1e-5)
+    assert list(out["active_features"][:6]) == [d.width] * 6
+    assert list(out["active_features"][6:]) == [0] * 4
+    assert out["share_over_dominance"] == pytest.approx(0.4)
+    assert out["rankable"].tolist() == [True] * 6 + [False] * 4
+    assert out["residual_share_quantiles"]["0.5"] == pytest.approx(0.0, abs=1e-5)
+    assert out["active_features_quantiles"]["1.0"] == d.width
+
+
+def test_reconstruction_budget_refuses_the_wrong_shape_and_an_undeclared_threshold(a2_parts):
+    d, _, _ = a2_parts
+    with pytest.raises(ValueError, match="dominance must be in"):
+        B.reconstruction_budget(d, np.ones((2, d.hidden_size), np.float32), dominance=0.0)
+    with pytest.raises(ValueError, match="residuals must be"):
+        B.reconstruction_budget(d, np.ones((2, d.hidden_size + 1), np.float32), dominance=0.5)
+    with pytest.raises(ValueError, match="zero residual"):
+        B.reconstruction_budget(d, np.zeros((1, d.hidden_size), np.float32), dominance=0.5)

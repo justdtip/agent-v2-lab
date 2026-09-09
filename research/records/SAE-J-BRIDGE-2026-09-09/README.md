@@ -103,12 +103,14 @@ should rank differently, and exactly one should match the shipped tokens.
 | raw `top_k(W d_i)` | **0.245** | recorded first |
 | gain `top_k(W (d_i ⊙ g))` | **0.995** | |
 
-Conclusion, by the amendment's table: **the shipped file applies the final gain; convention settled,
-bridge proceeds.** The prediction held: one arm matched and one did not. This also answers the
-question Codex's caveat left open — whether the shipped `top_logits` follow Google's tutorial and
-apply the final normalisation — by measurement: they do. The 0.5% of features where even the gain
-arm disagrees is the near-tie rate one expects at the tenth position of a 262k-token vocabulary
-under two float32 paths, and not a signal.
+**The finding is about the shipped file, not the model**: the shipped `top_tokens` in
+`examples.safetensors` were made through the final gain — raw arm 0.245, gain arm 0.995 — and so,
+by the amendment's table, the convention is settled and the bridge proceeds. This is the
+measurement Codex's caveat asked for, and it says what that one artefact did; it says nothing
+about what any other suite's file did, which is measured the same way when it arrives. The
+prediction held: one arm matched and one did not. The 0.5% of features where even the gain arm
+disagrees is the near-tie rate one expects at the tenth position of a 262k-token vocabulary under
+two float32 paths, and not a signal.
 
 ### A1 through the lens
 
@@ -156,7 +158,13 @@ after two misses. This is the stream's own rule turned on its author: a global n
 downstream of the mechanism, and the top-k set is the mechanism. The honest next step was to
 measure the curve rather than guess it.
 
-### The control curve, measured at every layer
+### The control curve, measured at every layer — exploratory, chosen after the controls were seen
+
+This sweep was decided on after the three pre-registered controls had been read and my ordering
+of them had failed. It is therefore **not a pre-registered control** and is not offered as one:
+it is the exploratory measurement that replaced the model I would otherwise have fitted, and the
+pre-registered prediction and its failure above stand as recorded, before it. The raw-arm-first
+rule applies here as it did to the overlap: the declaration comes first, the sweep second.
 
 `control_sweep.py`, the same 512-feature draw as the A1 controls (the six named features first,
 then 512 under `default_rng(20260909)`), read through every one of the 33 lens maps and once with
@@ -223,6 +231,19 @@ no artefact presents them as one.
 Feature 1452 reads as one thing; 7616, 9546, 13022 and 16363 read as formatting families; 61 reads
 as multilingual science-and-medicine vocabulary. That is as far as a token list licenses reading.
 
+## Handing the dictionary to the decoder intervention
+
+Codex's `sae_intervention.SAEIntervention` (on `cuda-migration` at e8dbcc3) takes the decoder as
+`[residual, feature]`, the bias separately, and an encoder callable that returns a vector in the
+residual's dtype and device. `intervention_parts(dictionary, dtype=…, device=…)` produces exactly
+those three from a loaded dictionary: the decoder is the stored `w_dec` transposed, the bias is
+`b_dec` never folded in, and the encoder computes in the **declared** dtype and casts its code to
+the residual's. The declaration is returned as a dict for the record. A test constructs the real
+wrapper from the fixture dictionary, checks the encoder agrees with the numpy reference encode,
+that a bfloat16 residual gets a bfloat16 code, and that the edit lands on the chosen feature. The
+wrapper preserves the base reconstruction error and reports re-encoding as numbers; nothing here
+claims attainment.
+
 ## Labels: unavailable, and why, verbatim
 
 The label field of every artefact is `unlabelled`, with the second amendment's reason recorded
@@ -257,6 +278,56 @@ It is a measurement instrument. A large feature contribution to a lens score is 
 that score, at that layer, under this averaging convention and this gain-only linearisation. It is
 not a token probability, not a causal derivative, and not evidence of a workspace, a maintained
 state, or flexible access. The order is careful about this and the artefacts inherit its care.
+
+## The suite, with its skips named
+
+Full suite on this branch after merging `cuda-migration` at e8dbcc3 (Codex's intervention wrapper
+and the WS-D reference), box free, no model loaded: **2449 passed, 10 skipped, 0 failed**
+in 152 s wall. The count is read from the progress marks because the repository's `-q` and mine
+stacked to `-qq`, which suppresses the summary line; the ten skips sum to the same ten. All are
+absent-data gates on this checkout, none in the bridge, and each names its reason:
+
+| where | n | reason |
+|---|---:|---|
+| `tests/test_integrity.py:823` | 1 | saved B/C evaluations are not available |
+| `tests/test_patch.py:703` | 1 | protected saved evaluations not present on this checkout |
+| `tests/test_patch.py:2348` | 1 | protected saved evaluations not present on this checkout |
+| `tests/test_patch.py:3605` | 1 | protected saved evaluations not present on this checkout |
+| `tests/test_power.py:445` | 1 | run artifacts are untracked; the report carries their paths and fields instead |
+| `tests/test_power.py:497` | 1 | run artifacts are untracked; the report carries their paths and fields instead |
+| `tests/test_probes.py:1829` | 1 | the base capture has not been made |
+| `tests/test_tasks.py:389` | 2 | configured protected replay directory is absent: /Users/daniel.tipton/worktrees/cuda-ws-c/data/chat_replay |
+| `tests/test_tasks.py:417` | 1 | run D dataset is not present on this checkout: /Users/daniel.tipton/worktrees/cuda-ws-c/data/agent_v2d |
+
+## After review: three additions on fixtures, 2026-09-09
+
+The Chief's review of e2d2bc2 (merged as 5d32db8) named one gap and two follow-ons. All three are
+on fixtures with no model loaded.
+
+**A dictionary of another checkpoint of the same width is now refused.** `hook_alignment` checked
+layer and hidden size, which a `-pt` dictionary read through the `-it` lens passes. It now reads
+the config's `model_name`, resolves it through the same registry resolution a lens identity goes
+through, and refuses on disagreement with the lens identity's base, with both names in the
+message. When the bridge runs from a registry entry, the entry's `base` is the third party to the
+same comparison. A config that names no model is refused, and so is a lens that carries no
+identity, because a check that passes when it cannot compare is the inert kind. Tests cover the
+pt-against-it case, the missing name, the missing identity, and the registry third party; the
+gated real-artefact test now runs the real config's `google/gemma-3-4b-it` against the real lens
+identity and passes.
+
+**The adapter's decode side and the wrapper's identity through it.** Beyond the encoder check,
+`decoder @ z + bias` agrees with the numpy `decode` to float32 tolerance on the A2 fixture, and
+the wrapper's residual preservation holds through the adapter: after the edit, `h' − b − D z'`
+equals `h − b − D z` to float32 tolerance, with the code changed only where asked.
+
+**The reconstruction-budget gate.** `reconstruction_budget(dictionary, residuals, dominance=…)`
+takes a `(sites, hidden)` array and reports, per site, the residual share `|e| / |h|` and the
+active-feature count, plus their quantiles, the fraction of sites over the declared dominance, and
+a `rankable` mask that is exactly the sites `decompose_position` would accept. The threshold is an
+input and is echoed, never chosen. On the tied orthonormal fixture, explained sites report share 0
+with every feature active and complement sites report share 1 with none, and the declined fraction
+is the designed 0.4. The device supplies the real residuals after A2's first forward; that number
+is what decides Stage B, and it is not in this record.
 
 ## Unexecuted
 
