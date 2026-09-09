@@ -130,7 +130,17 @@ class AgreementReport:
         # Every flip, not only the gating ones. A run that passes because no flip was confident
         # is only evidence if the reader can see where the flips actually sat; "0 at P >= 0.99"
         # on its own cannot be told apart from a threshold nobody came near.
-        lines.extend(f"  {flip.describe()}" for flip in self.flips[:12])
+        #
+        # **Every hard flip prints; only the soft ones are capped.** This was one cap over all
+        # flips in position order, which on the rented card dropped half the gating flips from
+        # the output while showing near-ties that gate nothing: the run said 24 and the log
+        # carried 12, and the positions of the other 12 were recorded nowhere. A cap that can
+        # hide the evidence for the failure it is reporting is the wrong cap.
+        lines.extend(f"  {flip.describe()}" for flip in self.hard_flips)
+        soft = [flip for flip in self.flips if not flip.hard]
+        lines.extend(f"  {flip.describe()}" for flip in soft[:12])
+        if len(soft) > 12:
+            lines.append(f"  ... and {len(soft) - 12} further soft flips, none of them gating")
         if len(self.flips) > 12:
             lines.append(f"  ... and {len(self.flips) - 12} more")
         return "\n".join(lines)

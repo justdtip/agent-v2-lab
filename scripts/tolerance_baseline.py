@@ -74,6 +74,21 @@ def _episode_row(episode, report, elapsed: float) -> dict:
         "compared": provenance.Measured(report.agreement.compared, here).as_dict(),
         "agreed": provenance.Measured(report.agreement.agreed, here).as_dict(),
         "hard_flips": provenance.Measured(len(report.agreement.hard_flips), here).as_dict(),
+        "hard_flip_positions": provenance.Measured(
+            [
+                {
+                    "turn": flip.turn,
+                    "position": flip.position,
+                    "recorded_token": flip.recorded,
+                    "produced_token": flip.produced,
+                    "recorded_probability": flip.recorded_probability,
+                }
+                for flip in report.agreement.hard_flips
+            ],
+            here,
+            basis="each gating flip, so the failing positions are in the record and not only "
+            "in a log that truncates",
+        ).as_dict(),
         "flip_confidences": provenance.Measured(
             sorted(report.agreement.flip_confidences),
             provenance.LAPTOP_BASIS,

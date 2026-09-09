@@ -569,3 +569,49 @@ def test_every_number_in_an_episode_row_says_what_kind_of_number_it_is(records: 
         "laptop basis even when the agreement beside it was measured on the device"
     )
     assert "P >=" in row["confident_positions"]["basis_note"]
+
+
+def test_a_gating_flip_prints_even_when_soft_flips_would_have_crowded_it_out() -> None:
+    """The cap must never hide the evidence for the failure the run is reporting.
+
+    This was one cap of twelve over all flips in position order. On the rented card an episode
+    with many near-ties pushed its confident flips past the cap: the run reported 24 gating
+    flips and the log carried 12, and the positions of the other 12 were recorded nowhere, so
+    the input to the follow-up test had to be reconstructed and could not be.
+    """
+    soft = [tolerance.Flip(0, index, 10 + index, 900 + index, 0.4) for index in range(20)]
+    late = tolerance.Flip(3, 999, 777, 888, 0.9999)
+    report = tolerance.AgreementReport("ep", compared=100, agreed=79, flips=[*soft, late])
+
+    text = report.describe()
+    assert not report.passed and len(report.hard_flips) == 1
+    assert "position 999" in text, "the gating flip is the one line that may never be dropped"
+    assert "[HARD]" in text and "P=0.999900" in text
+    assert "further soft flips, none of them gating" in text, (
+        "the reader is told what was withheld, so a short list is not read as a complete one"
+    )
+    assert text.count("[soft]") == 12, (
+        "soft flips stay capped; they are the noise this cap exists for"
+    )
+
+
+def test_the_failing_positions_are_in_the_record_and_not_only_in_the_log() -> None:
+    """A log truncates and a record is what the next run reads."""
+    import tolerance_baseline as runner
+
+    flips = [tolerance.Flip(1, 735, 2818, 107, 1.0), tolerance.Flip(0, 66, 496, 506, 0.3)]
+    report = SimpleNamespace(
+        agreement=tolerance.AgreementReport("ep", compared=10, agreed=8, flips=flips),
+        jaccard=SimpleNamespace(mean=0.5),
+    )
+    episode = SimpleNamespace(
+        label="ep",
+        turns=[SimpleNamespace(emitted_confidence=lambda position: 1.0, emissions=[])],
+    )
+    row = runner._episode_row(episode, report, 1.0)
+
+    recorded = row["hard_flip_positions"]["value"]
+    assert len(recorded) == 1, "only the gating flips, and all of them"
+    assert recorded[0]["position"] == 735 and recorded[0]["recorded_token"] == 2818
+    assert recorded[0]["produced_token"] == 107
+    assert row["hard_flip_positions"]["basis"] == "measured-here"
