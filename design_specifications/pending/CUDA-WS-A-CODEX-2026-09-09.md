@@ -527,3 +527,5 @@ Chief. No verbal relay in either direction. The card stays read-only for Codex.
 
 Report as before: a record directory under `research/records/`, sources pinned by hash, no model
 loaded, nothing on the card changed.
+
+*2026-09-10, later:* the width-1 ladder landed on `cuda-ws-d` at `5b0feb7`/`15eddfa`; standing request 2 is live.
