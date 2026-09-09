@@ -121,3 +121,18 @@ Read plan §13 in full. The items below are the ones that change this order.
   off-by-one, entry-transform omission — and the controlled number must not be bit-identical to the
   uncontrolled one. Pre-registered criterion: ≤ 1e-3 relative per layer in bf16, control two orders
   above it.
+
+
+## The Research Division's answers (plan §14) supersede the above where they conflict
+
+Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
+- **`attn_implementation="eager"`**, always, on the model the view wraps. Under `sdpa` Gemma runs two
+  attention kernels per forward and the efficient backward has no batching rule.
+- **§6.3 uses `torch.autograd.grad(..., is_grads_batched=True)`**, not `vjp` + `vmap`; upstream's
+  `ActivationRecorder` then works unchanged. The acceptance test for the rewrite is a **timing ratio**
+  ≥ 1 against sequential on a small fixture. Never `output_hidden_states=True`; never
+  `register_full_backward_hook`; never `flash_attention_2`.
+- Cache offsets from `get_seq_length()` / `get_mask_sizes()`, never `keys.shape[-2]`; call
+  `activate_past_recording()` on every sliding layer at construction if anything will rewind.
+- The memory claim in your §4 was against a straw man: upstream fits at 128 tokens by default. Restate
+  it: the saving is the forward tape saved once, at whatever context length *we* choose.

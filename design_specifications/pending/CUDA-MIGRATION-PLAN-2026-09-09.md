@@ -786,3 +786,102 @@ design. The *relative* form `models/gemma-3-4b-it-4bit` is "anything else", beca
 resolved to an absolute path at load. A record that names a checkpoint by its relative path will not
 resolve through it. Not a defect this migration introduced; worth knowing before someone writes a
 comparison that assumes it does.
+
+---
+
+## 14. The Research Division's answers, and what they change
+
+`CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md`, five questions answered with sources and
+versions, measured on CPU with torch 2.14.0 and transformers 5.16.1 on this machine. Two verdicts
+are "does not work, do this instead", and one of those invalidates a written test. In their order.
+
+### 14.1 The golden trajectory test splits in two. G-2 as written is invalid.
+
+**Reproducing MLX recordings on CUDA token-for-token is not achievable**, and the plan's acceptance
+test assumed it. Divergence is not gradual: one flipped argmax then complete separation, and over
+2,000 to 2,700 tokens the probability of zero flips is effectively zero. bf16 carries eight mantissa
+bits against a 262,208-entry vocabulary, so exact top-1 ties occur and tie-breaking has differed
+between CPU and CUDA. Nobody gates on cross-backend token identity.
+
+**What is achievable**: same device, same process, batch one, fixed shapes — CUDA-versus-CUDA
+token-identical replay, because the forward has no atomic adds. **Byte-identical trajectories are a
+within-backend, fixed-topology property**, which the survey's determinism note had already said.
+
+**G-2 becomes two tests.** (a) **CUDA-versus-CUDA exact replay**, fifteen of fifteen, bit-identical,
+within one build and device. (b) **MLX-versus-CUDA as a tolerance comparison**: teacher-forced
+argmax agreement with the survey's attribution rule (a flip at P ≥ 0.99 fails outright), the
+divergence-index distribution with a floor, top-5 Jaccard, and per-step KL percentiles against the
+recorded layer-34 distributions. The free-running cross-backend token match is struck.
+
+### 14.2 `attn_implementation="eager"` on both the Jacobian path and the replay path
+
+One flag, two independent reasons. Under `sdpa`, Gemma 3 runs **two attention kernels in one
+forward** — sliding layers always carry an explicit 4D mask and cannot take the `is_causal` fast
+path, full layers receive `None` and can — which is a dispatch split inside every forward. And the
+efficient-attention backward has **no batching rule** (pytorch #117016, open; its fix unmerged), so
+batched Jacobian rows under `sdpa` fall back to sequential on five layers in six: measured **0.65x**
+on CPU against **1.50x** under `eager`. `flash_attention_2` is a hard error under `torch.func`.
+`torch.use_deterministic_algorithms(True)` is mostly a backward-pass list and does nothing about
+reduction order; replay is batch one, unpadded, identically chunked.
+
+### 14.3 §6.3 works, with a different mechanism and a restated memory claim
+
+Use **`torch.autograd.grad(..., is_grads_batched=True)`** rather than `vjp` + `vmap` directly: same
+batching backend, but it keeps leaf and `requires_grad_` semantics so upstream's `ActivationRecorder`
+works unchanged. Forward hooks are fine; `register_full_backward_hook` is a hard error; never pass
+`output_hidden_states=True`. The saving is real and is on the forward tape only — activations saved
+once instead of `dim_batch` times — paid for with transient gradient buffers, which is why `jacrev`
+exposes `chunk_size`. **The test is a timing ratio**, batched against sequential on a small fixture,
+failing below one; a warning-based assertion would not fire on this path.
+
+**And the memory comparison in §6.3 was against a straw man.** Upstream fits at **128 tokens by
+default** (`fit(max_seq_len=128, skip_first=16)`, `encode(max_length=max_seq_len)`): ~168 MB per
+layer at `dim_batch=128`. The 3.7 GB per layer was *our* extrapolation to 2,816 tokens, which upstream
+never does. The memory problem is created by our departure, not by upstream's design.
+
+### 14.4 The 128-token fit window is upstream's default, and transcript-length fitting is a departure
+
+The estimator truncates every prompt to 128 tokens, drops the first 16 and the last one, and fits on
+at most 111 positions per prompt; the published lenses were fitted so at `n_prompts=1000`. A position
+selector exists **only at readout** (`JacobianLens.apply(positions=)`), never at fit. `merge` is an
+`n_prompts`-weighted mean. Upstream has one commit, is unmaintained, has no PRs merged, and
+Neuronpedia's runner is not public, so **no diff against the hosted recipe is possible beyond its
+recorded flags**.
+
+**Consequence, stated rather than inherited.** WS-D's golden test refits at 128 tokens and *is*
+like-for-like. §6.2's position bands at transcript length are a **different estimator by
+construction** — the same fact this plan recorded yesterday as the 21.8x extrapolation, now seen from
+the fitting side — and they need their own justification (which they have: no agentic reading is in
+range) and their own memory model (§10.2). The two are never compared as if they were one.
+
+### 14.5 The cache: offsets from the API, never from tensor shapes, and recording before rewind
+
+`layer.keys.shape[-2]` reads 7 where the absolute position is 12 on every sliding layer. Offsets come
+from `get_seq_length()` and `get_mask_sizes()`. `crop()` on a sliding layer at or past the window
+**raises** unless `activate_past_recording()` was called before the window filled; with recording
+active, negative arguments work and positive ones raise. So any strategy that rewinds — `trim`,
+`snapshot`, `history` — calls `activate_past_recording()` on every sliding layer at construction.
+
+### 14.6 Training: the memory was understated, and world-size-1 FSDP is not the single-device path
+
+AdamW under bf16 mixed precision is **16 bytes per parameter** sharded, not twelve: Gemma 3 4B at
+4.30B parameters is **68.8 GB total**, and 27B is **438.9 GB total, 54.9 GB per device at eight
+ranks**, before activations and before the gathered `embed_tokens` root unit (2.82 GB at 27B). So
+**one 80 GB device is marginal for 4B full fine-tuning**, not comfortable, and the 262,208-vocabulary
+logits are the first thing to cut: **fused or chunked linear cross-entropy before the first run**,
+not after the first out-of-memory.
+
+Use **FSDP2** (`fsdp_version: 2`; FSDP1 is deprecated from torch 2.11), load on rank 0 rather than
+meta-device init, and let `Trainer` own activation checkpointing and the token-normalised
+accumulation (`num_items_in_batch`) rather than reimplementing them. **Do not develop under
+world-size-1 FSDP**: FSDP2 at world size one silently zeros gradients for some parameter shapes in
+non-root units (pytorch #144045). So §12.2's "world size 1 is the same code path" is withdrawn: the
+single-device path is plain training, and FSDP is the multi-device path. The `1 + weight` RMSNorm is
+a live trap under mixed precision, since its weights are stored as zeros.
+
+### 14.7 What is measured and what is not
+
+Everything above marked measured was measured on **CPU**, on this machine, with torch 2.14.0 — which
+means torch exists here in some environment, and §11.3's bridge is not hypothetical. Nothing is
+verified on CUDA. The Research Division's scripts can be moved into the tree as tests, and the
+timing-ratio test of 14.3 and the two-kernel dispatch check of 14.2 should be.

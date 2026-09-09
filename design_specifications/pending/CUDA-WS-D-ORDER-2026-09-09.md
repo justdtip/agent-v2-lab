@@ -76,3 +76,15 @@ Read plan §13 in full. The items below are the ones that change this order.
   saving is ~15.5x from the layer loop, not more.
 - The residual dtype your regression fit consumes is **Q5**; `residual_source` in the artefact must
   name it either way.
+
+
+## The Research Division's answers (plan §14) supersede the above where they conflict
+
+Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
+- **Upstream fits at 128 tokens by default** and the published lenses were fitted so. Your golden
+  test at 128 tokens is like-for-like. §6.2's transcript-length bands are a **different estimator by
+  construction** and are recorded as a declared departure with their own memory model, never
+  compared to the hosted lens as if they were one. The position selector exists only at readout
+  upstream; the fit-time selector is ours.
+- **`attn_implementation="eager"`** on the fitting model, or batched rows regress to sequential.
+- Upstream has one commit and is unmaintained; there is nothing to track and no runner to diff.

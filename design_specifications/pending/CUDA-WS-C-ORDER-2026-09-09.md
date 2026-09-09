@@ -80,3 +80,17 @@ Read plan §13 in full. The items below are the ones that change this order.
   fine-tuning, relevant if anyone compares against an MLX adapter record.
 - `adapter_delta`'s exact SVD via QR of the rank-r factors has no full-FT analogue; `checkpoint_delta`
   takes the full SVD of the materialised difference and the record says so.
+
+
+## The Research Division's answers (plan §14) supersede the above where they conflict
+
+Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
+- **The memory was understated.** Sixteen bytes per parameter under AdamW with bf16 mixed
+  precision: **68.8 GB total for 4B**, 438.9 GB for 27B. One 80 GB device is marginal for 4B.
+  **Fused or chunked linear cross-entropy before the first run** — the 262k-vocabulary logits are the
+  first thing to cut.
+- **FSDP2** (`fsdp_version: 2`), rank-0 loading, `Trainer` owning checkpointing and
+  `num_items_in_batch`. **No world-size-1 FSDP for development**: it silently zeros some gradients
+  (pytorch #144045). The single-device path is plain training; FSDP is the multi-device path. Your
+  golden test's "one device and two devices agree" compares plain against FSDP2, and says so.
+- The `1 + weight` RMSNorm stores its weights as zeros; a live trap under mixed precision.

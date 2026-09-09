@@ -80,3 +80,16 @@ Read plan §13 in full. The items below are the ones that change this order.
 - G-3 reports decode and prefill **separately**: MLX reads exactly 0.0 on all 5,339 decode forwards
   and 0.375–0.75 on the 100 prefill forwards. `replay.py` needs a `readout_factory=` seam (~14 lines).
 - TF32 off; deterministic algorithms on; `CUBLAS_WORKSPACE_CONFIG=:4096:8`; SDPA backend pinned.
+
+
+## The Research Division's answers (plan §14) supersede the above where they conflict
+
+Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
+- **G-2 is two tests now.** (a) CUDA-versus-CUDA exact replay, bit-identical, same build and device.
+  (b) MLX-versus-CUDA as tolerance: teacher-forced argmax agreement with the P ≥ 0.99 rule, the
+  divergence-index distribution with a floor, top-5 Jaccard, per-step KL percentiles against the
+  recorded layer-34 distributions. **Cross-backend token-for-token reproduction is struck**; it is
+  not achievable and nobody gates on it.
+- **`attn_implementation="eager"`** on the replay path. Batch one, unpadded, chunked at 2,048.
+- Cache offsets from the API, never tensor shapes; `activate_past_recording()` on sliding layers at
+  construction for `trim`, `snapshot` and `history`; negative arguments to `crop`.
