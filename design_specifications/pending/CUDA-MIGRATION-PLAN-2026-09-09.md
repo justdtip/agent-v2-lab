@@ -1151,6 +1151,16 @@ wrapper must also delegate `config` and the checkpointing methods or upstream re
 finds nothing. Every seat that wraps a model reads this paragraph before handing the wrapper to
 anything of upstream's.
 
+**Two claims, kept separate (SWE-2, 41808bc).** The sharded path is validated per parameter on CPU
+in the two-device record; `stage_train_torch` runs, single-process; the two joined is **not done**.
+Handed more processes, `Trainer` and `accelerate` would distribute under their own default rather
+than the sharded path the order requires, invisibly, with the loss falling and a checkpoint
+written and every memory figure describing a configuration that never ran. So the stage refuses a
+multi-process run and names the gap. Wiring FSDP2 into the stage is WS-C's next task, validated to
+two `gloo` processes on CPU; NCCL and more ranks are the device's. Under tying,
+`lm_head.weight is embed_tokens.weight`: one parameter with two names, so no flat parameter
+straddles two units and there is nothing to shard by halves; that sentence is now in the code.
+
 ### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
 
 SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
