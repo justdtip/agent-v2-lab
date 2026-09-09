@@ -560,3 +560,16 @@ render row: the corpus rendered under the entry reproduces the split digests the
 laptop render records, so the 12B re-render assertion in the runbook is a command, not a sentence.
 Tests with stubs and a fixture corpus; pathspec commit on `cuda-ws-c`; review and merge as before.
 Stage B and A1 at other layers wait for the device's numbers as recorded.
+
+## Review of the preflight rows, Chief, 2026-09-10 — `743b044` on `cuda-ws-c`, merged into `cuda-migration` at `8be822d`
+
+**Verdict: passes; merged.** One `fetch-dictionary` remains in the merge result, the Chief's, and
+`lab-device` parses. Against the merge result: the device-setup, rules, import-tree, bridge and
+runlock sets, 163 passed, 0 skipped, with user warnings promoted to errors, under the Chief's
+window at 06:44Z; and a real offline preflight on this machine naming the cached layer 17: present
+with its 335,686,016 bytes, digest **undecided** because no fetch has recorded one and the hub was
+not asked, model `google/gemma-3-4b-it` against the entry's base through `base_of_artifact`. That
+undecided row is the row doing its job. The render row refuses a different source before any render
+and names the differing split after one. The missing-file row names the fetch command with the
+layer read off the folder's layout. Nothing further for SWE-2 on the laptop; Stage B and A1 at
+other layers wait for the device's numbers.
