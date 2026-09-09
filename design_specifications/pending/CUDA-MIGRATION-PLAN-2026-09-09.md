@@ -153,7 +153,7 @@ Estimates from the reads; the survey's counts replace them where they differ.
 | `lens_fitting/jacobian.py` | 957 | ~400 (plan, gates, records) | ~30 | adapter → `jlens.fitting` | **997** (built; budgeted ~80 — §13.5 correction) | **~450 deleted** |
 | `lens_fitting/replay.py`, `runtime.py`, `prose.py`, `validation.py` | ~1,600 | most | ~60 | — | ~20 | 0 |
 | `pipeline/jlens.py` | 1,987 | — | — | — | 0 | **defer** (probe-era, superseded; survey to confirm) |
-| training: `train_expanded.py`, `depth_expansion.py` | ~600 | depth_expansion | ~40 | PEFT + accelerate | **~180** | `gated_delta_*` (614, DeltaNet) **deleted for Gemma** |
+| training: `train_expanded.py`, `depth_expansion.py` | ~600 | depth_expansion | ~40 | PEFT + accelerate | **~180** | `gated_delta_*` (614, DeltaNet) **kept under `[mlx]`** — ruling 5 keeps the recurrence, the torch path refuses recurrent backbones, and §16.3 forbids Gemma-scoped deletions (was "deleted for Gemma") |
 | box discipline: `runlock.py`, `preflight.py`, `cli.py` | 4,460 | ~4,300 | ~30 | — | **~60** (device backend) | 0 |
 | probes | 15,742 | — | — | — | ~200 (patch core on the new seam) | **~15,500 deferred** |
 | registry + `pyproject` | — | — | ~30 | — | 0 | 0 |
@@ -1055,7 +1055,20 @@ worktree, without `PYTHONPATH=<worktree>/src`, the tests exercise main's code an
 import. Confirmed in `cuda-ws-c`. Every seat runs with that variable set, and a record's "tests
 passed" names the source path they resolved to.
 
-### 16.5 WS-A review
+### 16.5 `device.py` landed, and the gated-delta deletion is withdrawn
+
+`src/local_llm_lab/device.py` is the WS-E device shim: `backend()`, `select()`, `pin()` (deterministic
+algorithms, `CUBLAS_WORKSPACE_CONFIG=:4096:8` before the first CUDA use, TF32 off, cuDNN benchmark
+off, the seed), `describe()` (read back from the runtime, never echoed from the arguments; says
+`UNPINNED` until `pin()` runs; imports torch only as the backend and mlx never), the six box calls
+two ways with a multi-device `"all"` form, and `budget()` for the R47 fraction of what the device
+grants. SWE-1's kit reads `describe()`; WS-C wires the pipeline `train` stage's torch branch behind
+`backend()`. The gated-delta deletion the ledger listed is withdrawn: the `[mlx]` extra keeps the
+recurrence (ruling 5), the torch view refuses recurrent backbones, and §16.3 rules out anything
+Gemma-scoped. `tests/test_import_tree.py` (SWE-2's guard) is on main so every seat's suite asserts
+which tree it is testing.
+
+### 16.6 WS-A review
 
 Read in full by the Chief: `arch.py` diff (a pure extraction, AST-identical contracts, the MLX
 suite green on the branch), `arch_base.py`, `arch_torch.py`, `torch_capture.py`, the record and the
