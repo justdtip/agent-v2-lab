@@ -274,3 +274,88 @@ builds the attention mask**, with both carried as departures in the run manifest
 already changes the model, the precision and the parameterisation, so matching a supervision bug
 would add nothing but the bug. The flag is kept for a within-MLX-recipe check, where reproducing it
 is the point.
+
+---
+
+# The two-device agreement gate runs on CPU, and a loss curve alone would have passed a broken one
+
+**The order's golden test, on CPU, before the remote exists.** FSDP2 at world size one is not a
+valid rung — it silently zeros gradients for some parameter shapes in non-root units
+(pytorch #144045) — so this compares **plain single-process training against two-process FSDP2**
+under `gloo`, which is the comparison the single-device path actually makes.
+
+## FSDP2 does not refuse a CPU mesh
+
+torch 2.14.0, `init_device_mesh("cpu", (2,))`, `fully_shard` on each block, `torchrun
+--nproc_per_node=2`: **it works.** `DeviceMesh((2,), 'cpu', stride=(1,))`, forward, backward and
+optimizer step all complete. So the whole gate is answerable on this laptop and none of the first
+hour on rented hardware needs to be spent finding out.
+
+## Sharding the root unit fails, and it fails on this stream's own loss design
+
+`fully_shard(model)` on the root raises, at `Gemma3TextModel.forward`:
+
+    RuntimeError: aten.embedding.default got mixed torch.Tensor and DTensor, need to convert
+    all torch.Tensor to DTensor before calling distributed operators!
+    (transformers/models/gemma3/modeling_gemma3.py:117)
+
+The cause is ours, not upstream's. `causal_lm_chunked_loss` calls `model.model` directly and reaches
+for `lm_head.weight`, both to avoid materialising a 262,208-wide logit tensor. Both bypass the
+pre-forward hooks FSDP2 uses to unshard a unit, so the embedding is still a `DTensor` when
+`F.embedding` meets a plain `input_ids`. **Chunked loss wants raw parameters; FSDP2 wants every
+access to go through a module call.** The two designs trade directly against each other.
+
+## Leaving the root replicated is the workaround, and it is silently wrong
+
+**FSDP2 communicates gradients only for parameters inside a unit.** Shard the blocks and leave the
+embedding, final norm and tied head outside, and nothing reduces their gradients: each rank keeps
+only its own half of the accumulation window, forever.
+
+Step 0, before any update, on identical weights:
+
+| quantity | one device | two devices | relative |
+|---|---:|---:|---:|
+| loss | 4.1746088012 | 4.1746088012 | **0.00e+00** |
+| gradient norm, sharded blocks | 1.89720254 | 1.89720254 | 2.17e-10 |
+| gradient norm, **root unit** | 0.93408004 | 1.31364770 | **4.06e-01** |
+
+**The loss was bit-identical while the gradient was forty per cent wrong.** The order's gate as
+written — "one device and two devices produce the same loss curve to tolerance" — compares the
+column that agreed. It would have passed this configuration, on the machine it was meant to
+protect, and the damage would have appeared as a training run that quietly optimised something
+else. The gate therefore records **gradients as well as losses**, and the loss-only form should be
+treated as insufficient wherever else it appears.
+
+## With the root reduced by hand, the arms agree to float32
+
+An explicit all-reduce of the root unit's gradients, **mean and not sum**, to match the reduction
+FSDP applies to the sharded parameters against the same `× world` loss scaling:
+
+| quantity | max relative deviation over 6 steps |
+|---|---:|
+| loss | **5.39e-08** |
+| gradient norm, sharded blocks | 3.79e-07 |
+| gradient norm, root unit | 1.39e-07 |
+
+Against 8.83e-04 on the loss before the fix: four orders of magnitude, and what remains sits at
+float32 epsilon, which is where reassociated summation lives. Step 0 is exact and the token count
+per step is identical in both arms, so the two are optimising the same objective on the same rows.
+
+**The design that makes them comparable**, since it is the part that is easy to get wrong: the
+global window is `accum` micro-batches either way; at world size `W` each rank takes `accum / W` of
+them interleaved by rank; each micro-batch contributes a **summed** token loss divided by the
+window's **global** token count, all-reduced; and each rank's loss is scaled by `W` because FSDP2
+reduce-scatters with a mean. Drop that scaling and the two-device gradient is `1/W` of the
+one-device gradient — a divergence that looks like a sharding bug and is arithmetic. Gradient
+clipping is off throughout, so any deviation is attributable to sharding alone.
+
+**The proper fix is not this one.** Reducing the root by hand works and is what the gate does;
+putting the root inside an FSDP unit would need the loss to call `lm_head` as a module, unsharding
+and resharding the model's largest parameter once per chunk. That is a real cost against a real
+saving and it is the Chief's call, not one to take silently in a gate.
+
+## Unexecuted
+
+CPU and `gloo` only. Nothing here has run on CUDA or NCCL, on more than two processes, on a real
+checkpoint, or at any size where the memory arithmetic bites. The model's shape is read from
+`tiny_gemma3.json` so that nothing in the script names a layer count or a width.

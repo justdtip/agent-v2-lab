@@ -1,0 +1,81 @@
+{
+  "mode": "fsdp2",
+  "world_size": 2,
+  "backend": "gloo",
+  "mesh": "DeviceMesh((2,), 'cpu', stride=(1,))",
+  "torch": "2.14.0",
+  "model_shape": {
+    "vocab_size": 64,
+    "hidden_size": 32,
+    "intermediate_size": 64,
+    "num_hidden_layers": 6,
+    "num_attention_heads": 4,
+    "num_key_value_heads": 2,
+    "head_dim": 8,
+    "sliding_window": 8,
+    "rms_norm_eps": 1e-06,
+    "use_cache": false
+  },
+  "settings": {
+    "rows": 40,
+    "steps": 6,
+    "accum": 4,
+    "batch": 2,
+    "learning_rate": 0.001,
+    "seed": 20260902,
+    "loss_chunk": 16
+  },
+  "gradient_clipping": "off, so any deviation is attributable to sharding alone",
+  "sharded": "transformer blocks only; root unit replicated",
+  "failure": null,
+  "curve": [
+    {
+      "step": 0,
+      "loss": 4.174608801165197,
+      "grad_norm": 2.11468271588472,
+      "grad_norm_blocks": 1.8972025386633409,
+      "grad_norm_root": 0.9340800373367107,
+      "tokens": 117
+    },
+    {
+      "step": 1,
+      "loss": 4.180447289703089,
+      "grad_norm": 2.216252619223713,
+      "grad_norm_blocks": 1.8706546401080677,
+      "grad_norm_root": 1.1884556742504633,
+      "tokens": 109
+    },
+    {
+      "step": 2,
+      "loss": 4.161570829503677,
+      "grad_norm": 1.8955789768440998,
+      "grad_norm_blocks": 1.59676384530354,
+      "grad_norm_root": 1.0215502336081062,
+      "tokens": 102
+    },
+    {
+      "step": 3,
+      "loss": 4.1794467329168,
+      "grad_norm": 1.597834109791079,
+      "grad_norm_blocks": 1.332432462351479,
+      "grad_norm_root": 0.8818716322026834,
+      "tokens": 147
+    },
+    {
+      "step": 4,
+      "loss": 4.169413711085464,
+      "grad_norm": 1.296767798399803,
+      "grad_norm_blocks": 1.0737665357643766,
+      "grad_norm_root": 0.7270709385192352,
+      "tokens": 132
+    },
+    {
+      "step": 5,
+      "loss": 4.088378188956497,
+      "grad_norm": 1.3022141729615602,
+      "grad_norm_blocks": 1.0430747377145833,
+      "grad_norm_root": 0.7795876113713027,
+      "tokens": 117
+    }
+  ]
+}
