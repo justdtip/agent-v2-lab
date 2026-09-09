@@ -948,3 +948,44 @@ nothing like the cause. The directory is deliberately a namespace.
 
 For the record: torch was installed at 10:04:06 and `accelerate` at 10:07:41, before the Research
 Division read the brief, and pinned at 10:21:08 by the Chief. The Director installed it.
+
+---
+
+## 15. Branch topology and two seam rulings, settled by the first status reports
+
+### 15.1 `cuda-migration` is the integration branch; the main line takes no CUDA code
+
+Settled when Engineer 1's worktree made it concrete. **Seat branches** — `cuda-migration` (WS-B),
+`codex/cuda-torch-seam` (WS-A), `cuda-ws-c` (WS-C), `cuda-ws-d` (WS-D, once step 1 lands) — carry
+each stream's code. **`cuda-migration` is the integration branch**: seat branches merge into it when
+their gates pass, and it merges the main line in regularly. **The main line** (`codex/agent-v2-specs`)
+carries the plan, the orders, the records, Phase 0's packaging and registry, and the Research
+Division's measurement tests — what every seat needs regardless of backend — and takes no CUDA code
+directly. It merges `cuda-migration` back on the Director's word. A seat working in the main checkout
+commits only its own files by explicit path, and the Chief's commits do the same, so that
+uncommitted work in a shared checkout is never swept in.
+
+### 15.2 The generation loop produces from the model's logits; the readout is compared, never substituted
+
+Engineer 1's first loop generated from `view.native_readout(hidden)` so that a generated token and a
+captured one came from one readout by construction. The record was written the other way round. On
+MLX, `NativeCapture.__call__` handed **the model's own logits** to `sink.output`, the `argmax` rows
+were computed from those, and the readout gate then recomputed `native_readout(h)` at layer 34 and
+**compared** it, recording the error on every forward (divergence §3.6). Inverting that makes the
+readout the producer and the gate a comparison against the thing that generated the token, which
+silently changes what the golden records mean on the tolerance half of G-2. **Ruled: the loop calls
+`logits = generation_model(ids, cache)` through WS-A's capture wrapper, which owns the backend
+difference — HF returns `CausalLMOutputWithPast` and takes `past_key_values=` — and never calls
+`native_readout`; the capture session does, in the gate, as today.**
+
+### 15.3 WS-B's first status, for the record
+
+`research/acceptance/golden_trajectories.py` loads all fifteen records with hash chains verified;
+every one of 5,245 emitted tokens equals its forward's argmax, the record's own oracle; the agentic
+subset is 4,801 and both figures are right. The stop rule is one `_consume_stream` fed by both
+backends; `torch_greedy_stream` is ~50 lines under it. **No torch reproduction has happened**; the
+replay generator reads its answers from the record and passes by construction, prints that in a
+banner, and a `--self-test` plants token flips and requires divergence at the planted index. That is
+the discipline: a harness that passes trivially and says so, with a check that proves the comparison
+can fail. Two rule-test failures on that branch are the guard the D-CRO added at `d6dc41f`, which the
+branch predates; a merge from the main line resolves them.
