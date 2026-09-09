@@ -260,3 +260,12 @@ anchor is captured at it. (4) The method entry follows the sweep.
 1 with `forward_batch` in the manifest, since a batched capture carries a width-dependent
 arithmetic-path term into every probe fit; and the ν of every lens fitted at `dim_batch = 64`
 declares that width, because the map was fitted on the width-64 function.
+
+**Correction to the amendment above, Chief, 2026-09-10, from Codex's file-only review.** The
+calibration record's "the hook is not implicated, and nothing about the hook needs repairing" is
+withdrawn as a verdict: its field in `batch_invariance.py` is `not all(...) and False`, false by
+construction, and the wider widths were only ever tested against a capture made at width 1, so a
+hook defect at width > 1 was never separable from the forward's batch-dependence. What stands: the
+hook is exact at batch one; the forward is not batch-invariant; the hook at wider widths is
+**untested** until the unchanged-residual check is run at width w with a capture made at width w,
+which step 3 above requires. The field is removed or computed from that test.
