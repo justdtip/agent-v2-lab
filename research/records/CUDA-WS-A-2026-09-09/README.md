@@ -1,7 +1,8 @@
 # WS-A review corrections and CPU calibration
 
-**Ready for source review:** see [REVIEW-READY.md](REVIEW-READY.md) for the
-review boundary and the real-checkpoint calibration still in progress.
+**Source review passed:** the edit round through `e0a05cf` was accepted and merged
+into `cuda-migration` at `6106ea8`; the dated ruling is in the WS-A order at
+`cd8055d`. [REVIEW-READY.md](REVIEW-READY.md) preserves the earlier handoff state.
 
 Latest verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
 `codex/cuda-torch-seam`. The source includes the committed shared upstream loader and device shim.
@@ -48,6 +49,26 @@ The first attempt, `cpu-calibration-01.json`, was refused **before any torch or 
 another seat's pytest process had MLX mapped. Its gate statuses are all unexecuted. The wrapper
 closed its own window; no foreign process, lock or window was changed. Further attempt records,
 if present, carry their own source commit and observed status.
+
+Retry02 completed in **1,785.2 seconds** (29.75 minutes), with a fresh-process peak of
+**7.2386322021484375 GiB**, below the 9.8 GiB projection and 10.656 GiB cap. The
+wrapper and model exited, and both owned lock and window were confirmed closed.
+`cpu-calibration-02-summary.json` binds the final raw JSON and log by SHA256.
+
+The largest mixed-precision residual ratio was **1.2386%** at 64 tokens and
+**6.9013%** at 1,400. Replacing sliding masks with the observed global mask left
+all per-layer maximum errors unchanged at 64; at 1,400 it changed them at every
+block output and reached **53.9638%**. Rotary-table rounding was **2^-9** at both
+lengths. These measurements hold stored weights and token IDs fixed; the loop
+uses float32 block arithmetic while the native reference uses bf16. Thus the
+normal difference is a precision-confounded measurement, not a seam acceptance.
+A future all-layer bf16 comparison must establish exactness separately.
+
+The review at `cd8055d` supplies that next gate: native-dtype loop versus native
+dtype, exactly zero; cross-precision comparisons remain descriptive, with no
+post hoc tolerance. Hook-site and entry-transform controls are still unexecuted
+in retry02. Its gate 1 passed; gate 2 was measured but not accepted; gates 3–4
+remain unexecuted. The evidence predates that new gate implementation.
 
 The graph-once estimator remains unstarted pending accepted checkpoint gates 1–4. CUDA/MPS and
 full float32-loaded checkpoint execution are unexecuted. The following original handoff is retained
