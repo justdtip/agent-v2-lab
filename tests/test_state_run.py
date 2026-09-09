@@ -56,8 +56,10 @@ def test_rate_is_measured_here_and_the_pilot_has_both_arms_and_a_reliability_arm
     rate = json.loads((out / "rate.json").read_text())
     rows = read_rows(out / "pilot" / "rows.jsonl")
     assert rate["basis"] == "measured-here" and rate["mode"] == "greedy"
-    assert rate["episodes"] == len(rows) == 5 * 2 + 5 * 2
-    assert {r["arm"] for r in rows} == {"E", "A", "RE", "RA"}
+    assert rate["episodes"] == len(rows) == 5 * 2 + 5 * 2 + 5 * 2
+    assert {r["arm"] for r in rows} == {"E", "A", "RE", "RA", "T1", "T2"}
+    # The relation test is generated and scored in the pilot: D10 on every second episode.
+    assert all("D10" in r["scores"] for r in rows if r["arm"] == "T2")
     assert any(r["falsified"] for r in rows if r["arm"].startswith("R"))
     # A falsified exists-arm episode was told the file is absent, and the scripted expert still
     # tried to read it: the diagnostics see a contradiction, so D7 is scorable there.
@@ -70,10 +72,11 @@ def test_the_seal_carries_the_derived_table_and_the_pilot_digest(tmp_path) -> No
     _fixture_run(out)
     seal = require_seal(out)
     t = seal["tolerances"]
-    assert set(t["retained"]) <= {f"D{i}" for i in range(1, 10)} and t["M"] == len(t["retained"])
+    assert set(t["retained"]) <= {f"D{i}" for i in range(1, 11)} and t["M"] == len(t["retained"])
     assert "D1" in t["retained"] and "D5" in t["retained"], "the expert's contrast is exact"
+    assert "D10" in t["retained"], "the relation contrast is +1 under the expert and is retained"
     assert t["epsilon_sub"] == t["d_min"] / 4 and t["n"] >= 1
-    assert seal["derived_from"]["pilot_row_count"] == 20
+    assert seal["derived_from"]["pilot_row_count"] == 30  # 5 pairs x (E, A, RE, RA, T1, T2)
     assert len(seal["derived_from"]["pilot_rows_sha256"]) == 64
     assert seal["budget"]["reason"]
 
@@ -107,7 +110,10 @@ def test_estimands_are_distances_with_tolerances_and_the_stub_says_it_is_a_stub(
     out = tmp_path / "rec"
     _fixture_run(out)
     e = json.loads((out / "estimands.json").read_text())
-    assert set(e["estimands"]) == {"substitution", "specificity", "reuse", "predictive", "dynamic"}
+    assert set(e["estimands"]) == {
+        "substitution", "specificity", "reuse", "predictive", "dynamic", "relation"
+    }
+    assert e["estimands"]["relation"]["measured"] and e["estimands"]["relation"]["distance"] == 0.0
     keys = {"distance", "tolerance", "rows", "measured", "untestable", "passes"}
     assert all(keys <= set(v) for v in e["estimands"].values())
     assert "coefficient table" in e["level"]
@@ -122,7 +128,7 @@ def test_the_main_run_carries_the_reliability_arm_so_a_contradiction_can_exist(t
     _fixture_run(out)
     rows = read_rows(out / "main" / "rows.jsonl")
     arms = {r["arm"] for r in rows if r["condition"] == "base"}
-    assert arms == {"E", "A", "RE", "RA"}
+    assert arms == {"E", "A", "RE", "RA", "T1", "T2"}
     base = [r for r in rows if r["condition"] == "base"]
     assert any(r["falsified"] for r in base if r["arm"] in ("RE", "RA"))
     assert all(r["falsified"] is False for r in base if r["arm"] in ("E", "A"))

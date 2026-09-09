@@ -319,3 +319,35 @@ Regenerated fixture record: predictive **untestable (degenerate tolerance)**; dy
 (no scorable row)**, because only the exists arm meets a contradiction under a scripted expert;
 substitution, specificity and reuse pass by construction against the stub, as before. 46 state
 tests; the full suite exits 0 on the branch.
+
+**D10's two-file maker, D-CRO, 2026-09-10 — the relation test is generated and scored in both
+stages, and one construction the order did not specify is flagged.**
+
+`family.make_relation_pairs` builds a `RelationPair`: one directory with two named summaries, two
+episodes with swapped states (A present and B absent, then A absent and B present), one prompt
+string in both that names the two files and not their states. Both experts replay cleanly through
+the real environment. The pilot and the main run generate one relation pair per matched pair and
+run both episodes (arms `T1`/`T2`); D1–D9 are scored on file B's context in each episode, and D10 is
+scored over the two episodes and carried on the `T2` row, so a reader finds the relation where its
+second half was decided. The main run resumes relation pairs on the same key as the rest.
+
+**The construction to review.** The derivation table contrasts arm E against arm A, and D10 is a
+single indicator per relation pair with no arms of its own. It enters the table as a contrast
+against its own negation: E is "the action on B follows B's state" (D10), A is "the action on B
+follows A's state" (`D10_follows_A`), and under swapped states A's state is the negation of B's in
+every episode, so the two indicators are logical negations wherever both are scorable. A policy
+that acts on B by B's state contrasts at +1, one that acts on B by A's state at −1, and chance at 0,
+which the drop rule drops. This is the relation test's own sentence — "the one B's state implies,
+not A's" — turned into the table's shape, derived from the same rows and never scored separately.
+The relation estimand reports the distance from "the action on B always follows B's state" at the
+substitution tolerance, since it is a substitution claim about file B. If the Chief wants the
+relation held out of the table and reported only as its own estimand, the change is one branch in
+`derive_tolerances`.
+
+Regenerated fixture record: 60 pilot rows and 60 main rows (six arms per pair); retained D1, D4,
+D5, **D10** (M = 4), `n = 82`; relation passes by construction under the scripted expert, as the
+other stub-facing estimands do and as labelled; predictive untestable; dynamic not measured. 51
+state tests; the full suite exits 0 on the branch.
+
+The near-miss of the last round is the method record's twenty-ninth entry, in my name, with the
+gating I redid it with as the rule.

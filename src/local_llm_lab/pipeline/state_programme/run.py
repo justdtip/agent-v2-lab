@@ -35,8 +35,10 @@ from local_llm_lab.pipeline.state_programme import diagnostics as dx
 from local_llm_lab.pipeline.state_programme import tolerances as tol
 from local_llm_lab.pipeline.state_programme.family import (
     ExistencePair,
+    RelationPair,
     apply_reliability,
     make_existence_pairs,
+    make_relation_pairs,
 )
 from local_llm_lab.pipeline.state_programme.record import (
     append_row,
@@ -164,11 +166,29 @@ def _score_row(row: dict[str, Any], pair: ExistencePair) -> dict[str, float | No
     return dx.score(ctx)
 
 
+def _relation_rows(pair: RelationPair, policy: Policy) -> list[dict[str, Any]]:
+    """Both episodes of a relation pair. D1-D9 are scored on file B's context in each episode;
+    D10 and its A-arm negation are scored over the two episodes and carried on the second row,
+    so a reader of the rows finds the relation where its second half was decided."""
+    rows = []
+    contexts = []
+    for arm, task in pair.episodes():
+        row = run_episode(task, policy)
+        ctx = dx.Context.from_trajectory(row["steps"], target=pair.file_b, directory=pair.directory)
+        contexts.append(ctx)
+        row.update(pair_id=pair.pair_id, arm=arm, condition="base", falsified=False,
+                   scores=dx.score(ctx), relation_target=pair.file_b)
+        rows.append(row)
+    rows[1]["scores"].update(dx.relation_scores(contexts[0], contexts[1]))
+    return rows
+
+
 def pilot(
     directory: Path, *, pairs: list[ExistencePair], policy: Policy, decoding: str,
-    fault_rate: float, fault_seed: int,
+    fault_rate: float, fault_seed: int, relation_pairs: list[RelationPair] | None = None,
 ) -> Path:
-    """Stage 1: matched pairs, plus the reliability arm. ``rate.json`` is written first."""
+    """Stage 1: matched pairs, the reliability arm, and the relation pairs. ``rate.json`` is
+    written first."""
     rows_path = directory / "pilot" / "rows.jsonl"
     started = time.monotonic()
     episodes = 0
@@ -184,6 +204,10 @@ def pilot(
         row.update(pair_id=pair_id, arm=f"R{arm}", falsified=falsified, scores=_score_row(row, pair))
         append_row(rows_path, row)
         episodes += 1
+    for relation in relation_pairs or ():
+        for row in _relation_rows(relation, policy):
+            append_row(rows_path, row)
+            episodes += 1
     hours = (time.monotonic() - started) / 3600
     write_json(directory / "rate.json", {
         "episodes": episodes, "hours": hours, "episodes_per_hour": episodes / hours if hours else None,
@@ -243,6 +267,12 @@ def derive_tolerances(rows: list[dict[str, Any]], *, seed: int) -> tol.Table:
         if row["arm"] in by_arm:
             for name, value in row["scores"].items():
                 by_arm[row["arm"]].setdefault(name, []).append(value)
+    for row in rows:
+        if row["arm"] == "T2" and "D10" in row["scores"]:
+            # The relation test as a contrast: E is "the action on B follows B's state", A is
+            # "follows A's state"; negations of each other under swapped states.
+            by_arm["E"].setdefault("D10", []).append(row["scores"]["D10"])
+            by_arm["A"].setdefault("D10", []).append(row["scores"]["D10_follows_A"])
     rows_c = tol.contrasts(by_arm["E"], by_arm["A"], seed=seed)
     return tol.derive(rows_c, split_half_log_loss_gap=split_half_log_loss_gap(rows))
 
@@ -268,7 +298,7 @@ def resume_key(manifest: dict[str, Any], directory: Path) -> tuple[str, dict[str
 
 def main_run(
     directory: Path, *, manifest: dict[str, Any], pairs: Iterable[ExistencePair], policy: Policy,
-    wrapper: Wrapper,
+    wrapper: Wrapper, relation_pairs: Iterable[RelationPair] = (),
 ) -> Path:
     """Stage 4: ``n`` matched pairs, resumable; then the estimands on the same contexts."""
     require_seal(directory)
@@ -311,6 +341,12 @@ def main_run(
                 row.update(pair_id=pair.pair_id, arm="A", condition=condition, falsified=False,
                            scores=_score_row(row, pair), resume_key=key, resume_parts=parts)
                 append_row(rows_path, row)
+    for relation in relation_pairs:
+        if (relation.pair_id, "T2", "base") in done:
+            continue
+        for row in _relation_rows(relation, policy):
+            row.update(resume_key=key, resume_parts=parts)
+            append_row(rows_path, row)
     return rows_path
 
 
@@ -377,6 +413,12 @@ def estimands(directory: Path) -> Path:
     dyn_a = means(select("RA", "base"), dynamic_names)
     dyn_distance, dyn_rows = distance(dyn_e, dyn_a)
 
+    relation_rows = [r for r in rows if r["arm"] == "T2" and r["condition"] == "base"]
+    relation_mean = _mean([r["scores"].get("D10") for r in relation_rows])
+    # Distance from "the action on B always follows B's state"; None when no relation row scored.
+    relation_distance = None if relation_mean is None else abs(1.0 - relation_mean)
+    relation_n = sum(1 for r in relation_rows if r["scores"].get("D10") is not None)
+
     d_sub, n_sub = distance(sub, reference)
     d_ctrl, n_ctrl = distance(ctrl, absent)
     d_reuse, n_reuse = distance(reuse, reference)
@@ -386,6 +428,9 @@ def estimands(directory: Path) -> Path:
         "reuse": _estimand(d_reuse, t["epsilon_reuse"], rows=n_reuse),
         "predictive": _estimand(predictive_distance, t["epsilon_pred"], rows=predictive_rows),
         "dynamic": _estimand(dyn_distance, t["epsilon_dyn"], rows=dyn_rows),
+        # The relation test (order §4, D10) at the substitution tolerance: "the action on B
+        # follows B's state" is a substitution claim about file B.
+        "relation": _estimand(relation_distance, t["epsilon_sub"], rows=relation_n),
     }
     payload = {
         "schema_version": 2,
@@ -421,8 +466,9 @@ def run(
                          fault_rate=fault_rate, fault_seed=fault_seed, fixture=fixture, **manifest_inputs)
     write_json(directory / "manifest.json", manifest)
     pairs = make_existence_pairs("pilot", pilot_pairs, level, seed=seed)
+    relations = make_relation_pairs("pilot", pilot_pairs, level, seed=seed)
     rows_path = pilot(directory, pairs=pairs, policy=policy, decoding=decoding,
-                      fault_rate=fault_rate, fault_seed=fault_seed)
+                      fault_rate=fault_rate, fault_seed=fault_seed, relation_pairs=relations)
     refuse_rederive(directory)
     table = derive_tolerances(read_rows(rows_path), seed=seed)
     rate = json.loads((directory / "rate.json").read_text())
@@ -432,7 +478,9 @@ def run(
     seal(directory, table=table.as_dict(), budget=budget, decoding=manifest["decoding"], pilot_rows_path=rows_path)
     n = main_pairs if main_pairs is not None else (budget["n_final"] if budget else table.n)
     main_pairs_ = make_existence_pairs("main", n, level, seed=f"{seed}:main")
-    main_run(directory, manifest=manifest, policy=policy, wrapper=wrapper(main_pairs_), pairs=main_pairs_)
+    main_run(directory, manifest=manifest, policy=policy, wrapper=wrapper(main_pairs_),
+             pairs=main_pairs_,
+             relation_pairs=make_relation_pairs("main", n, level, seed=f"{seed}:main"))
     estimands(directory)
     write_readme(directory)
     return {"n": n, "retained": table.retained, "seal_digest": seal_digest(directory)}

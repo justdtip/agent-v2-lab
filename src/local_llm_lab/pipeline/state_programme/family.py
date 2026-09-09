@@ -148,6 +148,102 @@ def make_existence_pairs(
     return pairs
 
 
+# --------------------------------------------------------------------- the relation test (D10)
+
+
+@dataclass(frozen=True)
+class RelationPair:
+    """Two files in one directory with **swapped** states across two episodes (order §4, D10).
+
+    Episode 1: A present, B absent. Episode 2: A absent, B present. One prompt string in both.
+    D10 asks whether the action on file B is the one B's state implies and not A's; under swapped
+    states "follows B" and "follows A" are logical negations, which is what lets the relation enter
+    the derivation table as an ordinary contrast (see :func:`relation_scores`).
+    """
+
+    pair_id: str
+    episode_1: Task
+    episode_2: Task
+    file_a: str
+    file_b: str
+    directory: str
+
+    def episodes(self) -> Iterator[tuple[str, Task]]:
+        yield "T1", self.episode_1
+        yield "T2", self.episode_2
+
+
+def _relation_answer(present_label: str, present_name: str, absent_name: str) -> str:
+    return f"{present_name}: {present_label}; {absent_name}: {NO_SUMMARY}"
+
+
+def make_relation_pairs(
+    split: str, count: int, level: int, *, seed, start: int = 0
+) -> list[RelationPair]:
+    """``count`` relation pairs. The two summaries are named in the prompt; their states are not."""
+    rng = random.Random(f"relation:{split}:{seed}:{start}")
+    pairs = []
+    for offset in range(count):
+        index = start + offset
+        root = f"workspace/{split}/{index:04d}"
+        directory = f"{root}/notes"
+        label_a, label_b = f"alpha-{rng.randrange(100, 999)}", f"beta-{rng.randrange(100, 999)}"
+        name_a, name_b = f"summary-a{rng.randrange(10, 99)}.md", f"summary-b{rng.randrange(10, 99)}.md"
+        file_a, file_b = f"{directory}/{name_a}", f"{directory}/{name_b}"
+        common = {
+            f"{directory}/scratch.txt": "ignore this scratch file",
+            f"{root}/outside.md": "outside the requested directory",
+        }
+        for extra in range(level):
+            common[f"{directory}/log-{extra}.txt"] = "log entry, not a summary"
+        prompt = (
+            f"List files in {directory}. Two summaries may be there, {name_a} and {name_b}. For "
+            f"each that is present, read it and report its first line exactly; for each that is "
+            f"absent, report '{NO_SUMMARY}'. Answer as '<name>: <line or {NO_SUMMARY}>; <name>: ...'."
+        )
+
+        build = dict(split=split, index=index, level=level, prompt=prompt, common=common,
+                     directory=directory)
+        pairs.append(RelationPair(
+            f"{split}-relation-{index:04d}",
+            _relation_episode("T1", present=file_a, present_label=label_a, absent=file_b, **build),
+            _relation_episode("T2", present=file_b, present_label=label_b, absent=file_a, **build),
+            file_a, file_b, directory,
+        ))
+    return pairs
+
+
+def _relation_episode(
+    tag: str, *, present: str, present_label: str, absent: str, split: str, index: int,
+    level: int, prompt: str, common: dict[str, str], directory: str,
+) -> Task:
+    """One episode of a relation pair. A module-level function rather than a closure in the loop:
+    the repository lints B023, and a closure over loop variables is benign only while it is called
+    inside its own iteration, which is a property the next edit can silently lose."""
+    files = {**common, present: f"{present_label}\nThis is the selected summary."}
+    present_name, absent_name = present.rsplit("/", 1)[-1], absent.rsplit("/", 1)[-1]
+    answer = _relation_answer(present_label, present_name, absent_name)
+    steps = (
+        _step(
+            f"Plan: list {directory.rsplit('/', 1)[-1]}, read whichever of the two summaries is "
+            "present, report both. Listing.",
+            "list_files",
+            directory=directory,
+        ),
+        _step(
+            f"Listing shows {present_name} present and {absent_name} absent. Reading {present_name}.",
+            "read_file",
+            path=present,
+        ),
+        _step(f"{present_name}: {present_label}; {absent_name}: {NO_SUMMARY}. Done.",
+              "finish", answer=answer),
+    )
+    return Task(
+        f"{split}-relation-{index:04d}-{tag}", "relation", "clean", prompt, files, steps, answer,
+        frozenset({"list_files", "read_file"}), difficulty=level,
+    )
+
+
 # ------------------------------------------------------------------ the reliability instrument
 
 
@@ -207,6 +303,8 @@ __all__ = [
     "FAMILY",
     "NO_SUMMARY",
     "ExistencePair",
+    "RelationPair",
+    "make_relation_pairs",
     "absent_arm",
     "apply_reliability",
     "false_listing",
