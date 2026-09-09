@@ -6,10 +6,20 @@ checked inline and matching. Every figure below is `basis: measured-here` unless
 Artefacts under `/workspace/wsd/out/`; the run wrote each result as it completed.
 
 **The short form.** The gate that has no tolerance passed exactly. The measurement the workstream
-exists to produce did not, and the reason is not the model: the finite-difference estimator is
-**noise-dominated at bf16 everywhere except adjacent to the target**, and there is no step size at
-which it recovers the exact map at the shallow layers. That is a result about the instrument, and
-the instrument's own controls are what said so.
+exists to produce did not, and the reason is the instrument rather than the model: the
+finite-difference estimator recovers nothing of the exact map at the shallow layers, at any step over
+four decades. The instrument's own controls are what said so.
+
+**Read §3 and §8 together, and prefer §8's reading of the cause.** §3 was written first and attributes
+the failure to bf16 cancellation. §8 answers the Chief's later question by counting the artefact's
+exactly-zero columns — **none, of 84,480** — which refutes the rounding-to-zero mechanism, and shows
+instead a map systematically *compressed*, at 0.13 to 0.76 of the reference's norm. That is the
+signature of a saturating response to an oversized step, and it supports the Director's reading: the
+step is 1% of the whole sequence array's Frobenius norm applied to one coordinate of one position, so
+a coordinate moves several times its own size while the vector's norm moves 11%. **The cause is not
+settled between step size and precision**, the two are not separable by anything measured here, and
+the control that separates them is the Chief's matched-precision pair crossed with a step rule.
+Nothing in §3's numbers changes; its sentence about the mechanism does.
 
 ## 1. What passed
 
