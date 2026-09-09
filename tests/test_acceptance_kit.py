@@ -495,3 +495,43 @@ def test_the_runner_gates_on_the_divergence_floor_too(tmp_path: Path) -> None:
     assert not early.passed, "an episode that parts company at token 2 did not drift there"
     late = tolerance.run_tolerance(episode, forward, free_running=[_Result(120)], floor=16)
     assert late.passed
+
+
+def test_an_interrupted_run_leaves_what_completed_on_disk(records: Path, tmp_path: Path) -> None:
+    """The defect that cost ten minutes of box time and recovered nothing.
+
+    The runner accumulated every result and wrote once at the end, so an interrupt partway
+    through lost all of it. On a laptop that is ten wasted minutes; on a rented device it is a
+    paid hour with nothing to show for where it failed.
+    """
+    import tolerance_baseline as runner
+
+    episodes = golden.load_episodes(records)
+    assert len(episodes) == 2
+    per_episode = tmp_path / "rows.jsonl"
+
+    calls = {"n": 0}
+
+    def forward(sequence):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise KeyboardInterrupt("stopped partway, as a run on a shared box is")
+        return [(0, (0,))] * len(sequence)
+
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_episodes(episodes, forward, per_episode=per_episode)
+
+    rows = [json.loads(line) for line in per_episode.read_text().splitlines()]
+    assert len(rows) == 1, "the episode that finished is on disk; the one that did not is not"
+    assert rows[0]["label"] == episodes[0].label
+    assert set(rows[0]) >= {"compared", "agreed", "hard_flips", "confident_positions", "seconds"}
+
+
+def test_no_result_file_is_written_when_none_was_asked_for(records: Path) -> None:
+    import tolerance_baseline as runner
+
+    episodes = golden.load_episodes(records)[:1]
+    reports = runner.run_episodes(
+        episodes, lambda sequence: [(0, (0,))] * len(sequence), per_episode=None
+    )
+    assert len(reports) == 1
