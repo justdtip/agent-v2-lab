@@ -1161,6 +1161,30 @@ two `gloo` processes on CPU; NCCL and more ranks are the device's. Under tying,
 `lm_head.weight is embed_tokens.weight`: one parameter with two names, so no flat parameter
 straddles two units and there is nothing to shard by halves; that sentence is now in the code.
 
+**Joined (SWE-2, aa96cd8): the stage driving FSDP2 through `Trainer`, single process against two
+`gloo` processes on CPU, the tiny wrapper checkpoint.**
+
+| quantity | worst relative deviation | parameters |
+|---|---:|---:|
+| gradient, step zero, before any update | 1.24e-07 | 26 trainable |
+| value, after the step | 0.0 | 80, all |
+
+The gradient is the load-bearing number. The exact value agreement is real and weaker than it
+looks: the difference the gradients imply is about 1.2e-11 at lr 1e-4 against a float32 ulp of
+1.9e-09 near a typical weight, so the updates are bit-identical by construction at this step
+count. The refusal is off; `describe_distribution` puts in every manifest what the distribution
+has been measured at (two `gloo` processes on CPU) and what it has not (CUDA, NCCL, more than two
+ranks, any real checkpoint). The sharded checkpoint shows the recipe: 54 bfloat16 tensors and 26
+float32, frozen trunk at two bytes, trained slice at four.
+
+The first run of the gate failed at 0.499 on gradients and 1.357 on values, and the gate was what
+was wrong: `Trainer` shards data across ranks, so an accumulation count left alone doubles the rows
+per optimiser step at world size two and the arms optimise different objectives; and even with the
+global batch matched, a distributed sampler need not put the same rows in the same step, so any run
+longer than one step compares two trajectories. One optimiser step over the whole dataset removes
+both. **A disagreement is a defect only once the two arms are the same experiment, and getting
+them there is most of the work**; every multi-device gate carries that sentence.
+
 ### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
 
 SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
@@ -1291,3 +1315,27 @@ the eleven under twenty minutes next, about 75 minutes; then the four long ones,
 2,607-position turn above all, as one announced block, because the sliding window is exercised only
 beyond 1,024 positions and the mask-dispatch control on the tiny model bit only there. They are
 the point of the gate, not its remainder. Full corpus about 324 minutes of CPU box time.
+
+### 16.12 The laptop is for tests; the device is for runs
+
+The Director, 2026-09-10 early: "All subsequent runs will use the rented GPU. Do not plan for long
+runs that will tie up this box. Test as much as you can, but accept we may need to resolve bugs in
+the actual environment." This amends §12.1's "CPU torch is the development environment": CPU is
+where tests, fixtures and tiny models run, and every model-scale run from here is the device's.
+Consequences, in order:
+
+- SWE-1's eleven-episode block stops after the episode in flight and releases the box; what
+  completed is the laptop calibration the device numbers are compared against. The remaining
+  episodes and the four long ones, which exercise the sliding window, run in the device's first hour,
+  where the whole corpus is seconds.
+- Codex's next arm (the bf16-loop seam-exactness check, the three controls at 1,400 tokens, the
+  measured peak) runs on the device, not on CPU. Gates 1–4 on the real checkpoint close there.
+- WS-D's golden test, finite-difference against exact on the 4B, runs on the device; the adapter's
+  fixture tests and the corpus freezing are the laptop's.
+- Every seat's record becomes the first hour's checklist: each device item with the number it must
+  produce and the local figure it is compared against, in execution order. `acceptance_gates.py`
+  and the tolerance runner are the first hour's tools.
+- Bugs found only on the device are expected and are not failures of the local work; they are
+  resolved there, recorded there, and their tests come back here.
+
+No announced blocks on this box from now; windows of minutes for tests are fine.

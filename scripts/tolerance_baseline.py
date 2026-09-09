@@ -51,6 +51,54 @@ CHECKPOINT_ENTRY = "gemma3-4b-cuda-bf16"
 #: outlive this checkpoint.
 
 
+def _episode_row(episode, report, elapsed: float) -> dict:
+    """One episode's result, in the shape both the incremental file and the summary use."""
+    return {
+        "label": episode.label,
+        "compared": report.agreement.compared,
+        "agreed": report.agreement.agreed,
+        "hard_flips": len(report.agreement.hard_flips),
+        "flip_confidences": sorted(report.agreement.flip_confidences),
+        "confident_positions": sum(
+            1
+            for turn in episode.turns
+            for emission in turn.emissions
+            if (turn.emitted_confidence(emission.position) or 0) >= tolerance.HARD_CONFIDENCE
+        ),
+        "jaccard_mean": report.jaccard.mean,
+        "seconds": round(elapsed, 1),
+    }
+
+
+def run_episodes(episodes, forward, *, top_k: int = 5, per_episode: Path | None = None):
+    """Read every episode, writing each result the moment it is finished.
+
+    The first version of this accumulated everything and wrote once at the end, with stdout
+    block-buffered because it was not a terminal. An interrupt at ten minutes therefore
+    recovered nothing: no JSON, and not one episode line. That was survivable on a laptop and
+    is not on a rented device, where an interrupted hour is an hour paid for and this kit's
+    whole purpose is to say what failed and where.
+
+    So the contract is: whatever finished is on disk, whatever the run does next.
+    """
+    reports = []
+    for index, episode in enumerate(episodes, 1):
+        print(f"\n[{index}/{len(episodes)}] {episode.label} ...", flush=True)
+        started = time.monotonic()
+        report = tolerance.run_tolerance(episode, forward, top_k=top_k)
+        elapsed = time.monotonic() - started
+        print(f"{episode.label}  ({elapsed:.1f}s)")
+        print(f"  {report.agreement.describe()}")
+        print(f"  {report.jaccard.describe()}")
+        print(f"  gate: {'PASS' if report.passed else 'FAIL'}", flush=True)
+        reports.append((episode, report, elapsed))
+        if per_episode is not None:
+            with per_episode.open("a") as stream:
+                stream.write(json.dumps(_episode_row(episode, report, elapsed)) + "\n")
+                stream.flush()
+    return reports
+
+
 def _require_own_window() -> None:
     """Refuse unless *this* process holds the window, not merely that one is open.
 
@@ -153,18 +201,17 @@ def main(argv: list[str] | None = None) -> int:
         def output(self, offset, ids, logits) -> None:
             pass
 
-    reports = []
+    # Each episode's result is written the moment it finishes, and the stream is flushed.
+    #
+    # The first version of this accumulated everything and wrote once at the end, with stdout
+    # block-buffered because it was not a terminal. An interrupt at ten minutes therefore
+    # recovered nothing: no JSON, and not one episode line. That was survivable on a laptop
+    # and is not on a rented device, where an interrupted hour is an hour paid for and the
+    # kit's whole purpose is to say what failed and where.
+    per_episode = arguments.json.with_suffix(".jsonl") if arguments.json else None
     with TorchCapture(view, _Sink(), layers=(view.num_layers,)) as wrapped:
         forward = tolerance.torch_forward_rows(wrapped, view, top_k=arguments.top_k)
-        for episode in episodes:
-            started = time.monotonic()
-            report = tolerance.run_tolerance(episode, forward, top_k=arguments.top_k)
-            elapsed = time.monotonic() - started
-            print(f"\n{episode.label}  ({elapsed:.1f}s)")
-            print(f"  {report.agreement.describe()}")
-            print(f"  {report.jaccard.describe()}")
-            print(f"  gate: {'PASS' if report.passed else 'FAIL'}")
-            reports.append((episode, report, elapsed))
+        reports = run_episodes(episodes, forward, top_k=arguments.top_k, per_episode=per_episode)
 
     compared = sum(report.agreement.compared for _, report, _ in reports)
     agreed = sum(report.agreement.agreed for _, report, _ in reports)
@@ -188,22 +235,7 @@ def main(argv: list[str] | None = None) -> int:
                     "agreed": agreed,
                     "hard_flips": hard,
                     "episodes": [
-                        {
-                            "label": episode.label,
-                            "compared": report.agreement.compared,
-                            "agreed": report.agreement.agreed,
-                            "hard_flips": len(report.agreement.hard_flips),
-                            "flip_confidences": sorted(report.agreement.flip_confidences),
-                            "confident_positions": sum(
-                                1
-                                for turn in episode.turns
-                                for emission in turn.emissions
-                                if (turn.emitted_confidence(emission.position) or 0)
-                                >= tolerance.HARD_CONFIDENCE
-                            ),
-                            "jaccard_mean": report.jaccard.mean,
-                            "seconds": round(elapsed, 1),
-                        }
+                        _episode_row(episode, report, elapsed)
                         for episode, report, elapsed in reports
                     ],
                 },

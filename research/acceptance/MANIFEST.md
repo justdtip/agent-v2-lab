@@ -65,6 +65,29 @@ deliberately so the box could be released quickly. Jaccard at 0.70 means the top
 by more than the argmax does, which is expected between precisions and is reported rather than
 gated. The remaining fourteen episodes are unrun.
 
+## The eleven-episode run: stopped, and what it cost
+
+Ordered stopped by the Director part-way, so that no long run ties up this box: subsequent
+runs go to the rented device. **Zero of eleven episodes completed.** Ten and a half minutes of
+box time, 32 minutes of processor time, and nothing recovered.
+
+**Nothing was recovered because of a defect in this kit, not because of the interrupt.** The
+runner accumulated every result and wrote once at the end, and its stdout was block-buffered
+because it was not a terminal. So an interrupt at ten minutes produced no JSON and not one
+episode line. The interrupt was clean — `SIGINT`, so the interpreter unwound and flushed — and
+there was simply nothing in the buffer to flush.
+
+That is survivable on a laptop and is not on a rented device, where an interrupted hour is an
+hour paid for and this kit's entire purpose is to say what failed and where. Fixed: each
+episode's row is written and flushed the moment it finishes, and progress prints unbuffered.
+The property is now a test that fails against the old behaviour.
+
+**One number does survive**, and it is about the box rather than the port:
+`aggregate_report-0167`, projected at 667 s on an idle box, had not finished in 630 s while
+SWE-2's two `gloo` processes shared the machine at load 6.4. Consistent with the sharing
+inflation predicted before the run, and the reason tonight's projections would have used the
+idle-box basis.
+
 ## Gate status
 
 Run: `python scripts/acceptance_gates.py --records <stage-two records> --keep-going`

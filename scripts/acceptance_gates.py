@@ -39,10 +39,12 @@ for _path in (_REPOSITORY_ROOT / "src", _REPOSITORY_ROOT / "research" / "accepta
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
+import gate_records  # noqa: E402
 import golden_trajectories as golden  # noqa: E402
 import tolerance  # noqa: E402
 
 PASS = "pass"
+RESUMED = "resumed"
 FAIL = "fail"
 UNAVAILABLE = "unavailable"
 
@@ -273,6 +275,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--model", help="model to load; requires an announced box window")
     parser.add_argument(
+        "--results",
+        type=Path,
+        help="directory of gate records; a gate whose record matches this run's commit, "
+        "checkpoint and device is not re-run",
+    )
+    parser.add_argument(
         "--keep-going",
         action="store_true",
         help="run every gate instead of stopping at the first failure",
@@ -281,11 +289,38 @@ def main(argv: list[str] | None = None) -> int:
 
     _print_environment()
 
+    store = None
+    if arguments.results:
+        identity = gate_records.current_identity(arguments.model)
+        store = gate_records.GateRecords(arguments.results, identity)
+        usable, why = identity.usable
+        print(f"resume store: {arguments.results}")
+        note = "" if usable else f" -- {why}"
+        print(f"  commit {identity.source_commit[:12]}, resumable: {usable}{note}")
+        print()
+
     results: list[tuple[Gate, GateResult]] = []
     for gate in GATES:
-        result = gate.run(arguments)
+        stored = store.completed(gate.number) if store is not None else None
+        if stored is not None and stored.get("status") == PASS:
+            result = GateResult(
+                status=RESUMED,
+                saw=stored.get("saw", ""),
+                expected=stored.get("expected", ""),
+                notes=[f"resumed from {store.directory}; not re-run"],
+            )
+        else:
+            if store is not None and gate.number in store.refusals:
+                reason = store.refusals[gate.number]
+                print(f"         note:     gate {gate.number} not resumed: {reason}")
+            result = gate.run(arguments)
+            if store is not None:
+                store.write(
+                    gate.number,
+                    {"status": result.status, "saw": result.saw, "expected": result.expected},
+                )
         results.append((gate, result))
-        marker = {PASS: "PASS", FAIL: "FAIL", UNAVAILABLE: "----"}[result.status]
+        marker = {PASS: "PASS", FAIL: "FAIL", UNAVAILABLE: "----", RESUMED: "SKIP"}[result.status]
         print(f"[{marker}] gate {gate.number}: {gate.name} ({gate.owner})")
         if result.saw:
             print(f"         saw:      {result.saw}")
@@ -298,7 +333,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"stopping at gate {gate.number}; later gates were not run")
             break
 
-    passed = sum(1 for _, result in results if result.status == PASS)
+    passed = sum(1 for _, result in results if result.status in (PASS, RESUMED))
+    resumed = [gate.number for gate, result in results if result.status == RESUMED]
+    if resumed:
+        print(f"gates resumed rather than re-run: {resumed}")
     print(f"{passed} of {len(GATES)} gates passed.")
     unavailable = [gate.number for gate, result in results if result.status == UNAVAILABLE]
     if unavailable:
