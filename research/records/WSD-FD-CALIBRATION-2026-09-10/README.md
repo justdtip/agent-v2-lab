@@ -286,7 +286,7 @@ Codex reproduces them. The defensible statement is: **native-path autograd readi
 respective anchors are strongly schedule-sensitive for the tested projections, and the matched
 float32 readings are far more stable** — a median of 76% against parts in a hundred thousand.
 
-### 8.1 The same-anchor control, run: the answer is different at every depth
+### 8.1 The same-anchor control, run: the answer differs across the three sampled layers
 
 `a₆₄(x₆₄) − a₁(x₁)` moves the width and the anchor at once, because the width-64 forward produces a
 different residual at the source. The protocol's control splits it into two brackets that sum to it
@@ -298,7 +298,7 @@ exactly:
 
 Fourteen seconds of card time, 54 cells, and the identity closes to **exactly 0.0** in every one.
 
-| layer | anchor moved by | observed shift | anchor term | arithmetic term |
+| layer | selected position moved by | observed shift | anchor term | arithmetic term |
 |---:|---:|---:|---:|---:|
 | 1 | 0.19% | 0.756 | 0.502 | **1.108** |
 | 17 | 1.5% | 0.596 | **0.610** | 0.032 |
@@ -315,12 +315,12 @@ withdrawn.
 0.50, the two partly opposing to give the observed 0.76. Thirty-two blocks of backward accumulation
 run below that source, and that is where changing the reduction schedule tells.
 
-**And the conditioning is the finding that survives at every depth.** The anchor moves by 0.19% at
-layer 1 and the derivative read at it moves by 50%. At layer 33 an 8.8% anchor move gives 12%. A
-bf16 directional derivative here is extremely sensitive to the point it is read at, whatever one
-calls the cause — which is a statement about the instrument's conditioning and not about batching,
-and it is the reason the float32 fitting policy stands on stability evidence rather than on this
-attribution.
+**What survives at all three sampled layers is sensitivity to the anchor.** The derivative moves by
+a median of 50% at layer 1 and 12% at layer 33 when the anchor changes, and the anchor's change is a
+whole-sequence one whose *selected position* moved by 0.19% and 8.8%. Those percentages are the size
+of one position's move and **not** the size of the intervention, so they are reported as a label on
+the anchor pair and are not a denominator: no ratio of the two is a condition number, and none is
+computed. The float32 fitting policy stands on the stability evidence, not on this.
 
 ### 8.2 The displacement transplanted: the function is ill-conditioned, not the arithmetic
 
@@ -328,7 +328,7 @@ The obvious next question, and it has an answer. Take δ, the anchor move the wi
 produced in the native path, and apply the *same* δ in coherent float32 at width one, with no
 schedule change at all. Nine seconds of card time, 108 cells.
 
-| precision | layer | ‖δ‖/‖x‖ | derivative change from δ | from a random δ of equal norm |
+| precision | layer | selected position's move | derivative change from δ | from a random δ of equal norm |
 |---|---:|---:|---:|---:|
 | native bf16 | 1 | 0.19% | 0.471 | 1.006 |
 | **float32** | 1 | 0.19% | **1.035** | 0.749 |
@@ -376,9 +376,10 @@ does.
   was withdrawn correctly, and the positive claim replacing it is that the model's own map is steep
   there.
 - It explains why the ladder needed a much smaller step at layer 1 than at layer 33 without appealing
-  to precision. A map whose derivative changes by 100% under a 0.19% move of its input is one whose
-  secant needs a very small step to approximate its tangent, and §6's per-layer minima are that same
-  fact seen through the finite difference.
+  to precision. A map whose derivative changes by about 100% under a whole-sequence anchor move is
+  one whose secant needs a very small step to approximate its tangent, and §6's per-layer minima are
+  plausibly that same fact seen through the finite difference — an association between two
+  measurements, not a derivation of one from the other.
 - It is a caution the programme needs beyond this workstream. **A J-lens fitted at one anchor does
   not transport to a nearby anchor at early layers.** A lens read on a capture taken under any
   different arithmetic — a different batch width, a different precision, a promoted path — is being
@@ -422,7 +423,10 @@ Everything the first golden run could not have known. Coherent float32, because 
 that native bf16 has no useful interval. Width one on both sides, so the comparability gate's new
 `forward_batch` and `anchor_batch` agree by construction rather than by luck. And each layer at the
 step its **own** ladder minimum names, because the ladder also measured that one `epsilon_scale` for
-every layer is refuted — the two minima are a factor of 64 apart.
+every layer is at its best step is not: the two minima are 16 apart in normalized units, and §6
+records that a common scale of k = 10 would serve all three layers on this grid. Each layer is
+fitted at its own ladder minimum because that is the best available step for it, not because a
+shared one has been ruled out.
 
 | | first golden run | this run |
 |---|---|---|
@@ -556,11 +560,11 @@ to `a₁(x₁)` over eighteen direction-and-cotangent pairs; the identity closes
 | float32 | 24 | 7.3e-6 | 9.3e-6 | 5.6e-6 |
 | float32 | 47 | 2.3e-6 | 2.8e-6 | 1.2e-6 |
 
-**Coherent float32 is width-stable at 12B scale too**, at every depth, by four to five orders of
-magnitude against the native path. That is the confirmation the float32 fitting policy needed at the
+**Coherent float32 is width-stable at 12B scale too**, at the three sampled layers, by four to five
+orders of magnitude against the native path. That is the confirmation the float32 fitting policy needed at the
 larger model, and it is the reason this section exists as much as the memory number is.
 
-**In bf16 the anchor term is the larger one at every depth here, layer 1 included** — 0.330 against
+**In bf16 the anchor term is the larger one at all three sampled layers, layer 1 included** — 0.330 against
 0.096. That is not the 4B's pattern, where layer 1's arithmetic term was the larger. **The two are
 not comparable and the difference must not be read as a depth effect**: the 4B control changed the
 width by 64 and this one by 8, so the schedule perturbation is far smaller here, and the arithmetic
@@ -574,6 +578,16 @@ stability that its own design guaranteed. The native run was added for that reas
 now takes the precision as an argument with the trap named in its help text.
 
 ## 11. What this record concludes, and what is queued
+
+*On correcting this record, which took four audits and is the technique worth keeping.* Each round I
+fixed the paragraph the finding named and believed the correction done. It was not. A withdrawn claim
+goes on doing work wherever it was ever used, and the fourth audit found four live uses of claims I
+had withdrawn in the same document — the worst of them in the **concluding recommendation**, which is
+the paragraph most likely to be read alone and acted on, and the last place I looked. Sweeping the
+whole file for the withdrawn numbers rather than editing the named paragraph turned up nine, not
+four. **A correction is not done until every still-active use is found, and a concluding
+recommendation is the first place to look, not the last.**
+
 
 *Rewritten as the last act of the session. The three items that stood here were the plan at §6, and
 two of them are now stale: the width rows are §8, and "a single `epsilon_scale` is refuted by a
@@ -589,8 +603,8 @@ median is at or below 4.3e-3 at k = 10, so a common adequate scale is not refute
    demonstrated over this grid (§6).
 4. The golden test, fitted inside a demonstrated interval at a matched schedule, gives 4.85e-3 and
    2.86e-3 against the first run's 1.0245, with cosines of 0.99999 (§9).
-5. Coherent float32 is width-stable at 12B scale at every depth, and a float32 12B exact fit at
-   width 1 peaks at 44.10 GiB (§10).
+5. Coherent float32 is width-stable at 12B scale at the three sampled layers, on one row of 128
+   tokens, and a float32 12B exact fit at width 1 peaks at 44.10 GiB (§10).
 6. The derivative's sensitivity to its anchor is **not bfloat16's**: the same displacement applied in
    coherent float32 moves it as much or more, median 1.035 at repo layer 1 (§8.2). The amplification
    ratios first reported there are withdrawn — the perturbation was whole-sequence and the
@@ -614,10 +628,15 @@ median is at or below 4.3e-3 at k = 10, so a common adequate scale is not refute
    capture pass that does not is card time spent on artefacts nothing can be sealed against.
 
 **And one caution this record raises for work outside it.** A J-lens fitted at one anchor does not
-transport to a nearby anchor at early layers (§8.2). Reading a float32 lens against a native capture
-is benign at layer 33, where the amplification is 1.4×, and is not a small correction at layer 1,
-where it is 539×. That pairing is unmeasured, and it should be measured before an early-layer lens is
-read across an arithmetic boundary.
+transport to a nearby anchor at early layers (§8.2). **Cross-path compatibility remains unmeasured,
+including at layer 33**: nothing here measured a float32 lens read against a native capture at any
+layer, and the sampled sensitivity is what the restriction rests on, not a per-layer size. The ruled
+restriction on early-layer cross-path readings stays in force until the intended pairing is measured
+under its own reduction, population and precision — SWE-2's bridge already refuses at every sampled
+layer. *This paragraph previously called the pairing "benign at layer 33, where the amplification is
+1.4×"; those ratios were withdrawn in §8.2 and this was the last place still using them. A
+concluding recommendation is the first place to look for a withdrawn claim still doing work, and it
+was the last place I looked.*
 
 ## 12. Provenance
 
