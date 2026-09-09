@@ -127,8 +127,22 @@ class AgreementReport:
                 f"  {self.unrecorded_probability} compared positions carried no recorded "
                 "probability, so the hard rule could not be applied to them"
             )
-        lines.extend(f"  {flip.describe()}" for flip in self.hard_flips[:10])
+        # Every flip, not only the gating ones. A run that passes because no flip was confident
+        # is only evidence if the reader can see where the flips actually sat; "0 at P >= 0.99"
+        # on its own cannot be told apart from a threshold nobody came near.
+        lines.extend(f"  {flip.describe()}" for flip in self.flips[:12])
+        if len(self.flips) > 12:
+            lines.append(f"  ... and {len(self.flips) - 12} more")
         return "\n".join(lines)
+
+    @property
+    def flip_confidences(self) -> list[float]:
+        """The recorded probability at each flipped position, for the record."""
+        return [
+            flip.recorded_probability
+            for flip in self.flips
+            if flip.recorded_probability is not None
+        ]
 
 
 @dataclass

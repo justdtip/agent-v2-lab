@@ -44,11 +44,11 @@ import tolerance  # noqa: E402
 #: was made from, which is why the golden records correspond to it at all.
 CHECKPOINT_ENTRY = "gemma3-4b-cuda-bf16"
 
-#: The snapshot is the multimodal checkpoint, so the text weights carry a ``language_model.``
-#: prefix and the vision tower rides along. Both from WS-A's ``cpu_gates.py``; lifting that
-#: loader into the package is WS-E's and this mirrors it rather than diverging from it.
-KEY_MAPPING = {r"^language_model\.": ""}
-VISION_PREFIXES = ("vision_tower.", "multi_modal_projector.")
+#: The load goes through ``local_llm_lab.hf_text.load_text_causal_lm``, the package's one
+#: text-only loader. This script previously carried its own copy of the key mapping, the vision
+#: prefixes and the fail-closed checks; that copy is deleted rather than kept beside the
+#: package's, and naming a model class here would breach section 16.3 in a script meant to
+#: outlive this checkpoint.
 
 
 def _require_own_window() -> None:
@@ -83,26 +83,17 @@ def _snapshot(repo_id: str) -> Path:
     failure ``_resolve_checkpoint`` documents for local checkpoints, arriving through a
     different reader, so it is fixed here the same way.
 
-    ``box_state_root`` is that reader and it carries a known flaw: ``$AGENT_V2_BOX_STATE_DIR``
-    redirects it so an isolated run cannot take the machine's lock, and weights must not follow
-    that redirect. Plan §16.8 has SWE-2 splitting the git-derived half out as
-    ``primary_checkout_root``; when it lands this call moves to it. The redirect is unset here
-    and the run records which path it read, so the caveat is visible rather than assumed away.
+    ``primary_checkout_root`` is the git-derived reader, split out of ``box_state_root`` for
+    exactly this: the box-state half may be redirected by ``$AGENT_V2_BOX_STATE_DIR`` so an
+    isolated run cannot take the machine's lock, and weights must never follow that redirect.
+    This ran against ``box_state_root`` with the redirect refused at the call until the split
+    landed; that interim is deleted rather than left beside the real reader.
     """
-    import os
-
     from huggingface_hub import snapshot_download
 
-    from local_llm_lab.runlock import box_state_root
+    from local_llm_lab.runlock import primary_checkout_root
 
-    root = box_state_root()
-    if os.environ.get("AGENT_V2_BOX_STATE_DIR"):
-        raise SystemExit(
-            "AGENT_V2_BOX_STATE_DIR is set, so the shared-state reader is redirected and the "
-            "weights would be looked for in scratch. Unset it, or wait for "
-            "primary_checkout_root (plan section 16.8)."
-        )
-    cache = root / ".cache" / "huggingface" / "hub"
+    cache = primary_checkout_root() / ".cache" / "huggingface" / "hub"
     # Passed rather than exported: huggingface_hub reads its environment at import time, so
     # setting HF_HOME here is a no-op once anything has already imported it.
     print(f"weights cache: {cache}")
@@ -110,51 +101,22 @@ def _snapshot(repo_id: str) -> Path:
 
 
 def _load(checkpoint: Path):
-    """Text-only load that fails closed, mirroring WS-A's ``cpu_gates.load_text_model``.
-
-    The vision tower is expected to be left behind and every *other* gap is an error: a
-    missing text key, a shape change or a conversion failure would otherwise load a model that
-    runs and is not the one the records were made from.
-    """
-    import json
-
-    import torch
-    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
-
+    """Text-only load through the package's loader, which fails closed on every gap."""
     from local_llm_lab import device
     from local_llm_lab.arch_torch import TorchArchitectureView
+    from local_llm_lab.hf_text import load_text_causal_lm
 
     reading = device.pin(attention="eager")
     print(f"determinism: {reading.get('determinism')}, attention: eager, dtype bfloat16 on cpu")
 
-    raw = json.loads((checkpoint / "config.json").read_text())
-    config = Gemma3TextConfig(**raw["text_config"])
     started = time.monotonic()
-    model, info = Gemma3ForCausalLM.from_pretrained(
-        checkpoint,
-        config=config,
-        dtype=torch.bfloat16,
-        attn_implementation="eager",
-        local_files_only=True,
-        output_loading_info=True,
-        key_mapping=KEY_MAPPING,
+    model, report = load_text_causal_lm(
+        checkpoint, dtype="bfloat16", attn_implementation="eager", device="cpu"
     )
-    for field in ("missing_keys", "mismatched_keys", "error_msgs", "conversion_errors"):
-        if info.get(field):
-            raise SystemExit(f"text checkpoint load failed: {field}={info[field]}")
-    unexpected = set(info.get("unexpected_keys", ()))
-    if any(not key.startswith(VISION_PREFIXES) for key in unexpected):
-        raise SystemExit(
-            "the load left behind keys that are not the vision tower: "
-            f"{sorted(key for key in unexpected if not key.startswith(VISION_PREFIXES))[:5]}"
-        )
-    model = model.eval()
-    model.requires_grad_(False)
     view = TorchArchitectureView.from_model(model)
     print(
         f"loaded in {time.monotonic() - started:.1f}s: {view.num_layers} layers, "
-        f"hidden {view.hidden_size}, vocab {view.vocab_size}; "
-        f"{len(unexpected)} vision keys left behind"
+        f"hidden {view.hidden_size}, vocab {view.vocab_size}; load report {report}"
     )
     return model, view
 
@@ -231,6 +193,14 @@ def main(argv: list[str] | None = None) -> int:
                             "compared": report.agreement.compared,
                             "agreed": report.agreement.agreed,
                             "hard_flips": len(report.agreement.hard_flips),
+                            "flip_confidences": sorted(report.agreement.flip_confidences),
+                            "confident_positions": sum(
+                                1
+                                for turn in episode.turns
+                                for emission in turn.emissions
+                                if (turn.emitted_confidence(emission.position) or 0)
+                                >= tolerance.HARD_CONFIDENCE
+                            ),
                             "jaccard_mean": report.jaccard.mean,
                             "seconds": round(elapsed, 1),
                         }

@@ -24,6 +24,40 @@ CUDA is already initialised without it; that refusal reaching the operator is th
 pinning at the top of the kit. `pin_torch_determinism` remains as a once-per-process guard on
 the generation loop so a loop entered without the kit cannot take a number unpinned.
 
+## The first number not true by construction
+
+`agentic-d2-calculate-0158`, teacher-forced, MLX 4-bit records against CPU bfloat16, one box
+window, `cache_strategy: none`.
+
+| | |
+|---|---:|
+| argmax agreement | 98 of 103 (0.9515) |
+| flips | 5 |
+| flips at P ≥ 0.99 | **0** |
+| top-5 Jaccard, mean | 0.7018 |
+| top-5 Jaccard, median and worst | 0.6667 and 0.4286 |
+| gate | **PASS** |
+| wall clock | 83.5 s for the episode, 96 s total |
+| peak resident set | 7.88 GiB against a projected 7.56 and an R47 stop of 10.656 |
+
+**The pass is evidence and not a threshold nobody came near.** In this episode 78 of the 103
+emissions sit at P ≥ 0.99 and 25 do not. All five flips landed in the 25. If a flip were
+independent of confidence, the chance of none reaching the confident bucket is
+0.2427⁵ = 8.4 × 10⁻⁴. Put the other way: **0 of 78 confident positions flipped and 5 of 25
+unconfident ones did**, which is what a precision difference predicts and not what a mask,
+position, entry or norm defect would look like.
+
+**The projection missed by 4.2% and in the safe direction**, 7.88 GiB measured against 7.56
+projected. The basis was the snapshot's own header: 7.23 GiB of text tensors with the 0.78 GiB
+vision tower discarded, plus a 256 MiB ranking block and 80 MiB of KV. Stating the basis is
+what makes the 4.2% a number to learn from rather than a near miss.
+
+**What it does not say.** One episode of fifteen, 103 emissions of 5,245, and the shortest in
+the set — the same instance whose cheapness produced an earlier calibration error, chosen here
+deliberately so the box could be released quickly. Jaccard at 0.70 means the top-5 sets differ
+by more than the argmax does, which is expected between precisions and is reported rather than
+gated. The remaining fourteen episodes are unrun.
+
 ## Gate status
 
 Run: `python scripts/acceptance_gates.py --records <stage-two records> --keep-going`
