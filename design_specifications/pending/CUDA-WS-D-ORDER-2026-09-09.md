@@ -269,3 +269,12 @@ hook defect at width > 1 was never separable from the forward's batch-dependence
 hook is exact at batch one; the forward is not batch-invariant; the hook at wider widths is
 **untested** until the unchanged-residual check is run at width w with a capture made at width w,
 which step 3 above requires. The field is removed or computed from that test.
+
+**C2, from the same review, for the calibration record and the next run:** the record states which
+pieces of the protocol are **unexecuted** — matched float32 pairs, graph-once against sequential
+VJP, nonzero identity-derivative controls, the ladder with realised displacements, midpoints and
+spacing, per-direction autograd predictions — as unexecuted and not as failed; the next run
+preserves the individual response vectors per position and direction before any reduction, as §5
+requires; the sign control computes the flipped even remainder it promises; and the native control's
+JSON links its runtime manifest and the frozen-token digest to the boundary manifest so the two
+runs form one provenance chain.
