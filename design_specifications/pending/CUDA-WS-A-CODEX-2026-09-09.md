@@ -531,3 +531,29 @@ loaded, nothing on the card changed.
 *2026-09-10, later:* the width-1 ladder landed on `cuda-ws-d` at `5b0feb7`/`15eddfa`; standing request 2 is live.
 
 *2026-09-10, later:* standing request 2 delivered at `2678218` (`WSA-LADDER-AUDIT-2026-09-09`), accepted in full and ruled in the WS-D order's correction of this date; merged. Standing request 1 stays live until the D-CRO's P1–P6 commit exists.
+
+## Director → Codex, 2026-09-10: the direction reviews audit against from here
+
+The programme's purpose is to replicate what Anthropic found about the model's workspace, on
+agentic problems, and then to steer what the agent *does* rather than what it says. The experiments
+now being defined (`WORKSPACE-EXPERIMENTS-2026-09-10.md`, forthcoming) ask global-workspace
+questions of an agent at its decision positions: ignition and competition when it commits to a tool
+call; whether the chosen action lives in one subspace available across all task families or in
+family-specific ones; where the decision draws its content from, with Gemma's six global layers as
+the only long-range channel; and whether the progress note is a report of a decision already made
+or part of the deciding.
+
+Audit each measurement for whether it bears on the workspace property it claims to, not only
+whether its arithmetic reproduces. The failure modes to hunt, in this order: an instrument artefact
+read as a workspace property — this week that has meant an overcomplete dictionary, a lens read
+outside the positions it was fitted at, a carrier re-read from the transcript, a batch or precision
+path difference, and a test that certifies its own implementation; a claim about the model made
+from a median that hides the tail; and a control that matches size but not structure. A result that
+passes names its positions, its precision and width, its lens's identity and fitting positions, its
+nulls, and the unit of its confidence bound. Review the design before any capture is read and
+audit the result after, as for the calibration. Keep counting the gates that can disagree with their
+producers against the ones that cannot.
+
+**Standing requests 3 and 4:** (3) a design review of the workspace-experiments order when it lands
+on main, before any capture is read; (4) an audit of each experiment's record when it lands on
+`cuda-migration`.
