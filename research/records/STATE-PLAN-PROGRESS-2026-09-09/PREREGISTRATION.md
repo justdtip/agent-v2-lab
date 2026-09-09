@@ -373,9 +373,13 @@ the report says so in those words.
 
 Each fails closed and names itself.
 
-1. **The corpus is the counted corpus.** The five per-file digests in `prereg-inputs.json` match the
-   files under `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, and `capture-set.jsonl`
-   regenerates from them to the same `capture_set_sha256`.
+1. **The corpus is the counted corpus. Checked, 2026-09-09, and it passes.** All five per-file
+   digests in `prereg-inputs.json` match the files under
+   `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, and `prereg_inputs.py` run on the device copy
+   reproduces every figure in §1 and regenerates `capture-set.jsonl` to the same
+   `capture_set_sha256`. CPU only, seconds, no card time; nothing was written into the shared
+   checkout. This is the re-run on the device copy that order §1 asks the owner of the
+   pre-registration to do.
 2. **The two models share the rendering byte for byte.** The 12B entry asserts it in a comment with
    the tokenizer digests; the check compares the two snapshots' `tokenizer.json` and
    `tokenizer.model` and re-renders one episode under each entry, comparing the digest. The corpus
