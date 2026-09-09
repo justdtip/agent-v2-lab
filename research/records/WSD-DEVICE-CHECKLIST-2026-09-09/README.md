@@ -109,3 +109,17 @@ run at.**
 Adapter fixture tests, corpus freezing, and short probes of minutes. Not announced blocks, and not
 the golden test. The gates above are written so that the first hour on the device runs diagnosis
 rather than an experiment.
+
+## §4's blockers, resolved — 2026-09-09 evening
+
+All four are cleared. Two by ruling, two by code; none by being decided to matter less.
+
+| blocker | resolution |
+|---|---|
+| the corpus split | **Ruled** (plan §16.13). The golden test compares finite-difference against exact on the *same* rows of the pinned `validation` split, so the estimator difference is isolated and the split does not enter the comparison. The hosted-versus-fitted comparison declares the train/validation difference in ν as a corpus difference and is **not** a golden gate. The Director's `validation` answer stands unchanged. |
+| `compare_maps.py` | **Done, and not by editing the record.** `LensIdentity` is keyword-only as of `57a0b89`, so no positional call can silently rebind again. The record's script is left as-run, because its own `comparison.json` carries the pre-`a960d80` `{"name", "hf_id", "num_layers"}` shape and rewriting it would make the record claim something ran that did not. `GEMMA3-REGRESSION-2026-09-08/README.md` now says this, and says a current-signature copy belongs beside it. |
+| a pass threshold | **Ruled** (plan §16.13), and the ruling is that none is chosen in advance. Exactness is gated at zero where it holds by construction — upstream exact, re-run on the same rows. The FD-versus-exact residual per layer **is** the finding, reported with the finite-difference epsilon and the fp16 storage floor declared, against the fixture's own residual as the expected magnitude. What is gated is the controls: orientation through upstream's transport, a layer-shifted artefact, and a wrong-corpus fit, each required to fail by **more** than the residual. The `atol=1e-4` caution in §2 stands: it is an internal convention check and is still not a tolerance. |
+| CLI wiring | **Done** (`6c2f42e`). `scripts/lens_fit.py` reads `device.backend()` once, after argument validation and before the first import that reaches MLX, in the shape `stage_train` uses. A non-MLX backend is **refused**, not fallen through, and the refusal names the estimator difference so the two backends cannot be treated as interchangeable. Five fixture tests, including one that asserts the read's position in the source, because a read moved below the imports would still pass behaviourally on this box. |
+
+The gate tables above are unchanged. Nothing here supplies a number that was marked unknown; the
+per-layer agreement in §2 is still the measurement and still does not exist.
