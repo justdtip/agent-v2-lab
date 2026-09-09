@@ -176,7 +176,9 @@ against them: **the seam** and **the harness**.
 
 ### WS-A. The torch seam — Codex, via the Director. Hardest, first.
 
-**Owns.** New `src/local_llm_lab/arch_torch.py`; a small extraction of the backend-neutral parts of
+**Builds on upstream directly** (the Director's instruction): `jlens/hooks.py::ActivationRecorder` is
+extended into `TorchCapture`, and discovery delegates to `jlens/hf.py::_find_layout`, with our
+`_TEXT_MODULE_PATHS` as the fallback. **Owns.** New `src/local_llm_lab/arch_torch.py`; a small extraction of the backend-neutral parts of
 `arch.py` (structural discovery, index validation, `lora_targets` over a linear-type tuple) into a
 shared base both views inherit.
 
