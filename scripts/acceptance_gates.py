@@ -84,9 +84,23 @@ def _not_this_workstream(number: int, owner: str) -> Callable[[argparse.Namespac
     return run
 
 
-def gate_5_golden_trajectories(arguments: argparse.Namespace) -> GateResult:
-    """Fifteen episodes token-for-token from their recorded prompt ids."""
+def _selected_episodes(arguments: argparse.Namespace):
+    """The episodes a gate reads, and the shortest one alone under ``--smoke``.
+
+    Smoke exists so an hour that dies at minute fifty has touched every gate once and can say
+    which of them was never going to work. The reduced input is part of the resume key, so a
+    later full pass cannot resume past a smoke record; see gate_records.
+    """
     episodes = golden.load_episodes(arguments.records)
+    if not arguments.smoke or not episodes:
+        return episodes
+    shortest = min(episodes, key=lambda episode: episode.emission_count)
+    return [shortest]
+
+
+def gate_5_golden_trajectories(arguments: argparse.Namespace) -> GateResult:
+    """Every episode token-for-token from its recorded prompt ids; one under --smoke."""
+    episodes = _selected_episodes(arguments)
     if not episodes:
         return GateResult(FAIL, saw="0 records", expected=f"records under {arguments.records}")
 
@@ -123,7 +137,10 @@ def gate_5_golden_trajectories(arguments: argparse.Namespace) -> GateResult:
         return GateResult(
             UNAVAILABLE,
             saw="records read and self-consistent; nothing regenerated",
-            expected="15 episodes token-for-token from a loaded backend",
+            expected=(
+                f"{len(episodes)} episode{'' if len(episodes) == 1 else 's'} "
+                "token-for-token from a loaded backend"
+            ),
             notes=notes,
         )
 
@@ -154,7 +171,7 @@ def gate_5_golden_trajectories(arguments: argparse.Namespace) -> GateResult:
 
 def gate_6_golden_lens_reads(arguments: argparse.Namespace) -> GateResult:
     """Rank rows at every layer for the emitted tokens, against the recorded ones."""
-    episodes = golden.load_episodes(arguments.records)
+    episodes = _selected_episodes(arguments)
     emitted = sum(episode.emission_count for episode in episodes)
     agentic = sum(episode.emission_count for episode in episodes if episode.kind == "agentic")
     # Computable from the records alone, and it sizes the tolerance gate rather than
@@ -275,6 +292,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--model", help="model to load; requires an announced box window")
     parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="run every gate on its smallest input, so an hour that dies late has touched "
+        "each one once and can say which was never going to work",
+    )
+    parser.add_argument(
         "--results",
         type=Path,
         help="directory of gate records; a gate whose record matches this run's commit, "
@@ -288,10 +311,21 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     _print_environment()
+    if arguments.smoke:
+        selected = _selected_episodes(arguments)
+        print(
+            f"SMOKE PASS: every gate on its smallest input "
+            f"({', '.join(episode.label for episode in selected)}).\n"
+            "A pass here is not a pass on the full input, and the resume key says so.\n"
+        )
 
     store = None
     if arguments.results:
-        identity = gate_records.current_identity(arguments.model)
+        identity = gate_records.current_identity(
+            arguments.model,
+            smoke=arguments.smoke,
+            episodes=sorted(episode.label for episode in _selected_episodes(arguments)),
+        )
         store = gate_records.GateRecords(arguments.results, identity)
         usable, why = identity.usable
         print(f"resume store: {arguments.results}")

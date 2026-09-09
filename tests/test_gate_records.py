@@ -175,3 +175,17 @@ def test_the_reader_only_fields_never_split_a_key() -> None:
     mine = _identity()
     relabelled = replace(mine, source_commit="d" * 40, diff_stat="one file changed")
     assert mine.differences(relabelled) == []
+
+
+def test_a_failed_or_unavailable_gate_is_re_run_rather_than_resumed(tmp_path: Path) -> None:
+    """Resume carries a pass forward. A failure is a thing to try again, not to inherit.
+
+    The store keeps every result, so a reader can see what happened; the kit's resume reads
+    only the passes. Written as a test because the store's own behaviour is to return whatever
+    it holds, and the rule lives in the caller.
+    """
+    records = GateRecords(tmp_path, _identity())
+    records.write(4, _result("fail"))
+    records.write(5, _result("unavailable"))
+    assert records.completed(4)["status"] == "fail"
+    assert records.completed(5)["status"] == "unavailable"

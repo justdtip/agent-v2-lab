@@ -246,7 +246,7 @@ def test_an_unimplemented_gate_is_never_a_pass(records: Path) -> None:
 
 
 def test_the_kit_reports_gate_five_unavailable_rather_than_passing(records: Path) -> None:
-    arguments = gates.argparse.Namespace(records=records, model=None, keep_going=True)
+    arguments = gates.argparse.Namespace(records=records, model=None, keep_going=True, smoke=False)
     result = gates.gate_5_golden_trajectories(arguments)
     assert result.status == gates.UNAVAILABLE, (
         "records that read cleanly are not a reproduction, and reporting them as one would "
@@ -263,7 +263,9 @@ def test_the_kit_fails_gate_five_when_the_record_disagrees_with_itself(tmp_path:
         if event["kind"] == "forward":
             event["argmax"] = [[404]]
     _write_record(directory / "bad.jsonl", events)
-    arguments = gates.argparse.Namespace(records=directory, model=None, keep_going=True)
+    arguments = gates.argparse.Namespace(
+        records=directory, model=None, keep_going=True, smoke=False
+    )
     result = gates.gate_5_golden_trajectories(arguments)
     assert result.status == gates.FAIL and result.blocking
     assert "disagreement" in result.saw
@@ -273,7 +275,9 @@ def test_the_kit_refuses_to_load_a_model_without_a_box_window(records: Path, mon
     from local_llm_lab import runlock
 
     monkeypatch.setattr(runlock, "read_window", lambda *args, **kwargs: None)
-    arguments = gates.argparse.Namespace(records=records, model="gemma3-4b", keep_going=True)
+    arguments = gates.argparse.Namespace(
+        records=records, model="gemma3-4b", keep_going=True, smoke=False
+    )
     with pytest.raises(SystemExit, match="no box window"):
         gates._load_backend(arguments)
 
