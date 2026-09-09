@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import re
 from pathlib import Path
@@ -165,6 +166,13 @@ def load_text_causal_lm(
     )
     if key_mapping:
         kwargs["key_mapping"] = key_mapping
+    # transformers logs a load report naming every unexpected key at warning level: for a
+    # wrapper that is the whole vision tower, hundreds of lines burying the run's own output
+    # at every load (SWE-1). The same facts are checked below, fail-closed, and the report
+    # carries them as a count and its prefixes, so the table is silenced for the call only.
+    hf_logger = logging.getLogger("transformers.modeling_utils")
+    level = hf_logger.level
+    hf_logger.setLevel(logging.ERROR)
     try:
         model, info = AutoModelForCausalLM.from_pretrained(meta["path"], **kwargs)
     except RuntimeError as error:
@@ -173,6 +181,8 @@ def load_text_causal_lm(
             "text checkpoint load failed, a tensor did not match the model it was loaded into "
             f"(shape or dtype mismatch; HF's load report names it): {error}"
         ) from error
+    finally:
+        hf_logger.setLevel(level)
 
     for field in ("missing_keys", "mismatched_keys", "error_msgs", "conversion_errors"):
         if info.get(field):
@@ -202,6 +212,13 @@ def load_text_causal_lm(
     if devices != {torch.device(device).type} or dtypes != {dtype}:
         raise ValueError(f"loaded parameters are on {sorted(devices)} in {sorted(dtypes)}")
     model.eval().requires_grad_(False)
+    # `save_pretrained(save_original_format=True)`, the default, reverts the conversions the
+    # load applied, read from this attribute; a wrapper loaded under the prefix mapping would
+    # save `language_model.model.*` tensors under a config that names the causal LM, an artefact
+    # nothing reads (SWE-2, 7f5c6e4). Cleared, the save recomputes only the architecture's own
+    # conversions and drops the prefix change: the model saves in its own layout, and what it
+    # saves loads back through this function as a plain checkpoint.
+    model._weight_conversions = None
 
     report = {
         "path": meta["path"],
@@ -210,7 +227,12 @@ def load_text_causal_lm(
         "architecture": type(model).__name__,
         "key_mapping": key_mapping,
         "other_prefixes": meta["other_prefixes"],
-        "unexpected_keys": sorted(unexpected),
+        "unexpected_keys": {
+            "count": len(unexpected),
+            "prefixes": meta["other_prefixes"],
+            "note": "the full list is under loading_info; it equals the checkpoint's "
+            "non-text tensors exactly, checked above",
+        },
         "storage_dtypes": meta["storage_dtypes"],
         "safetensors_format": meta["safetensors_format"],
         "text_bytes": meta["text_bytes"],
@@ -220,6 +242,7 @@ def load_text_causal_lm(
         "device": sorted(devices)[0],
         "dtype": sorted(dtypes)[0],
         "attn_implementation": getattr(model.config, "_attn_implementation", None),
+        "save_layout": "the model's own; the load-time prefix mapping is not reverted on save",
         "sha256": meta["sha256"],
         "loading_info": {
             key: sorted(value) if isinstance(value, (set, list, tuple)) else value

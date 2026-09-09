@@ -386,3 +386,9 @@ key layout, or the path is untested by construction.** The Chief's own loader te
 shape, a made-up wrapper type over a Llama text config, and were corrected the same evening with a
 fixture mirrored from the snapshot's headers. It is the fourteenth entry's blind spot (the
 uncached tokenizer) with a different artefact.
+
+**One level out, the same evening.** The test that the stage's checkpoint reloads passed while
+every weight came back freshly initialised, because the reader it used treats missing keys as a
+warning. **An assertion that an artefact loads is worth nothing unless the loader fails closed**: a
+tolerant reader turns a corrupted artefact into a passing test, which is the guard that passes
+the object it exists to catch, applied to the reader instead of the guard.

@@ -681,6 +681,35 @@ def _probe_failed(command: Sequence[str], reason: BaseException) -> None:
     )
 
 
+_SHELLS = frozenset({"bash", "zsh", "sh", "dash", "fish", "ksh"})
+
+
+def _discarded_shell(pid: int) -> str | None:
+    """The parent's command when ``pid`` names it, it is a shell, and there is no terminal.
+
+    An interactive shell at a terminal persists for the block and is a legitimate holder; so is a
+    launcher script, which is not a shell. A shell with no terminal is a harness running one
+    command and discarding the shell, and a window read against it is dead before anyone reads
+    the file. ``None`` in every other case, and on any failure to read the process table: the
+    refusal is for the one shape that was observed, not a gate on everything else.
+    """
+    if pid != os.getppid():
+        return None
+    try:
+        if sys.stdin.isatty():
+            return None
+    except (AttributeError, ValueError):
+        return None
+    try:
+        for entry_pid, _, _, command in _process_table():
+            if entry_pid == pid:
+                executable = command.split()[0].rsplit("/", 1)[-1] if command.split() else ""
+                return command if executable.lstrip("-") in _SHELLS else None
+    except Exception:  # noqa: BLE001 - a process table that cannot be read is not a refusal
+        return None
+    return None
+
+
 def _process_table() -> list[tuple[int, int, int, str]]:
     """``(pid, ppid, pgid, command)`` for every process, or an empty table.
 
@@ -1205,7 +1234,18 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
     # a shell it then discards, where the recorded holder is dead before anyone reads the file
     # and the window reports itself orphaned from the moment it opens. Such a seat passes the
     # pid of something that will actually live: the run it is about to start, or a sentinel.
-    opening.add_argument("--holder-pid", type=int, default=None)
+    opening.add_argument(
+        "--holder-pid",
+        type=int,
+        default=None,
+        help=(
+            "pid of the process the window should be read against: one that outlives this "
+            "command. Not $$ from a harness shell, which the harness discards at once so the "
+            "window reads orphaned from the moment it opens (that is the trap the flag exists "
+            "for, and it fired on 2026-09-09 with the flag in hand). A harness seat uses "
+            "`runlock run -- <command>`, which holds the window with the command's own process."
+        ),
+    )
     running = sub.add_parser("run")
     running.add_argument("--seat", required=True)
     running.add_argument("--purpose", required=True)
@@ -1234,8 +1274,19 @@ def _window_cli(argv: Sequence[str] | None = None) -> int:
         # that died and left its window behind. Observed on 2026-09-08 by a seat that is not an
         # interactive terminal. Naming a longer-lived process is the caller's own knowledge and
         # cannot be inferred here, which is why it is an argument rather than a cleverer default.
+        holder = os.getppid() if args.holder_pid is None else args.holder_pid
+        shell = _discarded_shell(holder)
+        if shell:
+            print(
+                f"runlock announce refused: the holder would be {shell!r}, this command's own "
+                "parent shell with no terminal, which a harness discards as soon as this "
+                "command exits; the window would read orphaned from the moment it opened. "
+                "Name the pid of the run itself, or use `runlock run -- <command>`, which "
+                "holds the window with the command's own process.",
+                file=sys.stderr,
+            )
+            return 1
         try:
-            holder = os.getppid() if args.holder_pid is None else args.holder_pid
             nonce = announce_window(args.seat, args.purpose, args.minutes, pid=holder)
         except RunLockBusy as error:
             return refuse("announce", error)
