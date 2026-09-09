@@ -311,3 +311,9 @@ history no band trend exists.
 **Every read here is still a hosted-lens read outside its fitted position range.** The two-factor
 structure is a within-corpus contrast and is robust to that in the way the level is not; the level
 waits on a lens fitted at transcript positions.
+
+**The zero-history cell, per episode** (D-CRO, `669e0c4`). Seven episodes carry at least three
+zero-history tokens in both spans; **all seven are positive**, median +3.47 at layer 21 and +3.43 at
+23. So the matched-novelty gap is not one episode, and not the truncated one, which the leave-one-out
+already showed working against it. Bounded honestly: three to five argument tokens per episode, so
+seven of seven in sign is worth having and is not a significance test.
