@@ -1,8 +1,0 @@
-{
-  "base_commit": "2b7905f3311a5a50391f0bafb19682d456c070d4",
-  "payload_commit": "7221079f51348871c68e9dbc17b5942b1ceabdc9",
-  "file": "WS-A.patch",
-  "sha256": "4f638eef8ad53ecdf4515af2e60521ebf59cd1c8130370e8cb8023c379bea430",
-  "reverse_apply_check": "passed against payload tree",
-  "excludes": "this patch and its manifest; includes source, tests and evidence records"
-}

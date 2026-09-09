@@ -10,7 +10,12 @@ import inspect
 import math
 
 import torch
-from jlens.hooks import ActivationRecorder
+
+from local_llm_lab.upstream_ref import load_upstream
+
+# Use the very recorder imported by the selected upstream estimator. The shared loader
+# rejects an absent named clone or an already-imported copy from a different location.
+ActivationRecorder = load_upstream().fitting.ActivationRecorder
 
 
 def _arguments(module, args, kwargs):

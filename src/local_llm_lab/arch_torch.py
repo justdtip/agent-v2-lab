@@ -10,10 +10,10 @@ from __future__ import annotations
 import copy
 import inspect
 from collections.abc import Callable, Sequence
+from importlib import import_module
 from typing import Any
 
 import torch
-from jlens import hf
 from torch.utils._pytree import tree_leaves
 from transformers.cache_utils import DynamicCache
 
@@ -24,6 +24,11 @@ from local_llm_lab.arch_base import (
     _validate_scored_position,
 )
 from local_llm_lab.torch_capture import TorchCapture
+from local_llm_lab.upstream_ref import load_upstream
+
+# Resolve and validate the selected clone before importing any additional upstream module.
+load_upstream()
+hf = import_module("jlens.hf")
 
 __all__ = ["TorchArchitectureView", "TorchCapture"]
 

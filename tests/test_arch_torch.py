@@ -3,9 +3,18 @@
 import inspect
 
 import pytest
-import torch
-from jlens.fitting import _check_layer_indices
-from transformers import Gemma3ForCausalLM, Gemma3TextConfig
+
+torch = pytest.importorskip("torch")
+from local_llm_lab.upstream_ref import UpstreamUnavailable, load_upstream  # noqa: E402
+
+try:
+    _upstream = load_upstream()
+except UpstreamUnavailable as error:
+    pytest.skip(str(error), allow_module_level=True)
+pytest.importorskip("jlens", reason="the selected upstream Jacobian-lens reference is unavailable")
+from transformers import Gemma3ForCausalLM, Gemma3TextConfig  # noqa: E402
+
+_check_layer_indices = _upstream.fitting._check_layer_indices
 
 
 def make_model():

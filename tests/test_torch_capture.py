@@ -5,7 +5,14 @@ from types import SimpleNamespace
 import pytest
 
 torch = pytest.importorskip("torch")
-from jlens.hooks import ActivationRecorder  # noqa: E402
+from local_llm_lab.upstream_ref import UpstreamUnavailable, load_upstream  # noqa: E402
+
+try:
+    _upstream = load_upstream()
+except UpstreamUnavailable as error:
+    pytest.skip(str(error), allow_module_level=True)
+pytest.importorskip("jlens", reason="the selected upstream Jacobian-lens reference is unavailable")
+ActivationRecorder = _upstream.fitting.ActivationRecorder
 from torch import nn  # noqa: E402
 
 from local_llm_lab.torch_capture import TorchCapture  # noqa: E402
