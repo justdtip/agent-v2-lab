@@ -249,11 +249,18 @@ comparability rule says two things that ran different arithmetic are not two mea
 same quantity. So it is not a curiosity about one near-tie. It decides whether a cached run and
 an uncached record may be compared at all, which is precisely the claim the cache-strategy arm
 exists to make — that `trim` and `snapshot` reproduce the `none` trajectories byte for byte. The
-question to put to that arm before it lands is whether a restore promotes: a saved and restored
-activation *is* written back, so a restore that silently promotes makes every block above it run
-at a precision the model's own dtype field still denies. That is the same shape as the sampled
-path's upcast, except that the sampled path only ever reads at the head and never writes a block
-output, which is why it is not affected.
+question to put to that arm before it lands concerns the restore, because a saved and restored
+activation *is* written back, where the sampled path only ever reads at the head and never writes
+a block output.
+
+**Corrected by the D-CRO after they measured it.** Their first framing, which an earlier draft of
+this record repeated, was that a promoted write-back is invisible on the real model and loud only
+on a fixture. It is not: on a real bfloat16 Gemma it raises at every step they tried — `expected
+mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16`. So a restore that promotes
+stops rather than hides, which is better news for that arm than either of us had. The question to
+put to it changes shape accordingly: not "does a promotion hide", but whether the restore writes
+back in the block's own dtype, and whether anything **downcasts** a saved float32 activation to
+make it fit. The gate is still right; the reason given for it here was wrong.
 
 **Gate 6 is UNAVAILABLE**, correctly: the backend loads, and the lens read path is not ported.
 That is WS-A's producing side, unchanged by anything here.
@@ -324,7 +331,10 @@ the resolver device-aware rather than leaving a flag people must remember.
 **`classified-cuda.json` / `.jsonl` — the final four-class run, which is the number that counts.
 `port-spreads.json` — the port's cross-device spread per outstanding position, with
 `margins-cpu.json` and `margins-cuda.json` the readings behind it.** `rebased-cuda.json` /
-`.jsonl` / `.log` — the re-based run before the third class existed. `mlx-bf16-reference.json` / `.jsonl` — the reference
+`.jsonl` / `.log` — the re-based run before the third class existed. `flip-margins.json` is
+**superseded** at position 521 and carries a note saying so in the file: its logit gaps are right
+and its ULP conversion is not, because it fixed the grid at an assumed magnitude. The record must
+not carry two grids for one gap. `mlx-bf16-reference.json` / `.jsonl` — the reference
 itself, every deciding position with its top-two gap in ULPs.** `mlx-bf16-arm.json` / `.jsonl` —
 the precision-matched arm, one row per position with its verdict. `flip-margins.json` — the logit gaps in ULPs for the three that arm left open.**
 `confident-flips.json` — the twenty-four failing positions, the input to both. `cuda-all15-v2.json` / `.jsonl` and `cuda-v2.log` — the recapture that produced it,

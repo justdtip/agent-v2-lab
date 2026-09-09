@@ -686,10 +686,11 @@ the dtype the logits are stored in is a **tie**: counted and reported as a tie, 
 and never folded into agreement. And a margin is measured in ULPs of the stored dtype, never as a
 probability, because probability hides the grid the numbers actually live on.
 
-## Thirty-second: the instrument's resolution is a measurement, not a setting, in SWE-1's name
+### Addendum to the thirty-first, same author: the instrument's resolution is a measurement, not a setting
 
-Three things one position taught, after the thirty-first entry had already re-based the gate onto
-a precision-matched reference and left a single flip standing.
+Three things one position taught after the entry above was written, while the gate it re-based was
+being settled. Kept here rather than given a number of its own, on the Chief's ruling: it is the
+same finding continuing, not a second lesson.
 
 **The grid must be computed from the value.** bfloat16's spacing is `2^(⌊log₂|v|⌋ − 7)`, so it
 depends on the magnitude of the number being measured. One arm of this work fixed it once at an

@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 import time
 from pathlib import Path
@@ -48,6 +47,10 @@ for _path in (_ROOT / "src", _ROOT / "research" / "acceptance"):
 
 import golden_trajectories as golden  # noqa: E402
 import provenance  # noqa: E402
+import tolerance as _tolerance  # noqa: E402
+
+#: One definition of the grid, in the module that owns the rule.
+bf16_ulp = _tolerance.bf16_ulp
 
 #: The registry entry whose weights are MLX bfloat16 -- the same model as the records at a
 #: different precision, which is the one thing this comparison may not get wrong.
@@ -107,13 +110,6 @@ def mlx_argmax_rows(model: Any) -> Any:
         return [(int(token), ()) for token in argmax.tolist()]
 
     return forward
-
-
-def bf16_ulp(magnitude: float) -> float:
-    """The spacing of bfloat16 near ``magnitude``: 7 mantissa bits, so 2**(exponent - 7)."""
-    if magnitude == 0:
-        return 2.0**-133
-    return 2.0 ** (math.floor(math.log2(abs(magnitude))) - 7)
 
 
 def reference_rows(model: Any, episode: Any) -> list[dict]:

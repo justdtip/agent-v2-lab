@@ -42,6 +42,9 @@ import tolerance as _tolerance  # noqa: E402
 
 #: The ruled tie band, taken from the module that owns it so the two cannot drift.
 TIE_ULPS = _tolerance.TIE_ULPS
+#: One definition of the grid, in the module that owns the rule. Three copies of a device
+#: comparison had already accepted a wrong device between them; a grid is the same hazard.
+bf16_ulp = _tolerance.bf16_ulp
 
 
 def _require_own_window() -> None:
@@ -55,13 +58,6 @@ def _require_own_window() -> None:
             "refusing to load weights: no box window is announced. Announce one with "
             "`runlock run` and read `runlock status` back until it says running."
         )
-
-
-def bf16_ulp(magnitude: float) -> float:
-    """The spacing of bfloat16 near ``magnitude``: 7 mantissa bits, so 2**(exponent - 7)."""
-    if magnitude == 0:
-        return 2.0**-133
-    return 2.0 ** (math.floor(math.log2(abs(magnitude))) - 7)
 
 
 def _sequences(episodes: list[Any], wanted: list[dict]) -> dict[tuple[str, int], list[int]]:
@@ -85,7 +81,6 @@ def _reading(top1: int, p1: float, top2: int, p2: float, logit1: float) -> dict:
     three at the true |v| in [64, 128), and "every gap is an exact multiple of the grid" cannot
     tell 0.25 from 0.5, because a multiple of the finer grid is a multiple of the coarser.
     """
-    import math
 
     gap = math.log(p1 / p2) if p2 > 0 else float("inf")
     ulp = bf16_ulp(logit1)

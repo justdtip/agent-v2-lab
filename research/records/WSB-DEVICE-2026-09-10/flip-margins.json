@@ -1,4 +1,5 @@
 {
+ "SUPERSEDED": "This file's ULP figures are wrong and are kept only as the record of the arm that produced them. It fixed the bfloat16 grid at an assumed magnitude (ULP 0.25) instead of reading it from each position's own top logit, so read-0108/521 appears here as a 6 ULP gap where the true grid at |v| = 66.00 is 0.5 and the gap is 3.0 ULP. The logit gaps in logits are correct; only their conversion to ULPs is not. Superseded by margins-cpu.json, margins-cuda.json and port-spreads.json, which take the grid from the value. The Chief ruled on the 3.0.",
  "what": "top-two margins in each bfloat16 framework at the positions where they disagreed, to separate a defect from a rounding tie",
  "tie_ulps": 8,
  "near_ties_in_both": {
