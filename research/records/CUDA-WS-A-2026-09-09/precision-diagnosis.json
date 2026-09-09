@@ -1,0 +1,96 @@
+{
+  "source_commit": "0431e0077d79f01f63759622ad042255b224534a",
+  "scope": "tiny random model only",
+  "torch": "2.14.0",
+  "reference": "same bf16-rounded weights in both models; float32 load is an exact upcast",
+  "lengths": {
+    "64": {
+      "bf16_loop_vs_native": {
+        "0": {
+          "max_abs": 0.0,
+          "relative_max_norm": 0.0
+        },
+        "1": {
+          "max_abs": 0.014986991882324219,
+          "relative_max_norm": 0.005957562010735273
+        },
+        "2": {
+          "max_abs": 0.030860960483551025,
+          "relative_max_norm": 0.009316516108810902
+        },
+        "3": {
+          "max_abs": 0.04721444845199585,
+          "relative_max_norm": 0.01020852942019701
+        }
+      },
+      "bf16_loop_vs_float32_native": {
+        "0": {
+          "max_abs": 0.0,
+          "relative_max_norm": 0.0
+        },
+        "1": {
+          "max_abs": 0.001695871353149414,
+          "relative_max_norm": 0.0006773060304112732
+        },
+        "2": {
+          "max_abs": 0.0019043684005737305,
+          "relative_max_norm": 0.0005728031392209232
+        },
+        "3": {
+          "max_abs": 0.0022385716438293457,
+          "relative_max_norm": 0.00048618688015267253
+        }
+      },
+      "float32_loop_vs_native": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      }
+    },
+    "1400": {
+      "bf16_loop_vs_native": {
+        "0": {
+          "max_abs": 0.0,
+          "relative_max_norm": 0.0
+        },
+        "1": {
+          "max_abs": 0.022380828857421875,
+          "relative_max_norm": 0.008896727114915848
+        },
+        "2": {
+          "max_abs": 0.03479647636413574,
+          "relative_max_norm": 0.01050459686666727
+        },
+        "3": {
+          "max_abs": 0.0472143292427063,
+          "relative_max_norm": 0.01020850334316492
+        }
+      },
+      "bf16_loop_vs_float32_native": {
+        "0": {
+          "max_abs": 0.0,
+          "relative_max_norm": 0.0
+        },
+        "1": {
+          "max_abs": 0.001810908317565918,
+          "relative_max_norm": 0.0007232500938698649
+        },
+        "2": {
+          "max_abs": 0.001905098557472229,
+          "relative_max_norm": 0.0005730227567255497
+        },
+        "3": {
+          "max_abs": 0.002581477165222168,
+          "relative_max_norm": 0.0005606612539850175
+        }
+      },
+      "float32_loop_vs_native": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      }
+    }
+  }
+}

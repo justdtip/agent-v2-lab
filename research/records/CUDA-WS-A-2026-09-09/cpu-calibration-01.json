@@ -1,0 +1,49 @@
+{
+  "declared_source_commit": "ac8a91eade9f37dcaf053db667a88b395bf52b14",
+  "source_commit": "ac8a91eade9f37dcaf053db667a88b395bf52b14",
+  "script_sha256": "f7ca28bfcded95d30b29cd5c276a2772a7b1755ccca505e33fca152f70c3893f",
+  "scope": "CPU calibration, not complete checkpoint acceptance",
+  "device": "cpu",
+  "weights_dtype": "bfloat16",
+  "diagnostic_dtype": "float32",
+  "attention": "eager",
+  "cap_gib": 10.656005859375,
+  "projected_peak_gib": 9.8,
+  "gates": {
+    "1": {
+      "status": "unexecuted"
+    },
+    "2": {
+      "status": "unexecuted"
+    },
+    "3": {
+      "status": "unexecuted"
+    },
+    "4": {
+      "status": "unexecuted"
+    }
+  },
+  "memory": [
+    {
+      "phase": "final",
+      "rss_bytes": 41779200,
+      "process_peak_bytes": 42156032,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    }
+  ],
+  "measurements": [],
+  "cuda": "unexecuted",
+  "window": {
+    "seat": "codex-ws-a",
+    "holder_pid": 73912,
+    "holder_state": "running",
+    "path": "/Users/daniel.tipton/Desktop/An app/outputs/.box-window.json",
+    "purpose": "WS-A real checkpoint CPU bf16 calibration: batch 1, 64/1400 tokens, projected 9.8 GiB, R47 cap 10.656 GiB; no MLX or CUDA"
+  },
+  "status": "stopped",
+  "error": {
+    "type": "RunLockBusy",
+    "message": "refusing to load a model: another process on this machine already holds MLX.\n  pid 72019   /opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m pytest tests/ -p no:cacheprovider\n            maps /Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/mlx/lib/libmlx.dylib\nThe kernel says these have the MLX library mapped. They may hold no lock at all -- a\nscratch script or a notebook outside this package never takes one -- so there is\nnothing to clear here. Wait for the process above to exit, or stop it deliberately."
+  },
+  "elapsed_seconds": 0.2747737499885261
+}

@@ -1,0 +1,60 @@
+codex-ws-a: WS-A integration full test suite; tiny fixtures and native libraries, no checkpoint, projected under 3 GiB, opened 2026-09-09T01:29:46.713080Z
+  holder pid 61060: running
+........................................................................ [  3%]
+........................................................................ [  6%]
+........................................................................ [  9%]
+........................................................................ [ 13%]
+........................................................................ [ 16%]
+........................................................................ [ 19%]
+........................................................................ [ 22%]
+........................................................................ [ 26%]
+..........................s............................................. [ 29%]
+........................................................................ [ 32%]
+........................................................................ [ 36%]
+........................................................................ [ 39%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 49%]
+....................s.............................s..................... [ 52%]
+........s............................................................... [ 55%]
+........................................................................ [ 58%]
+....................ss.................................................. [ 62%]
+........................................................................ [ 65%]
+........................................................................ [ 68%]
+......................s................................................. [ 72%]
+........................................................................ [ 75%]
+............................F........................................... [ 78%]
+........................................................................ [ 81%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+........................................................................ [ 91%]
+....................................ssss................................ [ 94%]
+........sss............................................................. [ 98%]
+.................................
+  eager: batched 3.8 ms, sequential 12.0 ms, ratio 3.18x
+.
+  sdpa: batched 4.3 ms, sequential 11.7 ms, ratio 2.73x
+.....                                  [100%]
+=================================== FAILURES ===================================
+____ test_banned_model_constants_are_limited_to_approved_or_legacy_modules _____
+
+    def test_banned_model_constants_are_limited_to_approved_or_legacy_modules() -> None:
+        root = Path(__file__).resolve().parents[1]
+>       assert (
+            _banned_model_assumptions(_discover_modern_python_sources(root), _FORBIDDEN_MODEL_CONSTANTS)
+            == []
+        )
+E       AssertionError: assert ['arch_base.p...jection-list'] == []
+E         
+E         Left contains one more item: 'arch_base.py:18:projection-list'
+E         Use -v to get more diff
+
+tests/test_repository_rules.py:365: AssertionError
+=============================== warnings summary ===============================
+tests/test_state_swap.py::test_the_real_template_refuses_the_system_only_prefix_and_the_locator_starts_past_it
+  /Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py:1005: UserWarning: the real mlx-community/Qwen3.5-4B-MLX-4bit tokenizer is not cached under /Users/daniel.tipton/worktrees/cuda-torch-seam/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit, so the only tests in this file that render through the writer rather than a stand-in did not run. That is the blind spot EXP-002 died in. Populate the cache with `uv run python -c "from local_llm_lab.project import configure_local_cache; configure_local_cache(); from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('mlx-community/Qwen3.5-4B-MLX-4bit')"` and re-run.
+    fixture_result = fixturefunc(**kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_repository_rules.py::test_banned_model_constants_are_limited_to_approved_or_legacy_modules

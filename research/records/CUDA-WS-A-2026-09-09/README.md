@@ -1,4 +1,58 @@
-# WS-A: torch seam implemented; full-checkpoint CPU gates need a resource ruling
+# WS-A review corrections and CPU calibration
+
+Latest verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
+`codex/cuda-torch-seam`. The source includes the committed shared upstream loader and device shim.
+
+**2,203 tests passed, 10 skipped** in the final full suite plus calibration fixtures on torch
+2.14.0. The skipped checks require absent historical datasets/saved results. Native MLX library
+checks ran in a separate full-suite process; no checkpoint was loaded by those tests. The focused
+CPU suites blocked real MLX imports. `review-verification.json` binds source hashes and each run,
+including the initial scanner failure and the successful rerun; original evidence is preserved.
+
+The three review edits are complete: the view, capture and acceptance helpers all reach upstream
+through `load_upstream`; missing references skip with a reason and conflicting copies refuse;
+the evidence was rerun on torch 2.14; and the duplicate patch/manifest files were removed.
+`input_device` now reports actual embedding placement without moving the model. The architecture
+constant guard follows the existing policy into `arch_base.py` while still scanning `arch_torch.py`.
+
+## Finding and technique
+
+The small fp32 model still has exactly zero residual-source disagreement at 64 and 1,400 tokens,
+with the mask control biting only beyond the window. Final readout maximum error is unchanged at
+`1.4901161193847656e-08`. These are small-model measurements, not checkpoint acceptance.
+
+The revised bf16 loading proposal needs a reference-precision distinction. On a random three-block
+fixture using exactly the same bf16-rounded weights in both copies, the float32 loop/native paths
+agree exactly. The promoted loop versus **native bf16** differs by about 0.6–1.1% under the stated
+descriptive maximum-norm ratio. Against the **float32 native** copy its largest ratio is below
+0.073%. See `precision-diagnosis.json`. This is not evidence of a defect in Gemma 4B: it demonstrates
+that a comparison mixing block arithmetic includes more than rotary-table rounding.
+
+The transferable technique is to hold stored weight values fixed, change computation precision
+independently, and compare each hand-run path to its matching native reference before attributing
+a difference to the instrumentation. These measurements do not choose Q5 or relax the 1e-3 bound.
+
+## Real-checkpoint execution
+
+The earlier memory question is superseded by plan §16.1: store the CPU weights in bf16, promote
+per block, and measure within the existing 10.656 GiB cap. `CPU-CALIBRATION-PLAN.md` was written
+before loading; it fixes a 9.8 GiB projection, one sequence, source-validated pilot token IDs,
+native HF text-only loading and a running owned window/model lock. Its loader and interruption
+paths have fixture tests and independent source review. Reports update atomically and retain the
+final memory reading even after failure.
+
+The first attempt, `cpu-calibration-01.json`, was refused **before any torch or checkpoint load**:
+another seat's pytest process had MLX mapped. Its gate statuses are all unexecuted. The wrapper
+closed its own window; no foreign process, lock or window was changed. Further attempt records,
+if present, carry their own source commit and observed status.
+
+The graph-once estimator remains unstarted pending accepted checkpoint gates 1–4. CUDA/MPS and
+full float32-loaded checkpoint execution are unexecuted. The following original handoff is retained
+as history; its larger-host question was answered by §16.1.
+
+---
+
+# Original handoff at a639cae (superseded where noted)
 
 Source: `a639cae`, branch `codex/cuda-torch-seam`, based on the requested `2b7905f`.
 The fetch of `origin cuda-migration` reported no such remote ref; the exact requested commit was
