@@ -870,9 +870,17 @@ def _fetch_dictionary_offline(args: argparse.Namespace, cache: Path) -> int:
 # -------------------------------------------------------------------------- pack / verify data
 
 
+#: macOS writes AppleDouble sidecars (``._name``) and Finder files beside a dataset on some
+#: filesystems and inside archives made by its own ``tar``. They are invisible on a Mac, match a
+#: ``*.jsonl`` glob on Linux, and killed a reader on the card (SWE-1, 2026-09-10). They are never
+#: data, so the pack and the digests leave them out at the source.
+def _is_sidecar(path: Path) -> bool:
+    return path.name.startswith("._") or path.name == ".DS_Store"
+
+
 def _digests(root: Path) -> dict[str, str]:
     out = {}
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    for path in sorted(p for p in root.rglob("*") if p.is_file() and not _is_sidecar(p)):
         out[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     return out
 
@@ -886,7 +894,11 @@ def pack_data(args: argparse.Namespace) -> int:
     out = Path(args.out) if args.out else Path("outputs/transfer") / f"{source.name}.tar.gz"
     out.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(out, "w:gz") as tar:
-        tar.add(source, arcname=source.name)
+        tar.add(
+            source,
+            arcname=source.name,
+            filter=lambda info: None if _is_sidecar(Path(info.name)) else info,
+        )
         sums = json.dumps(digests, indent=2, sort_keys=True).encode()
         info = tarfile.TarInfo(f"{source.name}/SHA256SUMS.json")
         info.size = len(sums)
