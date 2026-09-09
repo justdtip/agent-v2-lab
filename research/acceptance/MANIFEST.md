@@ -127,6 +127,39 @@ reported. Jaccard is over sets, so producing the right token plus extras is not 
 score; a test pins that, so it is not later "fixed" into a top-1 agreement rate wearing a
 Jaccard's name.
 
+### Torch cache reuse, and two findings from building it against the real class — `66d14af`
+
+`trim` and `snapshot` on torch, built against `transformers` 5.16.1's own `DynamicCache` on a
+four-layer Gemma 3 config, because every rule they obey is a property of that class. `history`
+is not implemented and the module says why. **`make_turn_cache` still refuses all three under
+torch**; they are not wired in.
+
+**Arming rollback late does not raise, it corrupts.** Never arming makes `crop` raise, which is
+safe. Arming after the window has filled succeeds. Rewinding from absolute 12 back to 6, with
+each token's key set to its own index:
+
+| | reported offset | stored keys |
+|---|---:|---|
+| armed at construction | 6 | 0, 1, 2, 3, 4, 5 |
+| armed after 12 tokens | 6 | 5 |
+
+Both report offset 6; one holds six tokens and the other holds one, and would attend over a
+five-token hole with nothing raising. `enable_rollback` refuses a cache that has already
+advanced.
+
+**Arming rollback makes a sliding layer unbounded**, which is the measured need the deferral of
+the reuse strategies was waiting on. Unarmed, a sliding layer stores `window - 1` entries at any
+context length; armed, it stores everything, because rolling back needs the past. On Gemma 3 4B
+that is 29 of 34 layers, and at 2,749 positions against a 1,024 window the whole KV cache goes
+to **2.15x**. Below the window it costs nothing, so a short calibration misses it entirely.
+
+The ratio is quoted rather than an absolute size: the ratio depends only on the layer counts and
+the window, while megabytes depend on `head_dim`, which this checkpoint's config leaves null.
+
+**So `trim` is a rewindable cache and a rewindable cache is not free on this model.** Whether
+2.15x is worth the prefix reuse on a 10.656 GiB box is a ruling, not an implementation choice,
+and it is open.
+
 ## Corrections taken from the survey, and one sent back
 
 **Taken.** The readout is no longer the producer: the loop generates from the model's own head
@@ -151,22 +184,43 @@ Chief's request so the statistic is not proposed again.
 The three that survive are teacher-forced argmax agreement under the P ≥ 0.99 rule, the floored
 divergence profile, and top-k Jaccard, which survives precisely because it needs ids only.
 
+## A run under a box window is not a coverage statement
+
+The suite prints a green summary line whether or not it exercised the files that can reach the
+model library. When another seat holds the box window, those files are collected and skipped,
+and the count that moves is the skip count, which is the last number anyone reads.
+
+Concretely, on this tree and on the same commit:
+
+| run | passed | skipped |
+|---|---:|---:|
+| window free | 2,161 | 14 |
+| WS-A's window held | 1,082 | 1,110 |
+
+Both say "passed" and neither says "failed". The second exercised none of the model-facing
+code and is not evidence about it.
+
+**So every test count in this file names the window state it was taken under, and a count
+taken under a held window is never carried forward as though it were clean.** Three runs during
+this workstream were discarded on that ground and re-run rather than reported. WS-A's window
+will be open often over the next day, which makes this the difference between a manifest that
+records coverage and one that records the appearance of it.
+
 ## Test suite
 
-| | at `38e8504` |
-|---|---|
-| passed | 2,132 |
-| skipped | 14 |
-| failed | 1 |
+| commit | passed | skipped | failed | window |
+|---|---:|---:|---:|---|
+| `41dc6b4` | 2,161 | 14 | 0 | free |
+| `66d14af` | not yet taken clean | | | WS-A's held throughout |
 
-No box window was held during the run, so the files that reach the model library were
-genuinely exercised rather than skipped.
+**The last clean full-suite run is `41dc6b4`.** `66d14af` adds the torch cache module and its
+tests; those tests and the workstream's own files pass, and no clean full-suite count exists
+for it yet because WS-A's window has been open since it landed. That is stated here rather
+than carrying the `41dc6b4` number forward under a later commit's name.
 
-The one failure is `tests/test_pipeline.py::test_the_registry_lists_every_declared_backbone`,
-which holds a literal five-name list while `gemma3-4b-cuda-bf16` makes six. It arrived with
-the merge of the main line and is that seat's deliberate one-line edit to make, by the test's
-own design. The two `test_repository_rules` failures reported earlier are fixed on the main
-line and came across in the same merge.
+Two failures reported earlier in this workstream are gone, both fixed on the main line and
+brought across by merges: the registry name list that `gemma3-4b-cuda-bf16` made a sixth
+entry of, and the two `test_repository_rules` guards.
 
 ## Unexecuted, and what each one needs
 
@@ -176,7 +230,8 @@ line and came across in the same merge.
 | gate 6 entirely | WS-A's view and the hosted lens read path |
 | every G-2 tolerance statistic | a produced side from a loaded backend |
 | the readout band's actual value | both backends live on the same prefix |
-| `trim`, `snapshot`, `history` on torch | **deferred on purpose**, per the ledger and the Chief's ruling. A cache strategy changes memory and time, not the tokens, unless it changes which keys are attended, which is why a sliding cache must not promise rollback. They are built when a measured need on the device says so. `make_turn_cache` refuses them under torch meanwhile. The MLX `SnapshotCache` position defect is separately **fixed**, since it was live rather than a porting question. |
+| `trim` and `snapshot` wired into `make_turn_cache` on torch | **a ruling, not an implementation step.** Both are built and tested against the real `DynamicCache` at `66d14af`; what is open is whether the 2.15x cache growth that rollback costs is worth the prefix reuse on a 10.656 GiB box. `make_turn_cache` refuses all three meanwhile. |
+| `history` on torch | not implemented. Qwen 3.5's strategy, carrying snapshot files and a generation-model proxy, and the golden records never exercise it. |
 | `attn_implementation="eager"` on the replay model | WS-A's loading path |
 
 ## The seam, as ruled
