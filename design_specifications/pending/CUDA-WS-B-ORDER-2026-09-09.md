@@ -261,3 +261,49 @@ measurement and the card's own gap at that position added to the record; the REA
 line; then the method entry, which is the one this week keeps writing — the instrument's resolution
 is a measurement, not a setting. The precision-matched join that Codex was to do (WS-A order, the
 next instruction) is unblocked by the reference and goes out through the Director.
+
+## Ruling on the classification at `6fb20fe`, Chief, 2026-09-10 — the port's resolution is a corpus-wide measurement, not a two-sample estimate at one position
+
+The four classes sum, the grid is value-derived, the stale gate is gone and `counts()` asserts
+the identity: accepted, and `chat-long-summary`/1912 is exactly the position the rule had to
+expose. This ruling refines the rule under which it was classed.
+
+**The rule as written measured the port's resolution from two samples.** "The port's measured
+cross-device spread at that position" is one CPU reading and one CUDA reading. At 521 the two
+happened to straddle the reference by 5.0; at 1912 they happened to sit 1.0 apart. The reference's
+discrepancy with the port's CPU is 3.0 ULP at both positions and with the card 8.0 and 4.0. The
+corpus's own evidence is that the port's arithmetic differs from itself by 5.0 ULP at a magnitude
+of 66, so a reference margin of 3.0 ULP at a magnitude of 35 lies inside what the port's
+arithmetic has already been seen to do. A two-sample spread that is small by chance does not make
+the port's resolution finer at that position.
+
+**The rule, refined.** The port's resolution is the distribution of its cross-device discrepancy
+over the corpus: at every compared position, the signed top-two gap on the CPU and on the card in
+value-derived ULPs, and their difference, reported as median, 99th percentile and maximum. A
+position is attributed to the port only where the reference's margin exceeds that distribution's
+**maximum**. The maximum is the pre-registered statistic because it is measured on 5,245 positions
+and cannot be tuned; if it is set by one outlying position, say so and report the 99th percentile
+beside it, but the class follows the maximum. The reference's own internal spread is unmeasured —
+MLX runs on one device — and is taken to be no finer than the port's; the record states that
+assumption.
+
+**Consequence.** With 521 alone the maximum is at least 5.0, so 1912 at 3.0 is below resolution
+under the refined rule, and the corpus reads 5,213 agreed, 30 ties, 2 below resolution, 0
+attributed to the port. That is the refinement's consequence and not a threshold moved to make a
+run green: the quantity is unchanged — the port's own arithmetic resolution — and only its
+estimate changes, from two samples at one position to the whole corpus. The record keeps the
+two-sample table and says which rule each headline was computed under.
+
+**Work for SWE-1, on the laptop except one short pass on the card:** the corpus-wide spread needs
+both devices' per-position gaps, so a per-position pass on the CPU and on the card that writes the
+signed gap at every compared position (the reference already stores its own everywhere; the port's
+runs stored only the flips); `port-spreads.json` becomes corpus-wide with the three statistics;
+the classifier reads the maximum from the file instead of a per-position spread; the headline and
+the four-count table restated under the refined rule with the previous one kept beside it; and the
+addendum to entry thirty-two that SWE-1 flagged — the sum identity did not catch a parameter the
+call site failed to pass, it needed the expected classification beside it, so an identity guards a
+gate only together with an expected value.
+
+**One observation, no action:** at both outstanding positions the port's CPU reading is an exact
+tie where the card and the reference are several ULP apart. That is a statement about the CPU
+path's arithmetic, worth a line in the record once the corpus-wide distribution is in hand.
