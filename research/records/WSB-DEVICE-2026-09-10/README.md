@@ -205,12 +205,23 @@ attempted"* — so gate 5 as specified asks for the thing the programme already 
 should be restated as within-backend reproduction, which is the question exact agreement can
 answer, or struck. **That is a decision for the Chief, not a change I made.**
 
-One inconsistency worth someone's attention: at that same position the teacher-forced pass
-produces token 236777 while the free-running loop produces 107, from the same prefix. Two torch
-paths, one answer each. The teacher-forced pass is a single forward over the whole sequence; the
-decode loop is a chunked prefill plus cache. At a 0.52 near-tie a different accumulation order is
-enough to explain it, but it has not been checked and it is exactly the kind of thing that is
-cheap now and expensive later.
+**One inconsistency that is larger than it looks.** At that same position the teacher-forced
+pass produces token 236777 while the free-running loop produces 107, from the same prefix. The
+teacher-forced pass is a single forward over the whole sequence; the decode loop is a chunked
+prefill plus a cache. At a 0.52 near-tie a different accumulation order explains it, and the
+filing was "unchecked, small".
+
+The D-CRO's reading is better and is recorded here in their terms: structurally this is **the
+cache path being a different arithmetic path from the uncached one**, and the programme's own
+comparability rule says two things that ran different arithmetic are not two measurements of the
+same quantity. So it is not a curiosity about one near-tie. It decides whether a cached run and
+an uncached record may be compared at all, which is precisely the claim the cache-strategy arm
+exists to make — that `trim` and `snapshot` reproduce the `none` trajectories byte for byte. The
+question to put to that arm before it lands is whether a restore promotes: a saved and restored
+activation *is* written back, so a restore that silently promotes makes every block above it run
+at a precision the model's own dtype field still denies. That is the same shape as the sampled
+path's upcast, except that the sampled path only ever reads at the head and never writes a block
+output, which is why it is not affected.
 
 **Gate 6 is UNAVAILABLE**, correctly: the backend loads, and the lens read path is not ported.
 That is WS-A's producing side, unchanged by anything here.

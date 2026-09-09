@@ -238,18 +238,15 @@ def _load(checkpoint: Path) -> tuple[Any, Any, str]:
     model, report = load_text_causal_lm(
         checkpoint, dtype="bfloat16", attn_implementation="eager", device=target
     )
-    # Compared as devices rather than as strings: the loader reports the tensors' own
-    # ``device``, which is ``cuda`` when the index was not pinned into it, and a string
-    # comparison against ``cuda:0`` refuses a model that is exactly where it was asked to be.
-    # The check that matters is the type, and the index only when both name one.
-    import torch
+    # Compared as devices rather than as strings, through the one helper that knows how:
+    # the loader reports the tensors' own ``device``, which is ``cuda`` when the index was not
+    # pinned into it, and a string comparison against ``cuda:0`` refuses a model that is exactly
+    # where it was asked to be. This was three copies of the comparison across this kit and the
+    # D-CRO's fit hit the same shape the same morning; ``same_device`` resolves an omitted index
+    # against the current device rather than treating it as a wildcard, which the copies did not.
+    from local_llm_lab.pipeline.lens_fitting.upstream import same_device
 
-    asked = torch.device(target)
-    got = torch.device(str(report.get("device")))
-    mismatched = got.type != asked.type or (
-        got.index is not None and asked.index is not None and got.index != asked.index
-    )
-    if mismatched:
+    if not same_device(target, str(report.get("device"))):
         raise RuntimeError(
             f"asked for {target} and the loader reports {report.get('device')!r}; refusing to "
             "measure, because a number taken on another device would be recorded as this one's"

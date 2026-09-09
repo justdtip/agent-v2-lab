@@ -108,14 +108,14 @@ def torch_margins(checkpoint: Path, sequences: dict, rows: list[dict]) -> dict[t
 
     from local_llm_lab import device
     from local_llm_lab.hf_text import load_text_causal_lm
+    from local_llm_lab.pipeline.lens_fitting.upstream import same_device
 
     device.pin(attention="eager")
     target = device.select()
     model, report = load_text_causal_lm(
         checkpoint, dtype="bfloat16", attn_implementation="eager", device=target
     )
-    asked, got = torch.device(target), torch.device(str(report.get("device")))
-    if got.type != asked.type:
+    if not same_device(target, str(report.get("device"))):
         raise SystemExit(f"asked for {target}, loader reports {report.get('device')!r}")
     out = {}
     with torch.no_grad():

@@ -266,12 +266,9 @@ def _load_backend(arguments: argparse.Namespace) -> tuple[Any, Any, Any, Any] | 
     model, report = load_text_causal_lm(
         checkpoint, dtype="bfloat16", attn_implementation="eager", device=target
     )
-    import torch
+    from local_llm_lab.pipeline.lens_fitting.upstream import same_device
 
-    asked, got = torch.device(target), torch.device(str(report.get("device")))
-    if got.type != asked.type or (
-        got.index is not None and asked.index is not None and got.index != asked.index
-    ):
+    if not same_device(target, str(report.get("device"))):
         raise SystemExit(f"asked for {target} and the loader reports {report.get('device')!r}")
     view = TorchArchitectureView.from_model(model)
     tokenizer = _tokenizer(checkpoint)
