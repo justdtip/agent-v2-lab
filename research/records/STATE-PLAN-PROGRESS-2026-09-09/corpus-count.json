@@ -1,0 +1,57 @@
+{
+  "basis": "measured-here",
+  "claimed": {
+    "consecutive_pairs": 6501,
+    "decisions_per_episode_max": 17,
+    "non_prefix_pairs": 4509,
+    "rendered_rows": 8907,
+    "rows_without_family_test": 60,
+    "rows_without_family_train": 240,
+    "rows_without_family_valid": 48,
+    "tasks": 1128,
+    "tasks_test": 240,
+    "tasks_train": 840,
+    "tasks_valid": 48
+  },
+  "data": "/Users/daniel.tipton/Desktop/An app/data/agent_v2e-gemma3-4b",
+  "disagreements": [
+    {
+      "key": "consecutive_pairs",
+      "measured": 7431,
+      "order": 6501
+    },
+    {
+      "key": "decisions_per_episode_max",
+      "measured": 20,
+      "order": 17
+    }
+  ],
+  "measured": {
+    "consecutive_pairs": 7431,
+    "consecutive_pairs_deduplicated": 6501,
+    "decisions_per_episode_max": 20,
+    "decisions_per_episode_max_deduplicated": 17,
+    "decisions_per_episode_mean": 7.59,
+    "decisions_per_episode_mean_deduplicated": 6.76,
+    "decisions_per_episode_median": 6.0,
+    "duplicate_step_rows": 930,
+    "families_with_ambiguous_horizon": [
+      "pointer_chain"
+    ],
+    "horizon_keys": 153,
+    "non_prefix_fraction": 0.6068,
+    "non_prefix_pairs": 4509,
+    "rendered_rows": 8907,
+    "rows_deduplicated": 7629,
+    "rows_with_task_id": 8559,
+    "rows_without_family_test": 60,
+    "rows_without_family_train": 240,
+    "rows_without_family_valid": 48,
+    "tasks": 1128,
+    "tasks_test": 240,
+    "tasks_total_for_step_check": 1128,
+    "tasks_train": 840,
+    "tasks_valid": 48,
+    "tasks_with_contiguous_steps": 550
+  }
+}

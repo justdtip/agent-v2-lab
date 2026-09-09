@@ -157,3 +157,86 @@ Cites plan §16.18. The first state variable's order is
 machinery unchanged — the same diagnostics-as-code discipline, the same derivation table, the same
 seal, the same `measured / untestable / not measured` three-state reporting — and adds only the
 state variable, the capacity rule and the capture plan.
+
+---
+
+## Appendix, D-CRO, 2026-09-09: the corpus count re-run, and four things it adds
+
+`STATE-PLAN-PROGRESS-ORDER-2026-09-10` §1 instructs the owner of the pre-registration to re-run the
+Chief's count and put the script in the record. Script: `count_corpus.py`; output:
+`corpus-count.json`. It tries to *falsify* each claim and exits nonzero if any differs, so a
+disagreement cannot be skimmed past. CPU only, no model, no card.
+
+### Nine of eleven claims reproduce exactly; the other two reconcile, and the reconciliation is the finding
+
+| claim | order | raw | deduplicated |
+|---|---:|---:|---:|
+| rendered rows | 8,907 | **8,907** | — |
+| tasks | 1,128 | **1,128** | — |
+| tasks by split | 840 / 48 / 240 | **840 / 48 / 240** | — |
+| rows with no `family` | 240 / 60 / 48 | **240 / 60 / 48** | — |
+| non-prefix pairs | 4,509 | **4,509** | **4,509** |
+| consecutive pairs | 6,501 | 7,431 | **6,501** |
+| max decisions per episode | 17 | 20 | **17** |
+
+**`(task_id, step)` is not unique.** 930 of the 8,559 rows that carry a `task_id` share their
+`(task_id, step)` with another row. Deduplicated, every figure in the order reproduces to the digit:
+7,629 rows, 6,501 consecutive pairs, maximum 17. So the order's basis is the deduplicated one and
+mine was raw, and both are now reported, because a count whose basis is unstated is a count nobody
+can reproduce.
+
+The non-prefix *fraction* differs with the basis and the order's is right on its own: 4,509 of 6,501
+is **69.4%**, and 4,509 of 7,431 is **60.7%**. Fact 3's conclusion is unaffected on either.
+
+### Addition 1: the duplicates are the transient retry, and they say something E2 needs
+
+A `transient` task inserts a retry of the **same action**, and the corpus labels both rows with the
+**same step index** — `train-search-0313-transient` carries step 1 twice, both from the expert. That
+is semantically right: a retry is the same plan step re-executed, and plan progress does not advance
+across it.
+
+**That sharpens R3 rather than contradicting it.** The order's table has `transient` adding one step,
+which is true of the *horizon*. What the corpus adds is that the *step index does not move* at the
+retry turn. So the update rule E2 tests must predict **no advance** there, while predicting +1 on an
+ordinary turn and the recovery cost at a perturbation. A rule that advances on every turn is refuted
+by 244 transient tasks, and that is a stronger informative stratum than the order claims.
+
+### Addition 2: 334 tasks are missing exactly one step, and it is exactly the recovery variants
+
+Only **550 of 1,128** tasks have contiguous step indices. 334 tasks are missing exactly one step
+each, and the split by variant is total:
+
+| variant | tasks with a gap | of |
+|---|---:|---:|
+| `clean` | 0 | 550 |
+| `transient` | 0 | 244 |
+| `failed_edit` | **58** | 58 |
+| `stale_path` | **30** | 30 |
+| `unknown_tool` | **64** | 64 |
+| `wrong_path` | **182** | 182 |
+
+The mechanism is `runner.trajectory_rows`, which drops a row whose observation begins `ERROR` unless
+that step is an *injected fault*: `errored = observation.startswith("ERROR") and step["index"] not in
+faults`. `transient` has an injected fault so its error row is kept; the other four earn their errors
+and lose the row.
+
+**Fact 1 survives this and should say so.** The dropped step's turn still enters the context, because
+`trajectory_rows` appends to `context` whether or not it emits a row, so the number of model turns in
+the prompt is still the step index. What is *not* true is the converse: every rendered row is one
+decision, but not every decision is a rendered row. Anything that infers a horizon from a row count
+will be one short on 334 tasks.
+
+### Addition 3: R6's row addressing needs a third component
+
+R6 says *"Rows are enumerated through `task_id` and `step`."* With 930 collisions that key does not
+address a row. It needs the occurrence index within the task, or a row ordinal assigned at capture
+time and carried in the manifest. This is cheap to fix now and unfixable after 8,907 captures are
+written under an ambiguous key.
+
+### Addition 4: the rendered corpus is not on the card
+
+`data/agent_v2e-gemma3-4b/` exists on the laptop and **not** under `/workspace/agent-v2-lab/data/`,
+which has no such directory. R6's capture pass reads those rows, so this is a blocking input in the
+same way the lens corpus was, and it is better named now than at minute fifty of a window. Copying
+it is 169 MB and no GPU; it must land **outside** the shared checkout, since `data/` was ignored only
+after this corpus was made and the resume key hashes untracked files.
