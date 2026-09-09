@@ -1,0 +1,15 @@
+{
+ "expected": "rank rows at every layer for 103 agentic emitted tokens",
+ "gate": 6,
+ "identity": {
+  "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+  "device": "{\"backend\": \"torch\", \"determinism\": \"pinned\", \"device\": \"cuda:0\", \"pinned\": {\"attn_implementation\": \"eager\", \"deterministic\": true, \"seed\": 0}}",
+  "diff_stat": "",
+  "input_digest": "afbdab9529d9c2fa",
+  "smoke": true,
+  "source_commit": "16fd7e3171a66ec5bf57311bb484e7f9a4d66f9e",
+  "tree_hash": "66a57cbd7e865ff8503535dafc58d304ca033d6a9069122a9689092c009023d8"
+ },
+ "saw": "backend loaded, but the lens read path is not ported",
+ "status": "unavailable"
+}

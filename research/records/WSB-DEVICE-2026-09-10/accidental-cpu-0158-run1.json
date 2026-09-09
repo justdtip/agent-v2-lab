@@ -1,0 +1,68 @@
+{
+ "head": {
+  "tree_hash": "b7b532d4791f33b7f6ce48affc966829d776ef018ec97768c89bee776b36cff9",
+  "source_commit": "c4e7da9604a82e7482516758eda59a094cbc3687",
+  "diff_stat": "",
+  "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+  "device": "{\"backend\": \"torch\", \"determinism\": \"pinned\", \"device\": \"cuda:0\", \"pinned\": {\"attn_implementation\": \"eager\", \"deterministic\": true, \"seed\": 0}}",
+  "input_digest": "none",
+  "smoke": false,
+  "records": "/workspace/wsb/stage2",
+  "records_precision": "mlx 4-bit",
+  "port_precision": "cpu bfloat16"
+ },
+ "compared": {
+  "value": 103,
+  "basis": "measured-here"
+ },
+ "agreed": {
+  "value": 98,
+  "basis": "measured-here"
+ },
+ "hard_flips": {
+  "value": 0,
+  "basis": "measured-here"
+ },
+ "episodes": [
+  {
+   "label": "agentic-d2-calculate-0158",
+   "compared": {
+    "value": 103,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 98,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "flip_confidences": {
+    "value": [
+     0.35605308413505554,
+     0.3840745985507965,
+     0.4737294614315033,
+     0.5155090093612671,
+     0.8159769177436829
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 78,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7033055940822931,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 4.0,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  }
+ ]
+}
