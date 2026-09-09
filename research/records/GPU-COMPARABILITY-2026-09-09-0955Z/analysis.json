@@ -1,0 +1,95 @@
+{
+  "scope": "instrument comparability; not a model-behavior finding",
+  "source_commit": "a5a977b8cec7e32568071f7e97ff4e776f633fd4",
+  "source_checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+  "source_sha256": {
+    "cuda-all15.json": "a29d3b1dc919fa3d9508f628e154e51fa453469925bdcda42e3c2d7a9d167b42",
+    "cpu-all15.json": "1ea5f8db9c317abca5042f61705e3b40ae0c997a97da8cd79a9bf2f2bf7a8225",
+    "cuda-all15.jsonl": "a024bc94e3c0b498662552a83505c7d924d1e024340b125f07a052e0ac9eb4af",
+    "cpu-all15.jsonl": "4f95913c11c4d3dcc2990627df1eb4b06a6b05d7c0e3dd4014565a415e7a39ce"
+  },
+  "totals": {
+    "cuda": {
+      "compared": {
+        "value": 5245,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cuda report; shared MLX reference, no new model run"
+      },
+      "agreed": {
+        "value": 4999,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cuda report; shared MLX reference, no new model run"
+      },
+      "disagreed": {
+        "value": 246,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cuda report; shared MLX reference, no new model run"
+      },
+      "agreement_percent": {
+        "value": 95.30981887511916,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cuda report; shared MLX reference, no new model run"
+      },
+      "reference_confidence_gated_flips": {
+        "value": 24,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cuda report; shared MLX reference, no new model run"
+      }
+    },
+    "cpu": {
+      "compared": {
+        "value": 5245,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cpu report; shared MLX reference, no new model run"
+      },
+      "agreed": {
+        "value": 4998,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cpu report; shared MLX reference, no new model run"
+      },
+      "disagreed": {
+        "value": 247,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cpu report; shared MLX reference, no new model run"
+      },
+      "agreement_percent": {
+        "value": 95.29075309818874,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cpu report; shared MLX reference, no new model run"
+      },
+      "reference_confidence_gated_flips": {
+        "value": 24,
+        "basis": "measured-here",
+        "basis_note": "Derived locally from the card cpu report; shared MLX reference, no new model run"
+      }
+    }
+  },
+  "episodes_with_changed_gated_counts": [
+    "agentic-d2-list-0149",
+    "agentic-d2-read-0108"
+  ],
+  "checks": [
+    "transfer hashes",
+    "complete JSONL",
+    "JSON/JSONL equality",
+    "unique episode join",
+    "totals reconcile",
+    "confidence counts reproduce",
+    "matching tree/checkpoint/denominators",
+    "declared devices and bf16 precision"
+  ],
+  "limits": [
+    "hard_flips uses MLX reference P >= .99, not both machines confidence",
+    "per-position flip identities and port probabilities are absent",
+    "one net agreement difference is not one CPU/GPU token difference",
+    "input_digest is none; matched paths/counts do not independently hash the replay inputs",
+    "MLX 4-bit and torch bf16 remain different precision paths",
+    "positions are repeated/correlated observations, not independent samples",
+    "no performance or memory inference from these potentially shared-card runs"
+  ],
+  "inference": "A CPU run retains the aggregate gated mismatch count, weakening an exclusively GPU-specific account; these summaries do not isolate the port from precision and reference differences.",
+  "versions": {
+    "matplotlib": "3.11.1",
+    "numpy": "2.5.3"
+  }
+}
