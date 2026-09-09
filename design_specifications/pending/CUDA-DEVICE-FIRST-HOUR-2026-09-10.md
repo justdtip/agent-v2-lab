@@ -41,6 +41,14 @@ Then §6.3, the graph-once estimator, written and fixture-tested on the laptop, 
 
 ## 2. WS-B — trajectories, readout, the tolerance gate (SWE-1)
 
+The WS-B checklist (`research/records/WSB-DEVICE-CHECKLIST-2026-09-09/README.md`) is this section
+in full, in SWE-1's order. **The number most likely to be misread in the hour:** the bookkeeping
+join reports 5,245 of 5,245 and looks like the strongest figure in the record; it is evidence of
+nothing except that the reader and the writer share a position convention, and it is labelled
+bookkeeping in the checklist, the kit's output and the manifest. It is not a backend result.
+Gate 6's producing side is not ported, so it reports unavailable whatever the input, and the
+smoke pass says so rather than implying the gate is covered.
+
 `scripts/tolerance_baseline.py --records <stage-two records> --json <out>` over all fifteen
 episodes (no `--episode`), then `scripts/acceptance_gates.py --model gemma3-4b-cuda-bf16`:
 
@@ -102,6 +110,8 @@ tests, all four adversarial fixes). The D-CRO's device checklist is
 - **Resume keys on the tree that ran**, not on time: the working tree's content including
   untracked files, the checkpoint sha, the device reading and the gate's input; a modified tree
   resumes only its own records, and the refusal names every field that differs.
+- **Only a pass resumes.** A failure or an unavailable is a thing to try again, not to inherit; the
+  store keeps every result so the history is readable, and resume reads only the successes.
 - **Stop at the first failing gate** with what it saw against what it expected.
 - **A projection is a basis.** Every laptop figure above is what the device number is compared
   against, never what it is expected to equal; and a laptop figure taken on a shared box is not a
