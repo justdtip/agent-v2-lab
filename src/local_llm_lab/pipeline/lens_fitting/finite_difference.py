@@ -68,6 +68,7 @@ from local_llm_lab.pipeline.lens_fitting.upstream import (
     _require_frozen,
     default_position_selector,
     load_upstream,
+    same_device,
     selector_descriptor,
 )
 
@@ -157,7 +158,7 @@ def fit_finite_difference_jacobian(
     wrapped = model if isinstance(model, CorpusLensModel) else CorpusLensModel(model)
     _require_frozen(wrapped)
     observed = _observed_precision(wrapped)
-    if observed["device"] != device or observed["dtype"] != dtype:
+    if not same_device(device, observed["device"]) or observed["dtype"] != dtype:
         raise ValueError(
             f"this fit declares {dtype} on {device} and the model is "
             f"{observed['dtype']} on {observed['device']}. The declaration must be a measurement "
