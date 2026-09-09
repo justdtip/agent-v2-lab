@@ -157,29 +157,29 @@ def test_the_mlx_backend_does_not_reach_the_torch_branch(monkeypatch) -> None:
     assert not called
 
 
-def test_a_multi_process_run_is_refused_until_the_joined_path_has_a_number(monkeypatch) -> None:
-    """Two claims kept as two, in code.
+def test_the_run_records_what_its_distribution_has_been_measured_at() -> None:
+    """This replaced a refusal, and it replaced it with a number rather than with silence.
 
-    FSDP2 *is* wired: `fsdp_arguments` builds the configuration and the stage passes it. What does
-    not exist yet is the number for the **joined** path -- this stage driving that configuration
-    through `Trainer` -- against the per-parameter gate the standalone path passed. The refusal
-    comes off when that number exists and not before, because the alternative is a stage that
-    appears to work under a strategy nobody measured.
+    The stage used to reject any multi-process run: FSDP2 being *configured* and the joined path
+    being *measured* were two claims, and only the second licenses a sharded run. The second now
+    exists. What it does not license is silence about scale -- two gloo processes on CPU is what was
+    measured, and a run at a scale nobody has checked must say so in its own record rather than
+    looking like one that was.
     """
-    from local_llm_lab.pipeline.train_torch import require_supported_distribution
+    from local_llm_lab.pipeline.train_torch import VALIDATED_DISTRIBUTION, describe_distribution
 
-    require_supported_distribution(1)  # the single-device path is the one that runs
-    with pytest.raises(NotImplementedError, match="world size 2"):
-        require_supported_distribution(2)
+    single = describe_distribution(1)
+    assert single["strategy"] == "plain single-process"
+    assert describe_distribution(4)["strategy"] == "fsdp2"
 
-    monkeypatch.setenv("WORLD_SIZE", "4")
-    monkeypatch.setenv("LLL_BACKEND", "torch")
-    from local_llm_lab.pipeline import cli
-
-    with pytest.raises(NotImplementedError, match="per-parameter agreement gate"):
-        cli.stage_train(
-            {"train": {}, "model": "x", "output": Path("/nonexistent"), "seed": 1}, None
-        )
+    # The number, carried rather than asserted in prose.
+    assert VALIDATED_DISTRIBUTION["grad_step0_worst_relative"] < 1e-6
+    assert VALIDATED_DISTRIBUTION["value_final_worst_relative"] == 0.0
+    # And what it is not: the manifest says so in the same breath.
+    assert "NCCL" in VALIDATED_DISTRIBUTION["not_measured"]
+    assert "two gloo processes" in VALIDATED_DISTRIBUTION["arms"]
+    # The exact value agreement is explained rather than claimed as tighter evidence.
+    assert "ulp" in VALIDATED_DISTRIBUTION["note"]
 
 
 def test_fsdp_is_configured_only_above_world_size_one() -> None:

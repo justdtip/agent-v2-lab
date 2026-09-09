@@ -175,12 +175,27 @@ def main() -> None:
 
     store: dict[str, Any] = {}
     output = work / f"run-{args.mode}"
+    # **One optimizer step over the whole dataset, in both arms.** Two things have to hold for the
+    # comparison to mean anything, and the first attempt at this gate had neither.
+    #
+    # The global batch must match. `Trainer` shards the data across ranks, so an accumulation count
+    # left alone doubles the rows per step at world size two: the arms then optimise different
+    # objectives and disagree by half the quantity, which is what the first run showed and which
+    # says nothing about sharding.
+    #
+    # And the per-step *composition* must not matter. `Trainer`'s distributed sampler need not put
+    # the same rows in the same step as the single-process sampler, so any run longer than one step
+    # compares two different trajectories. With a single step over every row, both arms accumulate
+    # the same set and composition drops out.
+    per_rank = args.rows // world
     config = {
         "model": "tiny-wrapper", "data": str(data), "output": output, "seed": args.seed,
         "train": {
-            "iters": 8, "iters_unit": "batches", "grad_accumulation_steps": 2, "batch_size": 1,
+            "iters": per_rank, "iters_unit": "batches",
+            "grad_accumulation_steps": per_rank, "batch_size": 1,
             "learning_rate": 1e-4, "max_seq_length": 128, "val_batches": 0,
-            "steps_per_report": 2, "steps_per_eval": 8, "save_every": 4, "lora_layers": 2,
+            "steps_per_report": per_rank, "steps_per_eval": per_rank,
+            "save_every": per_rank, "lora_layers": 2,
         },
     }
     manifest = train_torch.stage_train_torch(config, callbacks=[_make_callback(store)])
@@ -189,7 +204,7 @@ def main() -> None:
     del trained
     from local_llm_lab.hf_text import load_text_causal_lm
 
-    model, _ = load_text_causal_lm(output / "checkpoints" / "checkpoint-4", device="cpu")
+    model, _ = load_text_causal_lm(output / "checkpoints" / "checkpoint-1", device="cpu")
     store["value_final"] = {
         name: p.detach().double().clone() for name, p in model.named_parameters()
     }

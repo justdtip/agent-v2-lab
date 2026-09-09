@@ -483,3 +483,57 @@ is written, and the memory arithmetic every device decision rests on describes a
 never ran. So the stage **refuses** a multi-process run and names the gap, rather than proceeding.
 That refusal is the cheapest possible version of discovering it, and the first hour on rented
 hardware is meant to be exactly that kind of hour.
+
+---
+
+# The joined gate passes, and the refusal comes off
+
+**The stage driving FSDP2 through `Trainer`, one process against two `gloo` processes on CPU, tiny
+Gemma 3 saved as a real multimodal wrapper.** The standalone sharded path passing was one claim; this
+is the other, and only this one licenses a sharded run.
+
+| quantity | worst relative deviation | parameters compared |
+|---|---:|---:|
+| **gradient, step 0, before any update** | **1.24e-07** | 26 trainable |
+| value, after the step | 0.0 | 80, all |
+
+**The gradient is the load-bearing number.** 1.24e-07 is float32 epsilon, which is where reassociated
+summation lives. The values agreeing *exactly* is real but is weaker evidence than it looks: the
+difference the gradients imply is about `1e-4 × 1.24e-07 ≈ 1.2e-11`, and the float32 ulp near a
+typical weight of 0.02 is `1.9e-09`. The updates are bit-identical **by construction** at this
+learning rate and step count, not because agreement is tighter than the gradient shows. Stated here
+because the opposite reading — "values agree exactly, so the paths are identical" — is available and
+wrong.
+
+## The first run of this gate failed, and the gate was what was wrong
+
+Worst gradient deviation 0.499, worst value deviation 1.357. Not sharding: **the two arms were not
+consuming the same rows per step.** `Trainer` shards data across ranks, so an accumulation count left
+alone doubles the rows per optimizer step at world size two, and the arms optimise different
+objectives. That is a fact about the harness and says nothing about FSDP2.
+
+Two conditions make the comparison mean anything, and the first attempt had neither:
+
+- **The global batch must match.** Accumulation is divided by world size, so both arms see the same
+  rows per step.
+- **The per-step composition must not matter.** `Trainer`'s distributed sampler need not put the same
+  rows in the same step as the single-process sampler, so any run longer than one step compares two
+  different trajectories, even with the global batch matched. **One optimizer step over the whole
+  dataset** removes it: both arms accumulate the same set and composition drops out.
+
+Worth carrying to any seat writing a multi-device gate: a disagreement is a defect only once the two
+arms are the same experiment, and getting them there is most of the work.
+
+## What the artefact shows about the recipe
+
+The checkpoint the sharded run wrote carries **54 bfloat16 tensors and 26 float32** — the frozen
+trunk at two bytes and the trained slice at four, which is the memory arithmetic visible in the
+output rather than asserted about it.
+
+## The refusal is replaced by a measurement, not by silence
+
+`require_supported_distribution` is gone; `describe_distribution` takes its place and every run
+manifest now carries what its distribution has been measured at and what it has not. Two `gloo`
+processes on CPU is what was measured. **CUDA, NCCL, more than two ranks and any real checkpoint are
+the device's**, and a run at a scale nobody has checked says so in its own record instead of looking
+like one that was.

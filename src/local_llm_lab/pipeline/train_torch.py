@@ -37,27 +37,43 @@ MANIFEST_NAME = "train_manifest.json"
 ATTENTION = "eager"
 
 
-def require_supported_distribution(world_size: int) -> None:
-    """Refuse a multi-process run rather than silently training under the wrong strategy.
+#: What the joined path -- this stage driving FSDP2 through `Trainer` -- has actually been measured
+#: at, and where. Carried into every run manifest so a sharded run says what its configuration is
+#: known to do rather than implying it was checked at the scale it is running.
+VALIDATED_DISTRIBUTION = {
+    "gate": "research/records/CUDA-WS-C-2026-09-09/stage_agreement.py",
+    "arms": "single-process plain training against two gloo processes under FSDP2, one optimizer "
+            "step over the whole dataset so the global batch matches and per-step composition "
+            "drops out",
+    "grad_step0_worst_relative": 1.24e-07,
+    "value_final_worst_relative": 0.0,
+    "note": "The gradient is the load-bearing number. The values agree exactly because the "
+            "difference the gradients imply (~1.2e-11 at lr 1e-4) is below the float32 ulp near a "
+            "typical weight (1.9e-09), so the updates are bit-identical by construction at this "
+            "step count -- not because agreement is tighter than the gradient shows.",
+    "not_measured": "CUDA, NCCL, more than two ranks, and any real checkpoint. Those are the "
+                    "device's and are re-measured there.",
+}
 
-    FSDP2 **is** now wired: :func:`fsdp_arguments` builds the configuration and the stage passes it.
-    What does not yet exist is the number. The standalone sharded path was checked per parameter
-    against single-process training in ``two_device_agreement.py``; the *joined* path -- that
-    configuration driven through `Trainer` by this stage -- has not been through the same gate.
 
-    Those are two claims and this refusal keeps them two. It comes off when the joined path passes
-    the per-parameter gate the standalone path passed, and not before, because the alternative is a
-    stage that appears to work under a strategy nobody measured: the loss falls, the checkpoint is
-    written, and the memory arithmetic every device decision rests on describes a configuration
-    that never ran.
+def describe_distribution(world_size: int) -> dict[str, Any]:
+    """What this run's distribution is, and what it has been measured at.
+
+    This replaced a refusal. The stage used to reject any multi-process run, because FSDP2 being
+    configured and the joined path being *measured* were two claims and only the second one licenses
+    a sharded run. The second now exists: per-parameter gradients at step zero agree to 1.24e-07 and
+    values to zero, against single-process training on the same rows.
+
+    What it does not license is silence about scale. Two gloo processes on CPU is what was measured;
+    NCCL, more ranks and a real checkpoint are the device's. So the manifest carries the measurement
+    rather than the stage carrying a refusal, and a run at a scale nobody has checked says so in its
+    own record instead of looking like one that was.
     """
-    if world_size > 1:
-        raise NotImplementedError(
-            f"world size {world_size}: FSDP2 is configured by fsdp_arguments() but the joined path "
-            "-- this stage driving that configuration through Trainer -- has not passed the "
-            "per-parameter agreement gate that the standalone path passed in "
-            "research/records/CUDA-WS-C-2026-09-09. Run single-process until that number exists."
-        )
+    return {
+        "world_size": world_size,
+        "strategy": "fsdp2" if world_size > 1 else "plain single-process",
+        "validated": VALIDATED_DISTRIBUTION,
+    }
 
 
 def rendered_rows(dataset: Any) -> list[dict[str, Any]]:
@@ -185,7 +201,6 @@ def stage_train_torch(
     from local_llm_lab.tuner_data import load_rendered_splits
 
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
-    require_supported_distribution(world_size)
     seed = int(config["seed"])
     # Before anything imports or touches the device: the workspace variable is read at cuBLAS's
     # first use, so a pin after that point reports a determinism the run does not have.
@@ -234,6 +249,7 @@ def stage_train_torch(
     manifest = {
         "backend": device.backend(),
         "device": device.select(),
+        "distribution": describe_distribution(world_size),
         "determinism": determinism,
         "model": {"name": spec.name, "hf_id": spec.hf_id, "source": source},
         # What the loader got, not what it was asked for.
