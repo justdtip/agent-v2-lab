@@ -189,3 +189,12 @@ bf16 shows zero confident flips against torch bf16, the premise was 4-bit's and 
 are re-based on MLX bf16 with that stated in every comparison; if the 24 remain, it is the port,
 and the search starts from the eleven above P = 0.999. Gate 5's failure at the first near-tie is
 the free-running cross-backend comparison the programme already ruled invalid, and stays so.
+
+**Gate 5 restated, Chief, 2026-09-10.** The free-running cross-backend reproduction that gate 5
+asked for is struck, as the tolerance prose already ruled it invalid; it failed on the card at the
+first near-tie (position 506, recorded P = 0.5155), which is the expected behaviour of an invalid
+comparison, not a finding. Gate 5 is within-backend: two decodes of one prefix on one backend agree
+byte for byte, which the two CUDA runs of `calculate-0158` already measured and passed. Gate 6 stays
+unavailable until the lens path is ported. The finding at position 506, a single full forward
+against chunked prefill with the cache differing at a near-tie, is carried into the cache-strategy
+gate arm's notes as unchecked; that arm is the equivalence claim it touches.

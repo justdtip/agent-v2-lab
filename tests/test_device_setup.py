@@ -487,3 +487,21 @@ def test_bootstrap_writes_its_report_when_a_step_raises(monkeypatch, tmp_path, c
     assert rows["exit"] == 1 and rows["rows"][-1]["step"] == "exception"
     assert "CUDA is already initialised" in rows["rows"][-1]["detail"]
     assert "Traceback" in capsys.readouterr().err
+
+
+def test_pack_data_leaves_macos_sidecars_out_of_the_archive_and_the_digests(tmp_path, dataset):
+    """AppleDouble files match a *.jsonl glob on Linux and are never data."""
+    (dataset / "._train.jsonl").write_bytes(b"\x00\x05\x16\x07")
+    (dataset / ".DS_Store").write_bytes(b"junk")
+    out = tmp_path / "packed.tar.gz"
+    assert device_setup.main(["pack-data", str(dataset), "--out", str(out)]) == 0
+    import tarfile
+
+    with tarfile.open(out) as tar:
+        names = [m.name.split("/", 1)[1] for m in tar.getmembers() if "/" in m.name]
+    assert "._train.jsonl" not in names and ".DS_Store" not in names
+    assert "train.jsonl" in names and "SHA256SUMS.json" in names
+    assert "._train.jsonl" not in device_setup._digests(dataset)
+    dest = tmp_path / "dest"
+    assert device_setup.main(["verify-data", str(out), "--dest", str(dest)]) == 0
+    assert not list((dest / dataset.name).glob("._*"))
