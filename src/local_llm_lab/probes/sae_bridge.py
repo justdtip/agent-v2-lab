@@ -369,30 +369,52 @@ def dictionary_base(dictionary: JumpReLUDictionary) -> str:
     return base_of_artifact(named)
 
 
-#: What a float32 lens read against a native capture costs, which is **not known** for a reading
-#: of this kind, and the record says so rather than lending it a number that measures something
-#: else (WS-A width audit W3, `d037454`).
+#: The cross-path term, **per layer**, and at every layer it is a refusal rather than a note
+#: until the pairing is measured there (WS-D's displacement control `e771c2b`, as amended by
+#: WS-A's map/anchor audit `ca396fb`).
 #:
-#: The width-rows ruling keeps captures native at width 1 while lenses are fitted in float32, so
-#: every such reading crosses two arithmetic paths. It is the crossing that is declared here. The
-#: size of what it does to a readout is not: a residual-relative difference does not bound a
-#: readout-relative one, because the readout's own denominator can be small. For a fixed linear
-#: ``L``, ``norm(L dh) <= opnorm(L) norm(dh)`` bounds the numerator and says nothing about
-#: ``norm(L h)``; with ``h = (100, 1)``, ``dh = (0, 1)`` and ``L`` selecting the second
-#: coordinate, the residual changes by about 1% and the readout by 100%. This bridge then ranks
-#: through a nonlinear normaliser and a thresholded dictionary, which adds more of the same
-#: question. So the two promoted-floor figures below travel as **historical context with their
-#: lengths**, never as an error bar, and ``measured`` is ``False`` until a paired comparison at
-#: this reading's own positions and context exists. When one does, the bridge records that
-#: measurement here instead of this statement.
+#: The width-rows ruling keeps captures native at width 1 while lenses are fitted in float32, so a
+#: reading that puts the two together crosses paths. The displacement control then displaced the
+#: anchor those derivatives were read at and measured how far they moved. In coherent float32 at
+#: layer 1 the sampled scalar derivatives moved by a median 1.035 of their own size, against 0.471
+#: natively, and an equal-norm random displacement moved them as much or more. **The sensitivity
+#: is not the arithmetic's.** A Jacobian lens is a statement about the neighbourhood it was
+#: fitted in, and that neighbourhood is a per-layer quantity.
+#:
+#: What that is **not**: a condition number. The audit withdrew the amplification ratios once
+#: quoted here, because they divided a derivative change by a displacement norm measured at one
+#: position while the intervention replaced the whole sequence; and a ratio of one scalar
+#: projection over a finite displacement is a directional sensitivity in any case. So the per-layer
+#: figures are the sampled distribution, median with its range and count, and the refusal cites
+#: them as that. Nor does a median settle a layer: at layer 33 the float32 median is 0.125 and the
+#: maximum over the same eighteen projections is 91.9, so a late layer is not shown benign by its
+#: middle.
+#:
+#: Two consequences the code carries rather than a reader remembering them. A cross-path reading
+#: is **refused by name** at any layer whose pairing has not been measured, citing that layer's
+#: sampled sensitivity where it was measured, because at layer 1 the crossing is not an error bar
+#: on the answer, it is the size of the answer. And the size of the crossing stays unmeasured
+#: until a paired comparison exists **at that layer**: the two promoted-floor percentages below
+#: are historical context about residuals at two lengths, not a bound on a readout through a lens,
+#: for the reason W3 gives -- the readout's denominator may be small.
+#:
+#: A same-path reading carries no term and is not refused: a float32 generation read through a
+#: float32 lens crosses nothing. Nor does a reading that touches no capture at all, such as the
+#: dictionary-direction readout in :func:`feature_scores`, where there is no anchor to have moved.
 LENS_PATH_TERM = {
-    "term": "float32 lens read against a native capture",
+    "term": "a lens read against a capture from a different width, precision or path",
     "measured": False,
-    "status": "unmeasured for this reading",
+    "status": "unmeasured at every layer; no paired comparison exists yet",
     "why": (
-        "a residual-relative difference does not bound a readout-relative one: the readout's "
-        "denominator norm(L h) may be small, and this bridge additionally ranks through a "
-        "nonlinear normaliser and a thresholded dictionary"
+        "the lens is a statement about the neighbourhood it was fitted in: displacing the anchor "
+        "moved the sampled scalar derivatives at layer 1 by a median 1.035 of their own size in "
+        "float32, and by more than their own size at their worst, so the crossing is not a "
+        "correction to the answer but potentially the whole of it. This is a sampled directional "
+        "sensitivity, not a condition number, and it does not bound the readout"
+    ),
+    "to_measure": (
+        "a paired comparison at that layer, at this reading's own positions and context: the same "
+        "readout through the same lens on a capture from each path"
     ),
     "historical_context": [
         {
@@ -410,13 +432,74 @@ LENS_PATH_TERM = {
     ],
     "context_basis": (
         "WS-A's first-hour promoted floor, recorded at two lengths on two backends; context for "
-        "this crossing, not a calibrated term on any reading through a lens"
-    ),
-    "to_measure": (
-        "a paired comparison at this reading's own positions and context: the same readout "
-        "through the same lens on a float32 and a native residual"
+        "this crossing, not a calibrated term on any reading through a lens (width audit, W3)"
     ),
 }
+
+
+#: Anchor sensitivity and measured pairings, by model and by layer, held beside this module as
+#: data. It is data and not code because it is a measurement of particular models at particular
+#: layers: the quantity falls by more than two orders of magnitude across one stack, so it is no
+#: more a property of this bridge than a checkpoint's weights are, and the model-constant rule is
+#: right to keep such numbers out of a module that must work on the next model too.
+ANCHOR_SENSITIVITY_PATH = Path(__file__).with_name("anchor_sensitivity.json")
+
+_ANCHOR_TABLE: dict[str, Any] | None = None
+
+
+def anchor_table() -> dict[str, Any]:
+    """The measurement table, read once from :data:`ANCHOR_SENSITIVITY_PATH`."""
+    global _ANCHOR_TABLE
+    if _ANCHOR_TABLE is None:
+        raw = json.loads(ANCHOR_SENSITIVITY_PATH.read_text(encoding="utf-8"))
+        _ANCHOR_TABLE = {key: value for key, value in raw.items() if not key.startswith("_")}
+    return _ANCHOR_TABLE
+
+
+def anchor_sensitivity(layer: int, *, base: str | None = None) -> dict[str, Any] | None:
+    """What the displacement control measured at ``layer`` of ``base``, or ``None``.
+
+    ``None`` covers three different absences on purpose, and none of them is filled in: a model
+    nobody measured, a layer nobody measured on a model somebody did, and no model named at all.
+    Returning a neighbouring layer's value instead would be a guess wearing a measurement's
+    clothes.
+    """
+    entry = anchor_table().get(base or "", {})
+    measured = (entry.get("layers") or {}).get(str(int(layer)))
+    return dict(measured) if measured else None
+
+
+def measured_layers(base: str | None = None) -> list[int]:
+    """Which layers of ``base`` the control measured, in order; empty for an unmeasured model."""
+    entry = anchor_table().get(base or "", {})
+    return sorted(int(key) for key in (entry.get("layers") or {}))
+
+
+def path_pairing(layer: int, *, base: str | None = None) -> dict[str, Any] | None:
+    """The measured cross-path pairing at ``layer`` of ``base``, or ``None`` while none exists."""
+    entry = anchor_table().get(base or "", {})
+    measured = (entry.get("measured_pairings") or {}).get(str(int(layer)))
+    return dict(measured) if measured else None
+
+
+def path_term_for_layer(layer: int, *, base: str | None = None) -> dict[str, Any]:
+    """The cross-path term as it stands for one layer: the measurement if there is one, else the
+    standing statement that there is not, with that layer's sensitivity attached."""
+    measured = path_pairing(layer, base=base)
+    if measured is not None:
+        return {"layer": int(layer), "base": base, "measured": True, **measured}
+    term = dict(LENS_PATH_TERM)
+    term["layer"] = int(layer)
+    term["base"] = base
+    term["anchor_sensitivity"] = anchor_sensitivity(layer, base=base)
+    entry = anchor_table().get(base or "", {})
+    term["anchor_sensitivity_basis"] = entry.get("basis")
+    term["anchor_sensitivity_label"] = entry.get("label")
+    term["anchor_sensitivity_quantity"] = entry.get("quantity")
+    term["anchor_sensitivity_notes"] = list(entry.get("reading_notes") or [])
+    term["historical_context"] = [dict(entry) for entry in LENS_PATH_TERM["historical_context"]]
+    return term
+
 
 #: The three fields the width-rows ruling requires a lens's nu to carry. Spelled as the fitter
 #: spells them, in nu's own precision block, so there is one name per quantity in the tree.
@@ -437,16 +520,29 @@ def lens_fit_precision(nu: dict | None) -> dict[str, Any]:
 
 
 def fit_precision_record(
-    nu: dict | None, *, declared: str | None, capture_dtype: str = "native"
+    nu: dict | None,
+    *,
+    declared: str | None,
+    layer: int | None = None,
+    base: str | None = None,
+    capture_dtype: str | None = None,
+    capture_batch: int | None = None,
 ) -> dict[str, Any]:
     """Compare a lens's declared fit precision with the registry's, and record the path term.
 
-    Refuses two ways, each naming the field and both sides: a registry that declares a fit
-    precision against a lens whose nu does not say what it was fitted in, and a lens whose
-    ``fit_dtype`` is not the declared one. Both silent is **not** a refusal: it is every lens
-    fitted before the ruling, including upstream's hosted one, and the record says the fit
-    precision is undeclared rather than pretending to have checked it. Widths are recorded, never
-    gated here: what a Jacobian is a Jacobian *of* is the fitter's gate to keep.
+    Refuses two ways on the fit precision, each naming the field and both sides: a registry that
+    declares a fit precision against a lens whose nu does not say what it was fitted in, and a
+    lens whose ``fit_dtype`` is not the declared one. Both silent is **not** a refusal: it is
+    every lens fitted before the ruling, including upstream's hosted one, and the record says the
+    fit precision is undeclared rather than pretending to have checked it. What a Jacobian is a
+    Jacobian *of* is the fitter's gate to keep, so the widths are recorded here, not gated.
+
+    And a third way, on the reading rather than the artefacts: ``capture_dtype`` and
+    ``capture_batch`` describe the capture this reading will be taken on, and a capture from a
+    different precision or width than the fit is a **cross-path reading**, refused by name at any
+    layer whose pairing is unmeasured. ``capture_dtype=None`` means no capture is read at all,
+    which is the dictionary-direction readout and crosses nothing; passing the capture's own
+    dtype is what a caller does when a residual is involved.
     """
     fit = lens_fit_precision(nu)
     fit_dtype = fit["fit_dtype"]
@@ -467,6 +563,8 @@ def fit_precision_record(
     record: dict[str, Any] = {
         "declared_by_registry": declared,
         "capture_dtype": capture_dtype,
+        "capture_batch": capture_batch,
+        "layer": None if layer is None else int(layer),
         "status": status,
         **fit,
     }
@@ -476,9 +574,64 @@ def fit_precision_record(
             "say what arithmetic its map was taken in, and upstream's hosted lens is by "
             "measurement a schedule-specific object (WS-D, the width rows)"
         )
-    if fit_dtype == "float32" and capture_dtype == "native":
-        record["path_term"] = dict(LENS_PATH_TERM)
-    return record
+    crossings = []
+    if capture_dtype is not None and fit_dtype is not None and capture_dtype != fit_dtype:
+        crossings.append(f"the lens was fitted in {fit_dtype} and the capture is {capture_dtype}")
+    if (
+        capture_batch is not None
+        and fit["forward_batch"] is not None
+        and int(capture_batch) != int(fit["forward_batch"])
+    ):
+        crossings.append(
+            f"the lens was fitted at forward width {fit['forward_batch']} and the capture is at "
+            f"width {capture_batch}"
+        )
+    if not crossings:
+        return record
+
+    record["crossing"] = crossings
+    if layer is None:
+        raise ValueError(
+            "this is a cross-path reading ("
+            + "; ".join(crossings)
+            + ") and no layer was given, so whether its pairing has been measured cannot be "
+            "decided. A lens is a statement about the neighbourhood it was fitted in, and that "
+            "neighbourhood is a per-layer quantity (WS-D, the displacement control)"
+        )
+    term = path_term_for_layer(layer, base=base)
+    record["path_term"] = term
+    if term["measured"]:
+        return record
+
+    sensitivity = term["anchor_sensitivity"]
+    if sensitivity is None:
+        known = measured_layers(base)
+        size = (
+            f"the anchor sensitivity at layer {layer} of {base!r} was not measured"
+            + (
+                f"; it was measured at layers {known} of that model, and a value is not carried "
+                "across from a neighbouring layer"
+                if known
+                else ", and no layer of that model was, so there is no figure to reason from"
+            )
+        )
+    else:
+        sampled = sensitivity["sampled_displacement"]
+        f32, native = sampled["float32"], sampled["native"]
+        size = (
+            f"at layer {layer}, displacing the anchor moved the sampled scalar derivatives by a "
+            f"median {f32['median']} of their own size in float32 (native {native['median']}), "
+            f"over {f32['count']} projections in one draw, worst {f32['max']}. That is a sampled "
+            "directional sensitivity, not a condition number, and a median does not settle a "
+            "layer"
+        )
+    raise ValueError(
+        f"refusing a cross-path reading at layer {layer}: "
+        + "; ".join(crossings)
+        + f". {size}. The pairing has not been measured at this layer, and until it is the "
+        "difference is not an annotation on the reading but potentially the whole of it "
+        "(WS-D, the float32 displacement control). Measure it: " + term["to_measure"]
+    )
 
 
 def hook_alignment(
@@ -488,6 +641,8 @@ def hook_alignment(
     base: str | None = None,
     lens_fit_dtype: str | None = None,
     nu: dict | None = None,
+    capture_dtype: str | None = None,
+    capture_batch: int | None = None,
 ) -> int:
     """The lens layer this dictionary reads, refusing a lens that is not of the same model.
 
@@ -501,8 +656,13 @@ def hook_alignment(
     :func:`fit_precision_record`, which is what the width rows made necessary: two maps of one
     model in two arithmetics are two different maps. Callers that name neither get the check
     they had before, which is why the artefacts already recorded here did not change.
+
+    ``capture_dtype`` and ``capture_batch`` describe the capture the reading will be taken on,
+    and naming them adds the fifth: a capture from a path the lens was not fitted on is refused
+    at any layer whose pairing is unmeasured. They default to ``None``, meaning *no capture is
+    read*, which is the truth for a dictionary-direction readout and is why A1 is untouched by
+    this; a caller that reads a residual passes that residual's own dtype and width.
     """
-    fit_precision_record(nu, declared=lens_fit_dtype)
     dict_base = dictionary_base(dictionary)
     identity = getattr(lens, "identity", None)
     if identity is None or not getattr(identity, "base", None):
@@ -534,6 +694,16 @@ def hook_alignment(
         raise ValueError(
             f"lens width {lens.hidden_size} is not the dictionary's {dictionary.hidden_size}"
         )
+    # Last, and with the layer in hand: the fit precision and, where a capture is named, whether
+    # this reading crosses paths at a layer whose pairing nobody has measured.
+    fit_precision_record(
+        nu,
+        declared=lens_fit_dtype,
+        layer=layer,
+        base=dict_base,
+        capture_dtype=capture_dtype,
+        capture_batch=capture_batch,
+    )
     return layer
 
 

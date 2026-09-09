@@ -646,6 +646,8 @@ FLOAT32_NU = {"precision": {"dtype": "float32", "fit_dtype": "float32",
 BF16_NU = {"precision": {"dtype": "bfloat16", "fit_dtype": "bfloat16",
                          "forward_batch": 64, "anchor_batch": 1}}  # fmt: skip
 SILENT_NU = {"precision": {"dtype": "bfloat16", "device": "cpu"}}
+#: The model the displacement control measured; the fixture dictionary names its own.
+GEMMA = "google/gemma-3-4b-it"
 
 
 def test_a_lens_that_does_not_say_what_it_was_fitted_in_is_refused_by_a_declaring_registry(parts):
@@ -682,52 +684,198 @@ def test_both_silent_is_recorded_as_undeclared_rather_than_refused(parts):
     assert "path_term" not in record
 
 
-def test_a_float32_lens_on_a_native_capture_records_the_crossing_as_unmeasured():
-    """W3: the crossing is declared, its size is not known, and no figure stands in for it."""
-    record = B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="native")
-    assert record["status"] == "declared"
-    assert record["forward_batch"] == 1 and record["anchor_batch"] == 1
-    term = record["path_term"]
-    assert term["measured"] is False
-    assert term["status"] == "unmeasured for this reading"
-    # No top-level number: a reader cannot lift one out and use it as an error bar. `measured`
+def test_a_cross_path_reading_is_refused_by_name_at_a_layer_with_a_measured_sensitivity():
+    """WS-D's displacement control: at layer 1 the crossing is not an error bar but the
+    answer."""
+    with pytest.raises(ValueError, match="refusing a cross-path reading at layer 1") as raised:
+        B.fit_precision_record(
+            FLOAT32_NU, declared="float32", layer=1, base=GEMMA, capture_dtype="bfloat16"
+        )
+    message = str(raised.value)
+    assert "fitted in float32 and the capture is bfloat16" in message
+    # The sampled distribution, cited as that: the amplification ratios were withdrawn by the
+    # map/anchor audit because their denominator was one position's norm and the intervention
+    # replaced the whole sequence, so no ratio appears here or anywhere in the record.
+    assert "median 1.035116 of their own size in float32 (native 0.470689)" in message
+    assert "over 18 projections in one draw, worst 35.1951" in message
+    assert "not a condition number" in message
+    assert "has not been measured at this layer" in message
+    assert "paired comparison at that layer" in message
+
+    # The last block is refused too, and its own figure travels with it: benign-looking is not
+    # measured, and the ruling conditions on the pairing rather than on the size of a proxy.
+    with pytest.raises(ValueError, match="refusing a cross-path reading at layer 33") as raised:
+        B.fit_precision_record(
+            FLOAT32_NU, declared="float32", layer=33, base=GEMMA, capture_dtype="bfloat16"
+        )
+    # And its own median does not excuse it: 0.125 in the middle, 91.9 at the worst of the
+    # same eighteen projections, which is why a late layer is not shown benign by its median.
+    message = str(raised.value)
+    assert "median 0.125179" in message and "worst 91.8969" in message
+    assert "a median does not settle a layer" in message
+
+
+def test_a_layer_the_control_never_measured_says_so_rather_than_borrowing_a_neighbour():
+    with pytest.raises(ValueError, match="refusing a cross-path reading at layer 18") as raised:
+        B.fit_precision_record(
+            FLOAT32_NU, declared="float32", layer=18, base=GEMMA, capture_dtype="bfloat16"
+        )
+    message = str(raised.value)
+    assert "was not measured; it was measured at layers [1, 17, 33]" in message
+    assert "not carried across from a neighbouring layer" in message
+    assert B.anchor_sensitivity(18, base=GEMMA) is None
+    sampled = B.anchor_sensitivity(17, base=GEMMA)["sampled_displacement"]
+    assert sampled["float32"]["median"] == 0.696514 and sampled["native"]["median"] == 0.585164
+
+    # A model nobody measured is a third absence, and it says which one it is.
+    with pytest.raises(ValueError, match="no layer of that model was") as raised:
+        B.fit_precision_record(
+            FLOAT32_NU, declared="float32", layer=17, base="acme/unmeasured",
+            capture_dtype="bfloat16",
+        )  # fmt: skip
+    assert B.measured_layers("acme/unmeasured") == []
+    assert B.measured_layers(GEMMA) == [1, 17, 33]
+
+
+def test_a_capture_at_another_width_is_a_crossing_even_at_one_precision():
+    """The rule names width as well as precision: same arithmetic, a different function."""
+    with pytest.raises(ValueError, match="forward width 1 and the capture is at width 64"):
+        B.fit_precision_record(
+            FLOAT32_NU, declared="float32", layer=17, base=GEMMA,
+            capture_dtype="float32", capture_batch=64,
+        )  # fmt: skip
+    # Same width, same precision: nothing crossed.
+    same = B.fit_precision_record(
+        FLOAT32_NU, declared="float32", layer=17, base=GEMMA,
+        capture_dtype="float32", capture_batch=1,
+    )  # fmt: skip
+    assert "path_term" not in same and "crossing" not in same
+
+
+def test_a_cross_path_reading_without_a_layer_cannot_be_decided_and_says_so():
+    with pytest.raises(ValueError, match="no layer was given"):
+        B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="bfloat16")
+
+
+def test_a_same_path_reading_and_a_reading_of_no_capture_carry_no_term(parts):
+    d, _, lens = parts
+    same = B.fit_precision_record(
+        FLOAT32_NU, declared="float32", layer=1, base=GEMMA, capture_dtype="float32"
+    )
+    assert "path_term" not in same and "crossing" not in same
+    # No capture at all: the dictionary-direction readout, which has no anchor to have moved.
+    none = B.fit_precision_record(FLOAT32_NU, declared="float32", layer=1, base=GEMMA)
+    assert "path_term" not in none and none["capture_dtype"] is None
+    # And that is why A1's own call is untouched by the ruling.
+    assert B.hook_alignment(d, lens, lens_fit_dtype="float32", nu=FLOAT32_NU) == B.layer_for_hook(
+        d.hook_point
+    )
+    with pytest.raises(ValueError, match="refusing a cross-path reading"):
+        B.hook_alignment(
+            d, lens, lens_fit_dtype="float32", nu=FLOAT32_NU, capture_dtype="bfloat16"
+        )
+
+
+def test_the_per_layer_term_states_the_crossing_without_offering_a_number():
+    term = B.path_term_for_layer(1, base=GEMMA)
+    assert term["layer"] == 1 and term["measured"] is False and term["base"] == GEMMA
+    assert "no paired comparison exists yet" in term["status"]
+    assert term["anchor_sensitivity"]["sampled_displacement"]["float32"]["median"] == 1.035116
+    assert "e771c2b" in term["anchor_sensitivity_basis"]
+    assert "ca396fb" in term["anchor_sensitivity_basis"]
+    assert term["anchor_sensitivity_label"] == (
+        "sampled displacement, one draw, eighteen projections"
+    )
+    assert any(
+        "does not follow from the median" in note for note in term["anchor_sensitivity_notes"]
+    )
+    # An equal-norm random displacement moves them as much or more, so it is not a special
+    # direction, and that context travels with the figure rather than in someone's memory.
+    assert term["anchor_sensitivity"]["equal_norm_random_displacement"]["native"]["median"] > 1.0
+    assert B.path_term_for_layer(18, base=GEMMA)["anchor_sensitivity"] is None
+
+    # No bare number at the top level, so nothing can be lifted out as an error bar. `measured`
     # is excluded by name rather than by type, because a bool *is* an int in Python and a type
     # test alone would either pass vacuously or fail on the flag it exists to keep.
     numeric = {
         key: value
         for key, value in term.items()
-        if key != "measured" and isinstance(value, (int, float))
+        if key not in ("measured", "layer") and isinstance(value, (int, float))
     }
     assert numeric == {}
-    assert "denominator" in term["why"] and "thresholded dictionary" in term["why"]
-    assert term["to_measure"].startswith("a paired comparison")
 
-    # Both historical figures travel with their lengths, and neither is offered as the term.
+    # Both historical figures still travel with their lengths, as W3 requires.
     context = {entry["at_tokens"]: entry for entry in term["historical_context"]}
-    assert set(context) == {64, 1400}
-    assert context[64]["relative"] == 0.0124
-    assert context[1400]["relative"] == 0.694
-    assert "CUDA" in context[1400]["note"] and "6.9%" in context[1400]["note"]
-    assert all("residual-relative" in entry["quantity"] for entry in context.values())
-    assert "not a calibrated term" in term["context_basis"]
+    assert context[64]["relative"] == 0.0124 and context[1400]["relative"] == 0.694
+    assert "6.9%" in context[1400]["note"]
 
-    # The crossing is what triggers it: no crossing, nothing to declare.
-    same = B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="float32")
-    assert "path_term" not in same
-
-    # A defensive copy, so an artefact cannot edit the declaration for every later reading.
-    record["path_term"]["measured"] = True
+    # A defensive copy: an artefact cannot edit the declaration for every later reading.
+    term["measured"] = True
+    term["anchor_sensitivity"]["sampled_displacement"] = {}
     assert B.LENS_PATH_TERM["measured"] is False
+    fresh = B.anchor_sensitivity(1, base=GEMMA)["sampled_displacement"]
+    assert fresh["float32"]["median"] == 1.035116
 
 
-def test_the_fit_precision_lands_in_the_provenance_block(parts):
+def test_the_refusal_lifts_where_a_pairing_has_been_measured(monkeypatch):
+    """The refusal is conditioned on the measurement, not on the layer being late."""
+    measurement = {"relative": 0.004, "positions": "all", "context_tokens": 512, "basis": "paired"}
+    monkeypatch.setitem(B.anchor_table()[GEMMA]["measured_pairings"], "1", measurement)
+
+    record = B.fit_precision_record(
+        FLOAT32_NU, declared="float32", layer=1, base=GEMMA, capture_dtype="bfloat16"
+    )
+    assert record["path_term"]["measured"] is True
+    assert record["path_term"]["relative"] == 0.004
+    assert record["crossing"] == ["the lens was fitted in float32 and the capture is bfloat16"]
+    # Its neighbour is still refused: the measurement is per layer and does not spread.
+    with pytest.raises(ValueError, match="refusing a cross-path reading at layer 17"):
+        B.fit_precision_record(
+            FLOAT32_NU, declared="float32", layer=17, base=GEMMA, capture_dtype="bfloat16"
+        )
+
+
+def test_the_fit_precision_lands_in_the_provenance_block(parts, monkeypatch):
     d, u, lens = parts
-    record = B.fit_precision_record(FLOAT32_NU, declared="float32")
+    record = B.fit_precision_record(FLOAT32_NU, declared="float32", layer=10, base=GEMMA)
     block = B.bridge_provenance(
         d, lens, u, 10, dictionary_repo="r", dictionary_folder="f", fit_precision=record
     )
     assert block["lens"]["fit_precision"]["fit_dtype"] == "float32"
-    assert block["lens"]["fit_precision"]["path_term"]["measured"] is False
+    # No capture was read, so there is no crossing to record and none is invented.
+    assert "path_term" not in block["lens"]["fit_precision"]
+
+    # Where a pairing has been measured, the measurement is what the artefact carries.
+    monkeypatch.setitem(B.anchor_table()[GEMMA]["measured_pairings"], "10", {"relative": 0.004})
+    measured = B.fit_precision_record(
+        FLOAT32_NU, declared="float32", layer=10, base=GEMMA, capture_dtype="bfloat16"
+    )
+    block = B.bridge_provenance(
+        d, lens, u, 10, dictionary_repo="r", dictionary_folder="f", fit_precision=measured
+    )
+    assert block["lens"]["fit_precision"]["path_term"]["relative"] == 0.004
     # Absent by default, so an artefact that did not check cannot look as though it had.
     plain = B.bridge_provenance(d, lens, u, 10, dictionary_repo="r", dictionary_folder="f")
     assert plain["lens"]["fit_precision"] is None
+
+
+def test_no_amplification_ratio_survives_anywhere_in_the_shipped_measurements():
+    """The audit withdrew them; a test is what keeps them withdrawn.
+
+    They divided a derivative change by a displacement norm taken at one position while the
+    intervention replaced the whole sequence, so they were never condition estimates. The data
+    file may name the withdrawal in prose, but no ratio may be readable as a value.
+    """
+    import json
+
+    table = B.anchor_table()
+    for model, entry in table.items():
+        for layer, measured in (entry.get("layers") or {}).items():
+            assert not any("amplif" in key for key in measured), (model, layer)
+    # And nothing shaped like the withdrawn ratios is reachable as a number.
+    numbers = [
+        value
+        for value in json.loads(json.dumps(table)).values()
+        if isinstance(value, (int, float))
+    ]
+    assert numbers == []

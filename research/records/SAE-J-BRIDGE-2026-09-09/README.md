@@ -407,11 +407,74 @@ thresholded dictionary, which adds more of the same question. The figure is also
 number: the same promoted floor reads 1.2386% at 64 tokens on both backends and 69.4% at 1,400
 tokens on CUDA against 6.9% on the CPU.
 
-So `LENS_PATH_TERM` now carries `measured: false`, both figures as historical context **with their
+So `LENS_PATH_TERM` carries `measured: false`, both figures as historical context **with their
 lengths and backends**, why a residual percentage cannot answer the question, and what would:
 a paired comparison at the reading's own positions and context. When that measurement exists the
 bridge records it in place of the statement. A test asserts the shape, including that no bare
 number sits at the top level where a reader could lift it out as an error bar.
+
+### And then the term became per layer, and a refusal, 2026-09-10
+
+WS-D's float32 displacement control (`e771c2b`) applied the same anchor move the width change had
+produced, in coherent float32 at width 1, and measured how far the sampled scalar derivatives moved.
+At layer 1 they moved by a median **1.035** of their own size in float32 against 0.471 natively; at
+17, 0.697 against 0.585; at 33, 0.125 against 0.120. An equal-norm random displacement moved them as
+much or more, so it is not a special direction. The sensitivity is not the arithmetic's.
+
+**What those numbers are not, and this is a correction to what I first built.** WS-A's map/anchor
+audit (`ca396fb`) withdrew the amplification ratios that had been read off them. They divided a
+derivative change by a displacement norm measured at **one position** while the intervention
+replaced the **whole sequence**, so they were never condition estimates; the audit's own example is
+that for `F(p, z) = p·z` the derivative with respect to `p` is `z`, and moving only `z` while
+dividing by the movement of `p` manufactures infinite amplification in a perfectly ordinary
+function. A ratio of one scalar projection over a finite displacement is a directional sensitivity
+in any case, not a worst-case condition number. So no ratio is recorded anywhere, and a test keeps
+it that way: no key in the shipped table may name one, and no bare number is reachable in it at all.
+
+What the record carries instead is the sampled distribution the audit recomputed from all 108
+committed rows: median, minimum, maximum and count per layer, labelled *sampled displacement, one
+draw, eighteen projections*, with the equal-norm random arm beside it.
+
+The crossing itself is still what it was: a Jacobian lens is a statement about the neighbourhood it
+was fitted in. So the term is per layer, and at any layer whose pairing is unmeasured a cross-path
+reading is now **refused by name**, citing that layer's sampled sensitivity, rather than annotated.
+At layer 1 the crossing is not an error bar on the answer; it is the size of the answer.
+
+Four things the implementation is careful about, each because the alternative would be the inert
+kind of check.
+
+- **A layer the control never measured says so.** The figure is not carried across from a
+  neighbouring layer. The refusal names the three measured layers instead.
+- **The last block is refused too, and the audit is why.** The order calls the term benign there,
+  and the median at layer 33 is 0.125, which looks benign. Over the same eighteen projections the
+  maximum is **91.9**. The audit says plainly that "the last block is well conditioned" does not
+  follow from the median, and the rule conditions on the pairing being *measured*, which it has not
+  been at any layer. A layer that looks safe by a proxy is not a layer that has been checked.
+- **Width counts as a crossing, not just precision.** The rule names width, and a lens fitted at
+  one forward width is a Jacobian of a different function than the same lens at another, which is
+  what the width rows established.
+- **No capture read is not a crossing.** A1 reads dictionary directions through the lens and touches
+  no residual, so there is no anchor to have moved and nothing to refuse. `capture_dtype` defaults
+  to `None`, meaning *no capture*, and a caller that reads a residual passes its dtype and width.
+  This is why the A1 artefacts in this record are unaffected.
+
+A test proves the refusal lifts exactly where a pairing is measured, and only at that layer: with a
+measurement inserted at layer 1, layer 1 records it and layer 17 is still refused.
+
+**And the figures live beside the module as data, keyed by model, because the repository's own
+rule caught them in the code.** The model-constant gate failed on a literal `33` in
+`sae_bridge.py`, and it was right to: a table of per-layer measurements for one checkpoint is no
+more a property of this bridge than that checkpoint's weights are. It now sits in
+`probes/anchor_sensitivity.json` under `google/gemma-3-4b-it`, and the reading's own model, taken
+from the dictionary's `model_name`, is what selects it. That distinguishes three absences the code
+had been collapsing into one: a layer nobody measured on a model somebody did, a model nobody
+measured at all, and no model named. The refusal says which, and fills in none of them.
+
+One measurement in the file is the nearest thing that exists to the crossing and is **not** it:
+holding the tail in float32 and switching only the anchor to the native one gives median scalar
+changes of 0.537, 0.252 and 0.049 at the three layers. Both of its readings use the float32 tail,
+so it is not a native-against-float32 comparison. It travels with that sentence attached, because
+without it someone will read it as the measurement that lifts the refusal.
 
 Two things this does not do. It does not gate the widths: what a Jacobian is a Jacobian *of* is
 the fitter's gate, and a second copy in the bridge would be a worse one. And it does not change
