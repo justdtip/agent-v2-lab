@@ -375,8 +375,10 @@ stays comfortably nonzero. The audit's counterexample makes the size of that gap
 map with unit diagonal and 0.49 off-diagonals, central-differenced at step 1 with nearest-integer
 output rounding at dimension 256, loses **99.61% of components**, keeps **every** column nonzero, and
 returns a norm ratio of **0.12677**. Our observed ratio at layer 5 is 0.131 and at layer 1 is 0.185.
-The numbers are illustrative and not a bf16 simulation, but they land in our range, which is the
-point: the rounding hypothesis my zero-column artefact was written to retire is quantitatively alive.
+Those are three numbers of the same size. It is an observation about the arithmetic of a constructed
+example and not evidence about Gemma, and it is here for one purpose: the objection is that the
+zero-column count cannot retire the rounding hypothesis, and a count of components lost that high
+beside a ratio that low makes the objection concrete rather than abstract.
 
 **"Moves the output by up to half its own size" is not measured.** The declared map averages the
 selected source positions and sums the selected target positions, so for this two-position causal
