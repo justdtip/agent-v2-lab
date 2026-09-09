@@ -306,3 +306,31 @@ tip. Every CUDA measurement remains unexecuted, as the checklist says in its fir
 
 Nothing further is asked of WS-A on the laptop. The next thing Codex does is on the device, in the
 order the checklist gives, and its record comes back here under a dated heading.
+
+## Next instruction, 2026-09-10, second — the decoder intervention wrapper, on fixtures
+
+The derivation `sae_j_lens_state_derivation.md` (§7.1) and its order `SAE-J-BRIDGE-ORDER-2026-09-08.md`
+are now requirements for the device phase (plan §16.16). One piece is yours because it sits on
+`TorchCapture.intervene`, which you built. Device-free; fixture-tested against the tiny decoder.
+
+**1. The decoder intervention.** `h' = h + D_F (z'_F − E(h)_F)` inside the capture's `intervene`
+function at a layer and position: the SAE's encoder `E`, decoder `D` and bias `b` are taken as
+plain callables and tensors (SWE-2's Gemma Scope 2 loader lands separately; until then the tests
+use a synthetic dictionary with a JumpReLU encoder), the feature set `F` and the target values
+`z'_F` are arguments, and the base reconstruction residual is preserved by construction, which is a
+test: `h' − b − D z'` restricted off `F` equals the base residual off `F`.
+
+**2. The re-encoding diagnostic.** After the intervention, report `E(h')_F` against `z'_F` and the
+change in `E(h')_{−F}` against `E(h)_{−F}`, as numbers in the record, never as an assertion that the
+target was attained: the derivation is explicit that attainment must be measured. A test constructs
+a dictionary where re-encoding does not return the target and checks the diagnostic says so.
+
+**3. Clamp mode.** Today an intervention applies once per fresh prefill. A clamp re-applies at every
+forward, keyed to absolute positions or to every emitted position, and is released explicitly; the
+record distinguishes a one-shot patch from a clamp, since the derivation treats them as different
+claims (§11.3). Tests: the clamp holds across steps through a cache, the one-shot does not, and a
+clamp on a cached position fails closed the way the existing intervention does.
+
+**4. Model-agnostic**, as everything: no layer count, no width, no family class; the layer list and
+the feature set come from the caller. Pathspec commit on `codex/cuda-torch-seam`, merged after
+review as before. Its device use is the state programme's, ordered after the migration validates.
