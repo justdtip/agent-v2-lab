@@ -1,0 +1,22 @@
+{
+  "approved_tolerances_modified": false,
+  "checks": [
+    "analysis.json reproduces exactly",
+    "all 14 frozen-source byte corruptions rejected",
+    "reported corpus and transition counts checked",
+    "reporter trailing-false expression checked for both Boolean outcomes",
+    "analysis imports restricted to declared Python standard-library set",
+    "ruff F/E9 with --no-cache passed"
+  ],
+  "hashes": {
+    "README.md": "70cb89752a074daaca0220d883e9ef91408e5624ea6a989efd6c51e5f59e1567",
+    "SOURCE-MANIFEST.json": "e2fed75b8471bb87ccda55464d1ad9d2250c571ffefdca54fe5ddb8894633a74",
+    "analysis.json": "2349d891eca8350a1358881e32a93443e37b194d10c7ff8b1e7754c028a7938a",
+    "analyze.py": "41bbf2ca2cdc3e45fd81d85de0a4d4faf79b1762bc91f73affc4cd6327ae8713"
+  },
+  "live_server_inspection": false,
+  "model_execution": false,
+  "scope": "review record only; no producer model code executed",
+  "source_orders_modified": false,
+  "status": "passed"
+}
