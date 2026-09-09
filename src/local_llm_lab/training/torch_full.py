@@ -193,42 +193,6 @@ def causal_lm_chunked_loss(
     )
 
 
-def make_chunked_loss_trainer_class(
-    chunk_size: int = DEFAULT_LOSS_CHUNK, autocast_dtype: "torch.dtype | None" = None
-) -> Any:
-    """Build a `Trainer` subclass that computes the loss without materialising all the logits.
-
-    A factory rather than a module-level class so that importing this module does not import
-    `transformers`, which the suite's import-closure rule cares about.
-
-    `Trainer` keeps everything else: activation checkpointing, the accumulation window and its
-    `num_items_in_batch`, `accelerator.clip_grad_norm_` under whatever strategy is active, the
-    schedule, checkpoint writing and the evaluation cadence. The one thing added beside the loss is
-    that the pre-clip gradient norm is *recorded*: MLX's `StableAdamW.update` discards it
-    (`gradients, _ = clip_grad_norm(...)`), so no artefact in this programme says whether clipping
-    ever fired, on any run.
-    """
-    from transformers import Trainer
-
-    class ChunkedLossTrainer(Trainer):
-        loss_chunk_size = chunk_size
-        loss_autocast_dtype = autocast_dtype
-
-        def compute_loss(
-            self, model, inputs, return_outputs: bool = False, num_items_in_batch=None
-        ):
-            loss = causal_lm_chunked_loss(
-                model,
-                inputs,
-                chunk_size=self.loss_chunk_size,
-                num_items_in_batch=num_items_in_batch,
-                autocast_dtype=self.loss_autocast_dtype,
-            )
-            return (loss, None) if return_outputs else loss
-
-    return ChunkedLossTrainer
-
-
 class ChunkedLossModule:
     """Namespace marker; the class itself is built by :func:`wrap_with_chunked_loss`."""
 
@@ -269,6 +233,17 @@ def wrap_with_chunked_loss(
         def __init__(self) -> None:
             super().__init__()
             self.inner = model
+            # `Trainer` reads `config` off the model it is handed and calls the checkpointing
+            # methods on it. Delegating keeps the wrapper the only object anything is handed --
+            # which is the point of the ruling: autocast, the accumulation window and the unshard
+            # hooks all attach to the one `forward` that now runs.
+            self.config = model.config
+
+        def gradient_checkpointing_enable(self, **kwargs: Any) -> None:
+            self.inner.gradient_checkpointing_enable(**kwargs)
+
+        def gradient_checkpointing_disable(self) -> None:
+            self.inner.gradient_checkpointing_disable()
 
         def forward(
             self,
@@ -286,3 +261,49 @@ def wrap_with_chunked_loss(
             )
 
     return _ChunkedLossModule()
+
+
+def make_loss_module_trainer_class() -> Any:
+    """A `Trainer` for a model whose ``forward`` returns the loss.
+
+    A factory rather than a module-level class so that importing this module does not import
+    `transformers`, which the suite's import-closure rule cares about.
+
+    Two overrides, and both exist because the model handed to `Trainer` is the wrapper rather than
+    the `PreTrainedModel` inside it:
+
+    ``compute_loss`` calls that wrapper's forward and returns what it returns. Everything else stays
+    upstream's: activation checkpointing, the accumulation window and its ``num_items_in_batch``,
+    ``accelerator.clip_grad_norm_`` under whatever strategy is active, the schedule and the cadence.
+
+    ``_save`` saves the **inner** model. `Trainer._save` checks ``isinstance(model, PreTrainedModel)``
+    and, failing that, writes a bare state dict -- which would name every tensor ``inner.*`` and emit
+    no ``config.json``, producing a checkpoint that `checkpoint_delta` cannot name-match against its
+    base and the registry cannot load. Nothing would raise; the run would finish and the artefact
+    would be wrong.
+    """
+    from transformers import Trainer
+
+    class LossModuleTrainer(Trainer):
+        def compute_loss(
+            self, model, inputs, return_outputs: bool = False, num_items_in_batch=None
+        ):
+            loss = model(
+                input_ids=inputs["input_ids"],
+                labels=inputs["labels"],
+                attention_mask=inputs.get("attention_mask"),
+                num_items_in_batch=num_items_in_batch,
+            )
+            return (loss, None) if return_outputs else loss
+
+        def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
+            inner = getattr(self.accelerator.unwrap_model(self.model), "inner", None)
+            if inner is None:
+                super()._save(output_dir, state_dict)
+                return
+            target = output_dir if output_dir is not None else self.args.output_dir
+            inner.save_pretrained(target)
+            if self.processing_class is not None:
+                self.processing_class.save_pretrained(target)
+
+    return LossModuleTrainer

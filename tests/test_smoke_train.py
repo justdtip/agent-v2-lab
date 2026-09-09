@@ -22,7 +22,8 @@ from local_llm_lab.training.collator import IGNORE_INDEX, CausalCollator  # noqa
 from local_llm_lab.training.torch_full import (  # noqa: E402
     build_adamw,
     freeze_all_but_top_layers,
-    make_chunked_loss_trainer_class,
+    make_loss_module_trainer_class,
+    wrap_with_chunked_loss,
 )
 
 ROWS, VOCAB, LAYERS = 40, 64, 4
@@ -124,8 +125,8 @@ def test_forty_rows_run_the_loop_cadence_and_checkpoints_end_to_end(tmp_path: Pa
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
     )
-    trainer = make_chunked_loss_trainer_class(chunk_size=16)(
-        model=model,
+    trainer = make_loss_module_trainer_class()(
+        model=wrap_with_chunked_loss(model, chunk_size=16),
         args=arguments,
         train_dataset=rows,
         data_collator=CausalCollator(pad_token_id=0),
@@ -153,8 +154,8 @@ def test_only_the_opened_layers_moved(tmp_path: Path) -> None:
     freeze_all_but_top_layers(model, 1)
     before = {name: p.detach().clone() for name, p in model.named_parameters()}
 
-    trainer = make_chunked_loss_trainer_class(chunk_size=16)(
-        model=model,
+    trainer = make_loss_module_trainer_class()(
+        model=wrap_with_chunked_loss(model, chunk_size=16),
         args=TrainingArguments(
             output_dir=str(tmp_path / "run"), max_steps=2, per_device_train_batch_size=2,
             learning_rate=1e-2, logging_steps=1, save_strategy="no", eval_strategy="no",
@@ -168,3 +169,42 @@ def test_only_the_opened_layers_moved(tmp_path: Path) -> None:
     moved = {n for n, p in model.named_parameters() if not torch.equal(p.detach(), before[n])}
     assert moved, "nothing moved at all; the run did not train"
     assert all(name.startswith(f"model.layers.{LAYERS - 1}.") for name in moved), sorted(moved)
+
+
+def test_the_checkpoint_is_a_loadable_model_and_not_the_wrappers_state_dict(tmp_path: Path) -> None:
+    """`Trainer` saves what it is handed, and it is handed the wrapper.
+
+    `Trainer._save` checks `isinstance(model, PreTrainedModel)` and, failing that, writes a bare
+    state dict: every tensor named `inner.*` and no `config.json`. Nothing raises. The run finishes,
+    the file is there, and the artefact is one that `checkpoint_delta` cannot name-match against its
+    base and the registry cannot load -- a defect that would first appear as a puzzling delta table
+    hours after a real run. So the checkpoint is asserted to be a model, not a file.
+    """
+    from transformers import Gemma3ForCausalLM, TrainingArguments
+
+    output = tmp_path / "run"
+    trainer = make_loss_module_trainer_class()(
+        model=wrap_with_chunked_loss(_tiny_model(), chunk_size=16),
+        args=TrainingArguments(
+            output_dir=str(output), max_steps=1, per_device_train_batch_size=2,
+            learning_rate=1e-3, logging_steps=1, save_steps=1, save_strategy="steps",
+            eval_strategy="no", report_to=[], use_cpu=True, seed=1,
+        ),
+        train_dataset=_rows(),
+        data_collator=CausalCollator(pad_token_id=0),
+    )
+    trainer.train()
+
+    checkpoint = output / "checkpoint-1"
+    assert (checkpoint / "config.json").is_file(), "no config: this is a state dict, not a model"
+
+    from safetensors import safe_open
+
+    with safe_open(str(checkpoint / "model.safetensors"), framework="pt") as handle:
+        names = list(handle.keys())
+    assert names, "empty checkpoint"
+    assert not any(name.startswith("inner.") for name in names), sorted(names)[:3]
+
+    # The strongest form of the assertion: it loads.
+    reloaded = Gemma3ForCausalLM.from_pretrained(checkpoint)
+    assert reloaded.config.num_hidden_layers == LAYERS

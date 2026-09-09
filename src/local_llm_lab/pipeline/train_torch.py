@@ -98,8 +98,9 @@ def stage_train_torch(
     from local_llm_lab.training.torch_full import (
         build_adamw,
         freeze_all_but_top_layers,
-        make_chunked_loss_trainer_class,
+        make_loss_module_trainer_class,
         upcast_trainable_to_float32,
+        wrap_with_chunked_loss,
     )
     from local_llm_lab.tuner_data import load_rendered_splits
 
@@ -167,10 +168,14 @@ def stage_train_torch(
 
     selected = device.select()
     arguments = build_training_arguments(recipe, output=output, seed=seed, selected=selected)
-    # bfloat16 compute over a float32 trainable slice, made explicit because the loss bypasses the
-    # wrapper `Trainer` would otherwise have cast in.
-    trainer = make_chunked_loss_trainer_class(autocast_dtype=torch.bfloat16)(
-        model=model,
+    # One object is handed to `Trainer`, and would be handed to `fully_shard` on a sharded run: the
+    # loss runs inside this wrapper's forward, so autocast, the accumulation window and the unshard
+    # hooks all attach to the one forward that runs. The explicit autocast dtype stays inside the
+    # loss regardless -- a nested autocast of the same dtype costs nothing and documents which
+    # precision the loss owns rather than inherits.
+    wrapped = wrap_with_chunked_loss(model, autocast_dtype=torch.bfloat16)
+    trainer = make_loss_module_trainer_class()(
+        model=wrapped,
         args=arguments,
         train_dataset=rows,
         eval_dataset=validation,
