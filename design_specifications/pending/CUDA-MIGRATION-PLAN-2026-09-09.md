@@ -1514,3 +1514,26 @@ of the budget, the feasibility verdicts, the gate scripts' cap checks and the bo
 takes the fraction from `device.budget_fraction()` rather than from the constant. On the 95 GiB
 card that is 90 GiB, under which the 4B's full fine-tuning at 16 bytes per parameter fits
 unsharded, which the 0.6 cap refused.
+
+### 16.18 The second state variable, and the size hypothesis
+
+The Director, 2026-09-10, as a hypothesis to test and not a claim: the 12B carries a richer
+representation of the task it is executing than the 4B, possibly a maintained sequence of
+intermediate-step representations, possibly only under fine-tuning. It becomes the state
+programme's **second state variable, plan progress**: which step of the task the agent is at,
+which every expert trajectory carries as a step index and every family defines as a known
+sequence. The three estimands are the derivation's, on both models over the same episodes at
+matched positions: predictive sufficiency (how well a feature state read from the residual
+predicts the next action and the steps remaining, held out), update closure (whether that state
+advances by a fixed rule as steps complete), and retention under carrier controls (whether the
+state is carried in the residual stream and cache or recomputed each turn from the transcript,
+which is the confound the derivation names and WS-B's cache exchange separates). A fine-tuning arm
+repeats the three after the adapter.
+
+**Rules.** "Richer" means more predictive at matched positions under matched probe capacity, since
+a wider and deeper stream yields more of anything to any probe; the tolerances come from a pilot
+as the state programme requires; the pre-registration is written before any 12B capture is read;
+and residual captures of both models over the same episodes are made on the card in the same
+pass as the lenses, so the data exists when the pre-registration does. The D-CRO drafts the
+pre-registration and the capture plan; the readings are the seats' once the 12B lens and the 12B
+dictionary readout exist.
