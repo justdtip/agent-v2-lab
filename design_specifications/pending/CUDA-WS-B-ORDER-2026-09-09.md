@@ -105,3 +105,26 @@ class-default head dimension; read both off the loaded config). Memory does not 
 at `none` against the view; then each strategy is its own arm of the same gate and must reproduce
 the `none` trajectories byte for byte within the backend. A strategy that changes one token is a
 defect, not a speed setting. Plan §16.8.
+
+## Amendment, Chief, 2026-09-10: the sampled decoding path, ordered on the Director's ruling
+
+The Director lifted the temperature refusal today, on the Chief's advice and scoped as the advice
+was (plan §16.16). SWE-1 builds, on fixtures, device-free:
+
+- **A sampled decode beside the greedy loop**, not inside it: the greedy path's output stays
+  byte-identical to before and a test says so. The sampled path draws from the full softmax at
+  temperature 1.0 with no top-p or top-k truncation, from a generator seeded through the device
+  shim's pinned seed, and refuses any other temperature or any truncation by name: an argument
+  for another value is a change to what the device's runs measure and is a separate ruling.
+- **Only for runs declared as the state programme.** Every golden gate, the tolerance runner and
+  every comparison against an MLX record stay greedy and refuse the sampled mode by name.
+- **Provenance in every manifest of a sampled run**: `decoding: {mode: sampled, temperature: 1.0,
+  truncation: none, sampler: <the function's name and the backend>, seed}`, with the note that
+  sampled draws reproduce only within one backend and kernel set, so a sampled record is compared
+  only with a sampled record from the same backend.
+- **Tests**: a fixed seed reproduces the draw on CPU; two seeds differ; the greedy path unchanged
+  byte for byte; a gate handed the sampled mode refuses; the manifest fields present and typed.
+
+Own pathspec commit on your branch, pushed for the Chief's review and merge as before. The state
+programme's script (`STATE-PROGRAMME-RUN-ORDER-2026-09-10.md`) lifts its own refusal of
+`--decoding sampled` only once this lands on the branch it runs from.

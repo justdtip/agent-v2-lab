@@ -1491,7 +1491,14 @@ finds them and does the run is ordered in `STATE-PROGRAMME-RUN-ORDER-2026-09-10.
 with the derivation table, the drop rule, the budget rule and the seal (agreed). File existence is
 the first state variable, with tool reliability as the observation likelihood ratio through the
 environment's own fault mechanism and two files with swapped states as the relation test (agreed).
-**The temperature is not ruled.** Until it is, the sampled path is not built; the state programme's
-script carries the decoding mode as an argument and names its estimand per mode — the
-context-averaged outcome frequency under greedy, the derivation's distribution under sampled — and
-runs whole in greedy mode on the day the device is rented.
+**The temperature, ruled 2026-09-10: lifted as advised.** The Director accepted the Chief's
+recommendation: the sampled decoding path exists only for runs declared as the state programme;
+every golden gate and the tolerance runner stay greedy, because their records were made greedy;
+temperature 1.0 with no top-p or top-k truncation, because the estimands are the model's own
+laws and any tuning measures a different distribution; seed, temperature and sampler in every
+manifest, with the note that sampled draws reproduce only within one backend and kernel set.
+SWE-1 builds the sampler (WS-B order, amendment of this date); the state programme's script
+keeps `--decoding sampled` refused by name until that sampler is on the branch it runs from,
+and names its estimand per mode: the context-averaged outcome frequency under greedy, the
+derivation's distribution under sampled. A record made in one mode is not compared with one
+made in the other.
