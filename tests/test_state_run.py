@@ -169,7 +169,7 @@ def test_a_non_fixture_preflight_refuses_an_unpinned_device(tmp_path, monkeypatc
     monkeypatch.setattr(device, "describe", lambda: {"determinism": "UNPINNED", "python": "x"})
     inputs = dict(registry_name="r", checkpoint_digest="d", lens_identity={"base": "b"},
                   dictionary_layers={"1": "h"}, wrapper_version="w", decoding="greedy",
-                  temperature=None, seed=1, fault_rate=0.1, fault_seed=1)
+                  seed=1, fault_rate=0.1, fault_seed=1)
     with pytest.raises(ValueError, match="UNPINNED"):
         sp.preflight(root=ROOT, fixture=False, **inputs)
     assert sp.preflight(root=ROOT, fixture=True, **inputs)["device"]["determinism"] == "UNPINNED"
@@ -187,10 +187,77 @@ def test_the_readme_is_written_from_the_files_and_names_each_ones_source(tmp_pat
     assert "untestable (degenerate tolerance)" in text
 
 
-def test_sampled_decoding_is_refused_by_name_until_it_is_built(tmp_path, capsys) -> None:
+def test_sampled_decoding_is_refused_by_name_only_where_the_sampler_is_absent(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    """The refusal is lifted by the sampler's presence, not by a flag: absent, it refuses by
+    name; a real import failure inside the sampler is raised, not read as absence."""
+    import importlib
+
+    real = importlib.import_module
+    module = "local_llm_lab.pipeline.sampled_decode"
+
+    def absent(name, *a, **k):
+        if name == module:
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(importlib, "import_module", absent)
     assert _cli().main(["--out", str(tmp_path / "s"), "--decoding", "sampled", "--fixture"]) == 3
     err = capsys.readouterr().err
-    assert "ruled" in err and "SWE-1" in err and "refused by name" in err
+    assert "ruled" in err and module in err and "refused by name" in err
+
+    def broken(name, *a, **k):
+        if name == module:
+            raise ModuleNotFoundError("No module named 'torch'", name="torch")
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(importlib, "import_module", broken)
+    with pytest.raises(ModuleNotFoundError, match="torch"):
+        _cli().main(["--out", str(tmp_path / "t"), "--decoding", "sampled", "--fixture"])
+
+
+def test_the_sampled_branch_runs_whole_and_records_the_ruling_in_its_manifest(tmp_path) -> None:
+    """§2's sampled branch on fixtures: the plumbing and the provenance, not a draw."""
+    out = tmp_path / "rec"
+    argv = ["--out", str(out), "--decoding", "sampled", "--fixture", "--pilot-pairs", "3",
+            "--main-pairs", "2", "--fault-rate", "0.4", "--seed", "11"]
+    assert _cli().main(argv) == 0
+    manifest = json.loads((out / "manifest.json").read_text())
+    d = manifest["decoding"]
+    assert d["mode"] == "sampled" and d["temperature"] == 1.0 and d["truncation"] == "none"
+    assert d["sampler"] == {
+        "name": "torch_sampled_stream",
+        "function": "torch.multinomial over the full softmax",
+        "backend": "torch",
+    }
+    assert d["seed"] == 11 and d["seed_source"] and "kernel" in d["note"].lower()
+    assert "distribution" in d["estimand"] and "context-averaged" not in d["estimand"]
+    assert json.loads((out / "rate.json").read_text())["mode"] == "sampled"
+    assert json.loads((out / "preregistration.json").read_text())["decoding"]["mode"] == "sampled"
+    rows = read_rows(out / "main" / "rows.jsonl")
+    assert all(r["resume_parts"]["decoding_mode"] == "sampled" for r in rows)
+
+
+def test_a_greedy_manifest_carries_no_temperature_and_no_seed_in_its_decoding_block(tmp_path):
+    out = tmp_path / "rec"
+    _fixture_run(out)
+    d = json.loads((out / "manifest.json").read_text())["decoding"]
+    assert d["mode"] == "greedy" and d["sampler"]["name"] == "torch_greedy_stream"
+    assert "temperature" not in d and "seed" not in d
+    assert "context-averaged" in d["estimand"]
+
+
+def test_a_greedy_record_is_not_resumed_as_a_sampled_one(tmp_path) -> None:
+    out = tmp_path / "rec"
+    _fixture_run(out)
+    manifest = json.loads((out / "manifest.json").read_text())
+    sampled = dict(manifest, decoding=dict(manifest["decoding"], mode="sampled"))
+    policy = sp.ScriptedPolicy()
+    pairs = make_existence_pairs("main", 3, 1, seed="20260910:main")
+    with pytest.raises(RuntimeError, match=r"differ: \['decoding_mode'\]"):
+        sp.main_run(out, manifest=sampled, pairs=pairs, policy=policy,
+                    wrapper=sp.scripted_wrapper(policy, pairs))
 
 
 def test_a_non_empty_record_directory_is_refused(tmp_path) -> None:

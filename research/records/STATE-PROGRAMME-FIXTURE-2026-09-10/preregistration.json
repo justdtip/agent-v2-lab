@@ -2,24 +2,27 @@
   "budget": {
     "epsilon_sub_derived": 0.25,
     "epsilon_sub_final": 0.25,
-    "hours_at_derived": 1.0999642483915927e-05,
+    "hours_at_derived": 1.0480117810571014e-05,
     "hours_bought": 100.0,
-    "hours_final": 1.0999642483915927e-05,
+    "hours_final": 1.0480117810571014e-05,
     "loosened": false,
     "n_at_derived": 82,
     "n_final": 82,
-    "rate_per_hour": 29819150.98419002,
+    "rate_per_hour": 31297358.0954553,
     "reason": "within budget at the derived tolerance"
   },
   "decoding": {
     "estimand": "context-averaged outcome frequency over the task distribution (one outcome per context)",
     "mode": "greedy",
-    "seed": 20260910,
-    "temperature": null
+    "sampler": {
+      "backend": "torch",
+      "function": "argmax in float32",
+      "name": "torch_greedy_stream"
+    }
   },
   "derived_from": {
     "pilot_row_count": 60,
-    "pilot_rows_sha256": "188298ff2ebffe639cf9a4dfc462e48186ded0a6325a2bf57ec7c431203d2f5d"
+    "pilot_rows_sha256": "4d28d02fb9abb52d3b6f54f597c0aee14d6a84a1b57b56bd764b0dd93dabcb66"
   },
   "rules": {
     "budget": "over budget loosens epsilon_sub and writes both numbers; never fewer diagnostics, never no control",

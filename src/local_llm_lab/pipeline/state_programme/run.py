@@ -31,6 +31,7 @@ from typing import Any, Protocol
 from local_llm_lab import device, spawn
 from local_llm_lab.agent_protocol import Action
 from local_llm_lab.pipeline.env import Simulator
+from local_llm_lab.pipeline.sampled_decode import decoding_manifest, decoding_mode
 from local_llm_lab.pipeline.state_programme import diagnostics as dx
 from local_llm_lab.pipeline.state_programme import tolerances as tol
 from local_llm_lab.pipeline.state_programme.family import (
@@ -59,6 +60,9 @@ ESTIMANDS = {
     "greedy": "context-averaged outcome frequency over the task distribution (one outcome per context)",
     "sampled": "the model's distribution over outcomes in a context (the derivation's estimand)",
 }
+"""The estimand per mode, in the record's words. A greedy record and a sampled record are two
+records: the mode is in the seal and in the resume key, so neither is resumed or compared as the
+other."""
 
 
 class Policy(Protocol):
@@ -125,10 +129,17 @@ def tree_content_digest(root: Path) -> str:
 
 def preflight(
     *, root: Path, registry_name: str, checkpoint_digest: str, lens_identity: dict[str, Any],
-    dictionary_layers: dict[str, str], wrapper_version: str, decoding: str, temperature: float | None,
+    dictionary_layers: dict[str, str], wrapper_version: str, decoding: Any,
     seed: int, fault_rate: float, fault_seed: int, fixture: bool,
 ) -> dict[str, Any]:
-    """Stage 0: written before any episode. A missing input stops here, by name."""
+    """Stage 0: written before any episode. A missing input stops here, by name.
+
+    ``decoding`` is ``"greedy"`` or a :class:`SampledDecoding`; the manifest's ``decoding`` block
+    is :func:`decoding_manifest`'s, so a sampled run records temperature, truncation, the
+    sampler's name and backend, the seed and its source, and the reproducibility note, and a
+    greedy run records none of those because greedy has none. The temperature is not an argument
+    here: the sampled object owns it and refuses any value but the ruled one by name.
+    """
     missing = [name for name, value in (
         ("registry_name", registry_name), ("checkpoint_digest", checkpoint_digest),
         ("lens_identity", lens_identity), ("dictionary_layers", dictionary_layers),
@@ -136,10 +147,12 @@ def preflight(
     ) if not value]
     if missing:
         raise ValueError(f"preflight stops: missing {missing}")
-    if decoding not in ESTIMANDS:
-        raise ValueError(f"decoding must be one of {sorted(ESTIMANDS)}; got {decoding!r}")
-    if decoding == "greedy" and temperature not in (None, 0.0):
-        raise ValueError("greedy decoding carries no temperature; a temperature is the sampled mode's")
+    mode = decoding_mode(decoding)
+    if mode == "sampled" and not hasattr(decoding, "resolved_seed"):
+        raise ValueError(
+            "the sampled mode is declared by handing a SampledDecoding, which carries its seed and "
+            "its temperature; the bare word 'sampled' declares nothing and is refused"
+        )
     reading = device.describe()
     if not fixture and reading.get("determinism") != "pinned":
         raise ValueError(
@@ -151,8 +164,8 @@ def preflight(
         "schema_version": 1, "fixture": fixture, "registry_name": registry_name,
         "checkpoint_digest": checkpoint_digest, "lens_identity": lens_identity,
         "dictionary_layers": dictionary_layers, "wrapper_version": wrapper_version,
-        "decoding": {"mode": decoding, "temperature": temperature, "seed": seed,
-                     "estimand": ESTIMANDS[decoding]},
+        "decoding": {**decoding_manifest(decoding), "estimand": ESTIMANDS[mode]},
+        "seed": seed,
         "faults": {"rate": fault_rate, "seed": fault_seed},
         "device": reading, "tree_content_digest": tree_content_digest(root),
     }
@@ -292,6 +305,8 @@ def resume_key(manifest: dict[str, Any], directory: Path) -> tuple[str, dict[str
         "checkpoint_digest": manifest["checkpoint_digest"],
         "device": json.dumps(manifest["device"], sort_keys=True),
         "seal_digest": seal_digest(directory),
+        # A greedy record and a sampled record are two records; one is never resumed as the other.
+        "decoding_mode": manifest["decoding"]["mode"],
     }
     return content_key(parts), parts
 
@@ -456,18 +471,19 @@ WrapperFactory = Callable[[list[ExistencePair]], Wrapper]
 
 
 def run(
-    directory: Path, *, root: Path, policy: Policy, wrapper: WrapperFactory, decoding: str,
+    directory: Path, *, root: Path, policy: Policy, wrapper: WrapperFactory, decoding: Any,
     pilot_pairs: int, level: int, seed: int, fault_rate: float, fault_seed: int,
     hours_bought: float | None, manifest_inputs: dict[str, Any], main_pairs: int | None = None,
-    temperature: float | None = None, fixture: bool = True,
+    fixture: bool = True,
 ) -> dict[str, Any]:
     directory.mkdir(parents=True, exist_ok=True)
-    manifest = preflight(root=root, decoding=decoding, temperature=temperature, seed=seed,
-                         fault_rate=fault_rate, fault_seed=fault_seed, fixture=fixture, **manifest_inputs)
+    manifest = preflight(root=root, decoding=decoding, seed=seed, fault_rate=fault_rate,
+                         fault_seed=fault_seed, fixture=fixture, **manifest_inputs)
+    mode = manifest["decoding"]["mode"]
     write_json(directory / "manifest.json", manifest)
     pairs = make_existence_pairs("pilot", pilot_pairs, level, seed=seed)
     relations = make_relation_pairs("pilot", pilot_pairs, level, seed=seed)
-    rows_path = pilot(directory, pairs=pairs, policy=policy, decoding=decoding,
+    rows_path = pilot(directory, pairs=pairs, policy=policy, decoding=mode,
                       fault_rate=fault_rate, fault_seed=fault_seed, relation_pairs=relations)
     refuse_rederive(directory)
     table = derive_tolerances(read_rows(rows_path), seed=seed)

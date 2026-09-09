@@ -351,3 +351,27 @@ state tests; the full suite exits 0 on the branch.
 
 The near-miss of the last round is the method record's twenty-ninth entry, in my name, with the
 gating I redid it with as the rule.
+
+**The sampled branch of §2, D-CRO, 2026-09-10 — built on the sampler's presence, the refusal
+lifted by name.** SWE-1's sampler is on `cuda-migration` at b29c509 (`pipeline/sampled_decode.py`,
+`runner.torch_sampled_stream`). The script now imports it by name: present, `--decoding sampled`
+constructs a `SampledDecoding` and runs whole; absent from the branch the script runs from, the
+refusal stands, worded as before; a real import failure inside the sampler is raised, not read as
+absence — the same discrimination the lens-fit seam uses. There is no `--temperature` flag any
+more: the sampled object owns the temperature and refuses any value but the ruled one by name, so
+a second place to say it would only be a second place to say it wrongly.
+
+The manifest's `decoding` block is `decoding_manifest`'s for either mode, with the estimand named
+per mode beside it: a greedy record carries no temperature and no seed because greedy has neither;
+a sampled record carries temperature 1.0, truncation `none`, the sampler's name and backend, the
+seed and where it came from, the kernel set and the reproducibility note. The seal carries the
+block, and **the resume key carries the mode**, so a greedy record is never resumed as a sampled
+one; the refusal names `decoding_mode`. On the laptop the seed is stated (`--seed`); on the device
+it is `None` and reads the pin, which the non-fixture preflight already requires.
+
+**What a fixture run proves about the sampled mode, stated so it is not over-read:** the plumbing
+and the provenance. The scripted policy decodes nothing, so no draw happens here; the draws are the
+device driver's, which hands the same `SampledDecoding` to the runner as its sampler. The sampled
+fixture run is a test, not a committed record; the committed record stays greedy.
+
+54 state tests; the full suite exits 0 on the branch.

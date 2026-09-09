@@ -3,7 +3,7 @@
 Decoding mode: `greedy` — estimand: context-averaged outcome frequency over the task distribution (one outcome per context) *(manifest.json)*
 Fixture run: `True` *(manifest.json)*
 
-**Rate**: 29819150.98419 episodes/hour, measured over 60 episodes in mode `greedy` *(rate.json)*
+**Rate**: 31297358.09546 episodes/hour, measured over 60 episodes in mode `greedy` *(rate.json)*
 **Pilot rows**: 60 *(pilot/rows.jsonl)*
 
 ## Pre-registration *(preregistration.json)*
