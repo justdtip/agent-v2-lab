@@ -243,6 +243,48 @@ def decode(dictionary: JumpReLUDictionary, z: np.ndarray) -> np.ndarray:
     return np.asarray(z, dtype=np.float32) @ dictionary.w_dec + dictionary.b_dec
 
 
+# ------------------------------------------------------------------------------ intervention
+
+
+def intervention_parts(dictionary: JumpReLUDictionary, *, dtype: Any, device: Any = "cpu"):
+    """The three things ``sae_intervention.SAEIntervention`` takes, in its own column convention.
+
+    The wrapper's contract, from its docstring: ``decoder`` is ``[residual, feature]``, which for
+    a stored ``w_dec`` of ``(width, hidden)`` is the transpose; ``bias`` is supplied separately and
+    never folded in; and the encoder callable returns a vector in the residual's dtype and device.
+    Dictionary precision is the caller's declared choice, made here: the encoder computes in
+    ``dtype`` and casts its result back to the residual's, so a bfloat16 residual gets a bfloat16
+    code and the record can say what precision the code was formed in. Torch is imported here and
+    not at module level; everything else in this module is numpy.
+
+    Returns ``(encoder, decoder, bias, declared)`` where ``declared`` is the provenance to record.
+    """
+    import torch
+
+    def tensor(a: np.ndarray):
+        # The raw reader hands back read-only views of the file's bytes; torch wants its own copy.
+        return torch.as_tensor(np.array(a, dtype=np.float32, copy=True), dtype=dtype, device=device)
+
+    w_enc, b_enc, threshold = tensor(dictionary.w_enc), tensor(dictionary.b_enc), tensor(dictionary.threshold)
+    decoder, bias = tensor(dictionary.w_dec.T), tensor(dictionary.b_dec)
+
+    def encoder(h):
+        pre = h.to(dtype=dtype) @ w_enc + b_enc
+        z = torch.relu(pre) * (pre > threshold).to(dtype)
+        return z.to(dtype=h.dtype, device=h.device)
+
+    declared = {
+        "decoder_layout": "[residual, feature]: the stored w_dec (width, hidden) transposed",
+        "bias": "b_dec, supplied separately, never folded into the decoder",
+        "encoder": "jump_relu, relu(pre) * (pre > threshold)",
+        "dictionary_precision": str(dtype).replace("torch.", ""),
+        "device": str(device),
+        "code_dtype": "the residual's, cast on return",
+        "params_sha256": dictionary.sha256,
+    }
+    return encoder, decoder, bias, declared
+
+
 # --------------------------------------------------------------------------------- alignment
 
 

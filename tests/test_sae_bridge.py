@@ -471,3 +471,51 @@ def test_the_real_dictionary_hook_is_a_layer_the_real_lens_carries() -> None:
     # The archive keys J{L-1}: the map the loader hands back at `layer` is the archive's J{block}.
     with np.load(lens_npz, allow_pickle=False) as a:
         np.testing.assert_array_equal(lens.maps[layer], a[f"J{block}"].astype(np.float32))
+
+
+# ------------------------------------------------------------------------------ intervention
+
+
+def test_intervention_parts_meet_the_wrapper_contract(parts):
+    torch = pytest.importorskip("torch")
+    from local_llm_lab.sae_intervention import SAEIntervention
+
+    d, _, _ = parts
+    encoder, decoder, bias, declared = B.intervention_parts(d, dtype=torch.float32)
+    # Column convention: [residual, feature], the stored matrix transposed; bias separate.
+    assert tuple(decoder.shape) == (d.hidden_size, d.width)
+    assert torch.equal(decoder, torch.as_tensor(np.ascontiguousarray(d.w_dec.T)))
+    assert torch.equal(bias, torch.as_tensor(d.b_dec.copy()))
+    assert declared["dictionary_precision"] == "float32"
+    assert declared["params_sha256"] == d.sha256
+
+    rng = np.random.default_rng(3)
+    h_np = (rng.standard_normal(d.hidden_size) * 4).astype(np.float32)
+    h = torch.as_tensor(h_np)
+    # The encoder callable agrees with the numpy reference encode, and does not touch its input.
+    z = encoder(h)
+    assert z.dtype == h.dtype and z.device == h.device
+    np.testing.assert_allclose(z.numpy(), B.encode(d, h_np), rtol=1e-5, atol=1e-5)
+    assert torch.equal(h, torch.as_tensor(h_np))
+
+    # A bfloat16 residual gets a bfloat16 code, formed in the declared float32.
+    z16 = encoder(h.to(torch.bfloat16))
+    assert z16.dtype == torch.bfloat16
+
+    # The real wrapper accepts the parts and the edit lands on the chosen feature.
+    feature = int(np.argmax(B.encode(d, h_np)))
+    target = torch.tensor([float(z[feature]) + 2.0])
+    edit = SAEIntervention(encoder, decoder, bias, features=(feature,), target_values=target)
+    replaced = edit(h)
+    expected = h + decoder[:, feature] * 2.0
+    torch.testing.assert_close(replaced, expected)
+    record = edit.diagnostic_record()
+    assert record["features"] == [feature] and record["basis"] == "measured-here"
+
+
+def test_intervention_parts_refuse_nothing_but_record_precision(parts):
+    torch = pytest.importorskip("torch")
+    d, _, _ = parts
+    _, decoder, _, declared = B.intervention_parts(d, dtype=torch.bfloat16)
+    assert decoder.dtype == torch.bfloat16
+    assert declared["dictionary_precision"] == "bfloat16"
