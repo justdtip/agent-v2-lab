@@ -312,3 +312,25 @@ depends on noticing when your own preconditions lapse is care wearing a mechanis
 this record already says about the deduplication rule that its author broke an hour after writing it.
 The same shape, one level out: not a wrong belief about the data, a lapsed precondition about the
 world the command runs in.
+
+---
+
+## Twenty-first: a gate that compared the column that agreed
+
+**SWE-2's, caught on the laptop before a device was rented.** The multi-device gate said "one device
+and two produce the same loss curve to tolerance". With the blocks sharded and the root replicated
+outside any FSDP2 unit, the loss was bit-identical at step zero while the root's gradient was forty
+per cent wrong; over six steps the loss drifted 8.83e-04, inside any tolerance anyone would have
+written. Loss on identical weights and the same rows agrees by construction, and afterwards it is
+one step behind the parameters. The gate would have passed the configuration it existed to catch,
+and the damage would have surfaced as a run quietly optimising something else on rented hardware.
+
+**The rule.** A gate compares the quantity nearest the mechanism it guards, never one downstream of
+it: gradients and parameters for a training gate, residuals for a forward gate, the mask for a
+masking gate. A downstream number is reported beside the gate and passes nothing on its own. And a
+quantity that agrees by construction at the point of comparison (identical weights, same rows, step
+zero) is not evidence, whatever tolerance it clears.
+
+**Where it sits.** Beside the ninth and the eighteenth: a passing number produced by a comparison
+that could not fail. This one is the cleaner instance, because both columns were real measurements
+and the wrong one was the one the specification named.
