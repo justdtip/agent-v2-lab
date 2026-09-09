@@ -1,10 +1,24 @@
 # WS-A review corrections and CPU calibration
 
+**Follow-up source ready:** `79d2567` implements the dated review's native-dtype
+exactness arm and all three controls, through one native text forward with frozen
+references. **140 CPU fixture tests passed, zero skipped**, with actual MLX imports
+blocked. The private loader is removed in favour of shared `hf_text`.
+`native-dtype-verification.json` binds the tested source and raw evidence.
+
+The new checkpoint arm is **unexecuted**: WS-B opened its scheduled checkpoint
+window at 02:35:28 UTC while this source was being finished. No launch, lock
+clearance or competing model load was attempted. Next: run the fixed-ID native
+arm under an owned window, then the ordered identity/readout checks. No measured
+native-readout band on the golden episodes is available yet; the WS-B 98/103
+argmax result measures a different comparison. The estimator remains unstarted.
+The requested review/Git heartbeat completed and is paused.
+
 **Source review passed:** the edit round through `e0a05cf` was accepted and merged
 into `cuda-migration` at `6106ea8`; the dated ruling is in the WS-A order at
 `cd8055d`. [REVIEW-READY.md](REVIEW-READY.md) preserves the earlier handoff state.
 
-Latest verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
+Earlier full-suite verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
 `codex/cuda-torch-seam`. The source includes the committed shared upstream loader and device shim.
 
 **2,203 tests passed, 10 skipped** in the final full suite plus calibration fixtures on torch

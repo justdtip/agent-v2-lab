@@ -1,0 +1,51 @@
+{
+  "source_commit": "79d25672fbca1a7af0ae418fc386303f2440c79a",
+  "source_root": "/Users/daniel.tipton/worktrees/cuda-torch-seam",
+  "review_ruling_commit": "cd8055d4f3d9d6c677eb5d573ac88183ca4de7a9",
+  "previous_reviewed_source": "e0a05cf5266fe526252b1880c2efa598fe7e1954",
+  "previous_review_merge": "6106ea8",
+  "tests": {
+    "tests": 140,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 140
+  },
+  "seconds": 34.209,
+  "python_runtime": "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+  "versions": {
+    "torch": "2.14.0",
+    "transformers": "5.16.1",
+    "pytest": "9.1.1"
+  },
+  "model_material": "random tiny real HF models and their locally serialized fixtures only; no checkpoint load",
+  "mlx": "actual mlx and mlx_lm imports blocked in the verification process",
+  "source_sha256": {
+    "research/acceptance/torch_seam.py": "aef8b4c5e194a7fccc54400e11d147019e694f9dc5e01bb0de734bdc29c2db81",
+    "research/records/CUDA-WS-A-2026-09-09/cpu_gates.py": "fd95711dfaeedab48c38bea5f4be666e494061e3deb6144af2268b683d88b895",
+    "research/records/CUDA-WS-A-2026-09-09/test_cpu_gates.py": "4dbd995150b9c5541b76010b0fe5d7b08cc58bff9c46d9547318a36f65bb3ab5",
+    "tests/test_arch_torch.py": "c1509b8767adde5a3ecc6d480bacd75ef04bd8276e551901a6306e949f4e0308",
+    "src/local_llm_lab/hf_text.py": "0c6162eaac570aad7997be26ffdbf55bfb76f0740f31dd9ad16550949bb7937c"
+  },
+  "evidence_sha256": {
+    "native-dtype-tests-01.log": "3ca63df1dde3ba9e2d2084a8facf905367fe65246c76bc33b3d06e0024ecdfa9",
+    "native-dtype-tests-01.xml": "d93530a8fb232f13c0ffc0418172fc015feeba158af079c42b5179cf30c59a05"
+  },
+  "source_timing": "Tests ran on these exact file contents before their source commit; source hashes bind the tested contents. No source edits occurred between the passing run and commit.",
+  "checks": [
+    "native dtype agreement exactly zero on tiny bf16 and float32 models at 64 and 1400 IDs",
+    "three controls and margins versus promoted arithmetic; zero short mask control",
+    "one native text forward, no vocabulary head, native reference isolation, parameter identity/value preservation",
+    "dtype, shape, nonfinite/zero-scale checks and complete/consistent gate reports",
+    "resource stop preserves completed measurements and removes hooks",
+    "shared loader tensors/tying and missing/corrupt checkpoint refusals"
+  ],
+  "ruff": "pass",
+  "source_diff_check": "pass",
+  "full_repository_suite": "not rerun during the foreign checkpoint window; prior full-suite evidence remains separately bound",
+  "new_real_checkpoint_gate_2": "unexecuted; WS-B owns the machine window",
+  "real_checkpoint_gates_3_4": "unexecuted; ordered after accepted gate 2, and no native-readout band is yet measured on golden episodes",
+  "estimator": "unstarted",
+  "q5": "unchanged; Director decision remains open",
+  "followup_heartbeat": "review and Git checked; one-shot follow-up paused"
+}
