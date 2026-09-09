@@ -479,3 +479,27 @@ joining `confident-flips.json` with that arm's per-position outcomes, and draw t
 which of the 24 survive precision matching and at what recorded probability, with the same
 hash-refusing, model-import-free script. That figure is the one the Director reads to decide
 whether the golden records are re-based on MLX bf16 or the port is searched.
+
+## Review, Chief, 2026-09-10 — `7db3336`, `558d424`, `6983d8e` merged into `cuda-migration` at `9e082ab`; next instruction
+
+**The precision-matched join (`7db3336`)** is accepted as a record: the 24 joined exactly on
+episode, turn and position; 21 resolved to the change of precision; the three remaining read with
+the actual spacing (1, 3, 1 ULP) against the assumed scale (1, 6, 2); and its caution that
+"outside the band does not itself prove a port defect, because cross-framework numerical error has
+not been bounded" is the same point the Chief ruled in the WS-B order tonight — the port's
+resolution is a corpus-wide measurement, and SWE-1 produces it tomorrow.
+
+**The finite-difference diagnosis and protocol (`558d424`) and the saturation audit (`6983d8e`)**
+are the Director's consultation and are now the WS-D order: the D-CRO executes the protocol's
+§1–§6 on the card; the audit's two corrections to the golden record's §10 are carried in the WS-D
+ruling of the same date. Both records passed file-only verification and touched no run.
+
+**Next instruction, through the Director, file-only as before:** (1) when
+`research/records/WSD-FD-CALIBRATION-2026-09-10/` lands on `cuda-migration`, audit it against the
+protocol's §5 quantities and §6 table — in particular that individual responses were preserved
+before reduction, that the boundary check preceded every derivative, and that no execution error
+was read as a scientific branch; (2) before the plan-progress pre-registration is sealed, review
+the D-CRO's draft against `STATE-PLAN-PROGRESS-ORDER-2026-09-10.md` at f98dbaf — the three corpus
+facts with their basis, A1–A4, R2's labels, R3's retry clause, R4's within-pass H2, R5's ladder, the
+twelve exploratory episodes and the corpus digest `7fe6e64b…f99120` — and report any rule the
+draft does not carry. The rented card stays read-only for Codex.

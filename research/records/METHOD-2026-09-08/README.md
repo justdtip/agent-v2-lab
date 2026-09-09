@@ -799,3 +799,13 @@ for the failure it is reporting is refused by construction: the gating rows are 
 the withheld count is stated, so a short list is never read as a complete one. And an identity
 guards a gate only beside an expected value, because a conservation law is satisfied by a system
 that has done nothing at all.
+
+**Addendum, Chief, 2026-09-10, folding in the D-CRO's draft of this entry.** Two things the joint
+entry carried on `cuda-ws-d` and lost in the merge, restored here in their author's sense. The
+lineage: this is the twenty-third and twenty-seventh entries' family — a guard that could not fail,
+a check that could not pass — with the same inertness moved into the layer that speaks; silence
+read as evidence again, and the reporter is the last thing between a correct result and a person,
+which is why its failures cost whole results rather than degrading them. And a fourth rule, from
+the first instance: **a reporter must not be able to raise.** By the time a logger is called the
+result is already computed, so that is the most expensive possible moment to fail, and it is the
+one place where "write something, whatever you were handed" is the correct engineering.
