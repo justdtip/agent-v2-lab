@@ -19,8 +19,18 @@ model and no card:
 Corpus on the card: `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, archive
 `7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120`. Per-file digests are in
 `prereg-inputs.json` under `file_sha256`, and they match the corpus manifest's own `outputs` block,
-so the counted rows and the shipped rows are the same bytes. Capture set digest:
-`1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a`.
+so the counted rows and the shipped rows are the same bytes.
+
+The capture set has **two** digests and they are not interchangeable, so both are pinned and each is
+labelled:
+
+| | digest | what it fixes |
+|---|---|---|
+| the set | `1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a` | the logical triples `(task_id, step, prompt_sha256)`, in order — what is to be captured |
+| the file | `98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d` | the bytes of `capture-set.jsonl` — what was shipped |
+
+The first is the one that must survive a re-run on another machine, since it is invariant to
+formatting; the second is the one that says the file on the card is the file written here.
 
 ---
 
@@ -277,17 +287,44 @@ turn count is still the step index; what does not survive is any horizon inferre
 confidence 1 − α, `n ≥ ln(2M/α) / ε²`, with α = 0.05, computed by
 `state_programme/tolerances.required_n`, whose two closed-form checks pass.
 
-| | evaluation set | n | ε |
-|---|---|---:|---:|
-| ε_main | E1 on the test split's decisions | 1,781 | **0.06** (needs 1,715) |
-| ε_ord | E2 on held-out ordinary transitions, train split | 4,122 | **0.04** (needs 3,859) |
-| ε_sub | E2 on the corrective transitions | 553 | **0.11** (needs 511) |
+**The unit is the episode, not the decision.** The first draft of this section counted decisions and
+transitions, and that was wrong: the design holds out **by episode**, precisely because decisions
+within one episode are not independent — they share a task, a prompt prefix and a plan — and a
+concentration bound over dependent observations is a bound over nothing. The first state variable's
+own order counted episodes for the same reason. So each episode contributes one bounded observation,
+its own mean, and n is the number of held-out episodes. Both computations are below, because the
+correction is the interesting part and hiding the first one would hide it.
 
-**ε_sub is loosened, and the number is written here before the run rather than after it.** There are
-553 corrective transitions in the whole corpus and no split of them reaches n at ε_main; the
-alternative to loosening ε is not reporting the primary estimand's informative stratum at all. This
-is the existing budget rule's shape — loosen ε_sub, write both numbers and the reason — applied to a
-population limit instead of a device-time limit.
+| | evaluation set | unit | n | ε declared | needs n ≥ |
+|---|---|---|---:|---:|---:|
+| ε_main | E1 on the test split | episodes | 240 | **0.17** | 214 |
+| ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.09** | 763 |
+| ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.11** | 511 |
+
+*Superseded, kept for the comparison:* counting decisions gave n = 1,781 and ε_main = 0.06,
+transitions gave n = 4,122 and ε_ord = 0.04. Those are two to three times tighter than the corpus
+supports, and every one of them was an artefact of counting dependent observations as independent.
+
+**ε_main is 0.17 and not 0.16.** The bound at 240 episodes is 0.1604, so 0.16 would be the honest
+figure to a reader — but declaring 0.16 requires n ≥ 242, and there are 240 test episodes. Two short.
+The declared value rounds **up** or the guarantee is not met, and a threshold that misses by two is
+exactly the kind that gets rounded into existence after the fact.
+
+**ε_sub stands at 0.11 and is still a loosening**, now for a plainer reason than before: there are
+553 corrective transitions in the whole corpus, one per recovery episode, and no split of them
+reaches n at ε_main. The alternative to loosening is not reporting the primary estimand's informative
+stratum at all. This is the existing budget rule's shape — loosen ε_sub, write both numbers and the
+reason, before the run — applied to a population limit rather than a device-time one.
+
+**What the run can claim, given these.** At ε_main = 0.17, E1 can support a claim that one model's
+decodability exceeds a null by more than about seventeen points of accuracy, and cannot support a
+claim about a smaller gap. That is a real weakening against the draft's 0.06 and it is the true
+resolution of this corpus at this M. If the eventual gap is smaller than that, the finding is
+"below the pre-registered resolution", not "no effect" — and it is reported in those words.
+
+*An episode-level bootstrap would be tighter than Hoeffding here, since Hoeffding assumes only
+boundedness and ignores the observed variance. If the Chief prefers one, these Hoeffding numbers stay
+beside it as the distribution-free floor; the seal can carry both. Flagged, not chosen.*
 
 **The drop rule is inherited unchanged**: a quantity whose bootstrap bound on its contrast does not
 exceed zero is dropped with its reason, and nothing is added to M after the pilot.
@@ -412,6 +449,10 @@ controls run, a measurement of the 12B being bigger.**
 1. **§1.1's correction is a change to a ruling, not a note.** A1's retry clause has nothing to
    predict and A3's occurrence index addresses copies. Both need the Chief's word before the seal.
 2. **E2's retrieval score replaces a derived tolerance** (§4.2). Mine, and flagged.
-3. **ε_sub = 0.11** (§7) is a loosening against a population limit. Mine, and flagged.
+3. **The tolerances are recomputed on the episode** (§7), which loosens ε_main from 0.06 to 0.17
+   and ε_ord from 0.04 to 0.09; ε_sub stands at 0.11. The first draft counted decisions and
+   transitions as independent observations when the design holds out by episode, which they are not.
+   The correction is the Chief's, through Codex's file-only review, and it is applied rather than
+   argued with. Whether to put an episode-level bootstrap beside the Hoeffding floor is open.
 4. The golden-test control design has not landed, and the capture pass is not scheduled. Until both,
    this document stays unsealed.

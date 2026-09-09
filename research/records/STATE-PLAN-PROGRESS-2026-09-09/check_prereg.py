@@ -66,9 +66,16 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      r"test split's 1,781 decisions"),
     ("exploratory episodes", "inputs", "r6_exploratory_episodes.count", 12,
      r"twelve pre-registered episodes"),
-    ("capture set digest", "inputs", "decisions.capture_set_sha256",
+    ("capture set digest, the triples", "inputs", "decisions.capture_set_sha256",
      "1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a",
-     r"`1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a`"),
+     r"\| the set \| `1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a`"),
+    ("capture set digest, the file", "file", "capture-set.jsonl",
+     "98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d",
+     r"\| the file \| `98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d`"),
+    ("E1 evaluation episodes", "inputs", "tasks.per_split.test", 240,
+     r"E1 on the test split \| episodes \| 240 \| \*\*0\.17\*\* \| 214"),
+    ("E2 ordinary episodes", "inputs", "tasks.per_split.train", 840,
+     r"train split \| episodes \| 840 \| \*\*0\.09\*\* \| 763"),
     ("archive digest", "inputs", "corpus_archive_sha256",
      "7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120",
      r"`7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120`"),
@@ -97,15 +104,36 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
 
 
 def at(payload: object, path: str) -> object:
+    """Walk a dotted path, but try the whole path as a key first.
+
+    A file name is a legitimate key and contains a dot, so splitting first turned
+    `capture-set.jsonl` into `["capture-set", "jsonl"]` and reported the digest absent. The check
+    then failed for a reason that had nothing to do with the digest, which is the worst kind of
+    failure a checker can have: it was right to fail and wrong about why.
+    """
+    if isinstance(payload, dict) and path in payload:
+        return payload[path]
     for part in path.split("."):
         payload = payload[int(part)] if isinstance(payload, list) else payload[part]
     return payload
 
 
 def artefacts() -> dict[str, object]:
+    """The two computed JSONs, plus the digests of the files in this directory.
+
+    The capture set has two digests and they answer different questions: the digest *of the logical
+    triples*, which is invariant to formatting and is what a re-run on another machine must
+    reproduce, and the digest *of the file*, which is what says the bytes on the card are the bytes
+    written here. Quoting one under a label that means the other is how a check like this gives
+    false assurance, so both are pinned and each is checked against its own source.
+    """
+    import hashlib
+
     return {
         "inputs": json.loads((HERE / "prereg-inputs.json").read_text()),
         "budget": json.loads((HERE / "capture-budget.json").read_text()),
+        "file": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                 for path in sorted(HERE.iterdir()) if path.is_file()},
     }
 
 
