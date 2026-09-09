@@ -223,7 +223,12 @@ def _load_backend(arguments: argparse.Namespace) -> tuple[Any, Any, Any, Any] | 
 GATES = [
     Gate(1, "structural discovery of the decoder", "WS-A", _not_this_workstream(1, "WS-A")),
     Gate(2, "residual_source_agreement at 64 and 1,400", "WS-A", _not_this_workstream(2, "WS-A")),
-    Gate(3, "layer-34 identity against the emitted token", "WS-A", _not_this_workstream(3, "WS-A")),
+    Gate(
+        3,
+        "final-layer identity against the emitted token",
+        "WS-A",
+        _not_this_workstream(3, "WS-A"),
+    ),
     Gate(4, "readout gate with both negative controls", "WS-A", _not_this_workstream(4, "WS-A")),
     Gate(5, "golden trajectories", "WS-B", gate_5_golden_trajectories),
     Gate(6, "golden lens reads", "WS-B", gate_6_golden_lens_reads),
@@ -244,16 +249,20 @@ def _print_environment() -> None:
         print(f"  default dtype: {torch.get_default_dtype()}")
     except ImportError:
         print("  torch is not installed")
-    try:
-        from local_llm_lab import device  # type: ignore[attr-defined]
+    # Pin before the first gate, then print what pin() read back rather than what it was asked
+    # for. `CUBLAS_WORKSPACE_CONFIG` is read by cuBLAS at first use, so a pin after CUDA has
+    # initialised is refused; that refusal reaching the operator is the point of doing it here.
+    from local_llm_lab import device
 
-        print(f"  determinism: {device.describe()}")
-    except (ImportError, AttributeError):
-        print(
-            "  determinism settings unavailable: device.py does not exist yet (WS-A/WS-E). "
-            "Deterministic algorithms and the attention kernel are therefore UNPINNED, and "
-            "any number below carries that."
-        )
+    try:
+        reading = device.pin(attention="eager")
+    except RuntimeError as error:
+        print(f"  determinism: REFUSED -- {error}")
+        print("  every number below was taken unpinned and carries that.")
+        print()
+        return
+    for key in sorted(reading):
+        print(f"  {key}: {reading[key]}")
     print()
 
 

@@ -1,0 +1,5 @@
+codex-ws-a: WS-A review corrections: CPU torch 2.14 tests, small fixtures only, projected under 2 GiB, opened 2026-09-09T01:16:37.559706Z
+  holder pid 45142: running
+{'python': '3.13.7', 'platform': 'Darwin 25.6.0 arm64', 'mlx': '0.32.2', 'torch': '2.14.0', 'transformers': '5.16.1', 'pinned': {'seed': 0, 'deterministic': True, 'attn_implementation': 'eager'}, 'determinism': 'pinned', 'backend': 'torch', 'device': 'cpu', 'cuda_available': False, 'device_count': 0, 'device_names': [], 'deterministic_algorithms': True, 'cudnn_deterministic': True, 'cudnn_benchmark': False, 'tf32_matmul': False, 'tf32_cudnn': False, 'float32_matmul_precision': 'highest', 'threads': 8, 'CUBLAS_WORKSPACE_CONFIG': ':4096:8'}
+........................................................................ [ 79%]
+...................                                                      [100%]

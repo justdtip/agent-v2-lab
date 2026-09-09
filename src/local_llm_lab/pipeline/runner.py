@@ -437,13 +437,17 @@ def make_turn_cache(
     prefix_tokens: int,
 ) -> TurnCacheBase | None:
     if is_torch_model(model) and resolved.cache_strategy != "none":
-        # The three reuse strategies are deferred on torch, and the golden records never
-        # exercised them. Refusing loudly is the point: a silent fallback to no reuse would
-        # be a speed regression that no test fails on, and an MLX cache handed to a torch
-        # model would attend to the wrong keys rather than raise.
+        # Refusing loudly is the point twice over. A silent fallback to no reuse would be a
+        # speed regression that no test fails on, and an MLX cache handed to a torch model
+        # would attend to the wrong keys rather than raise. The message names the plan section
+        # because whoever hits this reads the error, not the plan.
         raise NotImplementedError(
-            f"cache strategy {resolved.cache_strategy!r} is not ported to torch; "
-            "stage two ran under 'none' and only 'none' is implemented (WS-B)"
+            f"cache strategy {resolved.cache_strategy!r} is refused under torch. "
+            "'trim' and 'snapshot' are implemented in pipeline.torch_cache and are not wired "
+            "in yet: each is an arm of the same acceptance gate as 'none' and must reproduce "
+            "the 'none' trajectories byte for byte within one backend, which needs the "
+            "tolerance runner's 'none' baseline against the real view first. 'history' is not "
+            "implemented. Plan section 16.8 carries the ruling."
         )
     if resolved.cache_strategy == "trim":
         return TrimCache(model)
@@ -563,8 +567,8 @@ def config_eos_ids(model: Any) -> frozenset[int]:
     if declared is None:
         raise ValueError(
             "the model config declares no eos_token_id; refusing to fall back to the "
-            "tokenizer's single id, which would leave <end_of_turn> unrecognised and run "
-            "every turn to the token cap"
+            "tokenizer's single id, which is one marker where the config declares a set, so "
+            "any terminator outside it goes unrecognised and every turn runs to the token cap"
         )
     if isinstance(declared, int):
         return frozenset({declared})
@@ -574,40 +578,26 @@ def config_eos_ids(model: Any) -> frozenset[int]:
 _DETERMINISM_PINNED = False
 
 
-def pin_torch_determinism() -> None:
-    """TF32 off, deterministic algorithms on, workspace and matmul precision fixed.
+def pin_torch_determinism() -> dict[str, Any] | None:
+    """Pin determinism once per process, through ``device.pin``, which owns the policy.
 
-    ``device.py`` owns this once it lands (WS-A/WS-E) and is preferred when present; this is
-    the interim so that no torch number is taken under unpinned settings.
+    This function holds no settings of its own. It exists so that a loop entered without the
+    acceptance kit having run cannot take a number under unpinned settings, and it is a
+    once-per-process guard because ``pin`` reseeds and a per-turn reseed would be noise in the
+    record for no benefit under greedy decoding.
 
-    ``CUBLAS_WORKSPACE_CONFIG`` must be set before CUDA initialises to have any effect. Setting
-    it here is late for a process that has already touched CUDA, so it is set with ``setdefault``
-    and the real home for it is the environment or ``device.py``'s import. Deterministic
-    algorithms are mostly a backward-pass list and do not fix reduction order, which is why the
-    determinism test is CUDA against CUDA within one build rather than across backends.
+    ``CUBLAS_WORKSPACE_CONFIG`` is read by cuBLAS at first use, so ``pin`` refuses rather than
+    reports success if CUDA is already initialised without it. That refusal is worth more than a
+    late best effort, and it is the kit's job to call ``pin`` first.
     """
     global _DETERMINISM_PINNED
     if _DETERMINISM_PINNED:
-        return
-    try:
-        from local_llm_lab import device  # type: ignore[attr-defined]
+        return None
+    from local_llm_lab import device
 
-        device.configure()
-        _DETERMINISM_PINNED = True
-        return
-    except (ImportError, AttributeError):
-        pass
-    import os
-
-    import torch
-
-    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
-    torch.use_deterministic_algorithms(True, warn_only=True)
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    with contextlib.suppress(AttributeError):  # newer torch only
-        torch.backends.cuda.matmul.fp32_precision = "ieee"
+    reading = device.pin()
     _DETERMINISM_PINNED = True
+    return reading
 
 
 def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -> Any:
@@ -619,9 +609,9 @@ def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -
     compared against the model's head rather than a substitute for it.
 
     ``view._ids`` is the view's own token-to-tensor conversion and carries the device and dtype
-    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop
-    uses it, and building the tensor here instead would leave it on the CPU while the model sat
-    on a GPU. The fallback exists for a stub view that has no such helper.
+    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop uses
+    it, and building the tensor here instead would leave it on the CPU while the model sat on a
+    GPU. The fallback exists for a stub view that has no such helper.
     """
     import torch
 

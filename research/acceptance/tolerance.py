@@ -43,6 +43,10 @@ from dataclasses import dataclass, field
 
 __all__ = [
     "AgreementReport",
+    "ToleranceReport",
+    "run_tolerance",
+    "teacher_forced_run",
+    "torch_forward_rows",
     "DivergenceProfile",
     "JaccardReport",
     "confidence_violations",
@@ -54,6 +58,10 @@ __all__ = [
 
 #: A flip at or above this recorded probability is a defect and not a rounding difference.
 HARD_CONFIDENCE = 0.99
+
+#: Rows ranked per block when reading logits. Small enough that the float32 copy is tens of
+#: megabytes rather than gigabytes; large enough that the loop is not the cost.
+_RANK_ROWS = 256
 
 
 @dataclass(frozen=True)
@@ -119,8 +127,22 @@ class AgreementReport:
                 f"  {self.unrecorded_probability} compared positions carried no recorded "
                 "probability, so the hard rule could not be applied to them"
             )
-        lines.extend(f"  {flip.describe()}" for flip in self.hard_flips[:10])
+        # Every flip, not only the gating ones. A run that passes because no flip was confident
+        # is only evidence if the reader can see where the flips actually sat; "0 at P >= 0.99"
+        # on its own cannot be told apart from a threshold nobody came near.
+        lines.extend(f"  {flip.describe()}" for flip in self.flips[:12])
+        if len(self.flips) > 12:
+            lines.append(f"  ... and {len(self.flips) - 12} more")
         return "\n".join(lines)
+
+    @property
+    def flip_confidences(self) -> list[float]:
+        """The recorded probability at each flipped position, for the record."""
+        return [
+            flip.recorded_probability
+            for flip in self.flips
+            if flip.recorded_probability is not None
+        ]
 
 
 @dataclass
@@ -298,3 +320,112 @@ def symmetric_kl(left: Sequence[float], right: Sequence[float]) -> float:
 
     mean = [0.5 * (a + b) for a, b in zip(left, right, strict=True)]
     return 0.5 * _kl(left, mean) + 0.5 * _kl(right, mean)
+
+
+# --- the runner -----------------------------------------------------------------------------
+
+
+@dataclass
+class ToleranceReport:
+    """Every G-2(b) statistic for one corpus, and whether the run passed."""
+
+    agreement: AgreementReport
+    jaccard: JaccardReport
+    divergence: DivergenceProfile | None
+
+    @property
+    def passed(self) -> bool:
+        """Only the hard rule and the divergence floor gate. The rest is reported."""
+        if not self.agreement.passed:
+            return False
+        return self.divergence is None or self.divergence.passed
+
+    def describe(self) -> str:
+        lines = [self.agreement.describe(), self.jaccard.describe()]
+        if self.divergence is not None:
+            lines.append(self.divergence.describe())
+        else:
+            lines.append("free-running divergence not measured in this run")
+        return "\n".join(lines)
+
+
+def teacher_forced_run(episode, forward, *, top_k: int = 5):
+    """Read every deciding position of an episode with the recorded prefix in front of it.
+
+    Teacher forcing here is **one forward per turn, not one per token**. Feeding the whole
+    recorded sequence and reading the argmax at each position gives exactly the prediction that
+    position would have made with the recorded prefix ahead of it, because attention is causal.
+    Running it as *n* separate generations would cost *n* times as much for the same numbers.
+
+    ``forward`` takes a token id sequence and returns one ``(argmax, top_k ids)`` row per input
+    position. The row count is checked against the sequence length rather than assumed: an
+    off-by-one there would shift every comparison by one position and still produce a plausible
+    agreement rate, which is the failure this programme has already paid for once.
+    """
+    produced_argmax: dict[tuple[int, int], int] = {}
+    produced_top: dict[tuple[int, int], tuple[int, ...]] = {}
+    for turn in episode.turns:
+        sequence = list(turn.prompt_ids) + list(turn.token_ids)
+        rows = forward(sequence)
+        if len(rows) != len(sequence):
+            raise ValueError(
+                f"forward returned {len(rows)} rows for {len(sequence)} positions in turn "
+                f"{turn.index}; the join would be shifted and still look plausible"
+            )
+        for emission in turn.emissions:
+            argmax, top = rows[emission.position - 1]
+            produced_argmax[(turn.index, emission.position)] = int(argmax)
+            produced_top[(turn.index, emission.position)] = tuple(int(t) for t in top)
+    return produced_argmax, produced_top
+
+
+def run_tolerance(
+    episode, forward, *, top_k: int = 5, free_running: Sequence | None = None, floor: int = 16
+) -> ToleranceReport:
+    """The G-2(b) statistics for one episode, from a teacher-forced pass over its records."""
+    produced_argmax, produced_top = teacher_forced_run(episode, forward, top_k=top_k)
+    return ToleranceReport(
+        agreement=teacher_forced_agreement(episode, produced_argmax),
+        jaccard=top_k_jaccard(episode, produced_top, k=top_k),
+        divergence=None if free_running is None else divergence_indices(free_running, floor=floor),
+    )
+
+
+def torch_forward_rows(model, view, *, top_k: int = 5):
+    """A ``forward`` for :func:`teacher_forced_run` backed by a loaded torch model.
+
+    Chunked with the same partition generation uses, so a teacher-forced read and a generated
+    one see the same forward shapes and a difference between them cannot be the chunking.
+
+    UNEXECUTED: no torch architecture view exists to run this against yet.
+    """
+    import torch
+
+    from local_llm_lab.forward import prefill_passes
+    from local_llm_lab.pipeline.runner import _forward_logits, pin_torch_determinism
+
+    def forward(sequence):
+        pin_torch_determinism()
+        cache = view.make_cache()
+        rows: list[tuple[int, tuple[int, ...]]] = []
+        with torch.no_grad():
+            for chunk in prefill_passes(list(sequence)):
+                logits = _forward_logits(model, view, chunk.input_ids, cache)
+                # Rank in row blocks, never whole-tensor. A full 2,048-token chunk against a
+                # 262,208-entry vocabulary is 1.07 GB in bfloat16 and 2.15 GB the instant it is
+                # cast to float32, on top of 7.3 GiB of weights inside a 10.656 GiB cap. The
+                # cast is still needed -- ties in bfloat16 at this vocabulary size are common
+                # and the decode loop resolves them in float32 -- so it happens per block and
+                # the block is dropped.
+                for start in range(0, logits.shape[1], _RANK_ROWS):
+                    block = logits[0, start : start + _RANK_ROWS].float()
+                    top = block.topk(top_k, dim=-1).indices
+                    rows.extend(
+                        (int(top[local, 0]), tuple(int(value) for value in top[local]))
+                        for local in range(top.shape[0])
+                    )
+                    del block, top
+                del logits
+        return rows
+
+    return forward

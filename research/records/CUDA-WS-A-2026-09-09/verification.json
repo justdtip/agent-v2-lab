@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "base_commit": "2b7905f",
+  "source_commit": "a639cae",
+  "branch": "codex/cuda-torch-seam",
+  "upstream": {
+    "repository": "https://github.com/anthropics/jacobian-lens",
+    "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "license": "Apache-2.0",
+    "reuse": [
+      "jlens.hooks.ActivationRecorder",
+      "jlens.hf._find_layout",
+      "jlens.hf.HFLensModel.unembed",
+      "jlens.fitting._check_layer_indices"
+    ]
+  },
+  "tests": {
+    "passed": 85,
+    "failed": 0,
+    "cpu_threads": 1,
+    "deterministic_algorithms": true,
+    "files": [
+      "tests/test_arch_base.py",
+      "tests/test_arch_observation.py",
+      "tests/test_arch_torch.py",
+      "tests/test_torch_capture.py"
+    ],
+    "real_mlx_imports": "blocked; only explicit test doubles permitted",
+    "command": "PYTHONPATH=src:. .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_arch_base.py tests/test_arch_observation.py tests/test_arch_torch.py tests/test_torch_capture.py",
+    "actual_execution": "same pytest arguments through a Python wrapper setting CPU threads, deterministic algorithms, and the MLX import barrier",
+    "verification_harness_initial_failure": "a MetaPathFinder raising in find_spec prevented Transformers availability detection; switched to an actual-import guard before final successful run"
+  },
+  "lint": "Ruff passed on all changed source/tests; git diff --check passed",
+  "source_sha256": {
+    "src/local_llm_lab/arch.py": "5cfcca8e341e52d08ea76908770ee450c674fb9144486e41e5644d333edf8722",
+    "src/local_llm_lab/arch_base.py": "df7bb2b4fac8286a24656b88ef05b5a82ba8f37505165882262be5fd916e5dbe",
+    "src/local_llm_lab/arch_torch.py": "0a8a20dd55b768e51dbc84d853e0200fa773da4ee976010f75a494746c96285e",
+    "src/local_llm_lab/torch_capture.py": "8f88b2c98f52c8652689af56309e3a2b0ce09e40f557a04cfcd189fb0710a74d",
+    "research/acceptance/torch_seam.py": "c43287fcbbc55894e8f9f2020b0d4b6ed48e6d90c5e07da1c932cba1b9ecd7e0",
+    "tests/test_arch_base.py": "b90487e18c4a803029d2147aae7d5ac30b979283888ac5c74f47b75cdbc618b8",
+    "tests/test_arch_observation.py": "ade018e35e84ce71c69665889d9dbfefd438e7dcebb7a6750f690c960084ddda",
+    "tests/test_arch_torch.py": "a33369e858c581ddb16ca72b5c0adb0f71a92f091f4b5fab621fc0324823569c",
+    "tests/test_torch_capture.py": "c338cabe895791f1b718f9005337654a15a333ff6ecc92f0cbf3714da814a923"
+  },
+  "development_measurement": {
+    "path": "development-results.json",
+    "sha256": "e182ee12de3722f6d75e576caf0f5f6b294baa5fe170ce0d725551a3a581188c"
+  },
+  "gates": [
+    {
+      "gate": 1,
+      "status": "structural_pass_on_meta",
+      "source_commit": "a639cae",
+      "num_layers": 34,
+      "hidden_size": 2560,
+      "weights_loaded": false,
+      "basis": "official checkpoint config instantiated as real HF model on meta; upstream layer numbering pinned"
+    },
+    {
+      "gate": 2,
+      "status": "full_checkpoint_unexecuted",
+      "development_status": "passed_small_cpu_model",
+      "tokens": [
+        64,
+        1400
+      ],
+      "max_abs_error": 0.0,
+      "negative_control": "zero at64; nonzero at1400"
+    },
+    {
+      "gate": 3,
+      "status": "full_checkpoint_unexecuted",
+      "development_status": "passed_small_cpu_model",
+      "decode_steps": 3
+    },
+    {
+      "gate": 4,
+      "status": "full_checkpoint_unexecuted",
+      "development_status": "both_controls_detected_on_small_cpu_model",
+      "tolerance_scope": "development fixture only; not checkpoint or CUDA"
+    },
+    {
+      "gate": 5,
+      "status": "unexecuted",
+      "implementation": "not_started",
+      "reason": "graph-once estimator explicitly waits for full-checkpoint gates1-4"
+    }
+  ],
+  "unexecuted": [
+    "full-checkpoint CPU fp32 gates2-4",
+    "native MLX regression suite",
+    "cross-backend golden trajectory/logit comparison",
+    "CUDA and MPS",
+    "graph-once estimator and sharding",
+    "2816-token target memory measurement"
+  ],
+  "resource_blocker": {
+    "text_fp32_tensor_gib": 14.455106735229492,
+    "reference_r47_cap_gib": 10.656005859375,
+    "basis": "safetensors headers only; before activations, retained residuals, eager vocabulary logits, load copies",
+    "decision_needed": "applicable CPU memory/window ruling or defer full-checkpoint validation to a larger host"
+  }
+}

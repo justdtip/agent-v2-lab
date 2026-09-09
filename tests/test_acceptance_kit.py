@@ -402,3 +402,96 @@ def test_a_divergence_refuses_a_truncated_distribution() -> None:
     assert same == pytest.approx(0.0)
     apart = tolerance.symmetric_kl([1.0, 0.0], [0.0, 1.0])
     assert apart == pytest.approx(math.log(2))
+
+
+def _fake_forward(rows_by_sequence: dict[tuple[int, ...], list]):
+    def forward(sequence):
+        return rows_by_sequence[tuple(sequence)]
+
+    return forward
+
+
+def test_the_runner_reads_each_deciding_position_with_the_recorded_prefix(tmp_path: Path) -> None:
+    directory = tmp_path / "run"
+    directory.mkdir()
+    _write_record(
+        directory / "run.jsonl",
+        _with_confidence(_episode_events("run", [5, 6], [11, 12, 13]), 0.999998),
+    )
+    episode = golden.load_episodes(directory)[0]
+
+    # One row per input position. Position p's row is the prediction for p + 1, so the rows at
+    # 1, 2 and 3 must name 11, 12 and 13. Position 0 and the last row are never read.
+    sequence = (5, 6, 11, 12, 13)
+    rows = [(999, (999,)), (11, (11,)), (12, (12,)), (13, (13,)), (0, (0,))]
+    report = tolerance.run_tolerance(episode, _fake_forward({sequence: rows}))
+
+    assert report.agreement.compared == 3 and report.agreement.rate == 1.0
+    assert report.passed
+    assert report.jaccard.mean == 1.0
+    assert report.divergence is None
+    assert "not measured" in report.describe()
+
+    # Jaccard is over sets, so producing the right token plus extras is not a perfect score.
+    # The fixture records a single id per position; a two-id top halves the overlap. That is
+    # the statistic working, and it is worth pinning so nobody later "fixes" it into a
+    # top-1 agreement rate wearing a Jaccard's name.
+    wider = [(999, (999,)), (11, (11, 7)), (12, (12, 7)), (13, (13, 7)), (0, (0,))]
+    padded = tolerance.run_tolerance(episode, _fake_forward({sequence: wider}))
+    assert padded.agreement.rate == 1.0
+    assert padded.jaccard.mean == 0.5
+
+
+def test_the_runner_refuses_a_row_count_that_would_shift_the_join(tmp_path: Path) -> None:
+    """An off-by-one here shifts every comparison and still yields a plausible rate."""
+    directory = tmp_path / "shift"
+    directory.mkdir()
+    _write_record(directory / "shift.jsonl", _episode_events("shift", [5, 6], [11, 12]))
+    episode = golden.load_episodes(directory)[0]
+    with pytest.raises(ValueError, match="shifted and still look plausible"):
+        tolerance.run_tolerance(episode, _fake_forward({(5, 6, 11, 12): [(0, (0,))] * 3}))
+
+
+def test_the_runner_fails_on_a_confident_flip_and_survives_an_unconfident_one(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "flip"
+    directory.mkdir()
+    _write_record(
+        directory / "hard.jsonl",
+        _with_confidence(_episode_events("hard", [5, 6], [11, 12]), 0.999998),
+    )
+    _write_record(
+        directory / "soft.jsonl",
+        _with_confidence(_episode_events("soft", [5, 6], [11, 12]), 0.55),
+    )
+    hard, soft = golden.load_episodes(directory)
+
+    rows = [(0, (0,)), (11, (11,)), (404, (404,)), (0, (0,))]
+    forward = _fake_forward({(5, 6, 11, 12): rows})
+
+    assert not tolerance.run_tolerance(hard, forward).passed
+    assert tolerance.run_tolerance(soft, forward).passed, (
+        "a near-tie can flip on precision alone; only a confident flip is a defect"
+    )
+
+
+def test_the_runner_gates_on_the_divergence_floor_too(tmp_path: Path) -> None:
+    directory = tmp_path / "floor"
+    directory.mkdir()
+    _write_record(
+        directory / "floor.jsonl",
+        _with_confidence(_episode_events("floor", [5, 6], [11, 12]), 0.5),
+    )
+    episode = golden.load_episodes(directory)[0]
+    rows = [(0, (0,)), (11, (11,)), (12, (12,)), (0, (0,))]
+    forward = _fake_forward({(5, 6, 11, 12): rows})
+
+    class _Result:
+        def __init__(self, index):
+            self.first_divergence = None if index is None else SimpleNamespace(index=index)
+
+    early = tolerance.run_tolerance(episode, forward, free_running=[_Result(2)], floor=16)
+    assert not early.passed, "an episode that parts company at token 2 did not drift there"
+    late = tolerance.run_tolerance(episode, forward, free_running=[_Result(120)], floor=16)
+    assert late.passed
