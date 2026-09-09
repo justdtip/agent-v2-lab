@@ -250,3 +250,41 @@ linear regime that the estimator assumes. Separating that from precision needs t
 pair the Chief has specified, and the two can be crossed in one sweep: step rule × precision, at one
 shallow layer and one deep. That is the Chief's and the consulting mathematician's to settle; the
 measurement above is offered as an input to it, not as a conclusion.
+
+## 9. The step rule in closed form, verified against this run's own epsilons
+
+The Chief's addition, checked against the ν this run wrote rather than taken on the message. The
+step is `0.01 · ‖h‖_F` over the whole `L × d` residual array, applied to **one coordinate** of one
+position. A coordinate's root-mean-square is `‖h‖_F / √(L·d)`, so the displacement in units of a
+coordinate's own size is
+
+    ε / RMS = 0.01 · ‖h‖_F / (‖h‖_F / √(L·d)) = **0.01 · √(L·d)**
+
+which cancels the residual entirely. It is a constant of the geometry: independent of the model, of
+the layer, and of how large the residual happens to be.
+
+Measured from the recorded per-layer epsilons, across all 33 layers:
+
+| upstream layer | ε | ‖h‖_F | coordinate RMS | ε / RMS |
+|---:|---:|---:|---:|---:|
+| 0 | 101.57 | 10,157 | 17.74 | **5.7243** |
+| 12 | 2,002.20 | 200,220 | 349.77 | **5.7243** |
+| 24 | 4,343.82 | 434,382 | 758.83 | **5.7243** |
+| 32 | 8,817.75 | 881,775 | 1,540.40 | **5.7243** |
+
+Minimum 5.724334, maximum 5.724334, spread 1.8e-15. The closed form predicts
+`0.01 · √(128 · 2560) = 5.7243`, and it is exact.
+
+**Two things follow that the per-layer table alone could not give.**
+
+The same rule on the fixture is `0.01 · √(40 · 6) = 0.155` of a coordinate's RMS — inside the linear
+neighbourhood — against **5.72 on the model, thirty-seven times larger**. The rule did not change,
+the geometry did, and no precision argument is needed to explain why the fixture agreed to 3.6e-3
+and the model did not. A rule whose meaning depends on `√(L·d)` is not scale-free, and a fixture is
+exactly where that is invisible.
+
+And because the displacement in RMS units is **the same at every layer**, the monotone depth gradient
+in §2 cannot be the step. Whatever varies with depth is not the perturbation's local size; the
+remaining candidate the artefact supports is the number of nonlinear blocks the displacement has to
+traverse, which falls from 33 to 1 as the source approaches the target. That is a sharper statement
+than §3 or §8 could make on their own, and it is the constancy that licenses it.
