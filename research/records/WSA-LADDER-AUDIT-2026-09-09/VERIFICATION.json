@@ -1,0 +1,38 @@
+{
+  "basis": "file-only audit verification",
+  "checks": {
+    "analysis_imports": [
+      "__future__",
+      "argparse",
+      "ast",
+      "collections",
+      "hashlib",
+      "json",
+      "math",
+      "pathlib",
+      "statistics"
+    ],
+    "analytic_cancellation": "equal target sums with unequal per-position readings demonstrated",
+    "boundary_condition_mutation": "a failing width-one no-op is ignored by the current condition; matched wide failures are caught",
+    "identical_repeat_cells": 36,
+    "lint": "ruff F/E9 passed on all three owned scripts with --no-cache",
+    "scalar_rows_checked": 864,
+    "source_corruptions_rejected": 13,
+    "unique_cells": 828,
+    "visual_qa": "inspected the complete rendered PNG; axes, legend, source labels and footnotes readable"
+  },
+  "device_tests": "unexecuted",
+  "hashes": {
+    "README.md": "90e64b82799f757f1c290217282f1f070b46add2aee9913f01cea07c0f1fec11",
+    "SOURCE-MANIFEST.json": "4b513dfa68c2b3e198f51c57a0f4e34e61bf150724b7030129204392413709e2",
+    "analysis.json": "b75cbde0b18182298cf7ef2d23f1d9d892aa50723626cdc62c5dce4d443d127e",
+    "analyze.py": "99fe44701a6eb93a4d4b89e1da8bd6b1623142c0f44f864681caa12ee05c4538",
+    "build_report.py": "0bacfc8b5ee3819aaedf7ad3f84a3bb1534490df2b9d18e99c9f9b77fe03b3df",
+    "ladder-audit.pdf": "973742d1ca4bf92e74638657913e2a1cc593a9ae5a6b3fcb1311768532c2f392",
+    "ladder-audit.png": "89f8cc5bcf442fa5904c063fa3ff646e16d40cbe8d048ac41092e99cf8a73e40",
+    "make_figure.py": "1e158ac6c462646b6f070230ec0f8092c7d157bc89768413bb4ae5f7c2642895"
+  },
+  "model_execution": false,
+  "source_records_modified": false,
+  "status": "passed"
+}
