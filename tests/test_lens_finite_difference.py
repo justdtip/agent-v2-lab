@@ -217,3 +217,66 @@ def test_the_golden_report_runs_end_to_end_with_a_real_second_operand(exact, ups
     assert 1e-3 < finding < 1e-2
     assert finding > golden.storage_floor("float16")
     assert report["finding"]["at_or_below_storage_floor"] is False
+
+
+# ------------------------------------------------------- the arithmetic path, declared and gated
+
+
+def _bf16_model():
+    model = TinyLensModel().to(torch.bfloat16)
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    return model.eval()
+
+
+def test_the_perturbation_keeps_the_block_dtype_under_native_and_promotes_under_the_other() -> None:
+    """The claim itself, model-independent: which arithmetic the blocks above the source run.
+
+    Two fits of one checkpoint can declare the same weight dtype and not share this. On CUDA at
+    1,400 tokens the promoted path differs from native bf16 by 69.4% (WS-A on the device,
+    2026-09-11), so a golden comparison across the two paths is not a measurement of the estimator.
+    """
+    from local_llm_lab.pipeline.lens_fitting.finite_difference import _perturbation
+
+    base_bf16 = torch.zeros(1, 4, 3, dtype=torch.bfloat16)
+    columns = torch.eye(3)[:2]
+    native = _perturbation(base_bf16, 1, 0.5, columns)(None, None, torch.zeros(2, 4, 3))
+    promoted = _perturbation(base_bf16.float(), 1, 0.5, columns)(None, None, torch.zeros(2, 4, 3))
+
+    assert native.dtype is torch.bfloat16, "native hands the block its own dtype back"
+    assert promoted.dtype is torch.float32, "the promoted path makes every block above run float32"
+    assert native.shape == promoted.shape == (2, 4, 3)
+
+
+def test_a_bf16_fit_runs_native_and_says_so(upstream) -> None:
+    fit = fit_finite_difference_jacobian(
+        _bf16_model(), make_rows(), max_seq_len=SEQ_LEN, direction_batch=D_MODEL,
+        dtype="bfloat16", upstream=upstream,
+    )
+
+    assert fit.precision["dtype"] == "bfloat16"
+    assert fit.precision["capture_dtype"] == "native"
+    assert fit.provenance["capture_dtype"] == "native"
+    assert all(np.isfinite(m).all() for m in fit.jacobians.values())
+
+
+def test_an_unknown_capture_path_is_refused_by_name(upstream) -> None:
+    with pytest.raises(ValueError, match="capture_dtype must be one of"):
+        _fd(upstream, capture_dtype="float64")
+
+
+def test_the_golden_gate_refuses_two_fits_that_ran_different_arithmetic(exact, upstream) -> None:
+    """The gate that makes the finding a measurement of the estimator and not of the path."""
+    corpus = {"synthetic": True}
+    native = _fd(upstream, capture_dtype="native")
+    promoted = _fd(upstream, capture_dtype="promoted-float32")
+    exact_nu = adapter.declare_nu(exact, num_layers=NUM_LAYERS, corpus=corpus)
+    kw = dict(num_layers=NUM_LAYERS, corpus=corpus,
+              estimator=adapter.ESTIMATOR_FINITE_DIFFERENCE)
+
+    # Native against the exact estimator: the estimator is the only difference, so it compares.
+    golden.assert_estimator_is_the_only_difference(exact_nu, adapter.declare_nu(native, **kw))
+    # Promoted against it: two causes, and the gate says which field carries the second one.
+    with pytest.raises(golden.NotComparable, match="precision"):
+        golden.assert_estimator_is_the_only_difference(exact_nu, adapter.declare_nu(promoted, **kw))
+    assert "capture_dtype" in golden.COMPARABLE_KEYS["precision"]
