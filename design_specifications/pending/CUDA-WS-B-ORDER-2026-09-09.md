@@ -128,3 +128,26 @@ was (plan §16.16). SWE-1 builds, on fixtures, device-free:
 Own pathspec commit on your branch, pushed for the Chief's review and merge as before. The state
 programme's script (`STATE-PROGRAMME-RUN-ORDER-2026-09-10.md`) lifts its own refusal of
 `--decoding sampled` only once this lands on the branch it runs from.
+
+## Review of the sampled path, Chief, 2026-09-10 — `b29c509`, on `cuda-migration` at `ac69ab6`
+
+**Verdict: passes.** SWE-1 commits on the integration branch, so the review is of what landed:
+the seat's suite 2,661 passed, 10 skipped, box free, and the Chief's forward merge over it
+2,666 passed under the Chief's window at 06:58Z. Read in full: `SampledDecoding` refuses any
+temperature but the ruled one and any truncation by name at construction, seeds its own generator
+from the pinned seed unless told, refuses to draw when nothing is pinned, and draws from the full
+softmax; `torch_sampled_stream` is the greedy loop's sibling with one line different, and a test
+holds the greedy function to having no sampled branch and never calling the sampler; the sampled
+mode is declared by the object and the bare word is refused; an MLX sampler carrying a temperature
+is still refused on torch; one `require_greedy` sits behind the golden generator, the tolerance
+runner and both device scripts at the parser, before records, window or weights; the manifest
+block carries mode, temperature, truncation, sampler, seed with its source, draws, the kernel set
+read back and the note verbatim, and a greedy block carries neither seed nor temperature. The
+state programme's script now selects this loop through the policy seam (run order, review of
+`fa5fadc`).
+
+**One additive follow-up, SWE-1.** The shared stop rule reports an EOS-ended turn as `token_cap`
+on both backends, because only the tool-call id is in its stop set and the stream ends itself on
+EOS. Relabelling would move a field the MLX records are compared on, so the label stays; add an
+`ended_on_eos` boolean beside the reason on both backends, with a test on each, so a record never
+says a turn was capped when the model ended it. Own pathspec commit, as before.
