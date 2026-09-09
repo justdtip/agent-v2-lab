@@ -30,7 +30,9 @@ mlx = [
   "mlx-tune==0.6.0",
 ]
 cuda = [
-  "torch",
+  # Pinned to the version the Research Division measured on (plan §14); the batching-rule and
+  # determinism findings are version-dependent, and five seats must share one torch.
+  "torch>=2.14.0",
   "accelerate",
   "peft",
   "trl",
