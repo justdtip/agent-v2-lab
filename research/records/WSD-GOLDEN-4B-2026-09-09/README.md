@@ -217,8 +217,10 @@ zero, because the accumulator is only ever incremented by that direction's own d
 layers and all 2,560 directions: **none**. The reading that the response fell below bf16 resolution
 and rounded away is refused by the artefact.
 
-What the artefact does show is that the map is systematically **too small**, monotonically less so
-with depth:
+What the artefact does show is that the map is systematically **too small**, and broadly less so
+with depth — *broadly* and not monotonically, which §10 turns from a hedge into the evidence: the
+ratio reverses direction at twelve of the thirty-two steps, and its own table below already shows
+one of them, layer 5 at 0.131 sitting below layer 1 at 0.185.
 
 | repo layer | median column norm, FD | median column norm, exact | ‖FD‖ / ‖exact‖ |
 |---:|---:|---:|---:|
@@ -288,3 +290,47 @@ in §2 cannot be the step. Whatever varies with depth is not the perturbation's 
 remaining candidate the artefact supports is the number of nonlinear blocks the displacement has to
 traverse, which falls from 33 to 1 as the source approaches the target. That is a sharper statement
 than §3 or §8 could make on their own, and it is the constancy that licenses it.
+
+## 10. The saturation account, made quantitative: the predicted excursion orders the compression
+
+The Chief's proposal, computed. Both inputs were already in this record's own artefacts, so it
+needed neither the card nor the 526 MB maps: the per-layer epsilons from `nu-finite-difference.json`
+and the median exact column norms from `zero-response.json`.
+
+**The construction.** Perturbing one coordinate by ε moves the output, to first order, by
+`ε × (column norm of the exact map)`. Expressed as a fraction of the target's own per-position norm,
+that is how far outside its neighbourhood the perturbation pushes the network. The target norm is a
+single constant, taken here as a proxy from layer 32's source residual (77,939) since the target's
+own was not recorded — and it cancels out of any ordering.
+
+| repo layer | ε | median exact column norm | predicted excursion | as % of target |  ‖FD‖/‖exact‖ |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 101.6 | 272.9 | 27,720 | **35.6%** | 0.185 |
+| 5 | 283.4 | 139.4 | 39,500 | **50.7%** | 0.131 |
+| 13 | 2,002 | 10.69 | 21,410 | 27.5% | 0.320 |
+| 21 | 3,663 | 2.298 | 8,417 | 10.8% | 0.539 |
+| 25 | 4,344 | 1.576 | 6,846 | **8.8%** | 0.560 |
+| 33 | 8,818 | 1.089 | 9,605 | 12.3% | 0.756 |
+
+Over all 33 layers: **Spearman −0.872, Pearson on logs −0.927.** The more the perturbation is
+predicted to move the output, the more the finite-difference map is compressed. That is the
+saturation account as a number rather than a story.
+
+**The part that makes it a mechanism rather than a correlation with depth.** Neither series is
+monotone. The compression ratio reverses direction at **twelve of the thirty-two steps**, and the
+excursion fraction moves the way saturation predicts at **nine of those twelve** — the three misses
+are ties, the largest being a compression change of −0.017 against an excursion change of −0.006.
+Layer 29 is the clearest: it sits *below* layer 25 in compression, against the depth trend, and its
+predicted excursion is correspondingly *higher*. Depth alone cannot produce that; the excursion can,
+and does.
+
+**What it does not settle.** This is the exact map's *linear* prediction of the excursion, so it is
+the right quantity for asking "how far outside the linear neighbourhood does this step push", and it
+is circular if read as evidence that the exact map is right. It also does not exclude precision: a
+step large enough to saturate and a difference small enough to round are not mutually exclusive, and
+nothing here separates them. It removes the need to invoke precision to explain the *profile*, which
+is a smaller claim and the one the numbers support.
+
+The excursion fraction ranges from 8.8% to 50.7% of the target's per-position norm. A directional
+derivative is being estimated across a displacement that moves the output by up to half its own
+size.
