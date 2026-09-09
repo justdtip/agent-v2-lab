@@ -18,7 +18,7 @@
   },
   "settings": {
     "rows": 40,
-    "steps": 6,
+    "steps": 4,
     "accum": 4,
     "batch": 2,
     "learning_rate": 0.001,
@@ -26,7 +26,7 @@
     "loss_chunk": 16
   },
   "gradient_clipping": "off, so any deviation is attributable to sharding alone",
-  "sharded": "transformer blocks only; root unit replicated",
+  "sharded": "nothing; single process",
   "failure": null,
   "curve": [
     {
@@ -60,22 +60,6 @@
       "grad_norm_blocks": 1.3324327993247866,
       "grad_norm_root": 0.8818717551210681,
       "tokens": 147
-    },
-    {
-      "step": 4,
-      "loss": 4.169413826682351,
-      "grad_norm": 1.296767499434731,
-      "grad_norm_blocks": 1.0737662224024769,
-      "grad_norm_root": 0.7270708680848926,
-      "tokens": 132
-    },
-    {
-      "step": 5,
-      "loss": 4.088378188956497,
-      "grad_norm": 1.3022138199803928,
-      "grad_norm_blocks": 1.0430743421707247,
-      "grad_norm_root": 0.7795875509864411,
-      "tokens": 117
     }
   ]
 }

@@ -162,3 +162,47 @@ def test_token_weighting_is_what_num_items_in_batch_makes_it() -> None:
         (summed(short) + summed(long)) / total_tokens,
         rtol=1e-6,
     )
+
+
+def test_the_wrapper_computes_the_same_loss_it_wraps() -> None:
+    """Moving the loss inside a module must not change it; it only changes where it is called."""
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    model = _tiny().eval()
+    ids = torch.arange(24).remainder(64).reshape(2, 12)
+    labels = ids.clone()
+    labels[:, :3] = -100
+
+    direct = causal_lm_chunked_loss(
+        model, {"input_ids": ids, "labels": labels}, chunk_size=5, num_items_in_batch=1
+    )
+    wrapped = wrap_with_chunked_loss(model, chunk_size=5)(
+        input_ids=ids, labels=labels, num_items_in_batch=1
+    )
+    torch.testing.assert_close(wrapped, direct, rtol=0, atol=0)
+
+
+def test_the_wrapper_holds_the_tied_pair_outside_every_block() -> None:
+    """What `fully_shard` on the wrapper would own as the root unit.
+
+    A parameter is unsharded, with its backward hooks armed, only inside the forward of the unit
+    that owns it. The chunked loss reads `lm_head.weight` directly, so that weight has to be in the
+    unit whose forward the loss runs in -- and the embedding is tied to it, so the pair must be
+    owned together or FSDP2 sees a flat parameter straddling two units.
+    """
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    wrapper = wrap_with_chunked_loss(_tiny(), chunk_size=8)
+    root = [name for name, _ in wrapper.named_parameters() if ".layers." not in name]
+
+    assert any("embed_tokens" in name for name in root)
+    assert all(".layers." not in name for name in root)
+    # The head is tied to the embedding, so it is that one tensor and not a second entry.
+    assert wrapper.inner.lm_head.weight is wrapper.inner.model.embed_tokens.weight
+
+
+def test_the_wrapper_refuses_a_model_it_cannot_find_a_head_on() -> None:
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    with pytest.raises(TypeError, match="lm_head"):
+        wrap_with_chunked_loss(torch.nn.Linear(4, 4), chunk_size=8)

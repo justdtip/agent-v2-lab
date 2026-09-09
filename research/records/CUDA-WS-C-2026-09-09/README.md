@@ -403,3 +403,62 @@ the distribution is a different result about training drift and is not this find
 an agentic row sits far outside the lens's fitted position range, so a depth profile there inherits
 the extrapolation this record's own map section could not bound. The final-layer read does not, and
 it is sufficient to answer the question.
+
+---
+
+# The amended gate, and the design that lets the loss keep its raw parameters
+
+**Both on the Chief's rulings, and the second changed the design rather than working around it.**
+
+## The loss belongs inside the root unit's forward
+
+The earlier failure — `aten.embedding.default got mixed torch.Tensor and DTensor` — was read here as
+FSDP2 refusing the chunked loss's raw-parameter design. It is not. **A parameter is an unsharded
+tensor with its backward hooks armed only inside the forward of the unit that owns it**, and the
+loss was touching it outside that window. So the window moves, not the loss.
+
+`wrap_with_chunked_loss` puts the model and the loss in one thin `nn.Module` whose `forward` takes
+`input_ids` and `labels`. `fully_shard` each block as before, then `fully_shard` **the wrapper** as
+the root unit — which holds the tied embedding, the final norm and the head together, as a tied
+pair must be. Inside that forward the raw weight is the unsharded tensor and the reduce-scatter
+hooks are registered, so the loss keeps reading `lm_head.weight` directly and FSDP2 owns every
+parameter. It works: the root shards, and nothing about the loss changed.
+
+The cost is the root's parameters resident unsharded from forward through backward — **once per
+step, never once per chunk**, which is what calling the head as a module per chunk would have cost.
+`reshard_after_forward=True` on the root is the memory rung when a device is short, to be measured
+on the device rather than assumed.
+
+## Per parameter, not per norm, and not the loss
+
+The gate now compares **per-parameter gradients at step zero, before any update**, and per-parameter
+values after N steps. A norm was not enough for the same reason a loss was not: a wrong slice hides
+inside a right norm. Deviation is per tensor, `max|a − b|` over the tensor's own scale.
+
+Three arms against single-process training, on the same rows, tiny Gemma 3, `gloo`, two processes:
+
+| arm | loss, step 0 | **grad, step 0** | grad, root unit | value, final |
+|---|---:|---:|---:|---:|
+| blocks **and root** sharded | 0.00e+00 | **1.80e-07** | 8.13e-08 | 8.56e-06 |
+| blocks only, root reduced by hand | 0.00e+00 | 1.80e-07 | 8.51e-08 | 8.58e-06 |
+| **negative control**: root reduced by nothing | **0.00e+00** | **1.67e+00** | **1.67e+00** | **1.12e+00** |
+
+**The control's loss is bit-identical to the correct run at step zero while its gradient is 167%
+wrong and its parameters end 112% wrong.** That is not a near miss: it is the whole quantity. The
+loss at step zero is identical **by construction** in every arm — same weights, same rows, same
+objective — so it asserts nothing at all, and afterwards it is one step behind the error.
+
+**The rule this is the evidence for: a gate compares the quantity nearest the mechanism, never one
+downstream of it.** Two correct configurations sit at float32 epsilon; the broken one is off by more
+than one. There is no tolerance at which the old gate distinguishes them and no tolerance at which
+the new one fails to.
+
+Both correct arms agree, so the hand all-reduce is not wrong — it is a **second reduction path**,
+and a second path is a standing invitation to exactly this error the moment anyone adds a parameter
+outside a unit. It is kept only as the control that reproduces what the old gate passed.
+
+## Unexecuted
+
+CPU and `gloo`, two processes, a tiny model. No CUDA, no NCCL, no more than two ranks, no real
+checkpoint, and no size at which the memory arithmetic bites. `reshard_after_forward` on the root is
+named as a rung and has not been measured.

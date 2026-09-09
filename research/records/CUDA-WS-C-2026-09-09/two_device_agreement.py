@@ -64,6 +64,23 @@ def _rows(count: int, vocab: int, seed: int) -> list[dict]:
     return rows
 
 
+def _gathered(model: Any, attribute: str) -> dict[str, Any]:
+    """Per-parameter tensors, sharded ones gathered, keyed by name.
+
+    The amended gate compares **per parameter**, not a norm over all of them: a wrong slice hides
+    inside a right norm, which is the same failure as a wrong gradient hiding inside a right loss.
+    """
+    out = {}
+    for name, parameter in model.named_parameters():
+        tensor = getattr(parameter, attribute, None)
+        if tensor is None:
+            continue
+        tensor = tensor.detach()
+        tensor = tensor.full_tensor() if hasattr(tensor, "full_tensor") else tensor
+        out[name] = tensor.double().clone()
+    return out
+
+
 def _build_model(config_path: Path, seed: int):
     import torch
     from transformers import Gemma3ForCausalLM, Gemma3TextConfig
@@ -75,7 +92,11 @@ def _build_model(config_path: Path, seed: int):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("plain", "fsdp2"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=("plain", "fsdp2", "fsdp2-hand-reduce", "fsdp2-unreduced"),
+        required=True,
+    )
     parser.add_argument("--model-config", type=Path, required=True)
     parser.add_argument("--rows", type=int, required=True)
     parser.add_argument("--steps", type=int, required=True)
@@ -85,10 +106,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--loss-chunk", type=int, required=True)
     parser.add_argument(
-        "--shard-root",
-        action="store_true",
-        help="Also shard the root unit (embedding, final norm, tied head). Recorded because it "
-             "fails: see the module docstring.",
+        "--dump", type=Path, required=True,
+        help="Where to write per-parameter step-0 gradients and final values, for the comparison "
+             "the amended gate makes.",
     )
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -99,9 +119,19 @@ def main() -> None:
     from local_llm_lab.training.collator import CausalCollator
     from local_llm_lab.training.torch_full import causal_lm_chunked_loss
 
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
     rank = int(os.environ.get("RANK", "0"))
     world = int(os.environ.get("WORLD_SIZE", "1"))
-    distributed = args.mode == "fsdp2"
+    distributed = args.mode.startswith("fsdp2")
+    #: Shard the root unit too, holding the tied embedding, the final norm and the head together.
+    shard_root = args.mode == "fsdp2"
+    #: Root outside every unit, reduced by hand. Correct, and a second reduction path.
+    hand_reduce = args.mode == "fsdp2-hand-reduce"
+    #: THE NEGATIVE CONTROL. Root outside every unit and reduced by nothing: the configuration the
+    #: old loss-only gate passed while its root gradients were 40% apart.
+    if args.mode == "fsdp2-unreduced" and rank == 0:
+        print("NEGATIVE CONTROL: the root unit is reduced by nothing and is expected to disagree")
     failure: dict[str, str] | None = None
 
     if distributed:
@@ -114,7 +144,10 @@ def main() -> None:
     if args.accum % world:
         raise SystemExit(f"accum {args.accum} must divide by world size {world}")
 
-    model, shape = _build_model(args.model_config, args.seed)
+    inner, shape = _build_model(args.model_config, args.seed)
+    # Both arms train the wrapper, so parameter names match between them and the sharded arm has a
+    # unit boundary at the only place the chunked loss can be inside one.
+    model = wrap_with_chunked_loss(inner, chunk_size=args.loss_chunk)
     mesh_repr = None
     try:
         if distributed:
@@ -123,9 +156,10 @@ def main() -> None:
 
             mesh = init_device_mesh("cpu", (world,))
             mesh_repr = str(mesh)
-            for layer in model.model.layers:
+            for layer in inner.model.layers:
                 fully_shard(layer, mesh=mesh)
-            if args.shard_root:
+            if shard_root:
+                # The root unit: the tied embedding, the final norm and the head, together.
                 fully_shard(model, mesh=mesh)
     except Exception as error:  # the record must say exactly where, with the error
         failure = {
@@ -135,6 +169,7 @@ def main() -> None:
         }
 
     curve: list[dict] = []
+    dumped: dict[str, dict[str, Any]] = {}
     if failure is None:
         rows = _rows(args.rows, shape["vocab_size"], args.seed)
         collate = CausalCollator(pad_token_id=0)
@@ -161,8 +196,11 @@ def main() -> None:
             reported = torch.zeros((), dtype=torch.float64)
             for micro in mine:
                 batch = collate(micro)
-                summed = causal_lm_chunked_loss(
-                    model, batch, chunk_size=args.loss_chunk, num_items_in_batch=1
+                summed = model(
+                    input_ids=batch["input_ids"],
+                    labels=batch["labels"],
+                    attention_mask=batch["attention_mask"],
+                    num_items_in_batch=1,
                 )
                 reported += summed.detach().double()
                 (summed * world / token_total.item()).backward()
@@ -177,11 +215,17 @@ def main() -> None:
             # reduces its gradient and each rank holds only its own half of the window. Reducing it
             # by hand is what makes the two arms the same optimiser. Mean, not sum, to match the
             # reduction FSDP applies to the sharded parameters against the same `* world` scaling.
-            if distributed:
+            if hand_reduce:
                 for name, parameter in model.named_parameters():
                     if ".layers." not in name and parameter.grad is not None:
                         dist.all_reduce(parameter.grad, op=dist.ReduceOp.SUM)
                         parameter.grad /= world
+
+            # The amended gate's quantity, captured before the first update: per-parameter
+            # gradients, sharded ones gathered. Step zero on identical weights is where a wrong
+            # reduction is unambiguous, because nothing has diverged yet for any other reason.
+            if step == 0:
+                dumped["grad_step0"] = _gathered(model, "grad")
 
             # Split by whether the parameter lives inside a sharded unit. FSDP2 communicates
             # gradients only for parameters it manages; anything outside every unit keeps a purely
@@ -204,6 +248,11 @@ def main() -> None:
                 "tokens": int(token_total),
             })
 
+    if failure is None:
+        dumped["value_final"] = _gathered(model, "data")
+        if rank == 0:
+            torch.save(dumped, args.dump)
+
     payload = {
         "mode": args.mode,
         "world_size": world,
@@ -216,8 +265,13 @@ def main() -> None:
             "learning_rate": args.learning_rate, "seed": args.seed, "loss_chunk": args.loss_chunk,
         },
         "gradient_clipping": "off, so any deviation is attributable to sharding alone",
-        "sharded": "transformer blocks only; root unit replicated" if not args.shard_root
-                   else "blocks and root unit",
+        "sharded": {
+            "plain": "nothing; single process",
+            "fsdp2": "blocks and the root unit (tied embedding, final norm, head)",
+            "fsdp2-hand-reduce": "blocks only; root outside every unit, reduced by hand",
+            "fsdp2-unreduced": "blocks only; root reduced by NOTHING (negative control: the "
+                               "configuration the old loss-only gate passed)",
+        }[args.mode],
         "failure": failure,
         "curve": curve,
     }

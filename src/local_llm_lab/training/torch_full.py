@@ -227,3 +227,62 @@ def make_chunked_loss_trainer_class(
             return (loss, None) if return_outputs else loss
 
     return ChunkedLossTrainer
+
+
+class ChunkedLossModule:
+    """Namespace marker; the class itself is built by :func:`wrap_with_chunked_loss`."""
+
+
+def wrap_with_chunked_loss(
+    model: Any,
+    *,
+    chunk_size: int = DEFAULT_LOSS_CHUNK,
+    autocast_dtype: "torch.dtype | None" = None,
+) -> Any:
+    """Put the chunked loss *inside* a module, so FSDP2 can own every parameter it touches.
+
+    The loss reads `lm_head.weight` and calls the decoder stack directly, to avoid materialising a
+    262,208-wide logit tensor. Under FSDP2 a parameter is an unsharded tensor with its backward
+    hooks armed only **inside the forward of the unit that owns it**; touched anywhere else it is
+    still a `DTensor`, and `aten.embedding` meeting a plain `input_ids` is FSDP2 saying so rather
+    than refusing the design.
+
+    So the window is what has to move, not the loss. This wrapper's ``forward`` is a unit boundary:
+    ``fully_shard`` each block as usual and ``fully_shard`` this wrapper as the root, which holds
+    the tied embedding, the final norm and the head **together**, as a tied pair must be. Inside
+    the forward the raw weight is unsharded and the reduce-scatter hooks are registered, so the
+    loss keeps its raw-parameter design and every parameter stays FSDP2's.
+
+    The cost is the root's parameters resident unsharded from forward through backward -- **once per
+    step, never once per chunk**, which is what calling `lm_head` as a module per chunk would have
+    cost. `reshard_after_forward=True` on the root is the memory rung when a device is short, and
+    it is measured on the device rather than assumed (plan 10.2).
+    """
+    import torch
+
+    base_model_of(model)  # fail here, with a clear message, rather than inside a sharded forward
+
+    class _ChunkedLossModule(torch.nn.Module):
+        loss_chunk_size = chunk_size
+        loss_autocast_dtype = autocast_dtype
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.inner = model
+
+        def forward(
+            self,
+            input_ids: "torch.Tensor",
+            labels: "torch.Tensor",
+            attention_mask: "torch.Tensor | None" = None,
+            num_items_in_batch: "torch.Tensor | int | None" = None,
+        ) -> "torch.Tensor":
+            return causal_lm_chunked_loss(
+                self.inner,
+                {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask},
+                chunk_size=self.loss_chunk_size,
+                num_items_in_batch=num_items_in_batch,
+                autocast_dtype=self.loss_autocast_dtype,
+            )
+
+    return _ChunkedLossModule()

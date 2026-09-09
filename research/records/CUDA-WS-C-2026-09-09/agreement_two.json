@@ -18,7 +18,7 @@
   },
   "settings": {
     "rows": 40,
-    "steps": 6,
+    "steps": 4,
     "accum": 4,
     "batch": 2,
     "learning_rate": 0.001,
@@ -26,56 +26,40 @@
     "loss_chunk": 16
   },
   "gradient_clipping": "off, so any deviation is attributable to sharding alone",
-  "sharded": "transformer blocks only; root unit replicated",
+  "sharded": "blocks and the root unit (tied embedding, final norm, head)",
   "failure": null,
   "curve": [
     {
       "step": 0,
       "loss": 4.174608801165197,
-      "grad_norm": 2.11468271588472,
+      "grad_norm": 2.114682717033037,
       "grad_norm_blocks": 1.8972025386633409,
-      "grad_norm_root": 0.9340800373367107,
+      "grad_norm_root": 0.9340800399364084,
       "tokens": 117
     },
     {
       "step": 1,
       "loss": 4.180447289703089,
-      "grad_norm": 2.216252619223713,
-      "grad_norm_blocks": 1.8706546401080677,
-      "grad_norm_root": 1.1884556742504633,
+      "grad_norm": 2.2162527470895603,
+      "grad_norm_blocks": 1.8706547472237431,
+      "grad_norm_root": 1.1884557440945358,
       "tokens": 109
     },
     {
       "step": 2,
-      "loss": 4.161570829503677,
-      "grad_norm": 1.8955789768440998,
-      "grad_norm_blocks": 1.59676384530354,
-      "grad_norm_root": 1.0215502336081062,
+      "loss": 4.1615706799077055,
+      "grad_norm": 1.8955787545381415,
+      "grad_norm_blocks": 1.5967636594802654,
+      "grad_norm_root": 1.0215501115557486,
       "tokens": 102
     },
     {
       "step": 3,
       "loss": 4.1794467329168,
-      "grad_norm": 1.597834109791079,
-      "grad_norm_blocks": 1.332432462351479,
-      "grad_norm_root": 0.8818716322026834,
+      "grad_norm": 1.59783425237436,
+      "grad_norm_blocks": 1.3324325764898994,
+      "grad_norm_root": 0.8818717180912531,
       "tokens": 147
-    },
-    {
-      "step": 4,
-      "loss": 4.169413711085464,
-      "grad_norm": 1.296767798399803,
-      "grad_norm_blocks": 1.0737665357643766,
-      "grad_norm_root": 0.7270709385192352,
-      "tokens": 132
-    },
-    {
-      "step": 5,
-      "loss": 4.088378188956497,
-      "grad_norm": 1.3022141729615602,
-      "grad_norm_blocks": 1.0430747377145833,
-      "grad_norm_root": 0.7795876113713027,
-      "tokens": 117
     }
   ]
 }
