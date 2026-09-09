@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "source_commit": "38c6e488bd0478920d8802608cd4876b392b30bb",
+  "order_commit": "035d3e6d848ec846b5fdb270704e7ca1aa66e80f",
+  "integration_commit": "c633510cf69ed71e4a3a18185e196907c4375654",
+  "reviewer_parent": "4df1225971c6d29dbe3e68289e763225d9a9b6d7",
+  "sources": [
+    {
+      "commit": "38c6e488bd0478920d8802608cd4876b392b30bb",
+      "repository_path": "src/local_llm_lab/probes/sae_bridge.py",
+      "snapshot": "source/sae_bridge.py",
+      "sha256": "fd61bde0dcd101b2e5ac17fd5286ce9ac4e87418cfb43de08a9f7f342f6d91da",
+      "bytes": 56901
+    },
+    {
+      "commit": "38c6e488bd0478920d8802608cd4876b392b30bb",
+      "repository_path": "src/local_llm_lab/probes/anchor_sensitivity.json",
+      "snapshot": "source/anchor_sensitivity.json",
+      "sha256": "91a5b2f76aa7f2a5fda3f9690d93de6e5ac57d28036b933257e68280a1738e04",
+      "bytes": 4144
+    },
+    {
+      "commit": "38c6e488bd0478920d8802608cd4876b392b30bb",
+      "repository_path": "tests/test_sae_bridge.py",
+      "snapshot": "source/test_sae_bridge.py",
+      "sha256": "340f2f868d14af1141337209383d162a3abb461a32d78ce2c73763773aa292b9",
+      "bytes": 45566
+    },
+    {
+      "commit": "c633510cf69ed71e4a3a18185e196907c4375654",
+      "repository_path": "src/local_llm_lab/pipeline/lens_fitting/upstream.py",
+      "snapshot": "source/upstream.py",
+      "sha256": "3b8d29e22c2d80447ce4c9f2c019a45c273a4aca3211f8a388bec1113b7878ba",
+      "bytes": 49641
+    },
+    {
+      "commit": "c633510cf69ed71e4a3a18185e196907c4375654",
+      "repository_path": "src/local_llm_lab/pipeline/live_lens/instruments.py",
+      "snapshot": "source/instruments.py",
+      "sha256": "176808ebe882b9cb160e2ddb9f3a5abd13834bdb412c0a22c8c4fb549bddf180",
+      "bytes": 16510
+    },
+    {
+      "commit": "035d3e6d848ec846b5fdb270704e7ca1aa66e80f",
+      "repository_path": "design_specifications/pending/SAE-J-BRIDGE-ORDER-2026-09-08.md",
+      "snapshot": "source/order.md",
+      "sha256": "ee91d157e9ff9103eae320e6ffee44a3dd63a93ddfe7988d983c0e98544b3744",
+      "bytes": 42425
+    },
+    {
+      "commit": "4df1225971c6d29dbe3e68289e763225d9a9b6d7",
+      "repository_path": "research/records/WSA-BRIDGE-PAIRING-AUDIT-2026-09-10/source/displacement.jsonl",
+      "snapshot": "source/displacement.jsonl",
+      "sha256": "4992a08e5e275d6f6cdcbb536d3c9edcf5ac2eec6ce05bb9a54e1e524062f20d",
+      "bytes": 35687
+    }
+  ]
+}
