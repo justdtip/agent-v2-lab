@@ -1,0 +1,69 @@
+{
+  "_note": [
+    "How much a lens's sampled scalar derivatives moved when the anchor they were read at was",
+    "displaced, by model and by layer. Data rather than code because it is a measurement of one",
+    "model at three of its layers, and nothing may be carried across from a neighbouring layer or",
+    "a different checkpoint. A model absent here has not been measured, and a cross-path reading",
+    "on it is refused for that reason rather than allowed for want of a figure.",
+    "Source: WS-D's float32 displacement control (e771c2b), recomputed from all 108 committed",
+    "scalar rows by WS-A's map/anchor audit (ca396fb), which is the authority for these values.",
+    "WITHDRAWN by that audit: the amplification ratios once reported at these three layers, and",
+    "they are not restated here in any form, not even to name them. They divided a derivative",
+    "change by a displacement norm taken at one position while the",
+    "intervention replaced the whole sequence, so they are not condition estimates and are not",
+    "recorded here in any form. A ratio of one scalar projection over a finite displacement is a",
+    "directional sensitivity measurement in any case, not a worst-case condition number."
+  ],
+  "google/gemma-3-4b-it": {
+    "basis": "WS-D float32 displacement control (e771c2b), recomputed by WS-A's audit (ca396fb)",
+    "label": "sampled displacement, one draw, eighteen projections",
+    "precision_convention": "medians to six decimal places, minima and maxima to four, counts exact",
+    "quantity": "absolute change of each scalar derivative relative to its own baseline",
+    "layers": {
+      "1": {
+        "sampled_displacement": {
+          "float32": {"median": 1.035116, "min": 0.0144, "max": 35.1951, "count": 18},
+          "native": {"median": 0.470689, "min": 0.0916, "max": 28.9111, "count": 18}
+        },
+        "equal_norm_random_displacement": {
+          "float32": {"median": 0.748732, "min": 0.0978, "max": 27.1956, "count": 18},
+          "native": {"median": 1.005847, "min": 0.1812, "max": 7.8444, "count": 18}
+        },
+        "native_anchor_read_in_the_float32_tail": {"median": 0.536735, "min": 0.0589, "max": 24.4398, "count": 18}
+      },
+      "17": {
+        "sampled_displacement": {
+          "float32": {"median": 0.696514, "min": 0.0846, "max": 4.1596, "count": 18},
+          "native": {"median": 0.585164, "min": 0.044, "max": 2.3206, "count": 18}
+        },
+        "equal_norm_random_displacement": {
+          "float32": {"median": 1.277339, "min": 0.0403, "max": 37.9555, "count": 18},
+          "native": {"median": 1.560080, "min": 0.0685, "max": 6.6172, "count": 18}
+        },
+        "native_anchor_read_in_the_float32_tail": {"median": 0.252133, "min": 0.0032, "max": 14.5372, "count": 18}
+      },
+      "33": {
+        "sampled_displacement": {
+          "float32": {"median": 0.125179, "min": 0.01, "max": 91.8969, "count": 18},
+          "native": {"median": 0.119927, "min": 0.0052, "max": 7.0, "count": 18}
+        },
+        "equal_norm_random_displacement": {
+          "float32": {"median": 0.299125, "min": 0.0053, "max": 26.8376, "count": 18},
+          "native": {"median": 0.312953, "min": 0.0104, "max": 2.2667, "count": 18}
+        },
+        "native_anchor_read_in_the_float32_tail": {"median": 0.048705, "min": 0.0002, "max": 12.4548, "count": 18}
+      }
+    },
+    "reading_notes": [
+      "A median alone does not say the layer is safe: at layer 33 the float32 median is 0.125 and",
+      "the maximum over the same eighteen projections is 91.9, so 'the last block is well",
+      "conditioned' does not follow from the median (audit ca396fb).",
+      "An equal-norm random displacement moves the derivatives as much or more, so the sampled",
+      "displacement is not a special direction.",
+      "native_anchor_read_in_the_float32_tail holds the tail in float32 and switches only the",
+      "anchor. Both of its readings use the float32 tail, so it is NOT a native-against-float32",
+      "comparison and it does not measure the lens/capture crossing, which remains unmeasured."
+    ],
+    "measured_pairings": {}
+  }
+}
