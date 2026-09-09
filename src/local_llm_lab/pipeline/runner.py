@@ -24,6 +24,7 @@ from local_llm_lab.pipeline.protocol import (
     turn_is_complete,
     window_messages,
 )
+from local_llm_lab.pipeline.sampled_decode import SAMPLED, SampledDecoding, decoding_mode
 from local_llm_lab.pipeline.tasks import Task
 from local_llm_lab.pipeline.transcript import Transcript
 
@@ -682,6 +683,75 @@ def torch_greedy_stream(
                 return
 
 
+def torch_sampled_stream(
+    model: Any,
+    view: ArchitectureView,
+    tokenizer: Any,
+    prompt_ids: Sequence[int],
+    max_tokens: int,
+    *,
+    eos_ids: Iterable[int],
+    decoding: SampledDecoding,
+) -> Iterator[tuple[int, str]]:
+    """Sampled decode on torch: the greedy loop's sibling, beside it and not inside it.
+
+    Ruled 2026-09-10 for runs declared as the state programme only (plan §16.16; the WS-B order's
+    amendment). Same prefill partition, same lookahead, same EOS rule and the same stop rule
+    downstream, so a sampled turn's forward rows are shaped exactly like a greedy turn's and a
+    test holds the two loops to the same partition. The one line that differs is the token:
+    ``decoding.draw`` takes it from the full softmax at the ruled temperature, with no
+    truncation, from the decoding's own generator, so the model's forward never consumes
+    randomness and the sequence of draws depends on the seed and the logits alone.
+
+    The greedy function above is untouched by this one existing. Two loops rather than one with
+    a flag, because the flag would be a branch inside the path every golden gate runs through.
+    """
+    import torch
+
+    pin_torch_determinism()
+    cache = view.make_cache()
+    generated: list[int] = []
+    previous_text = ""
+    terminators = frozenset(eos_ids)
+    with torch.no_grad():
+        logits = None
+        for prefill in prefill_passes(list(prompt_ids)):
+            logits = _forward_logits(model, view, prefill.input_ids, cache)
+        while len(generated) < max_tokens:
+            token = decoding.draw(logits[0, -1])
+            generated.append(token)
+            text = tokenizer.decode(generated)
+            piece = text[len(previous_text) :]
+            previous_text = text
+            logits = _forward_logits(model, view, (token,), cache)
+            yield token, piece
+            if token in terminators:
+                return
+
+
+def _torch_stream(
+    model: Any,
+    view: ArchitectureView,
+    tokenizer: Any,
+    prompt_ids: Sequence[int],
+    max_tokens: int,
+    *,
+    eos_ids: Iterable[int],
+    decoding: SampledDecoding | str | None,
+) -> Iterator[tuple[int, str]]:
+    """Choose the loop from the declaration. The loops themselves never look at it."""
+    if isinstance(decoding, SampledDecoding):
+        return torch_sampled_stream(
+            model, view, tokenizer, prompt_ids, max_tokens, eos_ids=eos_ids, decoding=decoding
+        )
+    if decoding_mode(decoding) == SAMPLED:
+        raise ValueError(
+            "the sampled mode is declared by handing a SampledDecoding, which carries its seed "
+            "and its temperature; the bare word 'sampled' declares nothing and is refused"
+        )
+    return torch_greedy_stream(model, view, tokenizer, prompt_ids, max_tokens, eos_ids=eos_ids)
+
+
 def generate_turn_tokens(
     model: Any,
     tokenizer: Any,
@@ -690,11 +760,16 @@ def generate_turn_tokens(
     *,
     view: ArchitectureView,
     spec: ModelSpec,
+    decoding: SampledDecoding | str | None = None,
 ) -> tuple[list[int], str]:
     """Torch generation from token ids, returning the tokens and why the turn stopped.
 
     The acceptance harness needs both, and it starts from recorded ``prompt_ids`` rather than
     from a prompt string, so it cannot go through the string-shaped entry point.
+
+    ``decoding`` is ``None`` or ``"greedy"`` for the greedy loop, or a :class:`SampledDecoding`
+    for the sampled one. The acceptance harness never passes it: every gate compares against
+    an MLX record made greedy and refuses the sampled mode by name before reaching here.
     """
     stop_ids = _stop_ids(tokenizer)
     ids: list[int] = []
@@ -703,8 +778,14 @@ def generate_turn_tokens(
         max_tokens=spec.chat.max_think_tokens,
     )
     reason = _consume_stream(
-        torch_greedy_stream(
-            model, view, tokenizer, prompt_ids, max_tokens, eos_ids=config_eos_ids(model)
+        _torch_stream(
+            model,
+            view,
+            tokenizer,
+            prompt_ids,
+            max_tokens,
+            eos_ids=config_eos_ids(model),
+            decoding=decoding,
         ),
         ids=ids,
         thinking=thinking,
@@ -836,7 +917,8 @@ def _generate_turn_torch(
     """Torch branch of :func:`generate_turn_with_count`.
 
     Same thinking tracker, same stop rule, a hand-rolled greedy loop in place of
-    ``mlx_lm.stream_generate``. Only ``cache_strategy: none`` is implemented, which is what
+    ``mlx_lm.stream_generate``, or the sampled loop beside it when the sampler is a
+    :class:`SampledDecoding`. Only ``cache_strategy: none`` is implemented, which is what
     stage two ran under and what the golden records exercise.
     """
     if view is None:
@@ -849,13 +931,19 @@ def _generate_turn_torch(
             "torch generation implements cache_strategy 'none' only; the reuse strategies "
             "are deferred and the golden records never exercised them (WS-B)"
         )
-    temperature = getattr(sampler, "sampling_temperature", None)
-    if temperature not in (None, 0.0):
-        # Silently ignoring a temperature would produce a plausible trajectory that no test
-        # fails on and that does not match the sampler the caller asked for.
-        raise NotImplementedError(
-            f"torch generation is greedy; the caller asked for temperature {temperature}"
-        )
+    # A run declared as the state programme hands a SampledDecoding as its sampler. Anything
+    # else is greedy or refused: an MLX sampler closure carrying a temperature would otherwise
+    # produce a plausible trajectory that no test fails on and that does not match what the
+    # caller asked for.
+    decoding = sampler if isinstance(sampler, SampledDecoding) else None
+    if decoding is None:
+        temperature = getattr(sampler, "sampling_temperature", None)
+        if temperature not in (None, 0.0):
+            raise NotImplementedError(
+                f"torch generation is greedy; the caller asked for temperature {temperature}. "
+                "The sampled mode is declared by handing a SampledDecoding as the sampler, and "
+                "only for runs declared as the state programme"
+            )
 
     prompt_ids = encode_prompt(tokenizer, prompt)
     ids: list[int] = []
@@ -873,8 +961,14 @@ def _generate_turn_torch(
     terminators = config_eos_ids(model)
     with context as generation_model:
         _consume_stream(
-            torch_greedy_stream(
-                generation_model, view, tokenizer, prompt_ids, max_tokens, eos_ids=terminators
+            _torch_stream(
+                generation_model,
+                view,
+                tokenizer,
+                prompt_ids,
+                max_tokens,
+                eos_ids=terminators,
+                decoding=decoding,
             ),
             ids=ids,
             thinking=thinking,

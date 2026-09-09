@@ -23,6 +23,7 @@ says `measured-here`, `laptop-basis` or `expected`, per cell rather than per row
 | the corpus, from the records alone | 5,245 emitted tokens over 15 episodes, 4,801 agentic | a different corpus; every laptop basis below is void |
 | the forward-to-emission join | 5,245 agree, 0 disagree, 0 missing | **bookkeeping, not validation.** It asserts greedy decoding and one position convention, and nothing about any backend. It cannot fail on a correct reader, which is exactly why it catches a conflated position convention and nothing else does |
 | the hard rule's coverage | 4,199 of 5,245 at P ≥ 0.99 (80.06%) | the confidence rows were not read; the gate below degrades to a threshold nobody came near |
+| `--decoding sampled` on either script | refused by name before any weights load: the kit compares against MLX records made greedy | the sampled path is the state programme's (plan §16.16), not the kit's; a kit that accepted it would compare a draw against an argmax |
 
 ---
 

@@ -329,6 +329,40 @@ with every feature active and complement sites report share 1 with none, and the
 is the designed 0.4. The device supplies the real residuals after A2's first forward; that number
 is what decides Stage B, and it is not in this record.
 
+## Delegation from WS-E: the preflight's dictionary and render rows, 2026-09-09
+
+Device-free, on stubs and a fixture corpus. Preflight grows two kinds of row on top of the
+`fetch-dictionary` the Chief built (on `cuda-migration` at c1202a7; method entry twenty-eighth
+records that it reached my tree after I was told to reuse it, and that my first commit therefore
+built a second one, which this commit drops in favour of theirs).
+
+**Dictionary rows**, three per dictionary the entry or the run names (an optional `dictionaries:`
+list of `{repo, folder}` in the entry's file, read directly so `ModelSpec` does not learn it, or
+`--dictionary owner/repo:folder` on the command line), each read off
+`verify_cached_dictionary(repo, folder, offline=…)`: *present*, both files in the primary cache,
+else the row names the `lab-device fetch-dictionary <repo> --layer N --site … --width … --l0 …`
+that fills it, read off the folder's layout; *digest*, the parameters' bytes against the digest
+the verification compared, with its basis, `hub-declared` or `recorded-at-fetch`, and **undecided
+rather than passed** when it could not compare, the verification's note carried along; and
+*model*, the config's `model_name` resolved through `base_of_artifact` against the entry's `base`
+resolved the same way, basis `registry`, so a dictionary of another checkpoint of the same width
+is refused here as it is in the bridge. Tests stub the verification in its own return shape: the
+right digest passes, different bytes fail with both digests shown, undecided stays undecided with
+the note, a `-pt` dictionary fails the model row naming both, a missing file names the fetch
+command with its layer, and the registry field is read and refused by shape.
+
+**Render row.** `--render-source <dir> --render-manifest <laptop manifest.json> --model <entry>`
+re-renders the source under the entry into a scratch directory through `render_dataset`, the
+pipeline's own guarded render, and compares every `outputs.<role>.sha256` with the laptop
+manifest's. A source whose per-role digests differ from the laptop manifest's `source.sha256` is
+refused before any render as the wrong comparison. The tokenizer comes from the cache through
+transformers, not the pipeline's loader, because that one imports MLX and the device must not
+have it. Tests on a three-role fixture corpus of replay rows with a stub tokenizer: the same
+tokenizer reproduces every digest, a tokenizer that renders one character differently is named by
+split, a changed source is refused before rendering, and the whole thing runs through `preflight`
+with every added row carrying a basis. The runbook's 12B re-render sentence, on both branches
+since the Chief's forward merge, is what this row runs as a command.
+
 ## Unexecuted
 
 A2 on any real activation. Stage B entirely. Every layer other than 18 for the full readout — the
