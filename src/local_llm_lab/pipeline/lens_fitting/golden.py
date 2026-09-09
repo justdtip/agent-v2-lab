@@ -80,8 +80,22 @@ COMPARABLE_KEYS = {
         "blocks_measured",
         "requires_grad",
         "attn_implementation",
+        "forward_batch",
+        "anchor_batch",
     ),
 }
+
+#: Precision keys that must be *present* on both sides, not merely equal.
+#:
+#: `_compared` builds `{key: block[key] for key in keys if key in block}`, so a key absent from both
+#: blocks is dropped from both sides and they compare equal. That is the right behaviour for a field
+#: one estimator has and the other does not; it is the wrong behaviour for a field that describes the
+#: function being differentiated, because a fit made before the field existed then passes the gate by
+#: saying nothing. The batch schedule is such a field: the bf16 forward is not batch-invariant
+#: (`research/records/WSD-FD-CALIBRATION-2026-09-10`, measured on the card), so a lens that does not
+#: say what width it forwarded at has not said what it is a Jacobian *of*, and the gate refuses it by
+#: name rather than comparing two silences.
+REQUIRED_PRECISION_KEYS = ("forward_batch", "anchor_batch")
 
 
 class NotComparable(ValueError):
@@ -154,6 +168,22 @@ def assert_estimator_is_the_only_difference(reference_nu: dict, candidate_nu: di
         if keys is None or not isinstance(block, dict):
             return block
         return {key: block[key] for key in keys if key in block}
+
+    for name, nu in (("reference", reference_nu), ("candidate", candidate_nu)):
+        block = nu.get("precision")
+        missing = [key for key in REQUIRED_PRECISION_KEYS
+                   if not isinstance(block, dict) or key not in block]
+        if missing:
+            raise NotComparable(
+                f"the {name} fit declares no {missing} in its precision block, so it does not say "
+                "what function it is the Jacobian of. The bf16 forward is not batch-invariant: "
+                "measured on the card with no hook present, no block of the stack was bitwise "
+                "identical between two batch widths, and the divergence compounded with depth. The "
+                "batch schedule is therefore part of the arithmetic path, and two fits at two "
+                "widths are estimates of two functions. A fit made before this field existed is "
+                "refused rather than compared to a silence; declare it or refit. The measurement "
+                "is in research/records/WSD-FD-CALIBRATION-2026-09-10."
+            )
 
     differing = [
         field

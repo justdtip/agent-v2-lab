@@ -124,7 +124,7 @@ All four are cleared. Two by ruling, two by code; none by being decided to matte
 The gate tables above are unchanged. Nothing here supplies a number that was marked unknown; the
 per-layer agreement in §2 is still the measurement and still does not exist.
 
-## Device readiness, D-CRO, 2026-09-11 — gate 0 passed, one input built, one defect found before the window
+## Device readiness, D-CRO, 2026-09-09 — gate 0 passed, one input built, one defect found before the window
 
 Read-only on the card except where stated. No model loaded, no window taken, and the checkout's
 `git status --porcelain` was 0 lines before and after every step, so no other seat's resume key moved.
