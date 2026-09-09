@@ -4,6 +4,7 @@ import contextlib
 import copy
 import sys
 import time
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -379,6 +380,19 @@ class HistoryCache:
         self._save()
 
 
+def is_torch_model(model: Any) -> bool:
+    """Whether ``model`` is a torch module, discovered structurally rather than by name.
+
+    The same principle the architecture view already follows: never consult a model-type
+    string. A missing torch is not an error here, it is simply an MLX process.
+    """
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - exercised only where torch is absent
+        return False
+    return isinstance(model, torch.nn.Module)
+
+
 def make_turn_cache(
     model: Any,
     view: ArchitectureView,
@@ -386,6 +400,15 @@ def make_turn_cache(
     *,
     prefix_tokens: int,
 ) -> TurnCacheBase | None:
+    if is_torch_model(model) and resolved.cache_strategy != "none":
+        # The three reuse strategies are deferred on torch, and the golden records never
+        # exercised them. Refusing loudly is the point: a silent fallback to no reuse would
+        # be a speed regression that no test fails on, and an MLX cache handed to a torch
+        # model would attend to the wrong keys rather than raise.
+        raise NotImplementedError(
+            f"cache strategy {resolved.cache_strategy!r} is not ported to torch; "
+            "stage two ran under 'none' and only 'none' is implemented (WS-B)"
+        )
     if resolved.cache_strategy == "trim":
         return TrimCache(model)
     if resolved.cache_strategy == "snapshot":
@@ -444,6 +467,130 @@ class _ThinkingTracker:
         )
 
 
+#: Cheap gate before the expensive completeness test: a closing token always adds one of
+#: these characters, so a piece without them cannot have closed the call.
+_COMPLETION_MARKS = ("`", "<", "|")
+
+#: Why a turn stopped. ``token_cap`` is the one that means the turn was cut off rather than
+#: finished, and a turn that ends there without a parseable action is a truncation, not a
+#: wrong answer.
+STOP_TOKEN = "stop_token"
+STOP_TURN_COMPLETE = "turn_complete"
+STOP_TOKEN_CAP = "token_cap"
+
+
+def _consume_stream(
+    stream: Any,
+    *,
+    ids: list[int],
+    thinking: _ThinkingTracker,
+    tokenizer: Any,
+    stop_ids: set[int],
+    capture: Any | None,
+    turn_cache: TurnCacheBase | None,
+) -> str:
+    """Apply the turn's stop rule to a stream of ``(token_id, text_piece)`` pairs.
+
+    Both backends feed this one function, so the stop semantics cannot drift between them.
+    That matters more than it looks: the golden records were produced under exactly this rule,
+    and two copies of it that agree today are two copies that can disagree later.
+    """
+    for token, piece in stream:
+        ids.append(token)
+        if capture is not None:
+            capture.emitted(token)
+        if isinstance(turn_cache, HistoryCache):
+            turn_cache.emitted(token)
+        decoded = tokenizer.decode(ids)
+        thinking.update(ids, decoded, tokenizer)
+        if token in stop_ids:
+            return STOP_TOKEN
+        if any(mark in piece for mark in _COMPLETION_MARKS) and turn_is_complete(
+            thinking.decoded_text(ids, tokenizer)
+        ):
+            return STOP_TURN_COMPLETE
+    return STOP_TOKEN_CAP
+
+
+def torch_greedy_stream(
+    model: Any,
+    view: ArchitectureView,
+    tokenizer: Any,
+    prompt_ids: Sequence[int],
+    max_tokens: int,
+) -> Iterator[tuple[int, str]]:
+    """Greedy decode on torch, yielding ``(token_id, text_piece)`` like the MLX stream.
+
+    Prefill the whole prompt, then argmax, append, and forward the single new token through
+    the model's own cache. The piece is the text that appeared when the token was appended,
+    which is the quantity the stop gate inspects; MLX's streaming detokenizer supplies the
+    same thing.
+
+    The readout goes through ``view.native_readout`` rather than the model's own head so that
+    a generated token and a captured one come from one readout by construction. The record's
+    argmax rows were written under exactly that arrangement.
+
+    ``cache_strategy: none`` refers to reuse *across turns*. Within a turn the cache is still
+    needed or decoding is quadratic, so the loop makes its own and drops it at the end.
+    """
+    import torch
+
+    cache = view.make_cache()
+    generated: list[int] = []
+    previous_text = ""
+    tokens = torch.tensor([list(prompt_ids)], dtype=torch.long)
+    with torch.inference_mode():
+        while len(generated) < max_tokens:
+            hidden = model(tokens, cache=cache)
+            logits = view.native_readout(hidden)
+            token = int(torch.argmax(logits[0, -1]).item())
+            generated.append(token)
+            text = tokenizer.decode(generated)
+            piece = text[len(previous_text) :]
+            previous_text = text
+            yield token, piece
+            tokens = torch.tensor([[token]], dtype=torch.long)
+
+
+def generate_turn_tokens(
+    model: Any,
+    tokenizer: Any,
+    prompt_ids: Sequence[int],
+    max_tokens: int,
+    *,
+    view: ArchitectureView,
+    spec: ModelSpec,
+) -> tuple[list[int], str]:
+    """Torch generation from token ids, returning the tokens and why the turn stopped.
+
+    The acceptance harness needs both, and it starts from recorded ``prompt_ids`` rather than
+    from a prompt string, so it cannot go through the string-shaped entry point.
+    """
+    stop_ids = _stop_ids(tokenizer)
+    ids: list[int] = []
+    thinking = _ThinkingTracker(
+        enabled=spec.chat.thinking in {"inference", "trained"},
+        max_tokens=spec.chat.max_think_tokens,
+    )
+    reason = _consume_stream(
+        torch_greedy_stream(model, view, tokenizer, prompt_ids, max_tokens),
+        ids=ids,
+        thinking=thinking,
+        tokenizer=tokenizer,
+        stop_ids=stop_ids,
+        capture=None,
+        turn_cache=None,
+    )
+    return ids, reason
+
+
+def _stop_ids(tokenizer: Any) -> set[int]:
+    stop_ids: set[int] = set()
+    with contextlib.suppress(Exception):  # tokenizer wrappers vary
+        stop_ids.add(tokenizer.convert_tokens_to_ids("</tool_call>"))
+    return stop_ids
+
+
 def generate_turn_with_count(
     model: Any,
     tokenizer: Any,
@@ -454,6 +601,7 @@ def generate_turn_with_count(
     *,
     spec: ModelSpec,
     capture: Any | None = None,
+    view: ArchitectureView | None = None,
 ) -> tuple[str, int, int]:
     """Generate one assistant turn, stopping as soon as the tool call closes.
 
@@ -461,12 +609,23 @@ def generate_turn_with_count(
     When a thinking mode exhausts its budget, a closing tag is inserted into the raw output and
     generation continues until the visible note and tool call are complete.
     """
+    stop_ids = _stop_ids(tokenizer)
+    if is_torch_model(model):
+        return _generate_turn_torch(
+            model,
+            tokenizer,
+            prompt,
+            max_tokens,
+            turn_cache=turn_cache,
+            spec=spec,
+            capture=capture,
+            view=view,
+            sampler=sampler,
+            stop_ids=stop_ids,
+        )
+
     import mlx.core as mx
     from mlx_lm import stream_generate
-
-    stop_ids = set()
-    with contextlib.suppress(Exception):  # tokenizer wrappers vary
-        stop_ids.add(tokenizer.convert_tokens_to_ids("</tool_call>"))
 
     kwargs: dict[str, Any] = {}
     prompt_input: Any = prompt
@@ -509,21 +668,15 @@ def generate_turn_with_count(
             **kwargs,
         )
         try:
-            for response in stream:
-                ids.append(response.token)
-                if capture is not None:
-                    capture.emitted(response.token)
-                if isinstance(turn_cache, HistoryCache):
-                    turn_cache.emitted(response.token)
-                decoded = tokenizer.decode(ids)
-                thinking.update(ids, decoded, tokenizer)
-                if response.token in stop_ids:
-                    break
-                piece = response.text or ""
-                if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
-                    thinking.decoded_text(ids, tokenizer)
-                ):
-                    break
+            _consume_stream(
+                ((response.token, response.text or "") for response in stream),
+                ids=ids,
+                thinking=thinking,
+                tokenizer=tokenizer,
+                stop_ids=stop_ids,
+                capture=capture,
+                turn_cache=turn_cache,
+            )
         finally:
             if (capture is not None or isinstance(turn_cache, HistoryCache)) and callable(
                 getattr(stream, "close", None)
@@ -531,6 +684,68 @@ def generate_turn_with_count(
                 stream.close()
     if turn_cache is not None:
         turn_cache.commit(prompt_ids, ids)
+    think_tokens = thinking.tokens if thinking.started else 0
+    return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
+
+
+def _generate_turn_torch(
+    model: Any,
+    tokenizer: Any,
+    prompt: str,
+    max_tokens: int,
+    *,
+    turn_cache: TurnCacheBase | None,
+    spec: ModelSpec,
+    capture: Any | None,
+    view: ArchitectureView | None,
+    sampler: Any,
+    stop_ids: set[int],
+) -> tuple[str, int, int]:
+    """Torch branch of :func:`generate_turn_with_count`.
+
+    Same thinking tracker, same stop rule, a hand-rolled greedy loop in place of
+    ``mlx_lm.stream_generate``. Only ``cache_strategy: none`` is implemented, which is what
+    stage two ran under and what the golden records exercise.
+    """
+    if view is None:
+        raise ValueError(
+            "torch generation needs the architecture view: the loop reads through "
+            "view.native_readout and builds its within-turn cache with view.make_cache"
+        )
+    if turn_cache is not None:
+        raise NotImplementedError(
+            "torch generation implements cache_strategy 'none' only; the reuse strategies "
+            "are deferred and the golden records never exercised them (WS-B)"
+        )
+    temperature = getattr(sampler, "sampling_temperature", None)
+    if temperature not in (None, 0.0):
+        # Silently ignoring a temperature would produce a plausible trajectory that no test
+        # fails on and that does not match the sampler the caller asked for.
+        raise NotImplementedError(
+            f"torch generation is greedy; the caller asked for temperature {temperature}"
+        )
+
+    prompt_ids = encode_prompt(tokenizer, prompt)
+    ids: list[int] = []
+    thinking = _ThinkingTracker(
+        enabled=spec.chat.thinking in {"inference", "trained"},
+        max_tokens=spec.chat.max_think_tokens,
+    )
+    context = (
+        capture.generation(model, tokenizer, prompt, turn_cache=None)
+        if capture is not None
+        else contextlib.nullcontext(model)
+    )
+    with context as generation_model:
+        _consume_stream(
+            torch_greedy_stream(generation_model, view, tokenizer, prompt_ids, max_tokens),
+            ids=ids,
+            thinking=thinking,
+            tokenizer=tokenizer,
+            stop_ids=stop_ids,
+            capture=capture,
+            turn_cache=None,
+        )
     think_tokens = thinking.tokens if thinking.started else 0
     return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
 

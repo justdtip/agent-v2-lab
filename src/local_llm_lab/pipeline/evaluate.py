@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import sys
@@ -106,7 +107,13 @@ def load_policy(
 def make_sampler(temperature: float) -> Any:
     from mlx_lm.sample_utils import make_sampler as _make
 
-    return _make(temp=temperature)
+    sampler = _make(temp=temperature)
+    # The torch generation path is greedy by construction and cannot honour a temperature.
+    # Tagging the closure with the temperature it was built from lets that path refuse rather
+    # than silently sample differently from the sampler it was handed.
+    with contextlib.suppress(AttributeError):  # a builtin or C closure has no __dict__
+        sampler.sampling_temperature = float(temperature)
+    return sampler
 
 
 def evaluate_tasks(
