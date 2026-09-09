@@ -22,6 +22,7 @@ import platform
 import re
 import sys
 import tarfile
+import tempfile
 import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -58,6 +59,178 @@ def _version(distribution: str) -> str | None:
 
 def _row(check: str, ok: bool | None, detail: str, *, basis: str = "measured-here") -> dict:
     return {"check": check, "ok": ok, "detail": detail, "basis": basis}
+
+
+# -------------------------------------------------------------------- dictionaries in preflight
+
+
+def _entry_dictionaries(name: str) -> list[tuple[str, str]]:
+    """``(repo, folder)`` pairs a registry entry names under ``dictionaries:``, or none.
+
+    Read from the entry's file directly: the field is optional and belongs to the device's
+    step zero, not to the model specification, so ``ModelSpec`` does not learn it.
+    """
+    import yaml
+
+    from local_llm_lab.models import _REGISTRY_DIR
+
+    path = _REGISTRY_DIR / f"{name}.yaml"
+    if not path.is_file():
+        return []
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    out = []
+    for item in raw.get("dictionaries") or []:
+        if not isinstance(item, dict) or "repo" not in item or "folder" not in item:
+            raise ValueError(f"{path.name}: each dictionaries entry names a repo and a folder")
+        out.append((str(item["repo"]), str(item["folder"])))
+    return out
+
+
+def _parse_dictionary_arg(value: str) -> tuple[str, str]:
+    """``owner/repo:folder`` on the command line."""
+    repo_id, sep, folder = value.partition(":")
+    if not sep or "/" not in repo_id or not folder:
+        raise ValueError(f"--dictionary takes owner/repo:folder, not {value!r}")
+    return repo_id, folder
+
+
+def _fetch_command(repo: str, folder: str) -> str:
+    """The ``fetch-dictionary`` invocation that would fill ``folder``, read off its layout."""
+    match = re.fullmatch(r"([^/]+)/layer_(\d+)_width_([^_]+)_l0_(\w+)", folder)
+    if match is None:
+        return f"lab-device fetch-dictionary {repo} (folder {folder!r} is not the suite's layout)"
+    site, layer, width, l0 = match.groups()
+    return (
+        f"lab-device fetch-dictionary {repo} --layer {layer} --site {site} "
+        f"--width {width} --l0 {l0}"
+    )
+
+
+def dictionary_rows(
+    name: str, base: str, dictionaries: list[tuple[str, str]], *, offline: bool
+) -> list[dict]:
+    """Three rows per dictionary, read off :func:`verify_cached_dictionary`.
+
+    *present*: both files in the cache, else the fetch command that fills them. *digest*: the
+    parameters' bytes against the digest, with the basis the verification reports, and
+    undecided when it could not compare. *model*: the config's ``model_name`` and the entry's
+    ``base``, both through ``base_of_artifact``, so a dictionary of another checkpoint of the
+    same width is refused here as it is in the bridge.
+    """
+    from local_llm_lab.models import base_of_artifact
+
+    rows: list[dict] = []
+    for repo, folder in dictionaries:
+        label = f"{name} dictionary {folder}"
+        verified = verify_cached_dictionary(repo, folder, offline=offline)
+        files = verified["files"]
+        missing = [f for f in DICTIONARY_FILES if not files[f]["present"]]
+        if missing:
+            rows.append(
+                _row(
+                    f"{label} present",
+                    False,
+                    f"{repo}: {', '.join(missing)} not in the HF cache; run "
+                    f"`{_fetch_command(repo, folder)}`",
+                )
+            )
+            continue
+        params = files["params.safetensors"]
+        size = Path(params["path"]).stat().st_size
+        rows.append(_row(f"{label} present", True, f"{params['path']} ({size} bytes)"))
+
+        note = f"; {verified['note']}" if verified.get("note") else ""
+        if params.get("ok") is None:
+            sidecar = dictionary_sidecar(configure_local_cache(), repo, folder)
+            rows.append(
+                _row(
+                    f"{label} digest",
+                    None,
+                    f"{params.get('note', 'undecided')}{note} ({sidecar})",
+                )
+            )
+        else:
+            rows.append(
+                _row(
+                    f"{label} digest",
+                    bool(params["ok"]),
+                    f"{params['algorithm']} {params['actual'][:12]}… "
+                    + ("==" if params["ok"] else "!=")
+                    + f" declared {params['expected'][:12]}…{note}",
+                    basis=verified["basis"],
+                )
+            )
+
+        config = json.loads(Path(files["config.json"]["path"]).read_text(encoding="utf-8"))
+        named = config.get("model_name")
+        if not isinstance(named, str) or not named:
+            rows.append(_row(f"{label} model", False, "config names no model (`model_name`)"))
+            continue
+        entry_base, dict_base = base_of_artifact(base), base_of_artifact(named)
+        rows.append(
+            _row(
+                f"{label} model",
+                entry_base == dict_base,
+                f"config model_name {named!r} -> {dict_base!r}; entry base -> {entry_base!r}",
+                basis="registry",
+            )
+        )
+    return rows
+
+
+# ---------------------------------------------------------------------------------- render
+
+
+def _render_tokenizer(hf_id: str):
+    """The entry's tokenizer from the cache, through transformers: the device has no MLX."""
+    from transformers import AutoTokenizer
+
+    configure_local_cache()
+    return AutoTokenizer.from_pretrained(hf_id, local_files_only=True)
+
+
+def render_row(name: str, source: Path, laptop_manifest: Path) -> dict:
+    """Re-render ``source`` under ``name`` and compare split digests with the laptop's manifest.
+
+    The laptop render's manifest records ``source.sha256`` per role and ``outputs.<role>.sha256``
+    for what it wrote. A different source is reported before any render; the same source
+    rendered here must reproduce every output digest, which is the claim that a corpus rendered
+    for one entry is another's byte for byte, made into a command.
+    """
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.data import render_dataset
+
+    recorded = json.loads(Path(laptop_manifest).read_text(encoding="utf-8"))
+    source = Path(source).resolve()
+    recorded_source = recorded.get("source", {}).get("sha256", {})
+    source_digests = {
+        role: _file_digest(source / f"{role}.jsonl", "sha256")
+        for role in recorded_source
+        if (source / f"{role}.jsonl").is_file()
+    }
+    different = sorted(r for r in recorded_source if source_digests.get(r) != recorded_source[r])
+    if different:
+        return _row(
+            f"render {name}",
+            False,
+            f"source {source} differs from the laptop render's source in {different}; "
+            "not the same corpus, no render compared",
+        )
+    spec = load_model_spec(name)
+    tokenizer = _render_tokenizer(spec.hf_id)
+    with tempfile.TemporaryDirectory(prefix="lab-device-render-") as scratch:
+        manifest = render_dataset(source, Path(scratch) / "render", tokenizer, spec=spec)
+    expected = {r: v.get("sha256") for r, v in recorded.get("outputs", {}).items()}
+    got = {r: v.get("sha256") for r, v in manifest["outputs"].items()}
+    mismatch = sorted(r for r in expected if got.get(r) != expected[r])
+    detail = ", ".join(
+        f"{r}={'same' if r not in mismatch else 'DIFFERENT'}" for r in sorted(expected)
+    )
+    return _row(
+        f"render {name}",
+        not mismatch and bool(expected),
+        f"{len(expected)} split(s) against {laptop_manifest}: {detail}",
+    )
 
 
 # ------------------------------------------------------------------------------- preflight
@@ -233,6 +406,44 @@ def preflight(args: argparse.Namespace) -> int:
                 basis="measured-here" if budget else "laptop-basis",
             )
         )
+
+    from local_llm_lab.models import load_model_spec
+
+    named = [_parse_dictionary_arg(v) for v in (args.dictionary or [])]
+    for name, _hf_id in _torch_models():
+        if args.model and name not in args.model:
+            continue
+        try:
+            dictionaries = _entry_dictionaries(name) + named
+        except ValueError as error:
+            rows.append(_row(f"{name} dictionaries", False, str(error)))
+            continue
+        if not dictionaries:
+            continue
+        try:
+            base = load_model_spec(name).base
+        except Exception as error:  # noqa: BLE001 - reported as the failing row
+            rows.append(_row(f"{name} dictionaries", False, f"entry unreadable: {error}"))
+            continue
+        rows.extend(dictionary_rows(name, base, dictionaries, offline=bool(args.offline)))
+
+    if args.render_source or args.render_manifest:
+        if not (args.render_source and args.render_manifest and args.model):
+            rows.append(
+                _row(
+                    "render",
+                    False,
+                    "--render-source, --render-manifest and exactly one --model go together",
+                )
+            )
+        else:
+            for name in args.model:
+                try:
+                    rows.append(
+                        render_row(name, Path(args.render_source), Path(args.render_manifest))
+                    )
+                except Exception as error:  # noqa: BLE001 - reported as the failing row
+                    rows.append(_row(f"render {name}", False, str(error)))
 
     from local_llm_lab.pipeline.data import require_dataset_manifest
 
@@ -721,6 +932,20 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-cpu",
         action="store_true",
         help="a box without CUDA passes the cuda row (laptop use)",
+    )
+    p.add_argument(
+        "--dictionary",
+        action="append",
+        help="owner/repo:folder of a sparse dictionary the run names; repeatable",
+    )
+    p.add_argument(
+        "--offline",
+        action="store_true",
+        help="never ask the hub; dictionary digests come from what fetch-dictionary recorded",
+    )
+    p.add_argument("--render-source", help="source rows to re-render under --model")
+    p.add_argument(
+        "--render-manifest", help="the laptop render's manifest.json whose digests must reproduce"
     )
     p.set_defaults(func=preflight)
     lg = sub.add_parser("login", help="prompt for the Hugging Face token; the hub stores it")
