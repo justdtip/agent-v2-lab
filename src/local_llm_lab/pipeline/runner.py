@@ -437,13 +437,17 @@ def make_turn_cache(
     prefix_tokens: int,
 ) -> TurnCacheBase | None:
     if is_torch_model(model) and resolved.cache_strategy != "none":
-        # The three reuse strategies are deferred on torch, and the golden records never
-        # exercised them. Refusing loudly is the point: a silent fallback to no reuse would
-        # be a speed regression that no test fails on, and an MLX cache handed to a torch
-        # model would attend to the wrong keys rather than raise.
+        # Refusing loudly is the point twice over. A silent fallback to no reuse would be a
+        # speed regression that no test fails on, and an MLX cache handed to a torch model
+        # would attend to the wrong keys rather than raise. The message names the plan section
+        # because whoever hits this reads the error, not the plan.
         raise NotImplementedError(
-            f"cache strategy {resolved.cache_strategy!r} is not ported to torch; "
-            "stage two ran under 'none' and only 'none' is implemented (WS-B)"
+            f"cache strategy {resolved.cache_strategy!r} is refused under torch. "
+            "'trim' and 'snapshot' are implemented in pipeline.torch_cache and are not wired "
+            "in yet: each is an arm of the same acceptance gate as 'none' and must reproduce "
+            "the 'none' trajectories byte for byte within one backend, which needs the "
+            "tolerance runner's 'none' baseline against the real view first. 'history' is not "
+            "implemented. Plan section 16.8 carries the ruling."
         )
     if resolved.cache_strategy == "trim":
         return TrimCache(model)
