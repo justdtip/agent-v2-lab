@@ -568,3 +568,18 @@ because a reader who greps for a guard finds one.
 answering the question the code raises. Twelve closures were benign and reading them was still worth
 it, because the file that held the subtlest of them also held an inert guard over the assumption
 that subtlety depended on. The warning was not the finding; it was the reason someone read the line.
+
+---
+
+## Twenty-seventh: a check that cannot pass
+
+**The D-CRO's, in their own golden harness.** The gate that the two lenses under comparison differ
+only in their estimator compared the declared ν blocks whole. Each estimator records its own knob
+inside the block, and one records a backward-accumulation dtype the other has no backward pass to
+accumulate in, so two correct fits of one corpus could never have satisfied it. **A check that
+cannot pass is as useless as one that cannot fail**: the mirror image of the inert-guard family,
+in the instrument rather than the subject. It was found only by building the real second operand,
+because a fixture-shaped stand-in would have been written to satisfy the gate, which is the general
+argument against mocking the thing a check exists to judge. Fixed to compare, key by key, what
+decides the fitted quantity, with a test at each edge: a knob difference passes, a changed
+selector or dtype still refuses.

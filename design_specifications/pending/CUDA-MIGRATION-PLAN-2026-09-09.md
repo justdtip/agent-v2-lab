@@ -1390,3 +1390,66 @@ sub-block and multi-target) are device work against `research/records/WSD-DEVICE
   assert that cannot fail, a broad handler that swallows. Whether a present check discriminates
   is not decidable by parsing; that stays the WS-D record's technique, construct the input the
   check should fail on and confirm it does.
+
+### 16.15 The golden harness is on the integration branch, and the operand it does not produce
+
+The D-CRO's fixture-level golden harness (`pipeline/lens_fitting/golden.py`, merged at abc338e)
+takes two lens artefacts and applies §16.13's structure: exactness gated at exactly zero, since a
+nonzero value there is nondeterminism and a tolerance would hide the one thing the gate exists to
+see; the three controls, transposed, layer-shifted and wrong-corpus, gated to disagree by more than
+the candidate does, the report refusing rather than reporting when one does not; the
+finite-difference-versus-exact residual as the finding with no threshold and the reason in the
+field. Two readings are fixed before any measurement: the storage floor is the **coarsest**
+operand's, a comparison being only as resolved as its blunter side, and "agreement" is not a
+verdict the report can emit; and any two fits differing in more than the estimator are refused,
+since that residual is a sum of causes nothing downstream can take apart. Thirteen tests against
+real fits of the tiny decoder, the fixture's candidate being the reference stored through float16
+and back, so the floor logic is exercised rather than asserted.
+
+**What it does not produce is the finite-difference operand.** `jacobian.py`'s estimator is MLX,
+and the harness's scope was the comparison, the controls and the report. Ruling, in two parts that
+are both taken:
+
+1. **A finite-difference artefact fitted on the laptop under MLX, on the same pinned rows, at the
+   same context length, is the first operand** if one exists in the records or can be made within
+   §16.12's limits; its residual against the device's exact fit is declared as estimator plus
+   backend, with G-2's measured backend floor beside it, and it gives the first hour a number.
+2. **A torch finite-difference reference over `TorchArchitectureView.tail`, fixture-tested against
+   the tiny decoder, is the second operand** and the one that isolates the estimator: the same
+   backend, the same rows, the same precision, so the residual is the estimator difference and
+   nothing else. It is WS-D's, small, and its own record says it exists to be run once and retired,
+   which is what the ledger's deletion of the finite-difference machinery meant.
+
+**Checked, and the first branch is void:** the records hold no finite-difference Gemma lens, no
+artefact declaring an estimator and no Jacobian archive, and fitting one under MLX now is the
+long laptop run §16.12 forbids. The golden number comes from the second branch alone, the torch
+finite-difference reference over the view's `tail`, built on fixtures and run on the device.
+
+**Built (D-CRO, cc6e995), and the mechanism corrected.** Not over `tail`, which applies the final
+norm and runs to the last block, where upstream's target is the block output *before* the norm at a
+chosen block; the two estimators would have differentiated different functions and the harness
+would have refused the comparison. A forward hook that replaces the block's output needs no
+knowledge of call signatures or masks and works on the fixture and a real model without a branch.
+Against upstream's exact fit on the tiny decoder:
+
+| epsilon scale | worst relative residual |
+|---|---:|
+| 0.04 | 5.08e-2 |
+| 0.02 | 1.38e-2 |
+| 0.01 | 3.63e-3 |
+| 0.005 | 9.23e-4 |
+
+Halving the step divides the residual by 3.9, as a central difference must and a wrong derivative
+does not; the transposed orientation is 250 times worse, which pins orientation where no shape,
+dtype or identity check can; the fixture's residual sits above the float16 storage floor, so at
+fixture scale the estimator difference is resolvable. Cost at Gemma scale: full basis, central
+differences, `n_rows × |V| × 2 × ceil(d_model / direction_batch)` forwards, about 8,880 per
+128-token row at a batch of 64, so **the device run is a declared subset of rows and positions with
+the exact side re-run on the same subset**, which the comparability gate enforces. The estimator's
+own provenance says it exists to be run once and retired.
+
+**And a finding in the harness itself, the mirror image of the week.** Its comparability gate
+compared ν blocks whole; each estimator records its own knob, so two correct fits of one corpus
+could never have passed it. **A check that cannot pass is as useless as one that cannot fail.** It
+now compares key by key what decides the fitted quantity, with tests at both edges. Findable only by
+building the real operand: a stand-in would have been written to satisfy the gate.

@@ -7,7 +7,9 @@ adapter adds our residual numbering, native input observation and replacement in
 from __future__ import annotations
 
 import inspect
+import json
 import math
+from dataclasses import dataclass, field
 
 import torch
 
@@ -16,6 +18,46 @@ from local_llm_lab.upstream_ref import load_upstream
 # Use the very recorder imported by the selected upstream estimator. The shared loader
 # rejects an absent named clone or an already-imported copy from a different location.
 ActivationRecorder = load_upstream().fitting.ActivationRecorder
+_MISSING = object()
+
+
+def _json_snapshot(value, label):
+    """Copy serialized evidence, refusing tensors, non-finite numbers and other objects."""
+    try:
+        return json.loads(json.dumps(value, allow_nan=False))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must contain only finite JSON-safe values") from error
+
+
+@dataclass
+class _Intervention:
+    layer: int
+    position: int | str
+    fn: object
+    mode: str
+    released: bool = False
+    applications: list = field(default_factory=list)
+
+
+class ClampHandle:
+    """Explicit lifecycle for one clamp; release stops future writes, not cached effects."""
+
+    def __init__(self, capture, number):
+        self._capture, self._number = capture, number
+
+    @property
+    def released(self):
+        return self._capture._interventions[self._number].released
+
+    def release(self):
+        """Deactivate this clamp without removing/reindexing any other intervention.
+
+        Release does not undo prior replacements or their consequences in a KV cache.
+        A fresh, unpatched forward is required to reconstruct unmodified state.
+        """
+        if self._capture._forwarding:
+            raise RuntimeError("cannot release interventions during a forward")
+        self._capture._interventions[self._number].released = True
 
 
 def _arguments(module, args, kwargs):
@@ -36,6 +78,18 @@ class TorchCapture(ActivationRecorder):
     at absolute position p, and replaces that vector with its same-shape/dtype/device
     result. Multiple interventions compose in registration order. They apply once per
     fresh-prefill sequence; attempting an uncaptured past position fails closed.
+
+    ``clamp(L, p, fn)`` reapplies until its handle is released. Its position is either
+    an absolute integer or ``"emitted"``. The latter requires the capture wrapper's
+    ``emitted_positions`` on every forward: explicit absolute positions of forwarded
+    generated-token inputs, not positions whose logits predict the next token. An
+    empty declaration is valid for a prefill. Direct native model calls cannot supply
+    this capture metadata and fail while an emitted clamp is active. An absolute clamp
+    on a cached past position always refuses, even if it applied on an earlier forward.
+
+    ``intervention_record`` returns detached JSON-safe registration and application
+    evidence, including optional ``fn.diagnostic_record()`` snapshots. Application
+    events say a hook ran, not that the complete model forward subsequently succeeded.
 
     ``layer_inputs`` retains native block keyword bundles without hidden states, so
     observing kwargs does not itself retain every residual. Native outputs remain in
@@ -60,10 +114,14 @@ class TorchCapture(ActivationRecorder):
         self.entry_residual = None
         self._active = False
         self._forwarding = False
+        self._recursive_rejections = 0
         self._offset = 0
         self._ids = None
         self._interventions = []
         self._applied = set()
+        self._forward_index = -1
+        self._pending_emitted_positions = _MISSING
+        self._emitted_positions = ()
         super().__init__(view.layers, (layer - 1 for layer in self.layers if layer))
         if injection is not None:
             layer, position, delta = injection
@@ -84,13 +142,13 @@ class TorchCapture(ActivationRecorder):
     def __getattr__(self, name):
         return getattr(self.model, name)
 
-    def intervene(self, layer, position, fn):
-        """Register a position replacement; add and interchange are ordinary functions."""
+    def _register_intervention(self, layer, position, fn, mode):
+        absolute = type(position) is int and position >= 0
+        emitted = mode == "clamp" and type(position) is str and position == "emitted"
         if (
             type(layer) is not int
             or not 0 <= layer <= self.view.num_layers
-            or type(position) is not int
-            or position < 0
+            or not (absolute or emitted)
             or not callable(fn)
         ):
             raise ValueError("invalid intervention layer, position or function")
@@ -102,30 +160,118 @@ class TorchCapture(ActivationRecorder):
                     self._blocks[layer - 1].register_forward_hook(self._make_hook(layer - 1))
                 )
             self._indices = sorted({*self._indices, layer - 1})
-        self._interventions.append((layer, position, fn))
+        number = len(self._interventions)
+        self._interventions.append(_Intervention(layer, position, fn, mode))
+        return number
+
+    def intervene(self, layer, position, fn):
+        """Register one replacement per fresh prefill, preserving the existing return API."""
+        self._register_intervention(layer, position, fn, "one_shot")
         return self
 
+    def clamp(self, layer, position, fn):
+        """Reapply a replacement at each selected forward until explicit handle release.
+
+        ``position="emitted"`` selects only the absolute forwarded generated-token
+        input positions explicitly declared on this forward. It does not infer token
+        provenance from cache shape or treat the final prompt row as a generated token.
+        """
+        number = self._register_intervention(layer, position, fn, "clamp")
+        return ClampHandle(self, number)
+
+    @property
+    def intervention_record(self):
+        """Return detached evidence; zero-based forward indices survive context re-entry."""
+        rows = []
+        for number, item in enumerate(self._interventions):
+            selection = (
+                {"kind": "emitted"}
+                if item.position == "emitted"
+                else {"kind": "absolute", "position": item.position}
+            )
+            rows.append(
+                {
+                    "id": number,
+                    "mode": item.mode,
+                    "layer": item.layer,
+                    "selection": selection,
+                    "released": item.released,
+                    "applications": item.applications,
+                }
+            )
+        return _json_snapshot(rows, "intervention record")
+
     def _replace(self, layer, h):
-        for number, (target, position, fn) in enumerate(self._interventions):
-            local = position - self._offset
-            if target != layer or number in self._applied or not 0 <= local < h.shape[1]:
-                continue
-            replacement = fn(h[0, local].clone())
+        for number, item in enumerate(self._interventions):
             if (
-                not torch.is_tensor(replacement)
-                or replacement.shape != h[0, local].shape
-                or replacement.dtype != h.dtype
-                or replacement.device != h.device
+                item.released
+                or item.layer != layer
+                or (item.mode == "one_shot" and number in self._applied)
             ):
-                raise ValueError("intervention replacement must preserve shape, dtype and device")
-            result = h.clone()
-            result[0, local] = replacement
-            h = result
-            self._applied.add(number)
+                continue
+            positions = self._emitted_positions if item.position == "emitted" else (item.position,)
+            for position in positions:
+                local = position - self._offset
+                if not 0 <= local < h.shape[1]:
+                    continue
+                replacement = item.fn(h[0, local].clone())
+                if (
+                    not torch.is_tensor(replacement)
+                    or replacement.shape != h[0, local].shape
+                    or replacement.dtype != h.dtype
+                    or replacement.device != h.device
+                ):
+                    raise ValueError(
+                        "intervention replacement must preserve shape, dtype and device"
+                    )
+                event = {
+                    "forward_index": self._forward_index,
+                    "cache_offset": self._offset,
+                    "absolute_position": position,
+                }
+                diagnostic = getattr(item.fn, "diagnostic_record", None)
+                if diagnostic is not None:
+                    if not callable(diagnostic):
+                        raise ValueError("intervention diagnostic_record must be callable")
+                    event["diagnostic"] = _json_snapshot(diagnostic(), "intervention diagnostic")
+                result = h.clone()
+                result[0, local] = replacement
+                h = result
+                item.applications.append(event)
+                if item.mode == "one_shot":
+                    self._applied.add(number)
         return h
+
+    def _validate_emitted_positions(self, length):
+        supplied = self._pending_emitted_positions
+        required = any(
+            item.position == "emitted" and not item.released for item in self._interventions
+        )
+        if supplied is _MISSING:
+            if required:
+                raise ValueError(
+                    "active emitted clamp requires emitted_positions on the capture wrapper"
+                )
+            return ()
+        if supplied is None or isinstance(supplied, (str, bytes)):
+            raise ValueError("emitted_positions must be an iterable of absolute integer positions")
+        try:
+            positions = tuple(supplied)
+        except TypeError as error:
+            raise ValueError(
+                "emitted_positions must be an iterable of absolute positions"
+            ) from error
+        if (
+            any(type(position) is not int for position in positions)
+            or len(set(positions)) != len(positions)
+            or any(not self._offset <= position < self._offset + length for position in positions)
+        ):
+            raise ValueError("emitted_positions must be unique integers inside this forward")
+        return positions
 
     def _before_model(self, module, args, kwargs):
         if self._forwarding:
+            self._recursive_rejections += 1
             raise RuntimeError("capture cannot observe recursive model forwards")
         supplied = _arguments(module, args, kwargs)
         ids = supplied.get("input_ids", args[0] if args else None)
@@ -137,13 +283,18 @@ class TorchCapture(ActivationRecorder):
         self.activations.clear()
         self.layer_inputs.clear()
         self.entry_residual = None
-        if self._offset == 0:
-            self._applied.clear()
+        self._emitted_positions = self._validate_emitted_positions(ids.shape[1])
         if any(
-            position < self._offset and i not in self._applied
-            for i, (_, position, _) in enumerate(self._interventions)
+            not item.released
+            and type(item.position) is int
+            and item.position < self._offset
+            and (item.mode == "clamp" or i not in self._applied)
+            for i, item in enumerate(self._interventions)
         ):
             raise ValueError("intervention source is already cached; rebuild from a fresh prefill")
+        if self._offset == 0:
+            self._applied.clear()
+        self._forward_index += 1
         self._forwarding = True
 
     def _before_block(self, index):
@@ -190,6 +341,12 @@ class TorchCapture(ActivationRecorder):
         return hook
 
     def _after_model(self, module, args, kwargs, output):
+        # always_call also runs after a rejected native recursive forward. That
+        # notification must not unlock the still-running outer forward if its
+        # intervention catches the recursive error and continues.
+        if self._recursive_rejections:
+            self._recursive_rejections -= 1
+            return
         self._forwarding = False
         if output is not None:
             logits = (
@@ -202,6 +359,9 @@ class TorchCapture(ActivationRecorder):
     def __call__(self, ids, *args, **kwargs):
         if not self._active:
             raise RuntimeError("native capture must be entered before forwarding")
+        if self._forwarding:
+            raise RuntimeError("capture cannot observe recursive model forwards")
+        emitted_positions = kwargs.pop("emitted_positions", _MISSING)
         if args or "cache" in kwargs:
             if len(args) > 1 or (args and "cache" in kwargs) or "past_key_values" in kwargs:
                 raise TypeError("pass only one cache")
@@ -209,7 +369,11 @@ class TorchCapture(ActivationRecorder):
             kwargs["past_key_values"] = self.view._unwrap_cache(cache)
             kwargs.setdefault("use_cache", cache is not None)
         kwargs.setdefault("use_cache", kwargs.get("past_key_values") is not None)
-        return self.model(input_ids=ids, **kwargs)
+        self._pending_emitted_positions = emitted_positions
+        try:
+            return self.model(input_ids=ids, **kwargs)
+        finally:
+            self._pending_emitted_positions = _MISSING
 
     def __enter__(self):
         if self._active:
@@ -239,6 +403,9 @@ class TorchCapture(ActivationRecorder):
             super().__exit__(*exc)
         finally:
             self._active = self._forwarding = False
+            self._recursive_rejections = 0
             self.activations.clear()
             self.layer_inputs.clear()
             self.entry_residual = self._ids = None
+            self._pending_emitted_positions = _MISSING
+            self._emitted_positions = ()

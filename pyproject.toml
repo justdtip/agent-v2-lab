@@ -42,6 +42,7 @@ cuda = [
 
 [project.scripts]
 lab-check = "local_llm_lab.check_env:main"
+lab-device = "local_llm_lab.device_setup:main"
 lab-chat = "local_llm_lab.chat:main"
 lab-sft = "local_llm_lab.train_sft:main"
 lab-rewards = "local_llm_lab.rewards:main"

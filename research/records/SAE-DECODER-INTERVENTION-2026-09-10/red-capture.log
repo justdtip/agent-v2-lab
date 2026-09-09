@@ -1,0 +1,50 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_emitted_clamp_reapplies_through_cache_and_release_stops_it ________
+
+    def test_emitted_clamp_reapplies_through_cache_and_release_stops_it():
+        view, sink, ids = fixture()
+        expected_prefill = view.model(ids).logits
+        offset = [0]
+        cache = SimpleNamespace(get_seq_length=lambda: offset[0])
+        with TorchCapture(view, sink, layers=(1, 2)) as capture:
+>           handle = capture.clamp(1, "emitted", lambda h: torch.full_like(h, 7))
+                     ^^^^^^^^^^^^^
+
+tests/test_torch_capture.py:283: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/local_llm_lab/torch_capture.py:85: in __getattr__
+    return getattr(self.model, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Model(
+  (embed): Embedding(11, 3)
+  (layers): ModuleList(
+    (0-1): 2 x Block()
+  )
+)
+name = 'clamp'
+
+    def __getattr__(self, name: str) -> Union[Tensor, "Module"]:
+        if "_parameters" in self.__dict__:
+            _parameters = self.__dict__["_parameters"]
+            if name in _parameters:
+                return _parameters[name]
+        if "_buffers" in self.__dict__:
+            _buffers = self.__dict__["_buffers"]
+            if name in _buffers:
+                return _buffers[name]
+        if "_modules" in self.__dict__:
+            modules = self.__dict__["_modules"]
+            if name in modules:
+                return modules[name]
+>       raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
+E       AttributeError: 'Model' object has no attribute 'clamp'
+
+../../Desktop/An app/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1972: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_torch_capture.py::test_emitted_clamp_reapplies_through_cache_and_release_stops_it
+1 failed in 0.36s
