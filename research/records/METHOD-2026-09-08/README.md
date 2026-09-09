@@ -646,3 +646,42 @@ magnitude that agrees across backends. **The rules.** A check reads the property
 that produced it. A patch is verified by grepping for its text, never by a test count. A chain
 commits on the test's exit status, never a pipe's. And every laptop yardstick is re-read on the
 device before it judges anything, since the first hour's job is to find which of them moved.
+
+## Thirty-first: the gate whose reference was a different model, in SWE-1's name
+
+The port's acceptance gate compared the torch bfloat16 implementation against the MLX **4-bit**
+recordings, and failed a run outright on any position where the recording had been at least 99%
+confident and the port disagreed. The reasoning was that quantisation moves near-ties and nothing
+else, so a confident flip has to be a mask, position, entry or norm defect. On the rented card it
+fired **twenty-four times** across 5,245 positions, with eleven of the twenty-four above P = 0.999
+and one at P = 1.000000. It looked exactly like a defect, and the distribution ruled out a
+threshold artefact: a rule crowding the 0.990–0.995 band would have been an instrument problem,
+and this was not that shape.
+
+It was not a defect. Running MLX at **bfloat16** over the same positions resolved twenty-one of
+the twenty-four to quantisation: both bfloat16 implementations produced the same token and only
+the 4-bit recording dissented, the P = 1.000000 case among them. The premise was simply false.
+Four-bit quantisation is not a perturbation of a model, it is a different model, and the recorded
+probability is *that* model's confidence in its own preference. It bounds nothing about the port.
+
+**A gate is only a defect test against a precision-matched reference.** Against a differently
+quantised one it measures the difference between the two precisions, and it will keep firing and
+keep finding nothing, at whatever cost per firing the hardware charges. The check ran clean for a
+day on the one episode anybody had measured, which is the other half of the lesson: a rule
+validated on 103 of 5,245 positions had not been validated.
+
+The three that survived taught the second rule. Measured as a **probability margin** they read
+0.12 to 0.64 and the instrument called all three "not a tie", which would have sent the team
+hunting a defect that was not there. But the logits are bfloat16, so the gaps between candidates
+are quantised to the bfloat16 grid, and softmax being monotone, `ln(p1/p2)` recovers the logit gap
+exactly without keeping the logits. Every gap came back an exact multiple of 0.25 — the bfloat16
+step at that magnitude, which is the check that it is the right grid — and the three sat at 0, 2
+and 1–3 units of last place. At one the reference's own top two were **exactly equal**: the argmax
+was settling a coin toss, and which side the port landed is not information about the port.
+
+**The rules.** A confident-flip check is a defect test only when the reference runs the port's
+precision; against anything else it reports observations and refuses to yield a verdict, in the
+type rather than in a comment. A disagreement whose gap on the reference lies within two ULPs of
+the dtype the logits are stored in is a **tie**: counted and reported as a tie, never as a flip
+and never folded into agreement. And a margin is measured in ULPs of the stored dtype, never as a
+probability, because probability hides the grid the numbers actually live on.

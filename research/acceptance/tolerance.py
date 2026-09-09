@@ -59,6 +59,49 @@ __all__ = [
 #: A flip at or above this recorded probability is a defect and not a rounding difference.
 HARD_CONFIDENCE = 0.99
 
+#: A disagreement is a **tie** when the reference's own top-two gap is within this many units of
+#: last place of the dtype its logits are stored in. Ruled 2026-09-10 after the gate fired
+#: twenty-four times and found nothing: below this the reference is itself settling a coin toss,
+#: so which side the port lands is not information about the port.
+TIE_ULPS = 2
+
+
+class NotADefectTest(RuntimeError):
+    """Raised when a comparison is asked for a verdict it is not entitled to give."""
+
+
+@dataclass(frozen=True)
+class Reference:
+    """What the port is being compared against, and whether that is a defect test at all.
+
+    A confident flip is evidence of a defect only when the reference runs the **same precision**
+    as the port. Against a differently quantised recording the check measures quantisation: the
+    recorded probability is the quantised model's confidence in its own preference and does not
+    bound what the port will do. This programme established that empirically -- twenty-four
+    confident flips against a 4-bit recording, of which twenty-one were the quantisation and
+    three were ties -- so the type refuses the verdict rather than leaving it to a reader.
+    """
+
+    name: str
+    precision_matched: bool
+
+    def __str__(self) -> str:
+        return self.name
+
+
+#: The stage-two recordings. Not a defect test: it is 4-bit and the port is bfloat16.
+MLX_4BIT = Reference("mlx-4bit", precision_matched=False)
+#: The re-based reference, bfloat16 against bfloat16.
+MLX_BF16 = Reference("mlx-bf16", precision_matched=True)
+
+
+def bf16_ulp(magnitude: float) -> float:
+    """The spacing of bfloat16 near ``magnitude``: 7 mantissa bits, so 2**(exponent - 7)."""
+    if magnitude == 0:
+        return 2.0**-133
+    return 2.0 ** (math.floor(math.log2(abs(magnitude))) - 7)
+
+
 #: Rows ranked per block when reading logits. Small enough that the float32 copy is tens of
 #: megabytes rather than gigabytes; large enough that the loop is not the cost.
 _RANK_ROWS = 256
@@ -73,12 +116,26 @@ class Flip:
     recorded: int
     produced: int
     recorded_probability: float | None
+    #: The reference's own top-two gap at this position, in ULPs of its logit dtype. ``None``
+    #: when the reference cannot say, which is every reference that only recorded a token.
+    reference_gap_ulps: float | None = None
 
     @property
-    def hard(self) -> bool:
+    def tie(self) -> bool:
+        """The reference could not tell its own top two apart at the resolution it stores them."""
+        return self.reference_gap_ulps is not None and self.reference_gap_ulps <= TIE_ULPS
+
+    @property
+    def confident(self) -> bool:
+        """Whether the *recording* was confident here. Descriptive, never a verdict."""
         return (
             self.recorded_probability is not None and self.recorded_probability >= HARD_CONFIDENCE
         )
+
+    @property
+    def hard(self) -> bool:
+        """A disagreement the reference was in a position to have an opinion about."""
+        return self.confident and not self.tie
 
     def describe(self) -> str:
         probability = (
@@ -86,10 +143,15 @@ class Flip:
             if self.recorded_probability is None
             else f"P={self.recorded_probability:.6f}"
         )
-        severity = "HARD" if self.hard else "soft"
+        severity = "TIE" if self.tie else ("HARD" if self.hard else "soft")
+        gap = (
+            ""
+            if self.reference_gap_ulps is None
+            else f", reference gap {self.reference_gap_ulps:.1f} ULP"
+        )
         return (
             f"[{severity}] turn {self.turn} position {self.position}: recorded "
-            f"{self.recorded} ({probability}), produced {self.produced}"
+            f"{self.recorded} ({probability}), produced {self.produced}{gap}"
         )
 
 
@@ -102,26 +164,55 @@ class AgreementReport:
     agreed: int
     flips: list[Flip] = field(default_factory=list)
     unrecorded_probability: int = 0
+    #: What this comparison is against. The default is the stage-two recording, which is not a
+    #: defect test, so a caller that wants a verdict has to say what it compared with.
+    reference: Reference = MLX_4BIT
 
     @property
     def rate(self) -> float:
         return self.agreed / self.compared if self.compared else 0.0
 
     @property
+    def ties(self) -> list[Flip]:
+        """Disagreements the reference could not tell apart: never a flip, never agreement."""
+        return [flip for flip in self.flips if flip.tie]
+
+    @property
     def hard_flips(self) -> list[Flip]:
+        """Disagreements that are not ties and that the recording was confident about."""
         return [flip for flip in self.flips if flip.hard]
 
     @property
     def passed(self) -> bool:
-        """One hard flip fails the run. Soft flips are reported, not gated."""
+        """Whether this run passes, which only a precision-matched comparison may be asked.
+
+        Against a differently quantised reference this raises rather than answering. The
+        alternative is what happened on 2026-09-10: a green or red light from a check that was
+        measuring the reference's quantisation, read by everyone downstream as a statement
+        about the port.
+        """
+        if not self.reference.precision_matched:
+            raise NotADefectTest(
+                f"a comparison against {self.reference} is not a defect test and has no verdict: "
+                f"the reference is not precision-matched with the port, so a disagreement "
+                f"measures the difference between the two precisions. It reports "
+                f"{len(self.hard_flips)} confident disagreements and {len(self.ties)} ties as "
+                f"observations. Re-run against a precision-matched reference for a verdict."
+            )
         return not self.hard_flips
 
     def describe(self) -> str:
         lines = [
             f"{self.label}: {self.agreed}/{self.compared} argmax agree "
             f"({self.rate:.6f}), {len(self.flips)} flips, "
-            f"{len(self.hard_flips)} of them at P >= {HARD_CONFIDENCE}"
+            f"{len(self.hard_flips)} of them at P >= {HARD_CONFIDENCE} and not ties, "
+            f"{len(self.ties)} ties, against {self.reference}"
         ]
+        if not self.reference.precision_matched:
+            lines.append(
+                f"  not a defect test: {self.reference} is not precision-matched with the port, "
+                "so these disagreements measure the two precisions and not the port"
+            )
         if self.unrecorded_probability:
             lines.append(
                 f"  {self.unrecorded_probability} compared positions carried no recorded "
@@ -219,36 +310,51 @@ class JaccardReport:
 
 
 def teacher_forced_agreement(
-    episode, produced_argmax: dict[tuple[int, int], int]
+    episode,
+    produced_argmax: dict[tuple[int, int], int],
+    *,
+    reference: Reference = MLX_4BIT,
+    readings: dict[tuple[int, int], tuple[int, float | None]] | None = None,
 ) -> AgreementReport:
-    """Compare a ported argmax against the recorded one at every emitted position.
+    """Compare a ported argmax against the reference's at every emitted position.
 
     ``produced_argmax`` is keyed by ``(turn index, emitted position)`` and holds the argmax the
     ported backend produced when fed the recorded prefix up to that position. Teacher forcing is
     what makes each position an independent comparison; under free running one flip decides
     everything after it and the count stops meaning anything.
+
+    ``readings`` re-bases the comparison. Without it the expected token is the stage-two
+    recording's, which is 4-bit and therefore not a defect test. With it the expected token and
+    the tie gap both come from the precision-matched reference, and a position the reference has
+    no answer for is not compared rather than silently compared against the old one.
     """
-    report = AgreementReport(label=episode.label, compared=0, agreed=0)
+    report = AgreementReport(label=episode.label, compared=0, agreed=0, reference=reference)
     for turn in episode.turns:
         for emission in turn.emissions:
             key = (turn.index, emission.position)
             if key not in produced_argmax:
                 continue
+            reading = None if readings is None else readings.get(key)
+            if readings is not None and reading is None:
+                continue
+            expected = emission.token_id if reading is None else reading[0]
+            gap = None if reading is None else reading[1]
             report.compared += 1
             produced = produced_argmax[key]
             probability = turn.emitted_confidence(emission.position)
             if probability is None:
                 report.unrecorded_probability += 1
-            if produced == emission.token_id:
+            if produced == expected:
                 report.agreed += 1
             else:
                 report.flips.append(
                     Flip(
                         turn=turn.index,
                         position=emission.position,
-                        recorded=emission.token_id,
+                        recorded=expected,
                         produced=produced,
                         recorded_probability=probability,
+                        reference_gap_ulps=gap,
                     )
                 )
     return report
@@ -389,6 +495,32 @@ def teacher_forced_run(episode, forward, *, top_k: int = 5):
     return produced_argmax, produced_top
 
 
+def load_reference(path) -> tuple[Reference, dict[str, dict[tuple[int, int], tuple[int, float]]]]:
+    """Read the precision-matched reference written by ``scripts/mlx_reference.py``.
+
+    Returns the reference descriptor and, per episode label, a ``(turn, position)`` map to the
+    reference's own token and its top-two gap in ULPs. The descriptor comes from the file rather
+    than from the caller, so a file that does not declare itself precision-matched cannot be
+    used to obtain a verdict.
+    """
+    import json
+    from pathlib import Path
+
+    payload = json.loads(Path(path).read_text())
+    name = payload.get("reference")
+    if name != MLX_BF16.name:
+        raise ValueError(
+            f"reference file declares {name!r}; this loader knows {MLX_BF16.name!r}, and a "
+            "reference whose precision is not known cannot be read as a defect test"
+        )
+    readings: dict[str, dict[tuple[int, int], tuple[int, float]]] = {}
+    for label, rows in payload["episodes"].items():
+        readings[label] = {
+            (row["turn"], row["position"]): (row["token"], row["gap_ulps"]) for row in rows
+        }
+    return MLX_BF16, readings
+
+
 def run_tolerance(
     episode,
     forward,
@@ -397,6 +529,8 @@ def run_tolerance(
     free_running: Sequence | None = None,
     floor: int = 16,
     decoding: object = "greedy",
+    reference: Reference = MLX_4BIT,
+    readings: dict[tuple[int, int], tuple[int, float | None]] | None = None,
 ) -> ToleranceReport:
     """The G-2(b) statistics for one episode, from a teacher-forced pass over its records.
 
@@ -409,7 +543,9 @@ def run_tolerance(
     require_greedy(decoding, where="the tolerance runner (G-2b)")
     produced_argmax, produced_top = teacher_forced_run(episode, forward, top_k=top_k)
     return ToleranceReport(
-        agreement=teacher_forced_agreement(episode, produced_argmax),
+        agreement=teacher_forced_agreement(
+            episode, produced_argmax, reference=reference, readings=readings
+        ),
         jaccard=top_k_jaccard(episode, produced_top, k=top_k),
         divergence=None if free_running is None else divergence_indices(free_running, floor=floor),
     )

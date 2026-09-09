@@ -104,7 +104,16 @@ def _episode_row(episode, report, elapsed: float) -> dict:
     }
 
 
-def run_episodes(episodes, forward, *, top_k: int = 5, per_episode: Path | None = None):
+def run_episodes(
+    episodes,
+    forward,
+    *,
+    top_k: int = 5,
+    per_episode: Path | None = None,
+    reference=None,
+    readings=None,
+):
+    """``reference`` defaults to the stage-two recording, which is not a defect test."""
     """Read every episode, writing each result the moment it is finished.
 
     The first version of this accumulated everything and wrote once at the end, with stdout
@@ -115,16 +124,26 @@ def run_episodes(episodes, forward, *, top_k: int = 5, per_episode: Path | None 
 
     So the contract is: whatever finished is on disk, whatever the run does next.
     """
+    reference = reference or tolerance.MLX_4BIT
     reports = []
     for index, episode in enumerate(episodes, 1):
         print(f"\n[{index}/{len(episodes)}] {episode.label} ...", flush=True)
         started = time.monotonic()
-        report = tolerance.run_tolerance(episode, forward, top_k=top_k)
+        report = tolerance.run_tolerance(
+            episode,
+            forward,
+            top_k=top_k,
+            reference=reference,
+            readings=None if readings is None else readings.get(episode.label, {}),
+        )
         elapsed = time.monotonic() - started
         print(f"{episode.label}  ({elapsed:.1f}s)")
         print(f"  {report.agreement.describe()}")
         print(f"  {report.jaccard.describe()}")
-        print(f"  gate: {'PASS' if report.passed else 'FAIL'}", flush=True)
+        try:
+            print(f"  gate: {'PASS' if report.passed else 'FAIL'}", flush=True)
+        except tolerance.NotADefectTest:
+            print("  gate: not a defect test against this reference", flush=True)
         reports.append((episode, report, elapsed))
         if per_episode is not None:
             with per_episode.open("a") as stream:
@@ -251,6 +270,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--json", type=Path, help="write the report here")
     parser.add_argument(
+        "--reference",
+        type=Path,
+        help="a precision-matched reference from scripts/mlx_reference.py. Without it the "
+        "comparison is against the 4-bit stage-two recording, which is not a defect test and "
+        "reports observations rather than a verdict",
+    )
+    parser.add_argument(
         "--decoding",
         choices=("greedy", "sampled"),
         default="greedy",
@@ -265,6 +291,17 @@ def main(argv: list[str] | None = None) -> int:
             require_greedy(arguments.decoding, where="the tolerance runner")
         except ValueError as error:
             parser.error(str(error))
+
+    reference, readings = tolerance.MLX_4BIT, None
+    if arguments.reference:
+        reference, readings = tolerance.load_reference(arguments.reference)
+        print(f"reference: {reference} (precision-matched: {reference.precision_matched})")
+    else:
+        print(
+            f"reference: {reference} -- NOT a defect test. The recording is 4-bit and the port "
+            "is bfloat16, so disagreements measure the two precisions. Pass --reference for a "
+            "verdict."
+        )
 
     episodes = golden.load_episodes(arguments.records)
     if arguments.episode:
@@ -299,7 +336,14 @@ def main(argv: list[str] | None = None) -> int:
     per_episode = arguments.json.with_suffix(".jsonl") if arguments.json else None
     with TorchCapture(view, _Sink(), layers=(view.num_layers,)) as wrapped:
         forward = tolerance.torch_forward_rows(wrapped, view, top_k=arguments.top_k)
-        reports = run_episodes(episodes, forward, top_k=arguments.top_k, per_episode=per_episode)
+        reports = run_episodes(
+            episodes,
+            forward,
+            top_k=arguments.top_k,
+            per_episode=per_episode,
+            reference=reference,
+            readings=readings,
+        )
 
     peak = _peak_gib(target)
     if peak is not None:
@@ -308,12 +352,18 @@ def main(argv: list[str] | None = None) -> int:
     compared = sum(report.agreement.compared for _, report, _ in reports)
     agreed = sum(report.agreement.agreed for _, report, _ in reports)
     hard = sum(len(report.agreement.hard_flips) for _, report, _ in reports)
+    ties = sum(len(report.agreement.ties) for _, report, _ in reports)
     print("\n" + "=" * 78)
     print(
         f"teacher-forced argmax agreement {agreed}/{compared} "
         f"({agreed / compared if compared else 0:.6f}); "
-        f"{hard} flips at P >= {tolerance.HARD_CONFIDENCE}; "
-        f"gate {'PASS' if hard == 0 else 'FAIL'}"
+        f"{hard} flips at P >= {tolerance.HARD_CONFIDENCE} and not ties; {ties} ties; "
+        + (
+            f"gate {'PASS' if hard == 0 else 'FAIL'}"
+            if reference.precision_matched
+            else f"NOT A DEFECT TEST against {reference}: these are observations about two "
+            "precisions, not a verdict about the port"
+        )
     )
 
     if arguments.json:
@@ -328,7 +378,10 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     "compared": provenance.Measured(compared, provenance.MEASURED_HERE).as_dict(),
                     "agreed": provenance.Measured(agreed, provenance.MEASURED_HERE).as_dict(),
+                    "reference": reference.name,
+                    "precision_matched": reference.precision_matched,
                     "hard_flips": provenance.Measured(hard, provenance.MEASURED_HERE).as_dict(),
+                    "ties": provenance.Measured(ties, provenance.MEASURED_HERE).as_dict(),
                     **(
                         {}
                         if peak is None

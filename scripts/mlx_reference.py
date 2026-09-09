@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -106,6 +107,70 @@ def mlx_argmax_rows(model: Any) -> Any:
         return [(int(token), ()) for token in argmax.tolist()]
 
     return forward
+
+
+def bf16_ulp(magnitude: float) -> float:
+    """The spacing of bfloat16 near ``magnitude``: 7 mantissa bits, so 2**(exponent - 7)."""
+    if magnitude == 0:
+        return 2.0**-133
+    return 2.0 ** (math.floor(math.log2(abs(magnitude))) - 7)
+
+
+def reference_rows(model: Any, episode: Any) -> list[dict]:
+    """The reference's own answer at every deciding position, with its top-two gap.
+
+    The gap is what the tie rule reads. It is measured in units of last place of the dtype the
+    logits are stored in, because that is the resolution at which two candidates can be told
+    apart at all: a gap of nought means the reference itself is settling a coin toss, and a
+    disagreement there says nothing about the port.
+    """
+    import mlx.core as mx
+
+    rows: list[dict] = []
+    for turn in episode.turns:
+        sequence = list(turn.prompt_ids) + list(turn.token_ids)
+        logits = model(mx.array(sequence)[None])[0]
+        top1 = mx.max(logits, axis=-1)
+        argmax = mx.argmax(logits, axis=-1)
+        # Second-best by masking the winner, which needs no sort over a 262k vocabulary.
+        masked = mx.where(mx.arange(logits.shape[-1])[None, :] == argmax[:, None], -mx.inf, logits)
+        top2 = mx.max(masked, axis=-1)
+        mx.eval(top1, top2, argmax)
+        top1_list, top2_list, argmax_list = top1.tolist(), top2.tolist(), argmax.tolist()
+        for emission in turn.emissions:
+            index = emission.position - 1
+            best, second = float(top1_list[index]), float(top2_list[index])
+            gap = best - second
+            rows.append(
+                {
+                    "turn": turn.index,
+                    "position": emission.position,
+                    "token": int(argmax_list[index]),
+                    "gap": gap,
+                    "gap_ulps": gap / bf16_ulp(best),
+                }
+            )
+    return rows
+
+
+def build_reference(episodes, model, *, per_episode: Path | None) -> dict[str, list[dict]]:
+    """Every episode's reference rows, written as each episode completes."""
+    out: dict[str, list[dict]] = {}
+    for index, episode in enumerate(episodes, 1):
+        started = time.monotonic()
+        rows = reference_rows(model, episode)
+        ties = sum(1 for row in rows if row["gap_ulps"] <= 2)
+        print(
+            f"[{index}/{len(episodes)}] {episode.label}: {len(rows)} positions, "
+            f"{ties} of them within 2 ULP ({time.monotonic() - started:.1f}s)",
+            flush=True,
+        )
+        out[episode.label] = rows
+        if per_episode is not None:
+            with per_episode.open("a") as stream:
+                stream.write(json.dumps({"episode": episode.label, "positions": rows}) + "\n")
+                stream.flush()
+    return out
 
 
 def _verdict(recorded: int, torch_token: int, mlx_token: int) -> str:
@@ -187,14 +252,65 @@ class _EpisodeView:
         return getattr(self._episode, name)
 
 
+def _build(arguments: Any) -> int:
+    """Build the precision-matched reference over every episode."""
+    from local_llm_lab.models import load_model_spec
+
+    episodes = golden.load_episodes(arguments.records)
+    print(f"building the reference over {len(episodes)} episodes")
+    projection = provenance.Measured(
+        9.0,
+        provenance.EXPECTED,
+        basis="7.3 GiB MLX bfloat16 weights plus ~1.4 GiB of logits for the longest turn "
+        "(2,607 positions x 262,208 vocab at bf16), plus overhead",
+        unit="GiB",
+    )
+    print(f"projected peak: {projection.as_dict()}")
+
+    _require_own_window()
+    checkpoint = arguments.checkpoint or Path(load_model_spec(REFERENCE_ENTRY).hf_id)
+    model, _ = _load(checkpoint)
+
+    started = time.monotonic()
+    rows = build_reference(episodes, model, per_episode=arguments.reference.with_suffix(".jsonl"))
+    total = sum(len(v) for v in rows.values())
+    ties = sum(1 for v in rows.values() for row in v if row["gap_ulps"] <= 2)
+    print(f"\n{total} positions, {ties} within 2 ULP ({ties / total:.4%})")
+    arguments.reference.write_text(
+        json.dumps(
+            {
+                "what": "the precision-matched reference: MLX bfloat16's own token at every "
+                "deciding position, with the top-two gap that the tie rule reads",
+                "reference": "mlx-bf16",
+                "checkpoint": str(checkpoint),
+                "projected_peak": projection.as_dict(),
+                "positions": provenance.Measured(total, provenance.MEASURED_HERE).as_dict(),
+                "within_2_ulp": provenance.Measured(ties, provenance.MEASURED_HERE).as_dict(),
+                "seconds": provenance.Measured(
+                    round(time.monotonic() - started, 1), provenance.MEASURED_HERE, unit="s"
+                ).as_dict(),
+                "episodes": rows,
+            },
+            indent=1,
+        )
+        + "\n"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--records", type=Path, required=True)
     parser.add_argument(
         "--flips",
         type=Path,
-        required=True,
         help="confident-flips.json from the device run: the positions to resolve",
+    )
+    parser.add_argument(
+        "--reference",
+        type=Path,
+        help="build the precision-matched reference instead: every deciding position of every "
+        "episode, with the reference's own token and its top-two gap in ULPs",
     )
     parser.add_argument("--checkpoint", type=Path, help="overrides the registry entry")
     parser.add_argument("--json", type=Path, help="write the report here")
@@ -205,6 +321,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
 
+    if arguments.reference:
+        return _build(arguments)
+    if not arguments.flips:
+        parser.error("pass --flips to resolve positions, or --reference to build the reference")
     flips = json.loads(arguments.flips.read_text())["positions"]
     by_episode: dict[str, list[dict]] = {}
     for flip in flips:
