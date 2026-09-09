@@ -393,8 +393,25 @@ meets a lens whose ν does not say what it was fitted in, and when the two disag
 is not a refusal**: that is every lens fitted before the ruling, upstream's hosted one included,
 and the record then says the fit precision is undeclared rather than pretending to have checked
 it. Where a float32 lens is read against a native capture, the reading carries the path difference
-as a declared term, the first hour's promoted floor of 1.24% at 64 tokens, marked declared rather
-than measured here. It is absent when there is no path difference to pay for.
+as a declared **crossing** whose size is unmeasured. It is absent when there is no path difference
+to pay for.
+
+That last part is a correction to what I first built, and the correction is Codex's (WS-A width
+audit, W3, `d037454`). I had recorded the first hour's promoted floor, 1.24% at 64 tokens, as the
+declared figure for the crossing. It is not one. A residual-relative difference does not bound a
+readout-relative one, because the readout's own denominator can be small: for a fixed linear `L`,
+`norm(L dh) <= opnorm(L) norm(dh)` bounds the numerator and says nothing about `norm(L h)`, and
+with `h = (100, 1)`, `dh = (0, 1)` and `L` selecting the second coordinate the residual moves 1%
+while the readout moves 100%. This bridge then ranks through a nonlinear normaliser and a
+thresholded dictionary, which adds more of the same question. The figure is also not a single
+number: the same promoted floor reads 1.2386% at 64 tokens on both backends and 69.4% at 1,400
+tokens on CUDA against 6.9% on the CPU.
+
+So `LENS_PATH_TERM` now carries `measured: false`, both figures as historical context **with their
+lengths and backends**, why a residual percentage cannot answer the question, and what would:
+a paired comparison at the reading's own positions and context. When that measurement exists the
+bridge records it in place of the statement. A test asserts the shape, including that no bare
+number sits at the top level where a reader could lift it out as an error bar.
 
 Two things this does not do. It does not gate the widths: what a Jacobian is a Jacobian *of* is
 the fitter's gate, and a second copy in the bridge would be a worse one. And it does not change

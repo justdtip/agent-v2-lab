@@ -682,16 +682,42 @@ def test_both_silent_is_recorded_as_undeclared_rather_than_refused(parts):
     assert "path_term" not in record
 
 
-def test_a_float32_lens_on_a_native_capture_carries_the_declared_path_term():
+def test_a_float32_lens_on_a_native_capture_records_the_crossing_as_unmeasured():
+    """W3: the crossing is declared, its size is not known, and no figure stands in for it."""
     record = B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="native")
     assert record["status"] == "declared"
     assert record["forward_batch"] == 1 and record["anchor_batch"] == 1
-    assert record["path_term"]["relative"] == 0.0124
-    assert record["path_term"]["at"] == "64 tokens"
-    assert "declared" in record["path_term"]["basis"]
-    # The term is the cost of the *path difference*: no difference, no term.
+    term = record["path_term"]
+    assert term["measured"] is False
+    assert term["status"] == "unmeasured for this reading"
+    # No top-level number: a reader cannot lift one out and use it as an error bar. `measured`
+    # is excluded by name rather than by type, because a bool *is* an int in Python and a type
+    # test alone would either pass vacuously or fail on the flag it exists to keep.
+    numeric = {
+        key: value
+        for key, value in term.items()
+        if key != "measured" and isinstance(value, (int, float))
+    }
+    assert numeric == {}
+    assert "denominator" in term["why"] and "thresholded dictionary" in term["why"]
+    assert term["to_measure"].startswith("a paired comparison")
+
+    # Both historical figures travel with their lengths, and neither is offered as the term.
+    context = {entry["at_tokens"]: entry for entry in term["historical_context"]}
+    assert set(context) == {64, 1400}
+    assert context[64]["relative"] == 0.0124
+    assert context[1400]["relative"] == 0.694
+    assert "CUDA" in context[1400]["note"] and "6.9%" in context[1400]["note"]
+    assert all("residual-relative" in entry["quantity"] for entry in context.values())
+    assert "not a calibrated term" in term["context_basis"]
+
+    # The crossing is what triggers it: no crossing, nothing to declare.
     same = B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="float32")
     assert "path_term" not in same
+
+    # A defensive copy, so an artefact cannot edit the declaration for every later reading.
+    record["path_term"]["measured"] = True
+    assert B.LENS_PATH_TERM["measured"] is False
 
 
 def test_the_fit_precision_lands_in_the_provenance_block(parts):
@@ -701,7 +727,7 @@ def test_the_fit_precision_lands_in_the_provenance_block(parts):
         d, lens, u, 10, dictionary_repo="r", dictionary_folder="f", fit_precision=record
     )
     assert block["lens"]["fit_precision"]["fit_dtype"] == "float32"
-    assert block["lens"]["fit_precision"]["path_term"]["relative"] == 0.0124
+    assert block["lens"]["fit_precision"]["path_term"]["measured"] is False
     # Absent by default, so an artefact that did not check cannot look as though it had.
     plain = B.bridge_provenance(d, lens, u, 10, dictionary_repo="r", dictionary_folder="f")
     assert plain["lens"]["fit_precision"] is None
