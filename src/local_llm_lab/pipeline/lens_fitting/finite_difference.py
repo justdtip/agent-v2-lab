@@ -189,7 +189,13 @@ def fit_finite_difference_jacobian(
     skipped: list[dict] = []
     epsilons: dict[int, list[float]] = {layer: [] for layer in sources}
     n_done = 0
-    basis = torch.eye(d_model, dtype=torch.float32)
+    # On the compute device, not on the CPU the fixture happens to use. The basis, the position
+    # mask and the perturbation all meet the model's activations, and a CPU tensor meeting a CUDA
+    # one raises at the first real fit rather than at any test on a CPU-only box (found on the
+    # card, 2026-09-11). The accumulator stays on the CPU in float64 deliberately: it is the one
+    # tensor whose precision decides the result and the one that is cheap to keep off the device.
+    compute_device = torch.device(observed["device"])
+    basis = torch.eye(d_model, dtype=torch.float32, device=compute_device)
 
     for row in rows:
         if max_rows is not None and n_done >= max_rows:
@@ -200,7 +206,7 @@ def fit_finite_difference_jacobian(
         wrapped.register(key, row["ids"])
         ids = wrapped.encode(key, max_length=max_seq_len)
         seq_len = int(ids.shape[1])
-        mask = _valid_positions(up, seq_len, skip, position_selector)
+        mask = _valid_positions(up, seq_len, skip, position_selector).to(compute_device)
         positions = torch.nonzero(mask, as_tuple=False).reshape(-1).tolist()
         if not positions:
             # Counted, never absorbed into a smaller n that still returns a lens. Upstream refuses
@@ -252,7 +258,9 @@ def fit_finite_difference_jacobian(
                         # upstream's default mask drops the last one and summing past it would be
                         # a different estimator that no ν field records.
                         delta = ((both[0] - both[1])[:, mask, :]).sum(dim=1) / (2.0 * epsilon)
-                        accumulated[:, start : start + width] += delta.T.to(torch.float64)
+                        accumulated[:, start : start + width] += delta.T.to(
+                            device="cpu", dtype=torch.float64
+                        )
                 running[layer] += (accumulated / len(positions)).numpy()
 
         n_done += 1
