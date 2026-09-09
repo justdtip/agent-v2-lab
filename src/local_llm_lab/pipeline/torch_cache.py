@@ -31,6 +31,21 @@ Both report an offset of 6. One of them has the six tokens; the other has one an
 over a five-token hole with no error anywhere. So :func:`enable_rollback` refuses a cache that
 has already advanced, rather than arming it and returning a number that looks like success.
 
+**What decides whether a strategy is used is fidelity, not memory.** Arming rollback costs
+2.15x on the KV cache at 2,749 positions (see :func:`enable_rollback`), and that is 2.15x of a
+small base: read off the loaded config, this checkpoint is 4 KiB per layer per token, 136 KiB
+per token across 34 layers, so 178 MB bounded against 383 MB armed. Inside the laptop's cap and
+nothing on an 80 GB card. ``head_dim`` is the class default of 256 because the checkpoint's
+config leaves it null, which is worth saying because deriving it from hidden size over heads
+gives 320 and figures that are 25% too large.
+
+So the gate is behavioural. Each strategy is an arm of the same acceptance gate as ``none`` and
+must reproduce the ``none`` trajectories **byte for byte within one backend**. A strategy that
+changes a single token is a defect and not a speed setting, because a rewindable sliding cache
+is exactly where the stored keys and the attention mask can part company. That gate cannot run
+until the tolerance runner has a ``none`` baseline against the real view, which is why
+``make_turn_cache`` refuses all three meanwhile.
+
 ``history`` is not implemented here. It is Qwen 3.5's strategy, it carries snapshot files and a
 generation-model proxy, and none of that is exercised by the golden records. It is named in
 this docstring so its absence is a decision rather than an oversight.

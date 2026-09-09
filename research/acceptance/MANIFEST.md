@@ -153,12 +153,24 @@ context length; armed, it stores everything, because rolling back needs the past
 that is 29 of 34 layers, and at 2,749 positions against a 1,024 window the whole KV cache goes
 to **2.15x**. Below the window it costs nothing, so a short calibration misses it entirely.
 
-The ratio is quoted rather than an absolute size: the ratio depends only on the layer counts and
-the window, while megabytes depend on `head_dim`, which this checkpoint's config leaves null.
+Read off the loaded config, `head_dim` is the class default of **256** because the checkpoint's
+own config leaves it null. Deriving it from hidden size over attention heads gives 320 and
+figures 25% too large, which is why the first version of this section quoted the ratio alone.
 
-**So `trim` is a rewindable cache and a rewindable cache is not free on this model.** Whether
-2.15x is worth the prefix reuse on a 10.656 GiB box is a ruling, not an implementation choice,
-and it is open.
+| positions | bounded | rollback-armed | ratio |
+|---:|---:|---:|---:|
+| 1,024 | 142.6 MB | 142.6 MB | 1.000x |
+| 2,749 | 177.9 MB | 382.8 MB | 2.152x |
+
+**And the ruling is that memory does not decide this.** 2.15x of 178 MB is inside the laptop's
+cap and nothing on an 80 GB card. **The deciding question is fidelity**: each strategy is an arm
+of the same acceptance gate as `none` and must reproduce the `none` trajectories byte for byte
+within one backend. A strategy that changes a single token is a defect and not a speed setting,
+because a rewindable sliding cache is exactly where the stored keys and the attention mask can
+part company.
+
+That gate cannot run until the tolerance runner has a `none` baseline against the real view, so
+`make_turn_cache` keeps refusing until then.
 
 ## Corrections taken from the survey, and one sent back
 
@@ -230,7 +242,7 @@ entry of, and the two `test_repository_rules` guards.
 | gate 6 entirely | WS-A's view and the hosted lens read path |
 | every G-2 tolerance statistic | a produced side from a loaded backend |
 | the readout band's actual value | both backends live on the same prefix |
-| `trim` and `snapshot` wired into `make_turn_cache` on torch | **a ruling, not an implementation step.** Both are built and tested against the real `DynamicCache` at `66d14af`; what is open is whether the 2.15x cache growth that rollback costs is worth the prefix reuse on a 10.656 GiB box. `make_turn_cache` refuses all three meanwhile. |
+| `trim` and `snapshot` wired into `make_turn_cache` on torch | the `none` baseline from the tolerance runner against the real view. Both strategies are built and tested against the real `DynamicCache` at `66d14af`; each then runs as its own arm of the same gate and must reproduce the `none` trajectories byte for byte within one backend. `make_turn_cache` refuses all three meanwhile. |
 | `history` on torch | not implemented. Qwen 3.5's strategy, carrying snapshot files and a generation-model proxy, and the golden records never exercise it. |
 | `attn_implementation="eager"` on the replay model | WS-A's loading path |
 
