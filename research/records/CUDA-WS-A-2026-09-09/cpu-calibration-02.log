@@ -1,0 +1,46 @@
+{"phase": "before_load", "rss_bytes": 182681600, "process_peak_bytes": 344899584, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+Loading weights:   0%|          | 0/444 [00:00<?, ?it/s]Loading weights: 100%|██████████| 444/444 [00:00<00:00, 13225.70it/s]
+[transformers] [1mGemma3ForCausalLM LOAD REPORT[0m from: /Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767
+Key                                                                         | Status     |  | 
+----------------------------------------------------------------------------+------------+--+-
+vision_tower.vision_model.encoder.layers.{0...26}.layer_norm2.weight        | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.out_proj.bias   | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.mlp.fc1.weight            | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.q_proj.weight   | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.k_proj.bias     | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.layer_norm1.bias          | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.layer_norm2.bias          | UNEXPECTED |  | 
+vision_tower.vision_model.post_layernorm.weight                             | UNEXPECTED |  | 
+multi_modal_projector.mm_input_projection_weight                            | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.q_proj.bias     | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.out_proj.weight | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.mlp.fc2.weight            | UNEXPECTED |  | 
+vision_tower.vision_model.post_layernorm.bias                               | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.mlp.fc2.bias              | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.k_proj.weight   | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.v_proj.bias     | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.self_attn.v_proj.weight   | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.layer_norm1.weight        | UNEXPECTED |  | 
+vision_tower.vision_model.encoder.layers.{0...26}.mlp.fc1.bias              | UNEXPECTED |  | 
+vision_tower.vision_model.embeddings.patch_embedding.bias                   | UNEXPECTED |  | 
+vision_tower.vision_model.embeddings.position_embedding.weight              | UNEXPECTED |  | 
+vision_tower.vision_model.embeddings.patch_embedding.weight                 | UNEXPECTED |  | 
+multi_modal_projector.mm_soft_emb_norm.weight                               | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+{"phase": "after_load", "rss_bytes": 291045376, "process_peak_bytes": 344899584, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "gate_1_structure", "rss_bytes": 291094528, "process_peak_bytes": 344899584, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "64/before_normal", "rss_bytes": 291094528, "process_peak_bytes": 344899584, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "64/normal", "rss_bytes": 6555811840, "process_peak_bytes": 6725304320, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "64/before_rotary_rounding", "rss_bytes": 6560088064, "process_peak_bytes": 6725304320, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "64/rotary_rounding", "rss_bytes": 6046728192, "process_peak_bytes": 6725304320, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "64/before_mask_dispatch_control", "rss_bytes": 6051135488, "process_peak_bytes": 6725304320, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "64/mask_dispatch_control", "rss_bytes": 7014924288, "process_peak_bytes": 7038189568, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "1400/before_normal", "rss_bytes": 7018971136, "process_peak_bytes": 7038189568, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "1400/normal", "rss_bytes": 2745024512, "process_peak_bytes": 7308066816, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "1400/before_rotary_rounding", "rss_bytes": 2749153280, "process_peak_bytes": 7308066816, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "1400/rotary_rounding", "rss_bytes": 5705023488, "process_peak_bytes": 7308066816, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "1400/before_mask_dispatch_control", "rss_bytes": 5709217792, "process_peak_bytes": 7308066816, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "1400/mask_dispatch_control", "rss_bytes": 5965889536, "process_peak_bytes": 7772422144, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}
+{"phase": "complete", "rss_bytes": 5970264064, "process_peak_bytes": 7772422144, "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"}

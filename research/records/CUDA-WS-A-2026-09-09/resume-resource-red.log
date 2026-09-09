@@ -1,0 +1,56 @@
+...F                                                                     [100%]
+=================================== FAILURES ===================================
+__________ test_resume_missing_original_memory_reruns_only_that_unit ___________
+
+tmp_path = PosixPath('/private/var/folders/km/d1w73m657lzcnhr_c39d50_40000gn/T/pytest-of-daniel.tipton/pytest-882/test_resume_missing_original_m0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10854ef10>
+
+    def test_resume_missing_original_memory_reruns_only_that_unit(tmp_path, monkeypatch):
+        setup = prepare_main_fixture(tmp_path, monkeypatch)
+        assert gates.main(setup.argv) == 0
+        directory = setup.output.parent / (setup.output.stem + '-gates')
+        path = directory / 'gate-01.json'
+        record = gates.plain_numbers(json.loads(path.read_text()))
+        del record['memory']
+        gates.write_report(path, record)
+        before = list(setup.measures)
+        assert gates.main([*setup.argv, '--resume']) == 0
+>       assert setup.measures == [*before, ('bfloat16', 64)]
+E       AssertionError: assert [('bfloat16',...oat32', 1400)] == [('bfloat16',...float16', 64)]
+E         
+E         Right contains one more item: ('bfloat16', 64)
+E         Use -v to get more diff
+
+research/records/CUDA-WS-A-2026-09-09/test_cpu_gates.py:1094: AssertionError
+----------------------------- Captured stdout call -----------------------------
+{"phase": "before_load", "elapsed_seconds": {"value": 1.0037017090071458, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "before_bfloat16_load", "elapsed_seconds": {"value": 1.006349584000418, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "after_bfloat16_load", "elapsed_seconds": {"value": 1.0222462920064572, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "bfloat16/gate_1_structure", "elapsed_seconds": {"value": 1.022993792023044, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "bfloat16/64/fixture_bf16_complete", "elapsed_seconds": {"value": 1.0240808750095312, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "bfloat16/64/assessed", "elapsed_seconds": {"value": 1.0246778750151861, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "bfloat16/1400/fixture_bf16_complete", "elapsed_seconds": {"value": 1.0262900000088848, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "bfloat16/1400/assessed", "elapsed_seconds": {"value": 1.026879834011197, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "after_bfloat16_release", "elapsed_seconds": {"value": 1.0989700840145815, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "before_float32_load", "elapsed_seconds": {"value": 1.100294167001266, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "after_float32_load", "elapsed_seconds": {"value": 1.1776232499978505, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "float32/gate_1_structure", "elapsed_seconds": {"value": 1.178436000016518, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "float32/64/fixture_float32_complete", "elapsed_seconds": {"value": 1.179785834014183, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "float32/64/assessed", "elapsed_seconds": {"value": 1.1805854590202216, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "float32/1400/fixture_float32_complete", "elapsed_seconds": {"value": 1.1823108750104439, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "float32/1400/assessed", "elapsed_seconds": {"value": 1.1829139170004055, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "after_float32_release", "elapsed_seconds": {"value": 1.2499273749999702, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "complete", "elapsed_seconds": {"value": 1.2509185840026475, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "before_load", "elapsed_seconds": {"value": 1.0083254589990247, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+{"phase": "complete", "elapsed_seconds": {"value": 1.0165264589886647, "basis": "measured-here"}, "rss_bytes": {"value": 1048576, "basis": "measured-here"}, "process_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "device_peak_bytes": {"value": 1048576, "basis": "measured-here"}, "allocated_bytes": {"value": 1048576, "basis": "measured-here"}}
+----------------------------- Captured stderr call -----------------------------
+[transformers] The following layers were not sharded: model.layers.*.input_layernorm.weight, model.layers.*.post_attention_layernorm.weight, model.layers.*.post_feedforward_layernorm.weight, model.norm.weight, model.layers.*.pre_feedforward_layernorm.weight
+Loading weights:   0%|          | 0/41 [00:00<?, ?it/s]Loading weights: 100%|██████████| 41/41 [00:00<00:00, 18197.51it/s]
+[transformers] The following layers were not sharded: model.layers.*.input_layernorm.weight, model.layers.*.post_attention_layernorm.weight, model.layers.*.post_feedforward_layernorm.weight, model.norm.weight, model.layers.*.pre_feedforward_layernorm.weight
+Loading weights:   0%|          | 0/41 [00:00<?, ?it/s]Loading weights: 100%|██████████| 41/41 [00:00<00:00, 17328.34it/s]
+------------------------------ Captured log call -------------------------------
+WARNING  transformers.distributed.tensor_parallel:tensor_parallel.py:71 The following layers were not sharded: model.layers.*.input_layernorm.weight, model.layers.*.post_attention_layernorm.weight, model.layers.*.post_feedforward_layernorm.weight, model.norm.weight, model.layers.*.pre_feedforward_layernorm.weight
+WARNING  transformers.distributed.tensor_parallel:tensor_parallel.py:71 The following layers were not sharded: model.layers.*.input_layernorm.weight, model.layers.*.post_attention_layernorm.weight, model.layers.*.post_feedforward_layernorm.weight, model.norm.weight, model.layers.*.pre_feedforward_layernorm.weight
+=========================== short test summary info ============================
+FAILED research/records/CUDA-WS-A-2026-09-09/test_cpu_gates.py::test_resume_missing_original_memory_reruns_only_that_unit
+1 failed, 3 passed, 78 deselected in 8.82s
