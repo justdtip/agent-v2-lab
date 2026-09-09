@@ -369,17 +369,53 @@ def dictionary_base(dictionary: JumpReLUDictionary) -> str:
     return base_of_artifact(named)
 
 
-#: What a float32 lens costs when it is read against a native-precision capture. Declared, not
-#: measured here: it is the first hour's promoted floor, the relative disagreement between a
-#: promoted loop and the bf16 native path at 64 tokens. The width-rows ruling keeps captures
-#: native at width 1 because they are readings of the deployed computation, so this term is a
-#: standing property of every float32-lens-against-native-capture reading and belongs in the
-#: record rather than in a caveat someone has to remember.
+#: What a float32 lens read against a native capture costs, which is **not known** for a reading
+#: of this kind, and the record says so rather than lending it a number that measures something
+#: else (WS-A width audit W3, `d037454`).
+#:
+#: The width-rows ruling keeps captures native at width 1 while lenses are fitted in float32, so
+#: every such reading crosses two arithmetic paths. It is the crossing that is declared here. The
+#: size of what it does to a readout is not: a residual-relative difference does not bound a
+#: readout-relative one, because the readout's own denominator can be small. For a fixed linear
+#: ``L``, ``norm(L dh) <= opnorm(L) norm(dh)`` bounds the numerator and says nothing about
+#: ``norm(L h)``; with ``h = (100, 1)``, ``dh = (0, 1)`` and ``L`` selecting the second
+#: coordinate, the residual changes by about 1% and the readout by 100%. This bridge then ranks
+#: through a nonlinear normaliser and a thresholded dictionary, which adds more of the same
+#: question. So the two promoted-floor figures below travel as **historical context with their
+#: lengths**, never as an error bar, and ``measured`` is ``False`` until a paired comparison at
+#: this reading's own positions and context exists. When one does, the bridge records that
+#: measurement here instead of this statement.
 LENS_PATH_TERM = {
     "term": "float32 lens read against a native capture",
-    "relative": 0.0124,
-    "at": "64 tokens",
-    "basis": "declared: the first hour's promoted floor, not measured by this bridge",
+    "measured": False,
+    "status": "unmeasured for this reading",
+    "why": (
+        "a residual-relative difference does not bound a readout-relative one: the readout's "
+        "denominator norm(L h) may be small, and this bridge additionally ranks through a "
+        "nonlinear normaliser and a thresholded dictionary"
+    ),
+    "historical_context": [
+        {
+            "relative": 0.0124,
+            "at_tokens": 64,
+            "quantity": "promoted-float32 loop against bf16 native, residual-relative",
+            "note": "1.2386% to four digits, and it agrees across CPU and CUDA",
+        },
+        {
+            "relative": 0.694,
+            "at_tokens": 1400,
+            "quantity": "promoted-float32 loop against bf16 native, residual-relative",
+            "note": "on CUDA; the same length reads 6.9% on the CPU, so it is not one number",
+        },
+    ],
+    "context_basis": (
+        "WS-A's first-hour promoted floor, recorded at two lengths on two backends; context for "
+        "this crossing, not a calibrated term on any reading through a lens"
+    ),
+    "to_measure": (
+        "a paired comparison at this reading's own positions and context: the same readout "
+        "through the same lens on a float32 and a native residual"
+    ),
 }
 
 #: The three fields the width-rows ruling requires a lens's nu to carry. Spelled as the fitter
