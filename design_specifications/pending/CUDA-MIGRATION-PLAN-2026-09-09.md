@@ -1161,6 +1161,30 @@ two `gloo` processes on CPU; NCCL and more ranks are the device's. Under tying,
 `lm_head.weight is embed_tokens.weight`: one parameter with two names, so no flat parameter
 straddles two units and there is nothing to shard by halves; that sentence is now in the code.
 
+**Joined (SWE-2, aa96cd8): the stage driving FSDP2 through `Trainer`, single process against two
+`gloo` processes on CPU, the tiny wrapper checkpoint.**
+
+| quantity | worst relative deviation | parameters |
+|---|---:|---:|
+| gradient, step zero, before any update | 1.24e-07 | 26 trainable |
+| value, after the step | 0.0 | 80, all |
+
+The gradient is the load-bearing number. The exact value agreement is real and weaker than it
+looks: the difference the gradients imply is about 1.2e-11 at lr 1e-4 against a float32 ulp of
+1.9e-09 near a typical weight, so the updates are bit-identical by construction at this step
+count. The refusal is off; `describe_distribution` puts in every manifest what the distribution
+has been measured at (two `gloo` processes on CPU) and what it has not (CUDA, NCCL, more than two
+ranks, any real checkpoint). The sharded checkpoint shows the recipe: 54 bfloat16 tensors and 26
+float32, frozen trunk at two bytes, trained slice at four.
+
+The first run of the gate failed at 0.499 on gradients and 1.357 on values, and the gate was what
+was wrong: `Trainer` shards data across ranks, so an accumulation count left alone doubles the rows
+per optimiser step at world size two and the arms optimise different objectives; and even with the
+global batch matched, a distributed sampler need not put the same rows in the same step, so any run
+longer than one step compares two trajectories. One optimiser step over the whole dataset removes
+both. **A disagreement is a defect only once the two arms are the same experiment, and getting
+them there is most of the work**; every multi-device gate carries that sentence.
+
 ### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
 
 SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
