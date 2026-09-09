@@ -647,6 +647,15 @@ that produced it. A patch is verified by grepping for its text, never by a test 
 commits on the test's exit status, never a pipe's. And every laptop yardstick is re-read on the
 device before it judges anything, since the first hour's job is to find which of them moved.
 
+**Addendum, Chief, 2026-09-10, a fifth near-miss on paid hardware.** My shipping command listed the
+processes whose working directory was the shared checkout and then pulled regardless: the listing
+was printed for a reader, not gated. Tonight the D-CRO's float32 map run had its working directory
+there while I pulled the ladder corrections in. The pull changed only documents and record files —
+verified afterwards by diff: no source, test, script or config file — so the run was untouched, and
+that is luck of content, not a rule followed. From now the pull is gated: no process under the
+checkout, or the merge goes to the bare repository only and the checkout is brought forward when it
+is free. *A check that prints is a reporter; a check that stops is a gate.*
+
 ## Thirty-first: the gate whose reference was a different model, in SWE-1's name
 
 The port's acceptance gate compared the torch bfloat16 implementation against the MLX **4-bit**
