@@ -537,3 +537,29 @@ manifest now carries what its distribution has been measured at and what it has 
 processes on CPU is what was measured. **CUDA, NCCL, more than two ranks and any real checkpoint are
 the device's**, and a run at a scale nobody has checked says so in its own record instead of looking
 like one that was.
+
+## Re-taken on the merged tree, and the window I announced badly
+
+The loader changed after the gate first ran: it now clears the model's stored weight conversions,
+so a default `save_pretrained` writes the model's own layout without the explicit flag. The number
+was therefore re-taken on the merged tree, because a number measured against a since-changed loader
+is a number about something else.
+
+It reproduces **bit-identically**: `1.2407462046193974e-07` on gradients and `0.0` on values, the
+same digits. The explicit `save_original_format=False` stays regardless, as two belts.
+
+**Concurrency, recorded rather than avoided.** The re-run overlapped SWE-1's eleven-episode
+tolerance block. **Any timing in it is untrusted; the agreement is unaffected.** R61(b) is about
+measurements that depend on the machine being quiet, and a per-parameter deviation at float32
+epsilon is not one: the same two arms on the same rows produce the same arithmetic whatever else the
+machine is doing, which is why this gate needs no window at all. It loads no 4B model and takes no
+model lock.
+
+**A method fault of mine, since it nearly cost another seat.** The first run of this gate announced
+its window through `runlock.run_under_window` from a harness shell, and the box monitor read the
+holder as `swe-2 pid 33447 DEAD` **while the run was live**. The pid announced was one the harness
+discards, so the window looked abandoned: any seat's `blocking_window` check was entitled to start on
+top of it. It cost nothing because the run was short, and it is the same trap SWE-1 fell into an
+hour earlier, which is what makes it worth writing down rather than fixing quietly. The rule now is
+`runlock run --seat ... -- <command>`, which holds the window with the command's own process and
+releases it on exit, and main refuses that holder shape at the flag.

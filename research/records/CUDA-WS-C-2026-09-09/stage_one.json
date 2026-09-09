@@ -16,7 +16,7 @@
     "trainable_top_layers": 2
   },
   "load": {
-    "path": "/private/tmp/stage_gate2/checkpoint",
+    "path": "/private/tmp/stage_gate3/checkpoint",
     "wrapper": true,
     "model_type": "gemma3_text",
     "architecture": "Gemma3ForCausalLM",
@@ -94,6 +94,7 @@
     "device": "cpu",
     "dtype": "bfloat16",
     "attn_implementation": "eager",
+    "save_layout": "the model's own; the load-time prefix mapping is not reverted on save",
     "sha256": {
       "config.json": "b6b040999e9a727a840840d285f971247d498d8237b0a6a0b14e506917796515",
       "model.safetensors": "f30c1727c364005bbd18c69567e8c803a7646b78dfdca7a63379f170310d3a31"
