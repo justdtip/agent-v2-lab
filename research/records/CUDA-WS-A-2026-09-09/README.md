@@ -1,5 +1,8 @@
 # WS-A review corrections and CPU calibration
 
+**Ready for source review:** see [REVIEW-READY.md](REVIEW-READY.md) for the
+review boundary and the real-checkpoint calibration still in progress.
+
 Latest verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
 `codex/cuda-torch-seam`. The source includes the committed shared upstream loader and device shim.
 
