@@ -198,3 +198,28 @@ byte for byte, which the two CUDA runs of `calculate-0158` already measured and 
 unavailable until the lens path is ported. The finding at position 506, a single full forward
 against chunked prefill with the cache differing at a near-tie, is carried into the cache-strategy
 gate arm's notes as unchecked; that arm is the equivalence claim it touches.
+
+## The precision-matched arm, 2026-09-10 — the premise was wrong, not the port; rulings
+
+SWE-1, `df2f0a3`: MLX bfloat16 against torch bfloat16, teacher-forced over the turns carrying the
+24 gated positions, 55 s on the laptop. **Twenty-one of the 24 are quantisation**: MLX bf16
+produced exactly what torch bf16 produced and only the 4-bit record dissented, including the
+position recorded at P = 1.000000. **Three are bfloat16 ties**: the top-two gaps, recovered exactly
+from ln(p1/p2) and checked to lie on the 0.25 grid that is the bf16 step at that magnitude, are a
+0-ULP gap (two candidates exactly equal), a 2-ULP gap pointing opposite ways in the two frameworks,
+and one position where the card's own CPU and CUDA already differed, a device tie. A probability
+margin had called all three "not a tie"; the ULP measure is the instrument. No port defect is
+implicated at any of the 24, and the record says plainly that this is not evidence the port is
+correct, only that these positions were never evidence against it; the positive evidence remains
+device consistency to one position in 5,245 and the WS-A gates.
+
+**Rulings.** The rule "a confident flip is a defect" holds only against a precision-matched
+reference, with a margin in ULPs of the stored dtype: a position whose top-two gap on the
+reference lies within two ULPs is a tie, counted and reported as a tie, never as a flip and never
+as agreement; against a differently quantised recording the check is not a defect test and
+refuses to be read as one. The golden records are re-based on MLX bf16: the full fifteen episodes
+through the MLX bf16 arm on the laptop under one announced window, the new reference recorded with
+its provenance beside the 4-bit one, which stays as the record of what the rule was measured
+against; then the kit runs once more on the card against the new reference, and the expectation is
+zero confident flips outside listed ties. The rule goes into code; the lesson goes into the method
+record as the thirty-first entry, in SWE-1's name.
