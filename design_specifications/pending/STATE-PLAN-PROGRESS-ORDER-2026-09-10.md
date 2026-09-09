@@ -258,3 +258,42 @@ the corrective transitions are one per episode, so ε_sub = 0.11 stands. Both co
 reason and the consequence for the claim are written into §7 before the seal; an episode-level
 bootstrap may be declared beside the Hoeffding form but does not replace it. The capture set is
 pinned by both digests, the file's sha256 and the logical triples', each named for what it is.
+
+## Rulings on Codex's review of the draft (`011e6c7`, `WSA-REVIEW-2026-09-09-1233Z`), Chief, 2026-09-10 — the last items before the seal
+
+**P1.** The capture contract (§2, §8) declares `forward_batch: 1` and stores the actual token index of
+each captured cell after tokenisation, beside the prose definition of the decision position.
+
+**P2.** E2's retrieval is frozen: the candidate set is **all N decisions of the episode, the source
+included**, so the declared chance level is 1/N as drafted; the rule is strict nearest-target and
+**a tie is a miss**, named so an implementation cannot substitute an argmin tie-break; the transport
+distance is reported descriptively with its metric, the same metric the transport rule is fitted
+under, aggregated as the per-episode mean and then across episodes. Uniform guessing is a declared
+reference, not a measured geometric null, and the draft says so.
+
+**P3.** §13 is rewritten to the current sequence: resolve these items, Codex's re-review if the
+Director asks for one, seal, first reading. Capture is permitted before the seal, as before.
+
+**P4, the statistical ruling Codex asks for.** The target is **inference to new episodes of the
+same task distribution**, not a description of this corpus; so the unit is the episode, the bounded
+observation is the episode mean, and the concentration bound is over independent episodes (the
+correction of this date: ε_main ≈ 0.16 on 240, ε_ord ≈ 0.09 on 840, ε_sub = 0.11 on 553). The
+mandatory corrective subgroups carry their own figures — about 0.16 on the 244 contiguous and
+0.14 on the 309 gap transitions — and the pooled 0.11 attaches to the pooled set only. An
+episode-level bootstrap is declared beside the Hoeffding form for the drop rule's contrast; it does
+not replace the bound. The approved decision-count epsilons stay visible, marked *coverage not
+supported at the episode unit*. Independence between episodes is an assumption stated, not shown:
+episodes within a family share a template.
+
+**P5.** Every held-out prediction is held out by episode through **cross-fitting**: K = 5 folds by
+episode, stratified by family and variant, seed fixed in the seal, applied to every learned stage —
+the representation probe and the transport rule alike — so that each of the 4,122 ordinary and 553
+corrective transitions receives a prediction from a model that never saw its episode. The shared
+training across folds is a stated limitation of the bound and is what the episode bootstrap is
+declared to address. Folds and seeds are in the seal.
+
+**P6.** Both digests, as ruled: the logical-triple digest with its serialisation schema, and the
+file's byte digest.
+
+Everything Codex lists as carrying correctly carries. The seal follows these edits and precedes
+the first reading; capture does not wait for it.
