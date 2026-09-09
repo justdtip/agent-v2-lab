@@ -885,3 +885,36 @@ def test_the_sidecar_dtype_is_measured_rather_than_asserted(tmp_path):
     # Both inputs were cast on the way out, so the measurement reports one dtype -- and reports it
     # because it looked, not because it was told.
     assert written["dtype"] == ["float32"]
+
+
+def test_a_device_is_compared_as_a_device_and_not_as_a_string() -> None:
+    """`cuda` and `cuda:0` are one device, and `str()` says they are two.
+
+    Found on the card at the first real fit: the loader moves the model with `.to("cuda")` and the
+    fit declares `cuda:0`, so a guard that is right about the principle refused a correct pair and
+    cost a window. SWE-1 hit the same shape in the runner the same morning (`1672006`, "compare
+    the load device as a device, not as a string"), which is why the comparison is one function.
+    """
+    assert adapter.same_device("cpu", "cpu")
+    assert not adapter.same_device("cuda", "cpu")
+    assert not adapter.same_device("cpu", "cuda:0")
+    assert adapter.same_device("cuda", "cuda:0")
+    assert adapter.same_device("cuda:0", "cuda")
+
+
+def test_the_declared_precision_guard_still_refuses_a_real_mismatch(upstream) -> None:
+    """The fix must not have turned the guard off.
+
+    A wrong dtype and a wrong device *type* are both still refused, with the measurement in the
+    message. A fix to a guard that made the guard inert would be this week's shape a fourth time.
+    """
+    with pytest.raises(ValueError, match="must be a measurement"):
+        adapter.fit_upstream_jacobian(
+            TinyLensModel(), make_rows(), max_seq_len=SEQ_LEN, dim_batch=3,
+            dtype="bfloat16", upstream=upstream,
+        )
+    with pytest.raises(ValueError, match="must be a measurement"):
+        adapter.fit_upstream_jacobian(
+            TinyLensModel(), make_rows(), max_seq_len=SEQ_LEN, dim_batch=3,
+            device="cuda:0", upstream=upstream,
+        )

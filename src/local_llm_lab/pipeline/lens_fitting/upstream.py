@@ -345,6 +345,34 @@ class CorpusLensModel:
         return self._rows[text][:, :max_length]
 
 
+def same_device(declared: str, observed: str) -> bool:
+    """Compare two device names **as devices**, not as strings.
+
+    ``cuda`` and ``cuda:0`` are one device on a one-card box and ``str()`` says they are two, so a
+    fit that declares ``cuda:0`` against a model the loader moved with ``.to("cuda")`` is refused
+    by a guard that is right about the principle and wrong about the comparison. Found on the card
+    at the first real fit; SWE-1 hit the same shape in the runner the same morning (`1672006`,
+    "compare the load device as a device, not as a string"), which is the argument for putting the
+    comparison in one function rather than repeating it at each call site.
+
+    An omitted index means "the current device of that type", which is resolved here rather than
+    assumed equal.
+    """
+    import torch
+
+    left, right = torch.device(declared), torch.device(observed)
+    if left.type != right.type:
+        return False
+    if left.index == right.index:
+        return True
+    if left.type != "cuda":
+        return (left.index or 0) == (right.index or 0)
+    current = torch.cuda.current_device() if torch.cuda.is_available() else 0
+    return (current if left.index is None else left.index) == (
+        current if right.index is None else right.index
+    )
+
+
 def _observed_precision(model: Any) -> dict:
     """Read the device and dtype off the model rather than believing the caller's declaration.
 
@@ -523,7 +551,7 @@ def fit_upstream_jacobian(
     wrapped = model if isinstance(model, CorpusLensModel) else CorpusLensModel(model)
     _require_frozen(wrapped)
     observed = _observed_precision(wrapped)
-    if observed["device"] != device or observed["dtype"] != dtype:
+    if not same_device(device, observed["device"]) or observed["dtype"] != dtype:
         raise ValueError(
             f"this fit declares {dtype} on {device} and the model is "
             f"{observed['dtype']} on {observed['device']}. The declaration must be a measurement "
