@@ -530,13 +530,26 @@ name = "local-llm-lab"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "accelerate" },
     { name = "datasets" },
+    { name = "huggingface-hub" },
     { name = "jinja2" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "transformers" },
+]
+
+[package.optional-dependencies]
+cuda = [
+    { name = "accelerate" },
+    { name = "peft" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "trl" },
+]
+mlx = [
     { name = "mlx-lm", extra = ["train"] },
     { name = "mlx-tune" },
-    { name = "torch" },
-    { name = "transformers" },
 ]
 
 [package.dev-dependencies]
@@ -547,14 +560,22 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", specifier = ">=1.14.0" },
+    { name = "accelerate", marker = "extra == 'cuda'" },
     { name = "datasets", specifier = ">=2.14,<4" },
+    { name = "huggingface-hub", specifier = ">=1.29.0" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "mlx-lm", extras = ["train"], specifier = "==0.31.3" },
-    { name = "mlx-tune", specifier = "==0.6.0" },
-    { name = "torch", specifier = ">=2.14.0" },
-    { name = "transformers", specifier = ">=5.16" },
+    { name = "mlx-lm", extras = ["train"], marker = "extra == 'mlx'", specifier = "==0.31.3" },
+    { name = "mlx-tune", marker = "extra == 'mlx'", specifier = "==0.6.0" },
+    { name = "numpy", specifier = ">=2.5.2" },
+    { name = "peft", marker = "extra == 'cuda'" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "safetensors", specifier = ">=0.8.0" },
+    { name = "safetensors", marker = "extra == 'cuda'" },
+    { name = "torch", marker = "extra == 'cuda'" },
+    { name = "transformers", specifier = ">=5.16.1" },
+    { name = "trl", marker = "extra == 'cuda'" },
 ]
+provides-extras = ["mlx", "cuda"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1067,6 +1088,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/8d/36dade89b49e4f9d5cbdbe863772581f98c0c6d78fc39ad4c557f6f2e17e/pandas-3.0.5-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:db172144bb56422bd157812f3b021eacc255451470b31e2c633c349490a1cfee", size = 11989004, upload-time = "2026-07-22T22:18:42.208Z" },
     { url = "https://files.pythonhosted.org/packages/9c/ba/18c4ec8a746e177da05a9e7a7963781d8ea195780724f854601b6ebd6b78/pandas-3.0.5-cp313-cp313-win_amd64.whl", hash = "sha256:0d298e951f23016ce4699951d044ae6418dbc91bf68cefca0f77666fcbb4e5c6", size = 9826896, upload-time = "2026-07-22T22:18:44.539Z" },
     { url = "https://files.pythonhosted.org/packages/de/ec/28a57266b753799a87b8bc79e7887ac6fd981b8c6d2978a0b7e7b6bd708c/pandas-3.0.5-cp313-cp313-win_arm64.whl", hash = "sha256:66266d3442a5e8b3c90274c2b8b230bee42dd1c286bc822cc2f9f2c7e12b883e", size = 9094790, upload-time = "2026-07-22T22:18:47.468Z" },
+]
+
+[[package]]
+name = "peft"
+version = "0.20.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "accelerate" },
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "psutil" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "tqdm" },
+    { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b4/08/02541a2c29be7c78698f73d438bc0e733b214f3f35ec5db79fca8da8fc61/peft-0.20.0.tar.gz", hash = "sha256:4769c8093a4ca145fd6fb3fd4dd50449675f5fe46434ad1e98b285a132d4b1d0", size = 880503, upload-time = "2026-07-28T13:46:01.85Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/79/13bcabb8048126422d5c4b880575d40886c726f354db88cfeed4325525bb/peft-0.20.0-py3-none-any.whl", hash = "sha256:0fbba16ffebfad3de96e06f2da6860fd860292324b85b6141909fa1e26ea9233", size = 775777, upload-time = "2026-07-28T13:45:59.809Z" },
 ]
 
 [[package]]
@@ -1617,6 +1659,21 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/87/4d/4c564374bcdadb166fccbf3e45aee0d4a473f88d341761bd2fefe3b8e8c1/triton-3.8.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b7004666652f500ed854a86988e4b3d69d247188b5d2092b5df1e44f4a954099", size = 226476793, upload-time = "2026-08-28T16:08:30.956Z" },
     { url = "https://files.pythonhosted.org/packages/b0/b6/3394d5548404c1cabd1dadadd28d0b3f9478db1dff8180da53bb3f0a1e19/triton-3.8.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1f0497218e26b7d79773ad9c2a3fa3b539ee69f587a13fac2e552b1d322a8015", size = 247975122, upload-time = "2026-08-28T15:56:04.112Z" },
+]
+
+[[package]]
+name = "trl"
+version = "0.29.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "accelerate" },
+    { name = "datasets" },
+    { name = "packaging" },
+    { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3f/01/87b09019a9be4c73f8fb07ac9db1dccbeb78743fc17b6f3175ebe0a31a70/trl-0.29.1.tar.gz", hash = "sha256:12df5aa22d1deb26942cafdf4cfd75f53d7141942e70c4dc0966687a3617813b", size = 453604, upload-time = "2026-03-20T03:43:34.578Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/3b/33226ae50a36f718e1107ece0c91b016457bb4b956d1cb5bd7078c04de9c/trl-0.29.1-py3-none-any.whl", hash = "sha256:f9490cd1af93f3dce1cfdfe0fa1de108dbc46a2f6c2f90485cc2b4021c43eef3", size = 530959, upload-time = "2026-03-20T03:43:33.02Z" },
 ]
 
 [[package]]

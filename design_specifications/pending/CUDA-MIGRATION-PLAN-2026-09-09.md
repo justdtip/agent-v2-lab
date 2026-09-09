@@ -759,3 +759,30 @@ Engineer 1 builds to the Chief's specification.
   the `--residual-source manual` arm changes meaning. The alternative — hooks that reproduce an fp32
   recomputation nobody chose — costs several hundred unbudgeted lines to preserve an artefact of one
   cast. **Taken in the open, not inherited.**
+
+### 13.8 Phase 0 landed, and two things every seat must know about it
+
+**The venv is managed by `uv`, and there is no `pip` in it.** The install commands are:
+
+```bash
+uv sync --extra mlx            # the laptop: exactly what the venv holds today
+uv sync --extra cuda           # the GPU box
+uv sync --extra mlx --extra cuda   # the laptop during the migration, CPU torch beside MLX
+```
+
+**A plain `uv sync` now removes MLX from the laptop**, because `mlx-lm` and `mlx-tune` moved from
+base dependencies to the `[mlx]` extra (§13.2). That is the intended layout and it is a trap for
+anyone who types the old habit. The five dependencies that arrived transitively — `transformers`,
+`numpy`, `pyyaml`, `huggingface_hub`, `safetensors` — are direct now, at the installed versions as
+floors, so the tree imports on a box with neither extra.
+
+**The registry has six entries.** `gemma3-4b-cuda-bf16` is a copy of the bf16 entry whose `hf_id`
+is the upstream repo id; the five existing files are byte-identical, so every `registry_sha256` in a
+committed record still verifies.
+
+**A latent behaviour, pre-existing and unchanged:** `base_of_artifact` resolves a registry name, an
+absolute checkpoint path, or a base id to the base, and passes anything else through untouched by
+design. The *relative* form `models/gemma-3-4b-it-4bit` is "anything else", because `hf_id` is
+resolved to an absolute path at load. A record that names a checkpoint by its relative path will not
+resolve through it. Not a defect this migration introduced; worth knowing before someone writes a
+comparison that assumes it does.

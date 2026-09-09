@@ -9,13 +9,32 @@ description = "Local Apple Silicon experiments for MLX inference, fine-tuning, a
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "accelerate>=1.14.0",
   "datasets>=2.14,<4",
   "jinja2>=3.1",
+  # Promoted from transitive-through-mlx-lm to direct on 2026-09-09 (plan §13.2): nineteen files
+  # import these at module scope, and a tree without mlx-lm broke before torch was considered.
+  "transformers>=5.16.1",
+  "numpy>=2.5.2",
+  "pyyaml>=6.0.3",
+  "huggingface_hub>=1.29.0",
+  "safetensors>=0.8.0",
+]
+
+# Backends are extras, not environment markers: MLX wheels exist only for macOS on Apple silicon,
+# so a Linux box cannot resolve them at all, and a marker would make the project uninstallable
+# there rather than merely MLX-less. The laptop installs `.[mlx]`; the GPU box installs `.[cuda]`;
+# both may coexist on the laptop for the migration's duration (plan §8.5, §13.7 Q6).
+[project.optional-dependencies]
+mlx = [
   "mlx-lm[train]==0.31.3",
   "mlx-tune==0.6.0",
-  "torch>=2.14.0",
-  "transformers>=5.16",
+]
+cuda = [
+  "torch",
+  "accelerate",
+  "peft",
+  "trl",
+  "safetensors",
 ]
 
 [project.scripts]
