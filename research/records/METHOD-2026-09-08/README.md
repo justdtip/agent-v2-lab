@@ -583,3 +583,23 @@ because a fixture-shaped stand-in would have been written to satisfy the gate, w
 argument against mocking the thing a check exists to judge. Fixed to compare, key by key, what
 decides the fitted quantity, with a test at each edge: a knob difference passes, a changed
 selector or dtype still refuses.
+
+## Twenty-eighth: an instruction that named a mechanism without naming its branch
+
+**The Chief's.** SWE-2 was told to "reuse the `fetch-dictionary` mechanism in `device_setup.py`"
+for the preflight's dictionary rows. The mechanism existed on main and had reached the integration
+branch only with a forward merge made minutes after the instruction; SWE-2's tree was the
+integration tip from before it, where the file held no such command. They searched, found nothing,
+said so, and built one, and the two are textually mergeable and semantically a broken program: two
+`fetch_dictionary` functions in one module and two `fetch-dictionary` subparsers in one `main`,
+which `argparse` refuses at startup. The same instruction cited "the 12B re-render assertion in the
+runbook", also on main only; SWE-2 reported it absent, correctly, from the tree they had.
+
+**Two rules.** An instruction that names a mechanism or a sentence names the commit it is on, and
+the seat merges that commit forward before building on it; the Chief checks the integration tip,
+not main, before writing "reuse". And a merge that `merge-tree` calls clean is clean at the level of
+lines, not of programs: when two branches add the same command, the merge is tested by running the
+command, and the resolution is one implementation, chosen on its merits and named in the review.
+Here the Chief's version stays, being on both branches and verifying every file, and takes from
+SWE-2's the fetch-time digest sidecar and the offline check that the preflight rows need; the
+preflight rows and the render row are SWE-2's and are rebased onto it.
