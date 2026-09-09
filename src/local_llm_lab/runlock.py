@@ -47,6 +47,7 @@ in the record — command, timestamp, pid — is read from the process itself.
 from __future__ import annotations
 
 import atexit
+import importlib.util
 import json
 import os
 import shlex
@@ -495,6 +496,47 @@ def blocking_window(path: Path | None = None, *, holder: str | None = None) -> B
     if token and token == held.nonce:
         return None
     return held
+
+
+MLX_ABSENT_STASH = "mlx_absent_files"
+
+
+def ignore_when_mlx_absent(
+    file_name: str, reaching: tuple[str, ...], config, *, installed: bool | None = None
+) -> bool:
+    """Collector body: leave a file that can reach MLX uncollected on a box without MLX.
+
+    `uv sync --extra cuda` strips MLX, and fifteen test files import it at module level, so the
+    suite on the rented device would be red at collection for something nobody did wrong (plan
+    §16.12). Those files are the laptop's. Here they are left uncollected, counted on the config
+    for :func:`report_mlx_absent`, and named in the terminal summary, so "N passed" on the device
+    is read beside "M files not collected" and not as the whole suite. ``installed`` is an
+    argument so the nested run that proves this fires can say "not installed" on a box that has
+    it, the way the window collector takes its file list.
+    """
+    if installed is None:
+        installed = importlib.util.find_spec("mlx") is not None
+    if installed or file_name not in reaching:
+        return False
+    names = getattr(config, "_mlx_absent_files", None)
+    if names is None:
+        names = []
+        try:
+            config._mlx_absent_files = names
+        except AttributeError:
+            return True
+    names.append(file_name)
+    return True
+
+
+def report_mlx_absent(terminalreporter, config) -> None:
+    names = getattr(config, "_mlx_absent_files", None)
+    if names:
+        terminalreporter.write_line(
+            f"{len(names)} test files not collected: MLX is not installed on this box, and "
+            "these can reach it. They are the laptop's suite, not a pass here: "
+            + ", ".join(sorted(names))
+        )
 
 
 def mark_items_for_a_foreign_window(items: Sequence[Any], names: Sequence[str]) -> BoxWindow | None:

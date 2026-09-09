@@ -1316,6 +1316,11 @@ def test_the_grep_that_this_rule_replaces_is_wrong_in_both_directions() -> None:
         # closure never does.
         "conftest.py",
         "test_cache_equivalence.py",
+        # Added 2026-09-10: it writes `import mlx.core` into a nested pytester file as a
+        # string, to prove the no-MLX collection guard; the grep holds it for containing the
+        # words, the closure clears it because nothing is imported. The same shape as the
+        # conftest entry above.
+        "test_conftest_without_mlx.py",
         "test_lens_jacobian.py",
         "test_metal_cache_limit.py",
         "test_repository_rules.py",

@@ -284,6 +284,15 @@ TESTS_THAT_CAN_REACH_MLX = tuple(
 )
 
 
+def pytest_ignore_collect(collection_path, config):
+    """On a box without MLX, the files that can reach it are left uncollected and named.
+
+    The body lives in `runlock.ignore_when_mlx_absent`, like the window collector's, so the
+    nested run in `tests/test_conftest_without_mlx.py` can import it and say "not installed".
+    """
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+
+
 def pytest_collection_modifyitems(config, items):
     """Skip the MLX-loading files while another seat holds the box window (issue 95).
 
@@ -305,6 +314,7 @@ def pytest_collection_modifyitems(config, items):
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    runlock.report_mlx_absent(terminalreporter, config)
     """Say, where a reader will meet it, that a window skipped part of this run.
 
     A skip is the right response to somebody else's window and a silent one is its own hazard: on

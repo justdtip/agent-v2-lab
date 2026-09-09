@@ -243,3 +243,42 @@ rotary rounding at 2^-9, the 9.8 GiB projection) are what the device's numbers a
 against. On this box from here: fixture tests only. Item (4), fetching `cuda-migration`, stands;
 item (5), the graph-once estimator, is written and tested here on fixtures and run there. Plan
 §16.12.
+
+## Next instruction, 2026-09-10 — three tasks that need no device, in this order
+
+The Director's ruling stands (plan §16.12): nothing model-scale runs on the laptop; fixtures and
+tests do. Each task below is a test before it is a feature, and each carries its own record
+section in the shape WS-C's record has: the finding, the technique without reference to our code,
+the implementation in one line, then the device checklist row with the number it must produce and
+the laptop figure it is compared against.
+
+**1. The graph-once estimator, §6.3, on fixtures.** `torch.autograd.grad(..., is_grads_batched=True)`
+over upstream's recorder, the forward tape saved once at whatever context length we choose, never
+`output_hidden_states=True`, never `register_full_backward_hook`, never `flash_attention_2`. The
+acceptance test is the timing ratio ≥ 1 against sequential on the small fixture, under both `eager`
+and `sdpa` (Research's `tests/torch/test_batched_cotangents.py` is the shape), plus exactness: the
+batched Jacobian equals the sequential one to float32 epsilon on the fixture, per layer. It is
+written and tested here and run on the device, where its memory claim (the tape once, not per
+cotangent) is measured for the first time.
+
+**2. `cpu_gates.py` becomes the device gate script.** Load through
+`local_llm_lab.hf_text.load_text_causal_lm` and delete your own loader copy, so there is one;
+`device.select()` and `device.pin(seed, attention="eager")` before the first CUDA use;
+`device.describe()`, the checkpoint sha and the source commit in every report's head; every phase
+written and flushed as it completes (yours already does; keep it); `basis: measured-here |
+laptop-basis | expected` on every number; the bf16-loop arm added (the hand-run loop through
+`_block` without promotion against bf16 native, expected exactly zero, at 64 and 1,400 tokens); the
+three controls at 1,400 gated outside the declared floor; the float32-loaded control under the 1e-3
+bound, which fits on the device. Fixture-tested here against the tiny model, with the fixture
+mirroring the snapshot's declared type and key layout (plan §16.9: a fixture built from
+`Gemma3TextConfig` declares a shape no registered checkpoint has). Its device run is the first
+hour's step 1 in the runbook, `CUDA-DEVICE-FIRST-HOUR-2026-09-10.md`.
+
+**3. The WS-A record as the first hour's checklist**, in your own order, cheapest and most
+diagnostic first, each row with what a mismatch means. The 1.24% at 64 tokens, the rotary rounding
+at 2^-9, the 9.8 GiB projection and the fixture's precision decomposition are the laptop bases;
+say of each which was taken on an idle box.
+
+Reviews continue to land here under a dated heading naming your commit. Two rules from tonight apply
+to every seat: commit with `git commit -- <paths>` in a shared checkout, never bare; and a suite
+reading is not a claim without its skip count and the box state on the same line.
