@@ -885,3 +885,44 @@ Everything above marked measured was measured on **CPU**, on this machine, with 
 means torch exists here in some environment, and §11.3's bridge is not hypothetical. Nothing is
 verified on CUDA. The Research Division's scripts can be moved into the tree as tests, and the
 timing-ratio test of 14.3 and the two-kernel dispatch check of 14.2 should be.
+
+### 14.8 A fourth upstream default, the sharpest in its class, and two process rules from the same hour
+
+**Upstream fits at 128 tokens and reads out at 512, by default, silently** (D-CRO, verified against
+the clone at `4383fda`). `HFLensModel.encode` defaults to `max_length=512`; `JacobianLens.apply`
+defaults to `max_seq_len=512`; `jacobian_for_prompt` passes its own `max_seq_len=128` into `encode`.
+A caller running `fit(...)` then `apply(...)` at their defaults applies a lens four times outside the
+length it was fitted at, and neither signature warns them. That is this programme's 21.8x arriving
+from upstream's own defaults, and it is the specific trap the instruction to use upstream directly
+was most likely to spring. **The adapter passes lengths explicitly at both ends and relies on
+neither default.** Upstream sets no `attn_implementation` anywhere in `jlens/`, so `eager` is ours
+to set; and there is no fit-time position selector — `jacobian_for_prompt` takes only `skip_first` —
+so the selector of §6.2 is ours to build.
+
+**§6.2, restated more sharply than "a declared departure".** Because 128 is definitional, a
+transcript-length band fit is **not a higher-resolution version of the hosted lens; it is a different
+estimator that happens to share an implementation.** The recovery gate — a band covering all positions
+reproduces the plain fit — proves the *selector* is faithful. It cannot prove the *lengths* are
+comparable. Those are different guarantees, only the first is testable, and the two lenses never
+appear in one table without that sentence.
+
+**Process rule, recorded against the Chief.** Landing Codex's lens-fitting branch brought
+`run_native.py` into `research/records/` with no refusal guard: it takes the model-run lock and loads
+a 4B checkpoint if invoked. I ran the tests near the diff and reported them green. The rule tests that
+scan the tree for unguarded launchers are not "tests near the diff"; the full suite would have caught
+it and the D-CRO's did. **A merge that brings scripts into the tree is followed by the full suite.**
+The guard was added in the established form; the record was not touched; the rule was not relaxed.
+It is the first time the guard rule caught a script arriving from another seat, which is what it was
+written for.
+
+**Coordination rule, from the manifest race.** Two seats edited `pyproject.toml` within one hour —
+`uv add torch` at `d6dc41f`, Phase 0's restructure at `7eef9f8` — and only commit order decided the
+outcome. It resolved correctly because the second edit's rewrite subsumed the first, which is luck.
+**The manifest and the lockfile are one seat's files at a time, announced like a window.**
+
+**The environment, for the record.** Torch 2.14 with MPS is in the venv beside MLX; the state
+`uv sync --extra mlx --extra cuda` produces. **A plain `uv sync` strips MLX** and would break every
+MLX record, replay and suite run on this machine; the D-CRO has surfaced that to the Director
+directly, since the failure would look like a broken repository rather than a missing extra. The
+full suite with torch present: 2,123 passed, nothing skipped — `transformers` takes different code
+paths with torch importable, and they are clean.
