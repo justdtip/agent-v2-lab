@@ -1,0 +1,154 @@
+{
+  "basis": "file-only comparison of accepted rulings and corrected prose",
+  "corrected_table": [
+    {
+      "computed": [
+        0.09163549670648467,
+        0.47068866657568204,
+        28.91111111111111
+      ],
+      "precision": "native",
+      "repo_layer": 1,
+      "reported": [
+        "0.092",
+        "0.471",
+        "28.9"
+      ],
+      "rounded_values_match": true
+    },
+    {
+      "computed": [
+        0.014441022777099634,
+        1.0351164008592333,
+        35.19511380711225
+      ],
+      "precision": "float32",
+      "repo_layer": 1,
+      "reported": [
+        "0.014",
+        "1.035",
+        "35.2"
+      ],
+      "rounded_values_match": true
+    },
+    {
+      "computed": [
+        0.04402622674533897,
+        0.5851635514018692,
+        2.3205741626794256
+      ],
+      "precision": "native",
+      "repo_layer": 17,
+      "reported": [
+        "0.044",
+        "0.585",
+        "2.32"
+      ],
+      "rounded_values_match": true
+    },
+    {
+      "computed": [
+        0.08464810308668003,
+        0.6965141209703237,
+        4.159607643933125
+      ],
+      "precision": "float32",
+      "repo_layer": 17,
+      "reported": [
+        "0.085",
+        "0.697",
+        "4.16"
+      ],
+      "rounded_values_match": true
+    },
+    {
+      "computed": [
+        0.005208333333333333,
+        0.11992703627963265,
+        7.0
+      ],
+      "precision": "native",
+      "repo_layer": 33,
+      "reported": [
+        "0.005",
+        "0.120",
+        "7.00"
+      ],
+      "rounded_values_match": true
+    },
+    {
+      "computed": [
+        0.009983309133839035,
+        0.12517927059081657,
+        91.8969242001079
+      ],
+      "precision": "float32",
+      "repo_layer": 33,
+      "reported": [
+        "0.010",
+        "0.125",
+        "91.9"
+      ],
+      "rounded_values_match": true
+    }
+  ],
+  "corrections_present": {
+    "amplification_withdrawn": [
+      {
+        "line": 346,
+        "text": "**withdrawn**, correctly, on Codex's third audit."
+      }
+    ],
+    "metric_relabelled": [
+      {
+        "line": 471,
+        "text": "the **relative Frobenius error of the whole map**"
+      }
+    ],
+    "one_draw": [
+      {
+        "line": 368,
+        "text": "**On the random control:** one draw is one draw."
+      }
+    ],
+    "repeat_unexecuted": [
+      {
+        "line": 448,
+        "text": "The repeat gate is **not**:"
+      }
+    ]
+  },
+  "new_experiments": false,
+  "order_commit": "6c2f7d0666342fe3d38313e8b09d808e5a315021",
+  "preregistration_P1_P6_review": "still pending producer amendment",
+  "prior_scientific_findings_changed": false,
+  "producer_commit": "547b7a052244ec87334956cef03c6e5661a49b2f",
+  "schema_version": 1,
+  "sources_verified": 4,
+  "surviving_passages": {
+    "common_step_refutation_repeated": [
+      {
+        "line": 425,
+        "text": "every layer is refuted \u2014 the two minima are a factor of 64 apart."
+      }
+    ],
+    "concluding_cross_precision_claim": [
+      {
+        "line": 618,
+        "text": "is benign at layer 33, where the amplification is 1.4\u00d7, and is not a small correction at layer 1,\nwhere it is 539\u00d7."
+      }
+    ],
+    "same_partial_input_used_in_explanation": [
+      {
+        "line": 379,
+        "text": "A map whose derivative changes by 100% under a 0.19% move of its input"
+      }
+    ],
+    "sampled_depth_scope_in_conclusion": [
+      {
+        "line": 592,
+        "text": "Coherent float32 is width-stable at 12B scale at every depth, and a float32 12B exact fit at"
+      }
+    ]
+  }
+}
