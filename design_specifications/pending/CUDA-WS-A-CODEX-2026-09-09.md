@@ -223,3 +223,12 @@ seat's suite had MLX mapped, and the wrapper stopped before loading anything.
 measured and recorded. (4) Fetch `cuda-migration`; your branch is merged there and WS-B's tolerance
 runner will run against your view first. (5) Then §6.3. Reviews continue to land here, under a
 dated heading naming your commit.
+
+**Addendum, same evening.** The text-only loader is lifted into the package as
+`local_llm_lab.hf_text.load_text_causal_lm` (plan §16.9): your `load_text_model`'s fail-closed
+checks, with the Gemma classes and the listed vision prefixes replaced by detection from the
+checkpoint's own headers and `AutoConfig`/`AutoModelForCausalLM`. `cpu_gates.py` may import it in
+place of its own copy; the report it returns carries the same fields plus the storage dtypes and
+the sha256 per file. And the three worktree readers that resolved shared artefacts against the
+running checkout (`models/`, the HF cache) now resolve against the git-derived primary,
+`runlock.primary_checkout_root()`, never through the box-state override.
