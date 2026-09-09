@@ -43,11 +43,20 @@ class Verdict:
     executable_calls: int = 0
     unexpected_files: tuple[str, ...] = ()
     raw_answer: str | None = None
+    contains_expected: bool = False
+    """Whether the answer *contains* the expected value, under the same normaliser.
+
+    ``success`` requires exact normalised equality, which is stricter than what many task
+    prompts actually ask for. Reporting the looser bound beside the strict one means every
+    pass rate carries the gap between what was graded and what was requested, instead of the
+    gap being rediscovered later as a result.
+    """
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "clean": self.clean,
+            "contains_expected": self.contains_expected,
             "reasons": list(self.reasons),
             "answer": self.answer,
             "expected_answer": self.expected_answer,
@@ -285,8 +294,14 @@ class Simulator:
         if missing:
             reasons.append("required tools unused: " + ", ".join(missing))
         success = not reasons
+        # The looser grade uses the same normaliser as the strict one, so the two differ only
+        # in exact-versus-containment and never in whitespace, case or fencing.
+        given = None if self.finished_answer is None else normalize_answer(self.finished_answer)
+        wanted = normalize_answer(self.expected_answer)
+        contains_expected = bool(given is not None and wanted and wanted in given)
         return Verdict(
             success=success,
+            contains_expected=contains_expected,
             clean=success and self.errors == 0,
             reasons=tuple(reasons),
             answer=None if self.finished_answer is None else normalize_answer(self.finished_answer),
