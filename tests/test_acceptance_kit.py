@@ -535,3 +535,31 @@ def test_no_result_file_is_written_when_none_was_asked_for(records: Path) -> Non
         episodes, lambda sequence: [(0, (0,))] * len(sequence), per_episode=None
     )
     assert len(reports) == 1
+
+
+def test_every_number_in_an_episode_row_says_what_kind_of_number_it_is(records: Path) -> None:
+    """Once the prose is gone, the field is the only thing left saying where a figure came from."""
+    import tolerance_baseline as runner
+
+    episode = golden.load_episodes(records)[0]
+    forward = _fake_forward(
+        {
+            tuple(list(episode.turns[0].prompt_ids) + list(episode.turns[0].token_ids)): [(0, (0,))]
+            * (len(episode.turns[0].prompt_ids) + len(episode.turns[0].token_ids))
+        }
+    )
+    report = tolerance.run_tolerance(episode, forward)
+    row = runner._episode_row(episode, report, 12.3)
+
+    for name, cell in row.items():
+        if name == "label":
+            continue
+        assert "basis" in cell, f"{name} was written without saying what kind of number it is"
+        assert cell["basis"] in {"measured-here", "laptop-basis", "expected"}
+
+    assert row["agreed"]["basis"] == "measured-here"
+    assert row["confident_positions"]["basis"] == "laptop-basis", (
+        "the confident count comes from the MLX recording, not from this run, and stays a "
+        "laptop basis even when the agreement beside it was measured on the device"
+    )
+    assert "P >=" in row["confident_positions"]["basis_note"]
