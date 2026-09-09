@@ -213,7 +213,24 @@ def capture_decisions(
                 progress({"event": "shard", "shard": shard - 1, "captured": written + len(done)})
     if buffer:
         written += _flush(target, shard, buffer, cells, manifest_path)
-    return {"captured": written, "already_present": len(done), "shards": shard + (1 if cells else 0)}
+
+    # The coverage beside the verdict, per method entry thirty-four: a summary that says how many
+    # cells were written and not how many were asked for cannot distinguish a complete pass from a
+    # truncated one, and both look like success. `complete` is computed against the decisions this
+    # call was given — a caller that passed a subset gets `requested` equal to that subset, which is
+    # why `requested` is reported beside it rather than assumed to be the whole set.
+    final = _already_captured(manifest_path)[0]
+    outstanding = [d for d in decisions if (d["task_id"], d["step"]) not in final]
+    return {
+        "captured": written,
+        "already_present": len(done),
+        "requested": len(decisions),
+        "outstanding": len(outstanding),
+        "complete": not outstanding,
+        "shards": shard + (1 if cells else 0),
+        "coverage_note": "requested is what this call was given, not necessarily the whole capture "
+                         "set; complete says every requested decision now has a manifest line",
+    }
 
 
 def _already_captured(manifest_path: Path) -> tuple[set[tuple[str, int]], int]:

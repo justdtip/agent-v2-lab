@@ -102,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     decisions = [json.loads(line) for line in args.capture_set.read_text().splitlines() if line.strip()]
+    # The size of the set before any truncation, kept so the run's own record can distinguish a
+    # complete pass from a limited one. `capture_decisions` reports completeness against what it was
+    # given, which is the right scope for it and the wrong scope for the pass as a whole.
+    capture_set_size = len(decisions)
     if args.limit is not None:
         decisions = decisions[: args.limit]
     corpus_rows = []
@@ -111,7 +115,9 @@ def main(argv: list[str] | None = None) -> int:
             json.loads(line) for line in path.read_text().splitlines() if line.strip()
         )
     corpus = capture.rows_by_decision(corpus_rows)
-    emit("inputs", decisions=len(decisions), corpus_rows=len(corpus_rows), keyed=len(corpus))
+    emit("inputs", decisions=len(decisions), capture_set_size=capture_set_size,
+         limit=args.limit, whole_set=len(decisions) == capture_set_size,
+         capture_set=str(args.capture_set), corpus_rows=len(corpus_rows), keyed=len(corpus))
 
     target = capture.CaptureTarget(
         directory=args.out, entry=args.entry,
@@ -121,7 +127,9 @@ def main(argv: list[str] | None = None) -> int:
     summary = capture.capture_decisions(
         decisions=decisions, corpus=corpus, forward=forward, target=target, progress=emit_shard(emit)
     )
-    emit("done", **summary, peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3))
+    emit("done", **summary, capture_set_size=capture_set_size,
+         whole_set=summary["requested"] == capture_set_size,
+         peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3))
     return 0
 
 
