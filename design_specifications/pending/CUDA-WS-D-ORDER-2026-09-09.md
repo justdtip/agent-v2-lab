@@ -60,3 +60,59 @@ tolerance, a span selector over all spans likewise. That is the regression test 
 ## Budget
 
 ~80 adapter, ~45 regression edits, ~400 extensions; ~450 deleted.
+
+---
+
+## Corrections from the survey (plan §13), which supersede anything above they contradict
+
+Read plan §13 in full. The items below are the ones that change this order.
+- **The un-port changes ν and must declare it.** Our MLX fit uses the same-position reduction;
+  upstream sums over targets. The adapter supports **both** through the selector, the sidecar
+  records which, and `profiles.py` keeps `jacobian` distinct from `hosted-jacobian`. A lens fitted
+  under upstream's default is not the same estimator as ours; the un-port golden test compares
+  like with like by running upstream's ν.
+- **Finite differences versus exact autograd is Q3, the Director's**, decided by the pre-registered
+  c-sweep: no plateau means instrument-limited and autograd; a plateau keeps the estimator. The
+  saving is ~15.5x from the layer loop, not more.
+- The residual dtype your regression fit consumes is **Q5**; `residual_source` in the artefact must
+  name it either way.
+
+
+## The Research Division's answers (plan §14) supersede the above where they conflict
+
+Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
+- **Upstream fits at 128 tokens by default** and the published lenses were fitted so. Your golden
+  test at 128 tokens is like-for-like. §6.2's transcript-length bands are a **different estimator by
+  construction** and are recorded as a declared departure with their own memory model, never
+  compared to the hosted lens as if they were one. The position selector exists only at readout
+  upstream; the fit-time selector is ours.
+- **`attn_implementation="eager"`** on the fitting model for determinism only; that batched rows
+  regress under `sdpa` was a warm-up artefact, withdrawn (plan §14.2, `c0e4233`).
+- Upstream has one commit and is unmaintained; there is nothing to track and no runner to diff.
+
+## Upstream defaults, verified against the clone rather than reported
+
+**Checked at `581d398` before any of this reached code, because three of them are load-bearing for
+the adapter and one was not in anyone's message.**
+
+| claim | verified |
+|---|---|
+| `fit(max_seq_len=128, skip_first=16)` | **yes** — both are defaults of `fit` *and* of `jacobian_for_prompt` |
+| no fit-time position selector | **yes** — `jacobian_for_prompt` takes only `skip_first`; there is no `positions` parameter anywhere in the fit path |
+| `JacobianLens.apply(positions=)` exists at readout | **yes** |
+| upstream sets `attn_implementation` | **no** — it appears nowhere in `jlens/`, so the fitting model inherits transformers' default |
+
+So 128 tokens is the reference estimator's **definition**, not a Neuronpedia choice; the fit-time
+selector §6.2 needs is genuinely ours to add; and eager attention must be set by us because upstream
+never mentions it.
+
+**A fourth default, in the same class, that follows from reading the two signatures together.**
+`HFLensModel.encode` defaults to `max_length=512`, and `JacobianLens.apply` defaults to
+`max_seq_len=512`, while `jacobian_for_prompt` passes its own `max_seq_len=128` down into `encode`.
+**So upstream fits at 128 and reads out at 512 by default.** Nothing in either signature warns of it;
+a caller who fits with `fit(...)` and reads with `apply(...)`, both at their defaults, is applying a
+lens four times outside the length it was fitted at and will see no error.
+
+That is our own 21.8x extrapolation arriving from upstream's defaults rather than from our corpus,
+and it is a trap for anyone told to "use upstream directly". The adapter passes lengths explicitly
+at both ends and never relies on either default.

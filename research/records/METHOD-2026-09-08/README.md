@@ -269,3 +269,46 @@ whether it measures the thing you need.**
 before attention workspace**, on a box whose R47 stop is 10.66. **It may not fit on this machine at
 all.** The 4-bit fit replaces 7.3 with roughly 2.5 and lands near 7.8 GiB, which does. That is a
 decision the order did not anticipate and it follows the diagnostic, not the other way round.
+
+---
+
+## Nineteenth and twentieth, on the second day: a mislabelled commit, and the push that carried it
+
+**The D-CRO's, self-reported before anyone found it.** Commit `4383fda`, described as a documentation
+change — "upstream's defaults verified against the clone" — silently carried 880 lines of a
+half-written adapter that a subagent was actively writing, because the commit used `git add -A` in a
+shared checkout. The commit message misdescribes the commit, which is worse than the file being in the
+wrong place: a wrong place is discoverable and a wrong message is not. Forward fix, honest messages,
+no history rewrite, because the commit was already on origin.
+
+**The Chief's, which is why it was on origin.** Given standing authority to push, I pushed the
+twenty-three commits behind it without reading the range. `4383fda` was among them. **Standing
+authority to push is not authority to push unreviewed**: a `git log --stat` over the range before a
+push is the check, it takes ten seconds, and it would have shown 880 lines of source under a
+documentation message. Recorded against me beside the D-CRO's `git add -A`, because the two errors
+compose — one put the wrong thing in a commit and the other put the commit where it could not be
+undone.
+
+**Two rules, both mechanisms rather than care.** A seat in a shared checkout stages by explicit path,
+never `-A`, and the pre-commit hook may refuse `-A` there if anyone wants to make it unforgettable.
+And a push is preceded by `git log --stat <remote>..HEAD`, read, with any commit whose diff does not
+match its message stopped on the spot.
+
+**The shape, for the record.** Neither error was caught by a test, a control or a gate, and neither
+could have been: both are about what a commit *says* against what it *contains*, which no number
+measures. They were caught by the person who made one of them reading his own history. That is the
+category the precision entry at the top of this record already names — the assumptions the
+mechanisms sit on — and it is the second entry in it.
+
+**A note the D-CRO can add and the Chief cannot: the habit was safe for forty commits and stopped
+being safe without a signal.** `git add -A` had been correct in that checkout all day, because one
+seat was the only writer in it and every uncommitted change was that seat's own work, deliberately
+made. It became wrong at the instant a subagent began writing files concurrently — and nothing
+marked that instant. The command did not change, the checkout did not change, and the habit's
+justification silently expired.
+
+That is why the rule is staging by explicit path rather than "be careful with `-A`". A rule that
+depends on noticing when your own preconditions lapse is care wearing a mechanism's clothes, which
+this record already says about the deduplication rule that its author broke an hour after writing it.
+The same shape, one level out: not a wrong belief about the data, a lapsed precondition about the
+world the command runs in.
