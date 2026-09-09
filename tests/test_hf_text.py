@@ -65,7 +65,7 @@ def test_a_plain_checkpoint_loads_as_itself_with_nothing_unexpected(plain):
     root, saved = plain
     model, report = hf_text.load_text_causal_lm(root, dtype="float32")
     assert report["wrapper"] is False and report["key_mapping"] is None
-    assert report["unexpected_keys"] == [] and report["other_prefixes"] == []
+    assert report["unexpected_keys"]["count"] == 0 and report["other_prefixes"] == []
     assert report["architecture"] == type(saved).__name__ and report["model_type"] == "llama"
     assert report["device"] == "cpu" and report["dtype"] == "float32"
     assert report["storage_dtypes"] == ["F32"]
@@ -83,7 +83,9 @@ def test_a_wrapper_checkpoint_loads_its_text_tower_and_reports_the_other_towers_
     assert report["wrapper"] is True
     assert report["key_mapping"] == {r"^language_model\.": ""}
     assert report["other_prefixes"] == ["multi_modal_projector", "vision_tower"]
-    assert report["unexpected_keys"] == [
+    assert report["unexpected_keys"]["count"] == 2
+    assert report["unexpected_keys"]["prefixes"] == ["multi_modal_projector", "vision_tower"]
+    assert sorted(report["loading_info"]["unexpected_keys"]) == [
         "multi_modal_projector.linear.weight",
         "vision_tower.patch.weight",
     ]
@@ -261,3 +263,15 @@ def test_a_loaded_wrapper_saves_in_its_own_layout_and_reloads_fail_closed(
     assert report_again["wrapper"] is False and report_again["architecture"] == "Gemma3ForCausalLM"
     for name, tensor in model.state_dict().items():
         assert torch.equal(again.state_dict()[name], tensor), name
+
+
+def test_the_load_report_does_not_print_every_discarded_key(official_layout, caplog):
+    """SWE-1: 439 vision keys at warning level, ~50 KB, at every load, burying the run's output."""
+    import logging
+
+    root, _ = official_layout
+    with caplog.at_level(logging.WARNING, logger="transformers.modeling_utils"):
+        _, report = hf_text.load_text_causal_lm(root, dtype="float32")
+    assert "UNEXPECTED" not in caplog.text and "vision_tower" not in caplog.text
+    assert report["unexpected_keys"]["count"] == 2
+    assert logging.getLogger("transformers.modeling_utils").level != logging.ERROR, "restored"
