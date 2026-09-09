@@ -539,3 +539,35 @@ at each new precision, `responses.npz` durable per unit, and the float32 leg of 
 anchor-displacement control (the bf16 displacement inserted into the float32 path); the 12B exact
 fits with the captures only once the capture code meets the contract. `cuda-ws-d` is reviewed and
 merged first thing.
+
+## The float32 displacement control, Chief, 2026-09-10 — `e771c2b`: the conditioning is the function's, and an early-layer lens does not transport to a nearby anchor
+
+The same anchor displacement the width change produced natively, applied in coherent float32 at
+width 1 with no schedule change, nine seconds of card time, 108 cells:
+
+| precision | layer | ‖δ‖/‖x‖ | derivative change | from a random δ of equal norm |
+|---|---:|---:|---:|---:|
+| bf16 | 1 | 0.19% | 0.471 | 1.006 |
+| float32 | 1 | 0.19% | 1.035 | 0.749 |
+| bf16 | 17 | 1.5% | 0.585 | 1.560 |
+| float32 | 17 | 1.5% | 0.697 | 1.277 |
+| bf16 | 33 | 8.8% | 0.120 | 0.313 |
+| float32 | 33 | 8.8% | 0.125 | 0.299 |
+
+As amplification — derivative change per unit of anchor movement — 245× native and 539× float32
+at layer 1, 39× and 46× at 17, 1.4× in both at 33. **Ruled: the sensitivity is the function's.** The
+model's own map is steep at early layers and well conditioned at the last block; a random
+displacement of the same norm does the same or more, so it is not a special direction. This
+explains the ladder's per-layer minima without precision: a map whose derivative moves by its own
+size under a 0.19% input move needs a very small step for its secant to approximate its tangent.
+The float32 fitting policy is unchanged; what changes is how a lens may be read.
+
+**Rule, carried to the bridge and the readings:** a Jacobian lens is a statement about the
+neighbourhood it was fitted in, and at early layers that neighbourhood is 0.2% wide. **An
+early-layer float32 lens is not read against a native capture — or any capture from a different
+width, precision or path — until that pairing is measured at that layer.** The path term is
+therefore per layer: benign at the last block, the whole answer at the first. SWE-2's bridge
+records it per layer, with `measured: false` until the paired comparison exists, and refuses the
+early-layer cross-path reading by name rather than annotating it. Readings on the same path as
+the fit — a float32 generation read through a float32 lens — carry no such term. One row, one
+position, eighteen projections, three layers; the record says so.
