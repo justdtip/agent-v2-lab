@@ -1,0 +1,42 @@
+{
+  "max_seq_length": 4096,
+  "rule": "last supervised target is batch[true_length]; padding to 1 + 32*ceil(L/32) guarantees that column exists for an untruncated row",
+  "rows": [
+    {
+      "case": "typical row",
+      "true_length": 100,
+      "kept_after_cap": 100,
+      "padded_width": 129,
+      "supervised_tokens": 91,
+      "supervised_pad_tokens": 1,
+      "truncated": false
+    },
+    {
+      "case": "length an exact multiple of 32",
+      "true_length": 32,
+      "kept_after_cap": 32,
+      "padded_width": 33,
+      "supervised_tokens": 23,
+      "supervised_pad_tokens": 1,
+      "truncated": false
+    },
+    {
+      "case": "length one over a multiple",
+      "true_length": 33,
+      "kept_after_cap": 33,
+      "padded_width": 65,
+      "supervised_tokens": 24,
+      "supervised_pad_tokens": 1,
+      "truncated": false
+    },
+    {
+      "case": "row truncated at the cap",
+      "true_length": 5000,
+      "kept_after_cap": 4096,
+      "padded_width": 4096,
+      "supervised_tokens": 4086,
+      "supervised_pad_tokens": 0,
+      "truncated": true
+    }
+  ]
+}

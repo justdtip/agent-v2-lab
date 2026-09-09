@@ -193,3 +193,84 @@ fixes it. A guard rather than a line in a record, because the failure it catches
 the wrong tree and nothing else in the suite would notice.
 
 **103 tests pass** at this commit, including the whole of `tests/test_repository_rules.py`.
+
+---
+
+# Finding: every untruncated mlx-lm row supervises one padding token, and in Qwen that token is `!`
+
+**Recorded as a finding at the Chief's direction, because it is a fact about every adapter this
+programme has trained, not about the port.** It was found while writing the torch collator and it
+is not a property of the port; the port merely had to decide whether to reproduce it.
+
+## The mechanism: two short rules that never mention each other
+
+`mlx_lm/tuner/trainer.py` builds a batch at lines 156-167 and masks the loss at lines 86-99.
+
+    batch:  pad_to = 32
+            width = min(1 + 32 * ceil(max(lengths) / 32), max_seq_length)
+            batch_arr = np.zeros((rows, width), np.int32)      # the pad value is literally 0
+
+    loss:   targets = batch[:, 1:]
+            steps   = arange(1, targets.shape[1] + 1)
+            mask    = (steps >= offset) & (steps <= true_length)
+
+Target index `k` carries `steps[k] = k + 1` and therefore reads `batch[k + 1]`. The mask admits
+`k + 1 <= true_length`, so **the last supervised target is `batch[true_length]`**. Real tokens
+occupy `0 .. true_length - 1`. The `1 +` in the width guarantees `batch[true_length]` exists, and
+it is padding.
+
+Neither rule is wrong on its own. The padding rule guarantees a column; the mask rule supervises
+it. Nothing in either file refers to the other.
+
+## Verified, not inferred
+
+`mlx_pad_supervision.py` transcribes both rules into numpy and fills real tokens with `1..length`
+so that a zero in a supervised slot can only be padding. At a 4,096 cap:
+
+| case | true length | padded width | supervised | of which padding |
+|---|---:|---:|---:|---:|
+| typical row | 100 | 129 | 91 | **1** |
+| length an exact multiple of 32 | 32 | 33 | 23 | **1** |
+| length one over a multiple | 33 | 65 | 24 | **1** |
+| row truncated at the cap | 5,000 | 4,096 | 4,086 | **0** |
+
+The boundary case matters: at `L = 32` the width is 33, so the `1 +` is doing the work alone and
+the artefact still occurs. **A truncated row is the only one that escapes**, because the cap
+removes the pad column.
+
+## What the supervised token actually is
+
+Token id 0 is not a special token in every vocabulary, and this programme's runs are the case where
+it is not:
+
+| tokenizer | id 0 |
+|---|---|
+| Qwen3.5-4B, which every existing training record used | **`!`** |
+| Gemma 3 4B, the migration target | `<pad>` |
+
+So every MLX-trained adapter this programme has produced was taught, once per untruncated row, to
+emit **`!`** immediately after the row's final real token. The final real token of a rendered row is
+its end-of-turn marker, which places the artefact **exactly at the stopping decision**.
+
+Scale on arm 1: 1,200 rows at batch size 1, one pad target each, against roughly 1.32 million
+supervised tokens — about **0.09%** of the supervised signal. Small in mass, but it is 100% of rows,
+always the same target, and always the same structural position. It is not noise spread thinly; it
+is a consistent instruction at one point.
+
+**What it does not establish.** Nothing here measures an effect on behaviour. Whether 0.09% at the
+stopping position changed any trained model's stopping is unmeasured, and this record does not
+claim it did.
+
+## The second half: padding is attended over
+
+`default_loss` calls `model(inputs)` with no mask (line 90), so padded positions are attended to by
+the real tokens and only their *logits* are discarded. That is survivable on a dense causal model
+and is not safe on Gemma 3, whose sliding-window masks are built from the attention mask.
+
+## The decision taken, on the Chief's ruling
+
+For the arm-1 reproduction under full fine-tuning: **`supervise_one_pad` stays off and the collator
+builds the attention mask**, with both carried as departures in the run manifest. The reproduction
+already changes the model, the precision and the parameterisation, so matching a supervision bug
+would add nothing but the bug. The flag is kept for a within-MLX-recipe check, where reproducing it
+is the point.
