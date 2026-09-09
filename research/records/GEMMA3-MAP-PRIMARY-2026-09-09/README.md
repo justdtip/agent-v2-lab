@@ -258,3 +258,56 @@ on nearly right by 17.2.
 under the settled rule are **+3.80 at layer 21** and **+3.22 at layer 23**, against +3.03 and +2.77
 undeduplicated. Deduplication still strengthens the effect; only its size moved. That was the
 load-bearing claim and it did not depend on which key was used.
+
+---
+
+## The primary result, sharpened by matched history: two factors, not one
+
+The D-CRO put the headline through the same token-history control that killed the position-band
+claim, and it survived and sharpened. Reproduced here to two decimals, with the one composition check
+the strongest cell needed.
+
+**log2 of median argument rank over median skeleton rank, at matched prior occurrences:**
+
+| layer | 0 | 1–2 | 3–9 | 10+ |
+|---:|---:|---:|---:|---:|
+| 21 | **+3.80** | +5.53 | +3.92 | **−2.02** |
+| 23 | +4.03 | +5.04 | +3.59 | −0.59 |
+| n argument | 54 | 138 | 265 | 784 |
+| n skeleton | 65 | 317 | 519 | 411 |
+| episodes contributing | 12 | 11 | 12 | 10 |
+
+**The zero-history cell is the headline and it needed a check.** Twenty-one of its 54 argument
+tokens come from `aggregate_report-0167`, the truncated episode. Without it, at n = 33 against 60:
+**+6.54 at layer 21 and +5.20 at layer 23.** The dominant episode diluted the effect. This is the same
+shape as the deduplication result — the operation that killed every neighbouring claim strengthened
+this one — and it is the reason the strongest-worded claim below is the best-supported.
+
+### What it says
+
+1. **Novelty is the main effect.** A token of either span that has not appeared in its prompt is far
+   from the output at layer 21; one seen ten or more times is close. This is the "retrieving versus
+   composing" reading from earlier in this record, now confirmed as *half* of the result.
+2. **Content is held further than convention at matched novelty.** With both spans equally unseen,
+   argument content sits thirty to ninety times further from the output than the scaffolding around
+   it. That is not a novelty tautology — the tautology predicts the gap vanishing at matched
+   history, and it does not vanish, it grows.
+3. **The sign reverses under heavy repetition.** At ten or more occurrences a repeated argument is
+   *closer* to the output than the convention carrying it (−2.02 at 21; near zero at 23).
+
+So the map's primary result is about **novelty within the argument span**, not about arguments as a
+category: a fresh path is the hardest thing the model emits, and a fifteen-times-repeated one is
+easier than the fence around it. The pooled +3.80 at layer 21 understates rather than inflates,
+because arguments are 63.2% high-history and that is the single stratum where they do better.
+
+### Two things this settles from earlier in the record
+
+The "retrieving versus composing" reading, marked untested above, is now half-confirmed and
+superseded: retrieval is the novelty factor, and a second factor — content against convention —
+survives it. And the position-band halving (D-CRO, withdrawn) was this same history gradient seen
+through position: the band above 1,200 was 81.7% high-history on the argument side, and at matched
+history no band trend exists.
+
+**Every read here is still a hosted-lens read outside its fitted position range.** The two-factor
+structure is a within-corpus contrast and is robust to that in the way the level is not; the level
+waits on a lens fitted at transcript positions.
