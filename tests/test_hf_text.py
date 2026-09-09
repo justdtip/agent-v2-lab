@@ -65,7 +65,7 @@ def test_a_plain_checkpoint_loads_as_itself_with_nothing_unexpected(plain):
     root, saved = plain
     model, report = hf_text.load_text_causal_lm(root, dtype="float32")
     assert report["wrapper"] is False and report["key_mapping"] is None
-    assert report["unexpected_keys"] == [] and report["other_prefixes"] == []
+    assert report["unexpected_keys"]["count"] == 0 and report["other_prefixes"] == []
     assert report["architecture"] == type(saved).__name__ and report["model_type"] == "llama"
     assert report["device"] == "cpu" and report["dtype"] == "float32"
     assert report["storage_dtypes"] == ["F32"]
@@ -83,7 +83,9 @@ def test_a_wrapper_checkpoint_loads_its_text_tower_and_reports_the_other_towers_
     assert report["wrapper"] is True
     assert report["key_mapping"] == {r"^language_model\.": ""}
     assert report["other_prefixes"] == ["multi_modal_projector", "vision_tower"]
-    assert report["unexpected_keys"] == [
+    assert report["unexpected_keys"]["count"] == 2
+    assert report["unexpected_keys"]["prefixes"] == ["multi_modal_projector", "vision_tower"]
+    assert sorted(report["loading_info"]["unexpected_keys"]) == [
         "multi_modal_projector.linear.weight",
         "vision_tower.patch.weight",
     ]
@@ -219,3 +221,57 @@ def test_the_repositorys_mlx_conversion_is_refused_by_its_own_format(official_la
     (mlx / "config.json").write_text(json.dumps(config))
     with pytest.raises(ValueError, match="format \\['mlx'\\].*another runtime"):
         hf_text.checkpoint_metadata(mlx)
+
+
+def test_a_loaded_wrapper_saves_in_its_own_layout_and_reloads_fail_closed(
+    official_layout, tmp_path
+):
+    """SWE-2's defect, 7f5c6e4: loader right, save right, the pair wrote an unreadable artefact.
+
+    `save_pretrained` reverts the load-time key mapping by default, so a wrapper loaded under
+    the prefix mapping saved `language_model.model.*` tensors under a config naming the causal
+    LM. The control below reproduces that with a bare `from_pretrained` so the hazard is pinned
+    in this transformers rather than remembered; the loader's output saves in its own layout and
+    loads back through the fail-closed reader with every tensor equal. A tolerant reload would
+    have passed either way with freshly initialised weights, which is why the reader here is
+    `hf_text` and not the model class.
+    """
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    root, _ = official_layout
+    meta = hf_text.checkpoint_metadata(root)
+
+    # Control: the default save after a bare mapped load reverts the mapping.
+    text_config = dict(meta["text_config"])
+    bare = AutoModelForCausalLM.from_pretrained(
+        root,
+        config=AutoConfig.for_model(text_config.pop("model_type"), **text_config),
+        key_mapping={r"^language_model\.": ""},
+        local_files_only=True,
+    )
+    bare.save_pretrained(tmp_path / "control", safe_serialization=True)
+    control_keys = set(safetensors_torch.load_file(tmp_path / "control" / "model.safetensors"))
+    assert all(k.startswith(hf_text.TEXT_PREFIX) for k in control_keys), sorted(control_keys)[:3]
+
+    # The loader's output saves in the model's own layout and round-trips fail-closed.
+    model, report = hf_text.load_text_causal_lm(root, dtype="float32")
+    assert "own" in report["save_layout"]
+    model.save_pretrained(tmp_path / "resaved", safe_serialization=True)
+    resaved_keys = set(safetensors_torch.load_file(tmp_path / "resaved" / "model.safetensors"))
+    assert not any(k.startswith(hf_text.TEXT_PREFIX) for k in resaved_keys)
+    again, report_again = hf_text.load_text_causal_lm(tmp_path / "resaved", dtype="float32")
+    assert report_again["wrapper"] is False and report_again["architecture"] == "Gemma3ForCausalLM"
+    for name, tensor in model.state_dict().items():
+        assert torch.equal(again.state_dict()[name], tensor), name
+
+
+def test_the_load_report_does_not_print_every_discarded_key(official_layout, caplog):
+    """SWE-1: 439 vision keys at warning level, ~50 KB, at every load, burying the run's output."""
+    import logging
+
+    root, _ = official_layout
+    with caplog.at_level(logging.WARNING, logger="transformers.modeling_utils"):
+        _, report = hf_text.load_text_causal_lm(root, dtype="float32")
+    assert "UNEXPECTED" not in caplog.text and "vision_tower" not in caplog.text
+    assert report["unexpected_keys"]["count"] == 2
+    assert logging.getLogger("transformers.modeling_utils").level != logging.ERROR, "restored"
