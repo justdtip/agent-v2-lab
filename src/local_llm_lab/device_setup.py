@@ -404,6 +404,66 @@ def fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+# ------------------------------------------------------------------------- dictionaries
+
+
+#: The Gemma Scope 2 repositories are laid out as ``<site>/layer_<N>_width_<W>_l0_<S>/`` holding
+#: ``config.json`` (the hook string and the sparsity), ``params.safetensors`` (the dictionary) and
+#: ``examples.safetensors`` (activation examples, large and not needed for the bridge).
+#: ``resid_post`` is the deep-dive subset of a few depths; ``resid_post_all`` is every layer. Read
+#: from the hub's file listing on 2026-09-10, not assumed; the laptop's caches hold only configs.
+DICTIONARY_SITES = (
+    "resid_post",
+    "resid_post_all",
+    "attn_out",
+    "attn_out_all",
+    "mlp_out",
+    "mlp_out_all",
+)
+
+
+def _dictionary_patterns(site: str, layers: list[int], width: str, l0: str, examples: bool):
+    names = ("config.json", "params.safetensors") + (("examples.safetensors",) if examples else ())
+    return [f"{site}/layer_{n}_width_{width}_l0_{l0}/{name}" for n in layers for name in names]
+
+
+def fetch_dictionary(args: argparse.Namespace) -> int:
+    """Download sparse dictionary layers, and say which files and how many bytes before doing so."""
+    cache = configure_local_cache()
+    patterns = _dictionary_patterns(args.site, args.layer, args.width, args.l0, args.examples)
+    from huggingface_hub import HfApi, snapshot_download
+
+    try:
+        info = HfApi().model_info(args.repo, files_metadata=True)
+    except Exception as error:  # noqa: BLE001 - a gated repository without a login says so here
+        print(f"cannot list {args.repo}: {error}; run `lab-device login` first", file=sys.stderr)
+        return 2
+    sizes = {s.rfilename: (s.size or 0) for s in info.siblings}
+    missing = [pattern for pattern in patterns if pattern not in sizes]
+    if missing:
+        print(f"{args.repo} has no such files: {missing}", file=sys.stderr)
+        return 2
+    total = sum(sizes[pattern] for pattern in patterns)
+    for pattern in patterns:
+        print(f"  {sizes[pattern] / 2**20:8.1f} MiB  {pattern}")
+    print(f"{len(patterns)} files, {total / GIB:.2f} GiB, into {cache}")
+    if args.dry_run:
+        return 0
+    root = Path(snapshot_download(args.repo, allow_patterns=patterns))
+    for layer in args.layer:
+        config = root / args.site / f"layer_{layer}_width_{args.width}_l0_{args.l0}" / "config.json"
+        try:
+            declared = json.loads(config.read_text())
+        except (OSError, ValueError) as error:
+            print(f"layer {layer}: config unreadable: {error}", file=sys.stderr)
+            return 1
+        hook = declared.get("hook_name", declared.get("hook"))
+        width = declared.get("width", declared.get("d_sae"))
+        print(f"layer {layer}: hook={hook!r} l0={declared.get('l0')} width={width}")
+    print(f"dictionary layers under {root}")
+    return 0
+
+
 # -------------------------------------------------------------------------- pack / verify data
 
 
@@ -494,6 +554,19 @@ def main(argv: list[str] | None = None) -> int:
     pk.add_argument("directory")
     pk.add_argument("--out")
     pk.set_defaults(func=pack_data)
+    fd = sub.add_parser(
+        "fetch-dictionary", help="download sparse dictionary layers (Gemma Scope 2)"
+    )
+    fd.add_argument("repo", help="e.g. google/gemma-scope-2-4b-it")
+    fd.add_argument(
+        "--layer", type=int, action="append", required=True, help="block index; repeatable"
+    )
+    fd.add_argument("--site", default="resid_post_all", choices=DICTIONARY_SITES)
+    fd.add_argument("--width", default="16k")
+    fd.add_argument("--l0", default="small", choices=("small", "medium", "big"))
+    fd.add_argument("--examples", action="store_true", help="also fetch examples.safetensors")
+    fd.add_argument("--dry-run", action="store_true")
+    fd.set_defaults(func=fetch_dictionary)
     vf = sub.add_parser(
         "verify-data", help="extract a packed dataset and verify digests and manifest"
     )
