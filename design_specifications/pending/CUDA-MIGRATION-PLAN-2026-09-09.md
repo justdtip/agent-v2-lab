@@ -1241,3 +1241,33 @@ are worth knowing as shapes: `Any` in annotations never imported, surviving only
 equal today, which is what stops a later edit truncating a batch in silence. The tree carries about
 75 older findings, mostly line length in records scripts; they are swept in one deliberate WS-E pass
 by one seat, not by incidental edits from four.
+
+### 16.11 The first number that is not by construction
+
+SWE-1, 4d553ef, `agentic-d2-calculate-0158`, the shortest episode of the fifteen, chosen so the box
+could be released: the MLX 4-bit records against CPU bfloat16 through the merged view, teacher
+forced one causal forward per turn, `cache_strategy: none`, `device.pin` first, eager attention,
+83.5 s.
+
+| | |
+|---|---:|
+| argmax agreement | 98 of 103 (0.9515) |
+| flips | 5 |
+| flips at recorded P ≥ 0.99 | 0 of 78 confident positions |
+| flips among the 25 unconfident positions | 5 |
+| chance of that under independence | 8.4e-4 |
+| gate | PASS |
+| peak memory, measured | 7.88 GiB against 7.56 projected from 7.23 GiB of text tensors |
+| top-5 Jaccard, mean and worst | 0.7018, 0.4286 (reported, not gated) |
+
+Every flip sits where a precision difference puts it and none where a mask, position, entry or norm
+defect would. The projection missed by 4.2% in the safe direction, allocator and workspace, with its
+basis stated. What it does not say: one episode of fifteen, 103 emissions of 5,245, and the
+shortest, the same instance whose cheapness produced an earlier calibration error. Two things
+follow. The report now prints every flip with its recorded probability and the episode's count of
+confident positions, because "0 at P ≥ 0.99" cannot be told from a threshold nobody approached
+without that count. And the remaining fourteen are scheduled by what they exercise, not by cost:
+the eleven under twenty minutes next, about 75 minutes; then the four long ones, `update-0028`'s
+2,607-position turn above all, as one announced block, because the sliding window is exercised only
+beyond 1,024 positions and the mask-dispatch control on the tiny model bit only there. They are
+the point of the gate, not its remainder. Full corpus about 324 minutes of CPU box time.
