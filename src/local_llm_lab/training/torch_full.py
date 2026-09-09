@@ -143,8 +143,17 @@ def causal_lm_chunked_loss(
     *,
     chunk_size: int = DEFAULT_LOSS_CHUNK,
     num_items_in_batch: "torch.Tensor | int | None" = None,
+    autocast_dtype: "torch.dtype | None" = None,
 ) -> "torch.Tensor":
     """Cross-entropy for a causal LM without materialising the whole logit tensor.
+
+    **This loss owns its own precision context, and has to.** It calls the decoder stack directly
+    and applies the head itself, both to avoid materialising a 262,208-wide logit tensor -- and both
+    reach around ``forward``, which is where `accelerate` installs autocast and where FSDP2 installs
+    its unshard hooks. A mixed-dtype stack (bfloat16 trunk, float32 trainable slice) therefore fails
+    with ``expected m1 and m2 to have the same dtype`` under a `Trainer` configured for bfloat16,
+    because the wrapper that would have cast never runs. Passing ``autocast_dtype`` makes the cast
+    explicit here rather than depending on a wrapper this function is designed to bypass.
 
     Returns a **sum** divided by ``num_items_in_batch`` when `Trainer` supplies one, which is how
     upstream weights each micro-batch by its supervised token count across an accumulation cycle.
@@ -152,29 +161,41 @@ def causal_lm_chunked_loss(
     when accumulation is 1 and is the wrong one otherwise -- so the caller passing it is not
     optional in a real run, and `Trainer` always does.
     """
+    import contextlib
+
+    import torch
+
     inner = base_model_of(model)
     labels = inputs["labels"]
-    hidden = inner.model(
-        input_ids=inputs["input_ids"],
-        attention_mask=inputs.get("attention_mask"),
-        use_cache=False,
-    ).last_hidden_state
-
-    flat_hidden, flat_labels = shift_for_causal_lm(hidden, labels)
-    total, count = chunked_linear_cross_entropy(
-        flat_hidden,
-        inner.lm_head.weight,
-        flat_labels,
-        chunk_size=chunk_size,
-        bias=getattr(inner.lm_head, "bias", None),
+    context = (
+        torch.autocast(device_type=inputs["input_ids"].device.type, dtype=autocast_dtype)
+        if autocast_dtype is not None
+        else contextlib.nullcontext()
     )
+    with context:
+        hidden = inner.model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs.get("attention_mask"),
+            use_cache=False,
+        ).last_hidden_state
+
+        flat_hidden, flat_labels = shift_for_causal_lm(hidden, labels)
+        total, count = chunked_linear_cross_entropy(
+            flat_hidden,
+            inner.lm_head.weight,
+            flat_labels,
+            chunk_size=chunk_size,
+            bias=getattr(inner.lm_head, "bias", None),
+        )
     denominator = count if num_items_in_batch is None else num_items_in_batch
     return total / denominator.clamp(min=1) if hasattr(denominator, "clamp") else total / max(
         int(denominator), 1
     )
 
 
-def make_chunked_loss_trainer_class(chunk_size: int = DEFAULT_LOSS_CHUNK) -> Any:
+def make_chunked_loss_trainer_class(
+    chunk_size: int = DEFAULT_LOSS_CHUNK, autocast_dtype: "torch.dtype | None" = None
+) -> Any:
     """Build a `Trainer` subclass that computes the loss without materialising all the logits.
 
     A factory rather than a module-level class so that importing this module does not import
@@ -191,6 +212,7 @@ def make_chunked_loss_trainer_class(chunk_size: int = DEFAULT_LOSS_CHUNK) -> Any
 
     class ChunkedLossTrainer(Trainer):
         loss_chunk_size = chunk_size
+        loss_autocast_dtype = autocast_dtype
 
         def compute_loss(
             self, model, inputs, return_outputs: bool = False, num_items_in_batch=None
@@ -200,6 +222,7 @@ def make_chunked_loss_trainer_class(chunk_size: int = DEFAULT_LOSS_CHUNK) -> Any
                 inputs,
                 chunk_size=self.loss_chunk_size,
                 num_items_in_batch=num_items_in_batch,
+                autocast_dtype=self.loss_autocast_dtype,
             )
             return (loss, None) if return_outputs else loss
 
