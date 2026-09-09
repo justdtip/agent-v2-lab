@@ -98,8 +98,9 @@ previous note, the task statement, or the placeholders of hidden results — and
 layers?*
 
 On the 300-sample: attention mass from `P_note` and from `P_act`, per layer and head, onto tagged
-spans of the prompt — the task statement, the most recent tool result, the previous note, the
-hidden-result placeholders, everything else — summarised by span, by layer type (local against
+spans of the prompt — the task statement, the latest and the older tool results, the hidden-result
+placeholders, the previous and the older notes, the previous and the older tool calls, and the format
+tokens — summarised by span, by layer type (local against
 global) and by distance (at most 1,024 tokens back against further). **Structural gate:** a local
 layer places zero mass beyond 1,024 tokens, or the mask is not what the registry says and the
 experiment stops. The global layers are read from the checkpoint's `layer_types` and the attention
@@ -112,13 +113,22 @@ and the ruling of this morning in the run orders cites it.
 *Is the action already readable where the note begins, so the note reports a decision made, or only
 after the note is written, so the note is part of the deciding?*
 
-Per decision: the lens's distribution over the six tools at `P_note` against `P_act`, at the last
-layer and at each model's median ignition depth from W-1; the **decided-before-the-note fraction**
-— decisions whose taken tool is already top of the six at `P_note` — per family and step, against
-the tool prior. On the 300-sample: the same readout at **every token of the note**, giving the
-trajectory of the decision through the note, and the note position at which the taken tool first
-becomes top, as a fraction of the note's length. The falsifier of "the note is a report" is the
-taken tool becoming top only during or after the note beyond what the prior explains.
+**Primary, by decodability.** The model's own next-token distribution at `P_note` puts negligible
+mass on tool names — it is about to write prose — so "which tool would it take now" has no resolved
+reading there by the mass floor (measured on the test rows: about 1e-14). The question is therefore
+asked as W-2 asks its own: the rank-r linear readout of the taken tool, fitted on the
+lens-transported residual at **`P_note`** and evaluated held out by episode, against the same
+readout at **`P_act`**, at every rank of the ladder, with the permutation null and the tool prior
+at each; the raw residual per layer beside the transported one. If the taken tool is decodable at
+`P_note` above the null at the ranks where it is decodable at `P_act`, the note reports a decision
+already made; if it is decodable only at `P_act`, the note is where the deciding happens; the gap
+between the two is the note's share. By family, step and variant; the unit is the episode.
+
+**Secondary, by readout.** The six-tool distribution through the lens at every token of the note on
+the 300-sample, each token carrying its mass and reading as *unresolved* below the floor; the
+position in the note at which the taken tool first becomes the resolved top, as a fraction of the
+note's length, and the count of unresolved tokens per note. Reported for what it is: a reading of
+what the model would emit were it to act mid-note, mostly unresolved by construction.
 
 ## Cost, schedule, record
 
