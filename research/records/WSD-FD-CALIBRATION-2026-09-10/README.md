@@ -550,15 +550,44 @@ displacement of 4.6e-7 — so both terms vanish by construction and the run woul
 stability that its own design guaranteed. The native run was added for that reason, and the script
 now takes the precision as an argument with the trap named in its help text.
 
-## 11. What follows
+## 11. What this record concludes, and what is queued
 
-1. **The width rows**, per the Chief's step 3: the same directions, cotangents and a few steps at
-   widths 64 and 256, anchor and forward at that width, with §3.1's anchored-at-width check repeated
-   first. That measures the schedule term after the matched answer exists rather than inside it.
-2. **No further full bf16 map is justified.** The instrument has no useful interval in that
-   precision, so another map would measure the same floor at more expense.
-3. **The step rule is not a constant.** Its useful value moved by 2⁶ across three layers here, so a
-   single `epsilon_scale` for every layer is refuted by this table whatever else is true.
+*Rewritten as the last act of the session. The three items that stood here were the plan at §6, and
+two of them are now stale: the width rows are §8, and "a single `epsilon_scale` is refuted by a
+factor of 2⁶" is the claim §6 withdraws — the normalized minima differ by 16, and every layer's
+median is at or below 4.3e-3 at k = 10, so a common adequate scale is not refuted at all.*
+
+**Concluded, and measured here.**
+
+1. The replacement hook is exact at every width tested, anchored at that width (§2, §3.1).
+2. The bf16 forward is not batch-invariant, from the first block, with no hook present (§3).
+3. Coherent float32 finite differences converge to autograd for the tested projections, with a
+   proper interval at every layer tested; no broadly accurate native-bf16 interval has been
+   demonstrated over this grid (§6).
+4. The golden test, fitted inside a demonstrated interval at a matched schedule, gives 4.85e-3 and
+   2.86e-3 against the first run's 1.0245, with cosines of 0.99999 (§9).
+5. Coherent float32 is width-stable at 12B scale at every depth, and a float32 12B exact fit at
+   width 1 peaks at 44.10 GiB (§10).
+6. The early-layer derivative is ill-conditioned **in both precisions**: about 539× amplification of
+   an anchor move at repo layer 1 in float32, 1.4× at layer 33. The sensitivity is the function's,
+   not the arithmetic's (§8.2).
+
+**Queued, in the Chief's order, and none of it started.**
+
+1. The capture code to the R6 contract, with tests: width 1, key `(task_id, step)`, `prompt_sha256`,
+   the token index, `rendered_rows`, native precision, `/workspace/captures/<entry>/`.
+2. P1–P6 of Codex's review, with the remaining C2 documentation items.
+3. R2's unreduced archive from the map run on; the float32 no-op boundary before the first derivative
+   at each new precision, bound to the records that follow; `responses.npz` written durably per
+   completed unit with a hash and an index.
+4. The 12B exact fits with the captures, **only** once the capture code meets the contract, because a
+   capture pass that does not is card time spent on artefacts nothing can be sealed against.
+
+**And one caution this record raises for work outside it.** A J-lens fitted at one anchor does not
+transport to a nearby anchor at early layers (§8.2). Reading a float32 lens against a native capture
+is benign at layer 33, where the amplification is 1.4×, and is not a small correction at layer 1,
+where it is 539×. That pairing is unmeasured, and it should be measured before an early-layer lens is
+read across an arithmetic boundary.
 
 ## 12. Provenance
 
