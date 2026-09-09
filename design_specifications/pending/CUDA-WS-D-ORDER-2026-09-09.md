@@ -116,3 +116,41 @@ lens four times outside the length it was fitted at and will see no error.
 That is our own 21.8x extrapolation arriving from upstream's defaults rather than from our corpus,
 and it is a trap for anyone told to "use upstream directly". The adapter passes lengths explicitly
 at both ends and never relies on either default.
+
+## Amendment, Chief, 2026-09-10 — row one of the golden test, and the float32 control that comes before rows two and three
+
+Read from `out/golden-4b/golden-report.json` on the card at 10:57Z, the D-CRO's run under
+`/workspace/wsd-checkout`, held row 39, one prompt of 128 tokens, two valid positions, native
+bfloat16, ε at 1% of the residual norm per layer (101 at layer 0, 8,818 at layer 32). Exact
+reproduces itself at 0.0. Finite-difference against exact, per layer:
+
+| layer | relative difference | cosine |
+|---|---:|---:|
+| 1 | 1.014 | 0.015 |
+| 17 | 0.973 | 0.295 |
+| 33 | 0.569 | 0.825 |
+
+monotone in between; the three controls separate (transposed 1.414, wrong corpus 1.466,
+layer-shifted 238); halving ε at layer 17 moves 0.973 to 0.844, a ratio of 1.15 against the
+laptop's 3.9. A relative difference of 1.0 with cosine 0 is not a wrong map of the right size — that
+is √2, which is what the transposed control shows — it is a map with about a fifth of the reference's
+norm and no direction in common. The finite-difference estimator saw almost nothing at the early
+layers and progressively more as ε grew with depth.
+
+**Reading, as a hypothesis to test and not a finding:** the output change per direction sits below
+the bfloat16 resolution of the logits at early layers and rounds to zero. The laptop's halving
+ratio of 3.9 is the truncation regime, which says the laptop's FD was effectively higher precision.
+
+**Schedule amended.** Rows two and three do not run yet; in bfloat16 they would spend 52 minutes
+re-measuring row one. First, about three minutes: the FD estimator on the same row and positions
+with the perturbation and the readout in float32 (weights in float32 if no promoted path exists),
+at layers 1, 17 and 33, same ε scale. If it agrees with exact at the fixture's order (3.6e-3), the
+finding is *the finite-difference estimator is precision-bound — unusable in native bfloat16, sound
+in float32* — rows two and three are unnecessary, and the 12B smoke row follows. If it still
+disagrees, the difference is not precision and rows two and three run as ordered, because the
+finding then needs the extension.
+
+**The record states, as measurements:** the dtype the laptop's FD ran in, which decides what this
+says about the MLX-fitted lenses; why row 39 has two valid positions of 128, since a per-row
+Jacobian over two positions is a thin basis and §6.2 depends on the mask; and the fraction of FD
+directions whose response was exactly zero per layer, the direct test of the rounding reading.
