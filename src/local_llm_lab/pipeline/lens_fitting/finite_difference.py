@@ -262,6 +262,21 @@ def fit_finite_difference_jacobian(
                             device="cpu", dtype=torch.float64
                         )
                 running[layer] += (accumulated / len(positions)).numpy()
+                # Per layer, not per row. At Gemma width one row is half an hour of forwards, and
+                # a callback that fires only at the end of it is the runbook's forbidden shape:
+                # a tool that reports once at the end, on a paid card, cannot say what failed or
+                # where. Learned by losing twenty-seven minutes of exactly that (2026-09-11).
+                if progress is not None:
+                    progress({
+                        "event": "layer",
+                        "estimator": ESTIMATOR_FINITE_DIFFERENCE,
+                        "row_index": int(row["index"]),
+                        "upstream_layer": layer,
+                        "layers_done": sources.index(layer) + 1,
+                        "layers_total": len(sources),
+                        "epsilon": epsilon,
+                        "elapsed_s": round(time.monotonic() - started, 1),
+                    })
 
         n_done += 1
         record = {
