@@ -1,0 +1,31 @@
+{
+  "checks": {
+    "analytic_counterexamples": 3,
+    "corrupted_source_files_rejected": 11,
+    "import_allowlist": [
+      "__future__",
+      "argparse",
+      "fractions",
+      "hashlib",
+      "json",
+      "math",
+      "pathlib",
+      "statistics"
+    ],
+    "lint": "ruff F/E9 passed",
+    "matched_width_cells": 648,
+    "width_one_scalar_identities": 648
+  },
+  "hashes": {
+    "README.md": "418f10f694762b7e197813555893eaa27d699f93f28d7dbbe319dcf994566063",
+    "SOURCE-MANIFEST.json": "0f0b696b5137740f9da831fb8894d9e75b6c60e6f9f6b8e3dabc85f9abb28687",
+    "analysis.json": "6690b760e5a0a277f008bbccf541f93d841f73130c089619e479b6a46132eeec",
+    "analyze.py": "89bdf7863b83c6d110a18985da9e5a9cee4de7f03ae69489382301125acceb74",
+    "build_report.py": "9b1a6b77d407df678a57202182b8ad09d126187695201111f7686afff877a83b"
+  },
+  "model_execution": false,
+  "scientific_precision_ruling_modified": false,
+  "scope": "file-only width audit; source code reviewed, no model imported",
+  "source_records_modified": false,
+  "status": "passed"
+}
