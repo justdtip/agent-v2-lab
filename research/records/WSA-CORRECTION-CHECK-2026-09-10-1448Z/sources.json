@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "producer_commit": "547b7a052244ec87334956cef03c6e5661a49b2f",
+  "order_commit": "6c2f7d0666342fe3d38313e8b09d808e5a315021",
+  "reviewer_parent": "ca396fbcf69f88a3a2841400e5bbb2c9dac88a86",
+  "sources": [
+    {
+      "commit": "547b7a052244ec87334956cef03c6e5661a49b2f",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/README.md",
+      "snapshot": "producer.md",
+      "sha256": "81105202c081910febecc880cc100c12edb10d4ff91898e5968f4a8d3df9a584",
+      "bytes": 40088
+    },
+    {
+      "commit": "6c2f7d0666342fe3d38313e8b09d808e5a315021",
+      "repository_path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "snapshot": "order.md",
+      "sha256": "f2b306f18bc35d7c92f5677f7c1de64c0a6a00ad5d2e37734ba7818bcb3ef318",
+      "bytes": 45343
+    },
+    {
+      "commit": "547b7a052244ec87334956cef03c6e5661a49b2f",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/displacement.jsonl",
+      "snapshot": "displacement.jsonl",
+      "sha256": "4992a08e5e275d6f6cdcbb536d3c9edcf5ac2eec6ce05bb9a54e1e524062f20d",
+      "bytes": 35687
+    },
+    {
+      "commit": "ca396fbcf69f88a3a2841400e5bbb2c9dac88a86",
+      "repository_path": "research/records/WSA-MAP-ANCHOR-AUDIT-2026-09-10/README.md",
+      "snapshot": "accepted-audit.md",
+      "sha256": "4f47ce3e8d866bf8d18abb4be9f8cb0ccb4b41fe0dee8f560005d599a92dbdfa",
+      "bytes": 14567
+    }
+  ]
+}
