@@ -407,6 +407,29 @@ def recorded_generator(episode: Episode) -> TurnGenerator:
     return generate
 
 
+def torch_generator(model: Any, view: Any, tokenizer: Any, spec: Any) -> TurnGenerator:
+    """The real generator: the runner's torch greedy loop, driven from recorded prompt ids.
+
+    UNEXECUTED. Nothing has run through this, because it needs WS-A's architecture view and no
+    torch view exists yet. It is wired rather than sketched so that swapping the view in is the
+    only remaining step, and so the call shape it assumes is inspectable now rather than
+    discovered on rented hardware.
+
+    It supplies no ``final_top`` and no logit digests. A divergence report will therefore say
+    the generated side's layer-34 top is empty, which is true, rather than filling it with the
+    recorded one and making a comparison look like it happened.
+    """
+    from local_llm_lab.pipeline.runner import generate_turn_tokens
+
+    def generate(prompt_ids: tuple[int, ...], *, max_tokens: int) -> GeneratedTurn:
+        token_ids, reason = generate_turn_tokens(
+            model, tokenizer, list(prompt_ids), max_tokens, view=view, spec=spec
+        )
+        return GeneratedTurn(token_ids=tuple(token_ids), stop_reason=reason)
+
+    return generate
+
+
 def _divergence(
     turn: Turn, generated: GeneratedTurn, index: int, actual_token: int | None
 ) -> Divergence:
