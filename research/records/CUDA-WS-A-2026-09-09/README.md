@@ -1,3 +1,45 @@
+# WS-A: ready for review against the next instruction
+
+The three device-free tasks ordered at **6ab3318** are delivered. Estimator source is
+**08a87fb**; device-gate source is **68b1ede**. **261 checks passed, zero skipped** on CPU
+with native MLX imports blocked. The box was active: a pre-run reading showed 11.7% CPU,
+load averages 5.53/5.83/6.22 across 12 logical CPUs, and no model lock or window. This was
+not an established idle-box measurement. The source-bound evidence is
+[DEVICE-READINESS-VERIFICATION.json](DEVICE-READINESS-VERIFICATION.json).
+
+- The graph-once estimator preserves upstream's target-position sum and source-position mean,
+  using its recorder and layer convention. On the six-block fixture every source map agreed
+  exactly under both eager and SDPA, within the required float32 epsilon. Warmed end-to-end
+  sequential/batched ratios were 2.98 and 2.69 respectively. These are fixture test outcomes,
+  not forecasts of device performance. The sequential timing baseline already has one forward;
+  memory savings against upstream's replicated batched forward remain unmeasured.
+- The existing gate script now selects and pins the device, loads each precision through the
+  shared loader, runs both required lengths, enforces bf16 exactness and the three controls,
+  and evaluates a separate float32-loaded control. The tiny serialized fixture mirrors the
+  official checkpoint's wrapper declaration and tensor-key layout. Real checkpoints require
+  CUDA. Host and device caps apply separately; no real checkpoint was loaded in this work.
+- [FIRST-HOUR-CHECKLIST.md](FIRST-HOUR-CHECKLIST.md) gives the findings, transferable methods,
+  required device numbers, historical laptop bases, and what each mismatch would mean.
+
+Each new gate number is stored as `{value, basis}`. Completed phases are written atomically.
+Resume requires the same commit, executable source (including upstream), checkpoint, full
+runtime reading, fixed IDs and declared limits. It rechecks the numerical and original resource
+readings. Earlier attempts and their memory evidence survive; a cheap resume is not a model-load
+peak. Interrupted lengths restart from native capture because scalar records cannot restore tensors.
+
+**Unexecuted:** all real-checkpoint CUDA gates, the device memory claim, long-context model-scale
+measurements, and the real decode identity/readout band. The script's successful exit covers
+structure, residual precision gates and the float32 control; its gates 3–4 remain explicitly
+unexecuted for the following device step. Q5 is unchanged. The heartbeat is disabled.
+
+---
+
+# Historical record through 79d2567
+
+The entries below retain their original chronology. Statements that the estimator is unstarted,
+or that a further checkpoint run belongs on the laptop, are superseded by the current order and
+readiness above. Historical raw evidence has not been rewritten.
+
 # WS-A review corrections and CPU calibration
 
 **Follow-up source ready:** `79d2567` implements the dated review's native-dtype

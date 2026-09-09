@@ -1,0 +1,191 @@
+BOX_STATE {"utc": "2026-09-09T03:43:16.884806+00:00", "cpu_percent_1s": 20.5, "load_average": [6.1533203125, 5.9541015625, 6.28662109375], "logical_cpus": 12, "window": "None", "lock": "None", "interpretation": "pre-run snapshot; continuous host idleness is not established", "scope": "tiny CPU fixtures and source checks; native MLX imports blocked"}
+
+==================================== ERRORS ====================================
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not NoneERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/torch/test_torch_jacobian.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_arch_torch.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_torch_capture.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_hf_text.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_upstream_ref.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_torch_upstream_imports.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_gate_records.py
+
+ERROR: found no collectors for /Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_repository_rules.py
+
+
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+____________________________ ERROR collecting tests ____________________________
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../Desktop/An app/.venv/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:293: in pytest_ignore_collect
+    return runlock.ignore_when_mlx_absent(collection_path.name, TESTS_THAT_CAN_REACH_MLX, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/local_llm_lab/runlock.py:518: in ignore_when_mlx_absent
+    installed = importlib.util.find_spec("mlx") is not None
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib.util>:100: in find_spec
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<stdin>:12: in find_spec
+    ???
+E   ImportError: native MLX is excluded from this CPU fixture verification
+=========================== short test summary info ============================
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+ERROR tests - ImportError: native MLX is excluded from this CPU fixture verif...
+8 errors in 0.12s
+VERIFICATION_EXIT 4
+NATIVE_MLX_MODULES []
