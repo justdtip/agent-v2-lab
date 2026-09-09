@@ -1120,3 +1120,56 @@ armed, which is how the fused-linear-cross-entropy kernels run under FSDP2 in th
 root's parameters resident unsharded from forward through backward, once per step; the memory rung
 is `reshard_after_forward=True` on the root, measured per §10.2. The hand-reduced arm stays in the
 record as the negative control: the configuration the old gate passed.
+
+**Executed, SWE-2, 8f9a178 on `cuda-ws-c`.** The wrapper is built and sharded as the root (under
+tying the head *is* the embedding tensor, so the root holds one parameter and not a straddling
+pair), and the amended gate ran three arms against single-process training on the same rows,
+per parameter, `max|a − b|` over the tensor's own scale:
+
+| arm | loss, step 0 | grad, step 0 | value, final |
+|---|---:|---:|---:|
+| blocks and root sharded | 0.00e+00 | 1.80e-07 | 8.56e-06 |
+| blocks only, root hand-reduced | 0.00e+00 | 1.80e-07 | 8.58e-06 |
+| control: root reduced by nothing | 0.00e+00 | **1.67e+00** | **1.12e+00** |
+
+The control's loss is bit-identical to the correct runs while its gradient is 167% wrong and its
+parameters end 112% wrong. Two correct configurations sit at float32 epsilon and the broken one
+is off by more than one, so there is no tolerance at which the old gate separates them and none at
+which the new one fails to. `reshard_after_forward` on the root is recorded as the memory rung and
+not yet measured; that measurement is the device's. Two-rank `gloo` on CPU only; no CUDA, no NCCL,
+no real checkpoint.
+
+### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
+
+SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
+stub could not have shown. Arming rollback (`activate_past_recording`) *after* a sliding window has
+filled does not raise: the cache reports the right offset and holds one key where six should be,
+and would attend over a five-token hole silently, so `enable_rollback` now refuses a cache that has
+already advanced. And an armed sliding layer stores everything rather than `window - 1` entries,
+so at the map's longest episode (2,749 positions against a 1,024 window, 29 of 34 layers sliding)
+the KV cache is 2.15x its bounded size. That is the measured need the deferral was waiting on, and
+it is a ratio of a small base: at this checkpoint's four KV heads and the class-default head
+dimension of 256, about 136 KB per token, roughly 380 MB armed against 180 MB bounded. SWE-1 read
+them off the loaded config (c36de39): 136.0 KiB per token, 177.9 MB bounded and 382.8 MB armed at
+2,749 positions, 2.152x. One trap for any model: `head_dim` here is the class default because the
+checkpoint's config leaves it null, and deriving it as hidden size over attention heads gives 320,
+a quarter too large; read the attribute, never derive it. Memory therefore does not decide. **Ruling:** every
+strategy stays refused under torch until the tolerance runner has its baseline at `none` against
+the view; then each strategy is its own arm of the same gate and must reproduce the `none`
+trajectories byte for byte within the backend. A strategy that changes one token is a defect, not
+a speed setting, because the golden records were made under one rule and a rewindable sliding
+cache is exactly where stored keys and the mask can part company.
+
+Separately, SWE-2 reported that no stage could load a registered `models/...` checkpoint from a
+worktree. The resolver was correct for every process without the override and wrong for every
+process with it: `_resolve_checkpoint` read the primary through `box_state_root`, whose
+`$AGENT_V2_BOX_STATE_DIR` redirect exists so an isolated run cannot take the machine's lock, and a
+checkpoint that followed the redirect resolved into scratch. Two things shared one reader and only
+one of them may be redirected. `primary_checkout_root()` is now the git-derived half on its own,
+the resolver uses it, and the test builds a real linked worktree whose primary has a space in its
+name, as the real one does. The registry comment that says "the project root" is frozen by the
+records' `registry_sha256` pins and stays; `models.py` carries the truth.
+
+Two rules from the same hour, both SWE-2's: anything that bypasses `forward` inherits none of what
+upstream attaches to it and must supply it itself; and a suite reading is not a claim unless it
+carries its skip count and window state on the same line.

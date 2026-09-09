@@ -412,3 +412,67 @@ and whether the episode entered a repeated-failure state without calling it. If 
 common across families, the map is measuring strategy switching and should say so in those words. If
 it stays confined to one episode, it is an outlier and the map is unaffected. **Either way it is
 recorded before the run rather than argued after it.**
+
+---
+
+## Latent: the snapshot cache restored keys and values but not position on rotating layers
+
+**Found by SWE-1 on 2026-09-09, fixed on `cuda-migration` at `c447e98` with the refuted version kept
+as a test. Verified here independently before logging, because a stated blast radius is exactly the
+kind of claim that should not be recorded on report.**
+
+**The defect.** `SnapshotCache.restore` round-trips a cache through `.state`. Confirmed against the
+installed `mlx_lm.models.cache`:
+
+| | assigns `offset` | assigns `_idx` |
+|---|---|---|
+| `KVCache.state` setter | recovers it from the array length | n/a |
+| `RotatingKVCache.state` setter | **no** | **no** |
+| `RotatingKVCache.meta_state` setter | yes | yes |
+
+So on a rotating layer a restore put the right keys and values back **at the wrong position**, and
+raised nothing. On Gemma that is 29 of 34 blocks.
+
+**Blast radius: nothing on disk is affected, and it is one registry field from engaging.** Checked
+four ways here:
+
+| check | result |
+|---|---|
+| any registry entry setting `cache.equivalence_verified` | **none** — all six are `null` |
+| `models.py` resolution | `auto` becomes `snapshot` only when that field is not `None` (`models.py:231`) |
+| every Gemma record's manifest | `cache_strategy: "none"` in stage one, the corrected run and stage two |
+| ~~the recorded reason~~ | ~~`auto:equivalence_unverified`, three occurrences~~ — **wrong, corrected below** |
+| Qwen3.5 | declares no sliding or rotating layers, so its snapshot path never met a rotating cache |
+
+**Correction, 2026-09-09, from SWE-1's independent check of the registry — and my "verified four
+ways" had a hole in exactly the place a count instead of a location always does.**
+
+The three Gemma entries declare `strategy: none` **explicitly**, so their recorded reason is
+`explicit:none`. `auto:equivalence_unverified` never described them: it appears in one qwen35-4b
+source-inspection record and nowhere else. My grep counted three occurrences of the string and
+attributed them to the Gemma runs without checking which file they were in — and one of the two
+files matching by the time anyone re-ran it was **this entry**, quoting itself.
+
+The Gemma run manifests record no reason field at all, so there was nothing there to have checked.
+
+**And the containment is one field wider than reported.** No registry entry sets
+`equivalence_verified`, so `SnapshotCache` was never constructed for **any** registered model, not
+only for Gemma. Engaging the defect on Gemma needed **two** registry changes — `strategy` from
+`none` to `auto`, *and* `equivalence_verified` set — not one. Verified from the registry:
+
+| entry | `strategy` | `equivalence_verified` |
+|---|---|---|
+| `gemma3-4b`, `gemma3-4b-bf16`, `gemma3-4b-cuda-bf16` | `none` | `null` |
+| `qwen35-4b` | `history` | `null` |
+
+Still latent, still zero results affected, one field further from engaging than first written.
+
+**Why it belongs in this register rather than only in the method record.** It never produced a wrong
+number, so it is not an error anyone made; it is a **confound that was one configuration change
+away** and would have been silent when it fired. The next person to set
+`cache_equivalence_verified` for a sliding-window model is the person at risk, and this is where
+they will look — which is the whole argument for logging a latent defect at all.
+
+It is also the day's recurring shape at the level of a cache: `state` is the quantity that *looks*
+like the cache's contents, and position lives one field away in `meta_state`. A round-trip through
+the obvious accessor is a check on the thing next to the mechanism.
