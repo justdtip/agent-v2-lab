@@ -331,3 +331,144 @@ def test_fetch_dictionary_records_digests_and_the_offline_check_reads_them(
     sidecar.unlink()
     result = device_setup.verify_cached_dictionary("google/x", folder, offline=True)
     assert result["basis"] is None and result["files"]["params.safetensors"]["ok"] is None
+
+
+# ---------------------------------------------------------------------------------- bootstrap
+
+
+def _bootstrap_stubs(monkeypatch, tmp_path, *, free_gib=250.0, logged_in="daniel", dictionary_ok=0):
+    import shutil
+
+    calls = []
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("HF_HOME", str(cache))
+    monkeypatch.setattr(device_setup, "_logged_in", lambda: logged_in)
+    monkeypatch.setattr(device_setup, "login", lambda args: calls.append(("login",)) or 0)
+    monkeypatch.setattr(device_setup, "_hub_size", lambda repo: (4e9, 8 * device_setup.GIB))
+    monkeypatch.setattr(
+        device_setup, "_dictionary_plan", lambda repo, site, width, l0: (34, 11 * device_setup.GIB)
+    )
+    monkeypatch.setattr(
+        shutil, "disk_usage", lambda path: types.SimpleNamespace(free=free_gib * device_setup.GIB)
+    )
+    monkeypatch.setattr(
+        device_setup, "fetch", lambda args: calls.append(("fetch", tuple(args.ids), args.all)) or 0
+    )
+
+    def fetch_dictionary(args):
+        calls.append(("dictionary", args.repo, args.all_layers))
+        for model in ("google/gemma-3-4b-it", "google/gemma-3-12b-it"):
+            if model.split("-")[2] in args.repo:  # "4b" / "12b"
+                folder = f"{args.site}/layer_17_width_{args.width}_l0_{args.l0}"
+                side = device_setup.dictionary_sidecar(cache, args.repo, folder)
+                side.parent.mkdir(parents=True, exist_ok=True)
+                side.write_text(json.dumps({"config": {"model_name": model}, "files": {}}))
+        return dictionary_ok
+
+    monkeypatch.setattr(device_setup, "fetch_dictionary", fetch_dictionary)
+    monkeypatch.setattr(
+        device_setup, "verify_data", lambda args: calls.append(("data", args.archive)) or 0
+    )
+    monkeypatch.setattr(
+        device_setup,
+        "_entries_by_base",
+        lambda: {
+            "google/gemma-3-4b-it": "gemma3-4b-cuda-bf16",
+            "google/gemma-3-12b-it": "gemma3-12b-cuda-bf16",
+        },
+    )
+    monkeypatch.setattr(
+        device_setup,
+        "preflight",
+        lambda args: (
+            calls.append(
+                ("preflight", args.model[0], tuple(args.dictionary or ()), args.render_source)
+            )
+            or 0
+        ),
+    )
+    return calls, cache
+
+
+def test_bootstrap_dry_run_logs_in_plans_the_disk_and_downloads_nothing(
+    monkeypatch, tmp_path, capsys
+):
+    calls, _ = _bootstrap_stubs(monkeypatch, tmp_path)
+    report = tmp_path / "report.json"
+    code = device_setup.main(["bootstrap", "--dry-run", "--report", str(report)])
+    out = capsys.readouterr().out
+    assert code == 0 and calls == [], "a dry run fetches nothing"
+    assert "already logged in as daniel" in out and "GiB to fetch plus 40 GiB reserve" in out
+    rows = json.loads(report.read_text())["rows"]
+    assert [r["step"] for r in rows] == ["login", "plan", "dry-run"]
+    assert "8.00 GiB  google/gemma-3-4b-it" in out and "(34 layers)" in out
+
+
+def test_bootstrap_refuses_a_disk_the_plan_does_not_fit_with_the_numbers(
+    monkeypatch, tmp_path, capsys
+):
+    _bootstrap_stubs(monkeypatch, tmp_path, free_gib=50.0)
+    code = device_setup.main(["bootstrap", "--report", str(tmp_path / "r.json")])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert (
+        "FAIL plan" in out and "38.0 GiB to fetch plus 40 GiB reserve, against 50.0 GiB free" in out
+    )
+
+
+def test_bootstrap_runs_every_step_in_order_and_pairs_each_dictionary_with_its_entry(
+    monkeypatch, tmp_path, capsys
+):
+    calls, _ = _bootstrap_stubs(monkeypatch, tmp_path)
+    source = tmp_path / "data" / "agent_v2e"
+    source.mkdir(parents=True)
+    rendered = tmp_path / "data" / "agent_v2e-gemma3-4b"
+    rendered.mkdir()
+    (rendered / "manifest.json").write_text("{}")
+    report = tmp_path / "report.json"
+    code = device_setup.main([
+        "bootstrap", "--report", str(report), "--allow-cpu",
+        "--data-archive", "x/agent_v2e.tar.gz", "--data-archive", "x/agent_v2e-gemma3-4b.tar.gz",
+        "--data-dest", str(tmp_path / "data"),
+        "--render-source", str(source), "--render-manifest", str(rendered / "manifest.json"),
+    ])  # fmt: skip
+    assert code == 0, capsys.readouterr().out
+    assert calls == [
+        ("fetch", ("google/gemma-3-4b-it", "google/gemma-3-12b-it"), True),
+        ("dictionary", "google/gemma-scope-2-4b-it", True),
+        ("dictionary", "google/gemma-scope-2-12b-it", True),
+        ("data", "x/agent_v2e.tar.gz"),
+        ("data", "x/agent_v2e-gemma3-4b.tar.gz"),
+        ("preflight", "gemma3-4b-cuda-bf16",
+         ("google/gemma-scope-2-4b-it:resid_post_all/layer_17_width_16k_l0_small",), None),
+        ("preflight", "gemma3-12b-cuda-bf16",
+         ("google/gemma-scope-2-12b-it:resid_post_all/layer_17_width_16k_l0_small",), str(source)),
+    ]  # fmt: skip
+    rows = json.loads(report.read_text())
+    assert rows["exit"] == 0 and [r["step"] for r in rows["rows"]][-2:] == [
+        "preflight gemma3-4b-cuda-bf16",
+        "preflight gemma3-12b-cuda-bf16",
+    ]
+
+
+def test_bootstrap_stops_at_the_first_failure_and_still_writes_the_report(monkeypatch, tmp_path):
+    calls, _ = _bootstrap_stubs(monkeypatch, tmp_path, dictionary_ok=1)
+    report = tmp_path / "report.json"
+    code = device_setup.main(
+        ["bootstrap", "--report", str(report), "--data-archive", "x/agent_v2e.tar.gz"]
+    )
+    assert code == 1
+    assert [c[0] for c in calls] == ["fetch", "dictionary"], "nothing after the failed step"
+    rows = json.loads(report.read_text())
+    assert rows["exit"] == 1 and rows["rows"][-1]["ok"] is False
+    assert rows["rows"][-1]["step"] == "dictionary google/gemma-scope-2-4b-it"
+
+
+def test_bootstrap_without_a_token_prompts_or_fails_by_flag(monkeypatch, tmp_path):
+    calls, _ = _bootstrap_stubs(monkeypatch, tmp_path, logged_in=None)
+    assert (
+        device_setup.main(["bootstrap", "--skip-login", "--report", str(tmp_path / "a.json")]) == 2
+    )
+    assert calls == []
+    assert device_setup.main(["bootstrap", "--dry-run", "--report", str(tmp_path / "b.json")]) == 0
+    assert calls == [("login",)], "the prompt ran once, then the plan"

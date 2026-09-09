@@ -8,8 +8,24 @@ carries its own section in the same shape; this page points at them and fixes th
 
 ## 0. What the device needs before anything runs — `lab-device`
 
-One command, five parts, in this order. `uv run lab-device --help` lists them; each writes what it
-found rather than what it was asked.
+Three commands and one paste, then nothing by hand until the first hour. `bootstrap` runs the
+five parts below in order, the same code each subcommand runs, stops at the first failure with its
+row, and writes `outputs/bootstrap-<utc>.json`; the login prompt is the only step that needs a
+hand. The Director's disk is 250-300 GB, so the default fetch is the two Gemma sizes and their
+every-layer dictionaries, about 31 GiB and 33 GiB by the hub's listings, with a 40 GiB reserve
+for checkpoints and captures; the 27B and the Qwen pair are named on the command line when wanted.
+
+```
+git clone … && git checkout cuda-migration
+uv sync --extra cuda
+uv run lab-device bootstrap --allow-cpu --dry-run                      # login prompt, then the disk plan; nothing downloaded
+uv run lab-device bootstrap --data-archive agent_v2e.tar.gz --data-archive agent_v2e-gemma3-4b.tar.gz
+```
+
+The two archives come from the laptop's `outputs/transfer/` (both are needed: the render row
+re-renders the source under the 12B entry and compares with the laptop render's digests). Drop
+`--allow-cpu` on the device: a box without CUDA must fail the row. The parts, for reference and
+for running one by hand when the sequence stops:
 
 | step | command | what it does |
 |---|---|---|
