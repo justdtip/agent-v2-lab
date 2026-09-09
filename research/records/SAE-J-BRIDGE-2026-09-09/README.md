@@ -505,6 +505,21 @@ The tests mutate each bound field independently and assert the pair becomes unme
 measurement at one layer and show it does not transfer to its neighbour, and cover both ways a
 registered entry can fail to identify itself.
 
+**Then the fix review found that the identity was still one field short, and this one was in the
+ruling rather than in the code.** Codex's fix review (`c55752f`) verified all six findings closed
+and then observed that a ν digest identifies the *fitting declaration*, not the archive it
+produced. Two lenses fitted from one declaration carry equal ν blocks by design, so this needs no
+hash collision: a pairing measured against one matrix would license a reading against a different
+matrix. The sidecar's binding does not close it either, since that proves a declaration belongs to
+an archive, not that only one archive answers to it. The pairing key now carries the loaded
+archive's own verified `sha256` beside the declaration digest, read off the `LensMaps` object by
+`hook_alignment` rather than asserted by a caller, because nobody should be asked to claim that two
+matrices are the same lens. A pairing missing either digest is unmeasured.
+
+The test holds the declaration fixed and changes the archive, then reverses the control by holding
+the archive and changing the declaration, so it cannot pass by ignoring either. A test that changes
+only metadata cannot detect this class of gap, which is the transferable part.
+
 **The ratio test was vacuous, and the fix is not the one I would have guessed.** It checked for
 `amplif` only in each layer's immediate keys, then scanned the top-level values for numbers, which
 are dictionaries, so it never descended and could not have failed. The audit's correction goes
