@@ -1,14 +1,33 @@
-"""Standalone all-layer lens fitting; input validation runs before model imports."""
+"""Standalone all-layer lens fitting; input validation runs before model imports.
+
+Both fits here are MLX. The backend is read once, after argument validation and before the first
+import that reaches MLX, and a non-MLX backend is refused rather than allowed to fall through —
+see the comment at that seam for why a refusal is the right answer and not a temporary one.
+"""
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+#: The torch stage, which exists on the CUDA line only. Named once so the dispatch below and the
+#: refusal beside it cannot drift apart, and so `error.name` is compared against a constant rather
+#: than a string repeated at both ends.
+TORCH_STAGE_MODULE = "local_llm_lab.pipeline.lens_fitting.fit_torch"
+
+
+def load_model_spec_for(name: str):
+    """The registry lookup, deferred so a torch box does not import the MLX side to reach it."""
+    from local_llm_lab.models import load_model_spec
+
+    return load_model_spec(name)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,6 +71,74 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("native Jacobian stages require a new --record-dir")
     elif args.jacobian_plan or args.plan_config or args.record_dir or args.jacobian_stage != "fit":
         parser.error("Jacobian stage arguments require --kind jacobian")
+    # The backend is read here and nowhere else in this script, so the MLX path below is reached by
+    # exactly the same code it always was — the shape `stage_train` uses (plan §16.5). The import is
+    # deferred rather than module-scope for the same reason it is there: `device` is stdlib-only,
+    # but everything after this point reaches MLX, and a torch-only box must get its answer before
+    # any of that is imported.
+    from local_llm_lab import device
+
+    backend = device.backend()
+    if backend != "mlx":
+        # The dispatch, and the refusal behind it. `fit_torch` lives on the CUDA line only, so this
+        # one file is identical on both branches and neither has to carry a divergent copy of the
+        # seam: where the stage exists it runs, and where it does not the refusal explains itself.
+        #
+        # The `error.name` test is not defensive tidiness. Catching ImportError broadly here would
+        # turn *any* import failure inside the stage — a missing torch, a typo in a submodule — into
+        # "not implemented on this backend", which is the over-broad-catch shape this repository has
+        # now found four times. Only the stage module itself being absent reaches the refusal;
+        # anything else is a real failure and is raised with its own name.
+        #
+        # `import_module`, not `from ... import fit_torch`: the `from` form raises with `name` set
+        # to the *package*, so the discrimination above would compare against the wrong string and
+        # re-raise on the one case the refusal exists for. Found by this file's own tests.
+        try:
+            stage = importlib.import_module(TORCH_STAGE_MODULE)
+        except ModuleNotFoundError as error:
+            if error.name != TORCH_STAGE_MODULE:
+                raise
+        else:
+            return stage.run(args, load_model_spec_for(args.model), progress=None)
+
+        # Deliberately a refusal and not a fall-through. Both fits below are MLX: `regression.py`
+        # has no torch port on this branch and `jacobian.py` is this repository's finite-difference
+        # estimator. Falling through on a torch-only box fails several imports deep, with an error
+        # about a missing module rather than about a missing fit, which is the failure this guard
+        # exists to replace. `run_native.py` shipped once without one; this is that lesson applied
+        # before rather than after.
+        #
+        # The estimator sentence is the load-bearing one. When the torch path lands it will be
+        # upstream's exact autograd, not a port of the finite-difference stage, so the two backends
+        # will produce *different instruments* fitted on the same corpus. That difference is the
+        # golden test's finding and it must be declared in provenance, never absorbed by a CLI that
+        # silently gives each box whichever estimator it can run.
+        print(
+            json.dumps(
+                {
+                    "event": "refused",
+                    "reason": "lens fitting has no torch implementation yet",
+                    "backend": backend,
+                    "backend_source": (
+                        f"${device.BACKEND_ENV}" if os.environ.get(device.BACKEND_ENV)
+                        else "first installed, MLX first"
+                    ),
+                    "kind": args.kind,
+                    "implemented_on": "mlx",
+                    "will_live_in": TORCH_STAGE_MODULE,
+                    "estimator_here": "finite difference (lens_fitting/jacobian.py)",
+                    "estimator_there": "exact autograd (upstream jlens)",
+                    "not_interchangeable": (
+                        "the two estimators are different instruments on the same corpus; the "
+                        "difference is a measurement, so neither backend may stand in for the other"
+                    ),
+                    "override": (
+                        f"{device.BACKEND_ENV}=mlx if MLX is installed on this box"
+                    ),
+                }
+            )
+        )
+        return 3
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.pipeline.lens_fitting.runtime import (
         configure_allocator_cache,
@@ -209,7 +296,9 @@ def main(argv: list[str] | None = None) -> int:
         # Issue 99: a lens we fit carries the model it was fitted on, inside the archive whose
         # digest every later reader pins.
         identity=LensIdentity(
-            loaded.spec.base, loaded.view.num_layers, loaded.spec.training
+            base=loaded.spec.base,
+            num_layers=loaded.view.num_layers,
+            training=loaded.spec.training,
         ),
     )
     print(

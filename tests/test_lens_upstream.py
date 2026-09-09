@@ -120,7 +120,7 @@ def make_rows(count: int = 3, seq_len: int = SEQ_LEN) -> list[dict]:
 
 
 CORPUS = {"manifest_sha256": "0" * 64, "domain": "prose", "split": "fit", "synthetic": True}
-IDENTITY = LensIdentity("tiny-synthetic-decoder", NUM_LAYERS)
+IDENTITY = LensIdentity(base="tiny-synthetic-decoder", num_layers=NUM_LAYERS)
 
 
 @pytest.fixture(scope="module")
@@ -533,7 +533,7 @@ def test_a_lens_of_another_model_is_refused_by_identity(tmp_path, fitted, upstre
             expected_sha256=written["npz_sha256"],
             hidden_size=HIDDEN,
             num_layers=NUM_LAYERS,
-            identity=LensIdentity("some-other-decoder", NUM_LAYERS),
+            identity=LensIdentity(base="some-other-decoder", num_layers=NUM_LAYERS),
         )
 
 
@@ -836,7 +836,7 @@ def test_a_loaded_lens_reports_what_it_was_stored_in_not_what_it_works_in(tmp_pa
     )
 
     hidden, layers = 4, 3
-    identity = LensIdentity("tiny-synthetic-decoder", layers)
+    identity = LensIdentity(base="tiny-synthetic-decoder", num_layers=layers)
     path = tmp_path / "half.npz"
     # The identity blob is written exactly as the writer writes it, so `load` accepts it; only the
     # map dtype differs from what `write_lens` would produce.
@@ -880,7 +880,7 @@ def test_the_sidecar_dtype_is_measured_rather_than_asserted(tmp_path):
         hidden_size=hidden,
         num_layers=layers,
         metadata={},
-        identity=LensIdentity("tiny-synthetic-decoder", layers),
+        identity=LensIdentity(base="tiny-synthetic-decoder", num_layers=layers),
     )
     # Both inputs were cast on the way out, so the measurement reports one dtype -- and reports it
     # because it looked, not because it was told.

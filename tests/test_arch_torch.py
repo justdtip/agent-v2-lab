@@ -371,3 +371,204 @@ def test_upstream_gpt2_layout_and_tuple_outputs():
     view = TorchArchitectureView.from_model(model)
     assert view.layout.path == "transformer"
     assert set(view.residual_source_agreement([1, 5, 9, 3], range(3)).values()) == {0.0}
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("length", [64, 1400])
+def test_residual_precision_probe_separates_native_seam_and_floor(dtype, length):
+    from local_llm_lab.arch_torch import TorchArchitectureView
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    model = make_model().to(dtype=dtype)
+    view = TorchArchitectureView.from_model(model)
+    report = residual_precision_probe(view, torch.arange(length) % view.vocab_size)
+    assert report["status"] == "measured"
+    assert report["native_dtype"] == str(dtype)
+    assert report["native_dtype_loop"]["exact"]
+    assert report["native_dtype_loop"]["max_abs"] == 0.0
+    floor = report["promoted_fp32_loop"]
+    assert (floor["max_abs"] == 0.0) == (dtype == torch.float32)
+    mask = report["controls"]["mask_dispatch"]
+    assert (mask["max_abs"] == 0.0) == (length <= model.config.sliding_window)
+    for name, arm in report["controls"].items():
+        assert arm["status"] == "measured"
+        assert arm["margins_vs_floor"]["max_norm_relative"] == (
+            arm["max_norm_relative"] - floor["max_norm_relative"]
+        )
+        if length == 1400:
+            assert arm["margins_vs_floor"]["max_norm_relative"] > 0.0, name
+        for layer, row in arm["by_layer"].items():
+            assert row["native_max_abs"] == floor["by_layer"][layer]["native_max_abs"]
+            assert row["margins_vs_floor"]["max_abs"] == (
+                row["max_abs"] - floor["by_layer"][layer]["max_abs"]
+            )
+    hook = report["controls"]["hook_site_off_by_one"]
+    mapping = [(row["intended_layer"], row["observed_layer"]) for row in hook["by_layer"].values()]
+    assert mapping == [(0, 0), (1, 0), (2, 1), (3, 2)]
+
+
+def test_precision_probe_reuses_one_text_forward_without_head_or_stale_hooks(view):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    calls, phases = [], []
+    weights = tuple(view.model.parameters())
+    values = [value.clone() for value in weights]
+    before = [(len(block._forward_hooks), len(block._forward_pre_hooks)) for block in view.blocks]
+    text_hook = view.text_module.register_forward_hook(lambda *args: calls.append("text"))
+
+    def forbid_head(*args):
+        raise AssertionError("residual probe allocated vocabulary logits")
+
+    head_hook = view._lm_head.register_forward_pre_hook(forbid_head)
+    try:
+        result = residual_precision_probe(
+            view, [1, 3, 5, 7],
+            checkpoint=lambda name, row: phases.append((name, row["status"])),
+        )
+    finally:
+        text_hook.remove()
+        head_hook.remove()
+    assert calls == ["text"]
+    assert [status for _, status in phases] == ["running", "measured"] * 6
+    assert result["native_capture"]["layers"] == [0, 1, 2, 3]
+    assert tuple(view.model.parameters()) == weights
+    assert all(
+        torch.equal(actual, expected) for actual, expected in zip(weights, values, strict=True)
+    )
+    assert before == [
+        (len(block._forward_hooks), len(block._forward_pre_hooks)) for block in view.blocks
+    ]
+    assert not view.model._forward_hooks and not view.model._forward_pre_hooks
+    assert not view._observing
+
+
+def test_precision_probe_frozen_native_reference_survives_observation_mutation(view, monkeypatch):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    observe = view._observe_forward
+
+    def wrong_entry(ids, cache=None):
+        entry, bundles = observe(ids, cache)
+        entry.add_(1)
+        return entry, bundles
+
+    monkeypatch.setattr(view, "_observe_forward", wrong_entry)
+    report = residual_precision_probe(view, [1, 3, 5, 7])
+    assert not report["native_dtype_loop"]["exact"]
+    assert report["native_dtype_loop"]["by_layer"][0]["max_abs"] >= 1.0
+
+
+def test_precision_probe_uses_block_for_seam_and_run_block_only_for_floor(view, monkeypatch):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    run_block = view.run_block
+    calls = []
+
+    def altered_promoted_loop(index, h, masks, cache_i):
+        calls.append(index)
+        return run_block(index, h, masks, cache_i) + 1.0
+
+    monkeypatch.setattr(view, "run_block", altered_promoted_loop)
+    report = residual_precision_probe(view, [1, 3, 5, 7])
+    assert report["native_dtype_loop"]["exact"]
+    assert report["promoted_fp32_loop"]["max_abs"] > 0.0
+    assert calls == list(range(view.num_layers))
+
+
+def test_precision_probe_failure_cleans_native_capture_hooks(view, monkeypatch):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    native_forward = view.text_module.forward
+    before = [(len(block._forward_hooks), len(block._forward_pre_hooks)) for block in view.blocks]
+    phases = []
+
+    def failed_forward(*args, **kwargs):
+        native_forward(*args, **kwargs)
+        raise RuntimeError("native capture failed after recording")
+
+    monkeypatch.setattr(view.text_module, "forward", failed_forward)
+    with pytest.raises(RuntimeError, match="native capture failed"):
+        residual_precision_probe(view, [1, 3, 5], checkpoint=lambda name, row: phases.append(row))
+    assert phases[-1]["status"] == "failed"
+    assert before == [
+        (len(block._forward_hooks), len(block._forward_pre_hooks)) for block in view.blocks
+    ]
+    assert not view.model._forward_hooks and not view.model._forward_pre_hooks
+    assert not view._observing
+
+
+def test_precision_probe_entry_control_bypasses_embedding_transform(view):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    ids = view._ids([1, 3, 5])
+    raw = view._embed_tokens.weight[ids]
+    native_entry = view._embed_tokens(ids)
+    expected = float((native_entry.float() - raw.float()).abs().max())
+    report = residual_precision_probe(view, ids)
+    assert expected > 0.0
+    assert report["controls"]["entry_transform_omission"]["by_layer"][0]["max_abs"] == expected
+
+
+def test_precision_probe_rejects_nonfinite_residual_and_invalid_ids(view, monkeypatch):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    with pytest.raises(ValueError, match="integer token IDs"):
+        residual_precision_probe(view, [True, 1])
+    with pytest.raises(ValueError, match="integer token IDs"):
+        residual_precision_probe(view, torch.tensor([float("nan")]))
+    with pytest.raises(ValueError, match="outside the vocabulary"):
+        residual_precision_probe(view, [view.vocab_size])
+    block = view._block
+
+    def nonfinite(index, h, masks, cache_i):
+        return block(index, h, masks, cache_i) * float("nan")
+
+    monkeypatch.setattr(view, "_block", nonfinite)
+    with pytest.raises(ValueError, match="non-finite residual"):
+        residual_precision_probe(view, [1, 3, 5])
+
+
+def test_precision_probe_rejects_silent_native_dtype_promotion(view, monkeypatch):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    view.model.to(dtype=torch.bfloat16)
+    block = view._block
+
+    def silently_promoted(index, h, masks, cache_i):
+        return block(index, h, masks, cache_i).float()
+
+    monkeypatch.setattr(view, "_block", silently_promoted)
+    with pytest.raises(ValueError, match="changed the native dtype"):
+        residual_precision_probe(view, [1, 3, 5])
+
+
+def test_residual_relative_metric_has_explicit_zero_reference_semantics():
+    from research.acceptance.torch_seam import _residual_error
+
+    zeros = torch.zeros(1, 2, 3)
+    assert _residual_error(zeros, zeros)["max_norm_relative"] == 0.0
+    with pytest.raises(ValueError, match="zero native reference norm"):
+        _residual_error(torch.ones_like(zeros), zeros)
+
+
+def test_precision_probe_preserves_measurement_when_post_phase_checkpoint_refuses(view):
+    from research.acceptance.torch_seam import residual_precision_probe
+
+    seen = []
+
+    def checkpoint(name, phase):
+        seen.append((name, phase))
+        if name == "native_dtype_loop" and phase["status"] == "measured":
+            raise RuntimeError("measured memory peak exceeds cap")
+
+    with pytest.raises(RuntimeError, match="measured memory peak exceeds cap"):
+        residual_precision_probe(view, [1, 3, 5], checkpoint=checkpoint)
+    name, completed = seen[-1]
+    assert name == "native_dtype_loop"
+    assert completed["status"] == "measured"
+    assert completed["exact"] and completed["max_abs"] == 0.0
+    assert set(completed["by_layer"]) == set(range(view.num_layers + 1))
+    assert "memory peak exceeds cap" in completed["checkpoint_error"]
+    assert not any(name == "promoted_fp32_loop" for name, _ in seen)
+    assert not view._observing
+    assert all(not block._forward_hooks and not block._forward_pre_hooks for block in view.blocks)

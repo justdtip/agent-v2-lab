@@ -246,7 +246,7 @@ def test_an_unimplemented_gate_is_never_a_pass(records: Path) -> None:
 
 
 def test_the_kit_reports_gate_five_unavailable_rather_than_passing(records: Path) -> None:
-    arguments = gates.argparse.Namespace(records=records, model=None, keep_going=True)
+    arguments = gates.argparse.Namespace(records=records, model=None, keep_going=True, smoke=False)
     result = gates.gate_5_golden_trajectories(arguments)
     assert result.status == gates.UNAVAILABLE, (
         "records that read cleanly are not a reproduction, and reporting them as one would "
@@ -263,7 +263,9 @@ def test_the_kit_fails_gate_five_when_the_record_disagrees_with_itself(tmp_path:
         if event["kind"] == "forward":
             event["argmax"] = [[404]]
     _write_record(directory / "bad.jsonl", events)
-    arguments = gates.argparse.Namespace(records=directory, model=None, keep_going=True)
+    arguments = gates.argparse.Namespace(
+        records=directory, model=None, keep_going=True, smoke=False
+    )
     result = gates.gate_5_golden_trajectories(arguments)
     assert result.status == gates.FAIL and result.blocking
     assert "disagreement" in result.saw
@@ -273,7 +275,9 @@ def test_the_kit_refuses_to_load_a_model_without_a_box_window(records: Path, mon
     from local_llm_lab import runlock
 
     monkeypatch.setattr(runlock, "read_window", lambda *args, **kwargs: None)
-    arguments = gates.argparse.Namespace(records=records, model="gemma3-4b", keep_going=True)
+    arguments = gates.argparse.Namespace(
+        records=records, model="gemma3-4b", keep_going=True, smoke=False
+    )
     with pytest.raises(SystemExit, match="no box window"):
         gates._load_backend(arguments)
 
@@ -535,3 +539,31 @@ def test_no_result_file_is_written_when_none_was_asked_for(records: Path) -> Non
         episodes, lambda sequence: [(0, (0,))] * len(sequence), per_episode=None
     )
     assert len(reports) == 1
+
+
+def test_every_number_in_an_episode_row_says_what_kind_of_number_it_is(records: Path) -> None:
+    """Once the prose is gone, the field is the only thing left saying where a figure came from."""
+    import tolerance_baseline as runner
+
+    episode = golden.load_episodes(records)[0]
+    forward = _fake_forward(
+        {
+            tuple(list(episode.turns[0].prompt_ids) + list(episode.turns[0].token_ids)): [(0, (0,))]
+            * (len(episode.turns[0].prompt_ids) + len(episode.turns[0].token_ids))
+        }
+    )
+    report = tolerance.run_tolerance(episode, forward)
+    row = runner._episode_row(episode, report, 12.3)
+
+    for name, cell in row.items():
+        if name == "label":
+            continue
+        assert "basis" in cell, f"{name} was written without saying what kind of number it is"
+        assert cell["basis"] in {"measured-here", "laptop-basis", "expected"}
+
+    assert row["agreed"]["basis"] == "measured-here"
+    assert row["confident_positions"]["basis"] == "laptop-basis", (
+        "the confident count comes from the MLX recording, not from this run, and stays a "
+        "laptop basis even when the agreement beside it was measured on the device"
+    )
+    assert "P >=" in row["confident_positions"]["basis_note"]

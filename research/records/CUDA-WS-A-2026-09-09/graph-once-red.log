@@ -1,0 +1,14 @@
+E                                                                        [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_every_source_layer_matches_unmodified_upstream_at_float32_epsilon[eager] _
+
+    @pytest.fixture
+    def estimator():
+        # Missing implementation is a failed test, not an optional-dependency skip.
+>       from local_llm_lab.torch_jacobian import jacobian_for_prompt_vjp
+E       ModuleNotFoundError: No module named 'local_llm_lab.torch_jacobian'
+
+tests/torch/test_torch_jacobian.py:39: ModuleNotFoundError
+=========================== short test summary info ============================
+ERROR tests/torch/test_torch_jacobian.py::test_every_source_layer_matches_unmodified_upstream_at_float32_epsilon[eager]
+1 error in 2.49s

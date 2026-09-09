@@ -1,0 +1,64 @@
+{
+  "source_commit": "326b0a01e95f46a816b0b9d6a5ca7e64eaf8ba61",
+  "working_tree_status": " M src/local_llm_lab/torch_capture.py\n M tests/test_torch_capture.py\n?? research/records/SAE-DECODER-INTERVENTION-2026-09-10/\n",
+  "started_utc": "2026-09-09T05:29:46.598771+00:00",
+  "device": "cpu",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "checkpoint_sha256": null,
+  "scope": "synthetic fixtures and source contracts; no checkpoint loaded",
+  "box_state": {
+    "idle": "not established",
+    "cpu_percent_before": {
+      "value": 30.2,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "load_average": {
+      "value": [
+        3.64892578125,
+        3.9482421875,
+        4.212890625
+      ],
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "window": "chief: Chief: full suite before pushing lab-device fetch-dictionary and the state-programme order, no model load, ~3 min, opened 2026-09-09T05:29:24.651352Z",
+    "lock": null
+  },
+  "tests": [
+    "tests/test_sae_intervention.py",
+    "tests/test_torch_capture.py"
+  ],
+  "native_mlx_imports": "blocked",
+  "torch": "2.14.0",
+  "counts": {
+    "tests": {
+      "value": 60,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "failures": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "errors": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "skipped": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    }
+  },
+  "exit_code": 0,
+  "elapsed_seconds": {
+    "value": 0.4095533340005204,
+    "basis": "measured-here",
+    "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+  },
+  "ended_utc": "2026-09-09T05:29:48.528059+00:00",
+  "native_mlx_modules_loaded": []
+}

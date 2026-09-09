@@ -56,6 +56,20 @@ _pinned: dict[str, Any] | None = None
 
 
 def _importable(name: str) -> bool:
+    """Whether ``name`` can be imported, including when something has already put it there.
+
+    The membership test is not an optimisation and cannot be dropped. ``find_spec`` raises
+    ``ValueError`` — not a miss, an exception — for a module that is in ``sys.modules`` with
+    ``__spec__`` set to ``None``, which is what every hand-built stub is; twelve test files in this
+    suite install one. A module that is already loaded is importable by definition, so answering
+    from ``sys.modules`` first is also the answer that is *correct*, not merely the one that avoids
+    the exception.
+
+    Found because the lens-fit CLI's backend seam (`scripts/lens_fit.py`) reads the backend before
+    the fitting imports, which put it downstream of a stub for the first time.
+    """
+    if name in sys.modules:
+        return True
     return importlib.util.find_spec(name) is not None
 
 

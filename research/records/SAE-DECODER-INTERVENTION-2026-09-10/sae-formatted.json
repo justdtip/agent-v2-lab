@@ -1,0 +1,63 @@
+{
+  "source_commit": "add9bc0ea930651d262235b4e6a845087c11afcd",
+  "working_tree_status": " M src/local_llm_lab/torch_capture.py\n M tests/test_torch_capture.py\n?? research/records/SAE-DECODER-INTERVENTION-2026-09-10/\n?? src/local_llm_lab/sae_intervention.py\n?? tests/test_sae_intervention.py\n",
+  "started_utc": "2026-09-09T05:28:54.476031+00:00",
+  "device": "cpu",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "checkpoint_sha256": null,
+  "scope": "synthetic fixtures and source contracts; no checkpoint loaded",
+  "box_state": {
+    "idle": "not established",
+    "cpu_percent_before": {
+      "value": 17.7,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "load_average": {
+      "value": [
+        3.7578125,
+        3.98828125,
+        4.24072265625
+      ],
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "window": null,
+    "lock": null
+  },
+  "tests": [
+    "tests/test_sae_intervention.py"
+  ],
+  "native_mlx_imports": "blocked",
+  "torch": "2.14.0",
+  "counts": {
+    "tests": {
+      "value": 19,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "failures": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "errors": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "skipped": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    }
+  },
+  "exit_code": 0,
+  "elapsed_seconds": {
+    "value": 0.3097427920147311,
+    "basis": "measured-here",
+    "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+  },
+  "ended_utc": "2026-09-09T05:28:56.308633+00:00",
+  "native_mlx_modules_loaded": []
+}

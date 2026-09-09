@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="38" time="5.122" timestamp="2026-09-09T13:20:02.201152+10:00" hostname="daniel.tipton-Mac"><testcase classname="tests.torch.test_torch_jacobian" name="test_every_source_layer_matches_unmodified_upstream_at_float32_epsilon[eager]" time="0.207" /><testcase classname="tests.torch.test_torch_jacobian" name="test_every_source_layer_matches_unmodified_upstream_at_float32_epsilon[sdpa]" time="0.140" /><testcase classname="tests.torch.test_torch_jacobian" name="test_remainder_and_oversized_batches_preserve_all_rows_and_negative_layer_indices[7-eager]" time="0.096" /><testcase classname="tests.torch.test_torch_jacobian" name="test_remainder_and_oversized_batches_preserve_all_rows_and_negative_layer_indices[7-sdpa]" time="0.098" /><testcase classname="tests.torch.test_torch_jacobian" name="test_remainder_and_oversized_batches_preserve_all_rows_and_negative_layer_indices[65-eager]" time="0.094" /><testcase classname="tests.torch.test_torch_jacobian" name="test_remainder_and_oversized_batches_preserve_all_rows_and_negative_layer_indices[65-sdpa]" time="0.096" /><testcase classname="tests.torch.test_torch_jacobian" name="test_one_forward_batch_one_and_model_state_hook_identity_are_preserved" time="0.031" /><testcase classname="tests.torch.test_torch_jacobian" name="test_selector_replaces_both_target_sum_and_source_mean_support[eager]" time="0.047" /><testcase classname="tests.torch.test_torch_jacobian" name="test_selector_replaces_both_target_sum_and_source_mean_support[sdpa]" time="0.044" /><testcase classname="tests.torch.test_torch_jacobian" name="test_selector_changes_are_local_and_never_replace_upstream_global_rule" time="0.118" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_selector_is_a_runtime_error_not_a_short_prompt_skip[&lt;lambda&gt;0]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_selector_is_a_runtime_error_not_a_short_prompt_skip[&lt;lambda&gt;1]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_selector_is_a_runtime_error_not_a_short_prompt_skip[&lt;lambda&gt;2]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_selector_is_a_runtime_error_not_a_short_prompt_skip[&lt;lambda&gt;3]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_selector_is_a_runtime_error_not_a_short_prompt_skip[&lt;lambda&gt;4]" time="0.065" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_selector_is_a_runtime_error_not_a_short_prompt_skip[&lt;lambda&gt;5]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_selector_failure_is_not_misreported_as_an_unusable_short_prompt" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs0]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs1]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs2]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs3]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs4]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs5]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_arguments_fail_before_leaking_hooks[kwargs6]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_source_layers_follow_upstream_validation[sources0]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_source_layers_follow_upstream_validation[sources1]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_invalid_source_layers_follow_upstream_validation[sources2]" time="0.006" /><testcase classname="tests.torch.test_torch_jacobian" name="test_explicit_position_rule_and_truncation_match_upstream" time="0.072" /><testcase classname="tests.torch.test_torch_jacobian" name="test_native_forward_failure_removes_every_owned_recorder_hook" time="0.009" /><testcase classname="tests.torch.test_torch_jacobian" name="test_backward_failure_removes_every_owned_recorder_hook" time="0.008" /><testcase classname="tests.torch.test_torch_jacobian" name="test_warmed_end_to_end_batching_ratio_is_at_least_one[eager]" time="0.290" /><testcase classname="tests.torch.test_torch_jacobian" name="test_warmed_end_to_end_batching_ratio_is_at_least_one[sdpa]" time="0.304" /><testcase classname="tests.torch.test_torch_jacobian" name="test_model_runtime_shape_failures_are_not_short_prompt_skips[encoded_shape]" time="0.007" /><testcase classname="tests.torch.test_torch_jacobian" name="test_model_runtime_shape_failures_are_not_short_prompt_skips[residual_shape]" time="0.009" /><testcase classname="tests.torch.test_torch_jacobian" name="test_nonfinite_gradient_is_a_runtime_failure_not_a_short_prompt_skip" time="0.013" /><testcase classname="tests.torch.test_torch_jacobian" name="test_retained_exception_releases_only_the_estimators_owned_tensor_locals[backward]" time="0.009"><failure message="AssertionError: estimator exception frame retained owned tensors: ['ids', 'mask', 'positions', 'maps[1]', 'maps[3]', 'target_positions', 'source_positions[0]', 'source_positions[1]', 'row_indices']&#10;assert ['ids', 'mask...sitions', ...] == []&#10;  &#10;  Left contains 9 more items, first extra item: 'ids'&#10;  Use -v to get more diff">estimator = &lt;function jacobian_for_prompt_vjp at 0x111c76700&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x10b3b0050&gt;
+failure = 'backward'
+
+    @pytest.mark.parametrize("failure", ["backward", "nonfinite_result"])
+    def test_retained_exception_releases_only_the_estimators_owned_tensor_locals(
+        estimator, monkeypatch, failure
+    ):
+        """An exception may remain logged. Its estimator frame must not retain our tape/workspace.
+    
+        Deeper torch and caller frames can retain their own references; this test deliberately makes
+        no assertion about those. The caller-supplied model itself remains live and unchanged.
+        """
+        model = make_model()
+        gradient = torch.autograd.grad
+    
+        def fail(*args, **kwargs):
+            if failure == "backward":
+                raise RuntimeError("retained fixture backward exception")
+            values = gradient(*args, **kwargs)
+            return tuple(value * float("nan") for value in values)
+    
+        monkeypatch.setattr(torch.autograd, "grad", fail)
+        with pytest.raises(RuntimeError) as caught:
+            estimator(model, PROMPT, [1, 3], target_layer=4, dim_batch=7)
+        traceback = caught.value.__traceback__  # Deliberately retain the exception and its frames.
+        owned_frame = None
+        while traceback is not None:
+            if traceback.tb_frame.f_code is estimator.__code__:
+                owned_frame = traceback.tb_frame
+                break
+            traceback = traceback.tb_next
+        assert owned_frame is not None
+        owned_locals = owned_frame.f_locals
+        retained = [
+            path for name, value in owned_locals.items() if name != "model"
+            for path in tensor_paths(value, name)
+        ]
+&gt;       assert retained == [], f"estimator exception frame retained owned tensors: {retained}"
+E       AssertionError: estimator exception frame retained owned tensors: ['ids', 'mask', 'positions', 'maps[1]', 'maps[3]', 'target_positions', 'source_positions[0]', 'source_positions[1]', 'row_indices']
+E       assert ['ids', 'mask...sitions', ...] == []
+E         
+E         Left contains 9 more items, first extra item: 'ids'
+E         Use -v to get more diff
+
+tests/torch/test_torch_jacobian.py:451: AssertionError</failure></testcase><testcase classname="tests.torch.test_torch_jacobian" name="test_retained_exception_releases_only_the_estimators_owned_tensor_locals[nonfinite_result]" time="0.012"><failure message="AssertionError: estimator exception frame retained owned tensors: ['ids', 'mask', 'positions', 'maps[1]', 'maps[3]', 'target_positions', 'source_positions[0]', 'source_positions[1]', 'row_indices', 'chosen']&#10;assert ['ids', 'mask...sitions', ...] == []&#10;  &#10;  Left contains 10 more items, first extra item: 'ids'&#10;  Use -v to get more diff">estimator = &lt;function jacobian_for_prompt_vjp at 0x111c76700&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x10b3b1a90&gt;
+failure = 'nonfinite_result'
+
+    @pytest.mark.parametrize("failure", ["backward", "nonfinite_result"])
+    def test_retained_exception_releases_only_the_estimators_owned_tensor_locals(
+        estimator, monkeypatch, failure
+    ):
+        """An exception may remain logged. Its estimator frame must not retain our tape/workspace.
+    
+        Deeper torch and caller frames can retain their own references; this test deliberately makes
+        no assertion about those. The caller-supplied model itself remains live and unchanged.
+        """
+        model = make_model()
+        gradient = torch.autograd.grad
+    
+        def fail(*args, **kwargs):
+            if failure == "backward":
+                raise RuntimeError("retained fixture backward exception")
+            values = gradient(*args, **kwargs)
+            return tuple(value * float("nan") for value in values)
+    
+        monkeypatch.setattr(torch.autograd, "grad", fail)
+        with pytest.raises(RuntimeError) as caught:
+            estimator(model, PROMPT, [1, 3], target_layer=4, dim_batch=7)
+        traceback = caught.value.__traceback__  # Deliberately retain the exception and its frames.
+        owned_frame = None
+        while traceback is not None:
+            if traceback.tb_frame.f_code is estimator.__code__:
+                owned_frame = traceback.tb_frame
+                break
+            traceback = traceback.tb_next
+        assert owned_frame is not None
+        owned_locals = owned_frame.f_locals
+        retained = [
+            path for name, value in owned_locals.items() if name != "model"
+            for path in tensor_paths(value, name)
+        ]
+&gt;       assert retained == [], f"estimator exception frame retained owned tensors: {retained}"
+E       AssertionError: estimator exception frame retained owned tensors: ['ids', 'mask', 'positions', 'maps[1]', 'maps[3]', 'target_positions', 'source_positions[0]', 'source_positions[1]', 'row_indices', 'chosen']
+E       assert ['ids', 'mask...sitions', ...] == []
+E         
+E         Left contains 10 more items, first extra item: 'ids'
+E         Use -v to get more diff
+
+tests/torch/test_torch_jacobian.py:451: AssertionError</failure></testcase><testcase classname="tests.torch.test_torch_jacobian" name="test_previous_source_gradients_are_released_before_the_next_backward" time="0.035" /></testsuite></testsuites>

@@ -34,7 +34,9 @@ for _path in (_ROOT / "src", _ROOT / "research" / "acceptance"):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
+import gate_records  # noqa: E402
 import golden_trajectories as golden  # noqa: E402
+import provenance  # noqa: E402
 import tolerance  # noqa: E402
 
 #: The registry entry torch can load. **Not** ``gemma3-4b-bf16``: that one's weights are the
@@ -52,21 +54,37 @@ CHECKPOINT_ENTRY = "gemma3-4b-cuda-bf16"
 
 
 def _episode_row(episode, report, elapsed: float) -> dict:
-    """One episode's result, in the shape both the incremental file and the summary use."""
+    """One episode's result, with every number saying what kind of number it is.
+
+    ``confident_positions`` is the count that makes the hard rule readable: "0 flips at
+    P >= 0.99" and "0 of 78 confident positions flipped" are the same fact and only the second
+    can be read. It comes from the records rather than from this run, so it is a laptop basis
+    even when the agreement beside it was measured on the device.
+    """
+    here = provenance.MEASURED_HERE
+    confident = sum(
+        1
+        for turn in episode.turns
+        for emission in turn.emissions
+        if (turn.emitted_confidence(emission.position) or 0) >= tolerance.HARD_CONFIDENCE
+    )
     return {
         "label": episode.label,
-        "compared": report.agreement.compared,
-        "agreed": report.agreement.agreed,
-        "hard_flips": len(report.agreement.hard_flips),
-        "flip_confidences": sorted(report.agreement.flip_confidences),
-        "confident_positions": sum(
-            1
-            for turn in episode.turns
-            for emission in turn.emissions
-            if (turn.emitted_confidence(emission.position) or 0) >= tolerance.HARD_CONFIDENCE
-        ),
-        "jaccard_mean": report.jaccard.mean,
-        "seconds": round(elapsed, 1),
+        "compared": provenance.Measured(report.agreement.compared, here).as_dict(),
+        "agreed": provenance.Measured(report.agreement.agreed, here).as_dict(),
+        "hard_flips": provenance.Measured(len(report.agreement.hard_flips), here).as_dict(),
+        "flip_confidences": provenance.Measured(
+            sorted(report.agreement.flip_confidences),
+            provenance.LAPTOP_BASIS,
+            basis="the MLX recording's own probability at each flipped position",
+        ).as_dict(),
+        "confident_positions": provenance.Measured(
+            confident,
+            provenance.LAPTOP_BASIS,
+            basis=f"emissions recorded at P >= {tolerance.HARD_CONFIDENCE} in the MLX run",
+        ).as_dict(),
+        "jaccard_mean": provenance.Measured(report.jaccard.mean, here).as_dict(),
+        "seconds": provenance.Measured(round(elapsed, 1), here, unit="s").as_dict(),
     }
 
 
@@ -228,12 +246,15 @@ def main(argv: list[str] | None = None) -> int:
         arguments.json.write_text(
             json.dumps(
                 {
-                    "checkpoint": str(checkpoint),
-                    "records_precision": "mlx 4-bit",
-                    "port_precision": "cpu bfloat16",
-                    "compared": compared,
-                    "agreed": agreed,
-                    "hard_flips": hard,
+                    "head": provenance.head(
+                        gate_records.current_identity(checkpoint),
+                        records=str(arguments.records),
+                        records_precision="mlx 4-bit",
+                        port_precision="cpu bfloat16",
+                    ),
+                    "compared": provenance.Measured(compared, provenance.MEASURED_HERE).as_dict(),
+                    "agreed": provenance.Measured(agreed, provenance.MEASURED_HERE).as_dict(),
+                    "hard_flips": provenance.Measured(hard, provenance.MEASURED_HERE).as_dict(),
                     "episodes": [
                         _episode_row(episode, report, elapsed)
                         for episode, report, elapsed in reports

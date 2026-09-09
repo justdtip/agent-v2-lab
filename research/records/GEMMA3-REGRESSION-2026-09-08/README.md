@@ -59,3 +59,27 @@ sample count is relaxed on failure. The normal shared lock and window remain aut
 The live record is run.log. run-end.json records outcome and whether an artifact exists. No full
 model suite runs during the window. A completed patch is preparation; the completed lens,
 comparison and report are the research deliverable. Scope composition remains deferred.
+
+## `compare_maps.py` is as-run and no longer runs, 2026-09-09
+
+The script in this directory constructs `LensIdentity` with three positional arguments in the order
+`(name, hf_id, num_layers)`. That was the signature when it ran. Commit `a960d80` applied the lineage
+rule afterwards, replacing the first two fields with a single `base` and appending `training`, so the
+same call now binds a filesystem path to `num_layers` and a layer count to `training` and raises.
+
+The script's own output dates it: `comparison.json` records `regression_identity` and
+`hosted_identity` in the old `{"name", "hf_id", "num_layers"}` shape, which the current class cannot
+produce. So the results here were produced by this file against the older class, and both are
+faithful to what ran.
+
+**It is deliberately not repaired.** Rewriting an as-run script inside a record to match a signature
+it never saw would make the record claim something ran that did not, and the digests in
+`SHA256SUMS.json` and `source-hashes.json` bind this text to this run. A reader who wants the same
+comparison against the current class should write it beside this one and say so, rather than edit
+here.
+
+`LensIdentity` is keyword-only as of `57a0b89`, which is the mechanism that stops the next field
+change from being noticed only when someone opens a record. Two-argument positional callers had
+survived `a960d80` by coincidence, which is why nothing flagged this file for a year of commits.
+The refusal is tested in `tests/test_live_lens.py`, including the exact three-positional shape used
+here.

@@ -1,9 +1,66 @@
+# WS-A: ready for review against the next instruction
+
+The three device-free tasks ordered at **6ab3318** are delivered. Estimator source is
+**08a87fb**; device-gate source is **68b1ede**. **261 checks passed, zero skipped** on CPU
+with native MLX imports blocked. The box was active: a pre-run reading showed 11.7% CPU,
+load averages 5.53/5.83/6.22 across 12 logical CPUs, and no model lock or window. This was
+not an established idle-box measurement. The source-bound evidence is
+[DEVICE-READINESS-VERIFICATION.json](DEVICE-READINESS-VERIFICATION.json).
+
+- The graph-once estimator preserves upstream's target-position sum and source-position mean,
+  using its recorder and layer convention. On the six-block fixture every source map agreed
+  exactly under both eager and SDPA, within the required float32 epsilon. Warmed end-to-end
+  sequential/batched ratios were 2.98 and 2.69 respectively. These are fixture test outcomes,
+  not forecasts of device performance. The sequential timing baseline already has one forward;
+  memory savings against upstream's replicated batched forward remain unmeasured.
+- The existing gate script now selects and pins the device, loads each precision through the
+  shared loader, runs both required lengths, enforces bf16 exactness and the three controls,
+  and evaluates a separate float32-loaded control. The tiny serialized fixture mirrors the
+  official checkpoint's wrapper declaration and tensor-key layout. Real checkpoints require
+  CUDA. Host and device caps apply separately; no real checkpoint was loaded in this work.
+- [FIRST-HOUR-CHECKLIST.md](FIRST-HOUR-CHECKLIST.md) gives the findings, transferable methods,
+  required device numbers, historical laptop bases, and what each mismatch would mean.
+
+Each new gate number is stored as `{value, basis}`. Completed phases are written atomically.
+Resume requires the same commit, executable source (including upstream), checkpoint, full
+runtime reading, fixed IDs and declared limits. It rechecks the numerical and original resource
+readings. Earlier attempts and their memory evidence survive; a cheap resume is not a model-load
+peak. Interrupted lengths restart from native capture because scalar records cannot restore tensors.
+
+**Unexecuted:** all real-checkpoint CUDA gates, the device memory claim, long-context model-scale
+measurements, and the real decode identity/readout band. The script's successful exit covers
+structure, residual precision gates and the float32 control; its gates 3–4 remain explicitly
+unexecuted for the following device step. Q5 is unchanged. The heartbeat is disabled.
+
+---
+
+# Historical record through 79d2567
+
+The entries below retain their original chronology. Statements that the estimator is unstarted,
+or that a further checkpoint run belongs on the laptop, are superseded by the current order and
+readiness above. Historical raw evidence has not been rewritten.
+
 # WS-A review corrections and CPU calibration
 
-**Ready for source review:** see [REVIEW-READY.md](REVIEW-READY.md) for the
-review boundary and the real-checkpoint calibration still in progress.
+**Follow-up source ready:** `79d2567` implements the dated review's native-dtype
+exactness arm and all three controls, through one native text forward with frozen
+references. **140 CPU fixture tests passed, zero skipped**, with actual MLX imports
+blocked. The private loader is removed in favour of shared `hf_text`.
+`native-dtype-verification.json` binds the tested source and raw evidence.
 
-Latest verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
+The new checkpoint arm is **unexecuted**: WS-B opened its scheduled checkpoint
+window at 02:35:28 UTC while this source was being finished. No launch, lock
+clearance or competing model load was attempted. Next: run the fixed-ID native
+arm under an owned window, then the ordered identity/readout checks. No measured
+native-readout band on the golden episodes is available yet; the WS-B 98/103
+argmax result measures a different comparison. The estimator remains unstarted.
+The requested review/Git heartbeat completed and is paused.
+
+**Source review passed:** the edit round through `e0a05cf` was accepted and merged
+into `cuda-migration` at `6106ea8`; the dated ruling is in the WS-A order at
+`cd8055d`. [REVIEW-READY.md](REVIEW-READY.md) preserves the earlier handoff state.
+
+Earlier full-suite verified source: `ac8a91eade9f37dcaf053db667a88b395bf52b14`, on
 `codex/cuda-torch-seam`. The source includes the committed shared upstream loader and device shim.
 
 **2,203 tests passed, 10 skipped** in the final full suite plus calibration fixtures on torch
@@ -48,6 +105,26 @@ The first attempt, `cpu-calibration-01.json`, was refused **before any torch or 
 another seat's pytest process had MLX mapped. Its gate statuses are all unexecuted. The wrapper
 closed its own window; no foreign process, lock or window was changed. Further attempt records,
 if present, carry their own source commit and observed status.
+
+Retry02 completed in **1,785.2 seconds** (29.75 minutes), with a fresh-process peak of
+**7.2386322021484375 GiB**, below the 9.8 GiB projection and 10.656 GiB cap. The
+wrapper and model exited, and both owned lock and window were confirmed closed.
+`cpu-calibration-02-summary.json` binds the final raw JSON and log by SHA256.
+
+The largest mixed-precision residual ratio was **1.2386%** at 64 tokens and
+**6.9013%** at 1,400. Replacing sliding masks with the observed global mask left
+all per-layer maximum errors unchanged at 64; at 1,400 it changed them at every
+block output and reached **53.9638%**. Rotary-table rounding was **2^-9** at both
+lengths. These measurements hold stored weights and token IDs fixed; the loop
+uses float32 block arithmetic while the native reference uses bf16. Thus the
+normal difference is a precision-confounded measurement, not a seam acceptance.
+A future all-layer bf16 comparison must establish exactness separately.
+
+The review at `cd8055d` supplies that next gate: native-dtype loop versus native
+dtype, exactly zero; cross-precision comparisons remain descriptive, with no
+post hoc tolerance. Hook-site and entry-transform controls are still unexecuted
+in retry02. Its gate 1 passed; gate 2 was measured but not accepted; gates 3–4
+remain unexecuted. The evidence predates that new gate implementation.
 
 The graph-once estimator remains unstarted pending accepted checkpoint gates 1–4. CUDA/MPS and
 full float32-loaded checkpoint execution are unexecuted. The following original handoff is retained

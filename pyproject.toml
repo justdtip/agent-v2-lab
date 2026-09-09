@@ -37,10 +37,12 @@ cuda = [
   "peft",
   "trl",
   "safetensors",
+  "jlens",
 ]
 
 [project.scripts]
 lab-check = "local_llm_lab.check_env:main"
+lab-device = "local_llm_lab.device_setup:main"
 lab-chat = "local_llm_lab.chat:main"
 lab-sft = "local_llm_lab.train_sft:main"
 lab-rewards = "local_llm_lab.rewards:main"
@@ -96,3 +98,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "src/local_llm_lab/probes/*" = ["E501"]
 "tests/test_pipeline.py" = ["E501"]
 "tests/test_probes.py" = ["E501"]
+
+[tool.uv.sources]
+jlens = { git = "https://github.com/anthropics/jacobian-lens", rev = "581d398613e5602a5af361e1c34d3a92ea82ba8e" }

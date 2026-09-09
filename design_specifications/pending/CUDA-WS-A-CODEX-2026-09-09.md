@@ -243,3 +243,94 @@ rotary rounding at 2^-9, the 9.8 GiB projection) are what the device's numbers a
 against. On this box from here: fixture tests only. Item (4), fetching `cuda-migration`, stands;
 item (5), the graph-once estimator, is written and tested here on fixtures and run there. Plan
 §16.12.
+
+## Next instruction, 2026-09-10 — three tasks that need no device, in this order
+
+The Director's ruling stands (plan §16.12): nothing model-scale runs on the laptop; fixtures and
+tests do. Each task below is a test before it is a feature, and each carries its own record
+section in the shape WS-C's record has: the finding, the technique without reference to our code,
+the implementation in one line, then the device checklist row with the number it must produce and
+the laptop figure it is compared against.
+
+**1. The graph-once estimator, §6.3, on fixtures.** `torch.autograd.grad(..., is_grads_batched=True)`
+over upstream's recorder, the forward tape saved once at whatever context length we choose, never
+`output_hidden_states=True`, never `register_full_backward_hook`, never `flash_attention_2`. The
+acceptance test is the timing ratio ≥ 1 against sequential on the small fixture, under both `eager`
+and `sdpa` (Research's `tests/torch/test_batched_cotangents.py` is the shape), plus exactness: the
+batched Jacobian equals the sequential one to float32 epsilon on the fixture, per layer. It is
+written and tested here and run on the device, where its memory claim (the tape once, not per
+cotangent) is measured for the first time.
+
+**2. `cpu_gates.py` becomes the device gate script.** Load through
+`local_llm_lab.hf_text.load_text_causal_lm` and delete your own loader copy, so there is one;
+`device.select()` and `device.pin(seed, attention="eager")` before the first CUDA use;
+`device.describe()`, the checkpoint sha and the source commit in every report's head; every phase
+written and flushed as it completes (yours already does; keep it); `basis: measured-here |
+laptop-basis | expected` on every number; the bf16-loop arm added (the hand-run loop through
+`_block` without promotion against bf16 native, expected exactly zero, at 64 and 1,400 tokens); the
+three controls at 1,400 gated outside the declared floor; the float32-loaded control under the 1e-3
+bound, which fits on the device. Fixture-tested here against the tiny model, with the fixture
+mirroring the snapshot's declared type and key layout (plan §16.9: a fixture built from
+`Gemma3TextConfig` declares a shape no registered checkpoint has). Its device run is the first
+hour's step 1 in the runbook, `CUDA-DEVICE-FIRST-HOUR-2026-09-10.md`.
+
+**3. The WS-A record as the first hour's checklist**, in your own order, cheapest and most
+diagnostic first, each row with what a mismatch means. The 1.24% at 64 tokens, the rotary rounding
+at 2^-9, the 9.8 GiB projection and the fixture's precision decomposition are the laptop bases;
+say of each which was taken on an idle box.
+
+Reviews continue to land here under a dated heading naming your commit. Two rules from tonight apply
+to every seat: commit with `git commit -- <paths>` in a shared checkout, never bare; and a suite
+reading is not a claim without its skip count and the box state on the same line.
+
+## Review of the three tasks, 2026-09-10 — `4aaab19`, merged into `cuda-migration` at `6b22d44`
+
+**Verdict: all three pass; merged.** Checked against the merge result itself: the branch's torch
+tests through the seam, the estimator's fixtures, the rules suite, the device and loader tests,
+162 passed; the record's own gate tests, 88 passed; the merge-tree clean against the integration
+tip. Every CUDA measurement remains unexecuted, as the checklist says in its first line.
+
+1. **The graph-once estimator.** `torch_jacobian.jacobian_for_prompt_vjp`: upstream's recorder,
+   layer convention and position rule unchanged, one forward, batched one-hot cotangents at every
+   selected target position through `torch.autograd.grad(..., is_grads_batched=True)`, source mean
+   over the same selection, no target-count division, hooks removed on every failure path. Exact
+   against unmodified upstream at float32 epsilon under `eager` and `sdpa`, remainder batches
+   preserved, the selector local rather than a patch of upstream's global, and the warmed
+   end-to-end batching ratio at least one under both kernels. Its memory claim is the device's.
+2. **The device gate script.** Loads through `hf_text.checkpoint_metadata` and
+   `load_text_causal_lm`, its own loader copy gone; `device.pin` before the first device use; every
+   number carries a basis; the `native_dtype_loop` phase is the seam-exactness arm gated at zero;
+   the precision arm declared, the controls gated outside the floor; resume verified.
+3. **The checklist.** Prepared on fixtures, every CUDA row marked unexecuted, the technique stated
+   without reference to our code, and the laptop bases with their box state.
+
+Nothing further is asked of WS-A on the laptop. The next thing Codex does is on the device, in the
+order the checklist gives, and its record comes back here under a dated heading.
+
+## Next instruction, 2026-09-10, second — the decoder intervention wrapper, on fixtures
+
+The derivation `sae_j_lens_state_derivation.md` (§7.1) and its order `SAE-J-BRIDGE-ORDER-2026-09-08.md`
+are now requirements for the device phase (plan §16.16). One piece is yours because it sits on
+`TorchCapture.intervene`, which you built. Device-free; fixture-tested against the tiny decoder.
+
+**1. The decoder intervention.** `h' = h + D_F (z'_F − E(h)_F)` inside the capture's `intervene`
+function at a layer and position: the SAE's encoder `E`, decoder `D` and bias `b` are taken as
+plain callables and tensors (SWE-2's Gemma Scope 2 loader lands separately; until then the tests
+use a synthetic dictionary with a JumpReLU encoder), the feature set `F` and the target values
+`z'_F` are arguments, and the base reconstruction residual is preserved by construction, which is a
+test: `h' − b − D z'` restricted off `F` equals the base residual off `F`.
+
+**2. The re-encoding diagnostic.** After the intervention, report `E(h')_F` against `z'_F` and the
+change in `E(h')_{−F}` against `E(h)_{−F}`, as numbers in the record, never as an assertion that the
+target was attained: the derivation is explicit that attainment must be measured. A test constructs
+a dictionary where re-encoding does not return the target and checks the diagnostic says so.
+
+**3. Clamp mode.** Today an intervention applies once per fresh prefill. A clamp re-applies at every
+forward, keyed to absolute positions or to every emitted position, and is released explicitly; the
+record distinguishes a one-shot patch from a clamp, since the derivation treats them as different
+claims (§11.3). Tests: the clamp holds across steps through a cache, the one-shot does not, and a
+clamp on a cached position fails closed the way the existing intervention does.
+
+**4. Model-agnostic**, as everything: no layer count, no width, no family class; the layer list and
+the feature set come from the caller. Pathspec commit on `codex/cuda-torch-seam`, merged after
+review as before. Its device use is the state programme's, ordered after the migration validates.
