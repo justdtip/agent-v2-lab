@@ -137,7 +137,7 @@ def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:
         raise LensIdentityError(
             f"{path.name} carries no model identity and has no sidecar at {sidecar.name}. "
             "A lens that does not say which model it was fitted on is refused, not warned "
-            "about: Qwen3.5-4B and Gemma 3 4B are both 2560-dimensional and the wrong lens "
+            "about: Qwen3.5-4B and Gemma 3 4B share one hidden width and the wrong lens "
             "loads in silence. Stamp it with scripts/stamp_lens_identity.py."
         )
     meta = json.loads(sidecar.read_text())
