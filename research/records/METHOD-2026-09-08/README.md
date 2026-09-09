@@ -785,13 +785,6 @@ control's amplification ratios went into the order from the D-CRO's messages; Co
 showed the first was a whole-matrix norm and the second divided by part of the input. Same rule,
 same night, same Chief.
 
-*A seventh, the next day (2026-09-11 UTC):* the workspace capture tokenised the rendered prompt with
-`add_special_tokens=True`, and the rendered prompt already carries its own `<bos>`, so every position
-would have shifted by one — [2, 2, 105] on a real row. It was caught before the pass ran, by the
-D-CRO's own finding that their capture code had been tested against an invented input, which sent
-me to check mine against a real row. The rule is theirs: *a test whose input is a fixture can
-validate code against a corpus that does not exist; pin at least one check against a real row.*
-
 ## Thirty-third: the reporter that failed, jointly with the D-CRO
 
 Three defects in one day that no test suite was built to catch, because **neither was a check that
@@ -850,3 +843,85 @@ so** — the pinning check line-anchored and its self-test corrupting each pinne
 0 survivors); the WS-B classifier's four classes corrupted at their own inputs with the class that
 should move asserted to move, every corruption still summing to four. A guard that is not itself
 corrupted and watched is a reporter too.
+
+## Thirty-fourth: the verifier is the least verified thing in the system
+
+**D-CRO, 2026-09-10, on the Chief's say-so.** The thirty-third entry was about the reporter — the code
+that writes the result down, which no test asserts on. This is its neighbour and it is worse, because
+these are not reporters. They are the **checks**: the gates, the controls, the tests, the corrections.
+Seven in one night, every one of them written *to catch this class*, and not one of them announced
+itself. Six were found by someone else or by a deliberate attempt to break my own tool. None was found
+by the tool reporting a problem, because every one of them reads as a pass.
+
+**A verdict that cannot be true.** `batch_invariance.py` computed
+`"hook_is_implicated": not all(...) and False`. The trailing `and False` makes it false whatever the
+rows say. It sat in the script written to investigate reporters that cannot fail, and it was reported
+as a finding. *(Codex.)*
+
+**A gate that excluded the only case it rested on.** `boundary.py` appended to `failures` only from
+rows labelled `anchor == "width"`, and the width-one case is skipped by that branch as a duplicate of
+another check. So a width-one failure could never have entered the failure list at all. The record's
+whole argument rests on the width-one pass. *(Codex.)*
+
+**A comparison of a thing with itself.** `golden_float32.py` passed `reproduction=reference` — the
+exact map — to the repeat gate. "The exact estimator reproduces itself at exactly 0.0" had 0.0 as its
+only possible value, and was reported as a gate holding, in the run whose entire purpose was a
+comparison done right. *(Codex.)*
+
+**A checker that passed a figure I had deliberately broken.** To test a tool that pins every number in
+a document to the artefact that computed it, I changed 7,629 to 7,628 in one table cell. It passed:
+the check asked whether the string appeared *anywhere*, and 7,629 appears seven other times. Anchored
+to the line, it then grew a self-test — and *that* reported nine false survivors, because it corrupted
+the first digit on the line rather than the digit inside the matched span, so it kept changing a
+neighbouring figure in the same table row. The same mistake, one level up, twice in one file.
+
+**A checker that reported success over a document it half-read.** After two new sections were added,
+it still printed "all claims check out", because its claims did not reach them. It now prints that its
+coverage is what the claims pin and not the whole document.
+
+**A test suite whose input was invented.** `capture.py` read `row["ids"]`. That is the *lens* corpus's
+shape; the agent corpus rows carry a rendered prompt string and no ids at all. All thirty-four tests
+passed, because every test built its own row and helpfully supplied one. The assertions were real, the
+code was real, and the thing under test had never met the data. Found by going to write the runner and
+asking what it would actually be handed.
+
+**A correction that was not done.** Four rounds of audit each named a paragraph; each time I fixed that
+paragraph and believed the correction complete. Sweeping the file for the withdrawn numbers instead
+found nine live uses, the worst of them in the **concluding recommendation** — the paragraph most
+likely to be read alone and acted on, and the last place I looked.
+
+### Why the suite cannot see this family
+
+The twenty-third and twenty-seventh entries were guards that could not fail and checks that could not
+pass; the thirty-third was the reporter with no assertion to break. All three are about code that
+returns nothing anyone asserts on. This one is about code that returns a **verdict**, which is worse in
+one specific way: a broken verifier does not go quiet, it says *pass*. A test asserts on what the
+computation returns. Nothing asserts on what the assertion returns, and the assertion's failure mode is
+the same word as its success.
+
+The instances also share a shape the earlier entries did not: in six of the seven, the defect is in the
+verifier's **scope** rather than its logic — which rows it collects, which fields it compares, which
+sections it covers, which object it compares against, which population its fixtures came from. The
+logic was right every time. It was pointed at the wrong set, and a verdict carries no record of the set
+it was computed over.
+
+### The rules
+
+- **A gate must be seen to fail.** Not argued to be capable of failing: corrupt its input and assert
+  rejection, once per thing it claims to pin. A gate that has never been observed rejecting anything is
+  not known to be a gate.
+- **A verdict without its coverage is half a verdict.** Report what was checked beside whether it
+  passed — how many rows gated, which sections were pinned, how many interventions rather than how many
+  rows. "All claims check out" over a document nobody said the claims covered is the same false
+  assurance as a gate that cannot fail.
+- **A comparison whose two sides can be the same object is not a comparison.** Check identity, not only
+  equality, wherever a reference and a candidate are supplied by the same caller.
+- **A fixture is a claim about the population and must be checked against it once.** Build the inputs
+  the tests need, then assert that a real row of the real corpus carries the fields the code reads.
+  Otherwise the suite validates the code against a world it invented.
+- **A correction is not done until every still-active use of the withdrawn claim is found.** Sweep the
+  file for the number, not the paragraph for the sentence; and read the conclusion first, because a
+  withdrawn claim doing work in a recommendation is the one that will be acted on.
+
+And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
+were broken, and then break it.** Every one of these answered "pass".
