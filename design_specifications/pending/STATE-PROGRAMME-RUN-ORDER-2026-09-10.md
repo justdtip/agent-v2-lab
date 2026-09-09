@@ -155,3 +155,53 @@ The script, the maker, the diagnostics and their tests on `cuda-ws-d`; the fixtu
 directory committed under `research/records/` with its README; the Chief's review; then the merge.
 The device run is scheduled in the first-hour runbook's successor, after the lenses and the
 dictionary layers exist on the device.
+
+## Review, Chief, 2026-09-10 — `001788a` on `cuda-ws-d`: two edits before the merge
+
+**Read in full** against the merge result with the integration tip: the six modules, the script,
+the five test files, the fixture record and the amendment above. Full suite on that merge 2,606
+passed, 10 skipped at nine sites, all for untracked data and saved evaluations absent from a
+scratch worktree, under the Chief's window at 06:02Z; the torch set 163 passed; no deletion on
+either side since the base. The merge object was built and is **not pushed**; it is rebuilt after
+the edits below land.
+
+**What is right and stays.** All five of the builder's decisions stand: the maker beside `_list`
+outside the family cycle, with the twelve pinned; the stub wrapper that says it is a stub in every
+row; `None` for an unreached position, which is what makes the drop rule read absence rather than
+dilution; the tree digest through `spawn.run`; and the definition of `ε_pred` as a Bernoulli on D4
+across halves of the reliability arm. The seal's two refusals are functions that raise, not flags.
+The resume refusal names every field that differs. The README is written from the files. The rate
+of 46.5 million episodes per hour is in the record for the right reason. The `4n` budget rule,
+the drop rule on the side the contrast lies, the closed-form checks, and the bootstrap seeded on
+both sides are the derivation table as ordered.
+
+**Edit 1, required: the absent arm's false listing names the wrong file.** `false_listing(task,
+arm="A")` recovers a target from the expert's note text and lists `summary-00.md`, while every
+diagnostic for that episode reads `pair.target`, which is `summary-NN.md` with `NN` never `00`. So
+in the reliability arm's absent half the model is told a different file exists, the scorer sees a
+listing without the target and reads it as truthful, and the falsification is invisible to D4 and
+to the split-half gap that defines `ε_pred`. Half the instrument is scoring nothing. The pair holds
+the target; `apply_reliability` has the pair; pass the target through and delete the note parsing.
+The test asserts `pair.target in false_a`, and that a falsified absent-arm row's state observation
+reads as *present* to the diagnostics.
+
+**Edit 2, required: an estimand that cannot fail.** The main run has no reliability arm, so no
+main-run row carries a contradiction, D7–D9 are `None` throughout, and `estimands()` reports
+`predictive` as distance 0.0 against tolerance 0.0, `passes: true` — computed from no rows. That is
+the twenty-seventh method entry's family with the sign flipped. Three parts: the main run includes
+the reliability arm at the manifest's rate in both arms, because the predictive and dynamic
+estimands exist only after a contradiction; `estimands()` reports an estimand with no scorable row
+as `measured: false` and never as a pass, and reports `predictive` and `dynamic` as the seal
+defines them — the belief update in falsified episodes against the pilot's fitted Bernoulli as a
+log-loss gap for `ε_pred`, and D7–D9 after the contradiction against `ε_dyn`; and a tolerance of
+exactly zero is recorded as *degenerate: the pilot's update never varied* with the estimand marked
+untestable at zero, not passed at zero. The fixture record is regenerated after this, and its
+predictive row must then say untestable.
+
+**Two more, not blocking the merge.** The device driver's obligations in the addendum gain a
+third: `device.pin` precedes preflight, and a non-fixture preflight refuses a `describe()` reading
+of `UNPINNED`. And `read_rows` on a resume meets a partial trailing line after a crash mid-append;
+refusing by line number beats a bare decode error. Both can land with the edits or after.
+
+D10's two-file maker stays the next task, as the amendment says. After the two edits: pathspec
+commit on `cuda-ws-d`, and the merge is rebuilt and tested again before it is pushed.
