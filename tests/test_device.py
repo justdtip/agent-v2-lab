@@ -235,3 +235,24 @@ def test_the_cuda_form_takes_an_index_a_string_none_or_all(torch_cpu, monkeypatc
     assert device.budget(device="all") == {0: 600, 1: int(0.6 * 1001)}
     assert device.budget() == 600
     device.clear_cache()
+
+
+def test_importable_answers_for_a_module_that_is_present_without_a_spec(monkeypatch):
+    """`find_spec` raises rather than returning None for a stub, and this suite is full of stubs.
+
+    Twelve test files install a hand-built module into `sys.modules` to keep MLX out of a test.
+    Such a module has `__spec__ is None`, and `importlib.util.find_spec` answers that with
+    `ValueError`. Any code that reads the backend downstream of one of those stubs would fail with
+    an error about a spec rather than about a backend. The lens-fit CLI's seam is the first caller
+    in that position, which is how this was found.
+    """
+    stub = types.ModuleType("mlx")
+    assert stub.__spec__ is None, "the premise: a hand-built module carries no spec"
+    monkeypatch.setitem(sys.modules, "mlx", stub)
+
+    assert device._importable("mlx") is True
+    monkeypatch.delenv(device.BACKEND_ENV, raising=False)
+    assert device.backend() == "mlx"
+
+    # A name that is neither loaded nor installed still goes to `find_spec` and still answers False.
+    assert device._importable("a_module_that_is_not_installed_anywhere") is False
