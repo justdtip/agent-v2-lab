@@ -102,7 +102,9 @@ spans of the prompt — the task statement, the most recent tool result, the pre
 hidden-result placeholders, everything else — summarised by span, by layer type (local against
 global) and by distance (at most 1,024 tokens back against further). **Structural gate:** a local
 layer places zero mass beyond 1,024 tokens, or the mask is not what the registry says and the
-experiment stops. Reported per model. This is the reviewer's carrier question measured directly,
+experiment stops. The global layers are read from the checkpoint's `layer_types` and the attention
+modules' `is_sliding`, which must agree: five global layers in the 4B (blocks 6, 12, 18, 24, 30) and
+eight in the 12B, every sixth block, checked on the device. Reported per model. This is the reviewer's carrier question measured directly,
 and the ruling of this morning in the run orders cites it.
 
 ## W-4. Report or computation
