@@ -156,3 +156,18 @@ against arm A's 0.221. If it scales with retained layers, arm 2 lands near 0.10;
 property of the run rather than the depth, near 0.22.
 
 Both projections go in arm 2's announcement per R47(b), before it runs.
+
+---
+
+## Amendment, 2026-09-09: the selection above is superseded, and the criterion is now pre-registered
+
+This record selected checkpoint 800 on validation loss. `ADAPTER-DEPTH-QUALITY-2026-09-08` then
+scored the full 180-task split: 1,200 passes 175 against 800's 159 (exact paired p = 6.1e-15) and
+says at its line 174 that the one-line answer here is wrong. The two records disagreed without this
+one pointing at the other, which SWE-2 found while mapping the tree for the CUDA reproduction.
+
+Ruling (Chief, 2026-09-09): the pre-registered criterion for checkpoint selection from here on is
+**full-split passes**. Validation loss on 48 rows is a monitoring signal, and for this recipe a
+demonstrably poor selector: it rose twelvefold between 800 and 1,200 while the task score rose.
+The CUDA reproduction (WS-C) reproduces both checkpoints and scores both, so the reproduction does
+not inherit the ambiguity.

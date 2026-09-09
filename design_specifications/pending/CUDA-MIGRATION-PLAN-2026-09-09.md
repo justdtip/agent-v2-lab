@@ -150,7 +150,7 @@ Estimates from the reads; the survey's counts replace them where they differ.
 | `live_lens/session.py` | 523 | ~490 | ~30 (eight `mx` sites → view ops) | — | ~10 | 0 |
 | `runner.py`, `rollout.py`, `evaluate.py` | ~1,750 | ~1,400 | ~40 | — | **~60** (greedy loop) | trim/snapshot/history caches (~300) deferred |
 | `lens_fitting/regression.py` | 219 | ~170 | ~45 (mx→torch 1:1) | — | 0 | 0 |
-| `lens_fitting/jacobian.py` | 957 | ~400 (plan, gates, records) | ~30 | ~80-line adapter → `jlens.fitting` | 0 | **~450 deleted** |
+| `lens_fitting/jacobian.py` | 957 | ~400 (plan, gates, records) | ~30 | adapter → `jlens.fitting` | **997** (built; budgeted ~80 — §13.5 correction) | **~450 deleted** |
 | `lens_fitting/replay.py`, `runtime.py`, `prose.py`, `validation.py` | ~1,600 | most | ~60 | — | ~20 | 0 |
 | `pipeline/jlens.py` | 1,987 | — | — | — | 0 | **defer** (probe-era, superseded; survey to confirm) |
 | training: `train_expanded.py`, `depth_expansion.py` | ~600 | depth_expansion | ~40 | PEFT + accelerate | **~180** | `gated_delta_*` (614, DeltaNet) **deleted for Gemma** |
@@ -259,7 +259,7 @@ and compare to `neuronpedia/jacobian-lens` per layer: cosine and relative differ
 against the numbers already in `GEMMA3-REGRESSION-2026-09-08`. Agreement validates the un-port; the
 residual disagreement is the estimator difference, measured for the first time.
 
-**Budget.** ~80 adapter + ~45 regression edits + ~400 extensions; ~450 deleted.
+**Budget.** ~80 adapter (built at 997 lines, 574 of them code; accepted 2026-09-09 evening, §13.5 correction) + ~45 regression edits + ~400 extensions; ~450 deleted.
 
 ### WS-E. Registry, backend selector, box discipline, tests, records — Chief
 
@@ -730,6 +730,17 @@ In-scope source 26,062 of 44,739 lines. **New 1,473 — 5.7% of in-scope — aga
 edited, 695 replaced by upstream, 18,677 deferred, 1,196 deleted. Net source delta −418.** Seventeen
 lines kept, edited or replaced for every new line. Tests are a further ~1,450 new. The per-subsystem
 table is in the survey record and its counts are the ones to hold seats to.
+
+**Correction, 2026-09-09 evening — the WS-D adapter.** Budgeted at ~80 lines, built at 997 (574
+code, 247 docstring, 39 comment, 137 blank), read in full by the Chief. Of the code, ~120 lines are
+the estimator adapter proper (load the clone, index conventions, the per-row loop, convert, write),
+~130 the §6.1 ν declaration and its reader, which the WS-D order required on top of a budget that
+only ever covered the estimator call, ~70 the §6.2 selector seam pulled forward, ~75 the orientation
+check through upstream's own transport, ~50 measurement-versus-declaration guards, the rest refusal
+messages. The estimator is imported, never copied; nothing re-derives upstream. Accepted, and the
+budget inconsistency was the plan's. The headline moves: **new ~2,390 — 9.2% of in-scope**; net
+source delta **+499** rather than −418; about ten lines kept, edited or replaced per new line rather
+than seventeen; tests a further ~2,100 with WS-D's 650.
 
 ### 13.6 Seat assignment: where the survey and the plan differ, and what stands
 
