@@ -32,12 +32,34 @@ class _Reached(RuntimeError):
     """Raised past the seam, so a test can prove the MLX path was entered rather than skipped."""
 
 
+def _without_the_torch_stage(monkeypatch) -> None:
+    """Assert the stage's absence rather than inheriting it from whichever branch is checked out.
+
+    `fit_torch` exists on `cuda-migration` and not on main, so a refusal test that relies on the
+    checkout passes on one branch and fails on the other — which puts the divergence in the tests
+    instead of the script, and the whole point of the seam is that neither diverges. The two
+    refusal tests below are statements about *an absent stage*, so they say so.
+    """
+    import importlib
+
+    real = importlib.import_module
+    stage = "local_llm_lab.pipeline.lens_fitting.fit_torch"
+
+    def absent(name, *args, **kwargs):
+        if name == stage:
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", absent)
+
+
 def test_a_torch_box_is_refused_before_anything_reaches_mlx(monkeypatch, capsys) -> None:
     from local_llm_lab import device, models
     from local_llm_lab.pipeline.lens_fitting import runtime
 
     monkeypatch.setattr(device, "backend", lambda: "torch")
     monkeypatch.delenv(device.BACKEND_ENV, raising=False)
+    _without_the_torch_stage(monkeypatch)
 
     def refuse(*args, **kwargs):  # pragma: no cover - reaching these is the failure
         raise AssertionError("the seam let a torch box through to the MLX path")
@@ -66,6 +88,7 @@ def test_the_refusal_names_the_environment_variable_when_that_is_what_chose(monk
 
     monkeypatch.setattr(device, "backend", lambda: "torch")
     monkeypatch.setenv(device.BACKEND_ENV, "torch")
+    _without_the_torch_stage(monkeypatch)
 
     assert _cli().main(ARGV) == 3
     assert json.loads(capsys.readouterr().out)["backend_source"] == f"${device.BACKEND_ENV}"
