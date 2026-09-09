@@ -1,0 +1,81 @@
+{
+  "source_commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65",
+  "source_record": "research/records/WSB-DEVICE-2026-09-10/",
+  "snapshot_utc": "2026-09-09T10:43:13.490802+00:00",
+  "files": {
+    "confident-flips.json": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/confident-flips.json",
+      "sha256": "27edcf3ce3ac4b8ff7a3c5570e457e7b9cc6eca7f4edc4016274956a301dbab4",
+      "bytes": 4997,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "mlx-bf16-arm.json": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/mlx-bf16-arm.json",
+      "sha256": "069e998de7d2b442ccc73aab49b5cdf725255e3e418eadfaca4e5ee8cc553d94",
+      "bytes": 6957,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "mlx-bf16-arm.jsonl": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/mlx-bf16-arm.jsonl",
+      "sha256": "f7031e02710f3a2aaae12bece1367202e71578ad03f195c4bd92ff791e446b89",
+      "bytes": 5104,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "flip-margins.json": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/flip-margins.json",
+      "sha256": "ff1cfc9e3317125b4cadfafa8f246cb9684036eca9965121213bbccdd8d03ecf",
+      "bytes": 3040,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "cuda-all15.json": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/cuda-all15.json",
+      "sha256": "a29d3b1dc919fa3d9508f628e154e51fa453469925bdcda42e3c2d7a9d167b42",
+      "bytes": 18177,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "cuda-all15-v2.json": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/cuda-all15-v2.json",
+      "sha256": "866a882f4a3bd71d2c4afc152620d52c9326d55dffd8d9d74d53a11e493beee7",
+      "bytes": 25166,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "canonical-README.md": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/README.md",
+      "sha256": "af995d655ac798d086993c0b9d0b0856705c54e1197176e1aacbb9d25e90e63e",
+      "bytes": 16134,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "mlx_reference.py.txt": {
+      "path": "scripts/mlx_reference.py",
+      "sha256": "1bf450cb7b48b5a42649ee86c136d10ce5a74a471b157b8607881e09cbb64eaa",
+      "bytes": 11311,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "flip_margin.py.txt": {
+      "path": "scripts/flip_margin.py",
+      "sha256": "bc5646502e5bd69bf4fda1740d917d021e2479434a43bec597f5c92a44a66416",
+      "bytes": 10930,
+      "commit": "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65"
+    },
+    "mlx-bf16-reference.json": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/mlx-bf16-reference.json",
+      "commit": "00e88b037415c22dca535ac75aaa5ab1a3026937",
+      "sha256": "113973eddd077e51de8a8696338bfcc9912e01f8ea956dd5da5c63deef58a668",
+      "bytes": 556160
+    },
+    "mlx-bf16-reference.jsonl": {
+      "path": "research/records/WSB-DEVICE-2026-09-10/mlx-bf16-reference.jsonl",
+      "commit": "00e88b037415c22dca535ac75aaa5ab1a3026937",
+      "sha256": "a3831a9d97bf738da33e2683e277b2e299ba1c54e289b7f2783cbad0b6e49897",
+      "bytes": 408877
+    },
+    "mlx_reference_actual_spacing.py.txt": {
+      "path": "scripts/mlx_reference.py",
+      "commit": "00e88b037415c22dca535ac75aaa5ab1a3026937",
+      "sha256": "185aea1471b91a8a272aa569e22feec8930c3c9c55661d409a2735130f74434f",
+      "bytes": 16429
+    }
+  },
+  "supplemental_reference_commit": "00e88b037415c22dca535ac75aaa5ab1a3026937",
+  "interpretation": "Original 24-position arm and margins are pinned at df2f0a3; newer full reference and actual-spacing producer are separately pinned at 00e88b0."
+}

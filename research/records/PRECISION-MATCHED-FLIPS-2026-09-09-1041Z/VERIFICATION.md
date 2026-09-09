@@ -1,0 +1,11 @@
+# Verification
+
+The analysis and its verification driver completed successfully on 2026-09-09. Eleven file-only checks passed: canonical joins/reductions; duplicate, missing and token-drift rejection; missing margin and wrong margin-arithmetic rejection; forbidden model import; changed source and manifest hash rejection; byte-identical reproduction of all eight generated outputs; refusal to overwrite existing outputs. No model library was loaded, and no model tests ran.
+
+Both PNGs were opened and visually inspected. All 24 labels and outcome annotations are readable, the three surviving positions agree with the CSV, the original probability axis is explicitly restricted to 99–100%, and the second figure separates the later reference's ULPs from the earlier CPU margin arm. Marker shapes duplicate the color distinction. Both figures include the relevant device/precision limits. The selected set is never presented as a population estimate.
+
+The MLX 24-position JSON equals its JSONL. The full-reference JSON equals its per-episode JSONL and contains 5,245 unique positions across 15 episodes. Its saved tie total reconciles with its rows. The original flip set equals the full canonical CUDA recapture's hard-flip positions exactly, including tokens and probabilities. Every original row appears once in the matched arm and later reference. The margin rows cover exactly the three original CUDA disagreements that remain after matching precision.
+
+Sources are immutable Git-object copies pinned per file in SOURCES.json. Their hashes are checked on every reproduction. The script pins the manifest hash too. The old snapshot under GPU-COMPARABILITY-2026-09-09-0955Z is unchanged. This analysis does not alter the golden records, acceptance policy, any shared source, or any running process.
+
+The newer full reference arrived while this heartbeat was reading the original arm. It is deliberately pinned separately at 00e88b0, rather than silently treated as the producer or output of the df2f0a3 run. The original assumed-spacing diagnostic remains preserved as evidence, including its eight-ULP wording. The figure uses the later actual-spacing reference where it applies the Chief's two-ULP rule, and does not claim that a rule-defined tie establishes a causal explanation.

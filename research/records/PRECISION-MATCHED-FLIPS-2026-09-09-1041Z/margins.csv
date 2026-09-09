@@ -1,0 +1,4 @@
+episode,turn,position,reference_gap_ulps_actual_spacing,old_assumed_spacing,mlx_signed_gap,mlx_reported_assumed_ulps,mlx_top1,torch_signed_gap,torch_reported_assumed_ulps,torch_top1,torch_device_basis
+agentic-d2-list-0149,0,522,1.0,0.25,0.24999999139448778,0.9999999655779511,107,0.7499999965478049,2.9999999861912197,107,"laptop CPU, per canonical README; not original CUDA margin"
+agentic-d2-read-0108,0,521,3.0,0.25,1.4999998717003529,5.9999994868014115,2234,0.0,0.0,2234,"laptop CPU, per canonical README; not original CUDA margin"
+agentic-d2-update-0028,0,556,1.0,0.25,0.499999959177356,1.999999836709424,9560,-0.499999959177356,1.999999836709424,623,"laptop CPU, per canonical README; not original CUDA margin"
