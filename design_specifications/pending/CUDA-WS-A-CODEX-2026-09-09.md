@@ -405,3 +405,77 @@ on, and the L1 overflow refusal clears stale evidence rather than keeping it.
 
 Nothing further on the laptop for WS-A. The device arms in the checklist are next, in their order,
 and their records come back here under dated headings.
+
+## The device's first hour, WS-A, 2026-09-10 — three runs, one finding, one rule, a pass
+
+Run on the rented RTX PRO 6000 by the Chief, since Codex cannot reach the card; records
+`device-gates-01..03` with their logs on `cuda-migration`. **The seam is exact on the card**: the
+native-dtype loop against the native capture reads 0 at every site at 64 and at 1,400 tokens,
+and the sliding window is applied natively beyond 1,024 (1,024 allowed keys per row in sliding
+blocks, 1,400 in global; `device_mask_probe.py`). The float32 control passes at both lengths under
+its 1e-3 bound. Device peak 15.66 GiB against a 24 GiB projection, host peak 23.25 GiB, 18 s.
+
+**The finding.** The promoted-float32 floor reads 1.2386% at 64 tokens on both backends, to four
+digits, and 69.4% at 1,400 tokens on CUDA against 6.9% on the CPU, while the mask-dispatch control
+reads 54.5% on both. The first run failed only because that control is judged against the long
+length's own floor, which on the card is not precision noise but the promoted path's own
+divergence; the seam it protects was exact. The rule is amended (`bc710e6`): a long control must
+lie strictly above the native seam's error and the short length's promoted floor, the one
+magnitude that agrees across backends, and the long floor is recorded as a finding. The finding
+itself goes to Q5: on CUDA beyond the window, a capture through the promoted path is 69% from
+native bf16, so the capture dtype is decided on the card, not inherited from the laptop.
+
+**Three near-misses of the Chief's in the same hour, each caught by a gate.** The amended rule was
+committed once without the amendment, because the patch command broke before the edit and the
+tests then passed on the unpatched file; the second run therefore ran the old rule, which the
+record's own rule string exposed. A chain read a pipe's status and committed past a failing test;
+the forward merge's suite refused it. A rerun was launched without the repository root on the
+path and without the full commit hash, and the script refused both by name. Gates 3–4 remain
+unexecuted by the script's scope and are WS-B's handoff.
+
+## Rows 6 and 7 on the device, 2026-09-10 — the graph-once estimator on the card
+
+Run by the Chief with `device_graph_once.py`, which rebuilds the fixture from Codex's own
+definition (seed 0, the tiny Gemma 3 text config, the same frozen ids) with the model placed on
+`cuda:0`, since the tests are CPU fixtures with no device knob and the checklist says repeating
+them on a GPU host is not a CUDA measurement. Record `device-graph-once-01.json` on
+`cuda-migration`. **Row 6 passes**: every source block against upstream's sequential estimator
+within float32 epsilon under both kernels, SDPA exactly zero, eager worst 2.4e-7 absolute against
+the scale-aware bound. **Row 7 passes**: the warmed end-to-end ratio of sequential over batched is
+9.66 with eager attention and 8.17 with SDPA, best of three, against 2.98 and 2.69 on the laptop's
+CPU; taken while the D-CRO's fit held the card, so `basis: shared-card`, and re-taken when the card
+is idle before it is quoted as a device performance figure. **Row 8**, graph memory at the intended
+context on the real checkpoint against upstream's replicated batch, waits for the card alone; it
+is the measurement the 12B fits need, since the exact fit's peak on the 4B read 43.9 GiB for one
+row at dictionary batch 64.
+
+## Review of the comparability analysis, 2026-09-10 — `f1d934f`, merged into `cuda-migration`
+
+**Verdict: passes as an analysis record; merged.** `research/records/GPU-COMPARABILITY-2026-09-09-0955Z/`
+analyses SWE-1's two full-corpus runs on the card, and its four source hashes equal the bytes
+SWE-1 committed in `WSB-DEVICE-2026-09-10/`, so the analysis is of the canonical record. Its
+conclusions are the record's: 24 reference-gated mismatches on both the card's GPU and its CPU,
+with the per-episode counts differing on two episodes so equal totals are not identical
+positions; one net agreement difference in 5,245; the gate's probability being the MLX 4-bit
+reference's own confidence and not shared ground truth; and the whole labelled instrument
+comparability rather than model behaviour, with no significance claim. The script refuses changed
+source hashes and forbids model imports, which is the right shape for a file-only analysis. The
+figure is honest: the two chat episodes at 19–20% disagreement are the free prose the gate was
+never about, and the gated panel shows where the 24 sit.
+
+Two amendments, small. Cite the canonical record path beside the card's directory, since the
+record is what survives the rental. And the limitation "flip-position identities are absent" was
+true of the sources at the time and is no longer true of the record: SWE-1's `661a453` added
+`confident-flips.json`, all 24 positions with turn, position, both tokens and the recorded
+probability, after a cap in the flip printer was found to hide half of them.
+
+**Codex may read the card.** The analysis reached `/workspace/wsb/out/` as the laptop's own user;
+that is allowed, read-only: no window, no run, no write outside a directory of Codex's own, and
+the seats' output directories are never modified. Every rule of the primer applies there too.
+
+**Next instruction, when SWE-1's precision-matched arm lands** (torch bf16 against MLX bf16 at the
+24 positions, running on the laptop now): extend this analysis, in a new record directory, by
+joining `confident-flips.json` with that arm's per-position outcomes, and draw the figure of
+which of the 24 survive precision matching and at what recorded probability, with the same
+hash-refusing, model-import-free script. That figure is the one the Director reads to decide
+whether the golden records are re-based on MLX bf16 or the port is searched.

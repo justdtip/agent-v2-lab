@@ -1,0 +1,288 @@
+box window (ours): swe-1 -- WS-B: recapture the corpus with every gating flip printed and recorded
+determinism: pinned, attention: eager, dtype bfloat16 on cuda:0
+[transformers] The following layers were not sharded: model.layers.*.pre_feedforward_layernorm.weight, model.layers.*.post_feedforward_layernorm.weight, model.layers.*.input_layernorm.weight, model.layers.*.post_attention_layernorm.weight, model.norm.weight
+Loading weights:   0%|          | 0/444 [00:00<?, ?it/s]Loading weights: 100%|██████████| 444/444 [00:00<00:00, 36267.64it/s]
+loaded in 5.2s: 34 layers, hidden 2560, vocab 262208; load report {'path': '/workspace/.hf_home/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767', 'wrapper': True, 'model_type': 'gemma3_text', 'architecture': 'Gemma3ForCausalLM', 'key_mapping': {'^language_model\\.': ''}, 'other_prefixes': ['multi_modal_projector', 'vision_tower'], 'unexpected_keys': {'count': 439, 'prefixes': ['multi_modal_projector', 'vision_tower'], 'note': "the full list is under loading_info; it equals the checkpoint's non-text tensors exactly, checked above"}, 'storage_dtypes': ['BF16'], 'safetensors_format': ['pt'], 'text_bytes': 7760526336, 'checkpoint_text_tensors': 444, 'model_state_tensors': 445, 'tied_keys': {'lm_head.weight': 'model.embed_tokens.weight'}, 'device': 'cuda', 'dtype': 'bfloat16', 'attn_implementation': 'eager', 'save_layout': "the model's own; the load-time prefix mapping is not reverted on save", 'sha256': {'config.json': '9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff', 'model-00001-of-00002.safetensors': 'eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f', 'model-00002-of-00002.safetensors': 'fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13'}, 'loading_info': {'missing_keys': [], 'unexpected_keys': ['multi_modal_projector.mm_input_projection_weight', 'multi_modal_projector.mm_soft_emb_norm.weight', 'vision_tower.vision_model.embeddings.patch_embedding.bias', 'vision_tower.vision_model.embeddings.patch_embedding.weight', 'vision_tower.vision_model.embeddings.position_embedding.weight', 'vision_tower.vision_model.encoder.layers.0.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.0.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.0.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.0.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.0.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.0.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.0.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.0.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.0.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.0.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.0.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.0.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.0.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.0.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.0.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.0.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.1.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.1.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.1.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.1.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.1.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.1.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.1.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.1.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.1.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.1.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.1.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.1.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.1.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.1.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.1.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.1.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.10.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.10.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.10.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.10.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.10.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.10.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.10.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.10.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.10.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.10.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.10.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.10.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.10.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.10.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.10.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.10.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.11.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.11.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.11.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.11.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.11.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.11.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.11.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.11.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.11.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.11.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.11.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.11.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.11.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.11.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.11.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.11.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.12.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.12.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.12.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.12.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.12.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.12.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.12.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.12.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.12.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.12.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.12.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.12.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.12.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.12.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.12.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.12.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.13.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.13.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.13.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.13.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.13.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.13.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.13.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.13.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.13.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.13.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.13.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.13.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.13.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.13.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.13.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.13.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.14.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.14.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.14.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.14.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.14.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.14.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.14.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.14.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.14.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.14.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.14.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.14.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.14.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.14.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.14.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.14.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.15.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.15.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.15.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.15.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.15.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.15.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.15.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.15.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.15.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.15.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.15.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.15.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.15.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.15.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.15.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.15.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.16.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.16.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.16.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.16.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.16.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.16.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.16.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.16.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.16.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.16.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.16.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.16.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.16.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.16.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.16.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.16.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.17.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.17.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.17.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.17.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.17.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.17.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.17.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.17.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.17.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.17.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.17.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.17.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.17.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.17.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.17.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.17.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.18.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.18.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.18.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.18.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.18.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.18.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.18.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.18.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.18.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.18.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.18.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.18.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.18.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.18.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.18.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.18.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.19.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.19.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.19.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.19.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.19.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.19.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.19.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.19.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.19.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.19.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.19.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.19.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.19.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.19.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.19.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.19.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.2.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.2.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.2.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.2.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.2.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.2.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.2.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.2.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.2.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.2.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.2.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.2.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.2.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.2.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.2.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.2.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.20.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.20.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.20.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.20.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.20.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.20.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.20.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.20.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.20.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.20.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.20.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.20.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.20.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.20.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.20.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.20.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.21.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.21.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.21.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.21.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.21.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.21.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.21.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.21.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.21.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.21.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.21.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.21.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.21.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.21.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.21.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.21.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.22.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.22.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.22.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.22.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.22.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.22.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.22.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.22.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.22.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.22.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.22.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.22.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.22.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.22.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.22.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.22.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.23.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.23.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.23.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.23.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.23.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.23.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.23.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.23.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.23.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.23.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.23.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.23.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.23.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.23.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.23.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.23.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.24.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.24.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.24.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.24.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.24.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.24.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.24.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.24.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.24.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.24.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.24.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.24.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.24.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.24.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.24.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.24.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.25.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.25.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.25.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.25.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.25.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.25.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.25.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.25.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.25.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.25.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.25.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.25.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.25.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.25.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.25.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.25.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.26.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.26.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.26.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.26.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.26.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.26.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.26.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.26.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.26.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.26.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.26.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.26.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.26.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.26.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.26.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.26.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.3.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.3.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.3.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.3.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.3.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.3.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.3.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.3.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.3.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.3.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.3.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.3.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.3.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.3.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.3.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.3.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.4.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.4.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.4.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.4.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.4.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.4.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.4.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.4.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.4.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.4.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.4.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.4.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.4.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.4.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.4.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.4.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.5.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.5.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.5.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.5.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.5.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.5.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.5.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.5.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.5.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.5.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.5.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.5.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.5.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.5.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.5.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.5.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.6.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.6.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.6.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.6.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.6.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.6.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.6.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.6.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.6.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.6.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.6.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.6.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.6.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.6.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.6.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.6.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.7.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.7.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.7.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.7.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.7.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.7.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.7.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.7.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.7.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.7.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.7.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.7.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.7.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.7.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.7.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.7.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.8.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.8.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.8.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.8.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.8.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.8.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.8.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.8.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.8.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.8.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.8.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.8.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.8.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.8.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.8.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.8.self_attn.v_proj.weight', 'vision_tower.vision_model.encoder.layers.9.layer_norm1.bias', 'vision_tower.vision_model.encoder.layers.9.layer_norm1.weight', 'vision_tower.vision_model.encoder.layers.9.layer_norm2.bias', 'vision_tower.vision_model.encoder.layers.9.layer_norm2.weight', 'vision_tower.vision_model.encoder.layers.9.mlp.fc1.bias', 'vision_tower.vision_model.encoder.layers.9.mlp.fc1.weight', 'vision_tower.vision_model.encoder.layers.9.mlp.fc2.bias', 'vision_tower.vision_model.encoder.layers.9.mlp.fc2.weight', 'vision_tower.vision_model.encoder.layers.9.self_attn.k_proj.bias', 'vision_tower.vision_model.encoder.layers.9.self_attn.k_proj.weight', 'vision_tower.vision_model.encoder.layers.9.self_attn.out_proj.bias', 'vision_tower.vision_model.encoder.layers.9.self_attn.out_proj.weight', 'vision_tower.vision_model.encoder.layers.9.self_attn.q_proj.bias', 'vision_tower.vision_model.encoder.layers.9.self_attn.q_proj.weight', 'vision_tower.vision_model.encoder.layers.9.self_attn.v_proj.bias', 'vision_tower.vision_model.encoder.layers.9.self_attn.v_proj.weight', 'vision_tower.vision_model.post_layernorm.bias', 'vision_tower.vision_model.post_layernorm.weight'], 'mismatched_keys': [], 'error_msgs': []}}
+
+[1/15] agentic-d2-aggregate_report-0167 ...
+agentic-d2-aggregate_report-0167  (1.4s)
+  agentic-d2-aggregate_report-0167: 481/506 argmax agree (0.950593), 25 flips, 4 of them at P >= 0.99
+  [HARD] turn 2 position 1345: recorded 236743 (P=0.996871), produced 14966
+  [HARD] turn 2 position 1380: recorded 236832 (P=0.993652), produced 236800
+  [HARD] turn 2 position 1457: recorded 900 (P=0.997219), produced 236768
+  [HARD] turn 2 position 1467: recorded 236832 (P=0.991670), produced 236778
+  [soft] turn 0 position 558: recorded 4796 (P=0.661116), produced 12229
+  [soft] turn 0 position 566: recorded 12229 (P=0.499780), produced 236786
+  [soft] turn 0 position 568: recorded 1676 (P=0.813383), produced 1299
+  [soft] turn 0 position 570: recorded 236743 (P=0.707702), produced 14966
+  [soft] turn 1 position 752: recorded 9456 (P=0.822378), produced 506
+  [soft] turn 1 position 753: recorded 784 (P=0.560437), produced 506
+  [soft] turn 1 position 765: recorded 784 (P=0.351998), produced 506
+  [soft] turn 1 position 769: recorded 236761 (P=0.771805), produced 532
+  [soft] turn 2 position 1307: recorded 11036 (P=0.341606), produced 1159
+  [soft] turn 2 position 1341: recorded 568 (P=0.548264), produced 3283
+  [soft] turn 2 position 1342: recorded 236812 (P=0.926632), produced 38294
+  [soft] turn 2 position 1346: recorded 236812 (P=0.284929), produced 236810
+  ... and 9 further soft flips, none of them gating
+  ... and 13 more
+  agentic-d2-aggregate_report-0167: top-5 Jaccard mean 0.7210, p01 0.2500, p50 0.6667, worst 0.2500, over 506 positions
+  gate: FAIL
+
+[2/15] agentic-d2-batch_update-0166 ...
+agentic-d2-batch_update-0166  (1.7s)
+  agentic-d2-batch_update-0166: 444/459 argmax agree (0.967320), 15 flips, 2 of them at P >= 0.99
+  [HARD] turn 1 position 735: recorded 2818 (P=1.000000), produced 107
+  [HARD] turn 4 position 1427: recorded 2818 (P=0.998066), produced 107
+  [soft] turn 0 position 548: recorded 20558 (P=0.507784), produced 236777
+  [soft] turn 0 position 551: recorded 22033 (P=0.765073), produced 564
+  [soft] turn 0 position 559: recorded 236761 (P=0.949956), produced 532
+  [soft] turn 1 position 727: recorded 7683 (P=0.926448), produced 10542
+  [soft] turn 1 position 728: recorded 236761 (P=0.281988), produced 532
+  [soft] turn 1 position 729: recorded 38882 (P=0.261835), produced 65857
+  [soft] turn 1 position 730: recorded 607 (P=0.486000), produced 506
+  [soft] turn 1 position 734: recorded 236761 (P=0.969857), produced 236764
+  [soft] turn 1 position 736: recorded 236761 (P=0.500099), produced 236764
+  [soft] turn 3 position 1307: recorded 236761 (P=0.819040), produced 532
+  [soft] turn 4 position 1423: recorded 15298 (P=0.944297), produced 506
+  [soft] turn 6 position 1229: recorded 10448 (P=0.903702), produced 18761
+  ... and 1 further soft flips, none of them gating
+  ... and 3 more
+  agentic-d2-batch_update-0166: top-5 Jaccard mean 0.6904, p01 0.2500, p50 0.6667, worst 0.2500, over 459 positions
+  gate: FAIL
+
+[3/15] agentic-d2-calculate-0158 ...
+agentic-d2-calculate-0158  (0.4s)
+  agentic-d2-calculate-0158: 97/103 argmax agree (0.941748), 6 flips, 0 of them at P >= 0.99
+  [soft] turn 0 position 506: recorded 818 (P=0.515509), produced 236777
+  [soft] turn 0 position 507: recorded 5671 (P=0.384075), produced 14988
+  [soft] turn 0 position 512: recorded 1354 (P=0.473729), produced 5619
+  [soft] turn 0 position 532: recorded 20558 (P=0.815977), produced 236777
+  [soft] turn 0 position 535: recorded 20879 (P=0.356053), produced 564
+  [soft] turn 1 position 607: recorded 1354 (P=0.539954), produced 14988
+  agentic-d2-calculate-0158: top-5 Jaccard mean 0.7124, p01 0.4286, p50 0.6667, worst 0.4286, over 103 positions
+  gate: PASS
+
+[4/15] agentic-d2-conditional_update-0093 ...
+agentic-d2-conditional_update-0093  (1.2s)
+  agentic-d2-conditional_update-0093: 270/279 argmax agree (0.967742), 9 flips, 1 of them at P >= 0.99
+  [HARD] turn 0 position 580: recorded 2717 (P=0.999149), produced 7280
+  [soft] turn 0 position 562: recorded 1586 (P=0.464266), produced 1694
+  [soft] turn 0 position 579: recorded 107 (P=0.902720), produced 564
+  [soft] turn 1 position 740: recorded 1202 (P=0.863172), produced 735
+  [soft] turn 1 position 746: recorded 532 (P=0.842075), produced 531
+  [soft] turn 2 position 1284: recorded 818 (P=0.499293), produced 4098
+  [soft] turn 2 position 1294: recorded 236764 (P=0.614596), produced 607
+  [soft] turn 2 position 1306: recorded 2352 (P=0.982831), produced 2426
+  [soft] turn 2 position 1312: recorded 236761 (P=0.937348), produced 532
+  agentic-d2-conditional_update-0093: top-5 Jaccard mean 0.7050, p01 0.2500, p50 0.6667, worst 0.1111, over 279 positions
+  gate: FAIL
+
+[5/15] agentic-d2-cross_reference-0032 ...
+agentic-d2-cross_reference-0032  (3.4s)
+  agentic-d2-cross_reference-0032: 531/543 argmax agree (0.977901), 12 flips, 0 of them at P >= 0.99
+  [soft] turn 0 position 534: recorded 20558 (P=0.470221), produced 236777
+  [soft] turn 0 position 541: recorded 92623 (P=0.595658), produced 2307
+  [soft] turn 1 position 648: recorded 496 (P=0.430917), produced 506
+  [soft] turn 1 position 652: recorded 2307 (P=0.871360), produced 3927
+  [soft] turn 1 position 657: recorded 236761 (P=0.770618), produced 531
+  [soft] turn 2 position 1222: recorded 3004 (P=0.412470), produced 532
+  [soft] turn 3 position 1339: recorded 2129 (P=0.750735), produced 2307
+  [soft] turn 4 position 1441: recorded 107 (P=0.553164), produced 41910
+  [soft] turn 5 position 1529: recorded 2129 (P=0.666584), produced 2148
+  [soft] turn 9 position 1909: recorded 2148 (P=0.924013), produced 2129
+  [soft] turn 10 position 1997: recorded 210150 (P=0.636645), produced 7989
+  [soft] turn 10 position 1998: recorded 236761 (P=0.690174), produced 506
+  agentic-d2-cross_reference-0032: top-5 Jaccard mean 0.7113, p01 0.2500, p50 0.6667, worst 0.1111, over 543 positions
+  gate: PASS
+
+[6/15] agentic-d2-ledger_reconcile-0163 ...
+agentic-d2-ledger_reconcile-0163  (2.4s)
+  agentic-d2-ledger_reconcile-0163: 535/567 argmax agree (0.943563), 32 flips, 3 of them at P >= 0.99
+  [HARD] turn 4 position 1484: recorded 15437 (P=0.999990), produced 623
+  [HARD] turn 4 position 1489: recorded 236778 (P=0.999919), produced 59849
+  [HARD] turn 8 position 1471: recorded 236778 (P=0.992404), produced 59849
+  [soft] turn 0 position 558: recorded 20558 (P=0.532385), produced 236777
+  [soft] turn 0 position 561: recorded 20879 (P=0.628969), produced 19704
+  [soft] turn 0 position 563: recorded 4209 (P=0.336276), produced 506
+  [soft] turn 0 position 574: recorded 77365 (P=0.451131), produced 506
+  [soft] turn 0 position 607: recorded 106 (P=0.970688), produced 2717
+  [soft] turn 1 position 786: recorded 1676 (P=0.423529), produced 1202
+  [soft] turn 1 position 787: recorded 506 (P=0.516235), produced 1546
+  [soft] turn 1 position 794: recorded 236761 (P=0.644293), produced 573
+  [soft] turn 2 position 1335: recorded 105343 (P=0.318593), produced 4224
+  [soft] turn 2 position 1338: recorded 531 (P=0.375182), produced 236761
+  [soft] turn 2 position 1346: recorded 1676 (P=0.920028), produced 9279
+  [soft] turn 2 position 1352: recorded 1091 (P=0.586395), produced 506
+  ... and 17 further soft flips, none of them gating
+  ... and 20 more
+  agentic-d2-ledger_reconcile-0163: top-5 Jaccard mean 0.6928, p01 0.2500, p50 0.6667, worst 0.0000, over 567 positions
+  gate: FAIL
+
+[7/15] agentic-d2-list-0149 ...
+agentic-d2-list-0149  (0.8s)
+  agentic-d2-list-0149: 216/228 argmax agree (0.947368), 12 flips, 2 of them at P >= 0.99
+  [HARD] turn 0 position 522: recorded 107 (P=0.991508), produced 564
+  [HARD] turn 0 position 530: recorded 2234 (P=0.999983), produced 1399
+  [soft] turn 0 position 511: recorded 43355 (P=0.856305), produced 783
+  [soft] turn 1 position 673: recorded 1676 (P=0.796512), produced 17318
+  [soft] turn 1 position 677: recorded 236761 (P=0.843305), produced 531
+  [soft] turn 2 position 770: recorded 3056 (P=0.752402), produced 1174
+  [soft] turn 2 position 775: recorded 623 (P=0.501718), produced 506
+  [soft] turn 2 position 785: recorded 8071 (P=0.550226), produced 34205
+  [soft] turn 2 position 787: recorded 17302 (P=0.474761), produced 40812
+  [soft] turn 3 position 832: recorded 818 (P=0.710033), produced 236777
+  [soft] turn 3 position 833: recorded 1816 (P=0.498124), produced 2129
+  [soft] turn 3 position 841: recorded 9009 (P=0.842908), produced 16807
+  agentic-d2-list-0149: top-5 Jaccard mean 0.7091, p01 0.2500, p50 0.6667, worst 0.2500, over 228 positions
+  gate: FAIL
+
+[8/15] agentic-d2-pointer_chain-0018 ...
+agentic-d2-pointer_chain-0018  (2.8s)
+  agentic-d2-pointer_chain-0018: 470/482 argmax agree (0.975104), 12 flips, 2 of them at P >= 0.99
+  [HARD] turn 0 position 573: recorded 127096 (P=0.999901), produced 236786
+  [HARD] turn 5 position 1669: recorded 1202 (P=0.999146), produced 735
+  [soft] turn 0 position 536: recorded 2129 (P=0.322611), produced 2148
+  [soft] turn 0 position 544: recorded 107 (P=0.883501), produced 564
+  [soft] turn 1 position 770: recorded 1676 (P=0.983056), produced 1586
+  [soft] turn 2 position 1191: recorded 1676 (P=0.973367), produced 1586
+  [soft] turn 2 position 1194: recorded 7906 (P=0.824141), produced 657
+  [soft] turn 2 position 1196: recorded 623 (P=0.492438), produced 2148
+  [soft] turn 8 position 1961: recorded 1202 (P=0.972965), produced 735
+  [soft] turn 8 position 1967: recorded 496 (P=0.930990), produced 506
+  [soft] turn 8 position 2002: recorded 236832 (P=0.526356), produced 236825
+  [soft] turn 8 position 2006: recorded 236828 (P=0.156947), produced 236800
+  agentic-d2-pointer_chain-0018: top-5 Jaccard mean 0.6889, p01 0.2500, p50 0.6667, worst 0.1111, over 482 positions
+  gate: FAIL
+
+[9/15] agentic-d2-read-0108 ...
+agentic-d2-read-0108  (0.8s)
+  agentic-d2-read-0108: 166/172 argmax agree (0.965116), 6 flips, 2 of them at P >= 0.99
+  [HARD] turn 0 position 521: recorded 2234 (P=0.999739), produced 1399
+  [HARD] turn 3 position 855: recorded 8123 (P=0.999510), produced 1492
+  [soft] turn 0 position 512: recorded 236761 (P=0.789399), produced 43355
+  [soft] turn 0 position 540: recorded 236786 (P=0.988590), produced 127096
+  [soft] turn 2 position 677: recorded 236777 (P=0.874161), produced 19058
+  [soft] turn 2 position 680: recorded 1676 (P=0.986631), produced 2802
+  agentic-d2-read-0108: top-5 Jaccard mean 0.7064, p01 0.2500, p50 0.6667, worst 0.1111, over 172 positions
+  gate: FAIL
+
+[10/15] agentic-d2-search-0061 ...
+agentic-d2-search-0061  (1.0s)
+  agentic-d2-search-0061: 220/237 argmax agree (0.928270), 17 flips, 0 of them at P >= 0.99
+  [soft] turn 0 position 513: recorded 2129 (P=0.775629), produced 4981
+  [soft] turn 0 position 514: recorded 5143 (P=0.386704), produced 7906
+  [soft] turn 0 position 528: recorded 236761 (P=0.559737), produced 532
+  [soft] turn 0 position 544: recorded 642 (P=0.970687), produced 3714
+  [soft] turn 1 position 609: recorded 3927 (P=0.650656), produced 1694
+  [soft] turn 1 position 611: recorded 107 (P=0.882212), produced 3792
+  [soft] turn 2 position 667: recorded 818 (P=0.539341), produced 19058
+  [soft] turn 2 position 678: recorded 3927 (P=0.336621), produced 20193
+  [soft] turn 2 position 679: recorded 573 (P=0.651852), produced 506
+  [soft] turn 2 position 681: recorded 2307 (P=0.746798), produced 2129
+  [soft] turn 2 position 682: recorded 532 (P=0.280872), produced 528
+  [soft] turn 2 position 683: recorded 2072 (P=0.520347), produced 1299
+  ... and 5 further soft flips, none of them gating
+  ... and 5 more
+  agentic-d2-search-0061: top-5 Jaccard mean 0.6979, p01 0.4286, p50 0.6667, worst 0.2500, over 237 positions
+  gate: PASS
+
+[11/15] agentic-d2-synthesis-0039 ...
+agentic-d2-synthesis-0039  (0.8s)
+  agentic-d2-synthesis-0039: 166/175 argmax agree (0.948571), 9 flips, 0 of them at P >= 0.99
+  [soft] turn 0 position 540: recorded 735 (P=0.387074), produced 1202
+  [soft] turn 0 position 545: recorded 236761 (P=0.331874), produced 236787
+  [soft] turn 1 position 656: recorded 1202 (P=0.957760), produced 735
+  [soft] turn 1 position 661: recorded 5934 (P=0.799522), produced 2129
+  [soft] turn 1 position 662: recorded 699 (P=0.309777), produced 2129
+  [soft] turn 1 position 667: recorded 1299 (P=0.378195), produced 24261
+  [soft] turn 1 position 668: recorded 9279 (P=0.766762), produced 24261
+  [soft] turn 2 position 783: recorded 740 (P=0.941426), produced 735
+  [soft] turn 3 position 830: recorded 107 (P=0.473066), produced 564
+  agentic-d2-synthesis-0039: top-5 Jaccard mean 0.6825, p01 0.4286, p50 0.6667, worst 0.2500, over 175 positions
+  gate: PASS
+
+[12/15] agentic-d2-update-0028 ...
+agentic-d2-update-0028  (8.0s)
+  agentic-d2-update-0028: 1027/1050 argmax agree (0.978095), 23 flips, 3 of them at P >= 0.99
+  [HARD] turn 0 position 556: recorded 9560 (P=0.999873), produced 623
+  [HARD] turn 8 position 1218: recorded 43233 (P=0.997521), produced 87460
+  [HARD] turn 10 position 1398: recorded 43233 (P=0.998069), produced 87460
+  [soft] turn 0 position 523: recorded 20558 (P=0.630139), produced 236777
+  [soft] turn 0 position 528: recorded 19703 (P=0.369241), produced 1586
+  [soft] turn 0 position 532: recorded 531 (P=0.456771), produced 532
+  [soft] turn 0 position 533: recorded 1460 (P=0.736446), produced 1586
+  [soft] turn 0 position 534: recorded 1061 (P=0.486917), produced 506
+  [soft] turn 0 position 537: recorded 236761 (P=0.575446), produced 1680
+  [soft] turn 0 position 546: recorded 2234 (P=0.965768), produced 1399
+  [soft] turn 0 position 557: recorded 127096 (P=0.938471), produced 44484
+  [soft] turn 1 position 598: recorded 12229 (P=0.788207), produced 5989
+  [soft] turn 1 position 600: recorded 4038 (P=0.603369), produced 1677
+  [soft] turn 2 position 676: recorded 12229 (P=0.954088), produced 1873
+  [soft] turn 2 position 678: recorded 4038 (P=0.548933), produced 992
+  ... and 8 further soft flips, none of them gating
+  ... and 11 more
+  agentic-d2-update-0028: top-5 Jaccard mean 0.6910, p01 0.2500, p50 0.6667, worst 0.2500, over 1050 positions
+  gate: FAIL
+
+[13/15] chat-long-summary ...
+chat-long-summary  (0.8s)
+  chat-long-summary: 157/196 argmax agree (0.801020), 39 flips, 2 of them at P >= 0.99
+  [HARD] turn 0 position 1743: recorded 2094 (P=0.998830), produced 818
+  [HARD] turn 0 position 1836: recorded 532 (P=0.995943), produced 2844
+  [soft] turn 0 position 1717: recorded 236789 (P=0.499999), produced 236858
+  [soft] turn 0 position 1727: recorded 623 (P=0.490464), produced 999
+  [soft] turn 0 position 1753: recorded 15858 (P=0.446668), produced 236743
+  [soft] turn 0 position 1755: recorded 496 (P=0.851945), produced 236743
+  [soft] turn 0 position 1762: recorded 6049 (P=0.657192), produced 116613
+  [soft] turn 0 position 1768: recorded 8428 (P=0.343601), produced 10317
+  [soft] turn 0 position 1774: recorded 84275 (P=0.977220), produced 4122
+  [soft] turn 0 position 1779: recorded 7157 (P=0.877783), produced 861
+  [soft] turn 0 position 1780: recorded 7545 (P=0.953337), produced 529
+  [soft] turn 0 position 1782: recorded 42226 (P=0.511681), produced 60326
+  [soft] turn 0 position 1802: recorded 506 (P=0.382428), produced 1061
+  [soft] turn 0 position 1812: recorded 10241 (P=0.420222), produced 5433
+  ... and 25 further soft flips, none of them gating
+  ... and 27 more
+  chat-long-summary: top-5 Jaccard mean 0.6857, p01 0.2500, p50 0.6667, worst 0.2500, over 196 positions
+  gate: FAIL
+
+[14/15] chat-reasoning ...
+chat-reasoning  (0.3s)
+  chat-reasoning: 131/139 argmax agree (0.942446), 8 flips, 0 of them at P >= 0.99
+  [soft] turn 0 position 74: recorded 3136 (P=0.578239), produced 71211
+  [soft] turn 0 position 78: recorded 659 (P=0.440055), produced 13345
+  [soft] turn 0 position 94: recorded 900 (P=0.444162), produced 568
+  [soft] turn 0 position 166: recorded 531 (P=0.818205), produced 573
+  [soft] turn 0 position 171: recorded 107 (P=0.685647), produced 106
+  [soft] turn 1 position 198: recorded 818 (P=0.970342), produced 2094
+  [soft] turn 1 position 203: recorded 2727 (P=0.485398), produced 13345
+  [soft] turn 1 position 209: recorded 4038 (P=0.406511), produced 496
+  chat-reasoning: top-5 Jaccard mean 0.7787, p01 0.1111, p50 0.6667, worst 0.1111, over 139 positions
+  gate: PASS
+
+[15/15] chat-short-factual ...
+chat-short-factual  (0.3s)
+  chat-short-factual: 88/109 argmax agree (0.807339), 21 flips, 3 of them at P >= 0.99
+  [HARD] turn 0 position 66: recorded 496 (P=0.997527), produced 506
+  [HARD] turn 1 position 147: recorded 1082 (P=0.999434), produced 1208
+  [HARD] turn 1 position 150: recorded 3439 (P=0.996364), produced 4077
+  [soft] turn 0 position 39: recorded 496 (P=0.714237), produced 37385
+  [soft] turn 0 position 40: recorded 20284 (P=0.985780), produced 37385
+  [soft] turn 0 position 45: recorded 7768 (P=0.463070), produced 138
+  [soft] turn 0 position 49: recorded 13076 (P=0.817566), produced 236764
+  [soft] turn 0 position 62: recorded 18182 (P=0.817190), produced 2541
+  [soft] turn 0 position 79: recorded 6590 (P=0.912885), produced 38702
+  [soft] turn 0 position 85: recorded 1061 (P=0.958309), produced 625
+  [soft] turn 0 position 90: recorded 21910 (P=0.817491), produced 506
+  [soft] turn 0 position 91: recorded 1183 (P=0.970619), produced 236764
+  [soft] turn 1 position 126: recorded 9675 (P=0.964660), produced 2094
+  [soft] turn 1 position 129: recorded 31476 (P=0.729326), produced 4954
+  [soft] turn 1 position 134: recorded 9034 (P=0.928917), produced 2344
+  ... and 6 further soft flips, none of them gating
+  ... and 9 more
+  chat-short-factual: top-5 Jaccard mean 0.6869, p01 0.2500, p50 0.6667, worst 0.2500, over 109 positions
+  gate: FAIL
+peak cuda:0 memory: 8.81 GiB
+
+==============================================================================
+teacher-forced argmax agreement 4999/5245 (0.953098); 24 flips at P >= 0.99; gate FAIL

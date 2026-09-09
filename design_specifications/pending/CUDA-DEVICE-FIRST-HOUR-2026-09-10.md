@@ -136,6 +136,19 @@ tests, all four adversarial fixes). The D-CRO's device checklist is
 - **Only a pass resumes.** A failure or an unavailable is a thing to try again, not to inherit; the
   store keeps every result so the history is readable, and resume reads only the successes.
 - **Stop at the first failing gate** with what it saw against what it expected.
+- **Archives made on the laptop go through `lab-device pack-data`, never a bare `tar`.** macOS
+  `tar` adds AppleDouble `._*` sidecars that are invisible on a Mac, match a `*.jsonl` glob on
+  Linux and killed the golden-episode reader on the card (SWE-1); `pack-data` leaves them out, and
+  a hand-made archive needs `COPYFILE_DISABLE=1` in front of `tar`.
+- **A corpus a seat builds on the device goes outside the checkout or under an ignored path.**
+  The resume key hashes untracked files, so a corpus written under a tracked-but-untracked
+  directory changes every seat's tree digest mid-run (the D-CRO, 2026-09-10; `/data/` is now
+  ignored in `.gitignore`, and `/workspace/lens-corpus/` is where the lens corpus lives).
+- **Two seats may share the card when neither measures time.** The Director's rule: not using
+  the card is the waste. A correctness gate and a fit may run beside each other under separate
+  box-state directories (`AGENT_V2_BOX_STATE_DIR=/workspace/box-<seat>`); a run that measures
+  time or a device peak that is not per-process takes the card alone, and any figure taken while
+  sharing carries `basis: shared-card`.
 - **A projection is a basis.** Every laptop figure above is what the device number is compared
   against, never what it is expected to equal; and a laptop figure taken on a shared box is not a
   basis for anything (a 667 s idle projection ran past 630 s at load 6.4).

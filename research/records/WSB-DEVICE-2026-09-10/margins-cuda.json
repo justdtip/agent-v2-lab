@@ -1,0 +1,66 @@
+{
+ "what": "top-two margins in each bfloat16 framework at the positions where they disagreed, to separate a defect from a rounding tie",
+ "tie_ulps": 2,
+ "device": "cuda:0",
+ "read": {
+  "value": 2,
+  "basis": "measured-here"
+ },
+ "seconds": {
+  "value": 6.7,
+  "basis": "measured-here",
+  "unit": "s"
+ },
+ "positions": [
+  {
+   "episode": "agentic-d2-read-0108",
+   "turn": 0,
+   "position": 521,
+   "recorded_token": 2234,
+   "recorded_probability": 0.999739,
+   "produced_token": 1399,
+   "reference_gap_ulps": 3.0,
+   "verdict": "outstanding",
+   "device": "cuda:0",
+   "reference": null,
+   "port": {
+    "top1": 1399,
+    "p1": 0.9240920543670654,
+    "top2": 2234,
+    "p2": 0.07585409283638,
+    "logit_gap": 2.500000028669466,
+    "top_logit": 67.0,
+    "exponent": 6,
+    "bf16_ulp": 0.5,
+    "gap_ulps": 5.000000057338932
+   },
+   "port_signed_gap_toward_reference": -2.500000028669466,
+   "port_signed_gap_ulps": -5.000000057338932
+  },
+  {
+   "episode": "chat-long-summary",
+   "turn": 1,
+   "position": 1912,
+   "recorded_token": 3530,
+   "recorded_probability": 0.599491,
+   "produced_token": 18997,
+   "reference_gap_ulps": 3.0,
+   "verdict": "outstanding",
+   "device": "cuda:0",
+   "reference": null,
+   "port": {
+    "top1": 18997,
+    "p1": 0.213287353515625,
+    "top2": 3530,
+    "p2": 0.16610835492610931,
+    "logit_gap": 0.25000001812724576,
+    "top_logit": 34.75,
+    "exponent": 5,
+    "bf16_ulp": 0.25,
+    "gap_ulps": 1.000000072508983
+   },
+   "port_signed_gap_toward_reference": -0.25000001812724576,
+   "port_signed_gap_ulps": -1.000000072508983
+  }
+ ]
+}

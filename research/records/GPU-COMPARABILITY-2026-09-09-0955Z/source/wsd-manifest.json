@@ -1,0 +1,77 @@
+{
+  "budget_departure": {
+    "cost_per_row_per_layer_seconds": 48.23,
+    "measured_basis": "measured-here",
+    "note": "rows are additive in this estimator: it means over prompts and records n_prompts, so a later run extends this one by the weighted mean rather than replacing it",
+    "one_row_all_layers_minutes": 26.5,
+    "reason": "the order's rule is to halve the rows if the measured cost puts the subset above thirty minutes, and to write the halving before the run",
+    "three_rows_all_layers_minutes": 79.6
+  },
+  "checkpoint": "/workspace/.hf_home/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767/",
+  "corpus": {
+    "manifest": "/workspace/lens-corpus/prose-gemma3-4b-cuda-bf16.json",
+    "split": "held"
+  },
+  "device": {
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "backend": "torch",
+    "cublas_workspace_before_cuda": true,
+    "cuda_available": true,
+    "cudnn_benchmark": false,
+    "cudnn_deterministic": true,
+    "determinism": "pinned",
+    "deterministic_algorithms": true,
+    "device": "cuda:0",
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "float32_matmul_precision": "highest",
+    "mlx": null,
+    "pinned": {
+      "attn_implementation": "eager",
+      "deterministic": true,
+      "seed": 0
+    },
+    "platform": "Linux 6.17.0-35-generic x86_64",
+    "python": "3.13.15",
+    "tf32_cudnn": false,
+    "tf32_matmul": false,
+    "threads": 8,
+    "torch": "2.14.0",
+    "transformers": "5.16.1"
+  },
+  "load_report_sha256": {
+    "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+    "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+    "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+  },
+  "schema_version": 1,
+  "seat": "d-cro",
+  "shared_card": true,
+  "shared_card_note": "another seat may run beside this one, so any wall-clock figure and any whole-device memory reading here carries basis: shared-card; per-process allocated peaks stay valid",
+  "subset": {
+    "declared_rows": 3,
+    "direction_batch": 256,
+    "drawn_indices": [
+      7,
+      16,
+      4
+    ],
+    "epsilon_scale": 0.01,
+    "halved_epsilon_scale": 0.005,
+    "halved_layer_upstream": 16,
+    "max_seq_len": 128,
+    "positions_per_row": "index 8 and the row's last position",
+    "seed": 20260910,
+    "source_layers": "every layer below the target",
+    "used_indices": [
+      7
+    ],
+    "used_rows": 1,
+    "wrong_corpus_index": [
+      16
+    ]
+  },
+  "workstream": "WS-D"
+}

@@ -1,0 +1,79 @@
+Environment
+  torch 2.14.0+cu130
+  cuda available: True
+  mps available: False
+  default dtype: torch.float32
+  CUBLAS_WORKSPACE_CONFIG: :4096:8
+  backend: torch
+  cublas_workspace_before_cuda: True
+  cuda_available: True
+  cudnn_benchmark: False
+  cudnn_deterministic: True
+  determinism: pinned
+  deterministic_algorithms: True
+  device: cuda:0
+  device_count: 1
+  device_names: ['NVIDIA RTX PRO 6000 Blackwell Workstation Edition']
+  float32_matmul_precision: highest
+  mlx: None
+  pinned: {'seed': 0, 'deterministic': True, 'attn_implementation': 'eager'}
+  platform: Linux 6.17.0-35-generic x86_64
+  python: 3.13.15
+  tf32_cudnn: False
+  tf32_matmul: False
+  threads: 8
+  torch: 2.14.0
+  transformers: 5.16.1
+
+SMOKE PASS: every gate on its smallest input (agentic-d2-calculate-0158).
+A pass here is not a pass on the full input, and the resume key says so.
+
+resume store: /workspace/wsb/out/gates-smoke
+  commit 16fd7e3171a6, resumable: True
+
+[----] gate 1: structural discovery of the decoder (WS-A)
+         saw:      not implemented
+         expected: WS-A implements gate 1
+         note:     reported unavailable rather than skipped: a gate that has not run is not a pass, and this kit's green run is what authorises spending on hardware
+
+[----] gate 2: residual_source_agreement at 64 and 1,400 (WS-A)
+         saw:      not implemented
+         expected: WS-A implements gate 2
+         note:     reported unavailable rather than skipped: a gate that has not run is not a pass, and this kit's green run is what authorises spending on hardware
+
+[----] gate 3: final-layer identity against the emitted token (WS-A)
+         saw:      not implemented
+         expected: WS-A implements gate 3
+         note:     reported unavailable rather than skipped: a gate that has not run is not a pass, and this kit's green run is what authorises spending on hardware
+
+[----] gate 4: readout gate with both negative controls (WS-A)
+         saw:      not implemented
+         expected: WS-A implements gate 4
+         note:     reported unavailable rather than skipped: a gate that has not run is not a pass, and this kit's green run is what authorises spending on hardware
+
+[transformers] The following layers were not sharded: model.layers.*.post_feedforward_layernorm.weight, model.layers.*.input_layernorm.weight, model.layers.*.pre_feedforward_layernorm.weight, model.layers.*.post_attention_layernorm.weight, model.norm.weight
+Loading weights:   0%|          | 0/444 [00:00<?, ?it/s]Loading weights: 100%|██████████| 444/444 [00:00<00:00, 38148.78it/s]
+backend: google/gemma-3-4b-it on cuda:0, 34 layers, eager
+
+[FAIL] gate 5: golden trajectories (WS-B)
+         saw:      1 of 1 episodes diverged
+         expected: 0 of 1
+         note:     bookkeeping (not validation): forward-to-emission join 103 agree, 0 disagree, 0 missing across 1 episodes
+         note:     turn 0 token 0 (position 506): recorded 818, generated 107
+    recorded final-layer top: [818, 236777, 20558, 4754, 6481, 153137, 30134, 1882, 10282, 26253]
+    generated final-layer top: []
+
+[----] gate 6: golden lens reads (WS-B)
+         saw:      backend loaded, but the lens read path is not ported
+         expected: rank rows at every layer for 103 agentic emitted tokens
+         note:     corpus: 103 emitted tokens across 1 episodes, 103 of them agentic
+         note:     tolerance coverage: 78 of 103 emissions were recorded at P >= 0.99 (0.7573), so the hard flip rule governs that share of the decisions; the remainder can flip on precision alone and is reported rather than gated
+         note:     the recorded ranks come from MLX 4-bit through the hosted lens; a comparison against another precision confounds the port with quantisation, and the gate reports the difference rather than attributing it
+
+[----] gate 7: lens un-port refitted and compared per layer (WS-D)
+         saw:      not implemented
+         expected: WS-D implements gate 7
+         note:     reported unavailable rather than skipped: a gate that has not run is not a pass, and this kit's green run is what authorises spending on hardware
+
+0 of 7 gates passed.
+gates not yet runnable: [1, 2, 3, 4, 6, 7]. None of these is a pass.

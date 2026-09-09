@@ -145,9 +145,7 @@ def gate_5_golden_trajectories(arguments: argparse.Namespace) -> GateResult:
         )
 
     model, view, tokenizer, spec = backend
-    generate = golden.torch_generator(
-        model, view, tokenizer, spec, decoding=arguments.decoding
-    )
+    generate = golden.torch_generator(model, view, tokenizer, spec, decoding=arguments.decoding)
     diverged = []
     tokens = 0
     for episode in episodes:
@@ -220,6 +218,17 @@ def gate_6_golden_lens_reads(arguments: argparse.Namespace) -> GateResult:
     )
 
 
+#: Gate 5 and gate 6 both ask for the backend, and a 7.3 GiB load is not done twice.
+_BACKEND: tuple[Any, Any, Any, Any] | None = None
+
+
+def _tokenizer(checkpoint: Any) -> Any:
+    """The checkpoint's own tokenizer, offline, from the same directory as the weights."""
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(str(checkpoint), local_files_only=True)
+
+
 def _load_backend(arguments: argparse.Namespace) -> tuple[Any, Any, Any, Any] | None:
     """Load a model only when asked, and only inside an announced box window.
 
@@ -235,10 +244,37 @@ def _load_backend(arguments: argparse.Namespace) -> tuple[Any, Any, Any, Any] | 
             "refusing to load a model: no box window is announced. Announce one and read "
             "`runlock status` back until it says running; announcing is not holding."
         )
-    raise SystemExit(
-        "--model is wired but the torch architecture view does not exist yet (WS-A). "
-        "Remove --model to run the gates that read records only."
+    global _BACKEND
+    if _BACKEND is not None:
+        return _BACKEND
+
+    from local_llm_lab import device
+    from local_llm_lab.arch_torch import TorchArchitectureView
+    from local_llm_lab.hf_text import load_text_causal_lm
+    from local_llm_lab.models import load_model_spec
+
+    spec = load_model_spec(arguments.model)
+    checkpoint = getattr(arguments, "checkpoint", None)
+    if checkpoint is None:
+        raise SystemExit(
+            "pass --checkpoint with the model's snapshot directory: the registry entry names "
+            f"{spec.hf_id!r}, and this kit does not resolve a cache location for it. On the "
+            "device the weights live under $HF_HOME, not under the checkout"
+        )
+    device.pin(attention="eager")
+    target = device.select()
+    model, report = load_text_causal_lm(
+        checkpoint, dtype="bfloat16", attn_implementation="eager", device=target
     )
+    from local_llm_lab.pipeline.lens_fitting.upstream import same_device
+
+    if not same_device(target, str(report.get("device"))):
+        raise SystemExit(f"asked for {target} and the loader reports {report.get('device')!r}")
+    view = TorchArchitectureView.from_model(model)
+    tokenizer = _tokenizer(checkpoint)
+    print(f"backend: {spec.hf_id} on {target}, {view.num_layers} layers, eager\n")
+    _BACKEND = (model, view, tokenizer, spec)
+    return _BACKEND
 
 
 GATES = [
@@ -294,6 +330,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--model", help="model to load; requires an announced box window")
     parser.add_argument(
+        "--checkpoint",
+        help="the model's snapshot directory; required with --model, because on the device the "
+        "weights live under $HF_HOME rather than under the checkout",
+    )
+    parser.add_argument(
         "--smoke",
         action="store_true",
         help="run every gate on its smallest input, so an hour that dies late has touched "
@@ -337,8 +378,10 @@ def main(argv: list[str] | None = None) -> int:
 
     store = None
     if arguments.results:
+        # The checkpoint's digests, not the registry name: `current_identity` hashes a path,
+        # and a name resolved against the working directory is not one.
         identity = gate_records.current_identity(
-            arguments.model,
+            arguments.checkpoint,
             smoke=arguments.smoke,
             episodes=sorted(episode.label for episode in _selected_episodes(arguments)),
         )

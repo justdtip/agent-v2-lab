@@ -1,0 +1,90 @@
+{
+ "what": "top-two margins in each bfloat16 framework at the positions where they disagreed, to separate a defect from a rounding tie",
+ "tie_ulps": 2,
+ "device": "cpu",
+ "read": {
+  "value": 2,
+  "basis": "measured-here"
+ },
+ "seconds": {
+  "value": 460.1,
+  "basis": "measured-here",
+  "unit": "s"
+ },
+ "positions": [
+  {
+   "episode": "agentic-d2-read-0108",
+   "turn": 0,
+   "position": 521,
+   "recorded_token": 2234,
+   "recorded_probability": 0.999739,
+   "produced_token": 1399,
+   "reference_gap_ulps": 3.0,
+   "verdict": "outstanding",
+   "device": "cpu",
+   "reference": {
+    "top1": 2234,
+    "p1": 0.8175243735313416,
+    "top2": 1399,
+    "p2": 0.18241436779499054,
+    "logit_gap": 1.4999998717003529,
+    "top_logit": 66.0,
+    "exponent": 6,
+    "bf16_ulp": 0.5,
+    "gap_ulps": 2.9999997434007057
+   },
+   "port": {
+    "top1": 2234,
+    "p1": 0.4999854564666748,
+    "top2": 1399,
+    "p2": 0.4999854564666748,
+    "logit_gap": 0.0,
+    "top_logit": 66.0,
+    "exponent": 6,
+    "bf16_ulp": 0.5,
+    "gap_ulps": 0.0
+   },
+   "port_signed_gap_toward_reference": 0.0,
+   "port_signed_gap_ulps": 0.0,
+   "tie": false,
+   "reading": "the reference is 3.0 ULP clear"
+  },
+  {
+   "episode": "chat-long-summary",
+   "turn": 1,
+   "position": 1912,
+   "recorded_token": 3530,
+   "recorded_probability": 0.599491,
+   "produced_token": 18997,
+   "reference_gap_ulps": 3.0,
+   "verdict": "outstanding",
+   "device": "cpu",
+   "reference": {
+    "top1": 3530,
+    "p1": 0.31222447752952576,
+    "top2": 13058,
+    "p2": 0.1474844068288803,
+    "logit_gap": 0.7499999545925286,
+    "top_logit": 34.75,
+    "exponent": 5,
+    "bf16_ulp": 0.25,
+    "gap_ulps": 2.999999818370114
+   },
+   "port": {
+    "top1": 18997,
+    "p1": 0.18779051303863525,
+    "top2": 3530,
+    "p2": 0.18779051303863525,
+    "logit_gap": 0.0,
+    "top_logit": 34.75,
+    "exponent": 5,
+    "bf16_ulp": 0.25,
+    "gap_ulps": 0.0
+   },
+   "port_signed_gap_toward_reference": -0.0,
+   "port_signed_gap_ulps": -0.0,
+   "tie": false,
+   "reading": "the reference is 3.0 ULP clear"
+  }
+ ]
+}

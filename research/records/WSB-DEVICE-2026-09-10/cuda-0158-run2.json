@@ -1,0 +1,74 @@
+{
+ "head": {
+  "tree_hash": "33153032c2a52d70e412d0d53eb3959ab4ab00a05d39293a914431f883027e7a",
+  "source_commit": "a5a977b8cec7e32568071f7e97ff4e776f633fd4",
+  "diff_stat": "",
+  "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+  "device": "{\"backend\": \"torch\", \"determinism\": \"pinned\", \"device\": \"cuda:0\", \"pinned\": {\"attn_implementation\": \"eager\", \"deterministic\": true, \"seed\": 0}}",
+  "input_digest": "none",
+  "smoke": false,
+  "records": "/workspace/wsb/stage2",
+  "records_precision": "mlx 4-bit",
+  "port_precision": "cuda:0 bfloat16"
+ },
+ "compared": {
+  "value": 103,
+  "basis": "measured-here"
+ },
+ "agreed": {
+  "value": 97,
+  "basis": "measured-here"
+ },
+ "hard_flips": {
+  "value": 0,
+  "basis": "measured-here"
+ },
+ "peak_memory": {
+  "value": 7.92,
+  "basis": "measured-here",
+  "unit": "GiB"
+ },
+ "episodes": [
+  {
+   "label": "agentic-d2-calculate-0158",
+   "compared": {
+    "value": 103,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 97,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "flip_confidences": {
+    "value": [
+     0.35605308413505554,
+     0.3840745985507965,
+     0.4737294614315033,
+     0.5155090093612671,
+     0.5399542450904846,
+     0.8159769177436829
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 78,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7124364308830328,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.6,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  }
+ ]
+}

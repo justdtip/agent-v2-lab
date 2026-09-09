@@ -164,3 +164,146 @@ unchanged count-based `truncated`. The builder's flagged choice is right and sta
 is a compared field and stays count-based, so a turn that ends on its terminator exactly at the
 cap reads `truncated: true` beside `ended_on_eos: true`, which is two true statements. Nothing
 further for WS-B on the laptop.
+
+## The device's first hour, WS-B, 2026-09-10 — the seam is faithful and the gate fails; a ruling
+
+SWE-1's record `research/records/WSB-DEVICE-2026-09-10/` (`0350db4`, on `cuda-migration`). Two facts
+held together: **the port is device-consistent** on the card, CUDA and CPU agreeing to one position
+in 5,245 with thirteen of fifteen episodes giving the identical set of confident disagreements on
+both and two CUDA runs of one episode byte-identical; and **the pre-registered gate fails**, 24
+positions where the MLX recording held its token at P ≥ 0.99 produced a different argmax, on CUDA
+and identically on the CPU. So the failure predates the card and was invisible on the laptop because
+one episode of fifteen had ever been measured, and that episode is clean everywhere. Peak 7.92 GiB
+for an episode and 8.81 GiB for the corpus against a 7.56 GiB projection; 4.0 s per episode on the
+card against 83.5 s on the laptop's CPU.
+
+**Ruling.** The gate stays failed as pre-registered; nothing is passed by borrowing a tolerance or
+by reading the 0.57% flip rate at confident positions against the 21.2% at unconfident ones as a
+pass, however concentrated the disagreement is where precision puts it. Two hypotheses remain and
+the record separates neither: a narrow port defect, or the rule's premise, that 4-bit quantisation
+cannot move a confident argmax, being too strong for MLX 4-bit against torch bf16. The separating
+test is torch bf16 against **MLX bf16** on the same fifteen episodes, and it needs MLX, so it is a
+laptop run: authorised, as a teacher-forced pass over 5,245 tokens under an announced window with
+its projected peak, each episode written as it completes; not a run that ties up the box. If MLX
+bf16 shows zero confident flips against torch bf16, the premise was 4-bit's and the golden records
+are re-based on MLX bf16 with that stated in every comparison; if the 24 remain, it is the port,
+and the search starts from the eleven above P = 0.999. Gate 5's failure at the first near-tie is
+the free-running cross-backend comparison the programme already ruled invalid, and stays so.
+
+**Gate 5 restated, Chief, 2026-09-10.** The free-running cross-backend reproduction that gate 5
+asked for is struck, as the tolerance prose already ruled it invalid; it failed on the card at the
+first near-tie (position 506, recorded P = 0.5155), which is the expected behaviour of an invalid
+comparison, not a finding. Gate 5 is within-backend: two decodes of one prefix on one backend agree
+byte for byte, which the two CUDA runs of `calculate-0158` already measured and passed. Gate 6 stays
+unavailable until the lens path is ported. The finding at position 506, a single full forward
+against chunked prefill with the cache differing at a near-tie, is carried into the cache-strategy
+gate arm's notes as unchecked; that arm is the equivalence claim it touches.
+
+## The precision-matched arm, 2026-09-10 — the premise was wrong, not the port; rulings
+
+SWE-1, `df2f0a3`: MLX bfloat16 against torch bfloat16, teacher-forced over the turns carrying the
+24 gated positions, 55 s on the laptop. **Twenty-one of the 24 are quantisation**: MLX bf16
+produced exactly what torch bf16 produced and only the 4-bit record dissented, including the
+position recorded at P = 1.000000. **Three are bfloat16 ties**: the top-two gaps, recovered exactly
+from ln(p1/p2) and checked to lie on the 0.25 grid that is the bf16 step at that magnitude, are a
+0-ULP gap (two candidates exactly equal), a 2-ULP gap pointing opposite ways in the two frameworks,
+and one position where the card's own CPU and CUDA already differed, a device tie. A probability
+margin had called all three "not a tie"; the ULP measure is the instrument. No port defect is
+implicated at any of the 24, and the record says plainly that this is not evidence the port is
+correct, only that these positions were never evidence against it; the positive evidence remains
+device consistency to one position in 5,245 and the WS-A gates.
+
+**Rulings.** The rule "a confident flip is a defect" holds only against a precision-matched
+reference, with a margin in ULPs of the stored dtype: a position whose top-two gap on the
+reference lies within two ULPs is a tie, counted and reported as a tie, never as a flip and never
+as agreement; against a differently quantised recording the check is not a defect test and
+refuses to be read as one. The golden records are re-based on MLX bf16: the full fifteen episodes
+through the MLX bf16 arm on the laptop under one announced window, the new reference recorded with
+its provenance beside the 4-bit one, which stays as the record of what the rule was measured
+against; then the kit runs once more on the card against the new reference, and the expectation is
+zero confident flips outside listed ties. The rule goes into code; the lesson goes into the method
+record as the thirty-first entry, in SWE-1's name.
+
+## Ruling on the surviving flip, Chief, 2026-09-10 — `5cdd1de`: below resolution is a class, not a defect and not a wider band
+
+The re-based run is accepted as WS-B's number on the card: 5,213 of 5,245 against the
+precision-matched reference for no change to the port, thirty ties listed under the two-ULP rule,
+and one position reported as a flip rather than cleared by widening the band. The refusal to widen
+was right. The ruling on `agentic-d2-read-0108`, turn 0, position 521:
+
+**Not a defect, and the band does not move.** The record holds three bfloat16 readings of the same
+weights on the same tokens at that position: the MLX reference puts the recorded token ahead by 1.5
+logits; torch on the laptop CPU has the two candidates at an exact tie; torch on the card prefers
+the other token. A port defect is a claim that the port disagrees with the reference by more than
+the port's own arithmetic can explain, and here the port's two devices straddle the reference's
+margin. The rule, stated so that it applies without a threshold moved after the fact: **a flip is
+attributed to the port only where the reference's margin exceeds the port's measured cross-device
+spread at that position.** Where it does not, the position is classed **below resolution** — a
+third class beside tie and flip, counted and listed with both margins, never folded into agreement
+and never called a defect. The two-ULP tie band stays as ruled: it is the reference's storage grid,
+and this class is the port's arithmetic grid, measured from the CPU control the record already has.
+
+**The ULP grid is computed from the value, per position.** The precision-matched arm recorded this
+position's reference gap as 1.5 logits at `bf16_ulp = 0.25`, six ULPs (`flip-margins.json`); the
+re-based run reports the same position at three. The check that every gap is an exact multiple of
+the grid cannot tell 0.25 from 0.5, since a multiple of the finer grid is a multiple of the coarser.
+bfloat16's ULP is 2^(⌊log₂|v|⌋ − 7) for the logit v itself, so `bf16_ulp` takes the stored top
+logit and returns the grid for that magnitude, per position, and the two arms are reconciled in the
+record with the exponent each logit actually has.
+
+**The line must sum.** 5,213 agreed, 30 ties and 1 flip leave one position of 5,245 unaccounted
+for; the README states its class — not compared, if the reference had no answer for it — so the
+headline reads as four counts that add to the corpus.
+
+**For SWE-1, in this order:** the value-derived grid and the reconciliation of the two arms at
+position 521; the below-resolution class in `AgreementReport`, with the CPU control as its second
+measurement and the card's own gap at that position added to the record; the README's four-count
+line; then the method entry, which is the one this week keeps writing — the instrument's resolution
+is a measurement, not a setting. The precision-matched join that Codex was to do (WS-A order, the
+next instruction) is unblocked by the reference and goes out through the Director.
+
+## Ruling on the classification at `6fb20fe`, Chief, 2026-09-10 — the port's resolution is a corpus-wide measurement, not a two-sample estimate at one position
+
+The four classes sum, the grid is value-derived, the stale gate is gone and `counts()` asserts
+the identity: accepted, and `chat-long-summary`/1912 is exactly the position the rule had to
+expose. This ruling refines the rule under which it was classed.
+
+**The rule as written measured the port's resolution from two samples.** "The port's measured
+cross-device spread at that position" is one CPU reading and one CUDA reading. At 521 the two
+happened to straddle the reference by 5.0; at 1912 they happened to sit 1.0 apart. The reference's
+discrepancy with the port's CPU is 3.0 ULP at both positions and with the card 8.0 and 4.0. The
+corpus's own evidence is that the port's arithmetic differs from itself by 5.0 ULP at a magnitude
+of 66, so a reference margin of 3.0 ULP at a magnitude of 35 lies inside what the port's
+arithmetic has already been seen to do. A two-sample spread that is small by chance does not make
+the port's resolution finer at that position.
+
+**The rule, refined.** The port's resolution is the distribution of its cross-device discrepancy
+over the corpus: at every compared position, the signed top-two gap on the CPU and on the card in
+value-derived ULPs, and their difference, reported as median, 99th percentile and maximum. A
+position is attributed to the port only where the reference's margin exceeds that distribution's
+**maximum**. The maximum is the pre-registered statistic because it is measured on 5,245 positions
+and cannot be tuned; if it is set by one outlying position, say so and report the 99th percentile
+beside it, but the class follows the maximum. The reference's own internal spread is unmeasured —
+MLX runs on one device — and is taken to be no finer than the port's; the record states that
+assumption.
+
+**Consequence.** With 521 alone the maximum is at least 5.0, so 1912 at 3.0 is below resolution
+under the refined rule, and the corpus reads 5,213 agreed, 30 ties, 2 below resolution, 0
+attributed to the port. That is the refinement's consequence and not a threshold moved to make a
+run green: the quantity is unchanged — the port's own arithmetic resolution — and only its
+estimate changes, from two samples at one position to the whole corpus. The record keeps the
+two-sample table and says which rule each headline was computed under.
+
+**Work for SWE-1, on the laptop except one short pass on the card:** the corpus-wide spread needs
+both devices' per-position gaps, so a per-position pass on the CPU and on the card that writes the
+signed gap at every compared position (the reference already stores its own everywhere; the port's
+runs stored only the flips); `port-spreads.json` becomes corpus-wide with the three statistics;
+the classifier reads the maximum from the file instead of a per-position spread; the headline and
+the four-count table restated under the refined rule with the previous one kept beside it; and the
+addendum to entry thirty-two that SWE-1 flagged — the sum identity did not catch a parameter the
+call site failed to pass, it needed the expected classification beside it, so an identity guards a
+gate only together with an expected value.
+
+**One observation, no action:** at both outstanding positions the port's CPU reading is an exact
+tie where the card and the reference are several ULP apart. That is a statement about the CPU
+path's arithmetic, worth a line in the record once the corpus-wide distribution is in hand.

@@ -1,0 +1,676 @@
+{
+ "head": {
+  "tree_hash": "f6ce68b499f04115e071ae882322ec8d2542b84a91144fdb693f70acd1bd5dcc",
+  "source_commit": "00e88b037415c22dca535ac75aaa5ab1a3026937",
+  "diff_stat": "",
+  "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+  "device": "{\"backend\": \"torch\", \"determinism\": \"pinned\", \"device\": \"cuda:0\", \"pinned\": {\"attn_implementation\": \"eager\", \"deterministic\": true, \"seed\": 0}}",
+  "input_digest": "none",
+  "smoke": false,
+  "records": "/workspace/wsb/stage2",
+  "records_precision": "mlx 4-bit",
+  "port_precision": "cuda:0 bfloat16"
+ },
+ "compared": {
+  "value": 5245,
+  "basis": "measured-here"
+ },
+ "agreed": {
+  "value": 5213,
+  "basis": "measured-here"
+ },
+ "reference": "mlx-bf16",
+ "precision_matched": true,
+ "hard_flips": {
+  "value": 1,
+  "basis": "measured-here"
+ },
+ "ties": {
+  "value": 30,
+  "basis": "measured-here"
+ },
+ "peak_memory": {
+  "value": 8.806,
+  "basis": "measured-here",
+  "unit": "GiB"
+ },
+ "episodes": [
+  {
+   "label": "agentic-d2-aggregate_report-0167",
+   "compared": {
+    "value": 506,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 504,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.8824068903923035,
+     0.9764658212661743
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 393,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7209674383587427,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 1.5,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-batch_update-0166",
+   "compared": {
+    "value": 459,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 458,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.8190401196479797
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 409,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6903983815748521,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 1.7,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-calculate-0158",
+   "compared": {
+    "value": 103,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 101,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.4737294614315033,
+     0.5399542450904846
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 78,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7124364308830328,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.4,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-conditional_update-0093",
+   "compared": {
+    "value": 279,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 279,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 222,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7049553393639415,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 1.2,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-cross_reference-0032",
+   "compared": {
+    "value": 543,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 540,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.6901738047599792,
+     0.8713598847389221,
+     0.9874475598335266
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 475,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7112821187406823,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 3.3,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-ledger_reconcile-0163",
+   "compared": {
+    "value": 567,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 562,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.3348384201526642,
+     0.37518203258514404,
+     0.5752913951873779,
+     0.6289689540863037,
+     0.9200275540351868
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 419,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6927927549620672,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 2.4,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-list-0149",
+   "compared": {
+    "value": 228,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 225,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.8066019415855408,
+     0.9142872095108032,
+     0.9915077686309814
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 178,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7091165413533834,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.8,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-pointer_chain-0018",
+   "compared": {
+    "value": 482,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 482,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 442,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6889284067707304,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 2.8,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-read-0108",
+   "compared": {
+    "value": 172,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 170,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 1,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [
+     {
+      "turn": 0,
+      "position": 521,
+      "recorded_token": 2234,
+      "produced_token": 1399,
+      "recorded_probability": 0.9997387528419495
+     }
+    ],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.7378382682800293,
+     0.9997387528419495
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 140,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7064184200812108,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.8,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-search-0061",
+   "compared": {
+    "value": 237,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 234,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.3867042362689972,
+     0.5854749083518982,
+     0.8822121024131775
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 171,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6979103877838054,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 1.0,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-synthesis-0039",
+   "compared": {
+    "value": 175,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 172,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.3119407892227173,
+     0.4409831762313843,
+     0.6475793123245239
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 134,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6825170068027211,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.8,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "agentic-d2-update-0028",
+   "compared": {
+    "value": 1050,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 1048,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.8748723864555359,
+     0.9998726844787598
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 889,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6909750566893424,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 8.0,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "chat-long-summary",
+   "compared": {
+    "value": 196,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 191,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.34088292717933655,
+     0.5770233273506165,
+     0.5994914174079895,
+     0.6438213586807251,
+     0.8519454002380371
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 87,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6857385811467444,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.8,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "chat-reasoning",
+   "compared": {
+    "value": 139,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 139,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 95,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.7787484298275665,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.3,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  },
+  {
+   "label": "chat-short-factual",
+   "compared": {
+    "value": 109,
+    "basis": "measured-here"
+   },
+   "agreed": {
+    "value": 108,
+    "basis": "measured-here"
+   },
+   "hard_flips": {
+    "value": 0,
+    "basis": "measured-here"
+   },
+   "hard_flip_positions": {
+    "value": [],
+    "basis": "measured-here",
+    "basis_note": "each gating flip, so the failing positions are in the record and not only in a log that truncates"
+   },
+   "flip_confidences": {
+    "value": [
+     0.49099060893058777
+    ],
+    "basis": "laptop-basis",
+    "basis_note": "the MLX recording's own probability at each flipped position"
+   },
+   "confident_positions": {
+    "value": 67,
+    "basis": "laptop-basis",
+    "basis_note": "emissions recorded at P >= 0.99 in the MLX run"
+   },
+   "jaccard_mean": {
+    "value": 0.6868719965050241,
+    "basis": "measured-here"
+   },
+   "seconds": {
+    "value": 0.3,
+    "basis": "measured-here",
+    "unit": "s"
+   }
+  }
+ ]
+}

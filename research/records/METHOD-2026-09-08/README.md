@@ -631,3 +631,95 @@ a step that reads that check's status — `test $? -eq 0 || { abort; exit 1; }` 
 heredoc, before `git add` — and a merge is verified free of markers *by grep in the commit step*,
 not by the message that claims it. The merge that did land here was made that way; the one that
 did not is why the rule is written down.
+
+## Thirtieth: the device's first hour, in the Chief's name
+
+Four things in ninety minutes on paid hardware, each caught by a gate that already existed. A
+preflight row tested the order of two calls rather than the property the order was meant to
+secure, and failed while printing a fully pinned reading; the fix was to record the property. A
+patch command broke before its edit, the tests then passed on the unpatched file, and the green
+was read as the patch; the second device run exposed it through the record's own rule string.
+A commit chain read a pipe's exit status and committed past a failing test; the forward merge's
+suite refused it. And a gate's yardstick, sound on the CPU, was the wrong magnitude on the card;
+the control it judged was fine and the seam it protected was exact, and the rule now names the
+magnitude that agrees across backends. **The rules.** A check reads the property, never the order
+that produced it. A patch is verified by grepping for its text, never by a test count. A chain
+commits on the test's exit status, never a pipe's. And every laptop yardstick is re-read on the
+device before it judges anything, since the first hour's job is to find which of them moved.
+
+## Thirty-first: the gate whose reference was a different model, in SWE-1's name
+
+The port's acceptance gate compared the torch bfloat16 implementation against the MLX **4-bit**
+recordings, and failed a run outright on any position where the recording had been at least 99%
+confident and the port disagreed. The reasoning was that quantisation moves near-ties and nothing
+else, so a confident flip has to be a mask, position, entry or norm defect. On the rented card it
+fired **twenty-four times** across 5,245 positions, with eleven of the twenty-four above P = 0.999
+and one at P = 1.000000. It looked exactly like a defect, and the distribution ruled out a
+threshold artefact: a rule crowding the 0.990–0.995 band would have been an instrument problem,
+and this was not that shape.
+
+It was not a defect. Running MLX at **bfloat16** over the same positions resolved twenty-one of
+the twenty-four to quantisation: both bfloat16 implementations produced the same token and only
+the 4-bit recording dissented, the P = 1.000000 case among them. The premise was simply false.
+Four-bit quantisation is not a perturbation of a model, it is a different model, and the recorded
+probability is *that* model's confidence in its own preference. It bounds nothing about the port.
+
+**A gate is only a defect test against a precision-matched reference.** Against a differently
+quantised one it measures the difference between the two precisions, and it will keep firing and
+keep finding nothing, at whatever cost per firing the hardware charges. The check ran clean for a
+day on the one episode anybody had measured, which is the other half of the lesson: a rule
+validated on 103 of 5,245 positions had not been validated.
+
+The three that survived taught the second rule. Measured as a **probability margin** they read
+0.12 to 0.64 and the instrument called all three "not a tie", which would have sent the team
+hunting a defect that was not there. But the logits are bfloat16, so the gaps between candidates
+are quantised to the bfloat16 grid, and softmax being monotone, `ln(p1/p2)` recovers the logit gap
+exactly without keeping the logits. Every gap came back an exact multiple of 0.25 — the bfloat16
+step at that magnitude, which is the check that it is the right grid — and the three sat at 0, 2
+and 1–3 units of last place. At one the reference's own top two were **exactly equal**: the argmax
+was settling a coin toss, and which side the port landed is not information about the port.
+
+**The rules.** A confident-flip check is a defect test only when the reference runs the port's
+precision; against anything else it reports observations and refuses to yield a verdict, in the
+type rather than in a comment. A disagreement whose gap on the reference lies within two ULPs of
+the dtype the logits are stored in is a **tie**: counted and reported as a tie, never as a flip
+and never folded into agreement. And a margin is measured in ULPs of the stored dtype, never as a
+probability, because probability hides the grid the numbers actually live on.
+
+### Addendum to the thirty-first, same author: the instrument's resolution is a measurement, not a setting
+
+Three things one position taught after the entry above was written, while the gate it re-based was
+being settled. Kept here rather than given a number of its own, on the Chief's ruling: it is the
+same finding continuing, not a second lesson.
+
+**The grid must be computed from the value.** bfloat16's spacing is `2^(⌊log₂|v|⌋ − 7)`, so it
+depends on the magnitude of the number being measured. One arm of this work fixed it once at an
+assumed magnitude and reported a 1.5-logit gap as six units of last place; the other took it per
+position and reported the same gap as three, because the logit is 66.0 and the step there is 0.5
+rather than 0.25. Both arms passed the check that every gap is an exact multiple of the grid —
+**that check cannot fail against a grid that is too fine**, since a multiple of 0.25 is also a
+multiple of 0.5. A resolution assumed once for a tensor is a setting; a resolution read off each
+value is a measurement, and only the second can be checked.
+
+**A defect is a claim about a margin, and the claim needs the port's own resolution beside the
+reference's.** A disagreement is attributable to the port only where the reference's margin
+exceeds the port's measured cross-device spread at that position. At `read-0108`/521 the
+reference is three units clear while the port is an exact tie on one device and five units the
+other way on another: the port's own arithmetic already spans the reference's margin, so no claim
+can be made and the position is **below resolution** — a third class beside tie and flip, counted
+and listed with both margins, never folded into agreement and never called a defect. The rule
+discriminates rather than excusing: at `chat-long-summary`/1912 the reference is three units clear
+and the port's devices differ by one, and that position is attributed to the port.
+
+**A count that does not sum is a class nobody named.** The re-based run reported 5,213 agreed, 30
+ties and 1 flip against 5,245 compared, and the missing position was not a rounding artefact: it
+was a disagreement outside the tie band that a **stale confidence gate** had silently dropped,
+because the rule still consulted the recording's probability — the *4-bit* model's — to decide
+whether a bfloat16-against-bfloat16 disagreement counted. The dropped position is the one now
+attributed to the port. The identity is asserted in the type: the four classes must add to the
+positions compared, or the report raises.
+
+**The rules.** Compute a dtype's resolution from the value, never once for the tensor, and
+distrust any check that a too-fine grid would also pass. State a defect as a margin that exceeds
+the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
+And make the classes sum, because the position with no class is the one nobody will look at.

@@ -1,0 +1,73 @@
+{
+  "snapshot_verification_utc": "2026-09-09T10:10:21.282071+00:00",
+  "analysis_base_commit": "fcab5b5d7def4299699b521037fc693c1b41b12a",
+  "remote_alias": "rtx6000",
+  "remote_operations": "read-only SSH and file copies; no model imports, launches, lock changes, or large map/checkpoint transfers",
+  "source_files": {
+    "cpu-all15.json": {
+      "sha256": "1ea5f8db9c317abca5042f61705e3b40ae0c997a97da8cd79a9bf2f2bf7a8225",
+      "bytes": 18121
+    },
+    "cpu-all15.jsonl": {
+      "sha256": "4f95913c11c4d3dcc2990627df1eb4b06a6b05d7c0e3dd4014565a415e7a39ce",
+      "bytes": 13976
+    },
+    "cuda-all15.json": {
+      "sha256": "a29d3b1dc919fa3d9508f628e154e51fa453469925bdcda42e3c2d7a9d167b42",
+      "bytes": 18177
+    },
+    "cuda-all15.jsonl": {
+      "sha256": "a024bc94e3c0b498662552a83505c7d924d1e024340b125f07a052e0ac9eb4af",
+      "bytes": 13947
+    },
+    "tolerance.py.txt": {
+      "sha256": "ed64707a045e1dc0146c0f1ffb6ebe7cbae87d7765572e8396be809b0e899800",
+      "bytes": 18135
+    },
+    "tolerance_baseline.py.txt": {
+      "sha256": "2f215bc875f8126c53b1d151dbe7a1660199c8e1e5c53ef5605c3111accfbe74",
+      "bytes": 16073
+    },
+    "wsd-finite_difference.py.txt": {
+      "sha256": "88e6cf937a3522ec5c94f16b9ac2a4cee83873070b84c0d53060f43b35e3b2b8",
+      "bytes": 17977
+    },
+    "wsd-golden.py.txt": {
+      "sha256": "6c16284e16ca55ad6e4ea9e086d5134a0c1faf57d10b6585fcd8508d3553c821",
+      "bytes": 11711
+    },
+    "wsd-manifest.json": {
+      "sha256": "b295fd9605197be037c4455a4e7c84814e8a58b865055dd2a85cbb82c43500ee",
+      "bytes": 2649
+    },
+    "wsd-progress.jsonl": {
+      "sha256": "d0085e263575eefdf0df7423720615070684a54f71f62f92c265b2b3c5c39acc",
+      "bytes": 1114
+    }
+  },
+  "remote_hash_checked": {
+    "wsd-golden.py.txt": {
+      "path": "/workspace/wsd/golden.py",
+      "sha256": "6c16284e16ca55ad6e4ea9e086d5134a0c1faf57d10b6585fcd8508d3553c821"
+    },
+    "wsd-finite_difference.py.txt": {
+      "path": "/workspace/wsd-checkout/src/local_llm_lab/pipeline/lens_fitting/finite_difference.py",
+      "sha256": "88e6cf937a3522ec5c94f16b9ac2a4cee83873070b84c0d53060f43b35e3b2b8"
+    },
+    "wsd-manifest.json": {
+      "path": "/workspace/wsd/out/golden-4b/manifest.json",
+      "sha256": "b295fd9605197be037c4455a4e7c84814e8a58b865055dd2a85cbb82c43500ee"
+    }
+  },
+  "wsb_source_paths": "/workspace/wsb/out/{cuda,cpu}-all15.{json,jsonl}",
+  "wsb_transfer_verification": "All four hashes matched remote sha256sum before analysis; pinned in analyze.py and analysis.json.",
+  "producer_definition_source": "git show a5a977b8cec7e32568071f7e97ff4e776f633fd4:research/acceptance/tolerance.py and scripts/tolerance_baseline.py",
+  "wsd": {
+    "observed_checkout_head": "7b6666cea29e58445eec48c6855e9ef59dc0c8d7",
+    "capture_precision_confirmation": "golden.py requests capture_dtype=native for both finite-difference arms; finite_difference.py preserves activation dtype in that mode; the load progress entry reports bfloat16.",
+    "precision_limit": "This confirms the configured implementation and loaded dtype. A completed finite-difference result was not available at this snapshot.",
+    "progress_snapshot": "source/wsd-progress.jsonl is an in-flight snapshot, not a completion claim. Last remote tail still reports gate_exactness passed with measured zero.",
+    "budget_departure": "Three declared rows reduced to one used row before execution, using the recorded cost projection. One row, 128-token cap, two positions; 33 source-layer exact maps. This is a comparability subset, not the full scientific fit.",
+    "interpretation_limit": "128 tokens does not cross the 1024 sliding window. No sliding/global contrast or timing claim follows; the card is shared."
+  }
+}
