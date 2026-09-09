@@ -286,13 +286,45 @@ Codex reproduces them. The defensible statement is: **native-path autograd readi
 respective anchors are strongly schedule-sensitive for the tested projections, and the matched
 float32 readings are far more stable** — a median of 76% against parts in a hundred thousand.
 
-What is *not* established is that the arithmetic causes it. `a₆₄(x₆₄) − a₁(x₁)` moves the width and
-the anchor at once: the width-64 forward produces a different residual at the source, so the
-derivative is read at a different point, and a smooth function can move its derivative by 75.6%
-between two anchors 0.0756% apart. The two brackets that separate them — width fixed with each saved
-anchor in turn, then anchor fixed across widths — are the protocol's same-anchor control and are
-**not yet run**. Until they are, "there is no width-independent bf16 Jacobian" and "a derivative of
-the rounding structure" are both withdrawn as attributions, and only the sensitivity is claimed.
+### 8.1 The same-anchor control, run: the answer is different at every depth
+
+`a₆₄(x₆₄) − a₁(x₁)` moves the width and the anchor at once, because the width-64 forward produces a
+different residual at the source. The protocol's control splits it into two brackets that sum to it
+exactly:
+
+    a₆₄(x₆₄) − a₁(x₁)  =  [a₆₄(x₆₄) − a₆₄(x₁)]  +  [a₆₄(x₁) − a₁(x₁)]
+                            the anchor term          the arithmetic term
+                          one width, two anchors    one anchor, two widths
+
+Fourteen seconds of card time, 54 cells, and the identity closes to **exactly 0.0** in every one.
+
+| layer | anchor moved by | observed shift | anchor term | arithmetic term |
+|---:|---:|---:|---:|---:|
+| 1 | 0.19% | 0.756 | 0.502 | **1.108** |
+| 17 | 1.5% | 0.596 | **0.610** | 0.032 |
+| 33 | 8.8% | 0.119 | **0.119** | 0.005 |
+
+medians of |term| over the eighteen pairs, relative to `a₁(x₁)`.
+
+**At layers 17 and 33 the width sensitivity is almost entirely the anchor.** The arithmetic term is
+3% and 0.5%: change the width but read at the same point and the derivative barely moves. My earlier
+"there is no width-independent bf16 Jacobian at these layers" was wrong for these two layers, and is
+withdrawn.
+
+**At layer 1 the arithmetic term is real and it is the larger one** — 1.11 against an anchor term of
+0.50, the two partly opposing to give the observed 0.76. Thirty-two blocks of backward accumulation
+run below that source, and that is where changing the reduction schedule tells.
+
+**And the conditioning is the finding that survives at every depth.** The anchor moves by 0.19% at
+layer 1 and the derivative read at it moves by 50%. At layer 33 an 8.8% anchor move gives 12%. A
+bf16 directional derivative here is extremely sensitive to the point it is read at, whatever one
+calls the cause — which is a statement about the instrument's conditioning and not about batching,
+and it is the reason the float32 fitting policy stands on stability evidence rather than on this
+attribution.
+
+**Not run, and the natural next question:** insert the *same* anchor displacement into the float32
+path. If the float32 derivative also moves 50% for a 0.19% anchor move, the function is genuinely
+that ill-conditioned there; if it does not, the sensitivity is bf16's. Queued.
 
 It is the schedule term of the protocol's §3 decomposition as far as this record takes it, and it is
 already enough to justify the ν field added at `1dee10d`: a reading that moves that much between two
