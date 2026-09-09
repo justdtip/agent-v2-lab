@@ -360,3 +360,21 @@ data corpus and preflight follow. The first hour's gates come next, then the len
 of both models, then the state programme's pilot, whose first output is the measured episode rate
 from which every later time figure is computed. Results follow when they exist, in the same shape
 as this document: each number with its basis, and each claim with what it is not.
+
+## Corrections after an external reading, Chief, 2026-09-10
+
+- **The 98-of-103 comparison is teacher-forced**: the acceptance kit feeds the recorded prompt and
+  the recorded emitted prefix and compares the produced argmax at each position against the
+  recorded token (`research/acceptance/tolerance.py`, `teacher_forced_agreement`). Free-running
+  reproduction across backends is struck from the acceptance and only its first divergence is
+  reported; on the smoke episode it parts company at the first near-tie. The sentence above should
+  have said so.
+- **Gemma 3 has no final logit softcap**: `final_logit_softcapping` and `attn_logit_softcapping` are
+  both absent from the 4B and 12B configs (checked on the device's snapshots); the readout L is
+  linear as written.
+- **Independent gates versus self-certifying tests.** The reviewer's count is the right one to keep:
+  of this week's gates, the finite-difference-versus-exact comparison, the MLX bfloat16 reference,
+  the CPU control, and Codex's seven file-only audits recomputed from raw artefacts are the kind that
+  disagree when wrong; the suite is the other kind. The method record will carry the count.
+- The carrier question (the transcript as a redundantly available state) is ruled into the
+  substitution tests of both state variables in the orders of this date.

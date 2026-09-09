@@ -297,3 +297,9 @@ file's byte digest.
 
 Everything Codex lists as carrying correctly carries. The seal follows these edits and precedes
 the first reading; capture does not wait for it.
+
+**Ruling, Chief, 2026-09-10, from the same external review (see the run order of this date):** the
+carrier-ablation arm and the re-read diagnostic apply to this variable as they do to the first. Here
+the carrier is the note's plan and progress in words (Fact 3), so the ablation removes the plan's
+progress statement from the note after the state-bearing position; E2 is scored with and without it,
+and R4's within-pass E3 is no longer the only place the carrier question lives.

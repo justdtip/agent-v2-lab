@@ -609,3 +609,12 @@ artefact's own sha256 beside the declaration digest** — declaration identity a
 are different things and a pairing is measured against a particular matrix. A pairing missing
 either is unmeasured. Tests: the same declaration with two artefacts is two pairings. SWE-2, laptop,
 before any pairing is registered.
+
+**Ruling for Stage B, Chief, 2026-09-10, fixed before any Stage B number exists (from an external
+review of the programme description):** the readout dictionary is about a hundred-fold overcomplete
+(vocabulary ~262k against a 2,560-wide residual) and non-orthogonal, so a nonnegative sparse fit at
+any moderate budget explains a large share of almost any vector's energy — a property of
+overcompleteness, not of J-space. The matched control for Δρ therefore matches **the Gram spectrum
+of B** — the same number of atoms and the same distribution of pairwise overlaps — and not merely
+its size; a control that matches size alone measures overcompleteness and is refused. The
+construction is declared and sealed the way the tolerances are, before the number exists.
