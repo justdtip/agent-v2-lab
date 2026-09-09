@@ -631,3 +631,18 @@ a step that reads that check's status — `test $? -eq 0 || { abort; exit 1; }` 
 heredoc, before `git add` — and a merge is verified free of markers *by grep in the commit step*,
 not by the message that claims it. The merge that did land here was made that way; the one that
 did not is why the rule is written down.
+
+## Thirtieth: the device's first hour, in the Chief's name
+
+Four things in ninety minutes on paid hardware, each caught by a gate that already existed. A
+preflight row tested the order of two calls rather than the property the order was meant to
+secure, and failed while printing a fully pinned reading; the fix was to record the property. A
+patch command broke before its edit, the tests then passed on the unpatched file, and the green
+was read as the patch; the second device run exposed it through the record's own rule string.
+A commit chain read a pipe's exit status and committed past a failing test; the forward merge's
+suite refused it. And a gate's yardstick, sound on the CPU, was the wrong magnitude on the card;
+the control it judged was fine and the seam it protected was exact, and the rule now names the
+magnitude that agrees across backends. **The rules.** A check reads the property, never the order
+that produced it. A patch is verified by grepping for its text, never by a test count. A chain
+commits on the test's exit status, never a pipe's. And every laptop yardstick is re-read on the
+device before it judges anything, since the first hour's job is to find which of them moved.

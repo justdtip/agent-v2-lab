@@ -34,3 +34,7 @@ models/
 # directory would have matched: a `GEMMA3-LIVE-LENS-PILOT-*` run would have committed its plain
 # JSONL at full size while the Qwen pilot's stayed compressed, which is the worst of both rules.
 research/records/*LIVE-LENS-PILOT-*/*.jsonl
+# The rendered corpus and any device-built corpus: untracked by design, and ignored here so that
+# the resume key's tree digest (git ls-files --others --exclude-standard) does not change for
+# every seat when one seat writes a corpus. The laptop excluded it locally; a clone did not.
+/data/

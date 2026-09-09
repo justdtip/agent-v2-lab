@@ -75,6 +75,14 @@ from local_llm_lab.pipeline.lens_fitting.upstream import (
 #: sequence, so it scales with the model rather than with an absolute guess.
 DEFAULT_EPSILON_SCALE = 0.01
 
+#: The arithmetic path a fit ran, declared because two fits of one checkpoint can share a weight
+#: dtype and not share this. `native` writes the perturbation back in the block's own dtype, which
+#: is the path upstream's exact estimator runs; `promoted-float32` writes float32 back, so every
+#: block above the source runs promoted. They are different arithmetic, and on CUDA at 1,400 tokens
+#: they differ by 69.4% (WS-A, 2026-09-11). A golden comparison across them is not a measurement of
+#: the estimator, which is why `golden.COMPARABLE_KEYS` refuses it.
+CAPTURE_DTYPES = ("native", "promoted-float32")
+
 #: Human-readable form of the same rule, carried into ν beside the residual. A residual without its
 #: epsilon cannot be reproduced or compared with another run's.
 EPSILON_RULE = "epsilon_scale * ||source residual, full sequence|| / ||direction|| (unit basis)"
@@ -118,6 +126,7 @@ def fit_finite_difference_jacobian(
     position_selector: Callable[[int], Any] | None = None,
     skip_first: int | None = None,
     epsilon_scale: float = DEFAULT_EPSILON_SCALE,
+    capture_dtype: str = "native",
     direction_batch: int = 64,
     max_seq_len: int,
     device: str = "cpu",
@@ -154,6 +163,8 @@ def fit_finite_difference_jacobian(
             f"{observed['dtype']} on {observed['device']}. The declaration must be a measurement "
             "of what actually ran, not an intention."
         )
+    if capture_dtype not in CAPTURE_DTYPES:
+        raise ValueError(f"capture_dtype must be one of {CAPTURE_DTYPES}; got {capture_dtype!r}")
     if not isinstance(direction_batch, int) or direction_batch < 1:
         raise ValueError(f"direction_batch must be a positive integer; got {direction_batch!r}")
     if not np.isfinite(epsilon_scale) or epsilon_scale <= 0:
@@ -199,13 +210,21 @@ def fit_finite_difference_jacobian(
         with torch.no_grad():
             with ActivationRecorder(wrapped.layers, at=[*sources, target]) as recorder:
                 wrapped.forward(ids)
+                # `native` keeps each block's own dtype, so the perturbed forward runs the
+                # arithmetic the exact estimator runs; `promoted-float32` is the older path, kept
+                # because it is the one a caller may want to *measure* against native rather than
+                # inherit by accident.
                 base = {
-                    layer: recorder.activations[layer].detach().float()
+                    layer: (
+                        recorder.activations[layer].detach().clone()
+                        if capture_dtype == "native"
+                        else recorder.activations[layer].detach().float()
+                    )
                     for layer in (*sources, target)
                 }
 
             for layer in sources:
-                norm = float(torch.linalg.vector_norm(base[layer]))
+                norm = float(torch.linalg.vector_norm(base[layer].float()))
                 epsilon = epsilon_scale * norm if norm else epsilon_scale
                 epsilons[layer].append(epsilon)
                 accumulated = torch.zeros(d_model, d_model, dtype=torch.float64)
@@ -221,6 +240,10 @@ def fit_finite_difference_jacobian(
                             try:
                                 with ActivationRecorder(wrapped.layers, at=[target]) as inner:
                                     wrapped.forward(ids.expand(width, -1))
+                                    # The *difference* is always taken in float32: promoting the
+                                    # two readings after the forward changes no arithmetic the
+                                    # model did, and differencing two bf16 tensors of nearly equal
+                                    # value in bf16 would lose the signal to rounding.
                                     both.append(inner.activations[target].detach().float())
                             finally:
                                 handle.remove()
@@ -249,6 +272,7 @@ def fit_finite_difference_jacobian(
         )
 
     precision = dict(observed)
+    precision["capture_dtype"] = capture_dtype
     precision["backward_accumulation_dtype"] = "float64"
     precision["note"] = (
         "no autograd graph is built: this estimator differences forward passes, so the "
@@ -275,6 +299,7 @@ def fit_finite_difference_jacobian(
                 for layer, values in epsilons.items()
                 if values
             },
+            "capture_dtype": capture_dtype,
             "direction_basis": "full standard basis",
             "difference": "central",
             "retired_when": (
@@ -319,13 +344,14 @@ def _perturbation(base: Any, position: int, step: float, columns: Any):
     def hook(module, inputs, output):
         width = int(columns.shape[0])
         perturbed = base.expand(width, -1, -1).clone()
-        perturbed[:, position, :] += step * columns
+        perturbed[:, position, :] += (step * columns).to(perturbed.dtype)
         return _replace_output(perturbed, output)
 
     return hook
 
 
 __all__ = [
+    "CAPTURE_DTYPES",
     "DEFAULT_EPSILON_SCALE",
     "EPSILON_RULE",
     "fit_finite_difference_jacobian",

@@ -371,6 +371,13 @@ def _observed_precision(model: Any) -> dict:
             grads.add(bool(parameter.requires_grad))
     if not dtypes:
         raise ValueError("model.layers has no parameters; cannot observe device or dtype")
+    # The *arithmetic* path, distinct from the weights' dtype and not derivable from it. A fit
+    # that reads activations and lets the model's own forward carry them runs "native"; one that
+    # writes a promoted tensor back into a block's output makes every block above it run in that
+    # promotion instead. On CUDA at 1,400 tokens the promoted-float32 path differs from native
+    # bf16 by 69.4% (WS-A on the device, 2026-09-11), so two fits of one checkpoint can declare
+    # the same dtype and have run different arithmetic. Native is the truth for any estimator that
+    # does not replace an activation; the one that does overrides this field and says so.
     if len(dtypes) > 1 or len(devices) > 1:
         raise MixedPrecisionModel(
             "the fitting model is not uniform, so no single declared precision describes the run: "
@@ -383,6 +390,7 @@ def _observed_precision(model: Any) -> dict:
         "dtype": next(iter(dtypes)),
         "dtypes_observed": sorted(dtypes),
         "devices_observed": sorted(devices),
+        "capture_dtype": "native",
         "blocks_measured": len(list(model.layers)),
         "requires_grad": bool(next(iter(grads))) if len(grads) == 1 else None,
         "attn_implementation": _observed_attention(model),

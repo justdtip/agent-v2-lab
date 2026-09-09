@@ -405,3 +405,30 @@ on, and the L1 overflow refusal clears stale evidence rather than keeping it.
 
 Nothing further on the laptop for WS-A. The device arms in the checklist are next, in their order,
 and their records come back here under dated headings.
+
+## The device's first hour, WS-A, 2026-09-10 — three runs, one finding, one rule, a pass
+
+Run on the rented RTX PRO 6000 by the Chief, since Codex cannot reach the card; records
+`device-gates-01..03` with their logs on `cuda-migration`. **The seam is exact on the card**: the
+native-dtype loop against the native capture reads 0 at every site at 64 and at 1,400 tokens,
+and the sliding window is applied natively beyond 1,024 (1,024 allowed keys per row in sliding
+blocks, 1,400 in global; `device_mask_probe.py`). The float32 control passes at both lengths under
+its 1e-3 bound. Device peak 15.66 GiB against a 24 GiB projection, host peak 23.25 GiB, 18 s.
+
+**The finding.** The promoted-float32 floor reads 1.2386% at 64 tokens on both backends, to four
+digits, and 69.4% at 1,400 tokens on CUDA against 6.9% on the CPU, while the mask-dispatch control
+reads 54.5% on both. The first run failed only because that control is judged against the long
+length's own floor, which on the card is not precision noise but the promoted path's own
+divergence; the seam it protects was exact. The rule is amended (`bc710e6`): a long control must
+lie strictly above the native seam's error and the short length's promoted floor, the one
+magnitude that agrees across backends, and the long floor is recorded as a finding. The finding
+itself goes to Q5: on CUDA beyond the window, a capture through the promoted path is 69% from
+native bf16, so the capture dtype is decided on the card, not inherited from the laptop.
+
+**Three near-misses of the Chief's in the same hour, each caught by a gate.** The amended rule was
+committed once without the amendment, because the patch command broke before the edit and the
+tests then passed on the unpatched file; the second run therefore ran the old rule, which the
+record's own rule string exposed. A chain read a pipe's status and committed past a failing test;
+the forward merge's suite refused it. A rerun was launched without the repository root on the
+path and without the full commit hash, and the script refused both by name. Gates 3–4 remain
+unexecuted by the script's scope and are WS-B's handoff.
