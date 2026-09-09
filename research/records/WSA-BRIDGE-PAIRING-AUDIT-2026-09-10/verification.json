@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "basis": "executed local metadata fixtures; not model evidence",
+  "analysis_reproduces": true,
+  "relocated_copy_reproduces": true,
+  "source_blobs_match_git": 7,
+  "source_corruptions_refused": 7,
+  "pure_producer_functions_extracted": 6,
+  "isolated_metadata_tests_extracted": 1,
+  "pairing_positive_and_negative_controls": "passed",
+  "nested_ratio_survives_test": true,
+  "immediate_ratio_negative_control_refused": true,
+  "numeric_fields_compared": 60,
+  "numeric_fields_mismatched": 1,
+  "numeric_field_corruptions_detected": 60,
+  "ruff_F_E9": "All checks passed!",
+  "git_diff_check": "passed",
+  "model_or_pytest_imports": false,
+  "analysis_sha256": "7d32e847764b536af8bb3f45c0b33edd706d0ef3ce2ac8c5fc18c3963efb9b8d",
+  "reviewer_parent": "43d69a304fc8275d51dd75710b2a1536c1874020",
+  "unexecuted": [
+    "model or device operations",
+    "full production-module import",
+    "native pytest",
+    "real pairing measurement",
+    "real A2 read"
+  ]
+}

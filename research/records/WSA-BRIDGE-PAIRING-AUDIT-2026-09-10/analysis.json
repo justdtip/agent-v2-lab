@@ -1,0 +1,870 @@
+{
+  "order_commit": "9114d66f7802ad7850a082094ade13038b5cc899",
+  "pairing_scope_replay": {
+    "basis": "executed pure metadata functions extracted unchanged from pinned source; no real pairings exist",
+    "different_capture_precision": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": 1,
+        "capture_dtype": "float16",
+        "crossing": [
+          "the lens was fitted in float32 and the capture is float16"
+        ],
+        "declared_by_registry": "float32",
+        "fit_dtype": "float32",
+        "forward_batch": 1,
+        "layer": 1,
+        "path_term": {
+          "base": "google/gemma-3-4b-it",
+          "basis": "synthetic metadata fixture, not measured",
+          "capture_path": "fixture-native-A",
+          "capture_precision": {
+            "dtype": "bfloat16",
+            "forward_batch": 1
+          },
+          "context_tokens": 128,
+          "fit_precision": {
+            "anchor_batch": 1,
+            "fit_dtype": "float32",
+            "forward_batch": 1
+          },
+          "layer": 1,
+          "lens_identity": "fixture-lens-A",
+          "measured": true,
+          "positions": [
+            8,
+            127
+          ],
+          "relative": 0.004
+        },
+        "status": "declared"
+      }
+    },
+    "different_capture_width": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": 64,
+        "capture_dtype": "bfloat16",
+        "crossing": [
+          "the lens was fitted in float32 and the capture is bfloat16",
+          "the lens was fitted at forward width 1 and the capture is at width 64"
+        ],
+        "declared_by_registry": "float32",
+        "fit_dtype": "float32",
+        "forward_batch": 1,
+        "layer": 1,
+        "path_term": {
+          "base": "google/gemma-3-4b-it",
+          "basis": "synthetic metadata fixture, not measured",
+          "capture_path": "fixture-native-A",
+          "capture_precision": {
+            "dtype": "bfloat16",
+            "forward_batch": 1
+          },
+          "context_tokens": 128,
+          "fit_precision": {
+            "anchor_batch": 1,
+            "fit_dtype": "float32",
+            "forward_batch": 1
+          },
+          "layer": 1,
+          "lens_identity": "fixture-lens-A",
+          "measured": true,
+          "positions": [
+            8,
+            127
+          ],
+          "relative": 0.004
+        },
+        "status": "declared"
+      }
+    },
+    "matching_fixture_scope": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": 1,
+        "capture_dtype": "bfloat16",
+        "crossing": [
+          "the lens was fitted in float32 and the capture is bfloat16"
+        ],
+        "declared_by_registry": "float32",
+        "fit_dtype": "float32",
+        "forward_batch": 1,
+        "layer": 1,
+        "path_term": {
+          "base": "google/gemma-3-4b-it",
+          "basis": "synthetic metadata fixture, not measured",
+          "capture_path": "fixture-native-A",
+          "capture_precision": {
+            "dtype": "bfloat16",
+            "forward_batch": 1
+          },
+          "context_tokens": 128,
+          "fit_precision": {
+            "anchor_batch": 1,
+            "fit_dtype": "float32",
+            "forward_batch": 1
+          },
+          "layer": 1,
+          "lens_identity": "fixture-lens-A",
+          "measured": true,
+          "positions": [
+            8,
+            127
+          ],
+          "relative": 0.004
+        },
+        "status": "declared"
+      }
+    },
+    "measurement_fixture": {
+      "basis": "synthetic metadata fixture, not measured",
+      "capture_path": "fixture-native-A",
+      "capture_precision": {
+        "dtype": "bfloat16",
+        "forward_batch": 1
+      },
+      "context_tokens": 128,
+      "fit_precision": {
+        "anchor_batch": 1,
+        "fit_dtype": "float32",
+        "forward_batch": 1
+      },
+      "lens_identity": "fixture-lens-A",
+      "positions": [
+        8,
+        127
+      ],
+      "relative": 0.004
+    },
+    "measurement_missing_pair_identity": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": 1,
+        "capture_dtype": "bfloat16",
+        "crossing": [
+          "the lens was fitted in float32 and the capture is bfloat16"
+        ],
+        "declared_by_registry": "float32",
+        "fit_dtype": "float32",
+        "forward_batch": 1,
+        "layer": 1,
+        "path_term": {
+          "base": "google/gemma-3-4b-it",
+          "layer": 1,
+          "measured": true,
+          "relative": 0.004
+        },
+        "status": "declared"
+      }
+    },
+    "neighbor_unmeasured": {
+      "message": "refusing a cross-path reading at layer 17: the lens was fitted in float32 and the capture is bfloat16. at layer 17, displacing the anchor moved the sampled scalar derivatives by a median 0.696514 of their own size in float32 (native 0.585164), over 18 projections in one draw, worst 4.1596. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. The pairing has not been measured at this layer, and until it is the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path",
+      "outcome": "refused"
+    },
+    "no_capture": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": null,
+        "capture_dtype": null,
+        "declared_by_registry": "float32",
+        "fit_dtype": "float32",
+        "forward_batch": 1,
+        "layer": 1,
+        "status": "declared"
+      }
+    },
+    "reversed_precision_direction": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": 1,
+        "capture_dtype": "float32",
+        "crossing": [
+          "the lens was fitted in bfloat16 and the capture is float32"
+        ],
+        "declared_by_registry": "bfloat16",
+        "fit_dtype": "bfloat16",
+        "forward_batch": 1,
+        "layer": 1,
+        "path_term": {
+          "base": "google/gemma-3-4b-it",
+          "basis": "synthetic metadata fixture, not measured",
+          "capture_path": "fixture-native-A",
+          "capture_precision": {
+            "dtype": "bfloat16",
+            "forward_batch": 1
+          },
+          "context_tokens": 128,
+          "fit_precision": {
+            "anchor_batch": 1,
+            "fit_dtype": "float32",
+            "forward_batch": 1
+          },
+          "layer": 1,
+          "lens_identity": "fixture-lens-A",
+          "measured": true,
+          "positions": [
+            8,
+            127
+          ],
+          "relative": 0.004
+        },
+        "status": "declared"
+      }
+    },
+    "same_dtype_same_width": {
+      "outcome": "accepted",
+      "record": {
+        "anchor_batch": 1,
+        "capture_batch": 1,
+        "capture_dtype": "float32",
+        "declared_by_registry": "float32",
+        "fit_dtype": "float32",
+        "forward_batch": 1,
+        "layer": 1,
+        "status": "declared"
+      }
+    },
+    "unmeasured_crossing": {
+      "message": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. The pairing has not been measured at this layer, and until it is the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path",
+      "outcome": "refused"
+    }
+  },
+  "schema_version": 1,
+  "sensitivity_table_cells": [
+    {
+      "computed": 1.0351164008592333,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "1.035116",
+      "stored_text": "1.035116"
+    },
+    {
+      "computed": 0.014441022777099634,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.0144",
+      "stored_text": "0.0144"
+    },
+    {
+      "computed": 35.19511380711225,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "35.1951",
+      "stored_text": "35.1951"
+    },
+    {
+      "computed": 18,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.47068866657568204,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.470689",
+      "stored_text": "0.470689"
+    },
+    {
+      "computed": 0.09163549670648467,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.0916",
+      "stored_text": "0.0916"
+    },
+    {
+      "computed": 28.91111111111111,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "28.9111",
+      "stored_text": "28.9111"
+    },
+    {
+      "computed": 18,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.7487315413571456,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.748732",
+      "stored_text": "0.748732"
+    },
+    {
+      "computed": 0.09776583917169748,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.0978",
+      "stored_text": "0.0978"
+    },
+    {
+      "computed": 27.19557690625919,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "27.1956",
+      "stored_text": "27.1956"
+    },
+    {
+      "computed": 18,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 1.0058473389355742,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "1.005847",
+      "stored_text": "1.005847"
+    },
+    {
+      "computed": 0.18120805369127516,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.1812",
+      "stored_text": "0.1812"
+    },
+    {
+      "computed": 7.844444444444444,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "7.8444",
+      "stored_text": "7.8444"
+    },
+    {
+      "computed": 18,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "native",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.5367349034474511,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.536735",
+      "stored_text": "0.536735"
+    },
+    {
+      "computed": 0.05890903778374331,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "0.0589",
+      "stored_text": "0.0589"
+    },
+    {
+      "computed": 24.43982692414714,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "24.4398",
+      "stored_text": "24.4398"
+    },
+    {
+      "computed": 18,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 1,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.6965141209703237,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.696514",
+      "stored_text": "0.696514"
+    },
+    {
+      "computed": 0.08464810308668003,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.0846",
+      "stored_text": "0.0846"
+    },
+    {
+      "computed": 4.159607643933125,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "4.1596",
+      "stored_text": "4.1596"
+    },
+    {
+      "computed": 18,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.5851635514018692,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.585164",
+      "stored_text": "0.585164"
+    },
+    {
+      "computed": 0.04402622674533897,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.044",
+      "stored_text": "0.044"
+    },
+    {
+      "computed": 2.3205741626794256,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "2.3206",
+      "stored_text": "2.3206"
+    },
+    {
+      "computed": 18,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 1.2773392073095753,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "1.277339",
+      "stored_text": "1.277339"
+    },
+    {
+      "computed": 0.04028951436775925,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.0403",
+      "stored_text": "0.0403"
+    },
+    {
+      "computed": 37.955530300408626,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "37.9555",
+      "stored_text": "37.9555"
+    },
+    {
+      "computed": 18,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 1.5600801068090788,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "1.560080",
+      "stored_text": "1.560080"
+    },
+    {
+      "computed": 0.0684931506849315,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.0685",
+      "stored_text": "0.0685"
+    },
+    {
+      "computed": 6.617224880382775,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "6.6172",
+      "stored_text": "6.6172"
+    },
+    {
+      "computed": 18,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "native",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.2521334447289412,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.252133",
+      "stored_text": "0.252133"
+    },
+    {
+      "computed": 0.003157297623289021,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "0.0032",
+      "stored_text": "0.0032"
+    },
+    {
+      "computed": 14.537163033626735,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "14.5372",
+      "stored_text": "14.5372"
+    },
+    {
+      "computed": 18,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 17,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.12517927059081657,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.125179",
+      "stored_text": "0.125179"
+    },
+    {
+      "computed": 0.009983309133839035,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.01",
+      "stored_text": "0.01"
+    },
+    {
+      "computed": 91.8969242001079,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "91.8969",
+      "stored_text": "91.8969"
+    },
+    {
+      "computed": 18,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.11992703627963265,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.119927",
+      "stored_text": "0.119927"
+    },
+    {
+      "computed": 0.005208333333333333,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.0052",
+      "stored_text": "0.0052"
+    },
+    {
+      "computed": 7.0,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "7.0",
+      "stored_text": "7.0"
+    },
+    {
+      "computed": 18,
+      "group": "sampled_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.29912528869752386,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.299125",
+      "stored_text": "0.299125"
+    },
+    {
+      "computed": 0.005256989923043155,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.0053",
+      "stored_text": "0.0053"
+    },
+    {
+      "computed": 26.83755282925549,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "26.8376",
+      "stored_text": "26.8376"
+    },
+    {
+      "computed": 18,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.31295347134393925,
+      "group": "equal_norm_random_displacement",
+      "matches": false,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.312953",
+      "stored_text": "0.313000"
+    },
+    {
+      "computed": 0.010416666666666666,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "min",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.0104",
+      "stored_text": "0.0104"
+    },
+    {
+      "computed": 2.2666666666666666,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "max",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "2.2667",
+      "stored_text": "2.2667"
+    },
+    {
+      "computed": 18,
+      "group": "equal_norm_random_displacement",
+      "matches": true,
+      "metric": "count",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    },
+    {
+      "computed": 0.048704760115652265,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "median",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.048705",
+      "stored_text": "0.048705"
+    },
+    {
+      "computed": 0.00016789940594310094,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "min",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.0002",
+      "stored_text": "0.0002"
+    },
+    {
+      "computed": 12.454827815934939,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "max",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "12.4548",
+      "stored_text": "12.4548"
+    },
+    {
+      "computed": 18,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "matches": true,
+      "metric": "count",
+      "precision": "float32",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "18",
+      "stored_text": "18"
+    }
+  ],
+  "sensitivity_table_mismatches": [
+    {
+      "computed": 0.31295347134393925,
+      "group": "equal_norm_random_displacement",
+      "matches": false,
+      "metric": "median",
+      "precision": "native",
+      "repo_layer": 33,
+      "rounded_at_declared_precision": "0.312953",
+      "stored_text": "0.313000"
+    }
+  ],
+  "shipped_measured_pairings": 0,
+  "source_commit": "c4f2f9f1a4f6cde4cfcc1105eafc248859c0ba88",
+  "sources_verified": 7,
+  "unexecuted": [
+    "model or device operations",
+    "native pytest",
+    "full module import",
+    "real A2 residual read",
+    "real cross-path pairing measurement"
+  ],
+  "withdrawn_ratio_test_replay": {
+    "basis": "extracted test replay with synthetic corruptions; shipped table was not changed",
+    "clean_table": "accepted",
+    "immediate_layer_ratio_control": "refused",
+    "nested_withdrawn_ratio": "accepted"
+  }
+}
