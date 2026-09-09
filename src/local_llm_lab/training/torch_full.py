@@ -172,3 +172,35 @@ def causal_lm_chunked_loss(
     return total / denominator.clamp(min=1) if hasattr(denominator, "clamp") else total / max(
         int(denominator), 1
     )
+
+
+def make_chunked_loss_trainer_class(chunk_size: int = DEFAULT_LOSS_CHUNK) -> Any:
+    """Build a `Trainer` subclass that computes the loss without materialising all the logits.
+
+    A factory rather than a module-level class so that importing this module does not import
+    `transformers`, which the suite's import-closure rule cares about.
+
+    `Trainer` keeps everything else: activation checkpointing, the accumulation window and its
+    `num_items_in_batch`, `accelerator.clip_grad_norm_` under whatever strategy is active, the
+    schedule, checkpoint writing and the evaluation cadence. The one thing added beside the loss is
+    that the pre-clip gradient norm is *recorded*: MLX's `StableAdamW.update` discards it
+    (`gradients, _ = clip_grad_norm(...)`), so no artefact in this programme says whether clipping
+    ever fired, on any run.
+    """
+    from transformers import Trainer
+
+    class ChunkedLossTrainer(Trainer):
+        loss_chunk_size = chunk_size
+
+        def compute_loss(
+            self, model, inputs, return_outputs: bool = False, num_items_in_batch=None
+        ):
+            loss = causal_lm_chunked_loss(
+                model,
+                inputs,
+                chunk_size=self.loss_chunk_size,
+                num_items_in_batch=num_items_in_batch,
+            )
+            return (loss, None) if return_outputs else loss
+
+    return ChunkedLossTrainer
