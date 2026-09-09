@@ -23,6 +23,7 @@ from local_llm_lab.agent_protocol import Action  # noqa: E402
 from local_llm_lab.models import load_model_spec  # noqa: E402
 from local_llm_lab.pipeline.protocol import parse_turn, render_turn  # noqa: E402
 from local_llm_lab.pipeline.runner import (  # noqa: E402
+    config_eos_ids,
     generate_turn_tokens,
     generate_turn_with_count,
     is_torch_model,
@@ -44,17 +45,29 @@ CALL_PIECES = [
 ]
 
 
+#: Scripted token ids start here so they cannot collide with Gemma's real terminators, 1 and
+#: 106. A stub whose ordinary tokens are also EOS ids stops generation for the wrong reason and
+#: the test then measures the collision instead of the loop.
+TOKEN_BASE = 1000
+
+
 class _StubTokenizer:
-    """Token id ``i`` decodes to ``pieces[i]``, so a scripted id list is a scripted string."""
+    """Token ``TOKEN_BASE + i`` decodes to ``pieces[i]``, plus any extra ids given by id."""
 
     bos_token = None
 
-    def __init__(self, pieces: list[str], prompt_ids: list[int] | None = None) -> None:
-        self.pieces = pieces
-        self.prompt_ids = prompt_ids if prompt_ids is not None else [0, 1, 2]
+    def __init__(
+        self,
+        pieces: list[str],
+        prompt_ids: list[int] | None = None,
+        extra: dict[int, str] | None = None,
+    ) -> None:
+        self.table = {TOKEN_BASE + index: piece for index, piece in enumerate(pieces)}
+        self.table.update(extra or {})
+        self.prompt_ids = prompt_ids if prompt_ids is not None else [7, 8, 9]
 
     def decode(self, ids: list[int]) -> str:
-        return "".join(self.pieces[i] for i in ids)
+        return "".join(self.table[i] for i in ids)
 
     def encode(self, prompt: str, add_special_tokens: bool = True) -> list[int]:
         return list(self.prompt_ids)
@@ -71,12 +84,16 @@ class _StubCache:
 
 
 class _StubView:
-    """The whole surface the torch loop is permitted to use, and a log of how it used it."""
+    """The whole surface the torch loop is permitted to use, and a log of how it used it.
 
-    def __init__(self, vocab_size: int, hidden_size: int = 4) -> None:
+    ``native_readout`` is present and must never be called: the model's own head is the
+    producer and the readout is the thing compared against it, never the reverse.
+    """
+
+    def __init__(self, vocab_size: int) -> None:
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
         self.caches: list[_StubCache] = []
+        self.readout_calls = 0
 
     def make_cache(self) -> _StubCache:
         cache = _StubCache()
@@ -84,36 +101,66 @@ class _StubView:
         return cache
 
     def native_readout(self, hidden: torch.Tensor) -> torch.Tensor:
-        """Channel zero of each row names that row's argmax token."""
-        index = hidden[..., 0].long().clamp(0, self.vocab_size - 1)
-        logits = torch.zeros(hidden.shape[0], hidden.shape[1], self.vocab_size)
-        return logits.scatter(2, index.unsqueeze(-1), 1.0)
+        self.readout_calls += 1
+        raise AssertionError(
+            "the generation loop must not read through native_readout; the readout is "
+            "compared against the model's head, never substituted for it"
+        )
+
+
+class _StubConfig:
+    def __init__(self, eos_token_id) -> None:
+        self.eos_token_id = eos_token_id
 
 
 class _StubModel(torch.nn.Module):
-    """Emits a scripted token per call, and records how wide each forward was."""
+    """Returns logits whose last-row argmax is the next scripted token."""
 
-    def __init__(self, script: list[int], hidden_size: int = 4) -> None:
+    def __init__(self, script: list[int], vocab_size: int, eos_token_id=(1, 106)) -> None:
         super().__init__()
         self.script = list(script)
-        self.hidden_size = hidden_size
+        self.vocab_size = vocab_size
+        self.config = _StubConfig(
+            eos_token_id if isinstance(eos_token_id, int) else list(eos_token_id)
+        )
         self.step = 0
 
-    def forward(self, tokens: torch.Tensor, cache: _StubCache | None = None) -> torch.Tensor:
-        if cache is not None:
-            cache.widths.append(int(tokens.shape[1]))
+    def forward(self, tokens: torch.Tensor, *, cache: _StubCache | None = None) -> torch.Tensor:
+        # Keyword-only on purpose. WS-A's wrapper is called as `wrapped(ids, cache=cache)`, and
+        # that is the one part of the seam a stub cannot otherwise hold the loop to.
+        if cache is None:
+            raise AssertionError("the cache must reach the model, as a keyword, every forward")
+        cache.widths.append(int(tokens.shape[1]))
         token = self.script[self.step] if self.step < len(self.script) else 0
         self.step += 1
-        hidden = torch.zeros(1, int(tokens.shape[1]), self.hidden_size)
-        hidden[0, -1, 0] = float(token)
-        return hidden
+        logits = torch.zeros(1, int(tokens.shape[1]), self.vocab_size)
+        logits[0, -1, min(token, self.vocab_size - 1)] = 1.0
+        return logits
 
 
-def _stubs(pieces: list[str], script: list[int] | None = None):
+#: `prefill_passes` splits any prompt under 2,049 tokens into one chunk plus the final token,
+#: so two forwards precede the first decode and only the second one's logits are read. The
+#: script therefore carries one leading entry that is never used.
+_DISCARDED_PREFILL_LOGITS = [0]
+
+
+def _stubs(pieces: list[str], eos_token_id=(1, 106)):
     tokenizer = _StubTokenizer(pieces)
-    view = _StubView(vocab_size=len(pieces))
-    model = _StubModel(script if script is not None else list(range(len(pieces))))
+    size = TOKEN_BASE + len(pieces) + 1
+    view = _StubView(vocab_size=size)
+    script = _DISCARDED_PREFILL_LOGITS + [TOKEN_BASE + index for index in range(len(pieces))]
+    model = _StubModel(script, vocab_size=size, eos_token_id=eos_token_id)
     return model, view, tokenizer
+
+
+def _generate(model, view, tokenizer, prompt_ids, max_tokens):
+    from local_llm_lab.pipeline.runner import config_eos_ids
+
+    return list(
+        torch_greedy_stream(
+            model, view, tokenizer, prompt_ids, max_tokens, eos_ids=config_eos_ids(model)
+        )
+    )
 
 
 def test_is_torch_model_discovers_structurally() -> None:
@@ -125,30 +172,85 @@ def test_is_torch_model_discovers_structurally() -> None:
 
 def test_greedy_stream_yields_scripted_tokens_with_incremental_pieces() -> None:
     model, view, tokenizer = _stubs(CALL_PIECES)
-    produced = list(
-        torch_greedy_stream(model, view, tokenizer, [0, 1, 2], max_tokens=len(CALL_PIECES))
-    )
-    assert [token for token, _ in produced] == list(range(len(CALL_PIECES)))
+    produced = _generate(model, view, tokenizer, [0, 1, 2], len(CALL_PIECES))
+    assert [token for token, _ in produced] == [
+        TOKEN_BASE + index for index in range(len(CALL_PIECES))
+    ]
     assert [piece for _, piece in produced] == CALL_PIECES, (
         "the piece is the text the token added, which is what the stop gate inspects"
     )
+    assert view.readout_calls == 0, "the model's head produces; the readout does not"
 
 
-def test_greedy_stream_prefills_once_then_feeds_single_tokens() -> None:
+def test_greedy_stream_uses_the_native_prefill_partition() -> None:
+    """Chunks of NATIVE_PREFILL_STEP_SIZE with the final prompt token always separate.
+
+    A single-chunk prefill produces the same tokens and different forward rows, and
+    ForwardLedger.validate asserts the partition on every forward, so the difference would
+    surface as a failed assertion far from its cause.
+    """
     model, view, tokenizer = _stubs(CALL_PIECES)
     prompt_ids = [0, 1, 2, 3, 4]
-    list(torch_greedy_stream(model, view, tokenizer, prompt_ids, max_tokens=4))
-    assert view.caches[0].widths == [len(prompt_ids), 1, 1, 1], (
-        "the prompt is forwarded once and then one token at a time through the cache; "
-        "re-feeding the prompt would be quadratic and would still produce the right tokens"
+    _generate(model, view, tokenizer, prompt_ids, 3)
+    assert view.caches[0].widths == [len(prompt_ids) - 1, 1, 1, 1, 1], (
+        "four prompt tokens, then the final prompt token alone, then one lookahead forward "
+        "per emitted token"
     )
     assert len(view.caches) == 1, "one within-turn cache per turn"
 
 
+def test_the_lookahead_forward_matches_the_recorded_partition() -> None:
+    """A turn of n emissions leaves n single-token forwards, the last one's argmax unused.
+
+    That is what makes the recorded forward at offset p the prediction of position p+1, which
+    the golden harness's whole join rests on.
+    """
+    model, view, tokenizer = _stubs(CALL_PIECES)
+    produced = _generate(model, view, tokenizer, [0, 1, 2, 3, 4], 3)
+    single_token_forwards = [width for width in view.caches[0].widths if width == 1]
+    assert len(produced) == 3
+    assert len(single_token_forwards) == 1 + 3, "the final prompt token, then one per emission"
+
+
 def test_greedy_stream_honours_the_token_cap() -> None:
     model, view, tokenizer = _stubs(CALL_PIECES)
-    produced = list(torch_greedy_stream(model, view, tokenizer, [0], max_tokens=3))
+    produced = _generate(model, view, tokenizer, [0, 1], 3)
     assert len(produced) == 3
+
+
+def test_generation_stops_on_a_config_eos_id_and_keeps_the_token() -> None:
+    """Token 106 is emitted on six of the golden records' ninety-four turns, always last."""
+    tokenizer = _StubTokenizer(["a", "b", "c", "d"], extra={106: "<end_of_turn>"})
+    view = _StubView(vocab_size=TOKEN_BASE + 8)
+    # Two ordinary tokens, then <end_of_turn>, then tokens that must never be reached.
+    script = _DISCARDED_PREFILL_LOGITS + [
+        TOKEN_BASE,
+        TOKEN_BASE + 1,
+        106,
+        TOKEN_BASE + 2,
+        TOKEN_BASE + 3,
+    ]
+    model = _StubModel(script, vocab_size=TOKEN_BASE + 8, eos_token_id=[1, 106])
+
+    produced = list(
+        torch_greedy_stream(model, view, tokenizer, [7, 8], 50, eos_ids=config_eos_ids(model))
+    )
+    assert [token for token, _ in produced] == [TOKEN_BASE, TOKEN_BASE + 1, 106], (
+        "the terminator is yielded and then generation ends; the recorded emissions contain it"
+    )
+
+
+def test_eos_ids_come_from_the_config_and_never_from_the_tokenizer() -> None:
+    model, _, _ = _stubs(CALL_PIECES, eos_token_id=[1, 106])
+    assert config_eos_ids(model) == frozenset({1, 106})
+
+    single = _StubModel([0], vocab_size=8, eos_token_id=7)
+    assert config_eos_ids(single) == frozenset({7}), "a scalar declaration is still a set"
+
+    naked = _StubModel([0], vocab_size=8)  # default eos, replaced below
+    naked.config = _StubConfig(None)
+    with pytest.raises(ValueError, match="token cap"):
+        config_eos_ids(naked)
 
 
 def test_torch_generation_stops_at_the_closing_fence() -> None:
@@ -260,7 +362,7 @@ def test_both_backends_stop_at_the_same_index(monkeypatch, pieces: list[str]) ->
 
     def fake_stream_generate(model, tokenizer, *, prompt, max_tokens, sampler):
         for index, piece in enumerate(pieces):
-            yield _Response(index, piece)
+            yield _Response(TOKEN_BASE + index, piece)
 
     fake_module = types.ModuleType("mlx_lm")
     fake_module.stream_generate = fake_stream_generate
@@ -279,3 +381,65 @@ def test_both_backends_stop_at_the_same_index(monkeypatch, pieces: list[str]) ->
 
     assert torch_count == mlx_count, "the two backends stopped at different tokens"
     assert torch_text == mlx_text
+
+
+class _HFStyleOutput:
+    """What an HF causal-LM forward actually returns: an object carrying `.logits`."""
+
+    def __init__(self, logits: torch.Tensor) -> None:
+        self.logits = logits
+        self.past_key_values = None
+
+
+class _WrappedModel(_StubModel):
+    """A model behind the capture wrapper: same logits, delivered in an HF output object."""
+
+    def forward(self, tokens: torch.Tensor, *, cache: _StubCache | None = None):
+        return _HFStyleOutput(super().forward(tokens, cache=cache))
+
+
+class _ViewWithIds(_StubView):
+    """A view that owns token-to-tensor conversion, as WS-A's real one does."""
+
+    def __init__(self, vocab_size: int) -> None:
+        super().__init__(vocab_size)
+        self.id_calls: list[list[int]] = []
+
+    def _ids(self, token_ids) -> torch.Tensor:
+        self.id_calls.append(list(token_ids))
+        return torch.tensor([list(token_ids)], dtype=torch.long)
+
+
+def test_the_loop_unwraps_an_hf_output_and_a_bare_tensor_alike() -> None:
+    tokenizer = _StubTokenizer(CALL_PIECES)
+    size = TOKEN_BASE + len(CALL_PIECES) + 1
+    script = _DISCARDED_PREFILL_LOGITS + [TOKEN_BASE + index for index in range(len(CALL_PIECES))]
+
+    wrapped = _WrappedModel(script, vocab_size=size)
+    view = _StubView(vocab_size=size)
+    from_output = _generate(wrapped, view, tokenizer, [7, 8, 9], 4)
+
+    bare = _StubModel(script, vocab_size=size)
+    plain_view = _StubView(vocab_size=size)
+    from_tensor = _generate(bare, plain_view, tokenizer, [7, 8, 9], 4)
+
+    assert from_output == from_tensor, (
+        "the wrapper returns the HF output object and a stub returns the tensor; the loop must "
+        "read the same native logits out of both"
+    )
+
+
+def test_the_view_converts_the_tokens_when_it_can() -> None:
+    """The view carries device and dtype; building the tensor here would strand it on the CPU."""
+    tokenizer = _StubTokenizer(CALL_PIECES)
+    size = TOKEN_BASE + len(CALL_PIECES) + 1
+    script = _DISCARDED_PREFILL_LOGITS + [TOKEN_BASE + index for index in range(len(CALL_PIECES))]
+    view = _ViewWithIds(vocab_size=size)
+    model = _WrappedModel(script, vocab_size=size)
+
+    prompt_ids = [7, 8, 9, 10]
+    _generate(model, view, tokenizer, prompt_ids, 3)
+
+    assert view.id_calls[0] == prompt_ids[:-1], "the prefill chunk goes through the view"
+    assert view.id_calls[1] == prompt_ids[-1:], "so does the final prompt token, on its own"
+    assert all(len(call) == 1 for call in view.id_calls[2:]), "and every decode step after it"

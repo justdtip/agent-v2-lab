@@ -4,7 +4,7 @@ import contextlib
 import copy
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -15,11 +15,11 @@ from local_llm_lab.pipeline.env import Fault, Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
-    system_prompt,
     assistant_message,
     build_prompt,
     parse_turn,
     strip_thinking,
+    system_prompt,
     tool_message,
     turn_is_complete,
     window_messages,
@@ -180,20 +180,54 @@ class SnapshotCache:
             self.model(mx.array(prefix)[None, :], cache=self.cache)
             mx.eval(*(entry.state for entry in self.cache))
             self._prefix = prefix
-            self._states = [_copy_cache_state(entry.state) for entry in self.cache]
+            self._states = snapshot_cache(self.cache)
             self.encoded_tokens += len(token_ids)
             return suffix
         if prefix != self._prefix:
             raise ValueError("immutable prefix changed after snapshot creation")
         assert self._states is not None
-        for entry, state in zip(self.cache, self._states, strict=True):
-            entry.state = _copy_cache_state(state)
+        restore_cache(self.cache, self._states)
         self.reused_tokens += self.prefix_tokens
         self.encoded_tokens += len(suffix)
         return suffix
 
     def commit(self, token_ids: list[int], generated: list[int]) -> None:
         """The live cache may advance; the saved prefix snapshot remains unchanged."""
+
+
+def snapshot_cache(entries: list[Any]) -> list[tuple[Any, Any]]:
+    """Save everything that defines a cache entry, which is contents *and* position.
+
+    Saving ``state`` alone is a defect, and a silent one. ``mlx_lm``'s two cache kinds split
+    the job differently: ``KVCache.state``'s setter recovers the offset from the restored
+    array's own length, while ``RotatingKVCache.state``'s setter assigns keys and values and
+    nothing else -- its ``offset`` and ``_idx`` live in ``meta_state`` (``models/cache.py``,
+    the ``state`` and ``meta_state`` properties of each class).
+
+    So a snapshot of ``state`` alone round-trips correctly on a full-attention model and
+    restores a rotating layer to the right contents at the wrong position. Gemma 3 4B runs a
+    rotating cache on 29 of its 34 blocks, which is where this stops being theoretical. The
+    failure mode is wrong attention rather than an exception.
+    """
+    saved = []
+    for entry in entries:
+        meta = getattr(entry, "meta_state", None)
+        saved.append((_copy_cache_state(entry.state), meta))
+    return saved
+
+
+def restore_cache(entries: list[Any], saved: list[tuple[Any, Any]]) -> None:
+    """Restore contents then position, in that order and for that reason.
+
+    ``KVCache.state``'s setter derives the offset from the restored length, so ``state`` must
+    land first; ``meta_state`` then puts back the true offset and write index for the entries
+    that keep them there. An empty ``meta_state`` is the base class's "no metadata" value and
+    assigning it back would raise, so it is skipped.
+    """
+    for entry, (state, meta) in zip(entries, saved, strict=True):
+        entry.state = _copy_cache_state(state)
+        if meta:
+            entry.meta_state = meta
 
 
 def _copy_cache_state(value: Any) -> Any:
@@ -514,44 +548,148 @@ def _consume_stream(
     return STOP_TOKEN_CAP
 
 
+def config_eos_ids(model: Any) -> frozenset[int]:
+    """Terminators from the model config's own id set, never from the tokenizer.
+
+    Gemma 3 declares ``eos_token_id: [1, 106]`` -- ``<eos>`` and ``<end_of_turn>`` -- and MLX
+    stops on that set. The tokenizer's ``eos_token_id`` is a single id and is not that set, so
+    taking it leaves ``<end_of_turn>`` unrecognised and every turn runs to the token cap.
+
+    This is measured rather than argued: in the golden records, token 106 is emitted on six of
+    the ninety-four turns and is the last token of each of them.
+    """
+    config = getattr(model, "config", None)
+    declared = getattr(config, "eos_token_id", None)
+    if declared is None:
+        raise ValueError(
+            "the model config declares no eos_token_id; refusing to fall back to the "
+            "tokenizer's single id, which would leave <end_of_turn> unrecognised and run "
+            "every turn to the token cap"
+        )
+    if isinstance(declared, int):
+        return frozenset({declared})
+    return frozenset(int(value) for value in declared)
+
+
+_DETERMINISM_PINNED = False
+
+
+def pin_torch_determinism() -> None:
+    """TF32 off, deterministic algorithms on, workspace and matmul precision fixed.
+
+    ``device.py`` owns this once it lands (WS-A/WS-E) and is preferred when present; this is
+    the interim so that no torch number is taken under unpinned settings.
+
+    ``CUBLAS_WORKSPACE_CONFIG`` must be set before CUDA initialises to have any effect. Setting
+    it here is late for a process that has already touched CUDA, so it is set with ``setdefault``
+    and the real home for it is the environment or ``device.py``'s import. Deterministic
+    algorithms are mostly a backward-pass list and do not fix reduction order, which is why the
+    determinism test is CUDA against CUDA within one build rather than across backends.
+    """
+    global _DETERMINISM_PINNED
+    if _DETERMINISM_PINNED:
+        return
+    try:
+        from local_llm_lab import device  # type: ignore[attr-defined]
+
+        device.configure()
+        _DETERMINISM_PINNED = True
+        return
+    except (ImportError, AttributeError):
+        pass
+    import os
+
+    import torch
+
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    with contextlib.suppress(AttributeError):  # newer torch only
+        torch.backends.cuda.matmul.fp32_precision = "ieee"
+    _DETERMINISM_PINNED = True
+
+
+def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -> Any:
+    """One forward through the capture wrapper, returning the model's own logits.
+
+    The seam WS-A fixed: the wrapper takes the cache as a keyword and returns the HF output,
+    whose ``.logits`` are the native ones. Hidden states do not come back here at all; they
+    reach the readout gate through the capture's sink, which is what keeps the readout a thing
+    compared against the model's head rather than a substitute for it.
+
+    ``view._ids`` is the view's own token-to-tensor conversion and carries the device and dtype
+    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop
+    uses it, and building the tensor here instead would leave it on the CPU while the model sat
+    on a GPU. The fallback exists for a stub view that has no such helper.
+    """
+    import torch
+
+    ids = view._ids(list(token_ids)) if hasattr(view, "_ids") else torch.tensor([list(token_ids)])
+    result = model(ids, cache=cache)
+    return result if torch.is_tensor(result) else result.logits
+
+
 def torch_greedy_stream(
     model: Any,
     view: ArchitectureView,
     tokenizer: Any,
     prompt_ids: Sequence[int],
     max_tokens: int,
+    *,
+    eos_ids: Iterable[int],
 ) -> Iterator[tuple[int, str]]:
     """Greedy decode on torch, yielding ``(token_id, text_piece)`` like the MLX stream.
 
-    Prefill the whole prompt, then argmax, append, and forward the single new token through
-    the model's own cache. The piece is the text that appeared when the token was appended,
-    which is the quantity the stop gate inspects; MLX's streaming detokenizer supplies the
-    same thing.
+    **The model's own head produces the token; the readout is never the producer.** The
+    capture wrapper hands back the model's logits and the readout gate then recomputes
+    ``native_readout(h)`` at layer 34 and *compares* it to them, recording the difference on
+    every forward. Generating from the readout instead would leave the gate comparing the
+    model's head against the thing that generated the token, which is the wrong way round and
+    would quietly change what the golden records mean.
 
-    The readout goes through ``view.native_readout`` rather than the model's own head so that
-    a generated token and a captured one come from one readout by construction. The record's
-    argmax rows were written under exactly that arrangement.
+    **The prefill partition is the native one**: chunks of ``NATIVE_PREFILL_STEP_SIZE`` with
+    the final prompt token always separate. ``ForwardLedger.validate`` asserts it on every
+    forward, and a single-chunk prefill would produce different forward rows under an
+    identical trajectory.
+
+    **The lookahead is MLX's.** The forward for a token runs before that token is yielded, so
+    a turn of *n* emissions leaves *n* single-token forwards behind it and the last one's
+    argmax is never used. That is what makes the recorded forward at offset *p* the prediction
+    of position *p + 1*.
+
+    **EOS terminates and is kept.** ``eos_ids`` comes from the model config's own set, and the
+    token is yielded before the stream ends because the recorded emissions contain it.
 
     ``cache_strategy: none`` refers to reuse *across turns*. Within a turn the cache is still
     needed or decoding is quadratic, so the loop makes its own and drops it at the end.
     """
     import torch
 
+    pin_torch_determinism()
     cache = view.make_cache()
     generated: list[int] = []
     previous_text = ""
-    tokens = torch.tensor([list(prompt_ids)], dtype=torch.long)
-    with torch.inference_mode():
+    terminators = frozenset(eos_ids)
+    # `no_grad` rather than `inference_mode` to match WS-A's own reference loop. Residuals
+    # reach the gate through the sink and an inference tensor is awkward to use later; there is
+    # no speed argument here worth diverging from the reference for.
+    with torch.no_grad():
+        logits = None
+        for prefill in prefill_passes(list(prompt_ids)):
+            logits = _forward_logits(model, view, prefill.input_ids, cache)
         while len(generated) < max_tokens:
-            hidden = model(tokens, cache=cache)
-            logits = view.native_readout(hidden)
-            token = int(torch.argmax(logits[0, -1]).item())
+            # Cast before the argmax: bfloat16 ties against a vocabulary this large are common
+            # and the reference resolves them in float32.
+            token = int(logits[0, -1].float().argmax().item())
             generated.append(token)
             text = tokenizer.decode(generated)
             piece = text[len(previous_text) :]
             previous_text = text
+            logits = _forward_logits(model, view, (token,), cache)
             yield token, piece
-            tokens = torch.tensor([[token]], dtype=torch.long)
+            if token in terminators:
+                return
 
 
 def generate_turn_tokens(
@@ -575,7 +713,9 @@ def generate_turn_tokens(
         max_tokens=spec.chat.max_think_tokens,
     )
     reason = _consume_stream(
-        torch_greedy_stream(model, view, tokenizer, prompt_ids, max_tokens),
+        torch_greedy_stream(
+            model, view, tokenizer, prompt_ids, max_tokens, eos_ids=config_eos_ids(model)
+        ),
         ids=ids,
         thinking=thinking,
         tokenizer=tokenizer,
@@ -738,9 +878,14 @@ def _generate_turn_torch(
         if capture is not None
         else contextlib.nullcontext(model)
     )
+    # The eos set comes from the model, not from the capture wrapper around it: a wrapper is
+    # not required to forward `.config`, and a missing set would silently become an empty one.
+    terminators = config_eos_ids(model)
     with context as generation_model:
         _consume_stream(
-            torch_greedy_stream(generation_model, view, tokenizer, prompt_ids, max_tokens),
+            torch_greedy_stream(
+                generation_model, view, tokenizer, prompt_ids, max_tokens, eos_ids=terminators
+            ),
             ids=ids,
             thinking=thinking,
             tokenizer=tokenizer,

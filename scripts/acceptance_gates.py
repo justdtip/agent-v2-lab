@@ -40,6 +40,7 @@ for _path in (_REPOSITORY_ROOT / "src", _REPOSITORY_ROOT / "research" / "accepta
         sys.path.insert(0, str(_path))
 
 import golden_trajectories as golden  # noqa: E402
+import tolerance  # noqa: E402
 
 PASS = "pass"
 FAIL = "fail"
@@ -154,9 +155,27 @@ def gate_6_golden_lens_reads(arguments: argparse.Namespace) -> GateResult:
     episodes = golden.load_episodes(arguments.records)
     emitted = sum(episode.emission_count for episode in episodes)
     agentic = sum(episode.emission_count for episode in episodes if episode.kind == "agentic")
+    # Computable from the records alone, and it sizes the tolerance gate rather than
+    # describing it: the hard rule only bites where the model was already confident.
+    confident = 0
+    scored = 0
+    for episode in episodes:
+        for turn in episode.turns:
+            for emission in turn.emissions:
+                probability = turn.emitted_confidence(emission.position)
+                if probability is None:
+                    continue
+                scored += 1
+                if probability >= tolerance.HARD_CONFIDENCE:
+                    confident += 1
+    share = confident / scored if scored else 0.0
     notes = [
         f"corpus: {emitted} emitted tokens across {len(episodes)} episodes, "
         f"{agentic} of them agentic",
+        f"tolerance coverage: {confident} of {scored} emissions were recorded at "
+        f"P >= {tolerance.HARD_CONFIDENCE} ({share:.4f}), so the hard flip rule governs that "
+        "share of the decisions; the remainder can flip on precision alone and is reported "
+        "rather than gated",
         "the recorded ranks come from MLX 4-bit through the hosted lens; a comparison against "
         "another precision confounds the port with quantisation, and the gate reports the "
         "difference rather than attributing it",

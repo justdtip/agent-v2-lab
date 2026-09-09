@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -26,7 +28,8 @@ for _path in (_ACCEPTANCE, _SCRIPTS):
 
 import acceptance_gates as gates  # noqa: E402
 import golden_trajectories as golden  # noqa: E402
-import readout_tolerance as tolerance  # noqa: E402
+import readout_tolerance as readout  # noqa: E402
+import tolerance  # noqa: E402
 
 
 def _encoded(value) -> bytes:
@@ -44,6 +47,12 @@ def _write_record(path: Path, events: list[dict]) -> None:
             previous = digest
 
 
+#: Deliberately not 34. Gemma 3 4B has 34 layers and the GPU is expected to bring other
+#: models, so a fixture at 34 would pass against a reader that had the depth hardcoded.
+FIXTURE_LAYERS = list(range(1, 13))
+FINAL_LAYER = max(FIXTURE_LAYERS)
+
+
 def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> list[dict]:
     """One turn: a prefill forward, then one single-token forward per emission."""
     events: list[dict] = [
@@ -52,7 +61,13 @@ def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> li
             "schema_version": 1,
             "provenance": {"episode": {"label": label, "kind": "agentic"}},
         },
-        {"kind": "begin_turn", "turn": 0, "prompt_ids": prompt_ids, "context": {}},
+        {
+            "kind": "begin_turn",
+            "turn": 0,
+            "prompt_ids": prompt_ids,
+            "context": {},
+            "layers": FIXTURE_LAYERS,
+        },
     ]
     sequence = list(prompt_ids) + list(emitted)
     # The forward at offset p predicts position p + 1, which is the convention the whole
@@ -70,7 +85,14 @@ def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> li
                 "logits_shape": [1, 1, 32],
             }
         )
-        events.append({"kind": "reading", "turn": 0, "position": offset, "top": {"34": [token]}})
+        events.append(
+            {
+                "kind": "reading",
+                "turn": 0,
+                "position": offset,
+                "top": {str(FINAL_LAYER): [token]},
+            }
+        )
         events.append(
             {
                 "kind": "emitted",
@@ -170,7 +192,7 @@ def test_readout_agreement_says_when_bit_identity_was_not_assessed(records: Path
 
 def test_a_band_is_measured_and_carries_what_it_was_measured_on() -> None:
     deltas = [0.1 * index for index in range(1, 1001)]
-    band = tolerance.measure_band(deltas, basis="cpu fp32 against mlx 4-bit, 15 episodes")
+    band = readout.measure_band(deltas, basis="cpu fp32 against mlx 4-bit, 15 episodes")
     assert band.n == 1000
     assert band.value == pytest.approx(99.9), (
         "the 0.999 quantile of a thousand samples is the 999th of them, not the largest; a "
@@ -184,18 +206,16 @@ def test_a_band_is_measured_and_carries_what_it_was_measured_on() -> None:
 
 def test_a_band_cannot_be_conjured_from_nothing() -> None:
     with pytest.raises(ValueError, match="empty sample"):
-        tolerance.measure_band([], basis="anything")
+        readout.measure_band([], basis="anything")
     with pytest.raises(ValueError, match="must carry the measurement"):
-        tolerance.measure_band([1.0], basis="   ")
+        readout.measure_band([1.0], basis="   ")
     with pytest.raises(ValueError, match="NaN"):
-        tolerance.measure_band([1.0, float("nan")], basis="a sample with a hole in it")
+        readout.measure_band([1.0, float("nan")], basis="a sample with a hole in it")
 
 
 def test_a_projection_carries_its_basis_and_refuses_to_exist_without_one() -> None:
-    measured = tolerance.measure_band([1.0, 2.0, 3.0], basis="cpu fp32 against mlx 4-bit")
-    projected = tolerance.project_band(
-        measured, factor=4.0, reason="bf16 has 8 fewer mantissa bits"
-    )
+    measured = readout.measure_band([1.0, 2.0, 3.0], basis="cpu fp32 against mlx 4-bit")
+    projected = readout.project_band(measured, factor=4.0, reason="bf16 has 8 fewer mantissa bits")
     assert not projected.measured
     assert projected.value == pytest.approx(measured.value * 4.0)
     assert projected.projected_from is measured
@@ -204,16 +224,16 @@ def test_a_projection_carries_its_basis_and_refuses_to_exist_without_one() -> No
         "a projection without its basis cannot be learned from, only failed"
     )
     with pytest.raises(ValueError, match="why its factor"):
-        tolerance.project_band(measured, factor=2.0, reason="")
+        readout.project_band(measured, factor=2.0, reason="")
     with pytest.raises(ValueError, match="positive"):
-        tolerance.project_band(measured, factor=0.0, reason="a reason")
+        readout.project_band(measured, factor=0.0, reason="a reason")
 
 
 def test_a_band_check_reports_the_worst_case_not_only_the_verdict() -> None:
-    band = tolerance.measure_band([1.0, 1.0, 1.0], basis="a flat sample")
-    inside = tolerance.check_band(band, [0.5, 0.9, 1.0])
+    band = readout.measure_band([1.0, 1.0, 1.0], basis="a flat sample")
+    inside = readout.check_band(band, [0.5, 0.9, 1.0])
     assert inside.passed and inside.worst == pytest.approx(1.0)
-    outside = tolerance.check_band(band, [0.5, 7.25])
+    outside = readout.check_band(band, [0.5, 7.25])
     assert not outside.passed and outside.exceeded == 1
     assert "7.25" in outside.describe()
 
@@ -256,3 +276,129 @@ def test_the_kit_refuses_to_load_a_model_without_a_box_window(records: Path, mon
     arguments = gates.argparse.Namespace(records=records, model="gemma3-4b", keep_going=True)
     with pytest.raises(SystemExit, match="no box window"):
         gates._load_backend(arguments)
+
+
+# --- G-2(b): the tolerance half -------------------------------------------------------------
+
+
+def _with_confidence(events: list[dict], probability: float) -> list[dict]:
+    """Add the layer-34 horizon-1 rank rows the P >= 0.99 rule reads."""
+    extra = []
+    for event in events:
+        if event["kind"] == "emitted":
+            extra.append(
+                {
+                    "kind": "rank",
+                    "turn": event["turn"],
+                    "layer": FINAL_LAYER,
+                    "horizon": 1,
+                    "position": event["position"] - 1,
+                    "token_id": event["token_id"],
+                    "rank": 1,
+                    "probability": probability,
+                }
+            )
+    return events[:-1] + extra + events[-1:]
+
+
+def test_teacher_forcing_keeps_every_position_an_independent_comparison(tmp_path: Path) -> None:
+    directory = tmp_path / "tf"
+    directory.mkdir()
+    events = _with_confidence(_episode_events("tf", [5, 6], [11, 12, 13, 14]), 0.5)
+    _write_record(directory / "tf.jsonl", events)
+    episode = golden.load_episodes(directory)[0]
+
+    produced = {
+        (0, position): token for position, token in zip([2, 3, 4, 5], [11, 12, 13, 14], strict=True)
+    }
+    perfect = tolerance.teacher_forced_agreement(episode, produced)
+    assert perfect.compared == 4 and perfect.rate == 1.0 and perfect.passed
+
+    produced[(0, 3)] = 999
+    one_flip = tolerance.teacher_forced_agreement(episode, produced)
+    assert one_flip.compared == 4, (
+        "a flip at one position does not stop the other three being compared; that is what "
+        "teacher forcing buys and free running does not"
+    )
+    assert one_flip.agreed == 3 and len(one_flip.flips) == 1
+
+
+def test_a_flip_at_high_recorded_confidence_fails_the_run(tmp_path: Path) -> None:
+    directory = tmp_path / "hard"
+    directory.mkdir()
+    _write_record(
+        directory / "hard.jsonl",
+        _with_confidence(_episode_events("hard", [5, 6], [11, 12]), 0.999998),
+    )
+    episode = golden.load_episodes(directory)[0]
+
+    clean = tolerance.teacher_forced_agreement(episode, {(0, 2): 11, (0, 3): 12})
+    assert clean.passed and not tolerance.confidence_violations(clean)
+
+    flipped = tolerance.teacher_forced_agreement(episode, {(0, 2): 11, (0, 3): 404})
+    violations = tolerance.confidence_violations(flipped)
+    assert len(violations) == 1 and violations[0].hard
+    assert not flipped.passed, (
+        "quantisation does not move an argmax at P = 0.999998; a flip there is a mask, "
+        "position, entry or norm defect and fails outright"
+    )
+    assert "HARD" in violations[0].describe()
+
+
+def test_a_flip_at_low_recorded_confidence_is_reported_and_not_gated(tmp_path: Path) -> None:
+    directory = tmp_path / "soft"
+    directory.mkdir()
+    _write_record(
+        directory / "soft.jsonl",
+        _with_confidence(_episode_events("soft", [5, 6], [11, 12]), 0.51),
+    )
+    episode = golden.load_episodes(directory)[0]
+    flipped = tolerance.teacher_forced_agreement(episode, {(0, 2): 11, (0, 3): 404})
+    assert len(flipped.flips) == 1 and not flipped.hard_flips
+    assert flipped.passed, "a near-tie can flip on precision alone and is not a defect"
+
+
+def test_a_position_with_no_recorded_probability_is_counted_not_assumed(records: Path) -> None:
+    """The fixture records carry no rank rows, so the hard rule cannot apply to them."""
+    episode = golden.load_episodes(records)[0]
+    report = tolerance.teacher_forced_agreement(episode, {(0, 3): 999})
+    assert report.compared == 1 and report.unrecorded_probability == 1
+    assert not report.hard_flips, "an unrecorded probability is never treated as a high one"
+    assert "could not be applied" in report.describe()
+
+
+def test_the_divergence_profile_reports_a_floor(records: Path) -> None:
+    class _Result:
+        def __init__(self, index):
+            self.first_divergence = None if index is None else SimpleNamespace(index=index)
+
+    profile = tolerance.divergence_indices(
+        [_Result(None), _Result(120), _Result(3), _Result(64)], floor=16
+    )
+    assert profile.reproduced == 1
+    assert profile.below_floor == [3]
+    assert not profile.passed, "an episode that parts company at token 3 did not drift there"
+    assert profile.percentile(0.5) == 64
+    assert "floor of 16" in profile.describe()
+
+
+def test_top_k_jaccard_uses_ids_because_that_is_all_the_record_has(records: Path) -> None:
+    episode = golden.load_episodes(records)[0]
+    # Position 3 is the first emission, token 11, and its reading sits at position 2.
+    identical = tolerance.top_k_jaccard(episode, {(0, 3): [11]}, k=5)
+    assert identical.mean == 1.0
+    disjoint = tolerance.top_k_jaccard(episode, {(0, 3): [777]}, k=5)
+    assert disjoint.mean == 0.0
+    assert "top-5 Jaccard" in identical.describe()
+
+
+def test_a_divergence_refuses_a_truncated_distribution() -> None:
+    """The records cannot supply a layer-34 distribution, only a top-k slice and one probability."""
+    with pytest.raises(ValueError, match="not a distribution"):
+        tolerance.symmetric_kl([0.6, 0.3], [0.5, 0.4])
+    with pytest.raises(ValueError, match="differ in support"):
+        tolerance.symmetric_kl([0.5, 0.5], [1.0])
+    same = tolerance.symmetric_kl([0.25, 0.25, 0.25, 0.25], [0.25, 0.25, 0.25, 0.25])
+    assert same == pytest.approx(0.0)
+    apart = tolerance.symmetric_kl([1.0, 0.0], [0.0, 1.0])
+    assert apart == pytest.approx(math.log(2))
