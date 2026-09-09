@@ -158,6 +158,42 @@ times and found nothing.
 
 ---
 
+## 2b. Re-based on MLX bfloat16: one flip in 5,245, at three ULPs
+
+The Chief ruled the rule restated and the records re-based. Both are done, and the re-based
+number is the one that means something.
+
+`scripts/mlx_reference.py --reference` built the precision-matched reference over all fifteen
+episodes on the laptop: 5,245 positions in 399 s, written per episode as each landed. The
+reference is decisive nearly everywhere — median top-two gap **63 ULP** — with **126 positions
+(2.40%) inside the two-ULP tie band** and 21 of those exact ties, where the reference itself
+cannot tell its top two apart.
+
+Then the kit ran once more on the card against it, beside the D-CRO's fit under a separate
+box-state directory:
+
+| reference | agreed | rate | outside ties | ties |
+|---|---:|---:|---:|---:|
+| MLX 4-bit, the stage-two recording | 4,999 / 5,245 | 0.9531 | 24 | not measurable |
+| **MLX bfloat16, precision-matched** | **5,213 / 5,245** | **0.9939** | **1** | **30** |
+
+Agreement rises by four points for no change to the port. That gap was the two precisions, and
+the old gate was reading it as the port's error.
+
+**The one that remains: `read-0108` turn 0 position 521, reference gap 3.0 ULP.** The reference
+prefers token 2234; the port produces 1399. It sits one ULP outside the band, and I am reporting
+it rather than widening the band to clear it — a threshold moved to make a run green is not a
+threshold. It is also the position where torch's *own* two devices disagree: the laptop's CPU
+puts the two candidates at an exact tie there while the card's CUDA prefers 1399, so the port is
+at the edge of its own resolution at a position where the reference is three steps clear.
+Whether three ULPs is a defect or a band drawn one step too tight is the Chief's to rule; the
+evidence for either is in `rebased-cuda.json`.
+
+**So the gate is FAIL, on one position, and the failure is legible.** That is a different object
+from the twenty-four it reported yesterday, which were legible only after two more runs.
+
+---
+
 ## 3. Gates 5 and 6
 
 **Gate 5 FAILS**, and now for a reportable reason rather than a stale guard. On the smoke episode
@@ -242,8 +278,10 @@ the resolver device-aware rather than leaving a flag people must remember.
 
 ## 6. Files
 
-**`mlx-bf16-arm.json` / `.jsonl` — the precision-matched arm, one row per position with its
-verdict. `flip-margins.json` — the logit gaps in ULPs for the three that arm left open.**
+**`rebased-cuda.json` / `.jsonl` / `.log` — the corpus re-based on the precision-matched
+reference, which is the number that counts. `mlx-bf16-reference.json` / `.jsonl` — the reference
+itself, every deciding position with its top-two gap in ULPs.** `mlx-bf16-arm.json` / `.jsonl` —
+the precision-matched arm, one row per position with its verdict. `flip-margins.json` — the logit gaps in ULPs for the three that arm left open.**
 `confident-flips.json` — the twenty-four failing positions, the input to both. `cuda-all15-v2.json` / `.jsonl` and `cuda-v2.log` — the recapture that produced it,
 identical to the first run in every figure. `cuda-all15.json` / `.jsonl`, `cpu-all15.json` /
 `.jsonl` — the two full-corpus runs, per-episode rows written and flushed as each completed. `cuda-0158-run1/run2` — the determinism pair.
