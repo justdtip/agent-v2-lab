@@ -329,7 +329,15 @@ def make_loss_module_trainer_class() -> Any:
                 super()._save(output_dir, state_dict)
                 return
             target = output_dir if output_dir is not None else self.args.output_dir
-            inner.save_pretrained(target)
+            # `save_original_format=False` writes the model's OWN key layout. The default is True,
+            # which re-applies the reverse of whatever `key_mapping` the checkpoint was loaded
+            # under -- and the text loader loads a multimodal checkpoint under
+            # `{"^language_model.": ""}`. Left at the default, a run started from any real Gemma 3
+            # checkpoint writes `language_model.*` tensor names beside a plain text `config.json`:
+            # an artefact whose config and keys disagree, which nothing can load and nothing warns
+            # about, because `from_pretrained` treats missing keys as a warning and silently
+            # initialises them instead.
+            inner.save_pretrained(target, save_original_format=False)
             if self.processing_class is not None:
                 self.processing_class.save_pretrained(target)
 

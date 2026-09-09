@@ -295,7 +295,22 @@ def test_the_stage_trains_the_text_tower_out_of_a_multimodal_checkpoint(
     assert manifest["result"]["global_step"] == 4
     assert 0 < manifest["parameters"]["trainable"] < manifest["parameters"]["total"]
 
-    from transformers import Gemma3ForCausalLM
+    # Reloaded through the fail-closed loader, NOT `from_pretrained`. This assertion was written
+    # with `from_pretrained` first and it passed on a checkpoint whose every weight was missing:
+    # missing keys are a warning there, and the tensors come back freshly initialised. "It loads"
+    # is not a check unless the loader refuses something.
+    from local_llm_lab.hf_text import load_text_causal_lm
 
-    reloaded = Gemma3ForCausalLM.from_pretrained(output / "checkpoints" / "checkpoint-4")
+    reloaded, report = load_text_causal_lm(output / "checkpoints" / "checkpoint-4", device="cpu")
+    assert report["wrapper"] is False, "the trained checkpoint is a text tower, not a wrapper"
     assert not hasattr(reloaded.model, "vision_tower")
+
+    # The keys must be the model's own, not the source checkpoint's. `save_pretrained` defaults to
+    # re-applying the reverse of the loader's `key_mapping`, which writes `language_model.*` names
+    # beside a plain text config.
+    from safetensors import safe_open
+
+    with safe_open(str(output / "checkpoints" / "checkpoint-4" / "model.safetensors"), "pt") as h:
+        names = list(h.keys())
+    assert names, "empty checkpoint"
+    assert not any(name.startswith("language_model.") for name in names), sorted(names)[:3]

@@ -161,9 +161,17 @@ def build_training_arguments(
 
 
 def stage_train_torch(
-    config: dict[str, Any], iters: int | None = None, resume_from: Path | None = None
+    config: dict[str, Any],
+    iters: int | None = None,
+    resume_from: Path | None = None,
+    callbacks: list[Any] | None = None,
 ) -> dict[str, Any]:
-    """Run the torch full-fine-tuning branch and return the manifest it wrote."""
+    """Run the torch full-fine-tuning branch and return the manifest it wrote.
+
+    ``callbacks`` are handed to `Trainer` unchanged. The agreement gate uses them to read gradients
+    at step zero out of the *joined* path -- this stage driving FSDP2 through `Trainer` -- rather
+    than reassembling the pieces beside it, which would be a gate on a different object.
+    """
     from local_llm_lab import device
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.training.collator import CausalCollator
@@ -274,6 +282,7 @@ def stage_train_torch(
         train_dataset=rows,
         eval_dataset=validation,
         data_collator=CausalCollator(pad_token_id=tokenizer.pad_token_id or 0),
+        callbacks=callbacks,
     )
     result = trainer.train(resume_from_checkpoint=str(resume_from) if resume_from else None)
 
