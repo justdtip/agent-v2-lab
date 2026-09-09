@@ -93,3 +93,15 @@ Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full
 - **`attn_implementation="eager"`** on the replay path. Batch one, unpadded, chunked at 2,048.
 - Cache offsets from the API, never tensor shapes; `activate_past_recording()` on sliding layers at
   construction for `trim`, `snapshot` and `history`; negative arguments to `crop`.
+
+## Amendment, 2026-09-09 late — cache strategies are arms of the gate
+
+The torch cache strategies were built against the real `DynamicCache` and measured what the
+deferral was waiting on: arming rollback after a sliding window has filled corrupts silently (now
+refused at `enable_rollback`), and an armed sliding layer is unbounded, 2.15x the bounded KV cache
+at the map's longest episode on this model, a ratio of a small base (~380 MB against ~180 MB at the
+class-default head dimension; read both off the loaded config). Memory does not decide. Ruling:
+`make_turn_cache` keeps refusing all three under torch until the tolerance runner has its baseline
+at `none` against the view; then each strategy is its own arm of the same gate and must reproduce
+the `none` trajectories byte for byte within the backend. A strategy that changes one token is a
+defect, not a speed setting. Plan §16.8.

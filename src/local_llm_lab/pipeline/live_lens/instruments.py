@@ -287,8 +287,13 @@ class LensMaps:
                 if not name.startswith("J") or not name[1:].isdigit():
                     raise ValueError(f"invalid lens map name: {name}")
                 layer = int(name[1:]) + 1
-                stored.add(str(archive[name].dtype))
-                a = np.array(archive[name], dtype=np.float32)
+                # Bound once: `archive[name]` on an NpzFile decompresses, so reading the dtype
+                # from one access and casting from a second decompressed every map twice. That was
+                # a regression introduced by recording `storage_dtype` at all, and it is exactly
+                # the size of the feature's cost if left in.
+                raw = archive[name]
+                stored.add(str(raw.dtype))
+                a = np.array(raw, dtype=np.float32)
                 if (
                     not 1 <= layer < num_layers
                     or a.shape != (hidden_size, hidden_size)

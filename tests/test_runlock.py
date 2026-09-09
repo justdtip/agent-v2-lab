@@ -1638,3 +1638,57 @@ def _a_pid_that_is_not_running() -> int:
         except OSError:
             continue
     raise AssertionError("every pid in range is in use, which cannot happen")
+
+
+def test_a_checkpoint_resolves_to_the_primary_even_under_the_box_state_override(
+    tmp_path, monkeypatch, unredirected_window_path
+) -> None:
+    """Two things shared one reader; only one of them may be redirected.
+
+    `$AGENT_V2_BOX_STATE_DIR` moves the lock and the window so an isolated run cannot take the
+    machine's lock. A converted checkpoint under `models/` exists once, in the primary, and a
+    resolver that followed the redirect pointed into scratch and found nothing: "no stage can
+    load a registered checkpoint from any worktree", as a seat read it on 2026-09-09, while every
+    process without the override resolved correctly. The primary's name carries a space here
+    because the real one does, and the gitdir line is split on its first colon, not on whitespace.
+    """
+    primary = tmp_path / "an app"
+    primary.mkdir()
+    for argv in (
+        ["git", "-C", str(primary), "init", "-q"],
+        ["git", "-C", str(primary), "config", "user.email", "t@example.com"],
+        ["git", "-C", str(primary), "config", "user.name", "t"],
+        ["git", "-C", str(primary), "commit", "-q", "--allow-empty", "-m", "root"],
+        ["git", "-C", str(primary), "worktree", "add", "-q", str(tmp_path / "linked")],
+    ):
+        spawn.run(argv, capture_output=True, text=True, check=True)
+    linked = tmp_path / "linked"
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+
+    monkeypatch.setattr(runlock, "PROJECT_ROOT", linked)
+    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(scratch))
+    # The lock and window follow the override; the primary does not.
+    assert runlock.box_state_root() == scratch
+    assert runlock.primary_checkout_root() == primary.resolve()
+
+    from local_llm_lab.models import _resolve_checkpoint
+
+    resolved = _resolve_checkpoint("models/some-checkpoint")
+    assert resolved == str((primary.resolve() / "models/some-checkpoint").resolve())
+    assert _resolve_checkpoint("google/gemma-3-4b-it") == "google/gemma-3-4b-it"
+
+    # Without the override the two readers agree, which is the case every real run is in.
+    monkeypatch.delenv(runlock.BOX_STATE_DIR_ENV)
+    assert runlock.box_state_root() == runlock.primary_checkout_root() == primary.resolve()
+
+    # The HF cache is the third reader of the same fact: weights exist once, in the primary.
+    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(scratch))
+    monkeypatch.delenv("HF_HOME", raising=False)
+    from local_llm_lab.project import configure_local_cache
+
+    cache = configure_local_cache()
+    assert cache == primary.resolve() / ".cache" / "huggingface"
+    assert not cache.is_relative_to(linked) and not cache.is_relative_to(scratch)
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "explicit"))
+    assert configure_local_cache() == tmp_path / "explicit"
