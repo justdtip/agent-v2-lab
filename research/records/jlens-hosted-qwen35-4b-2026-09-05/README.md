@@ -66,3 +66,19 @@ lives inside the tree, outside version control (`models/` is ignored):
 Regenerate with `scripts/convert_jlens.py` (a runnable converter; it loads no model, so it may run beside
 training or evaluation). The venv has no torch: run it under Homebrew's python3 (torch 2.9.1). The key
 convention is unchanged: `J{L-1}` is repo layer `L`; layer 32 is the identity and is not stored.
+
+## Verification note, 2026-09-09 — the swallowed cache limit
+
+`run_hosted_lens.py:36` sets MLX's buffer-cache limit to 2 GiB inside `try: … except Exception:
+pass`. If that call had failed, the declared limit was never applied and nothing in this record would
+say so — a declaration not carrying its measurement.
+
+Measured on the current runtime: on MLX 0.32.2 `mx.set_cache_limit` exists, succeeds, and returns the
+previous limit (24,481,313,587 bytes). The handler can therefore only fire on a runtime that lacks
+the call entirely. **This record does not name the MLX version that ran**, so whether it fired is not
+recoverable from what is here. The consequence is bounded to memory headroom during the run and
+touches no figure in this record: the lens artefacts and the cosine numbers are unaffected either
+way.
+
+The script is left as-run, like every producer in a record. Found by the sweep in
+`research/records/INERT-GUARD-SWEEP-2026-09-09/`, which assesses every hit.

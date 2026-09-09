@@ -207,7 +207,8 @@ def main() -> None:
     # constants above made a mismatch impossible by accident; this makes it impossible.
     lens = LensMaps.load(args.lens, expected_sha256=args.lens_sha256,
                          hidden_size=view.hidden_size, num_layers=view.num_layers,
-                         identity=LensIdentity(spec.base, view.num_layers, spec.training))
+                         identity=LensIdentity(base=spec.base, num_layers=view.num_layers,
+                                               training=spec.training))
     reader = LensReadout(view, lens)
     sampler = make_sampler(0.0)
     manifest = {"model": spec.hf_id, "lens_sha256": lens.sha256, "band": band, "layers": layers, "cache_strategy": resolved.cache_strategy,

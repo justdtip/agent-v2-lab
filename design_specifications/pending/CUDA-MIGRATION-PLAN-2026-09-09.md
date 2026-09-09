@@ -1339,3 +1339,54 @@ Consequences, in order:
   resolved there, recorded there, and their tests come back here.
 
 No announced blocks on this box from now; windows of minutes for tests are fine.
+
+### 16.13 The delete that merges forward, and four WS-D rulings
+
+**The trap (D-CRO, method twenty-fifth).** WS-D's adapter never travelled on `cuda-ws-d`: it was
+written on the main line and reached `cuda-migration` through an ordinary merge of main, so the
+seat branch is a label on a commit the integration branch already contains. Main then deleted the
+adapter and its 35 tests (9ae4444), correctly, because the main line takes no CUDA code. Against
+the shared merge base `cuda-migration` had both files unmodified, and git resolves
+delete-against-unmodified by deleting: the next routine merge of main forward would have removed
+the adapter from the only branch that has and runs it, silently, reporting success. Fixed in the
+merge commit itself (665ba0d): main merged forward with the two files restored inside the commit,
+so the deletion is recorded as merged and the base moves past it; a second merge of main now
+changes nothing, checked. **Rule:** when the main line deletes something the integration branch
+keeps, the restore lives inside the merge commit, never after it.
+
+**Four rulings WS-D's golden test was waiting on.**
+
+1. *Corpus split.* `corpus.py` pins WikiText-103 `validation`, the Director's answer; the hosted
+   lens was fitted on `train`. The golden test compares finite-difference against exact on the
+   **same rows**, the pinned validation split, so the estimator difference is isolated; the split
+   is irrelevant to it. The hosted-versus-fitted comparison declares the split difference in ν as a
+   corpus difference and is not a golden gate.
+2. *`compare_maps.py`'s three-positional `LensIdentity` calls.* Keyword-only construction, since
+   the dataclass has gained a trailing field once already (`storage_dtype`) and positional calls
+   survive that by accident. A laptop fix with its test, the D-CRO's.
+3. *The golden test's pass threshold.* None is chosen in advance. The same structure as G-1 under
+   bf16: exactness gated at zero where it is by construction (upstream exact against upstream
+   exact re-run on the same rows); the finite-difference-versus-exact residual is the finding,
+   reported per layer with the finite-difference epsilon and the fp16 storage floor declared,
+   against the fixture's own residual as the expected magnitude; and the controls gated: the
+   orientation check through upstream's transport, a layer-shifted artefact, a wrong-corpus fit,
+   each failing by more than the residual. A threshold picked before the first measurement would
+   be a number chosen, which §7 forbids.
+4. *CLI wiring in `scripts/lens_fit.py`.* Behind `device.backend()`, the way the train stage is
+   wired, fixture-tested here; the D-CRO's.
+
+WS-D steps 2 through 6 (declared ν, second moment, position bands, span-conditioned lenses,
+sub-block and multi-target) are device work against `research/records/WSD-DEVICE-CHECKLIST-2026-09-09/`.
+
+### 16.14 Deferred on purpose, so it is not rediscovered
+
+- `probes/patch.py:1232` catches `Exception` around `strip_thinking` and `parse_turn`, which raise
+  only `ActionParseError`; a `TypeError` from a pipeline bug would be scored as the model failing
+  to parse, a programming error entering a record as a measurement about the model. One line and
+  one test. Not fixed now because the probes are deferred and that file's donor-difference core
+  migrates onto the `intervene` API; it is fixed in that migration (D-CRO, inert-guard sweep,
+  `research/records/INERT-GUARD-SWEEP-2026-09-09/`).
+- The inert-guard scanner in `tests/test_repository_rules.py` catches the parseable shapes: an
+  assert that cannot fail, a broad handler that swallows. Whether a present check discriminates
+  is not decidable by parsing; that stays the WS-D record's technique, construct the input the
+  check should fail on and confirm it does.
