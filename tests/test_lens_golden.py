@@ -74,6 +74,40 @@ def test_two_fits_differing_in_more_than_the_estimator_are_refused(upstream) -> 
         golden.assert_estimator_is_the_only_difference(nu, other_corpus)
 
 
+def test_an_estimators_own_knob_does_not_make_two_fits_incomparable(upstream) -> None:
+    """The narrowing, and the reason for it: comparing the blocks whole is a gate that cannot pass.
+
+    Each estimator records its own batching knob inside `position_weighting` — `dim_batch` for the
+    exact fit, `direction_batch` for the finite-difference one — and neither changes which positions
+    were selected. Comparing the block whole would refuse **every** correct pair of fits of one
+    corpus, which is a check that cannot pass, and that is as useless as one that cannot fail. Found
+    by running the real second operand through it.
+    """
+    _, nu = _fit(upstream)
+    other = _as_finite_difference(nu)
+    other["position_weighting"] = {
+        **{k: v for k, v in nu["position_weighting"].items() if k != "dim_batch"},
+        "direction_batch": 64,
+    }
+
+    golden.assert_estimator_is_the_only_difference(nu, other)
+    assert nu["position_weighting"] != other["position_weighting"]
+
+
+def test_a_narrowed_block_still_refuses_a_difference_that_changes_what_was_fitted(upstream):
+    """The narrowing must not have become a hole: a changed position rule still refuses."""
+    _, nu = _fit(upstream)
+    other = _as_finite_difference(nu)
+    other["position_weighting"] = {**nu["position_weighting"], "skip_first": 0}
+    with pytest.raises(golden.NotComparable, match="sum of causes"):
+        golden.assert_estimator_is_the_only_difference(nu, other)
+
+    coarser = _as_finite_difference(nu)
+    coarser["precision"] = {**nu["precision"], "dtype": "bfloat16"}
+    with pytest.raises(golden.NotComparable, match="sum of causes"):
+        golden.assert_estimator_is_the_only_difference(nu, coarser)
+
+
 def test_comparing_an_estimator_with_itself_is_sent_to_the_exactness_gate(upstream) -> None:
     _, nu = _fit(upstream)
     with pytest.raises(golden.NotComparable, match="exactness gate"):
