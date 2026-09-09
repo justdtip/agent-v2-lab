@@ -88,7 +88,8 @@ Nothing I ran distinguishes these, and I am not going to pick between them from 
 same precision, different framework, quantisation removed from the comparison. Confident flips
 that survive are the port; confident flips that vanish were the 4-bit gap and the hard rule needs
 restating in terms of a precision-matched reference. That run needs MLX, so it is a laptop run,
-and it is small: the failing positions are 24 and their contexts are known.
+and it is small: **`confident-flips.json` in this directory is its input** — all twenty-four
+positions with turn, position, recorded and produced token, and the recorded probability.
 
 ---
 
@@ -115,7 +116,7 @@ That is WS-A's producing side, unchanged by anything here.
 
 ---
 
-## 4. Four defects the card found, all fixed here
+## 4. Five defects the card found, all fixed here
 
 **The corpus was not on the card.** No stage-two records existed anywhere on the box; the
 archives under `/workspace` are the training corpus, not the captures. They cannot be regenerated
@@ -148,6 +149,17 @@ the resume store died on `FileNotFoundError: .../gemma3-4b-cuda-bf16`. Both fixe
 now names the snapshot directory, because on the device the weights are under `$HF_HOME` and the
 weights-cache resolver looks under the checkout.
 
+**The flip printer hid the flips that gate** (fixed, `8773a1d`). The cap was twelve flips per
+episode in position order. An episode with many near-ties pushed its confident flips past it, so
+the run reported 24 gating flips and the log carried 12 — and the JSON row kept probabilities but
+not positions, so the other twelve existed nowhere. This was found only by trying to build the
+input for the follow-up test out of the log and coming up half short. **A cap that can hide the
+evidence for the failure it is reporting is the wrong cap.** Every hard flip now prints, only the
+soft ones are capped, the withheld count is stated so a short list is not read as a complete one,
+and each gating flip's position and tokens go into the record. The corpus was then re-run on the
+card and **reproduced the first run exactly** — 4,999/5,245 and the same 24 — which is a third
+determinism reading as well as the recapture.
+
 That last point generalises: **`_snapshot` resolves weights from the primary checkout, which is a
 laptop convention.** On the device, pass `--checkpoint` explicitly to both scripts. Worth making
 the resolver device-aware rather than leaving a flag people must remember.
@@ -165,8 +177,10 @@ the resolver device-aware rather than leaving a flag people must remember.
 
 ## 6. Files
 
-`cuda-all15.json` / `.jsonl`, `cpu-all15.json` / `.jsonl` — the two full-corpus runs, per-episode
-rows written and flushed as each completed. `cuda-0158-run1/run2` — the determinism pair.
+**`confident-flips.json` — the twenty-four failing positions, which is the input to the test
+§2 names.** `cuda-all15-v2.json` / `.jsonl` and `cuda-v2.log` — the recapture that produced it,
+identical to the first run in every figure. `cuda-all15.json` / `.jsonl`, `cpu-all15.json` /
+`.jsonl` — the two full-corpus runs, per-episode rows written and flushed as each completed. `cuda-0158-run1/run2` — the determinism pair.
 `accidental-cpu-0158-run1.*` — the first measurement of the day, kept because it is the evidence
 for the device defect above and because a record that quietly drops its own wrong turn is worth
 less. `cuda-chain.log`, `cpu-chain.log`, `gate5.log` — every flip printed with its recorded
