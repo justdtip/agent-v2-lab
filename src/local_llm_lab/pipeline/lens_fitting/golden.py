@@ -39,8 +39,48 @@ from local_llm_lab.pipeline.live_lens.instruments import LensMaps
 #: did not change at all. ``float16`` has 10 explicit mantissa bits, so 2**-11 is the half-step.
 STORAGE_FLOORS = {"float16": 2.0**-11, "bfloat16": 2.0**-8, "float32": 2.0**-24, "float64": 2.0**-53}
 
-#: The ν fields that must agree for a residual to be attributable to the estimator alone.
+#: What must agree for a residual to be attributable to the estimator alone: the ν blocks, and
+#: within two of them the keys that describe **what was fitted** rather than **how**.
+#:
+#: The narrowing is not a relaxation, it is the fix for a gate that could never pass. Comparing
+#: ``position_weighting`` and ``precision`` whole compares each estimator's own knobs — the exact
+#: fit records ``dim_batch`` and a backward accumulation dtype there, the finite-difference fit
+#: records ``direction_batch`` and has no backward pass at all — so two correct fits of one corpus
+#: differ in those blocks **by construction**. A check that cannot pass is as useless as one that
+#: cannot fail, and this repository has spent two days on the second kind; found by running the
+#: real second operand through it, which is the only way it could have been found.
+#:
+#: What stays compared in those two blocks is everything that decides the fitted quantity: which
+#: positions were selected (the selector fingerprint and the length rule), how they were reduced,
+#: how many there were, and the precision the model actually ran at.
 COMPARABILITY_FIELDS = ("endpoint", "position_weighting", "pair_weighting", "corpus", "precision")
+
+#: Keys compared within a block; a block absent here is compared whole.
+COMPARABLE_KEYS = {
+    "position_weighting": (
+        "sha256",
+        "probe",
+        "rule",
+        "skip_first",
+        "max_seq_len",
+        "upstream_default_path",
+        "source_and_target_tied",
+        "source_reduction",
+        "target_reduction",
+        "n_valid_positions",
+        "seq_len",
+    ),
+    "pair_weighting": ("source_target_pairs", "per_prompt", "n_prompts", "n_skipped"),
+    "precision": (
+        "device",
+        "dtype",
+        "dtypes_observed",
+        "devices_observed",
+        "blocks_measured",
+        "requires_grad",
+        "attn_implementation",
+    ),
+}
 
 
 class NotComparable(ValueError):
@@ -107,10 +147,17 @@ def compare_lenses(reference: LensMaps | dict, candidate: LensMaps | dict) -> li
 
 def assert_estimator_is_the_only_difference(reference_nu: dict, candidate_nu: dict) -> None:
     """Refuse a comparison whose residual would have more than one cause."""
+    def _compared(nu: dict, field: str) -> object:
+        block = nu.get(field)
+        keys = COMPARABLE_KEYS.get(field)
+        if keys is None or not isinstance(block, dict):
+            return block
+        return {key: block[key] for key in keys if key in block}
+
     differing = [
         field
         for field in COMPARABILITY_FIELDS
-        if reference_nu.get(field) != candidate_nu.get(field)
+        if _compared(reference_nu, field) != _compared(candidate_nu, field)
     ]
     if differing:
         raise NotComparable(
@@ -263,6 +310,7 @@ def golden_report(
 
 __all__ = [
     "COMPARABILITY_FIELDS",
+    "COMPARABLE_KEYS",
     "STORAGE_FLOORS",
     "ControlFailed",
     "NotComparable",
