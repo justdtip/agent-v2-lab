@@ -370,3 +370,19 @@ the override resolved into scratch. Two things shared one reader; only one may b
 git-derived primary is now its own function and the checkpoint uses that. The shape is the eighth
 entry's again: a mechanism built for one purpose, reused for another because it was there, carrying
 a behaviour the second purpose never asked for.
+
+---
+
+## Twenty-third: a guard that passed the object it existed to catch, and a fixture that could not fail
+
+**SWE-2's, on the torch train stage.** A guard meant to refuse the multimodal wrapper tested for
+`.model` and `.lm_head`; the wrapper has both, so the guard passed it and the run failed later and
+elsewhere. **A guard that passes the object it exists to catch is worse than none, because its
+silence is read as evidence.** And nothing caught it because every fixture in the stream was built
+from `Gemma3TextConfig`, which saves `architectures: [Gemma3ForCausalLM]`, a config shape no
+registered checkpoint has: the suite exercised a stand-in that differed from the real thing in
+exactly the way that mattered. **A synthetic fixture carries the real artefact's declared type and
+key layout, or the path is untested by construction.** The Chief's own loader tests had the same
+shape, a made-up wrapper type over a Llama text config, and were corrected the same evening with a
+fixture mirrored from the snapshot's headers. It is the fourteenth entry's blind spot (the
+uncached tokenizer) with a different artefact.

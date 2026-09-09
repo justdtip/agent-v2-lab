@@ -1203,15 +1203,26 @@ Three seats were loading the checkpoint three ways: Codex's record companion nam
 baseline named `Gemma3ForCausalLM`, and SWE-2's train stage called `AutoModelForCausalLM` on a
 plain path, which does not load the official multimodal snapshot text-only at all. §16.3 forbids
 the first two in the package and the third is wrong for the checkpoint we have. `local_llm_lab.hf_text`
-is the one loader: `checkpoint_metadata` reads the config and the safetensors headers and loads no
-tensor; a wrapper is detected from the checkpoint's own `text_config` and `language_model.` prefix,
+is the **only** loader, because `AutoModelForCausalLM` on any checkpoint we have builds the
+multimodal wrapper: the official snapshot and the repository's own MLX conversion both declare
+`model_type: gemma3` and a `text_config`, so "plain path" is not a case that exists among the
+registry's entries (SWE-2, a9192a1). `checkpoint_metadata` reads the config and the safetensors
+headers and loads no tensor; a wrapper is detected from the checkpoint's own `text_config` and `language_model.` prefix,
 never from a model name; the text config goes through `AutoConfig.for_model`, the model through
 `AutoModelForCausalLM` with the prefix mapped away; and every non-text prefix in the header must be
 exactly the unexpected-key set, no more and no less. Codex's fail-closed checks are kept and
 generalised: missing, mismatched or errored keys refuse; a text tensor the model did not take or
 whose shape changed refuses; a tied weight that came back as two tensors refuses; a parameter on
 the wrong device or in the wrong dtype refuses. The report is a reading of the loaded object. Seven
-tests on tiny random models, plain and wrapped, with two foreign towers beside the text tower.
+tests on tiny random models, plain and wrapped, with two foreign towers beside the text tower,
+one of them mirroring the official snapshot as it is on disk (`model_type: gemma3`,
+`architectures: [Gemma3ForConditionalGeneration]`, `text_config.model_type: gemma3_text`,
+`language_model.model.*` beside `vision_tower.*`, `__metadata__: {format: pt}`), and one
+proving the MLX conversion is refused by its own `format: mlx`, since nothing in its config
+distinguishes it from the snapshot. Two rules from SWE-2's guard that passed the object it
+existed to catch: **a synthetic fixture carries the real artefact's declared type and key layout,
+or the loader path is untested by construction**; and **a guard that passes the object it
+exists to catch is worse than none, because its silence is read as evidence.**
 Every torch load of a registered checkpoint goes through it: WS-B's baseline, WS-C's stage, WS-A's
 gates. The CUDA memory rung, a `device_map` under `accelerate` instead of a CPU load and a move,
 is deliberately not taken until measured.
@@ -1230,3 +1241,33 @@ are worth knowing as shapes: `Any` in annotations never imported, surviving only
 equal today, which is what stops a later edit truncating a batch in silence. The tree carries about
 75 older findings, mostly line length in records scripts; they are swept in one deliberate WS-E pass
 by one seat, not by incidental edits from four.
+
+### 16.11 The first number that is not by construction
+
+SWE-1, 4d553ef, `agentic-d2-calculate-0158`, the shortest episode of the fifteen, chosen so the box
+could be released: the MLX 4-bit records against CPU bfloat16 through the merged view, teacher
+forced one causal forward per turn, `cache_strategy: none`, `device.pin` first, eager attention,
+83.5 s.
+
+| | |
+|---|---:|
+| argmax agreement | 98 of 103 (0.9515) |
+| flips | 5 |
+| flips at recorded P ≥ 0.99 | 0 of 78 confident positions |
+| flips among the 25 unconfident positions | 5 |
+| chance of that under independence | 8.4e-4 |
+| gate | PASS |
+| peak memory, measured | 7.88 GiB against 7.56 projected from 7.23 GiB of text tensors |
+| top-5 Jaccard, mean and worst | 0.7018, 0.4286 (reported, not gated) |
+
+Every flip sits where a precision difference puts it and none where a mask, position, entry or norm
+defect would. The projection missed by 4.2% in the safe direction, allocator and workspace, with its
+basis stated. What it does not say: one episode of fifteen, 103 emissions of 5,245, and the
+shortest, the same instance whose cheapness produced an earlier calibration error. Two things
+follow. The report now prints every flip with its recorded probability and the episode's count of
+confident positions, because "0 at P ≥ 0.99" cannot be told from a threshold nobody approached
+without that count. And the remaining fourteen are scheduled by what they exercise, not by cost:
+the eleven under twenty minutes next, about 75 minutes; then the four long ones, `update-0028`'s
+2,607-position turn above all, as one announced block, because the sliding window is exercised only
+beyond 1,024 positions and the mask-dispatch control on the tiny model bit only there. They are
+the point of the gate, not its remainder. Full corpus about 324 minutes of CPU box time.

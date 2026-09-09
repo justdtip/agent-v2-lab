@@ -138,3 +138,84 @@ def test_no_shards_and_no_directory_are_refused(tmp_path):
         hf_text.checkpoint_metadata(empty)
     with pytest.raises(FileNotFoundError):
         hf_text.checkpoint_metadata(tmp_path / "absent")
+
+
+@pytest.fixture
+def official_layout(tmp_path):
+    """The real snapshot's shape, mirrored from its headers rather than a stand-in's.
+
+    On disk `google/gemma-3-4b-it` declares `model_type: gemma3`, `architectures:
+    [Gemma3ForConditionalGeneration]`, `text_config.model_type: gemma3_text`, keeps the text
+    tower under `language_model.model.*` beside `vision_tower.*` and `multi_modal_projector.*`,
+    and stamps `__metadata__: {format: pt}`. A fixture that saved a `Gemma3TextConfig` model
+    would declare `Gemma3ForCausalLM` instead, a config shape no registered checkpoint has, and
+    the loader path would be untested by construction (SWE-2, 2026-09-09). The tiny sizes are
+    the only departure, and `AutoModelForCausalLM` on the wrapper config would still build the
+    multimodal class, which is exactly what the loader must not do.
+    """
+    from transformers import AutoModelForCausalLM, Gemma3TextConfig
+
+    torch.manual_seed(0)
+    text_config = Gemma3TextConfig(
+        vocab_size=64,
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=8,
+        max_position_embeddings=64,
+        sliding_window=8,
+        tie_word_embeddings=True,
+    )
+    model = AutoModelForCausalLM.from_config(text_config)
+    state = {
+        hf_text.TEXT_PREFIX + name: tensor
+        for name, tensor in model.state_dict().items()
+        if name != "lm_head.weight"  # tied: the real snapshot does not store it either
+    }
+    state["vision_tower.vision_model.embeddings.patch_embedding.weight"] = torch.zeros(4, 3, 2, 2)
+    state["multi_modal_projector.mm_input_projection_weight"] = torch.zeros(4, 16)
+    root = tmp_path / "official-layout"
+    root.mkdir()
+    safetensors_torch.save_file(state, root / "model.safetensors", metadata={"format": "pt"})
+    (root / "config.json").write_text(
+        json.dumps(
+            {
+                "model_type": "gemma3",
+                "architectures": ["Gemma3ForConditionalGeneration"],
+                "text_config": json.loads(text_config.to_json_string()),
+                "vision_config": {"model_type": "siglip_vision_model", "hidden_size": 4},
+            }
+        )
+    )
+    return root, model
+
+
+def test_the_official_layout_loads_the_text_tower_as_the_causal_lm_not_the_wrapper(
+    official_layout,
+):
+    root, saved = official_layout
+    model, report = hf_text.load_text_causal_lm(root, dtype="float32")
+    assert report["architecture"] == "Gemma3ForCausalLM"
+    assert report["model_type"] == "gemma3_text"
+    assert report["wrapper"] is True and report["safetensors_format"] == ["pt"]
+    assert report["other_prefixes"] == ["multi_modal_projector", "vision_tower"]
+    assert report["tied_keys"] == {"lm_head.weight": "model.embed_tokens.weight"}
+    ids = torch.tensor([[1, 2, 3, 4]])
+    assert torch.allclose(model(ids).logits, saved(ids).logits)
+
+
+def test_the_repositorys_mlx_conversion_is_refused_by_its_own_format(official_layout, tmp_path):
+    """Same architecture, same text_config, same prefix: only `__metadata__` tells them apart."""
+    root, _ = official_layout
+    tensors = safetensors_torch.load_file(root / "model.safetensors")
+    text_only = {k: v for k, v in tensors.items() if k.startswith(hf_text.TEXT_PREFIX)}
+    mlx = tmp_path / "mlx-conversion"
+    mlx.mkdir()
+    safetensors_torch.save_file(text_only, mlx / "model.safetensors", metadata={"format": "mlx"})
+    config = json.loads((root / "config.json").read_text())
+    del config["vision_config"]
+    (mlx / "config.json").write_text(json.dumps(config))
+    with pytest.raises(ValueError, match="format \\['mlx'\\].*another runtime"):
+        hf_text.checkpoint_metadata(mlx)

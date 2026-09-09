@@ -46,14 +46,15 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _headers(shard: Path) -> dict[str, dict]:
+def _headers(shard: Path) -> tuple[dict[str, dict], dict[str, str]]:
+    """One shard's tensor entries and its ``__metadata__``, without reading a tensor."""
     with shard.open("rb") as stream:
         size = stream.read(8)
         if len(size) != 8:
             raise ValueError(f"truncated safetensors header: {shard.name}")
         header = json.loads(stream.read(int.from_bytes(size, "little")))
-    header.pop("__metadata__", None)
-    return header
+    metadata = header.pop("__metadata__", None) or {}
+    return header, metadata
 
 
 def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
@@ -61,7 +62,8 @@ def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
 
     Returns the config, the text config, whether the checkpoint is a wrapper, every tensor's
     header entry, the text tensors keyed as the text model names them, the non-text keys, the
-    storage dtypes seen, the text tower's stored bytes, and a sha256 per file.
+    storage dtypes seen, the safetensors format, the text tower's stored bytes, and a sha256 per
+    file. A format other than PyTorch's is refused here, by name.
     """
     root = Path(path).resolve(strict=True)
     if not root.is_dir():
@@ -72,12 +74,26 @@ def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
         raise ValueError(f"checkpoint has no local safetensors shards: {root}")
     tensors: dict[str, dict] = {}
     hashes = {"config.json": _sha256(root / "config.json")}
+    formats: set[str] = set()
     for shard in shards:
         hashes[shard.name] = _sha256(shard)
-        for name, entry in _headers(shard).items():
+        header, metadata = _headers(shard)
+        formats.add(str(metadata.get("format", "")))
+        for name, entry in header.items():
             if name in tensors:
                 raise ValueError(f"duplicate checkpoint tensor: {name}")
             tensors[name] = entry
+    if formats - {"pt", ""}:
+        # The repository's own MLX conversion declares the same architecture and text_config
+        # as the official snapshot and keeps its tensors under the same prefix, so nothing in
+        # the config distinguishes them; the safetensors metadata does. It is refused by name,
+        # not by a missing-keys puzzle, because the torch path loads the registry entry whose
+        # hf_id is the official snapshot, never a conversion made for another runtime.
+        raise ValueError(
+            f"checkpoint safetensors declare format {sorted(formats - {'pt', ''})}, not a "
+            "PyTorch checkpoint; the torch path loads the official snapshot, not a conversion "
+            f"made for another runtime: {root}"
+        )
     wrapper = "text_config" in config
     if wrapper:
         text = {
@@ -106,6 +122,7 @@ def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
         "other": other,
         "other_prefixes": sorted({name.split(".", 1)[0] for name in other}),
         "storage_dtypes": dtypes,
+        "safetensors_format": sorted(formats),
         "text_bytes": sum(
             math.prod(entry["shape"]) * _BYTES[entry["dtype"]] for entry in text.values()
         ),
@@ -195,6 +212,7 @@ def load_text_causal_lm(
         "other_prefixes": meta["other_prefixes"],
         "unexpected_keys": sorted(unexpected),
         "storage_dtypes": meta["storage_dtypes"],
+        "safetensors_format": meta["safetensors_format"],
         "text_bytes": meta["text_bytes"],
         "checkpoint_text_tensors": len(meta["text"]),
         "model_state_tensors": len(state),

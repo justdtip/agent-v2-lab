@@ -24,7 +24,58 @@ _PROJECTION_NAMES = frozenset(
 )
 
 # Briefing §1.7. Shared by the AST pass and the substring pass so the two cannot drift.
-_FORBIDDEN_MODEL_CONSTANTS = ("36", "2048", "35", "<|im_end|>", "model.model.layers")
+#: The constants of each model family the registry has ever carried, keyed by the registry's own
+#: `family:` field. The rule used to carry the 3B's constants alone, which made it one pivot behind
+#: by construction: the numbers people hardcode are the current model's, and Gemma's never entered
+#: the list (SWE-1, 2026-09-09, whose hardcoded final-layer key "34" passed it). The denylist is
+#: now the union over every family present in `configs/models/`, so it moves when an entry lands
+#: rather than when someone remembers, and a family without a row here fails the test by name.
+#: The 3B's row stays whether or not its entry does: it is the legacy the rule was born for.
+#: Left out on purpose: the sliding window as a bare `1024` (a byte unit in sixteen files) and the
+#: end-of-turn id `106` (a small integer); the marker string carries that assumption instead.
+_FAMILY_MODEL_CONSTANTS: dict[str, tuple[str, ...]] = {
+    "qwen2_5": ("36", "2048", "35", "<|im_end|>", "model.model.layers"),
+    "qwen3_5": ("36", "2048", "35", "<|im_end|>", "model.model.layers"),
+    "gemma3": ("34", "33", "2560", "262208", "<end_of_turn>"),
+}
+#: Model-class name prefixes per family: naming one in a modern source is how §16.3 is actually
+#: violated (a loader that only loads one model), and no constant scanner sees an import.
+_FAMILY_CLASS_PREFIXES: dict[str, tuple[str, ...]] = {
+    "qwen2_5": ("Qwen2",),
+    "qwen3_5": ("Qwen3",),
+    "gemma3": ("Gemma3",),
+}
+
+
+def _registry_families(root: Path) -> set[str]:
+    families: set[str] = set()
+    for path in sorted((root / "configs/models").glob("*.yaml")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("family:"):
+                families.add(line.split(":", 1)[1].strip())
+    return families
+
+
+def _forbidden_model_constants(root: Path) -> tuple[str, ...]:
+    """The union over the registry's families, the 3B's row always included."""
+    families = _registry_families(root) | {"qwen2_5"}
+    unlisted = sorted(families - set(_FAMILY_MODEL_CONSTANTS))
+    if unlisted:
+        raise AssertionError(
+            f"registry families {unlisted} have no row in _FAMILY_MODEL_CONSTANTS; add their "
+            "layer count, last block index, width, vocabulary and end-of-turn marker before the "
+            "entry lands, so the rule is not one pivot behind again"
+        )
+    seen: list[str] = []
+    for family in sorted(families):
+        seen.extend(c for c in _FAMILY_MODEL_CONSTANTS[family] if c not in seen)
+    return tuple(seen)
+
+
+def _forbidden_class_prefixes(root: Path) -> tuple[str, ...]:
+    families = _registry_families(root) | {"qwen2_5"}
+    return tuple(sorted({p for f in families for p in _FAMILY_CLASS_PREFIXES.get(f, ())}))
+
 
 # Characters that may sit next to a banned number without changing what it means: list
 # separators, brackets, quotes, whitespace, and the dash of a range spec such as "1-35" —
@@ -51,6 +102,14 @@ _LEGACY_SOURCE_PATHS = frozenset(
         "src/local_llm_lab/pipeline/transcript.py",
         "src/local_llm_lab/train_expanded.py",
         "src/local_llm_lab/train_grpo.py",
+        # Qwen-era research scripts whose 2048 is a token budget (mlx_lm's prefill step, a
+        # corpus cap, a sweep point) that coincides with the 3B width; surfaced when the walk
+        # widened to scripts/ on 2026-09-09 and sanctioned rather than reworded, because a
+        # token budget is not a model assumption and the scripts are not modern.
+        "scripts/cache_split_diagnostic.py",
+        "scripts/fit_regression_lens.py",
+        "scripts/lens_corpus.py",
+        "scripts/recurrence_exponent_sweep.py",
     }
 )
 
@@ -59,6 +118,11 @@ def _discover_modern_python_sources(root: Path) -> set[Path]:
     """Find source files covered by the modern-model-agnostic rule."""
     candidates = set((root / "src/local_llm_lab").rglob("*.py"))
     candidates.update((root / "research").glob("*.py"))
+    # `scripts/` and the acceptance kit are where this week's code is written; they were
+    # outside the walk, which is where SWE-1's hardcoded depth lived. Records stay out: a
+    # record's script is a record of one run on one model.
+    candidates.update((root / "scripts").rglob("*.py"))
+    candidates.update((root / "research/acceptance").rglob("*.py"))
     excluded = _SANCTIONED_SOURCE_PATHS | _LEGACY_SOURCE_PATHS
     return {path for path in candidates if path.relative_to(root).as_posix() not in excluded}
 
@@ -226,9 +290,7 @@ def _banned_model_assumptions(paths: set[Path], forbidden: tuple[str, ...]) -> l
                     findings.append(f"{path.name}:{node.lineno}:{chain}")
             if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
                 names = {
-                    value
-                    for item in node.elts
-                    if (value := _constant_string(item)) is not None
+                    value for item in node.elts if (value := _constant_string(item)) is not None
                 }
                 if names & _PROJECTION_NAMES:
                     findings.append(f"{path.name}:{node.lineno}:projection-list")
@@ -276,6 +338,28 @@ def _is_projection_name_list(text: str) -> bool:
     """
     cells = [cell.strip() for cell in text.split(",")]
     return len(cells) > 1 and any(cell in _PROJECTION_NAMES for cell in cells)
+
+
+def _banned_model_imports(paths: set[Path], prefixes: tuple[str, ...]) -> list[str]:
+    """Report imports of family-named model classes: `Gemma3ForCausalLM`, `Qwen2Config`, ...
+
+    A loader or a harness that names the class only loads one model, which is the §16.3 failure
+    in its commonest form, and no constant scanner sees an import. `Auto*` classes and config
+    attributes are the model-agnostic route and are not named here.
+    """
+    findings: list[str] = []
+    for path in sorted(paths):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, ast.ImportFrom):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.Import):
+                names = [alias.name.rsplit(".", 1)[-1] for alias in node.names]
+            for name in names:
+                if name.startswith(prefixes):
+                    findings.append(f"{path.name}:{node.lineno}:{name}")
+    return findings
 
 
 def _banned_model_substrings(paths: set[Path], forbidden: tuple[str, ...]) -> list[str]:
@@ -358,6 +442,43 @@ def _hard_coded_probe_layer_defaults(paths: set[Path]) -> list[str]:
             if numeric:
                 findings.append(f"{path.name}:{node.lineno}:{flag}={default}")
     return findings
+
+
+def test_a_hardcoded_current_model_depth_is_reported(tmp_path: Path) -> None:
+    """SWE-1's exact shipped line, which the 3B-only denylist passed (2026-09-09)."""
+    source = tmp_path / "example.py"
+    source.write_text('return_value = readings.get(position, {}).get("34", [])\n')
+    assert _banned_model_assumptions({source}, _FORBIDDEN_MODEL_CONSTANTS) == ["example.py:1:34"]
+    assert "34" in _FORBIDDEN_MODEL_CONSTANTS and "2560" in _FORBIDDEN_MODEL_CONSTANTS
+    assert "36" in _FORBIDDEN_MODEL_CONSTANTS, "the 3B's row stays whether or not its entry does"
+
+
+def test_a_registry_family_without_a_constants_row_fails_by_name(tmp_path: Path) -> None:
+    (tmp_path / "configs/models").mkdir(parents=True)
+    (tmp_path / "configs/models/new.yaml").write_text("name: new\nfamily: llama4\n")
+    with pytest.raises(AssertionError, match="llama4"):
+        _forbidden_model_constants(tmp_path)
+
+
+def test_importing_a_family_named_model_class_is_reported(tmp_path: Path) -> None:
+    source = tmp_path / "example.py"
+    source.write_text(
+        "from transformers import AutoModelForCausalLM, Gemma3ForCausalLM\n"
+        "import transformers.models.qwen2.modeling_qwen2 as q\n"
+    )
+    prefixes = _forbidden_class_prefixes(_REPO_ROOT)
+    assert "Gemma3" in prefixes and "Qwen2" in prefixes
+    assert _banned_model_imports({source}, prefixes) == ["example.py:1:Gemma3ForCausalLM"]
+
+
+def test_no_modern_source_imports_a_family_named_model_class() -> None:
+    root = _REPO_ROOT
+    assert (
+        _banned_model_imports(
+            _discover_modern_python_sources(root), _forbidden_class_prefixes(root)
+        )
+        == []
+    )
 
 
 def test_banned_model_constants_are_limited_to_approved_or_legacy_modules() -> None:
@@ -749,9 +870,7 @@ def test_the_run_lock_wrapper_is_the_module_that_holds_the_import() -> None:
         if isinstance(node, ast.Call) and _attribute_chain(node.func) == "hold_model_run_lock"
     ]
     imports = [
-        node.lineno
-        for node in body
-        if isinstance(node, ast.ImportFrom) and node.module == "mlx_lm"
+        node.lineno for node in body if isinstance(node, ast.ImportFrom) and node.module == "mlx_lm"
     ]
 
     assert acquires and imports, "the wrapper must both acquire and import the loader"
@@ -1027,6 +1146,8 @@ def test_the_process_start_scanner_reports_the_families_and_ignores_lookalikes(t
 _TESTS_THAT_LOAD_MLX = TESTS_THAT_LOAD_MLX
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+#: Derived below the root it needs; see _forbidden_model_constants.
+_FORBIDDEN_MODEL_CONSTANTS = _forbidden_model_constants(_REPO_ROOT)
 
 
 def _import_roots(repo_root: Path) -> tuple[Path, ...]:
@@ -1506,7 +1627,7 @@ def test_a_records_script_that_imports_mlx_lm_without_a_guard_fails_the_rule(tmp
     assert faults and "carries no refusal guard" in faults[0]
 
     guard = (
-        'import sys as _sys\n'
+        "import sys as _sys\n"
         f'if __name__ == "__main__" and "{_RECORD_SENTINEL}" not in _sys.argv:\n'
         '    _sys.exit("refusing to run: a record, not a launcher")\n'
     )
@@ -1645,9 +1766,7 @@ def test_the_any_scope_mlx_set_is_the_pinned_superset_the_collector_needs() -> N
 
     computed = tuple(
         sorted(
-            path.name
-            for path in Path(__file__).parent.glob("*.py")
-            if reaches_at_any_scope(path)
+            path.name for path in Path(__file__).parent.glob("*.py") if reaches_at_any_scope(path)
         )
     )
     assert computed == TESTS_THAT_CAN_REACH_MLX, (
