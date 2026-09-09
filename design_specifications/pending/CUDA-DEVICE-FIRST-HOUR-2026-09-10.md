@@ -6,22 +6,26 @@ come back to the tree. This is the one document that hour runs from, in executio
 with the number it must produce and the laptop figure it is compared against. Every seat's record
 carries its own section in the same shape; this page points at them and fixes the order.
 
-## 0. What the device needs before anything runs
+## 0. What the device needs before anything runs — `lab-device`
 
-| item | how | who |
+One command, five parts, in this order. `uv run lab-device --help` lists them; each writes what it
+found rather than what it was asked.
+
+| step | command | what it does |
 |---|---|---|
-| the repository at `cuda-migration` (WS-A, WS-B merged; WS-C and WS-D merge in before the hour) | `git clone`, `git checkout cuda-migration` | Chief merges, seats push |
-| the environment | `uv sync --extra cuda` installs torch ≥ 2.14, transformers 5.16.1, accelerate, peft, trl, safetensors and the pinned upstream `jlens` (git, 581d398); MLX is not installed and must not be | Chief (pinned tonight) |
-| the checkpoint | `google/gemma-3-4b-it` into the primary checkout's `.cache/huggingface` (`configure_local_cache` sets `HF_HOME` there): the Director's token, or a copy of the laptop's snapshot directory; the repository's `models/` conversions are **not** needed and are refused by the torch loader by name | Director |
-| the registry entry | `gemma3-4b-cuda-bf16`, `hf_id: google/gemma-3-4b-it`; nothing to edit | on main |
-| the records and calibration inputs | in git: the stage-two golden records, `research/acceptance/MANIFEST.md`, Codex's `calibration-token-ids.json` | on the branches |
-| the rendered training data for arm 1 | gitignored; copied from the laptop | Director / SWE-2 |
-| the box discipline | `runlock` works unchanged on Linux (`ps -Ao`, `ru_maxrss` in KB handled); every run under `runlock run --seat <seat> --purpose ... --minutes ... -- <command>` | all |
-| the suite | `uv run pytest` — expect the line "16 test files not collected: MLX is not installed on this box"; that is correct and not a pass of those files | all |
+| clone | `git clone … && git checkout cuda-migration` | the integration branch carries every workstream |
+| install | `uv sync --extra cuda` | torch ≥ 2.14, transformers 5.16.1, accelerate, peft, trl, safetensors and the pinned upstream `jlens` (git, 581d398); MLX is not installed and must not be |
+| token | `uv run lab-device login` | prompts for the Hugging Face token (hidden) and hands it to `huggingface_hub`'s own store under the project cache; this code never keeps it. Do not copy the cache directory between machines; log in on each |
+| weights | `uv run lab-device fetch --dry-run`, then `uv run lab-device fetch [--mode inference\|lora\|full] [ids…]` | for each id (default: Gemma 3 4B, 12B, 27B; Qwen3.5 4B, 9B — Gemma 3 has no 9B) reads the hub's metadata, prints whether it fits the device's R47 budget at 2, 2.5 and 16 bytes per parameter, downloads those that fit under the chosen mode, and refuses an MLX conversion by its format. The registry entry for the 4B is `gemma3-4b-cuda-bf16`; new sizes get entries and a `family` row in the rule test before they are run |
+| data | on the laptop `uv run lab-device pack-data data/<dataset>`; on the device `uv run lab-device verify-data <archive> --dest data` | the rendered rows are untracked and exist once; the archive carries the manifest the train stage requires and a digest per file, and verification refuses a tampered row before the manifest gate |
+| preflight | `LLL_BACKEND=torch uv run lab-device preflight --json outputs/preflight.json --data data/<dataset>` | environment (versions, upstream commit, MLX absent), backend and CUDA devices with memory, determinism pinned before the first CUDA use and read back, every torch-loadable registry checkpoint in the cache with its format and text bytes and a feasibility verdict, the dataset's manifest and splits, git HEAD and tree state, the box window. Every row carries a basis; exit is non-zero on any FAIL and names it. Gate 1 does not start on a failed preflight |
 
 Environment for every run: `LLL_BACKEND=torch`, `LLL_DEVICE=cuda` (or `cuda:N`), and `device.pin(seed, attention="eager")`
 called before the first CUDA use in every process, so `CUBLAS_WORKSPACE_CONFIG` is set before
-cuBLAS initialises; `device.describe()` printed into every record.
+cuBLAS initialises; `device.describe()` printed into every record. Every run under
+`runlock run --seat <seat> --purpose … --minutes … -- <command>`. The suite: `uv run pytest`, and
+expect "16 test files not collected: MLX is not installed on this box", which is correct and not a
+pass of those files.
 
 ## 1. WS-A — the view on the real checkpoint, gates 1–4 (Codex)
 
