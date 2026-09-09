@@ -431,3 +431,63 @@ same index. Both times the command was unchanged, the checkout was unchanged, an
 around it moved. A rule that protects you *given* an assumption about who else is touching the
 index is care wearing a mechanism's clothes; `git commit -- <paths>` does not depend on that
 assumption, which is why it is the one that survives."
+
+## Twenty-fifth: a merge that was already done, and a deletion waiting to be taken silently
+
+The CRO asked me to merge `cuda-ws-d` into `cuda-migration` under their review, the way WS-A's seat
+had been merged, and to confirm the merge-tree was clean against origin's tip first. The confirmation
+is where this entry starts, because the merge does not exist.
+
+`git merge-base cuda-ws-d origin/cuda-migration` returns `5121083`, which *is* `cuda-ws-d`'s tip. The
+branch is zero commits ahead of the integration branch and forty-seven behind it. The merge-tree
+writes `9d3fefa8ee`, which is `origin/cuda-migration`'s own tree, unchanged. There is nothing to
+integrate because WS-D's adapter never travelled on `cuda-ws-d`: it was written on the main line
+(`4383fda` swept the 880-line intermediate in, `805225c` finished it, `1912fa7` split out the seam),
+and it reached `cuda-migration` through `c7cb0da`, an ordinary merge of main. The branch named after
+the seat is a label on a commit the integration branch already contains.
+
+The twenty-fourth entry says of the deletion at `9ae4444`: *"both files are on `cuda-ws-d`, and
+`9ae4444`'s parent has both, so nothing is lost."* That sentence is true and it is the wrong
+reassurance. The files are not preserved *by* `cuda-ws-d`; they are preserved by `cuda-migration`,
+which carries them at the same blob hashes — `50cdbded86` for the adapter, `1c96991409` for its
+suite — and which is the only branch where they are exercised. I ran that suite at
+`origin/cuda-migration`'s tip in a detached worktree: 35 tests, 35 passed, nothing skipped, all four
+adversarial fix markers present in the 975-line file. `tests/test_upstream_ref.py` passes on main,
+3 tests. Every file is where the plan says it should be.
+
+**The defect is in the direction nobody was checking.** `9ae4444` deleted the adapter and its suite
+from main, deliberately and correctly, because the main line takes no CUDA code. The merge base of
+main and `cuda-migration` is that same `5121083`, which still has both files. So relative to the
+base, main deletes two files and `cuda-migration` does not touch them — and git resolves
+delete-against-unmodified by taking the delete, with no conflict and no prompt. I simulated it:
+`git merge-tree --write-tree origin/cuda-migration origin/codex/agent-v2-specs` reports zero
+conflicts and writes a tree whose diff against `cuda-migration` is exactly
+
+```
+D  src/local_llm_lab/pipeline/lens_fitting/upstream.py
+D  tests/test_lens_upstream.py
+```
+
+The next routine merge of main into the integration branch removes WS-D's adapter and its 35 tests
+from the only branch that has them, and reports success while doing it. Nothing warns, because
+nothing is wrong: both sides did what they meant to, and the merge did what a merge does.
+
+**The fix belongs in the merge, not in a note.** When main is next merged into `cuda-migration`,
+restore the two paths inside that merge commit rather than after it:
+
+```bash
+git merge --no-commit origin/codex/agent-v2-specs
+git checkout HEAD -- src/local_llm_lab/pipeline/lens_fitting/upstream.py tests/test_lens_upstream.py
+git commit
+```
+
+Doing it in the merge is what makes it a one-time cost. The merge commit records main's deletion as
+merged while keeping the content, so the base moves past `5121083` and no later merge re-proposes it.
+Restoring afterwards in a second commit leaves the deletion unmerged and the trap re-arms every time.
+
+**The shape.** A branch that is an ancestor of its target looks exactly like a branch that has been
+merged, and both the CRO and I read "the files are on `cuda-ws-d`" as "the work is on `cuda-ws-d`,
+waiting". Asking what a merge *would do*, rather than whether it would conflict, is what turned a
+routine confirmation into the finding: `merge-tree` reporting zero conflicts was the answer to the
+question I was told to ask, and the diff of its written tree was the answer to the one that mattered.
+A clean merge-tree means the merge is unambiguous. It does not mean the merge is harmless.
