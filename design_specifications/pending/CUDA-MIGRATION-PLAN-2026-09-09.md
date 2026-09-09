@@ -1203,15 +1203,26 @@ Three seats were loading the checkpoint three ways: Codex's record companion nam
 baseline named `Gemma3ForCausalLM`, and SWE-2's train stage called `AutoModelForCausalLM` on a
 plain path, which does not load the official multimodal snapshot text-only at all. §16.3 forbids
 the first two in the package and the third is wrong for the checkpoint we have. `local_llm_lab.hf_text`
-is the one loader: `checkpoint_metadata` reads the config and the safetensors headers and loads no
-tensor; a wrapper is detected from the checkpoint's own `text_config` and `language_model.` prefix,
+is the **only** loader, because `AutoModelForCausalLM` on any checkpoint we have builds the
+multimodal wrapper: the official snapshot and the repository's own MLX conversion both declare
+`model_type: gemma3` and a `text_config`, so "plain path" is not a case that exists among the
+registry's entries (SWE-2, a9192a1). `checkpoint_metadata` reads the config and the safetensors
+headers and loads no tensor; a wrapper is detected from the checkpoint's own `text_config` and `language_model.` prefix,
 never from a model name; the text config goes through `AutoConfig.for_model`, the model through
 `AutoModelForCausalLM` with the prefix mapped away; and every non-text prefix in the header must be
 exactly the unexpected-key set, no more and no less. Codex's fail-closed checks are kept and
 generalised: missing, mismatched or errored keys refuse; a text tensor the model did not take or
 whose shape changed refuses; a tied weight that came back as two tensors refuses; a parameter on
 the wrong device or in the wrong dtype refuses. The report is a reading of the loaded object. Seven
-tests on tiny random models, plain and wrapped, with two foreign towers beside the text tower.
+tests on tiny random models, plain and wrapped, with two foreign towers beside the text tower,
+one of them mirroring the official snapshot as it is on disk (`model_type: gemma3`,
+`architectures: [Gemma3ForConditionalGeneration]`, `text_config.model_type: gemma3_text`,
+`language_model.model.*` beside `vision_tower.*`, `__metadata__: {format: pt}`), and one
+proving the MLX conversion is refused by its own `format: mlx`, since nothing in its config
+distinguishes it from the snapshot. Two rules from SWE-2's guard that passed the object it
+existed to catch: **a synthetic fixture carries the real artefact's declared type and key layout,
+or the loader path is untested by construction**; and **a guard that passes the object it
+exists to catch is worse than none, because its silence is read as evidence.**
 Every torch load of a registered checkpoint goes through it: WS-B's baseline, WS-C's stage, WS-A's
 gates. The CUDA memory rung, a `device_map` under `accelerate` instead of a CPU load and a move,
 is deliberately not taken until measured.
