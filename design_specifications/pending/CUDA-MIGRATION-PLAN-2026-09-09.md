@@ -1377,3 +1377,16 @@ keeps, the restore lives inside the merge commit, never after it.
 
 WS-D steps 2 through 6 (declared ν, second moment, position bands, span-conditioned lenses,
 sub-block and multi-target) are device work against `research/records/WSD-DEVICE-CHECKLIST-2026-09-09/`.
+
+### 16.14 Deferred on purpose, so it is not rediscovered
+
+- `probes/patch.py:1232` catches `Exception` around `strip_thinking` and `parse_turn`, which raise
+  only `ActionParseError`; a `TypeError` from a pipeline bug would be scored as the model failing
+  to parse, a programming error entering a record as a measurement about the model. One line and
+  one test. Not fixed now because the probes are deferred and that file's donor-difference core
+  migrates onto the `intervene` API; it is fixed in that migration (D-CRO, inert-guard sweep,
+  `research/records/INERT-GUARD-SWEEP-2026-09-09/`).
+- The inert-guard scanner in `tests/test_repository_rules.py` catches the parseable shapes: an
+  assert that cannot fail, a broad handler that swallows. Whether a present check discriminates
+  is not decidable by parsing; that stays the WS-D record's technique, construct the input the
+  check should fail on and confirm it does.
