@@ -112,6 +112,10 @@ class TorchArchitectureView(ArchitectureViewBase):
         self.tie_word_embeddings = self._lm_head.weight is self._embed_tokens.weight
         config = getattr(text_module, "config", model.config)
         self.config = config.get_text_config() if hasattr(config, "get_text_config") else config
+        if any(kind == "linear_attention" for kind in getattr(self.config, "layer_types", ())):
+            raise NotImplementedError("recurrent architectures remain on the MLX path")
+        if any(bool(getattr(block, "is_linear", False)) for block in self.blocks):
+            raise NotImplementedError("recurrent architectures remain on the MLX path")
         self._logit_softcap = getattr(self.config, "final_logit_softcapping", None)
         self._observing = False
 

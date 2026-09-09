@@ -308,3 +308,38 @@ def test_cache_crop_preserves_upstream_remove_count_semantics(view):
     entry.crop(tokens_to_remove=-3)
     assert entry.offset == 0
     assert not view.cache_trimmable
+
+
+def test_deferred_hybrid_is_refused_not_mislabelled_as_attention():
+    from local_llm_lab.arch_torch import TorchArchitectureView
+
+    model = make_model()
+    model.config.layer_types[0] = "linear_attention"
+    with pytest.raises(NotImplementedError, match="recurrent"):
+        TorchArchitectureView.from_model(model)
+
+
+def test_upstream_gpt2_layout_and_tuple_outputs():
+    from transformers import GPT2Config, GPT2LMHeadModel
+
+    from local_llm_lab.arch_torch import TorchArchitectureView
+
+    torch.manual_seed(19)
+    model = (
+        GPT2LMHeadModel(
+            GPT2Config(
+                vocab_size=64,
+                n_embd=16,
+                n_layer=2,
+                n_head=2,
+                n_positions=64,
+                attn_implementation="eager",
+            )
+        )
+        .float()
+        .eval()
+        .requires_grad_(False)
+    )
+    view = TorchArchitectureView.from_model(model)
+    assert view.layout.path == "transformer"
+    assert set(view.residual_source_agreement([1, 5, 9, 3], range(3)).values()) == {0.0}
