@@ -453,7 +453,56 @@ worktree of `cuda-ws-d` at `9380e74` outside the shared checkout, at `/workspace
 by pushing the branch to the card's own bare repository. Nothing was written into
 `/workspace/agent-v2-lab`'s working tree.
 
-## 10. What follows
+## 10. The 12B smoke row, and the same-anchor control at 48 blocks
+
+Two runs, 52 seconds of card time, `smoke_12b.py`. Gemma 3 12B, 48 blocks, hidden 3,840.
+
+**Memory, measured rather than projected.** Every figure here is per-process allocated, on an idle
+card, at width 1.
+
+| | bf16 | coherent float32 |
+|---|---:|---:|
+| weights loaded | 22.01 GiB | 43.97 GiB |
+| free after load | 72.11 GiB | 38.12 GiB |
+| exact fit, one layer, `dim_batch = 1` | 22.11 GiB peak, 3.9 s | **44.10 GiB peak, 6.0 s** |
+| the VJP control at width 8 | 31.96 GiB peak | 59.01 GiB peak |
+
+**A float32 12B exact fit at width 1 is comfortable**: 44 GiB peak against 95 GiB of card, 38 GiB
+still free, six seconds for one layer and one row. The fitting policy carries to the larger model
+without a memory argument against it. The float32 promotion is the whole of the cost — the tensors
+double and nothing else changes.
+
+**The same-anchor control, in both precisions, width 1 against width 8.** Medians of |term| relative
+to `a₁(x₁)` over eighteen direction-and-cotangent pairs; the identity closes to exactly 0.0 in all
+108 cells.
+
+| | layer | observed | anchor term | arithmetic term |
+|---|---:|---:|---:|---:|
+| native bf16 | 1 | 0.370 | **0.330** | 0.096 |
+| native bf16 | 24 | 0.043 | 0.029 | 0.028 |
+| native bf16 | 47 | 0.022 | 0.033 | 0.014 |
+| float32 | 1 | 4.3e-5 | 2.1e-5 | 6.0e-5 |
+| float32 | 24 | 7.3e-6 | 9.3e-6 | 5.6e-6 |
+| float32 | 47 | 2.3e-6 | 2.8e-6 | 1.2e-6 |
+
+**Coherent float32 is width-stable at 12B scale too**, at every depth, by four to five orders of
+magnitude against the native path. That is the confirmation the float32 fitting policy needed at the
+larger model, and it is the reason this section exists as much as the memory number is.
+
+**In bf16 the anchor term is the larger one at every depth here, layer 1 included** — 0.330 against
+0.096. That is not the 4B's pattern, where layer 1's arithmetic term was the larger. **The two are
+not comparable and the difference must not be read as a depth effect**: the 4B control changed the
+width by 64 and this one by 8, so the schedule perturbation is far smaller here, and the arithmetic
+term is the one that scales with it. What can be said within this model is that the sensitivity falls
+with depth, 37% at layer 1 to 2% at layer 47, and that the anchor accounts for most of it throughout.
+
+*A note on how this section nearly went wrong.* The first run promoted to float32 before the control,
+which cannot answer a question about bf16: in float32 the two anchors barely differ — a relative
+displacement of 4.6e-7 — so both terms vanish by construction and the run would have "shown" width
+stability that its own design guaranteed. The native run was added for that reason, and the script
+now takes the precision as an argument with the trap named in its help text.
+
+## 11. What follows
 
 1. **The width rows**, per the Chief's step 3: the same directions, cotangents and a few steps at
    widths 64 and 256, anchor and forward at that width, with §3.1's anchored-at-width check repeated
@@ -463,7 +512,7 @@ by pushing the branch to the card's own bare repository. Nothing was written int
 3. **The step rule is not a constant.** Its useful value moved by 2⁶ across three layers here, so a
    single `epsilon_scale` for every layer is refuted by this table whatever else is true.
 
-## 11. Provenance
+## 12. Provenance
 
 Card: RTX PRO 6000 Blackwell, determinism pinned, `float32_matmul_precision: highest`,
 `cudnn_deterministic: true`, `deterministic_algorithms: true`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`.

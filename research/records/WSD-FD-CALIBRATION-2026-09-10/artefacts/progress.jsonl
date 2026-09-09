@@ -1,30 +1,11 @@
-{"event": "pinned", "elapsed_s": 1.02, "determinism": "pinned"}
-{"event": "loaded", "elapsed_s": 5.73, "seconds": 4.69, "dtype": "bfloat16", "device": "cuda", "attn": "eager", "checkpoint_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff"}
-{"event": "frozen", "elapsed_s": 5.8, "row_index": 39, "row_id": null, "seq_len": 128, "n_layers": 34, "d_model": 2560, "positions": [8, 127], "repo_layers": [1, 17, 33], "upstream_layers": {"1": 0, "17": 16, "33": 32}, "target_upstream": 33}
-{"event": "wrote", "elapsed_s": 5.8, "file": "manifest.json", "bytes": 2073}
-{"event": "ordinary_forward", "elapsed_s": 6.21, "target_shape": [1, 128, 2560], "dtype": "torch.bfloat16", "norm": 1052475.0, "basis": "measured-here"}
-{"event": "unchanged_residual", "elapsed_s": 6.24, "repo_layer": 1, "width": 1, "position": 8, "bitwise_identical": true, "equal_fraction": 1.0, "max_abs_difference": 0.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 6.26, "repo_layer": 1, "width": 1, "position": 127, "bitwise_identical": true, "equal_fraction": 1.0, "max_abs_difference": 0.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 6.49, "repo_layer": 1, "width": 64, "position": 8, "bitwise_identical": false, "equal_fraction": 0.024383544922, "max_abs_difference": 7680.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 6.73, "repo_layer": 1, "width": 64, "position": 127, "bitwise_identical": false, "equal_fraction": 0.024383544922, "max_abs_difference": 7680.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 7.92, "repo_layer": 1, "width": 256, "position": 8, "bitwise_identical": false, "equal_fraction": 0.03146667406, "max_abs_difference": 4096.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 9.1, "repo_layer": 1, "width": 256, "position": 127, "bitwise_identical": false, "equal_fraction": 0.03146667406, "max_abs_difference": 4096.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 9.12, "repo_layer": 17, "width": 1, "position": 8, "bitwise_identical": true, "equal_fraction": 1.0, "max_abs_difference": 0.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 9.14, "repo_layer": 17, "width": 1, "position": 127, "bitwise_identical": true, "equal_fraction": 1.0, "max_abs_difference": 0.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 9.37, "repo_layer": 17, "width": 64, "position": 8, "bitwise_identical": false, "equal_fraction": 0.084506228566, "max_abs_difference": 2048.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 9.61, "repo_layer": 17, "width": 64, "position": 127, "bitwise_identical": false, "equal_fraction": 0.084506228566, "max_abs_difference": 2048.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 10.8, "repo_layer": 17, "width": 256, "position": 8, "bitwise_identical": false, "equal_fraction": 0.087698362768, "max_abs_difference": 1024.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 11.99, "repo_layer": 17, "width": 256, "position": 127, "bitwise_identical": false, "equal_fraction": 0.087698362768, "max_abs_difference": 1024.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 12.01, "repo_layer": 33, "width": 1, "position": 8, "bitwise_identical": true, "equal_fraction": 1.0, "max_abs_difference": 0.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 12.02, "repo_layer": 33, "width": 1, "position": 127, "bitwise_identical": true, "equal_fraction": 1.0, "max_abs_difference": 0.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 12.26, "repo_layer": 33, "width": 64, "position": 8, "bitwise_identical": false, "equal_fraction": 0.53394472599, "max_abs_difference": 512.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 12.49, "repo_layer": 33, "width": 64, "position": 127, "bitwise_identical": false, "equal_fraction": 0.53394472599, "max_abs_difference": 512.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 13.69, "repo_layer": 33, "width": 256, "position": 8, "bitwise_identical": false, "equal_fraction": 0.554086327553, "max_abs_difference": 512.0, "rows_identical": true}
-{"event": "unchanged_residual", "elapsed_s": 14.88, "repo_layer": 33, "width": 256, "position": 127, "bitwise_identical": false, "equal_fraction": 0.554086327553, "max_abs_difference": 512.0, "rows_identical": true}
-{"event": "source_equals_target", "elapsed_s": 14.9, "width": 1, "bitwise_identical": true, "max_abs_difference": 0.0}
-{"event": "source_equals_target", "elapsed_s": 15.13, "width": 64, "bitwise_identical": true, "max_abs_difference": 0.0}
-{"event": "sign_control", "elapsed_s": 15.22, "repo_layer": 1, "epsilon": 101.5679, "odd_norm": 200383.421875, "even_remainder_norm": 277750.59375, "odd_negates_exactly": true, "unchanged_output_fraction": 0.065893553197}
-{"event": "sign_control", "elapsed_s": 15.3, "repo_layer": 17, "epsilon": 3011.375, "odd_norm": 49218.15234375, "even_remainder_norm": 59571.7578125, "odd_negates_exactly": true, "unchanged_output_fraction": 0.07975769043}
-{"event": "sign_control", "elapsed_s": 15.39, "repo_layer": 33, "epsilon": 8817.745, "odd_norm": 19379.16015625, "even_remainder_norm": 2607.50830078125, "odd_negates_exactly": true, "unchanged_output_fraction": 0.57449644804}
-{"event": "wrote", "elapsed_s": 15.39, "file": "boundary.json", "bytes": 20148}
-{"event": "verdict", "elapsed_s": 15.39, "boundary_holds": false, "unchanged_residual_checks": 18, "source_equals_target_checks": 2, "conclusion": "the hook fed its own unperturbed capture does NOT reproduce the ordinary forward; this is a boundary or schedule failure and every finite-difference reading taken through it is suspect until it is repaired", "failure_count": 12}
+{"event": "loaded_bf16", "elapsed_s": 14.48, "seconds": 13.44, "allocated_gib": 22.01, "checkpoint_sha256": "39172c4124d3470341bbbb25f2926fd97edf68f0fe3a9fa4cde6acb9b7ed2cc6"}
+{"event": "promoted_float32", "elapsed_s": 14.51, "seconds": 0.03, "allocated_gib": 43.966, "free_gib": 38.122, "dtype": "torch.float32", "basis": "measured-here"}
+{"event": "wrapped", "elapsed_s": 14.51, "n_layers": 48, "d_model": 3840, "repo_layers": [1, 24, 47], "upstream_layers": {"1": 0, "24": 23, "47": 46}, "target_upstream": 47}
+{"event": "smoke", "elapsed_s": 20.6, "seconds": 6.02, "peak_gib": 44.098, "free_after_gib": 38.047, "repo_layer": 47, "dim_batch": 1, "d_model": 3840, "forward_batch": 1, "anchor_batch": 1, "basis": "measured-here"}
+{"event": "anchors", "elapsed_s": 21.07, "repo_layer": 1, "anchor_displacement_norm": 0.0005216202698647976, "anchor_norm": 1123.8056640625, "relative_displacement": 4.6415522411514373e-07, "width": 8, "basis": "measured-here"}
+{"event": "layer_done", "elapsed_s": 25.85, "repo_layer": 1, "cells": 18, "peak_gib": 59.014}
+{"event": "anchors", "elapsed_s": 25.85, "repo_layer": 24, "anchor_displacement_norm": 0.01440142560750246, "anchor_norm": 45772.8515625, "relative_displacement": 3.146281063096583e-07, "width": 8, "basis": "measured-here"}
+{"event": "layer_done", "elapsed_s": 29.59, "repo_layer": 24, "cells": 36, "peak_gib": 59.014}
+{"event": "anchors", "elapsed_s": 29.59, "repo_layer": 47, "anchor_displacement_norm": 0.13143666088581085, "anchor_norm": 168655.96875, "relative_displacement": 7.793181697627339e-07, "width": 8, "basis": "measured-here"}
+{"event": "layer_done", "elapsed_s": 32.31, "repo_layer": 47, "cells": 54, "peak_gib": 59.014}
+{"event": "done", "elapsed_s": 32.32, "cells": 54, "max_identity_residual": 0.0, "peak_gib": 59.014}
