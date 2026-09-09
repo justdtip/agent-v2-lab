@@ -363,6 +363,46 @@ split, a changed source is refused before rendering, and the whole thing runs th
 with every added row carrying a basis. The runbook's 12B re-render sentence, on both branches
 since the Chief's forward merge, is what this row runs as a command.
 
+## The width-rows ruling reaches the bridge, 2026-09-09
+
+The WS-D order's width rows (`9380e74`) measured that in bfloat16 the autograd directional
+derivative moves by a median 76% at layer 1 when only the forward's batch width changes, against
+about 1e-5 in float32. There is no width-independent bfloat16 Jacobian at these layers: the map is
+a property of the schedule as much as of the model. Lenses are fitted in float32 from here, and
+captures stay native at width 1 because they are readings of the deployed computation. Three
+consequences land here, laptop only, no card.
+
+**The registry declares the fit precision.** Both CUDA Gemma entries gain
+`probes.lens_fit_dtype: float32` beside the existing `capture_dtype: native`, with the ruling's
+figures in the comment. The two fields answer different questions and the ruling separates them
+deliberately, so they are separate keys with separate validation; an entry that declares nothing
+reads `None`, which is every entry fitted before the ruling.
+
+**ν names what the fit was.** The ruling requires ν to carry `fit_dtype`, `forward_batch` and
+`anchor_batch`. The precision block already carried the dtype the forward was *measured* running
+in, under the key `dtype`, so `fit_dtype` is that measurement under the ruling's name and **not a
+second one**: a fit cannot have been in two precisions, and two keys that could disagree would be
+a defect rather than a record. The two widths are WS-D's own and pass through untouched where the
+fitter records them; a fit predating that work reads `None` for both, so it is visibly undeclared
+rather than assumed to be width 1.
+
+**The bridge refuses on a mismatch and records the path term.** `hook_alignment` gains a fourth
+comparison beside the three model-identity ones: the registry's declaration against the lens's own
+`fit_dtype`. It refuses two ways, each naming the field and both sides, when a declaring registry
+meets a lens whose ν does not say what it was fitted in, and when the two disagree. **Both silent
+is not a refusal**: that is every lens fitted before the ruling, upstream's hosted one included,
+and the record then says the fit precision is undeclared rather than pretending to have checked
+it. Where a float32 lens is read against a native capture, the reading carries the path difference
+as a declared term, the first hour's promoted floor of 1.24% at 64 tokens, marked declared rather
+than measured here. It is absent when there is no path difference to pay for.
+
+Two things this does not do. It does not gate the widths: what a Jacobian is a Jacobian *of* is
+the fitter's gate, and a second copy in the bridge would be a worse one. And it does not change
+the artefacts already in this record: the A1 numbers were read through upstream's hosted lens with
+no declaration passed, which is now recorded as an undeclared fit rather than reinterpreted. By
+this measurement that lens is a schedule-specific object, and A1 at any other layer waits for a
+float32 map, as the order says.
+
 ## Unexecuted
 
 A2 on any real activation. Stage B entirely. Every layer other than 18 for the full readout — the

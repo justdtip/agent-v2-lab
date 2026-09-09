@@ -369,14 +369,104 @@ def dictionary_base(dictionary: JumpReLUDictionary) -> str:
     return base_of_artifact(named)
 
 
-def hook_alignment(dictionary: JumpReLUDictionary, lens: Any, *, base: str | None = None) -> int:
+#: What a float32 lens costs when it is read against a native-precision capture. Declared, not
+#: measured here: it is the first hour's promoted floor, the relative disagreement between a
+#: promoted loop and the bf16 native path at 64 tokens. The width-rows ruling keeps captures
+#: native at width 1 because they are readings of the deployed computation, so this term is a
+#: standing property of every float32-lens-against-native-capture reading and belongs in the
+#: record rather than in a caveat someone has to remember.
+LENS_PATH_TERM = {
+    "term": "float32 lens read against a native capture",
+    "relative": 0.0124,
+    "at": "64 tokens",
+    "basis": "declared: the first hour's promoted floor, not measured by this bridge",
+}
+
+#: The three fields the width-rows ruling requires a lens's nu to carry. Spelled as the fitter
+#: spells them, in nu's own precision block, so there is one name per quantity in the tree.
+FIT_PRECISION_KEYS = ("fit_dtype", "forward_batch", "anchor_batch")
+
+
+def lens_fit_precision(nu: dict | None) -> dict[str, Any]:
+    """The fit precision a lens declares, read from its nu; every field ``None`` when it declares
+    none.
+
+    Reads ``nu["precision"]`` and nothing else. A lens fitted before the ruling carries no such
+    keys, and that is reported as an absence rather than filled in with a default: an assumed
+    ``float32`` here would be the inert kind of check, passing exactly the case it exists to
+    catch.
+    """
+    precision = ((nu or {}).get("precision") or {}) if isinstance(nu, dict) else {}
+    return {key: precision.get(key) for key in FIT_PRECISION_KEYS}
+
+
+def fit_precision_record(
+    nu: dict | None, *, declared: str | None, capture_dtype: str = "native"
+) -> dict[str, Any]:
+    """Compare a lens's declared fit precision with the registry's, and record the path term.
+
+    Refuses two ways, each naming the field and both sides: a registry that declares a fit
+    precision against a lens whose nu does not say what it was fitted in, and a lens whose
+    ``fit_dtype`` is not the declared one. Both silent is **not** a refusal: it is every lens
+    fitted before the ruling, including upstream's hosted one, and the record says the fit
+    precision is undeclared rather than pretending to have checked it. Widths are recorded, never
+    gated here: what a Jacobian is a Jacobian *of* is the fitter's gate to keep.
+    """
+    fit = lens_fit_precision(nu)
+    fit_dtype = fit["fit_dtype"]
+    if declared is not None and fit_dtype is None:
+        raise ValueError(
+            f"the registry declares probes.lens_fit_dtype {declared!r} and this lens's nu carries "
+            "no `fit_dtype`, so it does not say what arithmetic it was fitted in. In bfloat16 the "
+            "derivative depends on the forward's batch width, so an undeclared fit is not "
+            "assumed to be the declared one (WS-D, the width rows)"
+        )
+    if declared is not None and fit_dtype != declared:
+        raise ValueError(
+            f"this lens declares fit_dtype {fit_dtype!r} and the registry declares "
+            f"probes.lens_fit_dtype {declared!r}; a map fitted in one arithmetic is not a map "
+            "fitted in the other"
+        )
+    status = "undeclared" if declared is None and fit_dtype is None else "declared"
+    record: dict[str, Any] = {
+        "declared_by_registry": declared,
+        "capture_dtype": capture_dtype,
+        "status": status,
+        **fit,
+    }
+    if status == "undeclared":
+        record["note"] = (
+            "neither the registry nor the lens declares a fit precision; this reading does not "
+            "say what arithmetic its map was taken in, and upstream's hosted lens is by "
+            "measurement a schedule-specific object (WS-D, the width rows)"
+        )
+    if fit_dtype == "float32" and capture_dtype == "native":
+        record["path_term"] = dict(LENS_PATH_TERM)
+    return record
+
+
+def hook_alignment(
+    dictionary: JumpReLUDictionary,
+    lens: Any,
+    *,
+    base: str | None = None,
+    lens_fit_dtype: str | None = None,
+    nu: dict | None = None,
+) -> int:
     """The lens layer this dictionary reads, refusing a lens that is not of the same model.
 
     Three things are compared and any disagreement refuses: the dictionary's ``model_name``,
     the lens identity's base, and, when the bridge runs from a registry entry, that entry's
     ``base``. Layer and hidden size are checked too, but they are the checks a dictionary
     trained on a different checkpoint of the same architecture passes.
+
+    ``lens_fit_dtype`` is the registry entry's ``probes.lens_fit_dtype`` and ``nu`` the lens's
+    own declaration; together they add the fourth comparison, in
+    :func:`fit_precision_record`, which is what the width rows made necessary: two maps of one
+    model in two arithmetics are two different maps. Callers that name neither get the check
+    they had before, which is why the artefacts already recorded here did not change.
     """
+    fit_precision_record(nu, declared=lens_fit_dtype)
     dict_base = dictionary_base(dictionary)
     identity = getattr(lens, "identity", None)
     if identity is None or not getattr(identity, "base", None):
@@ -728,6 +818,7 @@ def bridge_provenance(
     *,
     dictionary_repo: str,
     dictionary_folder: str,
+    fit_precision: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Every artefact carries this block (R57, R60): what was read, from where, under which conventions."""
     return {
@@ -743,6 +834,7 @@ def bridge_provenance(
             "storage_dtype": list(lens.storage_dtype),
             "layer": int(layer),
             "convention": "maps[L] is the archive's J{L-1}; L x for a row is x @ J.T",
+            "fit_precision": fit_precision,
         },
         "dictionary": {
             "repo": dictionary_repo,

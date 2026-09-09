@@ -268,3 +268,33 @@ def test_a_partial_layer_intersection_is_refused_rather_than_compared(upstream) 
     partial = {layer: matrix for layer, matrix in exact.items() if layer != min(exact)}
     with pytest.raises(ValueError, match="present in one lens only"):
         golden.compare_lenses(exact, partial)
+
+
+# ------------------------------------------------------- the fit precision block in nu
+
+
+def test_nu_names_the_measured_dtype_as_fit_dtype_and_leaves_undeclared_widths_absent():
+    """The ruling's three fields, with no second measurement invented for the first.
+
+    ``fit_dtype`` is the dtype the fit was measured running in, under the name the width-rows
+    ruling gives it; the two widths are the fitter's own and read ``None`` until it records
+    them, so a fit predating that work is visibly undeclared rather than assumed to be width 1.
+    """
+    from types import SimpleNamespace
+
+    measured = adapter._fit_precision_block(
+        SimpleNamespace(precision={"dtype": "float32", "device": "cpu"})
+    )
+    assert measured["fit_dtype"] == "float32"
+    assert measured["forward_batch"] is None and measured["anchor_batch"] is None
+    assert measured["dtype"] == "float32"
+
+    # What the fitter records stands: nothing here overwrites a declared width or dtype.
+    recorded = adapter._fit_precision_block(
+        SimpleNamespace(
+            precision={"dtype": "bfloat16", "fit_dtype": "float32",
+                       "forward_batch": 64, "anchor_batch": 64}  # fmt: skip
+        )
+    )
+    assert recorded["fit_dtype"] == "float32"
+    assert (recorded["forward_batch"], recorded["anchor_batch"]) == (64, 64)
