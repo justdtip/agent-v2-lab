@@ -250,3 +250,243 @@ def test_diagnostic_differences_do_not_overflow_finite_fp32_readings():
     record = edit.diagnostic_record()
     assert record["target_error"][0] == record["achieved"][0] - record["target"][0]
     json.dumps(record, allow_nan=False)
+
+
+def test_summary_is_exact_reduction_of_full_counterexample_and_preserves_edit():
+    encoder, decoder, bias = dictionary()
+    h = torch.tensor([1.5, 1.5, 4.0])
+    records, outputs = {}, {}
+    for mode in ("full", "summary"):
+        edit = SAEIntervention(
+            encoder,
+            decoder,
+            bias,
+            features=(0,),
+            target_values=torch.tensor([3.0]),
+            diagnostic=mode,
+        )
+        outputs[mode] = edit(h)
+        records[mode] = edit.diagnostic_record()
+    full, summary = records["full"], records["summary"]
+    assert torch.equal(outputs["full"], outputs["summary"])
+    assert full["kind"] == "sae_decoder_reencoding"
+    assert summary["kind"] == "sae_decoder_reencoding_summary"
+    for key in ("features", "before", "target", "achieved", "target_error", "basis"):
+        assert summary[key] == full[key]
+    assert "off_target_features" not in summary and "off_target_change" not in summary
+    assert summary["off_target_summary"] == {
+        "nonzero_count": 1,
+        "max_abs": 2.0,
+        "l1": 2.0,
+        "top_changes": [[1, 2.0]],
+    }
+
+
+def test_explicit_full_form_is_identical_to_default():
+    encoder, decoder, bias = dictionary()
+    kwargs = dict(features=(0,), target_values=torch.tensor([3.0]))
+    default = SAEIntervention(encoder, decoder, bias, **kwargs)
+    explicit = SAEIntervention(encoder, decoder, bias, **kwargs, diagnostic="full")
+    h = torch.tensor([1.5, 1.5, 4.0])
+    assert torch.equal(default(h), explicit(h))
+    assert default.diagnostic_record() == explicit.diagnostic_record()
+
+
+@pytest.mark.parametrize("width", [2, 17, 257])
+def test_summary_keeps_only_eight_pairs_with_signed_changes_and_stable_ties(width):
+    # Editing feature zero also moves the other features by these known deltas.
+    # Several magnitudes tie, so ascending feature id is the tie breaker.
+    changes = torch.tensor([1.0] + [(-1.0 if i % 2 else 1.0) * (i % 5) for i in range(1, width)])
+    decoder = torch.zeros(width, width)
+    decoder[:, 0] = changes
+    records = {}
+    for mode in ("full", "summary"):
+        edit = SAEIntervention(
+            lambda h: h,
+            decoder,
+            torch.zeros(width),
+            features=(0,),
+            target_values=torch.tensor([1.0]),
+            diagnostic=mode,
+        )
+        edit(torch.zeros(width))
+        records[mode] = edit.diagnostic_record()
+    full, summary = records["full"], records["summary"]["off_target_summary"]
+    pairs = list(zip(full["off_target_features"], full["off_target_change"], strict=True))
+    expected = sorted(pairs, key=lambda pair: (-abs(pair[1]), pair[0]))[:8]
+    assert summary == {
+        "nonzero_count": sum(change != 0 for _, change in pairs),
+        "max_abs": max(abs(change) for _, change in pairs),
+        "l1": sum(abs(change) for _, change in pairs),
+        "top_changes": [list(pair) for pair in expected],
+    }
+    assert len(summary["top_changes"]) <= 8
+    assert len(records["summary"]["features"]) == 1
+    json.dumps(records["summary"], allow_nan=False)
+
+
+@pytest.mark.parametrize("features", [(0,), (0, 1)])
+def test_zero_off_target_change_is_reported_even_for_empty_complement(features):
+    edit = SAEIntervention(
+        lambda h: h,
+        torch.eye(2),
+        torch.zeros(2),
+        features=features,
+        target_values=torch.ones(len(features)),
+        diagnostic="summary",
+    )
+    edit(torch.ones(2))
+    assert edit.diagnostic_record()["off_target_summary"] == {
+        "nonzero_count": 0,
+        "max_abs": 0.0,
+        "l1": 0.0,
+        "top_changes": [[1, 0.0]] if len(features) == 1 else [],
+    }
+
+
+@pytest.mark.parametrize("mode", ["full", "summary"])
+def test_capture_snapshots_either_sae_diagnostic_form_across_clamp_steps(mode):
+    from types import SimpleNamespace
+
+    from test_torch_capture import TorchCapture, fixture
+
+    view, sink, ids = fixture()
+    encoder, decoder, bias = dictionary()
+    edit = SAEIntervention(
+        encoder,
+        decoder,
+        bias,
+        features=(0,),
+        target_values=torch.tensor([3.0]),
+        diagnostic=mode,
+    )
+    cache = SimpleNamespace(get_seq_length=lambda: 3)
+    with TorchCapture(view, sink, layers=(1,)) as capture:
+        capture.clamp(1, "emitted", edit)
+        capture(ids[:, :1], cache=cache, emitted_positions=[3])
+        first = capture.intervention_record[0]["applications"][0]["diagnostic"]
+        assert first == edit.diagnostic_record()
+        edit(torch.tensor([2.5, 2.5, 4.0]))
+        assert capture.intervention_record[0]["applications"][0]["diagnostic"] == first
+        assert ("off_target_summary" in first) == (mode == "summary")
+        assert ("off_target_change" in first) == (mode == "full")
+        json.dumps(capture.intervention_record, allow_nan=False)
+
+
+@pytest.mark.parametrize("mode", [None, "", "compact", True, []])
+def test_invalid_diagnostic_mode_is_refused_at_construction(mode):
+    encoder, decoder, bias = dictionary()
+    with pytest.raises(ValueError, match="diagnostic"):
+        SAEIntervention(
+            encoder,
+            decoder,
+            bias,
+            features=(0,),
+            target_values=torch.tensor([3.0]),
+            diagnostic=mode,
+        )
+
+
+def test_summary_never_materializes_dictionary_width_python_lists(monkeypatch):
+    width = 65
+    decoder = torch.zeros(3, width)
+    decoder[0, 1] = 1.0
+
+    def encoder(h):
+        return torch.arange(width, dtype=h.dtype) * h[0]
+
+    original = torch.Tensor.tolist
+    converted_sizes = []
+
+    def bounded_list(tensor):
+        converted_sizes.append(tensor.numel())
+        assert tensor.numel() <= 8, "dictionary-width list"
+        return original(tensor)
+
+    monkeypatch.setattr(torch.Tensor, "tolist", bounded_list)
+    edit = SAEIntervention(
+        encoder,
+        decoder,
+        torch.zeros(3),
+        features=(1,),
+        target_values=torch.tensor([1.0]),
+        diagnostic="summary",
+    )
+    edit(torch.zeros(3))
+    assert edit.diagnostic_record()["off_target_summary"]["top_changes"] == [
+        [feature, float(feature)] for feature in range(64, 56, -1)
+    ]
+    assert max(converted_sizes) == 8
+    # Negative control: the same guard detects the full form's width-scaled lists.
+    full = SAEIntervention(
+        encoder,
+        decoder,
+        torch.zeros(3),
+        features=(1,),
+        target_values=torch.tensor([1.0]),
+    )
+    with pytest.raises(AssertionError, match="dictionary-width list"):
+        full(torch.zeros(3))
+
+
+def test_summary_and_full_preserve_identical_replacement_gradients():
+    encoder, decoder, bias = dictionary()
+    results = []
+    for mode in ("full", "summary"):
+        h = torch.tensor([1.5, 1.5, 4.0], requires_grad=True)
+        target = torch.tensor([3.0], requires_grad=True)
+        edit = SAEIntervention(
+            encoder,
+            decoder,
+            bias,
+            features=(0,),
+            target_values=target,
+            diagnostic=mode,
+        )
+        output = edit(h)
+        output.sum().backward()
+        results.append((output, h.grad, target.grad))
+    assert all(torch.equal(a, b) for a, b in zip(*results, strict=True))
+    assert torch.equal(results[1][1], torch.tensor([-2.0, 1.0, 1.0]))
+    assert results[1][2].item() == 3.0
+
+
+def test_summary_preserves_baseline_with_reused_encoder_buffer():
+    encoder, decoder, bias = dictionary()
+    buffer = torch.empty(2)
+
+    def buffered_encoder(h):
+        buffer.copy_(encoder(h))
+        return buffer
+
+    edit = SAEIntervention(
+        buffered_encoder,
+        decoder,
+        bias,
+        features=(0,),
+        target_values=torch.tensor([3.0]),
+        diagnostic="summary",
+    )
+    edit(torch.tensor([1.5, 1.5, 4.0]))
+    diagnostic = edit.diagnostic_record()
+    assert diagnostic["before"] == [1.0]
+    assert diagnostic["achieved"] == [5.0]
+    assert diagnostic["off_target_summary"]["top_changes"] == [[1, 2.0]]
+
+
+def test_summary_l1_overflow_is_refused_without_retaining_stale_evidence():
+    decoder = torch.zeros(3, 3, dtype=torch.float64)
+    decoder[1:, 0] = 1e308
+    kwargs = dict(features=(0,), target_values=torch.ones(1, dtype=torch.float64))
+    bias = torch.zeros(3, dtype=torch.float64)
+    summary = SAEIntervention(lambda h: h, decoder, bias, **kwargs, diagnostic="summary")
+    summary(torch.tensor([1.0, 0.0, 0.0], dtype=torch.float64))
+    with pytest.raises(ValueError, match="L1"):
+        summary(torch.zeros(3, dtype=torch.float64))
+    with pytest.raises(RuntimeError, match="successful"):
+        summary.diagnostic_record()
+    # Full form still reports the individually finite values without an aggregate.
+    full = SAEIntervention(lambda h: h, decoder, bias, **kwargs)
+    full(torch.zeros(3, dtype=torch.float64))
+    assert full.diagnostic_record()["off_target_change"] == [1e308, 1e308]
+    json.dumps(full.diagnostic_record(), allow_nan=False)

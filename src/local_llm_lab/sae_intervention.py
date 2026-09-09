@@ -37,12 +37,18 @@ class SAEIntervention:
     the latest successful diagnostic is retained here, and a failed call clears
     it. Capture can snapshot it via ``diagnostic_record`` at each application.
 
-    The diagnostic includes every unselected feature's re-encoding change. Its
-    size scales with dictionary width; persisting it on every clamped token is a
-    caller's storage decision, not a constant-memory tracing claim.
+    ``diagnostic="full"`` (the default) includes every unselected feature's change.
+    ``diagnostic="summary"`` keeps the selected readings and reduces off-target
+    changes to nonzero count, maximum magnitude, L1 norm and up to eight signed
+    (feature, change) pairs. Ties use increasing feature index; zeros remain when
+    fewer than eight entries change. Summary bounds retained off-target evidence,
+    not transient encoding memory or the number of events accumulated by capture.
     """
 
-    def __init__(self, encoder, decoder, bias, *, features, target_values):
+    def __init__(self, encoder, decoder, bias, *, features, target_values, diagnostic="full"):
+        if not isinstance(diagnostic, str) or diagnostic not in ("full", "summary"):
+            raise ValueError("diagnostic must be 'full' or 'summary'")
+        self._diagnostic_mode = diagnostic
         if not callable(encoder):
             raise ValueError("encoder must be callable")
         if not callable(decoder) and not torch.is_tensor(decoder):
@@ -120,7 +126,7 @@ class SAEIntervention:
             off_change = _vector(
                 achieved_cpu[off_cpu] - before_cpu[off_cpu], "diagnostic off-target change"
             )
-            self._diagnostic = {
+            record = {
                 "kind": "sae_decoder_reencoding",
                 "basis": "measured-here",
                 "features": list(self.features),
@@ -128,9 +134,34 @@ class SAEIntervention:
                 "target": target_cpu.tolist(),
                 "achieved": achieved_cpu[selected_cpu].tolist(),
                 "target_error": target_error.tolist(),
-                "off_target_features": torch.arange(len(z), device=h.device)[mask].cpu().tolist(),
-                "off_target_change": off_change.tolist(),
             }
+            if self._diagnostic_mode == "full":
+                record.update(
+                    {
+                        "off_target_features": torch.arange(len(z), device=h.device)[mask]
+                        .cpu()
+                        .tolist(),
+                        "off_target_change": off_change.tolist(),
+                    }
+                )
+            else:
+                magnitudes = off_change.abs()
+                l1 = magnitudes.sum()
+                if not bool(torch.isfinite(l1)):
+                    raise ValueError("diagnostic off-target L1 norm must be finite")
+                # The complement is in feature-index order. Stable sorting therefore
+                # breaks equal-magnitude ties by global index, including at place eight.
+                top = torch.argsort(magnitudes, descending=True, stable=True)[:8]
+                features = torch.nonzero(off_cpu).flatten()[top].tolist()
+                changes = off_change[top].tolist()
+                record["kind"] = "sae_decoder_reencoding_summary"
+                record["off_target_summary"] = {
+                    "nonzero_count": int(torch.count_nonzero(off_change).item()),
+                    "max_abs": magnitudes.max().item() if off_change.numel() else 0.0,
+                    "l1": l1.item(),
+                    "top_changes": [list(pair) for pair in zip(features, changes, strict=True)],
+                }
+            self._diagnostic = record
         return replacement
 
     def diagnostic_record(self):
