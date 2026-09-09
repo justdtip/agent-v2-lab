@@ -598,3 +598,14 @@ supported nesting location, checking the quantity's meaning and location rather 
 numbers. (B3) One copied median (layer 33, native, the equal-norm random arm) reads 0.313000 against
 0.312953 recomputed; write the declared precision consistently. Laptop only; the technique is the
 audit's — test non-transfer as well as lookup.
+
+**Correction to B1, Chief, 2026-09-10 — Codex's fix review (`WSA-BRIDGE-FIX-REVIEW-2026-09-10`,
+`c55752f`): the ν digest identifies the fitting declaration, not the fitted matrix.** The six prior
+findings are verified closed, each of the ten pairing fields changed and removed independently and
+refused. The new finding is in this ruling: `nu_sha256` hashes the declaration, so two different
+fitted archives produced from one declaration would hash identically and a pairing measured
+against one would license a reading against the other. **Ruled: the pairing key carries the lens
+artefact's own sha256 beside the declaration digest** — declaration identity and artefact identity
+are different things and a pairing is measured against a particular matrix. A pairing missing
+either is unmeasured. Tests: the same declaration with two artefacts is two pairings. SWE-2, laptop,
+before any pairing is registered.
