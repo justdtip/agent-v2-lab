@@ -322,9 +322,57 @@ calls the cause — which is a statement about the instrument's conditioning and
 and it is the reason the float32 fitting policy stands on stability evidence rather than on this
 attribution.
 
-**Not run, and the natural next question:** insert the *same* anchor displacement into the float32
-path. If the float32 derivative also moves 50% for a 0.19% anchor move, the function is genuinely
-that ill-conditioned there; if it does not, the sensitivity is bf16's. Queued.
+### 8.2 The displacement transplanted: the function is ill-conditioned, not the arithmetic
+
+The obvious next question, and it has an answer. Take δ, the anchor move the width change actually
+produced in the native path, and apply the *same* δ in coherent float32 at width one, with no
+schedule change at all. Nine seconds of card time, 108 cells.
+
+| precision | layer | ‖δ‖/‖x‖ | derivative change from δ | from a random δ of equal norm |
+|---|---:|---:|---:|---:|
+| native bf16 | 1 | 0.19% | 0.471 | 1.006 |
+| **float32** | 1 | 0.19% | **1.035** | 0.749 |
+| native bf16 | 17 | 1.5% | 0.585 | 1.560 |
+| **float32** | 17 | 1.5% | **0.697** | 1.277 |
+| native bf16 | 33 | 8.8% | 0.120 | 0.313 |
+| **float32** | 33 | 8.8% | 0.125 | 0.299 |
+
+**The float32 derivative moves as much as the bf16 one, and at layer 1 rather more.** So the answer
+is the second branch: **the function is genuinely that ill-conditioned at early layers, and the
+sensitivity is not bfloat16's**. Read as an amplification — how far the derivative moves per unit of
+anchor movement — it is stark and falls steeply with depth:
+
+| layer | native bf16 | float32 |
+|---:|---:|---:|
+| 1 | 245× | **539×** |
+| 17 | 39× | 46× |
+| 33 | 1.4× | 1.4× |
+
+At the last block the derivative is well conditioned: move the anchor by 8.8% and it moves by 12.5%,
+which is about what a well-behaved map does. At the first block a **0.19%** move of the residual
+changes the directional derivative to the final residual by **about 100%**.
+
+**And it is not a special direction.** A random displacement of identical norm produces a comparable
+or larger change at every layer and both precisions. Any perturbation of that size does this; the map
+near layer 1 simply varies that fast.
+
+**This reframes three earlier readings and settles one.**
+
+- §8.1's "conditioning, not batching" was right, and is now attributed: it is the *function's*
+  conditioning, not the arithmetic's. The Chief's withdrawn "a derivative of the rounding structure"
+  was withdrawn correctly, and the positive claim replacing it is that the model's own map is steep
+  there.
+- It explains why the ladder needed a much smaller step at layer 1 than at layer 33 without appealing
+  to precision. A map whose derivative changes by 100% under a 0.19% move of its input is one whose
+  secant needs a very small step to approximate its tangent, and §6's per-layer minima are that same
+  fact seen through the finite difference.
+- It is a caution the programme needs beyond this workstream. **A J-lens fitted at one anchor does
+  not transport to a nearby anchor at early layers.** A lens read on a capture taken under any
+  different arithmetic — a different batch width, a different precision, a promoted path — is being
+  read at a point it was not fitted at, and at layer 1 an 0.2% difference is enough to change the
+  answer entirely. That is a general statement about early-layer lenses on this model, measured on
+  one row and marked as such.
+
 
 It is the schedule term of the protocol's §3 decomposition as far as this record takes it, and it is
 already enough to justify the ν field added at `1dee10d`: a reading that moves that much between two
