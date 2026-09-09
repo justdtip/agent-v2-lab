@@ -91,7 +91,9 @@ tests, all four adversarial fixes). The D-CRO's device checklist is
 
 | what | must produce | laptop basis |
 |---|---:|---:|
-| FD versus exact, per layer, at the fit's context length | the residual, with the storage floor declared | adapter fixture tests only |
+| FD versus exact on a **declared subset** of rows and positions, the exact side re-run on the same subset, per layer | the residual, with the epsilon and the storage floor declared; no threshold | tiny decoder: 3.6e-3 worst layer at epsilon scale 0.01, halving the step divides it by 3.9, transposed 250x worse |
+| exactness, upstream exact re-run on the same rows | exactly zero | fixture: zero |
+| the three controls, transposed, layer-shifted, wrong-corpus | each disagrees by more than the candidate | fixture: refused otherwise |
 | the orientation check through upstream's transport | passes on the written artefact | fixture |
 
 ## 5. Rules of the hour, learned on the laptop tonight
