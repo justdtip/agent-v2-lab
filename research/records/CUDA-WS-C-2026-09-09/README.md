@@ -173,3 +173,23 @@ as often, and finishes without complaint. Evaluation and save cadence must conve
   ratios inflates by roughly the square root of the module count, an error its own README records.
 - **Deleting the gated-delta modules reaches five places outside the deletion list**, including two
   literal assertions in `test_repository_rules.py` and the MLX training path ruling 5 keeps.
+
+---
+
+## Which tree the tests actually exercised
+
+The shared venv installs `local_llm_lab` from the main checkout, so from this worktree
+`import local_llm_lab` resolves to `/Users/daniel.tipton/Desktop/An app/src/local_llm_lab` unless
+`PYTHONPATH` says otherwise. A run like that reports on code nobody edited: a **new** module fails
+to import, which is loud, but a **changed** one silently resolves to main's version and passes.
+
+Every run recorded here set `PYTHONPATH` to this worktree's `src`, and the imports resolved to:
+
+    /Users/daniel.tipton/worktrees/cuda-ws-c/src/local_llm_lab/__init__.py
+
+`tests/test_import_tree.py` now asserts it, so the next run cannot be wrong about this quietly:
+it passes with the variable set and fails with the path it actually reached and the export that
+fixes it. A guard rather than a line in a record, because the failure it catches is green tests in
+the wrong tree and nothing else in the suite would notice.
+
+**103 tests pass** at this commit, including the whole of `tests/test_repository_rules.py`.
