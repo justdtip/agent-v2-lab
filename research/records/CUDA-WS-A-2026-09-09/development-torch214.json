@@ -1,0 +1,275 @@
+{
+  "source_commit": "0431e0077d79f01f63759622ad042255b224534a",
+  "source_root": "/Users/daniel.tipton/worktrees/cuda-torch-seam",
+  "upstream": {
+    "repository": "neuronpedia/jacobian-lens",
+    "licence": "Apache-2.0",
+    "path": "/Users/daniel.tipton/reference/jacobian-lens",
+    "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "expected_commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "commit_matches_expected": true,
+    "vendored": false
+  },
+  "scope": "small randomly initialized real HF model; not full-checkpoint acceptance",
+  "device": "cpu",
+  "dtype": "float32",
+  "attention": "eager",
+  "threads": 1,
+  "deterministic_algorithms": true,
+  "versions": {
+    "torch": "2.14.0",
+    "transformers": "5.16.1",
+    "numpy": "2.5.2",
+    "pytest": "9.1.1"
+  },
+  "small_model_structure": {
+    "num_layers": 3,
+    "hidden_size": 16,
+    "vocab_size": 64,
+    "attention_spans": [
+      "sliding",
+      "global",
+      "sliding"
+    ],
+    "upstream_source_blocks": [
+      0,
+      1
+    ],
+    "upstream_target_block": 2,
+    "source_residuals": [
+      1,
+      2
+    ],
+    "target_residual": 3,
+    "entry_residual": 0
+  },
+  "development_gate_2": [
+    {
+      "tokens": 64,
+      "normal_max_abs_by_layer": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "broken_mask_max_abs_by_layer": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      }
+    },
+    {
+      "tokens": 1400,
+      "normal_max_abs_by_layer": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "broken_mask_max_abs_by_layer": {
+        "0": 0.0,
+        "1": 0.15618959069252014,
+        "2": 0.1424400806427002,
+        "3": 0.21255925297737122
+      }
+    }
+  ],
+  "development_gates_3_and_4": {
+    "baseline": {
+      "emitted_ids": [
+        25,
+        25,
+        25
+      ],
+      "identity_failures": [],
+      "readout_errors": [
+        1.4901161193847656e-08,
+        0.0,
+        0.0
+      ],
+      "control": null
+    },
+    "controls": [
+      {
+        "emitted_ids": [
+          25,
+          25,
+          25
+        ],
+        "identity_failures": [],
+        "readout_errors": [
+          1.4901161193847656e-08,
+          1.0,
+          1.0
+        ],
+        "control": "skew_after_prefill"
+      },
+      {
+        "emitted_ids": [
+          25,
+          25,
+          25
+        ],
+        "identity_failures": [],
+        "readout_errors": [
+          0.028138965368270874,
+          0.03189246356487274,
+          0.033708177506923676
+        ],
+        "control": "corrupt_residual"
+      }
+    ],
+    "observed_max_error": 1.4901161193847656e-08,
+    "threshold_scope": "observed development distribution only; no checkpoint/CUDA bound"
+  },
+  "missing_readout": {
+    "emitted_ids": [
+      25,
+      25,
+      25
+    ],
+    "identity_failures": [],
+    "readout_errors": [
+      null,
+      null,
+      null
+    ],
+    "control": null
+  },
+  "full_model_structural_metadata": {
+    "num_layers": 34,
+    "hidden_size": 2560,
+    "vocab_size": 262208,
+    "attention_spans": [
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding"
+    ],
+    "upstream_source_blocks": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "upstream_target_block": 33,
+    "source_residuals": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33
+    ],
+    "target_residual": 34,
+    "entry_residual": 0,
+    "device": "meta",
+    "weights_loaded": false
+  },
+  "checkpoint_header_audit": {
+    "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
+    "header_sha256": {
+      "model-00001-of-00002.safetensors": "db8cfcd5085f625253e6ccd7790b4a1bdeae18cb3586355492e783c661376663",
+      "model-00002-of-00002.safetensors": "5d4b4ecbeb8931ed4bef02926673cb407db949c750629d95420b5deee640f0de"
+    },
+    "parameters": {
+      "text": 3880263168,
+      "vision_and_projector": 419816304
+    },
+    "fp32_tensor_gib": {
+      "text": 14.455106735229492,
+      "vision_and_projector": 1.5639376044273376
+    },
+    "basis": "tensor shapes from safetensors headers only; tensor bytes were not read"
+  },
+  "full_checkpoint_gates_2_3_4": "unexecuted",
+  "cuda": "unexecuted",
+  "estimator_rewrite": "not started; gated by full-checkpoint gates 1-4"
+}

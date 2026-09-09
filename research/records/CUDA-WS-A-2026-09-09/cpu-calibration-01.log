@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/Users/daniel.tipton/worktrees/cuda-torch-seam/research/records/CUDA-WS-A-2026-09-09/cpu_gates.py", line 472, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/daniel.tipton/worktrees/cuda-torch-seam/research/records/CUDA-WS-A-2026-09-09/cpu_gates.py", line 393, in main
+    runlock.hold_model_run_lock(session="WS-A CPU bf16 calibration")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/daniel.tipton/worktrees/cuda-torch-seam/src/local_llm_lab/runlock.py", line 1063, in hold_model_run_lock
+    handle = _acquire(
+        command=command, session=session, path=path, check_processes=check_processes
+    )
+  File "/Users/daniel.tipton/worktrees/cuda-torch-seam/src/local_llm_lab/runlock.py", line 913, in _acquire
+    raise RunLockBusy(refusal_for_processes(found))
+local_llm_lab.runlock.RunLockBusy: refusing to load a model: another process on this machine already holds MLX.
+  pid 72019   /opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m pytest tests/ -p no:cacheprovider
+            maps /Users/daniel.tipton/Desktop/An app/.venv/lib/python3.13/site-packages/mlx/lib/libmlx.dylib
+The kernel says these have the MLX library mapped. They may hold no lock at all -- a
+scratch script or a notebook outside this package never takes one -- so there is
+nothing to clear here. Wait for the process above to exit, or stop it deliberately.
