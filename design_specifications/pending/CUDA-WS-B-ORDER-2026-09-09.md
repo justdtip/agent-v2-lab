@@ -151,3 +151,16 @@ on both backends, because only the tool-call id is in its stop set and the strea
 EOS. Relabelling would move a field the MLX records are compared on, so the label stays; add an
 `ended_on_eos` boolean beside the reason on both backends, with a test on each, so a record never
 says a turn was capped when the model ended it. Own pathspec commit, as before.
+
+## Review of `ended_on_eos`, Chief, 2026-09-10 — `49de004`, on `cuda-migration`
+
+**Verdict: passes.** The Chief's own run of the full suite on the tip: 2,676 passed, 10 skipped at
+nine sites for absent worktree artefacts, under the Chief's window at 07:26Z; the torch, sampler
+and state sets 92. Read in full: the fact is computed from the last token consumed against the
+model's own terminator set and changes no stop decision; the turn output stays a three-tuple for
+every existing caller and carries the reason and the fact as attributes; a generator that cannot
+say leaves `None` rather than a guess; the step record and the transcript carry it beside the
+unchanged count-based `truncated`. The builder's flagged choice is right and stands: `truncated`
+is a compared field and stays count-based, so a turn that ends on its terminator exactly at the
+cap reads `truncated: true` beside `ended_on_eos: true`, which is two true statements. Nothing
+further for WS-B on the laptop.
