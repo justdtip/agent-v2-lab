@@ -356,6 +356,94 @@ def fit_finite_difference_jacobian(
     )
 
 
+def combine_fits(fits: Sequence[UpstreamJacobianFit]) -> UpstreamJacobianFit:
+    """Combine fits of the same estimator over disjoint rows, by the weighted mean it already uses.
+
+    The estimator means over prompts and records ``n_prompts``, so three rows fitted in one call and
+    three rows fitted in three calls are the same object: ``sum(J_i * n_i) / sum(n_i)``. That is what
+    makes a declared subset extensible — a run that costs half an hour a row can be met by extension
+    rather than by one long call that loses everything if it dies at the end.
+
+    **It refuses rather than averages** whenever the fits are not the same measurement: a different
+    target, width, source set, position rule, precision or estimator makes the mean a mixture of two
+    quantities, which is the failure the golden comparison's own gate exists to prevent, one level
+    down. The same row fitted twice is refused too — a repeat is an exactness check, not more data,
+    and averaging it would report a doubled ``n`` for one prompt's information.
+    """
+    fits = list(fits)
+    if not fits:
+        raise ValueError("nothing to combine")
+    if len(fits) == 1:
+        return fits[0]
+
+    head = fits[0]
+    for other in fits[1:]:
+        for field, mine, theirs in (
+            ("target_layer", head.target_layer, other.target_layer),
+            ("d_model", head.d_model, other.d_model),
+            ("source layers", sorted(head.jacobians), sorted(other.jacobians)),
+            ("selector", head.selector, other.selector),
+            ("precision", head.precision, other.precision),
+            ("estimator", head.provenance.get("estimator"), other.provenance.get("estimator")),
+            ("epsilon_scale", head.provenance.get("epsilon_scale"),
+             other.provenance.get("epsilon_scale")),
+        ):
+            if mine != theirs:
+                raise ValueError(
+                    f"these fits differ in {field} and their mean would be a mixture of two "
+                    f"quantities rather than one estimate: {mine!r} against {theirs!r}"
+                )
+    seen: dict[int, int] = {}
+    for position, fit in enumerate(fits):
+        for record in fit.per_prompt:
+            index = int(record["index"])
+            if index in seen:
+                raise ValueError(
+                    f"row {index} appears in fit {seen[index]} and fit {position}; a repeated row "
+                    "is an exactness check, not more data, and averaging it would report its "
+                    "information twice"
+                )
+            seen[index] = position
+
+    total = sum(fit.n_prompts for fit in fits)
+    jacobians = {
+        layer: (
+            sum(np.asarray(fit.jacobians[layer], np.float64) * fit.n_prompts for fit in fits) / total
+        ).astype(np.float32)
+        for layer in head.jacobians
+    }
+    epsilon_per_layer: dict[str, dict] = {}
+    for fit in fits:
+        for layer, stats in fit.provenance.get("epsilon_per_layer", {}).items():
+            prior = epsilon_per_layer.get(layer)
+            epsilon_per_layer[layer] = stats if prior is None else {
+                "min": min(prior["min"], stats["min"]),
+                "max": max(prior["max"], stats["max"]),
+                "mean": (prior["mean"] * (len(fits) - 1) + stats["mean"]) / len(fits),
+            }
+    return UpstreamJacobianFit(
+        jacobians=jacobians,
+        target_layer=head.target_layer,
+        n_prompts=total,
+        d_model=head.d_model,
+        per_prompt=[record for fit in fits for record in fit.per_prompt],
+        skipped=[record for fit in fits for record in fit.skipped],
+        elapsed_s=round(sum(fit.elapsed_s for fit in fits), 3),
+        provenance={
+            **head.provenance,
+            "epsilon_per_layer": epsilon_per_layer,
+            "combined_from": [
+                {"n_prompts": fit.n_prompts, "rows": [int(r["index"]) for r in fit.per_prompt],
+                 "elapsed_s": fit.elapsed_s}
+                for fit in fits
+            ],
+            "combined_rule": "sum(J_i * n_i) / sum(n_i), the estimator's own per-prompt weighting",
+        },
+        precision=dict(head.precision),
+        selector=dict(head.selector),
+    )
+
+
 def _perturbation(base: Any, position: int, step: float, columns: Any):
     """A forward hook that replaces the block's output with the base residual, perturbed.
 
@@ -378,5 +466,6 @@ __all__ = [
     "CAPTURE_DTYPES",
     "DEFAULT_EPSILON_SCALE",
     "EPSILON_RULE",
+    "combine_fits",
     "fit_finite_difference_jacobian",
 ]

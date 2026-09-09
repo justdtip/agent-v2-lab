@@ -280,3 +280,75 @@ def test_the_golden_gate_refuses_two_fits_that_ran_different_arithmetic(exact, u
     with pytest.raises(golden.NotComparable, match="precision"):
         golden.assert_estimator_is_the_only_difference(exact_nu, adapter.declare_nu(promoted, **kw))
     assert "capture_dtype" in golden.COMPARABLE_KEYS["precision"]
+
+
+# ------------------------------------------------ combining fits, so a declared subset extends
+
+
+def _fd_rows(upstream, rows, **kwargs):
+    return fit_finite_difference_jacobian(
+        TinyLensModel(), rows, max_seq_len=SEQ_LEN, upstream=upstream,
+        **{"direction_batch": D_MODEL, **kwargs},
+    )
+
+
+def test_three_rows_in_one_call_and_in_three_calls_are_the_same_fit(upstream) -> None:
+    """The property the Chief's extension rule rests on: the estimator means over prompts, so a
+    subset met by extension is the subset met in one run."""
+    from local_llm_lab.pipeline.lens_fitting.finite_difference import combine_fits
+
+    rows = make_rows(count=3)
+    together = _fd_rows(upstream, rows)
+    apart = combine_fits([_fd_rows(upstream, [row]) for row in rows])
+
+    assert apart.n_prompts == together.n_prompts == 3
+    assert [r["index"] for r in apart.per_prompt] == [r["index"] for r in together.per_prompt]
+    for layer in together.jacobians:
+        np.testing.assert_allclose(apart.jacobians[layer], together.jacobians[layer],
+                                   rtol=1e-6, atol=1e-7)
+
+
+def test_the_weighting_is_by_prompt_count_and_not_by_fit(upstream) -> None:
+    from local_llm_lab.pipeline.lens_fitting.finite_difference import combine_fits
+
+    rows = make_rows(count=3)
+    two = _fd_rows(upstream, rows[:2])
+    one = _fd_rows(upstream, rows[2:])
+    combined = combine_fits([two, one])
+
+    assert combined.n_prompts == 3
+    assert combined.provenance["combined_from"] == [
+        {"n_prompts": 2, "rows": [0, 1], "elapsed_s": two.elapsed_s},
+        {"n_prompts": 1, "rows": [2], "elapsed_s": one.elapsed_s},
+    ]
+    expected = {
+        layer: (two.jacobians[layer].astype(np.float64) * 2
+                + one.jacobians[layer].astype(np.float64)) / 3
+        for layer in two.jacobians
+    }
+    for layer, value in expected.items():
+        np.testing.assert_allclose(combined.jacobians[layer], value.astype(np.float32),
+                                   rtol=1e-6, atol=1e-7)
+
+
+def test_fits_that_are_not_the_same_measurement_are_refused_by_the_field_that_differs(upstream):
+    """The golden gate's rule one level down: a mean over two different quantities is neither."""
+    from local_llm_lab.pipeline.lens_fitting.finite_difference import combine_fits
+
+    rows = make_rows(count=2)
+    base = _fd_rows(upstream, rows[:1])
+    with pytest.raises(ValueError, match="epsilon_scale"):
+        combine_fits([base, _fd_rows(upstream, rows[1:], epsilon_scale=0.02)])
+    with pytest.raises(ValueError, match="source layers"):
+        combine_fits([base, _fd_rows(upstream, rows[1:], source_layers=[0])])
+    with pytest.raises(ValueError, match="precision"):
+        combine_fits([base, _fd_rows(upstream, rows[1:], capture_dtype="promoted-float32")])
+
+
+def test_a_repeated_row_is_refused_because_a_repeat_is_not_more_data(upstream) -> None:
+    from local_llm_lab.pipeline.lens_fitting.finite_difference import combine_fits
+
+    one = _fd_rows(upstream, make_rows(count=1))
+    with pytest.raises(ValueError, match="row 0 appears in fit 0 and fit 1"):
+        combine_fits([one, _fd_rows(upstream, make_rows(count=1))])
+    assert combine_fits([one]) is one, "one fit combines to itself without copying"
