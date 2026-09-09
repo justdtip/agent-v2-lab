@@ -359,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             per_episode=per_episode,
             reference=reference,
             readings=readings,
+            spreads=spreads,
         )
 
     peak = _peak_gib(target)
