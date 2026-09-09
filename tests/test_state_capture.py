@@ -242,3 +242,33 @@ def test_resuming_after_a_partial_shard_does_not_overwrite_it(tmp_path) -> None:
     for cell in after:
         path = tmp_path / f"residuals-{cell['shard']:05d}.pt"
         assert hashlib.sha256(path.read_bytes()).hexdigest() == cell["shard_sha256"]
+
+
+def test_the_summary_reports_what_was_asked_for_and_not_only_what_was_written(tmp_path) -> None:
+    """Method entry thirty-four's coverage rule, applied to this module's own verdict.
+
+    A summary saying how many cells were written, and not how many were asked for, cannot tell a
+    complete pass from a truncated one — and both read as success. The capture pass is the place
+    that matters most, because a partial capture set produces a probe fitted on a subset nobody
+    declared.
+    """
+    rows = [_row(step=i) for i in range(3)]
+    decisions = [
+        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        for i, r in enumerate(rows)
+    ]
+    corpus = capture.rows_by_decision(rows)
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c",
+                                   decoding="greedy", shard_size=2)
+
+    partial = capture.capture_decisions(decisions=decisions[:2], corpus=corpus,
+                                        forward=_forward(), target=target)
+    assert partial == {**partial, "requested": 2, "captured": 2, "outstanding": 0, "complete": True}
+
+    # Asked for all three against a directory holding two: complete only once the third is written.
+    full = capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                                     target=target)
+    assert full["requested"] == 3
+    assert full["already_present"] == 2
+    assert full["captured"] == 1
+    assert full["outstanding"] == 0 and full["complete"] is True

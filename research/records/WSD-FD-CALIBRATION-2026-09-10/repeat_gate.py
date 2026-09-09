@@ -186,8 +186,21 @@ verdict = {
     "float32_boundary_holds": all(v["bitwise_identical"] for v in boundary.values()),
     "passes": all(r["against_saved_map"]["relative_frobenius_difference"] == 0.0
                   for r in rows_out.values()),
+    # The set the verdict was computed over, per method entry thirty-four. This gate covers the two
+    # layers that have maps, not the model: "the exact estimator reproduces itself" is true here of
+    # repo layers 1 and 33 on one row, and a reader who takes it for the estimator would be taking
+    # more than was measured.
+    "coverage": {
+        "repo_layers_checked": sorted(REPO_LAYERS),
+        "repo_layers_in_model": n_layers,
+        "rows": 1,
+        "positions_per_row": 2,
+        "note": "two layers of the model, one row, the two positions the maps were fitted over; "
+                "the claim is about those maps and not about the estimator in general",
+    },
     "by_layer": rows_out,
 }
 (OUT / "repeat-gate.json").write_text(json.dumps(verdict, indent=2, sort_keys=True) + "\n")
 emit("verdict", executed=True, passes=verdict["passes"],
-     float32_boundary_holds=verdict["float32_boundary_holds"])
+     float32_boundary_holds=verdict["float32_boundary_holds"],
+     repo_layers_checked=sorted(REPO_LAYERS), repo_layers_in_model=n_layers, rows=1)
