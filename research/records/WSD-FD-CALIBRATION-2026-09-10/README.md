@@ -79,7 +79,34 @@ difference of 76.4 at the target. Every row of each batch still agrees with ever
 So the model's own forward is not batch-invariant in bf16 — the same tokens through the same frozen
 weights on the same card give different block outputs at different batch widths. This is what a
 kernel that chooses its reduction tiling by batch size does, and a 34-block residual stack amplifies
-it. **The hook is not implicated, and nothing about the hook needs repairing.**
+it.
+
+*This section first concluded "the hook is not implicated, and nothing about the hook needs
+repairing", and that was wider than what had been measured. At widths 64 and 256 the hook had been
+fed a capture made at width **one**, so a hook defect at width > 1 was never separable from the
+forward's own batch-dependence: the hook's behaviour at width was untested, not exonerated. Worse,
+`batch_invariance.py` carried a `hook_is_implicated` field computed as `not all(...) and False`,
+which is false whatever the rows say — a verdict that cannot be true, written during the
+investigation of reporters that cannot fail, and caught by Codex's file-only review through the
+Chief. The field is removed rather than repaired, because this script runs no hook and has no
+evidence about one. §3.1 measures the question properly.*
+
+### 3.1 The check that can fail, and does: anchoring at the width it replays at
+
+Feeding the hook a capture made at the **same** width it replays at puts the forward's
+batch-dependence on both sides of the comparison, where it cancels. What is left is a test of the
+hook alone, and it can fail — the anchored-at-one rows in the same run, at the same widths, do fail.
+
+| | anchored at width 1 | anchored at the replay width |
+|---|---|---|
+| width 1 | **bitwise identical**, 3 layers × 2 positions | — (the same check) |
+| width 64 | differs; 2.4%–53% of components equal | **bitwise identical**, 3 layers × 2 positions |
+| width 256 | differs; 3.2%–55% of components equal | **bitwise identical**, 3 layers × 2 positions |
+
+Twelve anchored-at-width checks, zero failures, and eighteen anchored-at-one rows that report rather
+than gate. **The hook is now measured sound at every width tested**, and the sentence above is a
+computed verdict rather than an inference: the same script, in the same run, produces both failing
+and passing rows, so the passing ones mean something.
 
 ## 4. What this means for the golden test, which is the reason it matters
 
@@ -119,7 +146,100 @@ The protocol's §6 table sends an unchanged-residual failure to "repair or local
 derivative interpretation". It is localized: the seam is the batch schedule, not the hook, and the
 repair is to match the widths rather than to change the hook.
 
-## 6. Provenance
+## 6. §4 at width one: the matched ladder, and the answer
+
+`ladder.py`, under the Chief's ruling that the matched pair runs at width 1 throughout — anchor,
+autograd and each perturbed forward all at width one, which is the ordinary forward and the
+canonical function, so no schedule term enters. One source position, target summed over the selected
+positions, so the check is directional and is not divided by positions it never touched. Six
+directions (four coordinate, two dense) and three cotangents (one coordinate, two dense), all seeded
+and fixed before any number was read. The scalar identity is `a = (Jᵀw)ᵀv` from one VJP against
+`d_h = wᵀ{F(x+hv) − F(x−hv)}/(2h)`, and the ladder is `h₀·2⁻ᵏ` where `h₀` is the estimator's current
+step. 864 cells, 28 seconds of card time.
+
+**Median relative error `|d_h − a| / |a|` over the eighteen direction-and-cotangent pairs:**
+
+| precision | layer | k=0 | k=2 | k=4 | k=6 | k=8 | k=10 | k=12 | k=14 | k=16 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| native bf16 | 1 | 0.99 | 1.04 | 1.62 | 2.06 | 5.38 | 17.2 | 134 | 543 | **1.00** |
+| native bf16 | 17 | 1.14 | 0.33 | 0.21 | 0.86 | 2.97 | 27.5 | | | |
+| native bf16 | 33 | 0.113 | **0.053** | 0.099 | 0.44 | 1.36 | 2.04 | | | |
+| float32 | 1 | 0.98 | 0.93 | 0.65 | 0.15 | 1.1e-2 | **4.3e-3** | 6.0e-3 | 1.9e-2 | 0.16 |
+| float32 | 17 | 1.29 | 0.35 | 3.2e-2 | 1.9e-3 | **5.8e-4** | 1.9e-3 | | | |
+| float32 | 33 | 8.1e-2 | 1.3e-2 | 8.0e-4 | **8.6e-5** | 1.2e-4 | 7.0e-4 | | | |
+
+**Float32 has a useful interval at every layer tested, and it is a proper one** — a minimum with
+neighbours on both sides within a factor of about three, which is truncation error falling and
+rounding error rising, meeting. It sits at k=6 at layer 33, k=8 at layer 17 and k=10 at layer 1: the
+shallower the source, the smaller the step it needs and the looser its best agreement, 8.6e-5 to
+4.3e-3 across the three. That is the protocol's "coherent float32 FD converges to coherent float32
+AD": the tested float32 local derivatives are supported.
+
+**Native bf16 has no useful interval at any layer tested.** Its best cell anywhere is 5.3% at layer
+33, and at layer 1 the error only grows as the step shrinks. It is squeezed from both sides at once
+and the two sides overlap.
+
+**The squeeze, measured directly rather than inferred.** The fraction of target components that come
+back **exactly equal** between the two arms, before any reduction:
+
+| precision | layer | k=0 | k=4 | k=8 | k=10 | k=16 |
+|---|---:|---:|---:|---:|---:|---:|
+| native bf16 | 33 | 0.004 | 0.063 | 0.399 | 0.534 | |
+| native bf16 | 1 | 0.001 | 0.004 | 0.008 | 0.008 | **1.000** |
+| float32 | any | 0.000 | 0.000 | 0.000 | 0.000 | ≤0.003 |
+
+At layer 1 in bf16, by k=16 **every** target component is bitwise identical between `F(x+hv)` and
+`F(x−hv)`. The difference is exactly zero, so `d_h` is exactly zero and the relative error is exactly
+1.00 — which is why the bf16 row above stops falling and pins there. The response has been rounded
+away in its entirety.
+
+This is the quantity the Director's audit said the zero-column count could not reach: not whether an
+aggregated column vanished, but what fraction of the individual responses did, before aggregation.
+It is now measured, and the answer is that in bf16 it goes to one.
+
+The input side is never the problem: the fraction of perturbed coordinates that did not move is
+**0.000 at every cell, both precisions, every step**. The displacement always lands; the loss is
+downstream.
+
+## 7. What this says about the golden test
+
+**At the step it used, in the precision it used, the finite-difference estimator does not estimate
+the derivative in any direction tested — and in bf16 no step exists at which it does.** The original
+step k=0 gives about 100% relative error at layer 1 in *both* precisions, so the step alone was
+already far too large, independent of precision; and bf16 cannot escape by shrinking, because the
+response is rounded away before the truncation error is gone.
+
+Two of the protocol's §6 rows fire together, which it explicitly allows:
+
+- *float32 error improves greatly as the step shrinks* → the original step carried substantial
+  truncation or nonlinear error. Calibrate a smaller interval; do not infer a universal step.
+- *bf16 loses its useful interval while float32 retains one* → precision limits native finite
+  differences at these scales. Keep autograd as the sensitivity instrument and report native finite
+  differences as unresolved.
+
+**The golden residual is therefore not evidence about the model.** It is the sum of a step far
+outside any useful interval and a precision that has none.
+
+**What this does not establish.** One row, one source position, six directions, three cotangents,
+three layers. It does not refute saturation: "substantial truncation or nonlinear error at the
+original step" is what k=0 shows, and a strongly curved response is one way to get it. What it
+removes is the need to reach for a mechanism at all to explain the disagreement, and it supplies the
+depth ordering directly — the k=0 error is worst at layer 1 and mildest at layer 33, the same
+ordering as the full map's compression — measured at a matched schedule and one position, so it is
+not the batch artefact of §3 either. The step from these eighteen scalar checks to the 84,480-column
+map is an inference and is marked as one.
+
+## 8. What follows
+
+1. **The width rows**, per the Chief's step 3: the same directions, cotangents and a few steps at
+   widths 64 and 256, anchor and forward at that width, with §3.1's anchored-at-width check repeated
+   first. That measures the schedule term after the matched answer exists rather than inside it.
+2. **No further full bf16 map is justified.** The instrument has no useful interval in that
+   precision, so another map would measure the same floor at more expense.
+3. **The step rule is not a constant.** Its useful value moved by 2⁶ across three layers here, so a
+   single `epsilon_scale` for every layer is refuted by this table whatever else is true.
+
+## 9. Provenance
 
 Card: RTX PRO 6000 Blackwell, determinism pinned, `float32_matmul_precision: highest`,
 `cudnn_deterministic: true`, `deterministic_algorithms: true`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`.

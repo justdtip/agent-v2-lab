@@ -117,16 +117,23 @@ for width in WIDTHS:
          else first_divergence["max_abs_difference"],
          final_mean_abs=[r for r in rows if r["width"] == width][-1]["mean_abs_difference"])
 
+invariant = all(r["bitwise_identical"] for r in rows)
 verdict = {
-    "forward_is_batch_invariant": all(r["bitwise_identical"] for r in rows),
-    "hook_is_implicated": not all(r["bitwise_identical"] for r in rows) and False,
+    "forward_is_batch_invariant": invariant,
+    # There was a `hook_is_implicated` field here and it read
+    # `not all(r["bitwise_identical"] for r in rows) and False`. The trailing `and False` makes it
+    # false whatever the rows say: a verdict that cannot be true, written during the investigation
+    # of reporters that cannot fail. It is removed rather than repaired, because this script has no
+    # evidence about the hook at all — it runs no hook. Whether the hook is sound at width > 1 is
+    # measured by `boundary.py`'s anchored-at-width check, which can fail, and nothing here should
+    # be read as answering it.
+    "what_this_measures": "the unhooked forward only; this script says nothing about the hook",
     "conclusion": (
-        "the model's own forward is batch-invariant here, so the width-dependence boundary.py "
-        "found is the hook's and the hook is what to repair"
-        if all(r["bitwise_identical"] for r in rows) else
+        "the model's own forward is batch-invariant across the tested widths"
+        if invariant else
         "the model's own forward is NOT batch-invariant: the same tokens through the same weights "
-        "give different block outputs at different batch widths, with no hook present. The hook is "
-        "not implicated, and batch width is part of the function any estimator differentiates."
+        "give different block outputs at different batch widths, with no hook present, so batch "
+        "width is part of the function any estimator differentiates"
     ),
 }
 (OUT / "batch-invariance.json").write_text(

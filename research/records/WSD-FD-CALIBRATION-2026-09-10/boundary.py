@@ -182,36 +182,61 @@ compute_device = reference.device
 basis_columns = torch.eye(d_model, dtype=torch.float32, device=compute_device)
 
 # ------------------------------------------------- 1. the unchanged-residual check, per width
-for repo_layer, layer in sources.items():
-    for width in WIDTHS:
-        columns = basis_columns[:width]
-        for position in positions:
-            with torch.no_grad():
-                handle = wrapped.layers[layer].register_forward_hook(
-                    _perturbation(base[layer], position, 0.0, columns)
-                )
-                try:
-                    with ActivationRecorder(wrapped.layers, at=[target]) as inner:
-                        wrapped.forward(ids.expand(width, -1))
-                        observed = inner.activations[target].detach()
-                finally:
-                    handle.remove()
-            entry = {
-                "check": "unchanged_residual",
-                "repo_layer": repo_layer,
-                "upstream_layer": layer,
-                "width": width,
-                "position": position,
-                **compare(reference.expand_as(observed), observed, mask),
-            }
-            results.append(entry)
-            if not entry["bitwise_identical"]:
-                failures.append(entry)
-            emit("unchanged_residual", repo_layer=repo_layer, width=width, position=position,
-                 bitwise_identical=entry["bitwise_identical"],
-                 equal_fraction=entry["equal_fraction"],
-                 max_abs_difference=entry["max_abs_difference"],
-                 rows_identical=entry["rows_identical_to_each_other"])
+#
+# Two checks per width, and they answer different questions. The **anchored-at-one** check feeds the
+# hook a capture made by a batch-one forward, which is what the estimator does today; at width > 1 it
+# cannot separate a hook defect from the forward's own batch-dependence, so its failure is not
+# evidence about the hook. The **anchored-at-width** check captures at the same width it replays at
+# and compares against that width's own unhooked target, so the forward's batch-dependence is common
+# to both sides and cancels: it is a test of the hook alone, and it can fail. The protocol's "repeat
+# the unchanged-residual check at each actual batch width" is this second one.
+for width in WIDTHS:
+    columns = basis_columns[:width]
+    batched = ids if width == 1 else ids.expand(width, -1)
+    with torch.no_grad():
+        with ActivationRecorder(wrapped.layers, at=[*sources.values(), target]) as recorder:
+            wrapped.forward(batched)
+        at_width = {layer: recorder.activations[layer][:1].detach().clone()
+                    for layer in (*sources.values(), target)}
+        reference_at_width = recorder.activations[target].detach().clone()
+    for repo_layer, layer in sources.items():
+        for anchor, anchor_base, against in (
+            ("one", base[layer], reference),
+            ("width", at_width[layer], reference_at_width),
+        ):
+            if anchor == "width" and width == 1:
+                continue  # the same check; running it twice would pad the count, not the evidence
+            for position in positions:
+                with torch.no_grad():
+                    handle = wrapped.layers[layer].register_forward_hook(
+                        _perturbation(anchor_base, position, 0.0, columns)
+                    )
+                    try:
+                        with ActivationRecorder(wrapped.layers, at=[target]) as inner:
+                            wrapped.forward(batched)
+                            observed = inner.activations[target].detach()
+                    finally:
+                        handle.remove()
+                entry = {
+                    "check": "unchanged_residual",
+                    "anchor": anchor,
+                    "repo_layer": repo_layer,
+                    "upstream_layer": layer,
+                    "width": width,
+                    "position": position,
+                    **compare(against.expand_as(observed), observed, mask),
+                }
+                results.append(entry)
+                # Only the anchored-at-width check is evidence about the hook, so only it gates.
+                # The anchored-at-one rows are reported and are not failures: they measure the
+                # estimator's current schedule, which is the finding, not a defect in the hook.
+                if anchor == "width" and not entry["bitwise_identical"]:
+                    failures.append(entry)
+                emit("unchanged_residual", anchor=anchor, repo_layer=repo_layer, width=width,
+                     position=position, bitwise_identical=entry["bitwise_identical"],
+                     equal_fraction=entry["equal_fraction"],
+                     max_abs_difference=entry["max_abs_difference"],
+                     rows_identical=entry["rows_identical_to_each_other"])
 
 # --------------------------------- 2. source equals target: the hook must write what it is given
 for width in (1, 64):
@@ -294,16 +319,21 @@ for repo_layer, layer in sources.items():
 
 verdict = {
     "boundary_holds": not failures,
+    "gated_on": "the anchored-at-width rows only; anchored-at-one rows at width > 1 cannot "
+                "separate a hook defect from the forward's own batch-dependence and are reported "
+                "rather than gated",
+    "anchored_at_width_checks": sum(1 for r in results
+                                    if r["check"] == "unchanged_residual" and r.get("anchor") == "width"),
     "unchanged_residual_checks": sum(1 for r in results if r["check"] == "unchanged_residual"),
     "source_equals_target_checks": sum(1 for r in results if r["check"] == "source_equals_target"),
     "failures": failures,
     "conclusion": (
-        "the replacement hook fed its own unperturbed capture reproduces the ordinary forward "
-        "bit for bit at every tested width and position; the seam is sound and the derivative "
-        "comparison may proceed"
+        "at every tested width the hook, fed a capture made at that same width, reproduces that "
+        "width's own forward bit for bit; the hook is sound at every width tested and the "
+        "derivative comparison may proceed on a matched schedule"
         if not failures else
-        "the hook fed its own unperturbed capture does NOT reproduce the ordinary forward; this is "
-        "a boundary or schedule failure and every finite-difference reading taken through it is "
+        "the hook, fed a capture made at its own width, does NOT reproduce that width's forward; "
+        "this is a defect in the hook and every finite-difference reading taken through it is "
         "suspect until it is repaired"
     ),
 }
