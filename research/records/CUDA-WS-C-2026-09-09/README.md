@@ -93,3 +93,83 @@ computes the wrong norm, silently, on more than one device.
 
 Everything about memory, sharding, multi-device loss agreement, the real checkpoint, and the arm-1
 re-measurement. No number in this record was taken on a GPU.
+
+---
+
+# The CPU smoke train passes, and four things it changed on the way
+
+**Later the same day.** The order's golden gate — forty rows through the loop, the cadence, the
+checkpoint and the manifest — runs on CPU against a tiny Gemma 3. Four optimizer steps, two
+checkpoints at `save_steps=2`, a loss logged every step, no NaN, and an unstamped dataset directory
+refused before the run starts. Every number below was taken on this laptop. **Nothing has run on a
+GPU, nothing has been sharded, and no real checkpoint has been loaded.**
+
+## float32 moments do not come from upstream, and my first draft said they did
+
+`StableAdamW.init_single` allocates `m` and `v` as `mx.float32` **regardless of the parameter's
+dtype**. `torch.optim.AdamW` allocates `exp_avg` and `exp_avg_sq` in the parameter's dtype. So
+bfloat16 parameters get a bfloat16 second moment, nothing warns, the loss still falls, and
+gradients below bfloat16's eight mantissa bits are rounded away. I wrote that this came for free
+from upstream; a test disagreed.
+
+The fix is not a custom optimizer. It is float32 master weights with bfloat16 compute, which is
+what the Research Division's sixteen bytes per parameter describes: four for the parameter, four
+for its gradient, eight for the two moments. `build_adamw` therefore **refuses** a bfloat16
+trainable parameter rather than accommodating it, and only the trained slice is upcast — a frozen
+trunk stays bfloat16 at two bytes.
+
+The cost is recorded rather than discovered: a mixed-dtype stack is valid only under autocast, so
+a runner that drops `bf16=True` gets a dtype error rather than a slow run. That is the better of
+the two failures and it has its own test.
+
+## The logits are the largest allocation, and they are avoidable
+
+| what | bytes at the 2,688-token cap |
+|---|---|
+| logits, bfloat16 | 1.41 GB |
+| logits upcast to float32 by cross-entropy | **2.82 GB** |
+| both live | 4.23 GB |
+| one 512-position chunk, float32 | 0.54 GB |
+
+`chunked_ce` applies the head and the loss a slice at a time under checkpointing. A single chunk is
+**bit-for-bit** the unchunked loss and gradient; many chunks agree to what reordering a float32 sum
+costs, measured here at 2e-6 relative on one weight element in 1,552. The shift is checked against
+`Gemma3ForCausalLM`'s own reported loss rather than a hand-written one.
+
+## mlx-lm trains the model to emit token id 0, once per row
+
+Its loss mask is `(steps >= offset) & (steps <= true_length)`. Target position `j` reads
+`batch[j]`, real tokens occupy `0..length-1`, and padding to `1 + 32*ceil(L/32)` guarantees a pad
+column at `j == length`. So **every untruncated row supervises exactly one pad token** — id 0,
+directly after the final end-of-turn. An off-by-one meeting a padding rule, not a design choice.
+
+Reproducible behind `supervise_one_pad`, off by default. Separately, mlx-lm passes **no attention
+mask** and lets pads be attended over; on Gemma, whose sliding-window masks are built from that
+mask, that is not safe, so the collator builds one.
+
+## `iters` is micro-batches, and no code in the tree reads the key that says so
+
+Arm 1's `iters: 1200` at accumulation 4 is **300 optimizer steps**. `steps_per_eval: 400` is 100
+and `save_every: 400` is 100. The configs carry `iters_unit: batches` to say this and nothing reads
+it. Handed to `transformers` unconverted, an arm trains four times as long and evaluates four times
+as often, and finishes without complaint. Evaluation and save cadence must convert exactly, because
+`ckpt 800` names a checkpoint; reporting cadence is rounded and the rounding is recorded.
+
+## Still open, and not mine to settle
+
+- **The arm-1 re-measurement has four variables moving at once**: Qwen3.5-4B against Gemma 3 4B,
+  32 layers against 34 (so "top 8" is 8/32 against 8/34), 4-bit against bf16, LoRA against full
+  fine-tuning. It cannot be a reproduction. The order's own escape clause is the operative one.
+- **The source records disagree on which checkpoint won.** The arm-1 record selects 800 on
+  validation loss; the quality record's full split scores 1,200 at 175/180 against 800's 159/180 at
+  p = 6.1e-15 and says the one-line answer is wrong. **The selection criterion must be
+  pre-registered before the re-measurement**, or it inherits the ambiguity.
+- **`hf_checkpoint` does not exist.** No `.py` or `.yaml` in the tree contains the string; the
+  field is `hf_id`. Adding it, and `backend:`, is WS-E's. `tests/test_pipeline.py` also pins the
+  registry to exactly five stems, so a sixth breaks it in the same commit.
+- **`delta.json` has no consumer.** `adapter_geometry.py` reads the safetensors directly and writes
+  no file. Byte-compatibility is a self-imposed constraint; the thing to reproduce is that script's
+  per-layer quadrature, which sums numerator and denominator separately — averaging per-module
+  ratios inflates by roughly the square root of the module count, an error its own README records.
+- **Deleting the gated-delta modules reaches five places outside the deletion list**, including two
+  literal assertions in `test_repository_rules.py` and the MLX training path ruling 5 keeps.
