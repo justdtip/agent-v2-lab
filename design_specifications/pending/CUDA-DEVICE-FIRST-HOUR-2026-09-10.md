@@ -8,8 +8,24 @@ carries its own section in the same shape; this page points at them and fixes th
 
 ## 0. What the device needs before anything runs — `lab-device`
 
-One command, five parts, in this order. `uv run lab-device --help` lists them; each writes what it
-found rather than what it was asked.
+Three commands and one paste, then nothing by hand until the first hour. `bootstrap` runs the
+five parts below in order, the same code each subcommand runs, stops at the first failure with its
+row, and writes `outputs/bootstrap-<utc>.json`; the login prompt is the only step that needs a
+hand. The Director's disk is 250-300 GB, so the default fetch is the two Gemma sizes and their
+every-layer dictionaries, about 31 GiB and 33 GiB by the hub's listings, with a 40 GiB reserve
+for checkpoints and captures; the 27B and the Qwen pair are named on the command line when wanted.
+
+```
+git clone … && git checkout cuda-migration
+uv sync --extra cuda
+uv run lab-device bootstrap --allow-cpu --dry-run                      # login prompt, then the disk plan; nothing downloaded
+uv run lab-device bootstrap --data-archive agent_v2e.tar.gz --data-archive agent_v2e-gemma3-4b.tar.gz
+```
+
+The two archives come from the laptop's `outputs/transfer/` (both are needed: the render row
+re-renders the source under the 12B entry and compares with the laptop render's digests). Drop
+`--allow-cpu` on the device: a box without CUDA must fail the row. The parts, for reference and
+for running one by hand when the sequence stops:
 
 | step | command | what it does |
 |---|---|---|
@@ -18,7 +34,7 @@ found rather than what it was asked.
 | token | `uv run lab-device login` | prompts for the Hugging Face token (hidden) and hands it to `huggingface_hub`'s own store under the project cache; this code never keeps it. Do not copy the cache directory between machines; log in on each |
 | weights | `uv run lab-device fetch --dry-run`, then `uv run lab-device fetch [--mode inference\|lora\|full] [ids…]` | for each id (default: Gemma 3 4B, 12B, 27B; Qwen3.5 4B, 9B — Gemma 3 has no 9B) reads the hub's metadata, prints whether it fits the device's R47 budget at 2, 2.5 and 16 bytes per parameter, downloads those that fit under the chosen mode, and refuses an MLX conversion by its format. The registry entry for the 4B is `gemma3-4b-cuda-bf16`; new sizes get entries and a `family` row in the rule test before they are run |
 | data | on the laptop `uv run lab-device pack-data data/agent_v2e-gemma3-4b`; on the device `uv run lab-device verify-data <archive> --dest data` | the task corpus rendered under the Gemma template (6,685 train, 381 valid, 1,841 test rows; split digests d7feef2e…, 53339592…, 6518f957…). The 4B, 12B and 27B tokenizers are byte-identical by the hub's hashes, so this one render serves all three; the device re-render under `gemma3-12b-cuda-bf16` (`agent-pipeline render --source data/agent_v2e --output data/agent_v2e-gemma3-12b --model gemma3-12b-cuda-bf16`) must reproduce those digests, and that is asserted, not assumed |
-| dictionaries | `uv run lab-device fetch-dictionary google/gemma-scope-2-4b-it --all-layers`, then the same for `google/gemma-scope-2-12b-it` | Gemma Scope 2 residual dictionaries, `resid_post_all` at every layer, 16k width, `l0_small`: 34 layers at 335.7 MB (11.4 GB) for the 4B, 48 at 503.5 MB (24.2 GB) for the 12B, fetched by exact filename (a folder pull would take 816 MB of examples per layer) and each verified against the hub's declared digest for its path, because the deep-dive and every-layer files at one hook are identical in size and header. Gated, so after `login`. On the laptop only layer 17 of the 4B exists; the rest are config files. The bridge order (`SAE-J-BRIDGE-ORDER-2026-09-08.md`, third amendment) names the layers the map makes interesting; the config's hook string is verified against our layer convention (block N's output is our layer N+1) by a test, not a comment |
+| dictionaries | `uv run lab-device fetch-dictionary google/gemma-scope-2-4b-it --all-layers`, then the same for `google/gemma-scope-2-12b-it` | Gemma Scope 2 residual dictionaries, `resid_post_all` at every layer, 16k width, `l0_small`: 34 layers at 335.7 MB (11.4 GB) for the 4B, 48 at 503.5 MB (24.2 GB) for the 12B, fetched by exact filename (a folder pull would take 816 MB of examples per layer) and each verified against the hub's declared digest for its path, because the deep-dive and every-layer files at one hook are identical in size and header. Gated, so after `login`. On the laptop only layer 17 of the 4B exists; the rest are config files. The bridge order (`SAE-J-BRIDGE-ORDER-2026-09-08.md`, third amendment) names the layers the map makes interesting; the config's hook string is verified against our layer convention (block N's output is our layer N+1) by a test, not a comment Each fetch records its digests beside the cache, and `lab-device preflight --dictionary <repo>:<folder>` (or a `dictionaries:` list in the entry) then reports three rows per layer: present, digest against the hub or the recorded value with its basis and *undecided* when neither exists, and the config's model against the entry's base. The render row, `preflight --model <entry> --render-source data/agent_v2e --render-manifest data/agent_v2e-gemma3-4b/manifest.json`, is the 12B re-render assertion as a command. |
 | preflight | `LLL_BACKEND=torch uv run lab-device preflight --json outputs/preflight.json --data data/<dataset>` | environment (versions, upstream commit, MLX absent), backend and CUDA devices with memory, determinism pinned before the first CUDA use and read back, every torch-loadable registry checkpoint in the cache with its format and text bytes and a feasibility verdict, the dataset's manifest and splits, git HEAD and tree state, the box window. Every row carries a basis; exit is non-zero on any FAIL and names it. Gate 1 does not start on a failed preflight |
 
 Environment for every run: `LLL_BACKEND=torch`, `LLL_DEVICE=cuda` (or `cuda:N`), and `device.pin(seed, attention="eager")`

@@ -913,6 +913,254 @@ def verify_data(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------------- bootstrap
+
+
+#: The device's default fetch, sized for a 250-300 GB disk (the Director, 2026-09-10): the two
+#: Gemma sizes and their every-layer residual dictionaries, about 31 GiB and 33 GiB by the hub's
+#: listings. The 27B (51 GiB) and the Qwen pair are named on the command line when wanted.
+BOOTSTRAP_MODELS = ("google/gemma-3-4b-it", "google/gemma-3-12b-it")
+BOOTSTRAP_DICTIONARIES = ("google/gemma-scope-2-4b-it", "google/gemma-scope-2-12b-it")
+
+
+def _logged_in() -> str | None:
+    """The hub user the stored token belongs to, or ``None`` when there is no usable token."""
+    from huggingface_hub import HfApi
+
+    try:
+        return str(HfApi().whoami().get("name", "?"))
+    except Exception:  # noqa: BLE001 - not logged in is the finding, not an error
+        return None
+
+
+def _dictionary_plan(repo: str, site: str, width: str, l0: str) -> tuple[int, int]:
+    """``(layers, bytes)`` an every-layer fetch of ``repo`` would take, from the hub's listing."""
+    from huggingface_hub import HfApi
+
+    stem = re.compile(
+        rf"^{re.escape(site)}/layer_(\d+)_width_{re.escape(width)}_l0_{l0}/"
+        r"(params\.safetensors|config\.json)$"
+    )
+    layers: set[int] = set()
+    total = 0
+    for sibling in HfApi().model_info(repo, files_metadata=True).siblings:
+        match = stem.match(sibling.rfilename)
+        if match:
+            layers.add(int(match.group(1)))
+            total += sibling.size or 0
+    return len(layers), total
+
+
+def _entries_by_base() -> dict[str, str]:
+    """Registry entries the torch path loads, keyed by the base each descends from."""
+    from local_llm_lab.models import base_of_artifact, load_model_spec
+
+    return {base_of_artifact(load_model_spec(name).base): name for name, _ in _torch_models()}
+
+
+def bootstrap(args: argparse.Namespace) -> int:
+    """The device's step zero as one command: login, the disk plan, models, dictionaries, data,
+    preflight. Each step runs the same code as its subcommand, in that order; the first failure
+    stops the sequence with its row, and the report is written either way. The login prompt is
+    the only thing that needs a hand."""
+    import shutil
+
+    cache = configure_local_cache()
+    started = time.time()
+    rows: list[dict] = []
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    report = Path(args.report or f"outputs/bootstrap-{stamp}.json")
+
+    def step(name: str, ok: bool | None, detail: str) -> bool:
+        rows.append(
+            {"step": name, "ok": ok, "detail": detail, "at_s": round(time.time() - started, 1)}
+        )
+        mark = "ok  " if ok else ("FAIL" if ok is False else "note")
+        print(f"{mark} {name:<30} {detail}")
+        return ok is not False
+
+    def finish(code: int) -> int:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "rows": rows,
+            "exit": code,
+            "cache": str(cache),
+            "seconds": round(time.time() - started, 1),
+        }
+        report.write_text(json.dumps(payload, indent=2) + "\n")
+        print(
+            f"bootstrap {'PASSED' if code == 0 else 'FAILED'} in {payload['seconds']:.0f}s; "
+            f"report {report}"
+        )
+        return code
+
+    # 0. login: the one prompt, skipped when a usable token is already stored.
+    who = _logged_in()
+    if who is not None:
+        step("login", True, f"already logged in as {who}")
+    elif args.skip_login:
+        step("login", False, "no usable token and --skip-login given")
+        return finish(2)
+    else:
+        code = login(argparse.Namespace(stdin=False))
+        detail = "token handed to the hub's store" if code == 0 else f"login exited {code}"
+        if not step("login", code == 0, detail):
+            return finish(2)
+
+    # 1. the disk plan, from the hub's listings, before any byte is downloaded.
+    plan: list[tuple[str, int]] = []
+    for repo_id in args.models:
+        _params, size = _hub_size(repo_id)
+        if not size:
+            step(
+                "plan",
+                False,
+                f"{repo_id}: the hub reports no size; is the id right and the token accepted?",
+            )
+            return finish(2)
+        plan.append((repo_id, size))
+    for repo in args.dictionaries:
+        try:
+            layers, size = _dictionary_plan(repo, args.site, args.width, args.l0)
+        except Exception as error:  # noqa: BLE001 - a gated listing without access says so here
+            step("plan", False, f"cannot list {repo}: {error}")
+            return finish(2)
+        if not layers:
+            step("plan", False, f"{repo}: no {args.site} layers at width {args.width} l0 {args.l0}")
+            return finish(2)
+        plan.append((f"{repo} ({layers} layers)", size))
+    total = sum(size for _, size in plan)
+    for label, size in plan:
+        print(f"  {size / GIB:8.2f} GiB  {label}")
+    free = shutil.disk_usage(cache).free
+    reserve = args.disk_reserve_gib * GIB
+    detail = (
+        f"{total / GIB:.1f} GiB to fetch plus {reserve / GIB:.0f} GiB reserve, against "
+        f"{free / GIB:.1f} GiB free under {cache}"
+    )
+    if not step("plan", total + reserve <= free, detail):
+        return finish(1)
+    if args.dry_run:
+        step("dry-run", None, "stopping before any download")
+        return finish(0)
+
+    # 2. models, through `fetch`, every named id regardless of the mode verdicts.
+    budget_gib = args.budget_gib
+    if budget_gib is None:
+        from local_llm_lab import device
+
+        try:
+            budget_gib = device.budget() / GIB
+        except Exception:  # noqa: BLE001 - the verdict columns then read "no"; --all fetches anyway
+            budget_gib = 0.0
+    code = fetch(
+        argparse.Namespace(
+            ids=list(args.models), budget_gib=budget_gib, mode="inference", all=True, dry_run=False
+        )
+    )
+    if not step(
+        "models", code == 0, ", ".join(args.models) if code == 0 else f"fetch exited {code}"
+    ):
+        return finish(1)
+
+    # 3. dictionaries, every layer, each file verified by digest and recorded.
+    for repo in args.dictionaries:
+        code = fetch_dictionary(
+            argparse.Namespace(
+                repo=repo,
+                layer=None,
+                all_layers=True,
+                site=args.site,
+                width=args.width,
+                l0=args.l0,
+                examples=False,
+                dry_run=False,
+                offline=False,
+            )
+        )
+        detail = (
+            "every layer fetched and verified by digest"
+            if code == 0
+            else f"fetch-dictionary exited {code}"
+        )
+        if not step(f"dictionary {repo}", code == 0, detail):
+            return finish(1)
+
+    # 4. data archives, verified by digest into the data directory.
+    data_dirs: list[Path] = []
+    for archive in args.data_archive or []:
+        code = verify_data(argparse.Namespace(archive=archive, dest=args.data_dest))
+        target = Path(args.data_dest) / Path(archive).name.removesuffix(".tar.gz")
+        detail = f"verified into {target}" if code == 0 else f"verify-data exited {code}"
+        if not step(f"data {Path(archive).name}", code == 0, detail):
+            return finish(1)
+        data_dirs.append(target)
+
+    # 5. preflight per entry, each with the dictionary trained on its base, paired by the config
+    # the fetch recorded rather than by position on the command line.
+    from local_llm_lab.models import base_of_artifact
+
+    by_base = _entries_by_base()
+    folder = f"{args.site}/layer_{args.check_layer}_width_{args.width}_l0_{args.l0}"
+    dictionary_for: dict[str, str] = {}
+    for repo in args.dictionaries:
+        sidecar = dictionary_sidecar(cache, repo, folder)
+        if not sidecar.is_file():
+            step(
+                "pairing",
+                False,
+                f"{sidecar} missing after the fetch; --check-layer {args.check_layer} names a "
+                "layer it did not record",
+            )
+            return finish(1)
+        named = json.loads(sidecar.read_text(encoding="utf-8")).get("config", {}).get("model_name")
+        entry = by_base.get(base_of_artifact(named)) if named else None
+        if entry is None:
+            step(
+                "pairing",
+                False,
+                f"{repo} names {named!r}, which no torch registry entry descends from",
+            )
+            return finish(1)
+        dictionary_for[entry] = f"{repo}:{folder}"
+    entries = [by_base.get(base_of_artifact(m)) for m in args.models]
+    if any(entry is None for entry in entries):
+        missing = [m for m, entry in zip(args.models, entries, strict=True) if entry is None]
+        step("pairing", False, f"no torch registry entry descends from {missing}")
+        return finish(1)
+    render_ready = Path(args.render_source).is_dir() and Path(args.render_manifest).is_file()
+    if not render_ready:
+        step(
+            "render",
+            None,
+            f"skipped: {args.render_source} or {args.render_manifest} absent; pass both data "
+            "archives to run the re-render check",
+        )
+    for entry in entries:
+        with_render = render_ready and entry == args.render_model
+        code = preflight(
+            argparse.Namespace(
+                json=str(report.with_name(f"{report.stem}-preflight-{entry}.json")),
+                model=[entry],
+                data=[str(d) for d in data_dirs] or None,
+                seed=0,
+                allow_cpu=args.allow_cpu,
+                dictionary=[dictionary_for[entry]] if entry in dictionary_for else None,
+                offline=True,
+                render_source=args.render_source if with_render else None,
+                render_manifest=args.render_manifest if with_render else None,
+            )
+        )
+        detail = (
+            "every row passed" + (", the re-render included" if with_render else "")
+            if code == 0
+            else f"preflight exited {code}; see its report"
+        )
+        if not step(f"preflight {entry}", code == 0, detail):
+            return finish(1)
+    return finish(0)
+
+
 # ------------------------------------------------------------------------------------- main
 
 
@@ -948,6 +1196,47 @@ def main(argv: list[str] | None = None) -> int:
         "--render-manifest", help="the laptop render's manifest.json whose digests must reproduce"
     )
     p.set_defaults(func=preflight)
+    bs = sub.add_parser(
+        "bootstrap",
+        help="step zero as one command: login, plan, models, dictionaries, data, preflight",
+    )
+    bs.add_argument("--models", nargs="*", default=list(BOOTSTRAP_MODELS), help="hub ids to fetch")
+    bs.add_argument("--dictionaries", nargs="*", default=list(BOOTSTRAP_DICTIONARIES))
+    bs.add_argument("--site", default="resid_post_all", choices=DICTIONARY_SITES)
+    bs.add_argument("--width", default="16k")
+    bs.add_argument("--l0", default="small", choices=("small", "medium", "big"))
+    bs.add_argument(
+        "--check-layer", type=int, default=17, help="the layer preflight's dictionary rows read"
+    )
+    bs.add_argument(
+        "--data-archive",
+        action="append",
+        help="a pack-data archive to verify into --data-dest; repeatable",
+    )
+    bs.add_argument("--data-dest", default="data")
+    bs.add_argument("--render-source", default="data/agent_v2e")
+    bs.add_argument("--render-manifest", default="data/agent_v2e-gemma3-4b/manifest.json")
+    bs.add_argument(
+        "--render-model",
+        default="gemma3-12b-cuda-bf16",
+        help="the entry whose re-render must reproduce the laptop digests",
+    )
+    bs.add_argument(
+        "--disk-reserve-gib",
+        type=float,
+        default=40.0,
+        help="free space kept for checkpoints and captures",
+    )
+    bs.add_argument(
+        "--budget-gib", type=float, help="memory to plan under; default: the device's R47 budget"
+    )
+    bs.add_argument("--allow-cpu", action="store_true")
+    bs.add_argument(
+        "--skip-login", action="store_true", help="fail rather than prompt when no token is stored"
+    )
+    bs.add_argument("--dry-run", action="store_true", help="login and the disk plan only")
+    bs.add_argument("--report", help="where the report goes; default outputs/bootstrap-<utc>.json")
+    bs.set_defaults(func=bootstrap)
     lg = sub.add_parser("login", help="prompt for the Hugging Face token; the hub stores it")
     lg.add_argument(
         "--stdin", action="store_true", help="read one line from stdin instead of prompting"
