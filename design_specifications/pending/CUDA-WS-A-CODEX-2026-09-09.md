@@ -432,3 +432,19 @@ record's own rule string exposed. A chain read a pipe's status and committed pas
 the forward merge's suite refused it. A rerun was launched without the repository root on the
 path and without the full commit hash, and the script refused both by name. Gates 3–4 remain
 unexecuted by the script's scope and are WS-B's handoff.
+
+## Rows 6 and 7 on the device, 2026-09-10 — the graph-once estimator on the card
+
+Run by the Chief with `device_graph_once.py`, which rebuilds the fixture from Codex's own
+definition (seed 0, the tiny Gemma 3 text config, the same frozen ids) with the model placed on
+`cuda:0`, since the tests are CPU fixtures with no device knob and the checklist says repeating
+them on a GPU host is not a CUDA measurement. Record `device-graph-once-01.json` on
+`cuda-migration`. **Row 6 passes**: every source block against upstream's sequential estimator
+within float32 epsilon under both kernels, SDPA exactly zero, eager worst 2.4e-7 absolute against
+the scale-aware bound. **Row 7 passes**: the warmed end-to-end ratio of sequential over batched is
+9.66 with eager attention and 8.17 with SDPA, best of three, against 2.98 and 2.69 on the laptop's
+CPU; taken while the D-CRO's fit held the card, so `basis: shared-card`, and re-taken when the card
+is idle before it is quoted as a device performance figure. **Row 8**, graph memory at the intended
+context on the real checkpoint against upstream's replicated batch, waits for the card alone; it
+is the measurement the 12B fits need, since the exact fit's peak on the 4B read 43.9 GiB for one
+row at dictionary batch 64.
