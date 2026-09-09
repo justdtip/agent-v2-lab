@@ -161,6 +161,55 @@ does not transfer.
 
 ---
 
+# Findings for other seats
+
+Neither is mine to change and I have changed neither.
+
+## Twelve closure warnings, all benign — but the rule was right to ask
+
+`B023` — a function defined in a loop closing over the loop variable — fires twelve times, in four
+files owned by other seats. **I read all four sites. Every one is benign**, and for the same reason:
+the closure is invoked on the next line inside the iteration that defines it, so the captured
+variable holds the intended value at call time. None is stored, returned, or deferred.
+
+| file | sites | closure | called |
+|---|---:|---|---|
+| `research/records/ARM-A-DIVERGENCE-2026-09-07/build_report.py:242` | 1 | over `row` | same line, same iteration |
+| `research/records/jlens-hosted-qwen35-4b-2026-09-05/query_cosine.py:69` | 2 | over `Qn` | next line, twice |
+| `scripts/cache_split_diagnostic.py:143–145` | 3 | over `cut`, `bS`, `ids` | three times, all in-iteration |
+| `scripts/fixed_history_lens.py:263, 265` | 6 | over `n_p`, `ids_full` | next line, three times |
+
+**So no recorded number is wrong on account of these.** The two in `research/records/` matter most
+because they computed published figures, and both are sound.
+
+The reason to report rather than silently clear them: the finding is *that they are benign*, and
+that finding required reading each one. A seat who knows what each record claimed should still hold
+the conclusion, which is why it went to the D-CRO rather than into a lint commit.
+
+## A rule that looks mechanical is not
+
+`B905` — `zip` without an explicit `strict` — is the sharper version of the same lesson. Eight sites;
+**two of the four in production would crash under a blind `strict=True`**, because a common-prefix
+scan and a pairwise walk over consecutive reports zip deliberately unequal sequences. A third of the
+sites wanted the opposite answer from the rest.
+
+It sits beside the rule that no automatic fix runs blind over a file that reads model weights,
+because it is the same shape: **an automatic fix is a guess about intent, and intent is what the
+tool cannot see.**
+
+---
+
+# The suite, and the state of the box beside it
+
+**2,348 passed, 10 skipped, 0 failed**, with **no window open and no model lock held** — the first
+reading with everything in and nothing standing off.
+
+The box state belongs beside the number. The same suite minutes earlier, under another seat's
+window, read **1,139 passed, 1,110 skipped**: eleven hundred box-gated tests correctly declining to
+run. Both readings are true and only one of them is a claim about the code.
+
+---
+
 # The first hour on the device, in order
 
 **Nothing in this record has run on a GPU.** No CUDA, no NCCL, no more than two processes, no real
