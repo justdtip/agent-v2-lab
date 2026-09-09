@@ -293,6 +293,17 @@ than §3 or §8 could make on their own, and it is the constancy that licenses i
 
 ## 10. The saturation account, made quantitative: the predicted excursion orders the compression
 
+> **Amended 2026-09-09, after the Director's audit at `6983d8e`
+> (`research/records/FD-SATURATION-AUDIT-2026-09-09`, on `origin/codex/cuda-torch-seam`). This
+> section is reproduced but not attributive.** Every figure below reproduces exactly — the audit
+> re-derives Spearman −0.8716577540, Pearson on logs −0.9270698881, the 8.8%–50.7% range, twelve
+> downward steps and nine opposite-moving ones — and I ran its `analyze.py` myself and it passes its
+> own known-answer, coupling, rounding and cancellation checks. What does not survive is the reading:
+> the association is real and **it does not identify saturation, and it does not exclude rounding**.
+> The reasons are set out in §10.1 below, which is written against my own argument. The cause is
+> unresolved until the matched whole-float32 step sweep says otherwise.
+
+
 The Chief's proposal, computed. Both inputs were already in this record's own artefacts, so it
 needed neither the card nor the 526 MB maps: the per-layer epsilons from `nu-finite-difference.json`
 and the median exact column norms from `zero-response.json`.
@@ -334,3 +345,52 @@ is a smaller claim and the one the numbers support.
 The excursion fraction ranges from 8.8% to 50.7% of the target's per-position norm. A directional
 derivative is being estimated across a displacement that moves the output by up to half its own
 size.
+
+### 10.1 Why the association above is not a mechanism — the Director's audit, checked and accepted
+
+Four objections, each of which I think is right. I state them in my own words rather than quoting,
+so that if I have misunderstood one it is visible.
+
+**The two axes share the exact map's magnitude, in opposite directions.** The horizontal quantity is
+`ε·m/T` and the vertical is `f/a`, where `m` is the median exact column norm, `a` the exact Frobenius
+norm and `f` the finite-difference one. In these records `log m` and `log a` correlate at **+0.9945**.
+So a family of *purely linear* tails `F_l(x) = s_l·x`, measured by an instrument that returns the
+identity regardless of `s_l`, puts `s_l` on one axis and `1/s_l` on the other and produces a
+correlation of exactly **−1**, with arbitrary non-monotone reversals, and nothing in it saturates.
+That does not show my relationship is an artefact. It shows **the correlation cannot tell the two
+apart**, which is fatal to it as evidence for one of them. The non-monotonicity I leaned on — twelve
+reversals, nine moving the right way — is reproduced by the counterexample too, so it is not the
+independent confirmation I took it for. And adjacent layers are not independent replications.
+
+**"Nine of twelve, the three misses are ties" needs a band, and there is none.** None of the twelve
+transitions is an exact tie. Calling three of them ties requires a tolerance declared in advance and
+applied symmetrically to both directions, and the record declares none. That is a threshold chosen
+after seeing which way the points fell, which is the thing this record spends §5 warning about.
+
+**Zero exactly-zero columns does not exclude rounding away.** My claim was an `iff` and it is too
+strong in both directions. Nonzero contributions can cancel to a zero aggregate, so zero columns do
+not imply zero responses; and, more damagingly, a column is an aggregate over many source and target
+responses, so almost all of the individual responses can be lost to rounding while every column norm
+stays comfortably nonzero. The audit's counterexample makes the size of that gap concrete: a linear
+map with unit diagonal and 0.49 off-diagonals, central-differenced at step 1 with nearest-integer
+output rounding at dimension 256, loses **99.61% of components**, keeps **every** column nonzero, and
+returns a norm ratio of **0.12677**. Our observed ratio at layer 5 is 0.131 and at layer 1 is 0.185.
+The numbers are illustrative and not a bf16 simulation, but they land in our range, which is the
+point: the rounding hypothesis my zero-column artefact was written to retire is quantitatively alive.
+
+**"Moves the output by up to half its own size" is not measured.** The declared map averages the
+selected source positions and sums the selected target positions, so for this two-position causal
+selection a column predicts `½(J₈→₈ + J₈→₁₂₇ + J₁₂₇→₁₂₇)` — an aggregate tangent response that can
+conceal cancellation, not the response of one position. The denominator, 77,938.59, is a proxy from
+the preceding source layer's full-sequence norm over √L, and is neither a measured target-token norm
+nor the norm at either selected position. So 8.8%–50.7% is an aggregate linear prediction over a
+proxy. Separately, and this one I should have seen: a globally linear function has no finite
+neighbourhood boundary, so a large linear prediction cannot by itself establish nonlinearity.
+
+**What still stands.** The figures reproduce. The geometry correction of §9 stands — the step is
+5.7243 global coordinate-RMS units, constant across layers to fifteen digits — and with it the point
+that the depth gradient cannot be the step. What falls is the attribution: the profile is
+*associated* with the predicted excursion and is *not thereby explained* by saturation, and precision
+is not excluded. Both may be present. The experiment that separates them is the matched
+whole-float32 AD-against-FD comparison at fixed layers and directions, with individual responses kept
+before aggregation, which is the resolution protocol's, and it is the next thing on the card.
