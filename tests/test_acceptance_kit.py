@@ -47,6 +47,12 @@ def _write_record(path: Path, events: list[dict]) -> None:
             previous = digest
 
 
+#: Deliberately not 34. Gemma 3 4B has 34 layers and the GPU is expected to bring other
+#: models, so a fixture at 34 would pass against a reader that had the depth hardcoded.
+FIXTURE_LAYERS = list(range(1, 13))
+FINAL_LAYER = max(FIXTURE_LAYERS)
+
+
 def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> list[dict]:
     """One turn: a prefill forward, then one single-token forward per emission."""
     events: list[dict] = [
@@ -55,7 +61,13 @@ def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> li
             "schema_version": 1,
             "provenance": {"episode": {"label": label, "kind": "agentic"}},
         },
-        {"kind": "begin_turn", "turn": 0, "prompt_ids": prompt_ids, "context": {}},
+        {
+            "kind": "begin_turn",
+            "turn": 0,
+            "prompt_ids": prompt_ids,
+            "context": {},
+            "layers": FIXTURE_LAYERS,
+        },
     ]
     sequence = list(prompt_ids) + list(emitted)
     # The forward at offset p predicts position p + 1, which is the convention the whole
@@ -73,7 +85,14 @@ def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> li
                 "logits_shape": [1, 1, 32],
             }
         )
-        events.append({"kind": "reading", "turn": 0, "position": offset, "top": {"34": [token]}})
+        events.append(
+            {
+                "kind": "reading",
+                "turn": 0,
+                "position": offset,
+                "top": {str(FINAL_LAYER): [token]},
+            }
+        )
         events.append(
             {
                 "kind": "emitted",
@@ -271,7 +290,7 @@ def _with_confidence(events: list[dict], probability: float) -> list[dict]:
                 {
                     "kind": "rank",
                     "turn": event["turn"],
-                    "layer": 34,
+                    "layer": FINAL_LAYER,
                     "horizon": 1,
                     "position": event["position"] - 1,
                     "token_id": event["token_id"],

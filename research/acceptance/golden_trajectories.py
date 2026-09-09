@@ -114,6 +114,7 @@ class Turn:
     forwards: dict[int, Forward]
     readings: dict[int, dict[str, list[int]]]
     confidence: dict[int, float]
+    final_layer: int
     emitted_count: int
     forwarded_count: int
     status: str
@@ -128,15 +129,21 @@ class Turn:
         return len(self.emissions) >= DEFAULT_MAX_TOKENS
 
     def final_top(self, position: int) -> list[int]:
-        """Recorded layer-34 top-k at ``position``, which is the model's own distribution."""
-        return list(self.readings.get(position, {}).get("34", []))
+        """Recorded final-layer top-k at ``position``, which is the model's own distribution.
+
+        The layer is read from the record's own declared list, never assumed. Gemma 3 4B has 34
+        and the GPU is expected to bring larger models, so a literal here would be scaffolding
+        that silently returns nothing on the first model with a different depth.
+        """
+        return list(self.readings.get(position, {}).get(str(self.final_layer), []))
 
     def emitted_confidence(self, position: int) -> float | None:
         """The model's own probability for the token emitted at ``position``.
 
-        Layer 34 is the model's own softmax, so at horizon 1 this is the probability of the
-        greedy choice. It is the quantity the P >= 0.99 rule reads: quantisation cannot move an
-        argmax that confident, so a flip there is a mask, position, entry or norm defect.
+        The final layer's readout is the model's own softmax, so at horizon 1 this is the
+        probability of the greedy choice. It is the quantity the P >= 0.99 rule reads:
+        quantisation cannot move an argmax that confident, so a flip there is a mask, position,
+        entry or norm defect.
         """
         return self.confidence.get(position)
 
@@ -192,8 +199,8 @@ class Divergence:
         return (
             f"turn {self.turn} token {self.index} (position {self.position}): "
             f"recorded {self.expected_token}, generated {self.actual_token}\n"
-            f"    recorded layer-34 top: {list(self.expected_final_top)}\n"
-            f"    generated layer-34 top: {list(self.actual_final_top)}"
+            f"    recorded final-layer top: {list(self.expected_final_top)}\n"
+            f"    generated final-layer top: {list(self.actual_final_top)}"
         )
 
 
@@ -201,7 +208,7 @@ class Divergence:
 class GeneratedTurn:
     """What a generator returns for one turn.
 
-    ``final_top`` is the generated side's layer-34 top-k per emitted token, used only to
+    ``final_top`` is the generated side's final-layer top-k per emitted token, used only to
     describe a divergence. A generator that cannot supply it returns an empty mapping and the
     divergence report says so rather than inventing one.
     """
@@ -288,6 +295,14 @@ def load_episode(path: Path) -> Episode:
     provenance = dict(manifest.get("provenance", {}))
     episode_meta = dict(provenance.get("episode", {}))
 
+    # The final layer is whatever the record declares, per turn. Deriving it is the difference
+    # between a reader that works on the next model and one that quietly returns nothing.
+    final_layers = {
+        event["turn"]: max(event["layers"])
+        for event in events
+        if event.get("kind") == "begin_turn" and event.get("layers")
+    }
+
     begins: dict[int, dict[str, Any]] = {}
     ends: dict[int, dict[str, Any]] = {}
     emissions: dict[int, list[Emission]] = {}
@@ -322,7 +337,11 @@ def load_episode(path: Path) -> Episode:
             )
         elif kind == "reading":
             readings.setdefault(event["turn"], {})[event["position"]] = event["top"]
-        elif kind == "rank" and event.get("layer") == 34 and event.get("horizon") == 1:
+        elif (
+            kind == "rank"
+            and event.get("layer") == final_layers.get(event["turn"])
+            and event.get("horizon") == 1
+        ):
             # A rank row is keyed by the *reading* position, whose forward predicts the token
             # one position later. Storing it under the emission's own position keeps every
             # consumer on one convention; the join is checked by record_consistency.
@@ -336,6 +355,7 @@ def load_episode(path: Path) -> Episode:
             forwards=forwards.get(index, {}),
             readings=readings.get(index, {}),
             confidence=confidence.get(index, {}),
+            final_layer=final_layers.get(index, 0),
             emitted_count=ends.get(index, {}).get("emitted_count", len(emissions.get(index, []))),
             forwarded_count=ends.get(index, {}).get("forwarded_count", 0),
             status=ends.get(index, {}).get("status", "unrecorded"),
@@ -630,7 +650,7 @@ def _report(
 
     if agreements:
         print()
-        print("Layer-34 readout: generated argmax against recorded argmax")
+        print("Final-layer readout: generated argmax against recorded argmax")
         print(f"  {'episode':40s} {'compared':>9s} {'agreed':>7s} {'rate':>7s}")
         for agreement in agreements:
             print(

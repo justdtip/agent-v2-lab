@@ -15,11 +15,11 @@ from local_llm_lab.pipeline.env import Fault, Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
-    system_prompt,
     assistant_message,
     build_prompt,
     parse_turn,
     strip_thinking,
+    system_prompt,
     tool_message,
     turn_is_complete,
     window_messages,

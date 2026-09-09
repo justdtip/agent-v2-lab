@@ -12,10 +12,10 @@ from typing import Any
 
 from local_llm_lab.arch import ArchitectureView
 from local_llm_lab.models import ModelSpec, ResolvedSpec, load_model_spec
+from local_llm_lab.pipeline.coherence import coherence_summary, trajectory_events
 from local_llm_lab.pipeline.env import Fault
 from local_llm_lab.pipeline.integrity import check_trajectory, git_tree_dirty
 from local_llm_lab.pipeline.protocol import DEFAULT_KEEP_LAST
-from local_llm_lab.pipeline.coherence import coherence_summary, trajectory_events
 from local_llm_lab.pipeline.runner import Trajectory, run_task
 from local_llm_lab.pipeline.tasks import (
     GENERATOR_VERSION,
