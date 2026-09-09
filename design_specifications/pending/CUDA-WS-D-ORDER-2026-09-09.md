@@ -328,3 +328,42 @@ cleared with the exact map at the same width, ν carrying `epsilon_per_layer`, `
 `anchor_batch`, a memory smoke row before the first float32 full map (`dim_batch` 32 if the smoke
 says so). Then the 12B smoke row alone, then the 12B exact fits with the captures. Timing is the
 D-CRO's by their own context; idle card time is the waste, an out-of-context seat the worse one.
+
+## The width rows, Chief, 2026-09-10 — `9380e74`: in bfloat16 the derivative itself depends on the batch width; the lenses are fitted in float32 from here
+
+Relative change of the autograd directional derivative `a = (Jᵀw)ᵀv` from width 1 to width 64,
+over eighteen direction-and-cotangent pairs, nothing else changed:
+
+| precision | layer | min | median | max |
+|---|---:|---:|---:|---:|
+| bf16 | 1 | 0.153 | 0.756 | 2.00 |
+| bf16 | 17 | 0.012 | 0.596 | 2.97 |
+| bf16 | 33 | 0.010 | 0.119 | 6.93 |
+| float32 | 1 | 5.5e-6 | 2.7e-5 | 5.3e-3 |
+| float32 | 17 | 2.2e-6 | 2.1e-5 | 6.6e-5 |
+| float32 | 33 | 1.4e-7 | 3.3e-6 | 1.9e-3 |
+
+**There is no width-independent bfloat16 Jacobian at these layers.** The map is a property of the
+schedule as much as of the model; in float32 the same change is arithmetic noise from a different
+reduction order. The bf16 width-64 ladder rows are therefore not comparable with the width-1 rows
+and are not tabled beside them. Float32 at width 64 still converges, one or two rungs deeper and
+two to five times looser (2.0e-4 at layer 33, 6.1e-4 at 17, 4.5e-2 and still falling at 1). §3.1's
+anchored-at-width check gated first at every width and precision; the refactor reproduces the
+width-1 table bit for bit (648 of 648 cells). Width 256 was not run: the retained graph exhausted
+the card at 94.71 GiB; recorded with the number, and **not ordered** — widths 1 and 64 answer the
+question and the frozen quantity is not changed to fit the card. Counts corrected: three
+interventions at width 1, six anchored checks.
+
+**Ruled: the exact estimator fits in float32 from here** — the stored bf16 weights cast, autocast
+off, TF32 off, highest matmul precision, eager attention, determinism pinned — for the 4B refits and
+the 12B fits, ν carrying `fit_dtype`, `forward_batch` and `anchor_batch`. A map that moves by a
+median 76% under a change of schedule is a derivative of the rounding structure, not of the model,
+and the float32 estimator is the one the ladder validated against an independent estimator. The
+**captures stay native at width 1**: they are the readings of the deployed computation, and a
+float32 lens read against a native capture carries the path difference as a declared term (the
+first hour's promoted floor, 1.24% at 64 tokens) on every reading. The registry field is WS-E's and
+SWE-2 carries it. The two in-interval float32 maps ordered above are the first fits under this rule.
+
+**Step 1 of this order is amended:** upstream's hosted lens was fitted by bfloat16 autograd at the
+width of their recipe and is by this measurement a schedule-specific object; the un-port comparison
+needs their width declared before it means anything, and reports it as such.
