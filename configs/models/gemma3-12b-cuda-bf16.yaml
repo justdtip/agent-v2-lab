@@ -1,0 +1,94 @@
+# The CUDA/PyTorch entry for Gemma 3 12B in bf16, derived from `gemma3-4b-cuda-bf16.yaml` on the
+# Director's instruction of 2026-09-10 (plan §16.3: larger models are the expectation). One entry per
+# artefact, as before. Everything below the identity fields is inherited from the 4B entry because
+# it is a property of the family and not of the size: the chat template, the observation convention,
+# the end-of-turn marker and the tokenizer are byte-identical across the 4B, 12B and 27B snapshots
+# (tokenizer.json 4667f208..., tokenizer.model 1299c11d..., read from the hub's file metadata), so an
+# episode corpus rendered for the 4B is the 12B's corpus byte for byte. The training recipe values
+# are the 4B entry's provisional ones and are evidence about a different model; the memory budget is
+# a single-card figure and is re-measured on the device. No golden records exist for this size: its
+# gates are within-backend only, which is the point of running it.
+name: gemma3-12b-cuda-bf16
+# The official multimodal snapshot, `google/gemma-3-12b-it`, loaded text-only by
+# `hf_text.load_text_causal_lm` from the primary checkout's HF cache after `lab-device fetch`.
+hf_id: google/gemma-3-12b-it
+# The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
+# entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted
+# on a model rather than on a file — so the lens identity check compares this and not the path.
+base: google/gemma-3-12b-it
+# No further training: this is the base checkpoint itself, converted. Stated rather than omitted,
+# because a lens fitted on a base and read against a trained checkpoint of the same base is a
+# different reading and the identity has to be able to say so (R57).
+training_lineage: {}
+family: gemma3
+chat:
+  thinking: "unsupported"
+  template_kwargs: {}
+  # What the template emits under `add_generation_prompt`; asserted by protocol.build_prompt.
+  generation_prefix: "<start_of_turn>model\n"
+  # PROVISIONAL, for reading only (the Chief's ruling of 2026-09-08). Gemma's template has no
+  # tool role and enforces user/model alternation with an explicit raise, so an observation stops
+  # the render. Re-roling keeps a base-model reading inside the model's own distribution; it
+  # reverts to provisional the day anyone builds a supervised target here, and every run's
+  # manifest says which role it used.
+  observation_role: "user"
+  # How the observation says what it is, since the `user` role cannot.
+  #
+  # This was Qwen's bare `<tool_response>` wrapper, chosen so that the two panels of the pilot's
+  # comparison differed in the model and not in what their prompts said. The Director's ruling of
+  # 2026-09-08 overrides that choice, and it is the stronger argument: *observations should render
+  # in a manner that teaches the model to understand what it is doing; a model executing a tool
+  # should not assume that in doing so it responds to the user.* Matching Qwen's wrapper kept the
+  # comparison tidy by rendering Gemma's episodes in a way that misdescribes them.
+  #
+  # So the wrapper now names the call it answers. `{name}` is the tool the model itself just
+  # invoked, which is precisely the relation the `tool` role used to carry and the one a bare
+  # wrapper leaves the model to guess. The cost is real and is recorded rather than avoided: the
+  # two panels no longer render observations identically, so a difference between them is no
+  # longer attributable to the model alone.
+  observation_template: "<tool_response tool=\"{name}\">\n{content}\n</tool_response>"
+  # What the prompt tells the model the format is doing to it. The wrapper marks each observation;
+  # this gives the model the key to the mark, and neither works without the other.
+  #
+  # Gemma's template renders an episode as a strict two-party conversation — user, model, user,
+  # model — so every tool call the model makes is followed by what the format calls a user turn.
+  # Unaided, the model is taught turn after turn that a person answers its actions, and a model
+  # that believes that behaves conversationally: it re-acknowledges, re-reads and restates rather
+  # than executing a plan. Stage one's transcripts have exactly that shape, including one episode
+  # that re-read a missing file four times in twelve turns without ever trying the path its own
+  # search had returned.
+  observation_convention: |
+    Tool results in this chat format: this format has no separate role for tool results, so a
+    result reaches you in a turn the format marks as the user's. A turn wrapped in
+    <tool_response> is not the user speaking. It is the workspace reporting what your own last
+    tool call returned. Read it as the result of your action and continue your task rather than
+    replying to it.
+  end_of_turn: "<end_of_turn>"
+  extra_stop_tokens: []
+lora:
+  keys: auto
+  rank: 16
+  scale: 32.0
+  dropout: 0.0
+train:
+  # UNRULED, and training on Gemma stays deferred under the Director's ruling of 2026-09-08.
+  # These exist so no consumer meets a bare key error; they are the Qwen recipe's values and are
+  # evidence about a different model.
+  max_seq_length: 2688
+  batch_size: 1
+  grad_accumulation_steps: 1
+  learning_rate: 3.0e-5
+  grad_checkpoint: true
+cache:
+  # `none` for the first runs: 29 of the 34 per-block caches rotate and no equivalence has been
+  # measured on this model. A reuse strategy is an equivalence claim. UNRULED.
+  strategy: none
+  equivalence_verified: null
+probes:
+  layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
+  capture_dtype: native
+memory:
+  # PROVISIONAL: one 48 GB card's figure for a 24 GB bf16 text tower; re-measured per device
+  # (plan §10.2) like every memory number in this registry.
+  budget_gib: 48
+policies: {}

@@ -39,6 +39,8 @@ def test_the_registry_lists_every_declared_backbone() -> None:
     `hf_id` the torch backend loads, so a cross-backend comparison is not also a comparison of
     checkpoints. Registry entries are WS-E's, and this line moves in the same commit as the YAML;
     the sixth entry landed without it and the tree was red for an afternoon.
+    Seven with the 12B CUDA entry on 2026-09-10, the first size beyond the laptop's, added with
+    this line in the same commit.
 
     This test is in a file that reaches the model library, so it was skipped under the window that
     verified the four-name landing and the tree was red until that line moved. The skip count in a
@@ -50,6 +52,7 @@ def test_the_registry_lists_every_declared_backbone() -> None:
     assert registered_models() == [
         "gemma3-4b",
         "gemma3-4b-bf16",
+        "gemma3-12b-cuda-bf16",
         "gemma3-4b-cuda-bf16",
         "qwen25-coder-3b",
         "qwen35-4b",
