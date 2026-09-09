@@ -437,3 +437,37 @@ own positions and context exists; the bridge's constant is amended to say so (SW
 **Provenance:** `responses.npz` written durably per completed unit with a hash and index, bound to
 its scalar cells; width-specific manifests, observed precision settings, frozen invocation, token
 digest and gate outcomes archived with each run.
+
+## The first maps inside an interval, Chief, 2026-09-10 — `17bb82d`: the golden test passes on its own terms in float32 at width 1
+
+| | first golden run | this one |
+|---|---|---|
+| precision | native bf16 | coherent float32, TF32 off, `highest` matmul |
+| widths | exact 64, difference 256, anchor 1 | 1 on both sides |
+| step | `epsilon_scale` 0.01 at every layer | k = 10 at layer 1, k = 6 at layer 33 |
+| worst relative difference | 1.0245 | 0.00485 (layer 1), 0.00286 (layer 33) |
+| cosine | 0.015 (layer 1), 0.825 (layer 33) | 0.9999907, 0.9999962 |
+
+Exact reproduces itself at 0.0; the transposed control separates by 292× and 348×; both findings
+sit above the float32 storage floor (5.96e-8), so this is agreement measured. The scalar ladder
+predicted the map with nothing tuned: layer 1's median of 4.3e-3 over eighteen projections against
+a worst of 4.85e-3 over 2,560 columns. Twelve minutes of card time; the memory smoke read 14.56 GiB
+at width 1 against 43.9 GiB for the bf16 exact side at width 64.
+
+**Two deviations from the ruling above, both accepted.** The maps were fitted at **width 1**, not
+64: the k values are width-1 minima, the width rows moved the intervals, and the width audit shows
+the widened ladder's step was eight times its rung, so the width-64 minima were mislabelled. Width 1
+is the canonical function and the maps stay there. The **layer-shifted control** is recorded
+`available: false` with its reason — each map has one layer at its own step — and the ν question
+is answered: a finite-difference map is per layer at its own step, ν carries `epsilon_per_layer`,
+and the control is constructible later if needed; the transposed control gates now. The record
+states the realized h per map beside the ladder's, and that the batched-norm defect does not apply
+at width 1. The D-CRO's branch had never reached the card's bare repository (its `origin` is local);
+it now has, and the maps ran from a worktree outside the shared checkout.
+
+**Ordered:** the 12B smoke row alone, in float32 at width 1, with the same-anchor control of W2 in
+the same seat; then, on the laptop, the capture code to the contract (width 1, key `(task_id, step)`,
+`prompt_sha256`, token index, `rendered_rows`, manifest fields, native precision, outside the
+checkout) with tests, and P1–P6 with the remaining C2 items; the 12B exact fits with the captures run
+only when the capture code meets the contract. `cuda-ws-d` is reviewed and merged in the morning,
+where SWE-2's registry declaration meets the D-CRO's ν fields.
