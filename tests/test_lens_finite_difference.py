@@ -465,3 +465,36 @@ def test_promoting_a_bf16_model_is_refused_by_name_and_points_at_the_probe(upstr
     # On a float32 model the option is what it was built to be: a path to measure against native.
     fit = _fd(upstream, capture_dtype="promoted-float32")
     assert fit.precision["capture_dtype"] == "promoted-float32"
+
+
+def test_repeating_the_residual_batch_does_not_change_the_per_row_step(upstream) -> None:
+    """The step is a property of one row's residual, not of how many copies are in the batch.
+
+    A capture at width w is `[w, seq, hidden]` with every row the same prompt, so a norm taken over
+    the whole tensor is √w times the norm over one row and the step silently inherits the factor.
+    The calibration ladder did exactly that and ran its width-64 rungs at eight times the fitter's
+    step, which shifted its whole axis by three rungs and made "the interval moves with width" a
+    reading of the bug. The fitter takes `activations[layer][:1]` before the norm; this pins that,
+    because the two paths agreed in intent and differed in arithmetic and nothing compared them.
+    """
+    fit_one = _fd(upstream, direction_batch=D_MODEL, anchor_batch=1)
+    fit_wide = _fd(upstream, direction_batch=D_MODEL, anchor_batch=4)
+
+    per_layer_one = fit_one.provenance["epsilon_per_layer"]
+    per_layer_wide = fit_wide.provenance["epsilon_per_layer"]
+    assert sorted(per_layer_one) == sorted(per_layer_wide)
+    for layer, entry in per_layer_one.items():
+        assert entry["mean"] == pytest.approx(per_layer_wide[layer]["mean"], rel=1e-6), (
+            f"layer {layer}: the step moved with the anchor width, so it is a function of the "
+            "batch and not of the residual"
+        )
+
+    # And the direct arithmetic the mistake rests on, so the reason is pinned beside the behaviour.
+    row = torch.arange(12, dtype=torch.float32).reshape(1, 3, 4)
+    repeated = row.expand(4, -1, -1)
+    assert torch.linalg.vector_norm(repeated) == pytest.approx(
+        2.0 * torch.linalg.vector_norm(row), rel=1e-6
+    )
+    assert torch.linalg.vector_norm(repeated[:1]) == pytest.approx(
+        torch.linalg.vector_norm(row), rel=1e-6
+    )

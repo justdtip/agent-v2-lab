@@ -241,7 +241,13 @@ for precision in args.precisions.split(","):
 
     for repo_layer, layer in sources.items():
         source = base[layer]
-        norm = float(torch.linalg.vector_norm(source.float()))
+        # One replica, exactly as `fit_finite_difference_jacobian` does. The capture at width w is
+        # `[w, seq, hidden]` and every row is the same prompt, so a norm over the whole tensor is
+        # √w times the norm the fitter uses and the step inherits the factor: at width 64 this
+        # ladder ran every rung at **8×** the fitter's step, so its rung k was the fitter's k − 3.
+        # Found by Codex's width audit, 2026-09-09. Two paths that agreed in intent and differed in
+        # arithmetic, with nothing comparing them — this week's shape once more.
+        norm = float(torch.linalg.vector_norm(source[:1].float()))
         h0 = EPSILON_SCALE * norm
         coordinate_scale = float(source.float()[0, POSITION].abs().mean())
         token_norm = float(torch.linalg.vector_norm(source.float()[0, POSITION]))

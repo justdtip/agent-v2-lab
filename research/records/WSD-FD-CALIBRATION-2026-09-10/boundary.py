@@ -206,6 +206,10 @@ for width in WIDTHS:
         ):
             if anchor == "width" and width == 1:
                 continue  # the same check; running it twice would pad the count, not the evidence
+            # At zero step the perturbed position does not change the replaced tensor, so the two
+            # positions are one intervention. Both are run and reported, and the verdict counts
+            # interventions rather than rows, because a count that doubles on a label is evidence
+            # that is not there.
             for position in positions:
                 with torch.no_grad():
                     handle = wrapped.layers[layer].register_forward_hook(
@@ -227,10 +231,14 @@ for width in WIDTHS:
                     **compare(against.expand_as(observed), observed, mask),
                 }
                 results.append(entry)
-                # Only the anchored-at-width check is evidence about the hook, so only it gates.
-                # The anchored-at-one rows are reported and are not failures: they measure the
-                # estimator's current schedule, which is the finding, not a defect in the hook.
-                if anchor == "width" and not entry["bitwise_identical"]:
+                # Every **matched** schedule gates, width 1 included. The first version wrote
+                # `if anchor == "width"`, and width 1 is skipped by the loop above as the same
+                # check, so a width-one failure could never have reached `failures` at all: the
+                # gate excluded the one case whose pass the whole record rests on. Found by Codex,
+                # 2026-09-09. The anchored-at-one rows at width > 1 still only report, because
+                # there they cannot separate a hook defect from the forward's batch-dependence.
+                matched = anchor == "width" or width == 1
+                if matched and not entry["bitwise_identical"]:
                     failures.append(entry)
                 emit("unchanged_residual", anchor=anchor, repo_layer=repo_layer, width=width,
                      position=position, bitwise_identical=entry["bitwise_identical"],
@@ -322,9 +330,14 @@ verdict = {
     "gated_on": "the anchored-at-width rows only; anchored-at-one rows at width > 1 cannot "
                 "separate a hook defect from the forward's own batch-dependence and are reported "
                 "rather than gated",
-    "anchored_at_width_checks": sum(1 for r in results
-                                    if r["check"] == "unchanged_residual" and r.get("anchor") == "width"),
-    "unchanged_residual_checks": sum(1 for r in results if r["check"] == "unchanged_residual"),
+    "anchored_at_width_interventions": len({
+        (r["repo_layer"], r["width"]) for r in results
+        if r["check"] == "unchanged_residual" and (r.get("anchor") == "width" or r["width"] == 1)
+    }),
+    "unchanged_residual_rows": sum(1 for r in results if r["check"] == "unchanged_residual"),
+    "counting_note": "interventions, not rows: at zero step the perturbed position does not change "
+                     "the replaced tensor, so the two positions of a (layer, width) pair are one "
+                     "intervention reported twice",
     "source_equals_target_checks": sum(1 for r in results if r["check"] == "source_equals_target"),
     "failures": failures,
     "conclusion": (

@@ -168,16 +168,23 @@ step. 864 cells, 28 seconds of card time.
 | float32 | 17 | 1.29 | 0.35 | 3.2e-2 | 1.9e-3 | **5.8e-4** | 1.9e-3 | | | |
 | float32 | 33 | 8.1e-2 | 1.3e-2 | 8.0e-4 | **8.6e-5** | 1.2e-4 | 7.0e-4 | | | |
 
-**Float32 has a useful interval at every layer tested, and it is a proper one** — a minimum with
-neighbours on both sides within a factor of about three, which is truncation error falling and
-rounding error rising, meeting. It sits at k=6 at layer 33, k=8 at layer 17 and k=10 at layer 1: the
-shallower the source, the smaller the step it needs and the looser its best agreement, 8.6e-5 to
-4.3e-3 across the three. That is the protocol's "coherent float32 FD converges to coherent float32
-AD": the tested float32 local derivatives are supported.
+**Float32 convergence is supported for the tested projections.** Each layer has a minimum with
+neighbours falling on both sides — truncation error falling and rounding error rising, meeting — at
+k = 6, 8 and 10 for layers 33, 17 and 1, reaching 8.6e-5, 5.8e-4 and 4.3e-3.
 
-**Native bf16 has no useful interval at any layer tested.** Its best cell anywhere is 5.3% at layer
-33, and at layer 1 the error only grows as the step shrinks. It is squeezed from both sides at once
-and the two sides overlap.
+*Two corrections to what stood here.* The neighbourhoods are **not** all within a factor of three:
+layer 33's k = 4 is 9.24 times its minimum. And the minima being at k = 6 and k = 10 does **not**
+mean the layers need steps 64 apart. In normalized units the two differ by **16**, and in absolute
+size by 1,390, because the source norms differ; neither ratio is 2⁶. Nor do differing optima refute
+a common adequate scale: every layer's median is at or below 4.3e-3 at k = 10, so a single scale of
+k = 10 would serve all three on this grid. The claim that a single `epsilon_scale` is "refuted" is
+withdrawn; what is shown is that the estimator's *current* scale, k = 0, is far outside every
+layer's interval.
+
+**No broadly accurate native-bf16 interval has been demonstrated over this tested grid.** Its best
+cell anywhere is 5.3% at layer 33, and at layer 1 the error only grows as the step shrinks. That is
+a statement about this grid and these projections, not a proof that no step exists anywhere, and the
+earlier wording claimed the latter.
 
 **The squeeze, measured directly rather than inferred.** The fraction of target components that come
 back **exactly equal** between the two arms, before any reduction:
@@ -188,18 +195,36 @@ back **exactly equal** between the two arms, before any reduction:
 | native bf16 | 1 | 0.001 | 0.004 | 0.008 | 0.008 | **1.000** |
 | float32 | any | 0.000 | 0.000 | 0.000 | 0.000 | ≤0.003 |
 
-At layer 1 in bf16, by k=16 **every** target component is bitwise identical between `F(x+hv)` and
-`F(x−hv)`. The difference is exactly zero, so `d_h` is exactly zero and the relative error is exactly
-1.00 — which is why the bf16 row above stops falling and pins there. The response has been rounded
-away in its entirety.
+*Corrected 2026-09-10, after Codex's ladder audit. The paragraph that stood here read the layer-1
+k=16 median of 1.000 as "the response rounded away in its entirety", and the sentence after it
+claimed the unchanged-input fraction is 0.000 at every cell. **Both are false and are withdrawn.**
+The two mechanisms are separate and the table above mixed them.*
 
-This is the quantity the Director's audit said the zero-column count could not reach: not whether an
-aggregated column vanished, but what fraction of the individual responses did, before aggregation.
-It is now measured, and the answer is that in bf16 it goes to one.
+**Input representability and downstream rounding are different failures, and only one of them is
+localized.** At layer 1, k = 16, native bf16, the six directions do not agree:
 
-The input side is never the problem: the fraction of perturbed coordinates that did not move is
-**0.000 at every cell, both precisions, every step**. The displacement always lands; the loss is
-downstream.
+| direction | realized displacement | unchanged input in support | equal outputs |
+|---|---:|---:|---:|
+| coordinate:0 | **0.0** | 1.000 | 1.000 |
+| coordinate:137 | **0.0** | 1.000 | 1.000 |
+| coordinate:1279 | **0.0** | 1.000 | 1.000 |
+| coordinate:2559 | **0.0** | 1.000 | 1.000 |
+| dense:0 | 2.6e-4 | 0.993 | **0.0043** |
+| dense:1 | 2.7e-4 | 0.992 | **0.0113** |
+
+**Four of the six are input no-ops**: the requested step is below the representable spacing of the
+coordinate it perturbs, so `x + hv` is bitwise `x`, nothing is perturbed and the identical outputs
+are a tautology rather than a measurement of anything downstream. The two dense directions do land
+and do produce responses. The median of 1.000 was four no-ops outvoting two live directions.
+
+What survives, and it is the part that matters for the maps: **at the calibrated rungs the input
+displacement lands.** The unchanged-input fraction is 0.000 through k = 10 at layer 1 and rises only
+past it — 0.42 at k = 12, 0.48 at k = 14, 1.00 at k = 16. Both maps in §9 are fitted at k = 10 or
+below, inside the representable region.
+
+The downstream rounding is real and separately visible — at layer 33 the equal-output fraction rises
+to 0.534 by k = 10 with the input still landing everywhere — but it is **not localized** by this
+record: knowing that outputs coincide does not say which block's arithmetic lost the difference.
 
 ## 7. What this says about the golden test
 
@@ -255,22 +280,44 @@ derivative itself, and it moves when the batch width changes:
 
 relative change from width 1 to width 64, over the eighteen direction-and-cotangent pairs.
 
-**In bf16 there is no width-independent Jacobian at these layers.** Change nothing but the batch
-width of the forward and the directional derivative moves by a median of 76% at layer 1, 60% at layer
-17 and 12% at layer 33, and by more than 100% in the worst pairs. The map is a property of the
-schedule as much as of the model. In float32 the same change moves it by parts in a hundred thousand,
-which is the arithmetic noise of a different reduction order and nothing more.
+**The measurement stands and its attribution does not.** `a` is computed from a VJP with no
+perturbation applied, so it never sees `h` and the step bug above does not touch these numbers;
+Codex reproduces them. The defensible statement is: **native-path autograd readings at their
+respective anchors are strongly schedule-sensitive for the tested projections, and the matched
+float32 readings are far more stable** — a median of 76% against parts in a hundred thousand.
 
-That is the schedule term of the protocol's §3 decomposition, measured. It also settles what the ν
-field added at `1dee10d` is worth: not a bookkeeping nicety, but up to a factor of two.
+What is *not* established is that the arithmetic causes it. `a₆₄(x₆₄) − a₁(x₁)` moves the width and
+the anchor at once: the width-64 forward produces a different residual at the source, so the
+derivative is read at a different point, and a smooth function can move its derivative by 75.6%
+between two anchors 0.0756% apart. The two brackets that separate them — width fixed with each saved
+anchor in turn, then anchor fixed across widths — are the protocol's same-anchor control and are
+**not yet run**. Until they are, "there is no width-independent bf16 Jacobian" and "a derivative of
+the rounding structure" are both withdrawn as attributions, and only the sensitivity is claimed.
 
-**Finite differences at width 64, for completeness.** Float32 still converges, with the interval
-moved one or two rungs deeper and the best agreement two to five times looser — 2.0e-4 at layer 33
-(k=8, against 8.6e-5 at k=6 at width 1), 6.1e-4 at layer 17, 4.5e-2 at layer 1 and still falling.
-Both arms share the width, so the batch offset is common to them; what does not cancel is its
-variation with the perturbation, and that is the larger floor. The bf16 rows at width 64 are not
-comparable to the bf16 rows at width 1 **at all**, because their reference `a` is a different number:
-a relative error against a reference that moved 76% measures the pair, not the estimator.
+It is the schedule term of the protocol's §3 decomposition as far as this record takes it, and it is
+already enough to justify the ν field added at `1dee10d`: a reading that moves that much between two
+schedules must say which schedule it is.
+
+**Finite differences at width 64: withdrawn as a cross-width comparison, and here is why.** This
+section first read the width-64 float32 rows as "the interval moved one or two rungs deeper". It did
+not. Codex's width audit found that **this ladder multiplied its own step by eight at width 64**: the
+capture is `[width, seq, hidden]` with every row the same prompt, and the ladder took its norm over
+the whole tensor instead of one replica, so `‖repeat(x, 64)‖ = 8‖x‖` and the step inherited it. The
+recorded ratios are 8.000000, 7.999998 and 8.000008 at layers 1, 17 and 33 — eight to six digits, at
+every rung.
+
+So width-64 rung *k* is width-1 rung *k − 3* in physical step. The apparent shift of the interval is
+a **horizontal shift of the axis**, not a schedule effect, and at layer 1 the width-64 best rung is
+the last one tested, so its small-step side was never measured at all. The production fitter takes
+`activations[layer][:1]` before the norm and does not have this bug; the ladder and the fitter did
+not implement the same step at a shared k, which nothing compared until Codex did. The norm is fixed
+in `ladder.py` and pinned by a fixture in `tests/test_lens_finite_difference.py`.
+
+What the width-64 rows remain valid as: **within-schedule measurements at their own stated `h`** —
+does the finite difference approximate its own declared autograd reference under that schedule — and
+they are re-labelled as that. The earlier sentence that they "cannot be compared at all" to the
+width-1 rows is narrowed to this: they are not a cross-schedule comparison, and each is sound on its
+own terms.
 
 **Width 256 did not run.** The retained graph for the autograd pass at width 256 with eager attention
 exhausted the card: 94.71 GiB in use, a 320 MiB allocation refused. It is recorded as not run for
@@ -297,11 +344,30 @@ every layer is refuted — the two minima are a factor of 64 apart.
 **Layer 1's cosine went from 0.015 to 0.9999907.** The residual is two to three orders of magnitude
 smaller than the first run's, and the first run's was the workstream's headline number for a week.
 
+**An accuracy floor is declared here, before the maps are read further**, as the audit requires: a
+relative error is reported as *unresolved* rather than as a percentage where the reference itself is
+small against the absolute error. The ladder's worst-looking cell, `coordinate:2559` against
+`dense:0` at layer 1 k = 10, has a = −0.0075 and an absolute error of 0.11; it is unresolved, not a
+1,462% disagreement, and reading it as the latter would be the same mistake as a relative error
+against a reference that moved.
+
 Both gates hold. The exact estimator reproduces itself at exactly 0.0. The transposed control
 separates by 292× at layer 1 and 348× at layer 33, so the finding is not a number any wrong lens
 would also produce. And both findings sit **above** the float32 storage floor of 5.96e-8, so the
 agreement is a measurement rather than two maps indistinguishable at the precision they are stored in
 — which, as the report's own wording says, is not agreement.
+
+**The maps are at the calibrated step, verified rather than assumed.** The step bug that shifted the
+width-64 ladder rows could have shifted these too, so it was checked before either map was cited:
+
+| | ladder `h` at that rung, width 1 | the map's realized `h` | ratio |
+|---|---|---|---|
+| layer 1, k = 10 | 0.09921077728271485 | 0.09921077728271485 | **1.0000000000** |
+| layer 33, k = 6 | 137.94705078125 | 137.94705078125 | **1.0000000000** |
+
+Identical to the last digit, for two independent reasons: `fit_finite_difference_jacobian` norms
+`activations[layer][:1]`, one replica, and these maps ran at width 1 where there are no replicas to
+sum over.
 
 **The scalar ladder predicted the map.** At layer 1, k = 10, the ladder's median relative error over
 eighteen direction-and-cotangent pairs was 4.3e-3 and the map's worst over 2,560 columns is 4.85e-3.
@@ -318,6 +384,13 @@ declaring one would be the next design question rather than a detail.
 
 **One row, one prompt, two layers, two positions.** The first golden run had the same shape and its
 number stood for a week; this one replaces it and inherits the same limits.
+
+**And these two maps are the test of an inference, labelled as that.** The ladder measures eighteen
+scalar projections; a map has 2,560 columns. That projections converge does not entail that columns
+do, and these two maps are the first evidence on that step rather than a confirmation of it. `J − I`
+and `FD − I` in the raw residual coordinates belong beside the errors, because the shared skip
+identity flatters late-layer cosine without validating the learned correction; they are **not yet
+computed** and are queued.
 
 ### 9.1 A deviation from the ruling, and why
 
