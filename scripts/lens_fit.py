@@ -209,7 +209,9 @@ def main(argv: list[str] | None = None) -> int:
         # Issue 99: a lens we fit carries the model it was fitted on, inside the archive whose
         # digest every later reader pins.
         identity=LensIdentity(
-            loaded.spec.base, loaded.view.num_layers, loaded.spec.training
+            base=loaded.spec.base,
+            num_layers=loaded.view.num_layers,
+            training=loaded.spec.training,
         ),
     )
     print(

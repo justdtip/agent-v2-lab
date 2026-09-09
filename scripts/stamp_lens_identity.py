@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     if "model" in meta:
         parser.error(f"{sidecar.name} already carries a model identity: {meta['model']}")
 
-    identity = LensIdentity(args.model, args.num_layers)
+    identity = LensIdentity(base=args.model, num_layers=args.num_layers)
     meta["model"] = identity.as_dict()
     meta["model_stamp"] = {
         "retroactive": True,
