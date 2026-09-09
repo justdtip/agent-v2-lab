@@ -1,0 +1,68 @@
+{
+  "status": "ready_for_review",
+  "tested_source_commit": "d32cc28146f95e0659798a24c5bdd01ee9fb1cc0",
+  "run_start_commit": "e8028bb319f6cc0060842ebccc65d94d68590aca",
+  "source_binding": "Acceptance ran on dirty e8028bb; source was unchanged during acceptance and until committed at d32cc28. These post-run hashes bind those unchanged files to that commit.",
+  "source_sha256": {
+    "src/local_llm_lab/sae_intervention.py": "20c531789467da71bf9b4cffebd4d67ea5e81c96e5a039908682682a1bb90577",
+    "tests/test_sae_intervention.py": "ad90858c75dfac1490052412e9cf585eb633a527d37f8921c9d1f3fec6f1618a"
+  },
+  "evidence_sha256": {
+    "acceptance.json": "0ecc9f1c2b607ae90397e030f6b8f31cb487de2f429a3bfe63d3353599bd1bc7",
+    "acceptance.log": "ef4218357f974444a2846e8b822406e2440dfd495abecdcb82e533947a684e2d",
+    "acceptance.xml": "5ae3a00bd54274131e81c026ede1dea38972c58d93359c8e3bb1580397aa7d1a",
+    "example.json": "7e4e3d64d328268c2d23bee0dc6a50cbed761d4046af72343376b2bdae1c8826"
+  },
+  "counts": {
+    "tests": {
+      "value": 132,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "failures": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "errors": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "skipped": {
+      "value": 0,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    }
+  },
+  "box_state": {
+    "idle": "not established",
+    "cpu_percent_before": {
+      "value": 50.9,
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "load_average": {
+      "value": [
+        6.732421875,
+        5.7138671875,
+        5.48388671875
+      ],
+      "basis": "measured-here",
+      "basis_note": "this CPU fixture run; an active desktop, not certified idle"
+    },
+    "window": null,
+    "lock": null
+  },
+  "native_mlx_modules_loaded": [],
+  "static_checks": {
+    "ruff": "passed",
+    "source_diff_check": "passed"
+  },
+  "unexecuted": [
+    "CUDA",
+    "real checkpoint",
+    "corpus-scale clamp",
+    "device memory and timing"
+  ]
+}
