@@ -1,0 +1,73 @@
+{
+  "anchor_batch": 1,
+  "checkpoint": "/workspace/.hf_home/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767/",
+  "corpus": {
+    "manifest": "/workspace/lens-corpus/prose-gemma3-4b-cuda-bf16.json",
+    "split": "held"
+  },
+  "device": {
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "backend": "torch",
+    "cublas_workspace_before_cuda": true,
+    "cuda_available": true,
+    "cudnn_benchmark": false,
+    "cudnn_deterministic": true,
+    "determinism": "pinned",
+    "deterministic_algorithms": true,
+    "device": "cuda",
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "float32_matmul_precision": "highest",
+    "mlx": null,
+    "pinned": {
+      "attn_implementation": "eager",
+      "deterministic": true,
+      "seed": 0
+    },
+    "platform": "Linux 6.17.0-35-generic x86_64",
+    "python": "3.13.15",
+    "tf32_cudnn": false,
+    "tf32_matmul": false,
+    "threads": 8,
+    "torch": "2.14.0",
+    "transformers": "5.16.1"
+  },
+  "direction_seed": 20260911,
+  "epsilon_scale": 0.01,
+  "forward_batch": 1,
+  "ladder_k": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+  ],
+  "load_report_sha256": {
+    "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+    "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+    "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+  },
+  "position": 8,
+  "reduction": "perturb one source position; target summed over the selected positions",
+  "repo_layers": [
+    1,
+    17,
+    33
+  ],
+  "row": {
+    "index": 39,
+    "seq_len": 128
+  },
+  "schema_version": 1,
+  "seat": "d-cro",
+  "stage": "resolution protocol \u00a74, width 1",
+  "target_upstream": 33,
+  "tf32": {
+    "cudnn_allow_tf32": false,
+    "float32_matmul_precision": "highest",
+    "matmul_allow_tf32": false
+  }
+}
