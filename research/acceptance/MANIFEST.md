@@ -196,6 +196,24 @@ Chief's request so the statistic is not proposed again.
 The three that survive are teacher-forced argmax agreement under the P ≥ 0.99 rule, the floored
 divergence profile, and top-k Jaccard, which survives precisely because it needs ids only.
 
+### A check whose answer I already knew, and got backwards — `bb4dba3`
+
+The baseline runner must refuse to load 7.3 GiB of weights unless this process holds the box
+window. My first draft asked whether a window **existed**. One did, held by a third seat, so
+**the check passed precisely because somebody else was holding the machine**, and the script
+would have loaded the model inside their run.
+
+`blocking_window` is the right question, because it returns `None` both when nothing is open
+and when the open one is ours; those two cases have to be separated explicitly. The runner now
+refuses with the runlock's own text, and I watched it refuse against a live foreign window
+rather than assuming it would.
+
+**The only reason it surfaced is that it was run while another seat held the lock.** Run five
+minutes after that window closed, it would have passed for the right-looking reason and stayed
+inverted indefinitely. That is the shape this repository already has a record about: the check
+that cannot fail teaches nothing, except about the one thing nothing else can catch, and only
+if it is exercised in the state it exists for.
+
 ## A run under a box window is not a coverage statement
 
 The suite prints a green summary line whether or not it exercised the files that can reach the
@@ -223,12 +241,13 @@ records coverage and one that records the appearance of it.
 | commit | passed | skipped | failed | window |
 |---|---:|---:|---:|---|
 | `41dc6b4` | 2,161 | 14 | 0 | free |
-| `66d14af` | not yet taken clean | | | WS-A's held throughout |
+| `66d14af` | never taken clean | | | held throughout |
+| `bb4dba3` | 2,265 | 14 | 0 | free |
 
-**The last clean full-suite run is `41dc6b4`.** `66d14af` adds the torch cache module and its
-tests; those tests and the workstream's own files pass, and no clean full-suite count exists
-for it yet because WS-A's window has been open since it landed. That is stated here rather
-than carrying the `41dc6b4` number forward under a later commit's name.
+**`bb4dba3` is the current clean run**, and it is the first that includes WS-A's torch view and
+capture. `66d14af` never got a clean count: the window was held for the whole of its life and
+the row says so rather than borrowing a neighbour's number. The count was taken by a job that
+waited for the window rather than by hand, which took 990 seconds.
 
 Two failures reported earlier in this workstream are gone, both fixed on the main line and
 brought across by merges: the registry name list that `gemma3-4b-cuda-bf16` made a sixth
