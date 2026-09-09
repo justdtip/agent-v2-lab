@@ -503,3 +503,27 @@ the D-CRO's draft against `STATE-PLAN-PROGRESS-ORDER-2026-09-10.md` at f98dbaf �
 facts with their basis, A1–A4, R2's labels, R3's retry clause, R4's within-pass H2, R5's ladder, the
 twelve exploratory episodes and the corpus digest `7fe6e64b…f99120` — and report any rule the
 draft does not carry. The rented card stays read-only for Codex.
+
+## Routing, ruled by the Director 2026-09-10: review requests reach Codex through this file
+
+The Chief sends Codex review requests by writing them here and pushing main; Codex answers by
+commit on `codex/cuda-torch-seam`; the Research Division's watch on `codex/*` tips notifies the
+Chief. No verbal relay in either direction. The card stays read-only for Codex.
+
+**Two standing requests, each file-only, each triggered by a commit on `cuda-ws-d`:**
+
+1. **Re-review of the plan-progress pre-registration** once the D-CRO's commit applies P1–P6 and
+   the episode-unit correction (`STATE-PLAN-PROGRESS-ORDER-2026-09-10.md`, the two sections of this
+   date): confirm each item is carried as ruled — `forward_batch: 1` and the token index in the
+   capture contract; the retrieval candidate set, tie policy and the transport distance with its
+   metric; §13 refreshed; the episode-level bound with the subgroup epsilons and the decision-count
+   epsilons marked; five-fold episode cross-fitting with folds and seed in the seal; both digests —
+   and report any rule the draft still does not carry. The seal waits for this review.
+2. **Audit of the width-1 ladder** when `WSD-FD-CALIBRATION-2026-09-10` carries it: against the
+   protocol's §5 quantities and §6 table, and against C2 of the WS-D order — individual response
+   vectors preserved before reduction, the boundary check preceding every derivative, `anchor_batch`
+   and `forward_batch` declared and equal to 1, both precisions on one forward path, no execution
+   error read as a scientific branch, and the unexecuted pieces listed as unexecuted.
+
+Report as before: a record directory under `research/records/`, sources pinned by hash, no model
+loaded, nothing on the card changed.
