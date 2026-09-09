@@ -1,9 +1,9 @@
 """G-2(b) at ``cache_strategy: none``: the first number in this migration not true by construction.
 
-Loads the bf16 checkpoint on CPU, reads every deciding position of the recorded episodes with
-the recorded prefix in front of it, and compares the argmax the port produces against the one
-MLX recorded. Teacher-forced, so a disagreement at one position cannot cascade into the next
-and every position is an independent comparison.
+Loads the bf16 checkpoint on the device ``LLL_DEVICE`` selects, reads every deciding position
+of the recorded episodes with the recorded prefix in front of it, and compares the argmax the
+port produces against the one MLX recorded. Teacher-forced, so a disagreement at one position
+cannot cascade into the next and every position is an independent comparison.
 
 **What a disagreement means depends entirely on the recorded confidence.** A flip where the
 model's own probability was at least 0.99 fails the run: quantisation between MLX 4-bit and CPU
@@ -28,6 +28,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[1]
 for _path in (_ROOT / "src", _ROOT / "research" / "acceptance"):
@@ -166,25 +167,54 @@ def _snapshot(repo_id: str) -> Path:
     return Path(snapshot_download(repo_id, local_files_only=True, cache_dir=str(cache)))
 
 
-def _load(checkpoint: Path):
-    """Text-only load through the package's loader, which fails closed on every gap."""
+def _peak_gib(target: str) -> float | None:
+    """Peak allocator memory on a CUDA device, or None where there is nothing to read.
+
+    The checklist asks for the peak measured on the device rather than projected; nothing in
+    this script measured one, and the laptop's 7.88 GiB came from outside it.
+    """
+    if not target.startswith("cuda"):
+        return None
+    import torch
+
+    return torch.cuda.max_memory_allocated(target) / (1024**3)
+
+
+def _load(checkpoint: Path) -> tuple[Any, Any, str]:
+    """Text-only load through the package's loader, which fails closed on every gap.
+
+    **The device is selected, never assumed.** This ran ``device="cpu"`` as a literal, written
+    on a laptop that had no CUDA, and on the rented card it therefore loaded onto the CPU and
+    produced a CPU number while every environment variable said ``cuda:0``. The load report
+    said ``device: cpu`` and nothing else did; a reader taking the agreement figure at face
+    value would have recorded a CPU measurement as the port's CUDA result. So the target comes
+    from ``device.select``, which reads ``LLL_DEVICE``, and is returned so the record can name
+    what actually ran rather than what the script was written on.
+    """
     from local_llm_lab import device
     from local_llm_lab.arch_torch import TorchArchitectureView
     from local_llm_lab.hf_text import load_text_causal_lm
 
     reading = device.pin(attention="eager")
-    print(f"determinism: {reading.get('determinism')}, attention: eager, dtype bfloat16 on cpu")
+    target = device.select()
+    pinned = reading.get("determinism")
+    print(f"determinism: {pinned}, attention: eager, dtype bfloat16 on {target}")
 
     started = time.monotonic()
     model, report = load_text_causal_lm(
-        checkpoint, dtype="bfloat16", attn_implementation="eager", device="cpu"
+        checkpoint, dtype="bfloat16", attn_implementation="eager", device=target
     )
+    if str(report.get("device")) != target:
+        raise RuntimeError(
+            f"asked for {target} and the loader reports {report.get('device')!r}; refusing to "
+            "measure, because a number taken on another device would be recorded as this one's"
+        )
     view = TorchArchitectureView.from_model(model)
     print(
         f"loaded in {time.monotonic() - started:.1f}s: {view.num_layers} layers, "
         f"hidden {view.hidden_size}, vocab {view.vocab_size}; load report {report}"
     )
-    return model, view
+    return model, view, target
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -222,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     from local_llm_lab.torch_capture import TorchCapture
 
     checkpoint = arguments.checkpoint or _snapshot(load_model_spec(CHECKPOINT_ENTRY).hf_id)
-    model, view = _load(checkpoint)
+    model, view, target = _load(checkpoint)
 
     class _Sink:
         """The capture needs a sink; teacher forcing reads logits and no residuals."""
@@ -245,6 +275,10 @@ def main(argv: list[str] | None = None) -> int:
         forward = tolerance.torch_forward_rows(wrapped, view, top_k=arguments.top_k)
         reports = run_episodes(episodes, forward, top_k=arguments.top_k, per_episode=per_episode)
 
+    peak = _peak_gib(target)
+    if peak is not None:
+        print(f"peak {target} memory: {peak:.2f} GiB")
+
     compared = sum(report.agreement.compared for _, report, _ in reports)
     agreed = sum(report.agreement.agreed for _, report, _ in reports)
     hard = sum(len(report.agreement.hard_flips) for _, report, _ in reports)
@@ -264,11 +298,20 @@ def main(argv: list[str] | None = None) -> int:
                         gate_records.current_identity(checkpoint),
                         records=str(arguments.records),
                         records_precision="mlx 4-bit",
-                        port_precision="cpu bfloat16",
+                        port_precision=f"{target} bfloat16",
                     ),
                     "compared": provenance.Measured(compared, provenance.MEASURED_HERE).as_dict(),
                     "agreed": provenance.Measured(agreed, provenance.MEASURED_HERE).as_dict(),
                     "hard_flips": provenance.Measured(hard, provenance.MEASURED_HERE).as_dict(),
+                    **(
+                        {}
+                        if peak is None
+                        else {
+                            "peak_memory": provenance.Measured(
+                                round(peak, 3), provenance.MEASURED_HERE, unit="GiB"
+                            ).as_dict()
+                        }
+                    ),
                     "episodes": [
                         _episode_row(episode, report, elapsed)
                         for episode, report, elapsed in reports
