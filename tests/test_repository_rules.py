@@ -1782,3 +1782,188 @@ def test_the_any_scope_mlx_set_is_the_pinned_superset_the_collector_needs() -> N
         "import-time loading is a strict subset of reaching at any scope; if they are equal the "
         "wider list has stopped being computed from a wider question"
     )
+
+
+# ------------------------------------------------------------ guards that are present and inert
+#
+# Three of these turned up in two days, across two streams, and they are one shape: a check that is
+# **present** and does nothing. Not an absent check — a present one, so a reader who greps for a
+# guard finds one and reads silence as evidence.
+#
+#   * SWE-2's: a guard that passed the object it existed to catch, so the early error never fired.
+#   * SWE-2's: an assertion that an artefact *loads*, under a reader that treats missing weights as
+#     a warning, satisfied by a checkpoint that had learned nothing.
+#   * D-CRO's: `assert <comparison> or True`, which is `(<comparison>) or True` because `==` binds
+#     tighter than `or`. It stood in the script that produced the log-probability figures in
+#     `research/records/ARM-A-DIVERGENCE-2026-09-07` and had never tested anything.
+#
+# Only the third is detectable by parsing, and so are two neighbours of it. The first two depend on
+# what a check is compared *against*, which no scanner can know; the technique for those is in
+# `research/records/CUDA-WS-D-2026-09-09/` — construct the input the check should fail on and
+# confirm that it does. This scanner takes the shapes that can be decided, so the fourth one is
+# caught at the moment of temptation rather than found in two days' time.
+#
+# Parsed, never grepped. The first draft of the pin in `tests/test_fixed_history_seam.py` searched
+# the source for `or True` and failed on the docstring that explains the shape: prose describing an
+# inert guard is not one, and a substring search cannot tell them apart.
+
+#: Sites allowed to keep a swallowing handler, each with the reason it is not inert. Empty, and an
+#: addition is a reviewed claim that a failure there is genuinely not information — not a way to
+#: quiet the scanner. Recorded as a set rather than left implicit so that adding to it is visible.
+_SANCTIONED_SWALLOW_SITES: frozenset[str] = frozenset()
+
+_SWALLOWING_STATEMENTS = (ast.Pass, ast.Continue, ast.Break)
+_BROAD_EXCEPTIONS = frozenset({"Exception", "BaseException"})
+
+
+def _handler_is_broad(handler: ast.ExceptHandler) -> bool:
+    if handler.type is None:  # a bare `except:`
+        return True
+    if isinstance(handler.type, ast.Name):
+        return handler.type.id in _BROAD_EXCEPTIONS
+    return getattr(handler.type, "attr", None) in _BROAD_EXCEPTIONS
+
+
+def _inert_guards(paths: set[Path], root: Path) -> list[str]:
+    """Every present-but-inert guard in `paths`, as `path:line: shape` strings, in file order.
+
+    Sorted by line within each file because `ast.walk` is breadth-first, so an unsorted result
+    reports a handler at line 12 before one at line 8 — which reads as a scanner that has lost
+    track of the file, and a scanner nobody trusts gets deleted rather than fixed.
+    """
+    found: list[str] = []
+    for path in sorted(paths):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue  # unreadable or unparseable is a different rule's problem, not this one's
+        relative = path.relative_to(root).as_posix()
+        in_file: list[tuple[int, str]] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assert):
+                shape = _inert_assert_shape(node.test)
+                if shape is not None:
+                    in_file.append((node.lineno, f"{relative}:{node.lineno}: {shape}"))
+            if isinstance(node, ast.ExceptHandler) and _handler_is_broad(node):
+                body = [
+                    statement
+                    for statement in node.body
+                    # A docstring-style bare string is not a statement that handles anything.
+                    if not (
+                        isinstance(statement, ast.Expr)
+                        and isinstance(statement.value, ast.Constant)
+                    )
+                ]
+                if len(body) == 1 and isinstance(body[0], _SWALLOWING_STATEMENTS):
+                    site = f"{relative}:{node.lineno}"
+                    if site not in _SANCTIONED_SWALLOW_SITES:
+                        in_file.append(
+                            (node.lineno, f"{site}: broad handler swallows the call")
+                        )
+        found.extend(line for _, line in sorted(in_file))
+    return found
+
+
+def _inert_assert_shape(test: ast.expr) -> str | None:
+    """Which inert shape `test` is, or None. Truthiness is decided on the constant, not its type."""
+    truthy = lambda node: isinstance(node, ast.Constant) and bool(node.value)  # noqa: E731
+    if (
+        isinstance(test, ast.BoolOp)
+        and isinstance(test.op, ast.Or)
+        and any(truthy(value) for value in test.values)
+    ):
+        return "assert short-circuits on a truthy constant, so it cannot fail"
+    if truthy(test):
+        return "assert on a bare truthy constant, so it cannot fail"
+    if isinstance(test, ast.Tuple) and test.elts:
+        return "assert on a non-empty tuple, which is always true (ruff F631)"
+    return None
+
+
+def _scanned_for_inert_guards(root: Path) -> set[Path]:
+    """The modern sources, plus `tests/` — two of the three shapes so far were in test code."""
+    return _discover_modern_python_sources(root) | set((root / "tests").rglob("*.py"))
+
+
+def test_no_source_or_test_carries_a_guard_that_cannot_fail() -> None:
+    assert _inert_guards(_scanned_for_inert_guards(_REPO_ROOT), _REPO_ROOT) == []
+
+
+def test_the_inert_guard_scan_reaches_tests_and_scripts_and_leaves_records_alone() -> None:
+    """A record's script is a record of one run and is reported elsewhere, never changed here.
+
+    `research/records/INERT-GUARD-SWEEP-2026-09-09/` carries the records' hits and the assessment
+    of each; two exist and both are benign.
+    """
+    paths = _scanned_for_inert_guards(_REPO_ROOT)
+
+    assert _REPO_ROOT / "scripts/fixed_history_lens.py" in paths
+    assert _REPO_ROOT / "tests/test_repository_rules.py" in paths
+    assert not [path for path in paths if "research/records/" in path.as_posix()]
+
+
+def test_the_inert_guard_scanner_finds_each_shape_and_spares_the_look_alikes(tmp_path) -> None:
+    """The scanner is proved before it is believed, because an empty result is the thing it hunts.
+
+    The look-alikes matter as much as the hits: a handler that re-raises, a handler that records
+    what happened, an assertion whose constant is falsy (`assert x or None` can fail), and prose
+    naming the shape are all correct code, and a scanner that flags them gets deleted.
+    """
+    (tmp_path / "hits.py").write_text(
+        "def f(a, b, xs):\n"
+        "    assert a == b or True\n"
+        "    assert (a, b)\n"
+        "    assert 'never empty'\n"
+        "    for x in xs:\n"
+        "        try:\n"
+        "            x.do_the_work()\n"
+        "        except Exception:\n"
+        "            continue\n"
+        "    try:\n"
+        "        x.again()\n"
+        "    except:  # noqa: E722\n"
+        "        pass\n"
+    )
+    (tmp_path / "clean.py").write_text(
+        '"""An assert with `or True` in its prose is not an assert with `or True` in it."""\n'
+        "def g(a, b, log):\n"
+        "    assert a == b or None\n"
+        "    assert ()\n"
+        "    try:\n"
+        "        a.work()\n"
+        "    except Exception as error:\n"
+        "        raise RuntimeError('named') from error\n"
+        "    try:\n"
+        "        b.work()\n"
+        "    except Exception as error:\n"
+        "        log(error)\n"
+        "    try:\n"
+        "        b.other()\n"
+        "    except KeyError:\n"
+        "        pass\n"
+    )
+    found = _inert_guards({tmp_path / "hits.py", tmp_path / "clean.py"}, tmp_path)
+
+    assert [line.split(": ", 1)[0] for line in found] == [
+        "hits.py:2",
+        "hits.py:3",
+        "hits.py:4",
+        "hits.py:8",
+        "hits.py:12",
+    ]
+    assert not [line for line in found if line.startswith("clean.py")]
+
+
+def test_the_scanner_catches_the_assertion_that_actually_shipped(tmp_path) -> None:
+    """Not a synthetic shape: the line as it stood in `scripts/fixed_history_lens.py:207`, which
+    guarded nothing while that script produced a published figure."""
+    (tmp_path / "as_shipped.py").write_text(
+        "def main(mtok, tok, pairs):\n"
+        "    for p in pairs:\n"
+        "        assert list(mtok.encode(p['prompt_text'])) == "
+        "tok(p['prompt_text'])['input_ids'][: p['n']] or True\n"
+    )
+    found = _inert_guards({tmp_path / "as_shipped.py"}, tmp_path)
+
+    assert len(found) == 1
+    assert "cannot fail" in found[0]
