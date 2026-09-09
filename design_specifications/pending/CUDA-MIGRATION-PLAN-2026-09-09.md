@@ -1497,8 +1497,8 @@ every golden gate and the tolerance runner stay greedy, because their records we
 temperature 1.0 with no top-p or top-k truncation, because the estimands are the model's own
 laws and any tuning measures a different distribution; seed, temperature and sampler in every
 manifest, with the note that sampled draws reproduce only within one backend and kernel set.
-SWE-1 builds the sampler (WS-B order, amendment of this date); the state programme's script
-keeps `--decoding sampled` refused by name until that sampler is on the branch it runs from,
-and names its estimand per mode: the context-averaged outcome frequency under greedy, the
+SWE-1 built the sampler (`b29c509`, on `cuda-migration`; WS-B order, review of this date) and
+the state programme's script selects it through its policy seam (`fa5fadc`, merged at `d946bc0`),
+refusing `--decoding sampled` only where the sampler is absent, and names its estimand per mode: the context-averaged outcome frequency under greedy, the
 derivation's distribution under sampled. A record made in one mode is not compared with one
 made in the other.

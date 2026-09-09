@@ -411,3 +411,41 @@ device driver's, which hands the same `SampledDecoding` to the runner as its sam
 fixture run is a test, not a committed record; the committed record stays greedy.
 
 54 state tests; the full suite exits 0 on the branch.
+
+## Review of the relation maker and the sampled branch, Chief, 2026-09-10 — `fa5fadc`, merged into `cuda-migration` at `d946bc0`
+
+**Verdict: passes; merged.** Against the merge result: full suite 2,674 passed, 10 skipped at nine
+sites for absent worktree artefacts, under the Chief's window at 07:04Z; the torch, state and
+sampler sets 101; the fixture script run whole in sampled mode on the merge, retaining D1, D4, D5
+and D10; no deletion on either side. The first merge object the Chief built carried the order
+file with conflict markers, because `merge-tree` writes the conflicted tree and prints its id
+before the conflict lines; it was not pushed, the tree was rebuilt with the order resolved, and
+the push was gated on the two trees differing in that file alone.
+
+**Ruling on the D10 construction: accepted as built.** The relation test enters the derivation
+table as a contrast against its own negation, E "the action on B follows B's state" and A
+"follows A's state", which are logical negations under swapped states, so the contrast is
+`2·mean(D10) − 1` by construction: +1 for a policy acting on B by B's state, −1 by A's, 0 at
+chance, and the drop rule drops chance. It is the relation sentence in the table's shape, derived
+from the same rows and never scored twice; `M` counts it, which tightens `n` and is the
+conservative side. The relation estimand at the substitution tolerance is right, since it is a
+substitution claim about file B. The record says the construction in those words so no reader
+takes D10 for an independent arm.
+
+**The sampled branch** lifts its refusal by the sampler's presence and raises a real import
+failure rather than reading it as absence, which is the lens-fit seam's discrimination reused; the
+object owns the temperature so the flag is gone; the manifest's block is the sampler's own, the
+estimand named beside it; the mode is in the seal and in the resume key, so a greedy record is
+never resumed as a sampled one. What a fixture run proves is the plumbing and the provenance and
+no draw, stated in the order so it is not over-read.
+
+**A protocol from today's three conflicts in this file.** From here the order files are written by
+the Chief only: reviews, rulings and amendments. A builder's notes, decisions and flagged
+constructions go into the record's README and are cited by the review, which is where they were
+read from anyway. Three parties appending to one file produced three merge conflicts in one day
+and one commit with markers in it, and the twenty-ninth method entry is the cost of that.
+
+**What remains for the state programme on the laptop: nothing.** The device driver that satisfies
+the policy seam is built on the device with its three obligations (positions declared on every
+forward, the diagnostic's form named, `device.pin` before preflight), and the first sampled record
+is made there at a measured rate.
