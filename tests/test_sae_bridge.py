@@ -835,15 +835,21 @@ def _register(monkeypatch, layer, identity, **overrides):
     )
 
 
-def _reading_identity(capture_dtype="bfloat16", capture_batch=1, reading=READING):
+#: Two archives that a single fitting declaration could have produced. Equal nu, different bytes.
+LENS_SHA, OTHER_LENS_SHA = "a" * 64, "b" * 64
+
+
+def _reading_identity(capture_dtype="bfloat16", capture_batch=1, reading=READING,
+                      lens_sha256=LENS_SHA):  # fmt: skip
     return B.reading_identity(
-        FLOAT32_NU, capture_dtype=capture_dtype, capture_batch=capture_batch, reading=reading
-    )
+        FLOAT32_NU, lens_sha256=lens_sha256, capture_dtype=capture_dtype,
+        capture_batch=capture_batch, reading=reading,
+    )  # fmt: skip
 
 
 def _record(**kwargs):
     call = {
-        "declared": "float32", "layer": 1, "base": GEMMA,
+        "declared": "float32", "layer": 1, "base": GEMMA, "lens_sha256": LENS_SHA,
         "capture_dtype": "bfloat16", "capture_batch": 1, "reading": READING,
     }  # fmt: skip
     call.update(kwargs)
@@ -870,6 +876,7 @@ def test_a_registered_pairing_lifts_the_refusal_only_for_the_pair_it_measured(mo
         ("reduction", {"reading": {**READING, "reduction": "mean over positions"}}),
         ("endpoint", {"reading": {**READING, "endpoint": "residual after block 16"}}),
         ("context_tokens", {"reading": {**READING, "context_tokens": 1400}}),
+        ("lens_sha256", {"lens_sha256": OTHER_LENS_SHA}),
     ):
         with pytest.raises(ValueError, match="measured a different pair") as raised:
             _record(**changed)
@@ -880,10 +887,55 @@ def test_a_registered_pairing_lifts_the_refusal_only_for_the_pair_it_measured(mo
     other_nu = {"precision": {**FLOAT32_NU["precision"], "forward_batch": 64}}
     with pytest.raises(ValueError, match="measured a different pair") as raised:
         B.fit_precision_record(
-            other_nu, declared="float32", layer=1, base=GEMMA,
+            other_nu, declared="float32", layer=1, base=GEMMA, lens_sha256=LENS_SHA,
             capture_dtype="bfloat16", capture_batch=1, reading=READING,
         )  # fmt: skip
     assert "fit_width" in str(raised.value) and "nu_sha256" in str(raised.value)
+
+
+def test_one_declaration_with_two_archives_is_two_pairings(monkeypatch, parts):
+    """A calibration keyed on the fitting metadata must not transfer to a different matrix.
+
+    Equal declarations produce equal declaration digests by design, so this needs no collision:
+    the nu says how a lens was fitted, and two archives fitted that way answer to it equally. The
+    archive's own verified digest is what says which matrix was measured.
+    """
+    _register(monkeypatch, 1, _reading_identity(lens_sha256=LENS_SHA))
+
+    # The archive the pairing was measured on: permitted.
+    assert _record(lens_sha256=LENS_SHA)["path_term"]["measured"] is True
+
+    # A different archive, byte for byte the same declaration: a different pairing, refused, and
+    # the refusal names the archive rather than the declaration, which is identical on both sides.
+    with pytest.raises(ValueError, match="measured a different pair") as raised:
+        _record(lens_sha256=OTHER_LENS_SHA)
+    message = str(raised.value)
+    assert "lens_sha256" in message
+    assert "nu_sha256" not in message
+
+    # The reverse control, so the test cannot pass by ignoring the declaration: hold the archive
+    # and change the declaration, and the guard refuses on that instead.
+    other_nu = {"precision": {**FLOAT32_NU["precision"], "anchor_batch": 8}}
+    with pytest.raises(ValueError, match="measured a different pair") as raised:
+        B.fit_precision_record(
+            other_nu, declared="float32", layer=1, base=GEMMA, lens_sha256=LENS_SHA,
+            capture_dtype="bfloat16", capture_batch=1, reading=READING,
+        )  # fmt: skip
+    assert "nu_sha256" in str(raised.value)
+
+
+def test_the_archive_digest_comes_off_the_loaded_lens_not_the_caller(parts, monkeypatch):
+    """hook_alignment reads it from the lens object; nobody is asked to assert it."""
+    d, _, lens = parts
+    captured = {}
+
+    def spy(nu, **kwargs):
+        captured.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(B, "fit_precision_record", spy)
+    B.hook_alignment(d, lens, lens_fit_dtype="float32", nu=FLOAT32_NU)
+    assert captured["lens_sha256"] == lens.sha256
 
 
 def test_a_measurement_does_not_transfer_to_a_neighbouring_layer(monkeypatch):
@@ -924,7 +976,9 @@ def test_a_reading_that_declares_no_provenance_matches_no_measurement(monkeypatc
 
 def test_the_fit_precision_lands_in_the_provenance_block(parts, monkeypatch):
     d, u, lens = parts
-    record = B.fit_precision_record(FLOAT32_NU, declared="float32", layer=10, base=GEMMA)
+    record = B.fit_precision_record(
+        FLOAT32_NU, declared="float32", layer=10, base=GEMMA, lens_sha256=LENS_SHA
+    )
     block = B.bridge_provenance(
         d, lens, u, 10, dictionary_repo="r", dictionary_folder="f", fit_precision=record
     )
@@ -934,15 +988,16 @@ def test_the_fit_precision_lands_in_the_provenance_block(parts, monkeypatch):
 
     # Where a pairing has been measured, the measurement is what the artefact carries.
     identity = B.reading_identity(
-        FLOAT32_NU, capture_dtype="bfloat16", capture_batch=1, reading=READING
-    )
+        FLOAT32_NU, lens_sha256=LENS_SHA, capture_dtype="bfloat16", capture_batch=1,
+        reading=READING,
+    )  # fmt: skip
     monkeypatch.setitem(
         B.anchor_table()[GEMMA]["measured_pairings"],
         "10",
         {"pair": identity, "relative": 0.004, "basis": "paired comparison, measured-here"},
     )
     measured = B.fit_precision_record(
-        FLOAT32_NU, declared="float32", layer=10, base=GEMMA,
+        FLOAT32_NU, declared="float32", layer=10, base=GEMMA, lens_sha256=LENS_SHA,
         capture_dtype="bfloat16", capture_batch=1, reading=READING,
     )  # fmt: skip
     block = B.bridge_provenance(

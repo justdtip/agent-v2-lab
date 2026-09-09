@@ -547,13 +547,21 @@ def measured_layers(base: str | None = None) -> list[int]:
 #: precision, another width, or with the paths reversed is a different object, which is the whole
 #: finding of this week's controls.
 #:
-#: The lens's side comes from its own nu, so it cannot be asserted by the caller: ``fit_dtype`` and
-#: ``fit_width`` are read from the precision block and ``nu_sha256`` digests the nu entire, which
-#: pins the endpoint and the fit's positions with it. ``lens_side`` records which side of the pair
-#: the lens was fitted on, so a measurement taken with the lens on the other side does not match a
-#: reading with it on this one. The reading's own side the caller must declare, because only the
-#: caller knows it: which positions, under which reduction, at which endpoint, at what context
-#: length. A2's caller supplies its actual provenance or it gets no permission.
+#: The lens's side comes from the lens, so it cannot be asserted by the caller: ``fit_dtype`` and
+#: ``fit_width`` are read from the precision block, ``nu_sha256`` digests the nu entire, and
+#: ``lens_sha256`` is the loaded archive's own verified digest. **Both digests, because they are
+#: different identities.** The nu is the *fitting declaration*, and two archives fitted from one
+#: declaration carry equal nu blocks by design -- no collision needed -- so a measurement keyed on
+#: the declaration alone would transfer to a different matrix. The sidecar's binding to its
+#: archive does not close this: it proves a declaration belongs to an archive, not that only one
+#: archive answers to it. A different archive is a different identity until an explicit,
+#: separately verified equivalence rule says otherwise, and none exists.
+#:
+#: ``lens_side`` records which side of the pair the lens was fitted on, so a measurement taken
+#: with the lens on the other side does not match a reading with it on this one. The reading's own
+#: side the caller must declare, because only the caller knows it: which positions, under which
+#: reduction, at which endpoint, at what context length. A2's caller supplies its actual
+#: provenance or it gets no permission.
 PAIR_FIELDS = (
     "fit_dtype",
     "fit_width",
@@ -561,6 +569,7 @@ PAIR_FIELDS = (
     "capture_width",
     "lens_side",
     "nu_sha256",
+    "lens_sha256",
     "positions",
     "reduction",
     "endpoint",
@@ -597,6 +606,7 @@ def nu_digest(nu: dict | None) -> str | None:
 def reading_identity(
     nu: dict | None,
     *,
+    lens_sha256: str | None = None,
     capture_dtype: str | None,
     capture_batch: int | None,
     reading: dict[str, Any] | None = None,
@@ -616,6 +626,9 @@ def reading_identity(
         "capture_width": capture_batch,
         "lens_side": "fit",
         "nu_sha256": nu_digest(nu),
+        # Read off the loaded archive by the caller above, never asserted: nobody is asked to
+        # claim that two matrices are the same lens.
+        "lens_sha256": lens_sha256,
     }
     for field in READING_FIELDS:
         identity[field] = declared_reading.get(field)
@@ -709,6 +722,7 @@ def fit_precision_record(
     declared: str | None,
     layer: int | None = None,
     base: str | None = None,
+    lens_sha256: str | None = None,
     capture_dtype: str | None = None,
     capture_batch: int | None = None,
     reading: dict[str, Any] | None = None,
@@ -784,7 +798,11 @@ def fit_precision_record(
             "neighbourhood is a per-layer quantity (WS-D, the displacement control)"
         )
     identity = reading_identity(
-        nu, capture_dtype=capture_dtype, capture_batch=capture_batch, reading=reading
+        nu,
+        lens_sha256=lens_sha256,
+        capture_dtype=capture_dtype,
+        capture_batch=capture_batch,
+        reading=reading,
     )
     record["proposed_pair"] = identity
     term = path_term_for_layer(layer, base=base, identity=identity)
@@ -891,6 +909,7 @@ def hook_alignment(
         declared=lens_fit_dtype,
         layer=layer,
         base=dict_base,
+        lens_sha256=getattr(lens, "sha256", None),
         capture_dtype=capture_dtype,
         capture_batch=capture_batch,
         reading=reading,
