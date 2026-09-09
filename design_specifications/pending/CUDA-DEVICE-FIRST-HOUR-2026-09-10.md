@@ -93,8 +93,15 @@ tests, all four adversarial fixes). The D-CRO's device checklist is
   record matches and re-runs one whose record does not, saying why.
 - **Smoke pass before full pass.** Every gate on its smallest input first, so an hour that dies at
   minute fifty has touched every gate once.
-- **Provenance as fields.** Every number carries `basis: measured-here | laptop-basis | expected`;
-  every record's head carries `device.describe()`, the checkpoint sha and the source commit.
+- **Provenance as fields, per cell and not per row.** Every number carries
+  `basis: measured-here | laptop-basis | expected`; every record's head carries `device.describe()`,
+  the checkpoint sha and the source commit. On one row the halves differ: "0 flips at P ≥ 0.99"
+  is measured on the device while "of 78 confident positions" comes from the MLX recording and
+  is not re-measured there; a reader who cannot see which is which takes the row as one
+  measurement (SWE-1). A field without a kind is refused.
+- **Resume keys on the tree that ran**, not on time: the working tree's content including
+  untracked files, the checkpoint sha, the device reading and the gate's input; a modified tree
+  resumes only its own records, and the refusal names every field that differs.
 - **Stop at the first failing gate** with what it saw against what it expected.
 - **A projection is a basis.** Every laptop figure above is what the device number is compared
   against, never what it is expected to equal; and a laptop figure taken on a shared box is not a
