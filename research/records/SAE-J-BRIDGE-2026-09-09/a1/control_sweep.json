@@ -1,0 +1,250 @@
+{
+  "source_commit": "6f605f84b000116f75c7dcb921111a566ddf92bf",
+  "source_script_sha256": "78430c9ddb2af502d977952aaefe087bf50907708dc0afe10bf4462bf6bb92c6",
+  "readout_layer": 18,
+  "k": 10,
+  "features": 512,
+  "feature_draw": "default_rng(20260909): six named features drawn first, then this subset",
+  "elapsed_s": 78.1,
+  "rows": [
+    {
+      "layer": 1,
+      "mean_overlap": 0.0392578125,
+      "share_identical": 0.0,
+      "dist_to_identity": 24.975849151611328,
+      "dist_to_layer": 24.816572189331055
+    },
+    {
+      "layer": 2,
+      "mean_overlap": 0.0470703125,
+      "share_identical": 0.0,
+      "dist_to_identity": 20.998699188232422,
+      "dist_to_layer": 20.807985305786133
+    },
+    {
+      "layer": 3,
+      "mean_overlap": 0.046484375,
+      "share_identical": 0.0,
+      "dist_to_identity": 19.901107788085938,
+      "dist_to_layer": 19.67472267150879
+    },
+    {
+      "layer": 4,
+      "mean_overlap": 0.056640625,
+      "share_identical": 0.0,
+      "dist_to_identity": 16.668100357055664,
+      "dist_to_layer": 16.408769607543945
+    },
+    {
+      "layer": 5,
+      "mean_overlap": 0.0548828125,
+      "share_identical": 0.0,
+      "dist_to_identity": 15.21036434173584,
+      "dist_to_layer": 14.96958065032959
+    },
+    {
+      "layer": 6,
+      "mean_overlap": 0.073046875,
+      "share_identical": 0.0,
+      "dist_to_identity": 13.67822551727295,
+      "dist_to_layer": 13.38576889038086
+    },
+    {
+      "layer": 7,
+      "mean_overlap": 0.1267578125,
+      "share_identical": 0.00390625,
+      "dist_to_identity": 10.77289867401123,
+      "dist_to_layer": 10.431299209594727
+    },
+    {
+      "layer": 8,
+      "mean_overlap": 0.153125,
+      "share_identical": 0.005859375,
+      "dist_to_identity": 8.994378089904785,
+      "dist_to_layer": 8.554585456848145
+    },
+    {
+      "layer": 9,
+      "mean_overlap": 0.22031250000000002,
+      "share_identical": 0.00390625,
+      "dist_to_identity": 6.927708625793457,
+      "dist_to_layer": 6.336071491241455
+    },
+    {
+      "layer": 10,
+      "mean_overlap": 0.2314453125,
+      "share_identical": 0.00390625,
+      "dist_to_identity": 7.120859622955322,
+      "dist_to_layer": 6.464089393615723
+    },
+    {
+      "layer": 11,
+      "mean_overlap": 0.34257812499999996,
+      "share_identical": 0.005859375,
+      "dist_to_identity": 5.643933296203613,
+      "dist_to_layer": 4.769161224365234
+    },
+    {
+      "layer": 12,
+      "mean_overlap": 0.384375,
+      "share_identical": 0.00390625,
+      "dist_to_identity": 5.143741130828857,
+      "dist_to_layer": 4.164890766143799
+    },
+    {
+      "layer": 13,
+      "mean_overlap": 0.3931640625,
+      "share_identical": 0.01171875,
+      "dist_to_identity": 5.324971675872803,
+      "dist_to_layer": 4.296012878417969
+    },
+    {
+      "layer": 14,
+      "mean_overlap": 0.427734375,
+      "share_identical": 0.01171875,
+      "dist_to_identity": 5.536593437194824,
+      "dist_to_layer": 4.26265811920166
+    },
+    {
+      "layer": 15,
+      "mean_overlap": 0.4046875,
+      "share_identical": 0.015625,
+      "dist_to_identity": 6.4030680656433105,
+      "dist_to_layer": 5.167877197265625
+    },
+    {
+      "layer": 16,
+      "mean_overlap": 0.615234375,
+      "share_identical": 0.029296875,
+      "dist_to_identity": 4.418208122253418,
+      "dist_to_layer": 2.6022515296936035
+    },
+    {
+      "layer": 17,
+      "mean_overlap": 0.7132812500000001,
+      "share_identical": 0.0625,
+      "dist_to_identity": 3.9476845264434814,
+      "dist_to_layer": 1.808208703994751
+    },
+    {
+      "layer": 18,
+      "mean_overlap": 1.0,
+      "share_identical": 1.0,
+      "dist_to_identity": 3.3159258365631104,
+      "dist_to_layer": 0.0
+    },
+    {
+      "layer": 19,
+      "mean_overlap": 0.8082031250000001,
+      "share_identical": 0.142578125,
+      "dist_to_identity": 3.2626938819885254,
+      "dist_to_layer": 0.8753829598426819
+    },
+    {
+      "layer": 20,
+      "mean_overlap": 0.7275390625,
+      "share_identical": 0.064453125,
+      "dist_to_identity": 3.151516914367676,
+      "dist_to_layer": 1.130019187927246
+    },
+    {
+      "layer": 21,
+      "mean_overlap": 0.6554687499999999,
+      "share_identical": 0.0390625,
+      "dist_to_identity": 2.9128668308258057,
+      "dist_to_layer": 1.4446144104003906
+    },
+    {
+      "layer": 22,
+      "mean_overlap": 0.6294921874999999,
+      "share_identical": 0.037109375,
+      "dist_to_identity": 2.8431715965270996,
+      "dist_to_layer": 1.6697560548782349
+    },
+    {
+      "layer": 23,
+      "mean_overlap": 0.571875,
+      "share_identical": 0.01953125,
+      "dist_to_identity": 2.8453941345214844,
+      "dist_to_layer": 1.8792201280593872
+    },
+    {
+      "layer": 24,
+      "mean_overlap": 0.5374999999999999,
+      "share_identical": 0.021484375,
+      "dist_to_identity": 2.7802181243896484,
+      "dist_to_layer": 2.0388715267181396
+    },
+    {
+      "layer": 25,
+      "mean_overlap": 0.5169921874999999,
+      "share_identical": 0.0078125,
+      "dist_to_identity": 2.688875198364258,
+      "dist_to_layer": 2.1201326847076416
+    },
+    {
+      "layer": 26,
+      "mean_overlap": 0.4849609375,
+      "share_identical": 0.0078125,
+      "dist_to_identity": 2.614354133605957,
+      "dist_to_layer": 2.224034070968628
+    },
+    {
+      "layer": 27,
+      "mean_overlap": 0.44296875,
+      "share_identical": 0.01171875,
+      "dist_to_identity": 2.450063943862915,
+      "dist_to_layer": 2.49001145362854
+    },
+    {
+      "layer": 28,
+      "mean_overlap": 0.3642578125,
+      "share_identical": 0.0,
+      "dist_to_identity": 2.2646660804748535,
+      "dist_to_layer": 2.5806467533111572
+    },
+    {
+      "layer": 29,
+      "mean_overlap": 0.35957031250000004,
+      "share_identical": 0.0,
+      "dist_to_identity": 2.1849961280822754,
+      "dist_to_layer": 2.700986862182617
+    },
+    {
+      "layer": 30,
+      "mean_overlap": 0.1521484375,
+      "share_identical": 0.0,
+      "dist_to_identity": 1.5658562183380127,
+      "dist_to_layer": 3.0738065242767334
+    },
+    {
+      "layer": 31,
+      "mean_overlap": 0.1703125,
+      "share_identical": 0.0,
+      "dist_to_identity": 1.3313101530075073,
+      "dist_to_layer": 3.069451332092285
+    },
+    {
+      "layer": 32,
+      "mean_overlap": 0.15859375,
+      "share_identical": 0.0,
+      "dist_to_identity": 1.240050196647644,
+      "dist_to_layer": 3.059926986694336
+    },
+    {
+      "layer": 33,
+      "mean_overlap": 0.12460937500000001,
+      "share_identical": 0.001953125,
+      "dist_to_identity": 0.9613425135612488,
+      "dist_to_layer": 3.0967535972595215
+    },
+    {
+      "layer": null,
+      "mean_overlap": 0.105859375,
+      "share_identical": 0.0,
+      "dist_to_identity": 0.0,
+      "dist_to_layer": 3.3159258365631104,
+      "note": "no lens: the decoder direction read raw through the gain"
+    }
+  ]
+}
