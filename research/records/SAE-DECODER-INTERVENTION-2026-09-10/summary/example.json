@@ -1,0 +1,61 @@
+{
+  "source_commit": "d32cc28146f95e0659798a24c5bdd01ee9fb1cc0",
+  "device": "cpu",
+  "checkpoint_sha256": null,
+  "scope": "the existing float32 JumpReLU counterexample; no model",
+  "full": {
+    "kind": "sae_decoder_reencoding",
+    "basis": "measured-here",
+    "features": [
+      0
+    ],
+    "before": [
+      1.0
+    ],
+    "target": [
+      3.0
+    ],
+    "achieved": [
+      5.0
+    ],
+    "target_error": [
+      2.0
+    ],
+    "off_target_features": [
+      1
+    ],
+    "off_target_change": [
+      2.0
+    ]
+  },
+  "summary": {
+    "kind": "sae_decoder_reencoding_summary",
+    "basis": "measured-here",
+    "features": [
+      0
+    ],
+    "before": [
+      1.0
+    ],
+    "target": [
+      3.0
+    ],
+    "achieved": [
+      5.0
+    ],
+    "target_error": [
+      2.0
+    ],
+    "off_target_summary": {
+      "nonzero_count": 1,
+      "max_abs": 2.0,
+      "l1": 2.0,
+      "top_changes": [
+        [
+          1,
+          2.0
+        ]
+      ]
+    }
+  }
+}
