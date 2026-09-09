@@ -253,7 +253,7 @@ def test_the_greedy_path_is_unchanged_and_never_draws(monkeypatch) -> None:
 
     spec = load_model_spec("qwen25-coder-3b")
     model, view, tokenizer = _peak(CALL_PIECES)
-    ids, reason = generate_turn_tokens(model, tokenizer, [7, 8, 9], 20, view=view, spec=spec)
+    ids, reason, _ = generate_turn_tokens(model, tokenizer, [7, 8, 9], 20, view=view, spec=spec)
     assert reason == STOP_TURN_COMPLETE and ids == expected[:9]
 
     model, view, tokenizer = _peak(CALL_PIECES)
@@ -385,10 +385,11 @@ def test_the_sampled_loop_shares_the_partition_and_the_stop_rule_with_the_greedy
 
     spec = load_model_spec("qwen25-coder-3b")
     model, view, tokenizer = _peak(CALL_PIECES)
-    ids, reason = generate_turn_tokens(
+    ids, reason, ended_on_eos = generate_turn_tokens(
         model, tokenizer, [7, 8, 9], 20, view=view, spec=spec, decoding=SampledDecoding(seed=1)
     )
     assert reason == STOP_TURN_COMPLETE and len(ids) == 9, "the shared stop rule closed the fence"
+    assert ended_on_eos is False
 
 
 def test_the_sampled_loop_keeps_a_terminator_and_stops_on_it() -> None:
@@ -403,15 +404,16 @@ def test_the_sampled_loop_keeps_a_terminator_and_stops_on_it() -> None:
 
     spec = load_model_spec("qwen25-coder-3b")
     model, view, tokenizer = _peak(["a", "b"], tail=[106, TOKEN_BASE])
-    greedy_ids, greedy_reason = generate_turn_tokens(
+    greedy_ids, greedy_reason, greedy_eos = generate_turn_tokens(
         model, tokenizer, [7, 8, 9], 10, view=view, spec=spec
     )
     model, view, tokenizer = _peak(["a", "b"], tail=[106, TOKEN_BASE])
-    ids, reason = generate_turn_tokens(
+    ids, reason, ended_on_eos = generate_turn_tokens(
         model, tokenizer, [7, 8, 9], 10, view=view, spec=spec, decoding=SampledDecoding(seed=1)
     )
     assert ids == greedy_ids == [TOKEN_BASE, TOKEN_BASE + 1, 106]
     assert reason == greedy_reason
+    assert ended_on_eos is greedy_eos is True, "the fact beside the label, on the sampled path too"
 
 
 def test_the_sampled_loop_honours_the_token_cap() -> None:

@@ -105,6 +105,7 @@ class Transcript:
         think_tokens: int = 0,
         raw: str | None = None,
         parse_error: str | None = None,
+        ended_on_eos: bool | None = None,
     ) -> None:
         entry = {
             "index": index,
@@ -117,6 +118,7 @@ class Transcript:
             "think_tokens": think_tokens,
             "raw": raw,
             "parse_error": parse_error,
+            "ended_on_eos": ended_on_eos,
         }
         self._record["steps"].append(entry)
         head = self._paint(f"[{index:02d}]", "1")

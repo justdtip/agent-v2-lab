@@ -235,3 +235,58 @@ def test_run_task_records_both_repetition_columns(monkeypatch) -> None:
     }
     assert trajectory.repetition["executed_calls"] == 1
     assert trajectory.as_dict()["repetition"] == trajectory.repetition
+
+
+def test_a_turn_the_model_ended_says_so_beside_the_cap_label(monkeypatch) -> None:
+    """A record never says a turn was capped when the model ended it.
+
+    The count-based ``truncated`` and the ``token_cap`` label stay what they were, because the
+    MLX records are compared on them; ``ended_on_eos`` is the fact beside them. A generator
+    that cannot say leaves ``None`` rather than a guess.
+    """
+    spec = load_model_spec("qwen35-4b")
+    monkeypatch.setattr(
+        runner,
+        "build_prompt",
+        lambda tokenizer, messages, *, spec, keep_last, generation=True: "turn",
+    )
+
+    def run(fake):
+        monkeypatch.setattr(runner, "generate_turn_with_count", fake)
+        return runner.run_task(
+            object(),
+            SimpleNamespace(encode=lambda text: list(range(len(text)))),
+            _task(),
+            sampler=None,
+            spec=spec,
+            view=None,
+            resolved=None,
+            max_steps=1,
+            max_tokens=17,
+            use_cache=False,
+        )
+
+    def ended_at_the_cap(model, tokenizer, prompt, sampler, max_tokens, turn_cache, *, spec):
+        return runner.TurnOutput(
+            "a note, then the model stopped", max_tokens, 0, reason="token_cap", ended_on_eos=True
+        )
+
+    step = run(ended_at_the_cap).steps[0]
+    assert step["truncated"] is True, "the count-based field is unmoved"
+    assert step["ended_on_eos"] is True, "and the fact beside it says the model stopped"
+
+    def cannot_say(model, tokenizer, prompt, sampler, max_tokens, turn_cache, *, spec):
+        return "a note and then the budget ran o", max_tokens, 0
+
+    step = run(cannot_say).steps[0]
+    assert step["truncated"] is True and step["ended_on_eos"] is None
+
+    finish = render_turn("done", Action("finish", {"answer": "x"}))
+
+    def closed_the_call(model, tokenizer, prompt, sampler, max_tokens, turn_cache, *, spec):
+        return runner.TurnOutput(finish, 8, 0, reason="turn_complete", ended_on_eos=False)
+
+    step = run(closed_the_call).steps[0]
+    assert step["action"]["name"] == "finish" and step["ended_on_eos"] is False, (
+        "the parsed path carries the fact too, and a fence-closed turn did not end on EOS"
+    )

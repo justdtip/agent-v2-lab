@@ -216,6 +216,9 @@ class GeneratedTurn:
     token_ids: tuple[int, ...]
     final_top: dict[int, tuple[int, ...]] = field(default_factory=dict)
     argmax_by_offset: dict[int, int] = field(default_factory=dict)
+    #: Whether the model ended the turn on a terminator; ``None`` when the generator cannot
+    #: say. Beside ``stop_reason`` rather than in it: the label is compared against the records.
+    ended_on_eos: bool | None = None
     logits_sha256_by_offset: dict[int, str] = field(default_factory=dict)
     stop_reason: str = "unrecorded"
 
@@ -468,10 +471,12 @@ def torch_generator(
     require_greedy(decoding, where="gate 5 (golden trajectories)")
 
     def generate(prompt_ids: tuple[int, ...], *, max_tokens: int) -> GeneratedTurn:
-        token_ids, reason = generate_turn_tokens(
+        token_ids, reason, ended_on_eos = generate_turn_tokens(
             model, tokenizer, list(prompt_ids), max_tokens, view=view, spec=spec
         )
-        return GeneratedTurn(token_ids=tuple(token_ids), stop_reason=reason)
+        return GeneratedTurn(
+            token_ids=tuple(token_ids), stop_reason=reason, ended_on_eos=ended_on_eos
+        )
 
     return generate
 

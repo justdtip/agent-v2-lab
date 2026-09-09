@@ -520,6 +520,42 @@ STOP_TURN_COMPLETE = "turn_complete"
 STOP_TOKEN_CAP = "token_cap"
 
 
+@dataclass(frozen=True)
+class TurnEnd:
+    """How a turn's stream ended: the label the records are compared on, and the fact beside it.
+
+    ``reason`` stays what it always was, because the MLX records carry it and relabelling would
+    move a field they are compared on. ``ended_on_eos`` is the fact the label cannot carry: only
+    the tool-call id is in the stop set, and a stream that ends itself on a terminator falls
+    through to ``token_cap`` on both backends, so without this a record says the model was cut
+    off when the model stopped.
+    """
+
+    reason: str
+    ended_on_eos: bool
+
+
+class TurnOutput(tuple):
+    """``(text, tokens, think_tokens)``, with how the turn ended carried beside the three.
+
+    Every caller since the MLX days unpacks the turn as three, in this package, in the scripts
+    and in the as-run records, so the end is an attribute rather than a fourth item that would
+    break each of them. A fake generator returning a plain tuple carries no end, and a reader
+    asking for one gets ``None``: not observed, rather than a guess.
+    """
+
+    reason: str
+    ended_on_eos: bool
+
+    def __new__(
+        cls, text: str, tokens: int, think_tokens: int, *, reason: str, ended_on_eos: bool
+    ) -> TurnOutput:
+        self = super().__new__(cls, (text, tokens, think_tokens))
+        self.reason = reason
+        self.ended_on_eos = ended_on_eos
+        return self
+
+
 def _consume_stream(
     stream: Any,
     *,
@@ -529,13 +565,22 @@ def _consume_stream(
     stop_ids: set[int],
     capture: Any | None,
     turn_cache: TurnCacheBase | None,
-) -> str:
+    terminators: Iterable[int] = (),
+) -> TurnEnd:
     """Apply the turn's stop rule to a stream of ``(token_id, text_piece)`` pairs.
 
     Both backends feed this one function, so the stop semantics cannot drift between them.
     That matters more than it looks: the golden records were produced under exactly this rule,
     and two copies of it that agree today are two copies that can disagree later.
+
+    ``terminators`` is the model's own EOS set, for the fact beside the label: whether the last
+    token consumed was one of them. It changes no stop decision.
     """
+    terminal = frozenset(terminators)
+
+    def end(reason: str) -> TurnEnd:
+        return TurnEnd(reason, bool(ids) and ids[-1] in terminal)
+
     for token, piece in stream:
         ids.append(token)
         if capture is not None:
@@ -545,12 +590,12 @@ def _consume_stream(
         decoded = tokenizer.decode(ids)
         thinking.update(ids, decoded, tokenizer)
         if token in stop_ids:
-            return STOP_TOKEN
+            return end(STOP_TOKEN)
         if any(mark in piece for mark in _COMPLETION_MARKS) and turn_is_complete(
             thinking.decoded_text(ids, tokenizer)
         ):
-            return STOP_TURN_COMPLETE
-    return STOP_TOKEN_CAP
+            return end(STOP_TURN_COMPLETE)
+    return end(STOP_TOKEN_CAP)
 
 
 def config_eos_ids(model: Any) -> frozenset[int]:
@@ -761,11 +806,12 @@ def generate_turn_tokens(
     view: ArchitectureView,
     spec: ModelSpec,
     decoding: SampledDecoding | str | None = None,
-) -> tuple[list[int], str]:
-    """Torch generation from token ids, returning the tokens and why the turn stopped.
+) -> tuple[list[int], str, bool]:
+    """Torch generation from token ids: the tokens, why the turn stopped, and whether on EOS.
 
-    The acceptance harness needs both, and it starts from recorded ``prompt_ids`` rather than
-    from a prompt string, so it cannot go through the string-shaped entry point.
+    The acceptance harness needs the first two, and it starts from recorded ``prompt_ids``
+    rather than from a prompt string, so it cannot go through the string-shaped entry point.
+    The third is the fact beside the label (:class:`TurnEnd`).
 
     ``decoding`` is ``None`` or ``"greedy"`` for the greedy loop, or a :class:`SampledDecoding`
     for the sampled one. The acceptance harness never passes it: every gate compares against
@@ -777,14 +823,15 @@ def generate_turn_tokens(
         enabled=spec.chat.thinking in {"inference", "trained"},
         max_tokens=spec.chat.max_think_tokens,
     )
-    reason = _consume_stream(
+    terminators = config_eos_ids(model)
+    end = _consume_stream(
         _torch_stream(
             model,
             view,
             tokenizer,
             prompt_ids,
             max_tokens,
-            eos_ids=config_eos_ids(model),
+            eos_ids=terminators,
             decoding=decoding,
         ),
         ids=ids,
@@ -793,8 +840,9 @@ def generate_turn_tokens(
         stop_ids=stop_ids,
         capture=None,
         turn_cache=None,
+        terminators=terminators,
     )
-    return ids, reason
+    return ids, end.reason, end.ended_on_eos
 
 
 def _stop_ids(tokenizer: Any) -> set[int]:
@@ -815,10 +863,11 @@ def generate_turn_with_count(
     spec: ModelSpec,
     capture: Any | None = None,
     view: ArchitectureView | None = None,
-) -> tuple[str, int, int]:
+) -> TurnOutput:
     """Generate one assistant turn, stopping as soon as the tool call closes.
 
-    Returns decoded text, total generated tokens, and tokens spent in the first think block.
+    Returns decoded text, total generated tokens, and tokens spent in the first think block,
+    as a :class:`TurnOutput` that unpacks as those three and carries how the turn ended.
     When a thinking mode exhausts its budget, a closing tag is inserted into the raw output and
     generation continues until the visible note and tool call are complete.
     """
@@ -871,6 +920,10 @@ def generate_turn_with_count(
             turn_cache.generation_model if isinstance(turn_cache, HistoryCache) else model
         )
     )
+    # The same set ``stream_generate`` ends on, read from the wrapper it reads. A wrapper that
+    # declares one id rather than a set is taken as that one.
+    declared = getattr(tokenizer, "eos_token_ids", None)
+    terminators = {declared} if isinstance(declared, int) else set(declared or ())
     with context as generation_model:
         stream = stream_generate(
             generation_model,
@@ -881,7 +934,7 @@ def generate_turn_with_count(
             **kwargs,
         )
         try:
-            _consume_stream(
+            end = _consume_stream(
                 ((response.token, response.text or "") for response in stream),
                 ids=ids,
                 thinking=thinking,
@@ -889,6 +942,7 @@ def generate_turn_with_count(
                 stop_ids=stop_ids,
                 capture=capture,
                 turn_cache=turn_cache,
+                terminators=terminators,
             )
         finally:
             if (capture is not None or isinstance(turn_cache, HistoryCache)) and callable(
@@ -898,7 +952,13 @@ def generate_turn_with_count(
     if turn_cache is not None:
         turn_cache.commit(prompt_ids, ids)
     think_tokens = thinking.tokens if thinking.started else 0
-    return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
+    return TurnOutput(
+        thinking.decoded_text(ids, tokenizer),
+        len(ids),
+        think_tokens,
+        reason=end.reason,
+        ended_on_eos=end.ended_on_eos,
+    )
 
 
 def _generate_turn_torch(
@@ -913,7 +973,7 @@ def _generate_turn_torch(
     view: ArchitectureView | None,
     sampler: Any,
     stop_ids: set[int],
-) -> tuple[str, int, int]:
+) -> TurnOutput:
     """Torch branch of :func:`generate_turn_with_count`.
 
     Same thinking tracker, same stop rule, a hand-rolled greedy loop in place of
@@ -960,7 +1020,7 @@ def _generate_turn_torch(
     # not required to forward `.config`, and a missing set would silently become an empty one.
     terminators = config_eos_ids(model)
     with context as generation_model:
-        _consume_stream(
+        end = _consume_stream(
             _torch_stream(
                 generation_model,
                 view,
@@ -976,9 +1036,16 @@ def _generate_turn_torch(
             stop_ids=stop_ids,
             capture=capture,
             turn_cache=None,
+            terminators=terminators,
         )
     think_tokens = thinking.tokens if thinking.started else 0
-    return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
+    return TurnOutput(
+        thinking.decoded_text(ids, tokenizer),
+        len(ids),
+        think_tokens,
+        reason=end.reason,
+        ended_on_eos=end.ended_on_eos,
+    )
 
 
 def generate_turn(model: Any, tokenizer: Any, prompt: str, sampler: Any, max_tokens: int) -> str:
@@ -1191,9 +1258,13 @@ def run_task(
                 messages=window_messages(messages, keep_last=keep_last),
             )
             capture_kwargs["capture"] = capture
-        raw, n_tokens, think_tokens = generate_turn_with_count(
+        output = generate_turn_with_count(
             model, tokenizer, prompt, sampler, max_tokens, turn_cache, spec=spec, **capture_kwargs
         )
+        raw, n_tokens, think_tokens = output
+        # The fact beside the label: a turn that ended on the model's terminator was not cut
+        # off, whatever the count says. ``None`` from a generator that cannot say.
+        ended_on_eos = getattr(output, "ended_on_eos", None)
         trajectory.turns += 1
         trajectory.generated_tokens += n_tokens
         trajectory.think_tokens += think_tokens
@@ -1215,6 +1286,7 @@ def run_task(
                     "raw": raw,
                     "parse_error": str(error),
                     "truncated": truncated,
+                    "ended_on_eos": ended_on_eos,
                 }
             )
             if transcript is not None:
@@ -1227,6 +1299,7 @@ def run_task(
                     think_tokens=think_tokens,
                     raw=raw,
                     parse_error=str(error),
+                    ended_on_eos=ended_on_eos,
                 )
             break
         trajectory.valid_turns += 1
@@ -1240,6 +1313,7 @@ def run_task(
                 "action": {"name": turn.action.name, "arguments": turn.action.arguments},
                 "observation": observation,
                 "raw": raw,
+                "ended_on_eos": ended_on_eos,
             }
         )
         if transcript is not None:
@@ -1251,6 +1325,7 @@ def run_task(
                 thinking=thinking,
                 think_tokens=think_tokens,
                 raw=raw,
+                ended_on_eos=ended_on_eos,
             )
         # Measure repetition but never rescue: the run continues to finish or max_steps.
         if detect_loop(trajectory.steps):

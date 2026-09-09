@@ -275,7 +275,7 @@ def test_torch_generation_stops_at_the_closing_fence() -> None:
 
 def test_generate_turn_tokens_reports_why_the_turn_stopped() -> None:
     model, view, tokenizer = _stubs(CALL_PIECES)
-    ids, reason = generate_turn_tokens(
+    ids, reason, _ = generate_turn_tokens(
         model,
         tokenizer,
         [0, 1, 2],
@@ -286,7 +286,7 @@ def test_generate_turn_tokens_reports_why_the_turn_stopped() -> None:
     assert len(ids) == 9 and reason == "turn_complete"
 
     model, view, tokenizer = _stubs(CALL_PIECES)
-    ids, reason = generate_turn_tokens(
+    ids, reason, _ = generate_turn_tokens(
         model,
         tokenizer,
         [0, 1, 2],
@@ -381,6 +381,59 @@ def test_both_backends_stop_at_the_same_index(monkeypatch, pieces: list[str]) ->
 
     assert torch_count == mlx_count, "the two backends stopped at different tokens"
     assert torch_text == mlx_text
+
+
+def test_both_backends_say_when_the_model_ended_the_turn(monkeypatch) -> None:
+    """The label stays ``token_cap``; the fact beside it says the model stopped.
+
+    Only the tool-call id is in the stop set, so a stream that ends itself on a terminator
+    falls through to the cap label on both backends. The records are compared on the label,
+    so it is not moved; ``ended_on_eos`` is added beside it so a record never says a turn was
+    capped when the model ended it, and a turn that really hit the cap says False.
+    """
+    spec = load_model_spec("qwen25-coder-3b")
+
+    class _Response:
+        def __init__(self, token: int, text: str) -> None:
+            self.token = token
+            self.text = text
+
+    def fake_stream(tokens):
+        def fake_stream_generate(model, tokenizer, *, prompt, max_tokens, sampler):
+            for token in tokens[:max_tokens]:
+                yield _Response(token, tokenizer.decode([token]))
+
+        return fake_stream_generate
+
+    def mlx_turn(tokens, budget):
+        fake_module = types.ModuleType("mlx_lm")
+        fake_module.stream_generate = fake_stream(tokens)
+        monkeypatch.setitem(sys.modules, "mlx_lm", fake_module)
+        tokenizer = _StubTokenizer(["a", "b", "c"], extra={106: "<end_of_turn>"})
+        tokenizer.eos_token_ids = {1, 106}
+        return generate_turn_with_count(None, tokenizer, "prompt", None, budget, spec=spec)
+
+    def torch_turn(script, budget):
+        tokenizer = _StubTokenizer(["a", "b", "c"], extra={106: "<end_of_turn>"})
+        view = _StubView(vocab_size=TOKEN_BASE + 8)
+        model = _StubModel(
+            _DISCARDED_PREFILL_LOGITS + script, vocab_size=TOKEN_BASE + 8, eos_token_id=[1, 106]
+        )
+        return generate_turn_with_count(
+            model, tokenizer, "prompt", None, budget, spec=spec, view=view
+        )
+
+    ended = [TOKEN_BASE, TOKEN_BASE + 1, 106]
+    for output in (mlx_turn(ended, 10), torch_turn(ended, 10)):
+        text, count, think = output
+        assert count == 3 and text.endswith("<end_of_turn>")
+        assert output.reason == "token_cap", "the label the records are compared on is unmoved"
+        assert output.ended_on_eos is True
+
+    capped = [TOKEN_BASE, TOKEN_BASE + 1, TOKEN_BASE + 2]
+    for output in (mlx_turn(capped, 2), torch_turn(capped, 2)):
+        assert output.reason == "token_cap" and output.ended_on_eos is False
+        assert len(output) == 3, "still unpacks as three for every existing caller"
 
 
 class _HFStyleOutput:
