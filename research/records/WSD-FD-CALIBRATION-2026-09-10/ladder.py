@@ -211,8 +211,42 @@ def forward_target(layer, base):
         handle.remove()
 
 
+import hashlib  # noqa: E402
+
+import numpy as np  # noqa: E402
+
 rows_out = []
 responses: dict[str, object] = {}
+archive_index: list[dict] = []
+
+
+def _archive(unit: str) -> None:
+    """Write the completed unit's arrays, hash them, and index them. Then forget them.
+
+    Per **completed unit**, not once at the end: a run that accumulates its archive in memory and
+    writes it after the last cell loses everything it measured if it is interrupted, which is the
+    runbook's forbidden shape wearing an archive's clothes — and this record already lost
+    twenty-seven paid minutes to exactly that in a logger. Each file is hashed and the hash goes in
+    the index beside the cells it holds, so an archive cannot be quietly swapped for another.
+    """
+    if not responses:
+        return
+    path = OUT / f"responses-{unit}.npz"
+    np.savez_compressed(path, **responses)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    archive_index.append({
+        "unit": unit, "file": path.name, "sha256": digest,
+        "arrays": sorted(responses), "bytes": path.stat().st_size,
+    })
+    (OUT / "responses-index.json").write_text(
+        json.dumps({"basis": "measured-here", "units": archive_index}, indent=2, sort_keys=True)
+        + "\n"
+    )
+    emit("archived", unit=unit, arrays=len(responses), bytes=path.stat().st_size,
+         sha256=digest[:16])
+    responses.clear()
+
+
 for precision in args.precisions.split(","):
     if precision == "float32":
         model.to(torch.float32)
@@ -272,7 +306,8 @@ for precision in args.precisions.split(","):
                  scalar=float(scalar), basis="measured-here")
 
         with torch.no_grad():
-            zero = reduced(forward_target(layer, source))
+            zero_raw = forward_target(layer, source).float()[0][mask]
+            zero = zero_raw.sum(dim=0)
             for dkind, dindex, v in directions:
                 v_dev = v.to("cuda:0")
                 for k in LADDER_K:
@@ -294,12 +329,18 @@ for precision in args.precisions.split(","):
 
                     raw_plus = forward_target(layer, plus_in).float()[0][mask]
                     raw_minus = forward_target(layer, minus_in).float()[0][mask]
-                    # Individual responses, per selected target position, kept before the sum.
-                    # Codex's C2: summary statistics cannot be revisited after averaging, and the
+                    raw_zero = zero_raw
+                    # Codex's R2: retain the plus, minus and zero outputs **per target position**
+                    # and the requested and realized input vectors, before any summation or
+                    # projection. The odd response alone cannot be taken apart afterwards, and the
                     # whole argument of this record is that an aggregate can hide a dead response.
-                    responses[f"{precision}|L{repo_layer}|{dkind}:{dindex}|k{k}"] = (
-                        (raw_plus - raw_minus).cpu().numpy()
-                    )
+                    cell = f"{precision}|L{repo_layer}|{dkind}:{dindex}|k{k}"
+                    responses[f"{cell}|plus"] = raw_plus.cpu().numpy()
+                    responses[f"{cell}|minus"] = raw_minus.cpu().numpy()
+                    responses[f"{cell}|zero"] = raw_zero.cpu().numpy()
+                    responses[f"{cell}|requested"] = (h * v).cpu().numpy()
+                    responses[f"{cell}|realized_plus"] = dplus.cpu().numpy()
+                    responses[f"{cell}|realized_minus"] = dminus.cpu().numpy()
                     tplus, tminus = raw_plus.sum(dim=0), raw_minus.sum(dim=0)
                     odd = (tplus - tminus)
                     even = (tplus + tminus - 2 * zero)
@@ -339,6 +380,7 @@ for precision in args.precisions.split(","):
                         rows_out.append(entry)
                         with (OUT / "ladder.jsonl").open("a", encoding="utf-8") as stream:
                             stream.write(json.dumps(entry, default=str) + "\n")
+                _archive(f"{precision}-L{repo_layer}-{dkind}{dindex}")
                 emit("direction", precision=precision, repo_layer=repo_layer,
                      direction=f"{dkind}:{dindex}", cells=len(LADDER_K) * len(cotangents),
                      best_relative=min(
@@ -349,12 +391,11 @@ for precision in args.precisions.split(","):
                          default=None))
     emit("precision_done", precision=precision, rows=len(rows_out))
 
-import numpy as np  # noqa: E402
-
-np.savez_compressed(OUT / "responses.npz", **responses)
-emit("responses", cells=len(responses),
-     bytes=(OUT / "responses.npz").stat().st_size,
-     note="the odd response per selected target position, before the sum, one array per cell")
+_archive("final")
+emit("responses", units=len(archive_index),
+     bytes=sum(u["bytes"] for u in archive_index),
+     note="plus, minus and zero per selected target position and the requested and realized input "
+          "vectors, before any summation, written per completed unit with a hash and an index")
 
 (OUT / "ladder-summary.json").write_text(json.dumps({
     "basis": "measured-here", "cells": len(rows_out),
