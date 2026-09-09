@@ -282,9 +282,20 @@ state, or flexible access. The order is careful about this and the artefacts inh
 ## The suite, with its skips named
 
 Full suite on this branch after merging `cuda-migration` at e8dbcc3 (Codex's intervention wrapper
-and the WS-D reference), box free, no model loaded: **2449 passed, 10 skipped, 0 failed**
+and the WS-D reference), box free, no model loaded: **2,566 passed, 10 skipped, 0 failed**
 in 152 s wall. The count is read from the progress marks because the repository's `-q` and mine
-stacked to `-qq`, which suppresses the summary line; the ten skips sum to the same ten. All are
+stacked to `-qq`, which suppresses the summary line; the ten skips sum to the same ten.
+
+**That reading was wrong, and every suite count I reported from it was low.** Correcting it here
+because the numbers went into this record and into four messages. The counter matched only lines
+that end in a percentage, and pytest emits a partial line with no percentage whenever a test writes
+to stdout mid-run, which several in this suite do. Those lines were silently dropped: about 120
+tests at the largest. Two things now make the count checkable rather than trusted. A progress line
+is matched only if it is marks and nothing else, or marks followed by the percentage, so a line of
+prose that merely begins with `s` cannot contribute a skip. And the total is cross-checked two ways:
+against `--collect-only`, which it must equal exactly, and the skip marks against the sum of the
+`SKIPPED` reason lines. The corrected figures for this record's runs are 2,566 at the preflight
+commit and 2,725 at the pairing commit, each with 10 skips and no failures. All are
 absent-data gates on this checkout, none in the bridge, and each names its reason:
 
 | where | n | reason |
@@ -469,6 +480,45 @@ more a property of this bridge than that checkpoint's weights are. It now sits i
 from the dictionary's `model_name`, is what selects it. That distinguishes three absences the code
 had been collapsing into one: a layer nobody measured on a model somebody did, a model nobody
 measured at all, and no model named. The refusal says which, and fills in none of them.
+
+### The guard was correct only because the table was empty, 2026-09-10
+
+Codex's bridge pairing audit (`4df1225`) reviewed the above and found the refusal correct today for
+the wrong reason. `path_pairing` keyed on model and layer alone, and `path_term_for_layer` treated
+**any** non-empty entry at that key as a measurement. So the first registered pairing would have
+lifted the refusal for every crossing at that layer: another capture precision, another width, the
+paths reversed. Worse, the test I wrote inserted exactly such a bare number and asserted
+acceptance, so the test encoded the defect instead of catching it. That is the present-but-inert
+family, written by someone who had been auditing for it all week.
+
+A measurement is evidence about **an experiment**, so it licenses that experiment and no other. A
+registered pairing now carries the identity of the pair it measured and the guard compares every
+field: the fit precision and fit width and the digest of the lens's own ν, which pins its endpoint
+and the fit's positions along with it; which side of the pair the lens was fitted on, so a
+measurement taken with the paths reversed does not match; the capture's precision and width; and
+the reading's own positions, reduction, endpoint and context length. A pairing missing any field
+is not a measurement, and a reading that declares no provenance matches nothing, because an
+undeclared field cannot equal a measured one. That failure direction is the whole point: A2's
+caller supplies its actual provenance or it gets no permission.
+
+The tests mutate each bound field independently and assert the pair becomes unmeasured, register a
+measurement at one layer and show it does not transfer to its neighbour, and cover both ways a
+registered entry can fail to identify itself.
+
+**The ratio test was vacuous, and the fix is not the one I would have guessed.** It checked for
+`amplif` only in each layer's immediate keys, then scanned the top-level values for numbers, which
+are dictionaries, so it never descended and could not have failed. The audit's correction goes
+further than depth: *do not ban numbers at all*. Medians, ranges and counts are legitimately
+numeric, and a legitimate statistic may coincidentally equal a withdrawn ratio, so a value
+blacklist catches the wrong thing and misses the right one. What is checked now is the quantity at
+each location: the table's schema is validated recursively when it loads, and a key nobody declared
+is refused wherever it sits. A parametrised test corrupts each supported nesting location,
+including the deepest, and asserts the load refuses.
+
+**And one number was wrong.** At layer 33, native, the equal-norm random arm was copied as
+0.313000 where the recomputation gives 0.312953. Fixed, the file now declares its rounding
+convention, and I rechecked all sixty fields against the audit's recomputation rather than only the
+one it named. The other fifty-nine match.
 
 One measurement in the file is the nearest thing that exists to the crossing and is **not** it:
 holding the tail in float32 and switching only the anchor to the native one gives median scalar

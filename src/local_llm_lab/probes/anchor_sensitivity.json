@@ -17,6 +17,7 @@
   "google/gemma-3-4b-it": {
     "basis": "WS-D float32 displacement control (e771c2b), recomputed by WS-A's audit (ca396fb)",
     "label": "sampled displacement, one draw, eighteen projections",
+    "precision_convention": "medians to six decimal places, minima and maxima to four, counts exact",
     "quantity": "absolute change of each scalar derivative relative to its own baseline",
     "layers": {
       "1": {
@@ -48,7 +49,7 @@
         },
         "equal_norm_random_displacement": {
           "float32": {"median": 0.299125, "min": 0.0053, "max": 26.8376, "count": 18},
-          "native": {"median": 0.313000, "min": 0.0104, "max": 2.2667, "count": 18}
+          "native": {"median": 0.312953, "min": 0.0104, "max": 2.2667, "count": 18}
         },
         "native_anchor_read_in_the_float32_tail": {"median": 0.048705, "min": 0.0002, "max": 12.4548, "count": 18}
       }
