@@ -154,3 +154,30 @@ finding then needs the extension.
 says about the MLX-fitted lenses; why row 39 has two valid positions of 128, since a per-row
 Jacobian over two positions is a thin basis and §6.2 depends on the mask; and the fraction of FD
 directions whose response was exactly zero per layer, the direct test of the rounding reading.
+
+## Correction to the amendment above, Chief, 2026-09-10 — the rounding reading is refused by the artefact; the cause is unsettled; the float32-only control is withdrawn
+
+The D-CRO's record at `b826558` §8, from the artefact and the repository with no card time:
+
+- **The laptop's finite-difference estimator ran in float32** (`jacobian.py` promotes before it
+  perturbs) on the 4-bit checkpoint. Row one ran native bfloat16. They are different estimators
+  under the arithmetic-path definition, and **row one is not evidence about the MLX-fitted lenses**.
+- **The two positions of 128 are the order's declaration** (index 8 and the row's last position),
+  handed identically to both estimators; the mask never ran.
+- **No response rounded to zero: 0 exactly-zero columns of 84,480.** The map is systematically too
+  small instead — ‖FD‖/‖exact‖ 0.185 at layer 1, 0.320 at 13, 0.539 at 21, 0.756 at 33 — which is
+  the signature of a saturating response to a displacement outside the linear neighbourhood, the
+  Director's reading, not mine. At layer 0 the step of 101.6 moves one coordinate 5.7 times its own
+  size (typical magnitude 17.8) while the vector's norm moves 11%.
+
+The step rule explains why the fixture passed and the model did not without invoking precision:
+1% of the whole sequence's Frobenius norm on one coordinate displaces that coordinate by
+0.01·√(L·d) of its root-mean-square, which is 5.7 at 128 × 2,560 and well under one on a small
+fixture. The mechanism in my amendment was wrong; the algebra (a map with a fifth of the norm and
+no shared direction) was right. **The control I ordered — float32 finite differences against the
+bfloat16 exact map — is withdrawn**: it would confound the estimator with the forward path. The
+separating design is a matched-precision pair crossed with the step rule (global 1% of the
+sequence norm against a per-coordinate- or per-position-relative step), at one shallow and one
+deep layer, the exact side at float32 preceded by a memory smoke since it peaked at 43.9 GiB in
+bfloat16. The Director is consulting on that design; nothing runs on the card until it is ruled.
+Rows two and three are withdrawn: three rows of a step-limited estimate average nothing.
