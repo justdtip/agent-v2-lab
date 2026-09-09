@@ -77,7 +77,7 @@ def test_preflight_reports_every_row_with_a_basis_and_fails_on_a_missing_checkpo
     checks = {row["check"]: row for row in data["rows"]}
     assert all("basis" in row for row in data["rows"])
     assert checks["cuda"]["ok"] is True and "allowed" in checks["cuda"]["detail"]
-    assert checks["determinism pinned before first CUDA use"]["ok"] is True
+    assert checks["determinism pinned, workspace set before first CUDA use"]["ok"] is True
     assert (
         checks["weights tiny"]["ok"] is True and "format=['pt']" in checks["weights tiny"]["detail"]
     )
