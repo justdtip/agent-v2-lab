@@ -571,3 +571,42 @@ records it per layer, with `measured: false` until the paired comparison exists,
 early-layer cross-path reading by name rather than annotating it. Readings on the same path as
 the fit — a float32 generation read through a float32 lens — carry no such term. One row, one
 position, eighteen projections, three layers; the record says so.
+
+## Correction, Chief, 2026-09-10 — Codex's map-and-anchor audit (`WSA-MAP-ANCHOR-AUDIT-2026-09-10`, `ca396fb`): four figures of the two sections above are withdrawn or relabelled
+
+Accepted in full; the audit recomputes the 108 displacement rows and the control ratios from the
+committed record and audits the repeat gate through the source's syntax tree.
+
+**M1.** The float32 maps' "exact reproduces itself at 0.0" was `reproduction=reference` — the same
+array compared with itself — so the repeat gate for those maps is **unexecuted**, not passed; the
+bfloat16 golden run's earlier repeat (two distinct runs) stands on its own. Amend the record, and
+compare the separately saved smoke fit where the endpoint and reduction match, or run a second fit.
+
+**M2.** "Worst relative difference over 2,560 columns" was the **relative Frobenius error of the
+full layer map** (0.485% at layer 1, 0.286% at layer 33), which is compatible with a badly estimated
+weak column; no per-column figure exists in the record. "The ladder predicted the map" is narrowed
+to: a median of eighteen scalar projections at layer 1 (4.3e-3) and the whole-matrix relative error
+at the same step (4.85e-3) are of one size; they are different quantities, and the eighteen scalars
+are not a sample of column errors. Per-column errors, if wanted, come from the saved arrays with the
+orientation and zero-denominator policy named.
+
+**M3.** The amplification figures — 539×, 245×, 46×, 39×, 1.4× — are **withdrawn as condition
+estimates**: the intervention moved the whole sequence's residual and the displacement norm was
+taken at one position, so the ratio divides by part of the input that changed. What stands is the
+measured fact: *the sampled native and random displacements both produced substantial changes in
+the float32 directional derivatives at the early layers* (medians 1.035 and 0.749 at layer 1), which
+contradicts an explanation confined to bfloat16 arithmetic. "The last block is well conditioned"
+cannot be concluded from a median (the layer-33 maximum is 91.9). The rule that an early-layer lens
+is not read against a capture from another path until the pairing is measured **stands as a
+policy**, justified by the sampled sensitivity and not by a condition number; SWE-2's per-layer
+field carries the median scalar changes as context, not the ratios.
+
+**M4.** One random displacement per layer, read eighteen times, is one draw; the wording is *the
+sampled native and random displacements both produced substantial changes*, and no general
+transport claim is made before the intended map/capture pair is tested under its own reduction,
+population and precision. Also: "at every depth" means the three sampled layers; medians of the
+anchor and arithmetic terms are not additive (14 of 18 oppose at layer 1); the 12B smoke bounds one
+row at layer 47 and not an all-layer or long-context graph.
+
+Records only; no device work. The queue for the morning is unchanged, with M1's repeat comparison
+added to it.

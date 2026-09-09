@@ -780,6 +780,11 @@ saved cells refute or narrow each. *An order cites the artefact's field, not the
 The producer's summary is a reporter, and the rule of the thirty-third entry applies to the Chief
 reading it.
 
+*And a sixth, before the night was out:* the map's "worst over 2,560 columns" and the anchor
+control's amplification ratios went into the order from the D-CRO's messages; Codex's third audit
+showed the first was a whole-matrix norm and the second divided by part of the input. Same rule,
+same night, same Chief.
+
 ## Thirty-third: the reporter that failed, jointly with the D-CRO
 
 Three defects in one day that no test suite was built to catch, because **neither was a check that
