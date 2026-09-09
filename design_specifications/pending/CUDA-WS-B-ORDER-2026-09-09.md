@@ -164,3 +164,28 @@ unchanged count-based `truncated`. The builder's flagged choice is right and sta
 is a compared field and stays count-based, so a turn that ends on its terminator exactly at the
 cap reads `truncated: true` beside `ended_on_eos: true`, which is two true statements. Nothing
 further for WS-B on the laptop.
+
+## The device's first hour, WS-B, 2026-09-10 — the seam is faithful and the gate fails; a ruling
+
+SWE-1's record `research/records/WSB-DEVICE-2026-09-10/` (`0350db4`, on `cuda-migration`). Two facts
+held together: **the port is device-consistent** on the card, CUDA and CPU agreeing to one position
+in 5,245 with thirteen of fifteen episodes giving the identical set of confident disagreements on
+both and two CUDA runs of one episode byte-identical; and **the pre-registered gate fails**, 24
+positions where the MLX recording held its token at P ≥ 0.99 produced a different argmax, on CUDA
+and identically on the CPU. So the failure predates the card and was invisible on the laptop because
+one episode of fifteen had ever been measured, and that episode is clean everywhere. Peak 7.92 GiB
+for an episode and 8.81 GiB for the corpus against a 7.56 GiB projection; 4.0 s per episode on the
+card against 83.5 s on the laptop's CPU.
+
+**Ruling.** The gate stays failed as pre-registered; nothing is passed by borrowing a tolerance or
+by reading the 0.57% flip rate at confident positions against the 21.2% at unconfident ones as a
+pass, however concentrated the disagreement is where precision puts it. Two hypotheses remain and
+the record separates neither: a narrow port defect, or the rule's premise, that 4-bit quantisation
+cannot move a confident argmax, being too strong for MLX 4-bit against torch bf16. The separating
+test is torch bf16 against **MLX bf16** on the same fifteen episodes, and it needs MLX, so it is a
+laptop run: authorised, as a teacher-forced pass over 5,245 tokens under an announced window with
+its projected peak, each episode written as it completes; not a run that ties up the box. If MLX
+bf16 shows zero confident flips against torch bf16, the premise was 4-bit's and the golden records
+are re-based on MLX bf16 with that stated in every comparison; if the 24 remain, it is the port,
+and the search starts from the eleven above P = 0.999. Gate 5's failure at the first near-tie is
+the free-running cross-backend comparison the programme already ruled invalid, and stays so.
