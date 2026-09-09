@@ -213,7 +213,10 @@ def wrap_with_chunked_loss(
 
     So the window is what has to move, not the loss. This wrapper's ``forward`` is a unit boundary:
     ``fully_shard`` each block as usual and ``fully_shard`` this wrapper as the root, which holds
-    the tied embedding, the final norm and the head **together**, as a tied pair must be. Inside
+    the tied embedding, the final norm and the head **together**. Under `tie_word_embeddings` the
+    head is not a second tensor that happens to be equal: ``lm_head.weight is embed_tokens.weight``,
+    one parameter with two names. That is what makes the root unit clean -- there is no flat
+    parameter straddling two units, and no way to shard half of a tied pair. Inside
     the forward the raw weight is unsharded and the reduce-scatter hooks are registered, so the
     loss keeps its raw-parameter design and every parameter stays FSDP2's.
 

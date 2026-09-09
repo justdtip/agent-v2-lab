@@ -153,3 +153,26 @@ def test_the_mlx_backend_does_not_reach_the_torch_branch(monkeypatch) -> None:
     with pytest.raises(Exception):  # it proceeds into the MLX path and fails on a bare config
         cli.stage_train({"train": {}, "model": "x", "output": Path("/nonexistent")}, iters=None)
     assert not called
+
+
+def test_a_multi_process_run_is_refused_rather_than_distributed_by_default(monkeypatch) -> None:
+    """The gap is named in code, because the alternative is invisible.
+
+    FSDP2 is validated per parameter on CPU in the two-device record, and is not wired into this
+    stage. Handed more than one process, `Trainer` and `accelerate` distribute under their own
+    default: the loss would fall, a checkpoint would be written, and the memory arithmetic every
+    device decision rests on would describe a configuration that never ran. A refusal in the first
+    hour on rented hardware is the cheapest possible version of finding that out.
+    """
+    from local_llm_lab.pipeline.train_torch import require_supported_distribution
+
+    require_supported_distribution(1)  # the single-device path is the one that runs
+    with pytest.raises(NotImplementedError, match="world size 2"):
+        require_supported_distribution(2)
+
+    monkeypatch.setenv("WORLD_SIZE", "4")
+    monkeypatch.setenv("LLL_BACKEND", "torch")
+    from local_llm_lab.pipeline import cli
+
+    with pytest.raises(NotImplementedError, match="not wired here"):
+        cli.stage_train({"train": {}, "model": "x", "output": Path("/nonexistent"), "seed": 1}, None)

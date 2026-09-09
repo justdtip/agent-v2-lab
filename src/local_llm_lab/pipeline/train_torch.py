@@ -21,6 +21,7 @@ config.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,30 @@ MANIFEST_NAME = "train_manifest.json"
 #: Eager attention: the golden tests compare against records made without a fused kernel, and a
 #: kernel choice is a numerical difference this stream has no reason to introduce silently.
 ATTENTION = "eager"
+
+
+def require_supported_distribution(world_size: int) -> None:
+    """Refuse a multi-process run rather than silently training under the wrong strategy.
+
+    This stage has **not** wired FSDP2 yet. Handed more than one process, `Trainer` and `accelerate`
+    would happily distribute the run under their own default, which is not the sharded path the
+    order requires and would not be visible in anything the run reports -- the loss would fall, the
+    checkpoint would be written, and the memory arithmetic every device decision rests on would be
+    describing a configuration that never ran.
+
+    The sharded path is validated on CPU in
+    ``research/records/CUDA-WS-C-2026-09-09/two_device_agreement.py``, per parameter against
+    single-process training; wiring it into this stage is what remains. Until then the first hour on
+    rented hardware should meet a refusal naming the gap, which is the whole point of a diagnostic
+    first hour.
+    """
+    if world_size > 1:
+        raise NotImplementedError(
+            f"world size {world_size}: this stage runs single-process only. FSDP2 is validated in "
+            "research/records/CUDA-WS-C-2026-09-09/two_device_agreement.py but is not wired here, "
+            "and `Trainer` would otherwise distribute this run under its own default strategy "
+            "without saying so. Run single-process, or wire FSDP2 before claiming a sharded run."
+        )
 
 
 def rendered_rows(dataset: Any) -> list[dict[str, Any]]:
@@ -104,6 +129,7 @@ def stage_train_torch(
     )
     from local_llm_lab.tuner_data import load_rendered_splits
 
+    require_supported_distribution(int(os.environ.get("WORLD_SIZE", "1")))
     seed = int(config["seed"])
     # Before anything imports or touches the device: the workspace variable is read at cuBLAS's
     # first use, so a pin after that point reports a determinism the run does not have.

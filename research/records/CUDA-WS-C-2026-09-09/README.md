@@ -462,3 +462,24 @@ outside a unit. It is kept only as the control that reproduces what the old gate
 CPU and `gloo`, two processes, a tiny model. No CUDA, no NCCL, no more than two ranks, no real
 checkpoint, and no size at which the memory arithmetic bites. `reshard_after_forward` on the root is
 named as a rung and has not been measured.
+
+---
+
+## What is validated, and what is only validated
+
+Worth separating, because the two are easy to conflate and the difference costs money on rented
+hardware.
+
+| piece | state |
+|---|---|
+| the sharded path, per parameter against single-process | **validated on CPU**, two gloo processes, tiny model |
+| the `train` stage's torch branch | **runs**, single process only |
+| the two joined together | **not done** |
+
+`stage_train_torch` does **not** wire FSDP2. Handed more than one process, `Trainer` and
+`accelerate` would distribute the run under their own default strategy, which is not the sharded
+path the order requires and which nothing the run reports would reveal: the loss falls, a checkpoint
+is written, and the memory arithmetic every device decision rests on describes a configuration that
+never ran. So the stage **refuses** a multi-process run and names the gap, rather than proceeding.
+That refusal is the cheapest possible version of discovering it, and the first hour on rented
+hardware is meant to be exactly that kind of hour.
