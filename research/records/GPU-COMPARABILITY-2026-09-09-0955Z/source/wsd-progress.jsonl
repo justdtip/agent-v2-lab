@@ -1,0 +1,7 @@
+{"event": "pinned", "elapsed_s": 1.02, "determinism": "pinned"}
+{"event": "loaded", "elapsed_s": 5.72, "seconds": 4.68, "dtype": "bfloat16", "device": "cuda", "attn": "eager", "checkpoint_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff"}
+{"event": "wrapped", "elapsed_s": 5.72, "n_layers": 34, "d_model": 2560, "upstream": {"repository": "neuronpedia/jacobian-lens", "licence": "Apache-2.0", "path": "/workspace/agent-v2-lab/.venv/lib/python3.13/site-packages", "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e", "expected_commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e", "commit_matches_expected": true, "vendored": false}}
+{"event": "wrote", "elapsed_s": 5.78, "file": "manifest.json", "bytes": 2649}
+{"event": "exact_fit", "elapsed_s": 21.21, "seconds": 15.43, "layers": 33, "n_prompts": 1, "n_valid": 2, "peak_gib": 43.949, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 109.05, "file": "exact-maps.npz", "layers": 33}
+{"event": "gate_exactness", "elapsed_s": 124.87, "state": "passed", "expected": 0.0, "measured": 0.0, "seconds": 15.82, "basis": "measured-here"}

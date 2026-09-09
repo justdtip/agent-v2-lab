@@ -1,0 +1,260 @@
+"""WS-D on the card: the exact lens at every layer, the finite-difference lens on the declared
+subset, and the golden comparison with its gates.
+
+Every result is written as it completes and flushed. The runbook forbids a tool that writes once at
+the end: on a paid card that is an hour which cannot say what failed or where.
+
+The subset is the Chief's declaration of 2026-09-11, with one departure recorded in the manifest
+*before* the run, as the order requires: three rows were declared, the measured cost put three rows
+at 79.6 minutes against a thirty-minute budget, and the order's lever is the row count, so this run
+takes one row. Rows are additive in this estimator -- it means over prompts and records the count --
+so a later run extends this one rather than replacing it.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import sys
+import time
+from pathlib import Path
+
+OUT = Path(sys.argv[3])
+OUT.mkdir(parents=True, exist_ok=True)
+STARTED = time.monotonic()
+
+
+def emit(event: str, **fields) -> dict:
+    """One line per result, flushed, and appended to the run's own jsonl as it happens."""
+    row = {"event": event, "elapsed_s": round(time.monotonic() - STARTED, 2), **fields}
+    print(json.dumps(row, default=str), flush=True)
+    with (OUT / "progress.jsonl").open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(row, default=str) + "\n")
+        stream.flush()
+    return row
+
+
+def write_json(name: str, payload: dict) -> None:
+    path = OUT / name
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+    emit("wrote", file=name, bytes=path.stat().st_size)
+
+
+from local_llm_lab import device  # noqa: E402
+
+device.pin(seed=0)
+emit("pinned", determinism=device.describe()["determinism"])
+
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+
+from local_llm_lab import hf_text  # noqa: E402
+from local_llm_lab.pipeline.lens_fitting import golden  # noqa: E402
+from local_llm_lab.pipeline.lens_fitting.corpus import read_corpus  # noqa: E402
+from local_llm_lab.pipeline.lens_fitting.finite_difference import (  # noqa: E402
+    fit_finite_difference_jacobian,
+)
+from local_llm_lab.pipeline.lens_fitting.upstream import (  # noqa: E402
+    ESTIMATOR_FINITE_DIFFERENCE,
+    CorpusLensModel,
+    declare_nu,
+    fit_upstream_jacobian,
+    load_upstream,
+    repo_layer_of_upstream,
+)
+
+SNAPSHOT, CORPUS = sys.argv[1], Path(sys.argv[2])
+MAX_SEQ = 128           # the hosted recipe's length, passed explicitly at both ends
+EPSILON = 0.01          # the laptop's scale, so the fixture's 3.6e-3 is the basis for this
+HALVED = 0.005          # one layer additionally, so the divide-by-four is shown on the card
+DIRECTION_BATCH = 256
+DECLARED_ROWS = 3       # the Chief declared three
+USED_ROWS = 1           # the budget rule's halving, declared here before the run
+SEED = 20260910
+HALVED_LAYER = 16       # the layer carried at both steps
+
+# ---------------------------------------------------------------- the model, the proven path
+t = time.monotonic()
+model, report = hf_text.load_text_causal_lm(
+    SNAPSHOT, dtype="bfloat16", attn_implementation="eager", device="cuda:0"
+)
+for parameter in model.parameters():
+    parameter.requires_grad_(False)
+model.eval()
+emit("loaded", seconds=round(time.monotonic() - t, 2), dtype=report["dtype"],
+     device=report["device"], attn=report["attn_implementation"],
+     checkpoint_sha256=report.get("sha256", {}).get("config.json"))
+
+up = load_upstream()
+import jlens.hf as upstream_hf  # noqa: E402
+
+wrapped = CorpusLensModel(upstream_hf.HFLensModel(model, tokenizer=None))
+n_layers, d_model = int(wrapped.n_layers), int(wrapped.d_model)
+emit("wrapped", n_layers=n_layers, d_model=d_model, upstream=up.provenance())
+
+# ------------------------------------------------------------------------- the declared subset
+held = [row for row in read_corpus(CORPUS) if row.get("split") == "held"]
+drawn = random.Random(SEED).sample(range(len(held)), DECLARED_ROWS)
+rows = [held[i] for i in drawn[:USED_ROWS]]
+wrong_corpus_rows = [held[i] for i in drawn[USED_ROWS:USED_ROWS + 1]]
+
+
+def two_positions(seq_len: int):
+    """Index 8 and the row's last position, as declared. Both sides take this same selector, so
+    the source mean and the target sum are over the same two positions on both."""
+    mask = torch.zeros(seq_len, dtype=torch.bool)
+    mask[8] = True
+    mask[seq_len - 1] = True
+    return mask
+
+
+manifest = {
+    "schema_version": 1,
+    "seat": "d-cro",
+    "workstream": "WS-D",
+    "checkpoint": SNAPSHOT,
+    "load_report_sha256": report.get("sha256"),
+    "corpus": {"manifest": str(CORPUS), "split": "held"},
+    "subset": {
+        "declared_rows": DECLARED_ROWS,
+        "used_rows": USED_ROWS,
+        "seed": SEED,
+        "drawn_indices": drawn,
+        "used_indices": drawn[:USED_ROWS],
+        "wrong_corpus_index": drawn[USED_ROWS:USED_ROWS + 1],
+        "positions_per_row": "index 8 and the row's last position",
+        "max_seq_len": MAX_SEQ,
+        "source_layers": "every layer below the target",
+        "epsilon_scale": EPSILON,
+        "halved_epsilon_scale": HALVED,
+        "halved_layer_upstream": HALVED_LAYER,
+        "direction_batch": DIRECTION_BATCH,
+    },
+    "budget_departure": {
+        "reason": (
+            "the order's rule is to halve the rows if the measured cost puts the subset above "
+            "thirty minutes, and to write the halving before the run"
+        ),
+        "measured_basis": "measured-here",
+        "cost_per_row_per_layer_seconds": 48.23,
+        "three_rows_all_layers_minutes": 79.6,
+        "one_row_all_layers_minutes": 26.5,
+        "note": (
+            "rows are additive in this estimator: it means over prompts and records n_prompts, so "
+            "a later run extends this one by the weighted mean rather than replacing it"
+        ),
+    },
+    "device": device.describe(),
+    "shared_card": True,
+    "shared_card_note": (
+        "another seat may run beside this one, so any wall-clock figure and any whole-device "
+        "memory reading here carries basis: shared-card; per-process allocated peaks stay valid"
+    ),
+}
+write_json("manifest.json", manifest)
+
+# ------------------------------------------------------------- the exact lens at every layer
+torch.cuda.reset_peak_memory_stats()
+t = time.monotonic()
+exact = fit_upstream_jacobian(
+    wrapped, rows, position_selector=two_positions, max_seq_len=MAX_SEQ, dim_batch=64,
+    device="cuda:0", dtype="bfloat16", split="held", upstream=up,
+)
+emit("exact_fit", seconds=round(time.monotonic() - t, 2), layers=len(exact.jacobians),
+     n_prompts=exact.n_prompts, n_valid=exact.per_prompt[0]["n_valid_positions"],
+     peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3), basis="measured-here")
+exact_maps = {repo_layer_of_upstream(i): np.asarray(m, np.float32) for i, m in exact.jacobians.items()}
+np.savez_compressed(OUT / "exact-maps.npz", **{f"J{k-1}": v for k, v in exact_maps.items()})
+emit("wrote", file="exact-maps.npz", layers=len(exact_maps))
+
+# --------------------------------------------------- gate 1: the exact estimator reproduces itself
+t = time.monotonic()
+again = fit_upstream_jacobian(
+    wrapped, rows, position_selector=two_positions, max_seq_len=MAX_SEQ, dim_batch=64,
+    device="cuda:0", dtype="bfloat16", split="held", upstream=up,
+)
+again_maps = {repo_layer_of_upstream(i): np.asarray(m, np.float32) for i, m in again.jacobians.items()}
+try:
+    reproduction_rows = golden.assert_exact_reproduction(exact_maps, again_maps)
+    emit("gate_exactness", state="passed", expected=0.0, measured=0.0,
+         seconds=round(time.monotonic() - t, 2), basis="measured-here")
+except golden.ControlFailed as failure:
+    reproduction_rows = None
+    emit("gate_exactness", state="FAILED", detail=str(failure), basis="measured-here")
+
+# --------------------------------------------------------- the finite-difference lens, declared
+torch.cuda.reset_peak_memory_stats()
+t = time.monotonic()
+fd = fit_finite_difference_jacobian(
+    wrapped, rows, position_selector=two_positions, max_seq_len=MAX_SEQ,
+    epsilon_scale=EPSILON, capture_dtype="native", direction_batch=DIRECTION_BATCH,
+    device="cuda:0", dtype="bfloat16", split="held", upstream=up,
+    progress=lambda e: emit("fd_row", **e),
+)
+emit("fd_fit", seconds=round(time.monotonic() - t, 2), layers=len(fd.jacobians),
+     capture_dtype=fd.precision["capture_dtype"],
+     peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3), basis="measured-here")
+fd_maps = {repo_layer_of_upstream(i): np.asarray(m, np.float32) for i, m in fd.jacobians.items()}
+np.savez_compressed(OUT / "fd-maps.npz", **{f"J{k-1}": v for k, v in fd_maps.items()})
+emit("wrote", file="fd-maps.npz", layers=len(fd_maps))
+
+# ------------------------------------------------- the halved step at one layer, for the schedule
+t = time.monotonic()
+fd_half = fit_finite_difference_jacobian(
+    wrapped, rows, source_layers=[HALVED_LAYER], position_selector=two_positions,
+    max_seq_len=MAX_SEQ, epsilon_scale=HALVED, capture_dtype="native",
+    direction_batch=DIRECTION_BATCH, device="cuda:0", dtype="bfloat16", split="held", upstream=up,
+)
+layer = repo_layer_of_upstream(HALVED_LAYER)
+coarse = golden.layer_metrics(exact_maps[layer], fd_maps[layer])["relative_difference"]
+fine = golden.layer_metrics(
+    exact_maps[layer], np.asarray(fd_half.jacobians[HALVED_LAYER], np.float32)
+)["relative_difference"]
+emit("epsilon_schedule", upstream_layer=HALVED_LAYER, repo_layer=layer,
+     epsilon_scale_coarse=EPSILON, epsilon_scale_fine=HALVED,
+     residual_coarse=coarse, residual_fine=fine,
+     ratio=(coarse / fine) if fine else None,
+     laptop_basis_ratio=3.9, basis="measured-here",
+     seconds=round(time.monotonic() - t, 2))
+
+# ------------------------------------------------------------------------------- the controls
+t = time.monotonic()
+wrong_corpus = fit_upstream_jacobian(
+    wrapped, wrong_corpus_rows, position_selector=two_positions, max_seq_len=MAX_SEQ,
+    dim_batch=64, device="cuda:0", dtype="bfloat16", split="held", upstream=up,
+)
+wrong_maps = {repo_layer_of_upstream(i): np.asarray(m, np.float32) for i, m in wrong_corpus.jacobians.items()}
+emit("control_wrong_corpus", seconds=round(time.monotonic() - t, 2),
+     row_index=wrong_corpus_rows[0]["index"], basis="measured-here")
+
+corpus_block = {
+    "manifest": str(CORPUS), "split": "held", "max_seq_len": MAX_SEQ,
+    "rows": [r["index"] for r in rows], "n_prompts": exact.n_prompts,
+}
+exact_nu = declare_nu(exact, num_layers=n_layers, corpus=corpus_block)
+fd_nu = declare_nu(fd, num_layers=n_layers, corpus=corpus_block,
+                   estimator=ESTIMATOR_FINITE_DIFFERENCE)
+write_json("nu-exact.json", exact_nu)
+write_json("nu-finite-difference.json", fd_nu)
+
+report_payload = golden.golden_report(
+    reference=exact_maps,
+    candidate=fd_maps,
+    reference_nu=exact_nu,
+    candidate_nu=fd_nu,
+    storage_dtypes=["float32"],
+    finite_difference_epsilon=fd.provenance["epsilon_per_layer"],
+    reproduction=again_maps if reproduction_rows is not None else None,
+    controls={
+        "transposed": golden.transposed_control(exact_maps),
+        "layer_shifted": golden.layer_shifted_control(exact_maps),
+        "wrong_corpus": wrong_maps,
+    },
+    fixture_residual=3.6286e-3,
+)
+write_json("golden-report.json", report_payload)
+emit("golden", worst=report_payload["finding"]["worst_relative_difference"],
+     at_or_below_floor=report_payload["finding"]["at_or_below_storage_floor"],
+     controls={k: v["separates"] for k, v in report_payload["gates"]["controls_separate"].items()},
+     basis="measured-here")
+emit("done", total_minutes=round((time.monotonic() - STARTED) / 60, 2))
