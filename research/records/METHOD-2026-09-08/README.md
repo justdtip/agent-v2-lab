@@ -723,3 +723,60 @@ positions compared, or the report raises.
 distrust any check that a too-fine grid would also pass. State a defect as a margin that exceeds
 the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
 And make the classes sum, because the position with no class is the one nobody will look at.
+
+## Thirty-third: the reporter that failed, which has no assertion to break
+
+**D-CRO and SWE-1 jointly, 2026-09-09, on the Chief's say-so.** Thirty-second is the Chief's and is
+in flight; the gap is deliberate and no entry is missing from it.
+
+Three failures in one day, in two seats, and none of them is a check that failed. In every one the
+checks passed, the computation was right, and the thing that lost the result was the code that
+*reported* it.
+
+**One. A progress logger that raised after the fit completed.** The finite-difference lens ran
+twenty-seven minutes of forwards on the rented card and finished. The run then died in
+`emit("fd_row", **e)`, because the estimator's own event dict already carried an `event` key and the
+call bound it twice. Python refuses that at the call, before any body runs, so no amount of defensive
+popping *inside* the function could have helped; the fix is a positional-only parameter. Nothing had
+been written, because the estimator reported once per row and there was one row. **The runbook's
+write-as-you-go rule was broken by the writer** — twice over, once by reporting late and once by a
+reporter that could raise — and twenty-seven paid minutes went with it.
+
+**Two. A flip printer that capped at twelve, in position order.** SWE-1's tolerance runner printed
+the disagreements it found, twelve per episode, ordered by position. The gating flips are the
+confident ones and they are not first by position, so the cap dropped roughly half the evidence for
+the failure the tool existed to report, while filling the space with near-ties that gate nothing. It
+was found only by trying to use the output, which is the only way anything like this is found.
+
+**Three. A classifier reading a stale probability, and an identity that summed with a term
+missing.** The same runner decided whether a disagreement counted by consulting the **4-bit
+recording's** confidence, 0.599, in a comparison that was bfloat16 against bfloat16 and no longer
+involved the 4-bit recording at all. It dropped a whole class that way. And the count identity that
+should have caught it summed to the right total with a parameter absent, so it agreed with itself.
+This is the twenty-fourth entry's confound surviving its own fix, one level deeper, in the reporter
+rather than in the gate.
+
+### The shape
+
+**Neither is a check that failed. They are a reporter that failed, and a reporter has no assertion
+to break.** That is why no suite here caught any of the three. Our tests assert what a computation
+returns; a logger, a printer, a summariser and a count line return nothing anyone asserts on, and so
+they sit in the one place a test-first discipline does not look. A reporter is also the *last* thing
+between a correct result and a person, which is why its failures cost whole results rather than
+degrading them.
+
+It is the twenty-third and twenty-seventh entries' family with the target moved: those were guards
+that could not fail and checks that could not pass, and this is the same inertness in the layer that
+speaks. Silence reads as evidence in all of them.
+
+### The rules
+
+- **Every summarising reporter gets a test that feeds it a known set and asserts the summary.** Not
+  that it runs — that the numbers it prints are the numbers of the set it was given.
+- **A cap that can hide the evidence for the failure it reports is refused by construction.** If a
+  display must truncate, it truncates by relevance to the verdict and says how many it dropped.
+- **An identity guards a gate only beside an expected value.** A sum that agrees with itself is not
+  a check; it must agree with a number stated in advance.
+- And, from the first instance: **a reporter must not be able to raise.** Whatever a logger is handed,
+  it writes something. The result is already computed by the time it is called, and losing it there
+  is the most expensive possible moment.
