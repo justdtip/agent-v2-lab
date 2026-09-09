@@ -1,0 +1,475 @@
+{
+  "full_maps": {
+    "1": {
+      "anchor_batch": 1,
+      "at_or_below_storage_floor": false,
+      "basis": "producer-reported matrix metric; underlying NPZ arrays absent from frozen Git record",
+      "cosine": 0.9999906704284479,
+      "forward_batch": 1,
+      "layer": 1,
+      "max_abs": 301.7705078125,
+      "metric": "whole-layer relative Frobenius norm, NOT worst column",
+      "physical_step": {
+        "0": {
+          "max": 0.09921077728271485,
+          "mean": 0.09921077728271485,
+          "min": 0.09921077728271485
+        }
+      },
+      "reference_norm": 117568.45209176648,
+      "relative_difference": 0.004847986291516893,
+      "scientific_pass_threshold": null,
+      "seq_len": 128,
+      "source_target_positions": [
+        8,
+        127
+      ],
+      "stored_repeat_gate": {
+        "expected": 0.0,
+        "measured": 0.0,
+        "state": "passed"
+      },
+      "transposed_ratio_recomputed": 291.7080030908359
+    },
+    "33": {
+      "anchor_batch": 1,
+      "at_or_below_storage_floor": false,
+      "basis": "producer-reported matrix metric; underlying NPZ arrays absent from frozen Git record",
+      "cosine": 0.9999962219561683,
+      "forward_batch": 1,
+      "layer": 33,
+      "max_abs": 0.16730022430419922,
+      "metric": "whole-layer relative Frobenius norm, NOT worst column",
+      "physical_step": {
+        "32": {
+          "max": 137.94705078125,
+          "mean": 137.94705078125,
+          "min": 137.94705078125
+        }
+      },
+      "reference_norm": 74.26813399404145,
+      "relative_difference": 0.0028639612301082336,
+      "scientific_pass_threshold": null,
+      "seq_len": 128,
+      "source_target_positions": [
+        8,
+        127
+      ],
+      "stored_repeat_gate": {
+        "expected": 0.0,
+        "measured": 0.0,
+        "state": "passed"
+      },
+      "transposed_ratio_recomputed": 348.02262299313304
+    }
+  },
+  "known_answer_examples": {
+    "basis": "analytic known-answer examples, not model measurements",
+    "independent_repeat": {
+      "actual_second_result_comparison": 1.0,
+      "self_comparison": 0.0
+    },
+    "one_random_direction_is_not_every_direction": {
+      "along_x": 0.1,
+      "along_y": 0.0
+    },
+    "partial_input_norm": {
+      "function": "F(p,z)=p*z; selected derivative dF/dp=z",
+      "selected_derivative_relative_change": 0.10000000000000009,
+      "selected_position_relative_change": 0.0,
+      "whole_input_relative_change": 0.07071067811865481
+    },
+    "weak_column": {
+      "candidate_diagonal": [
+        1000.0,
+        0.0
+      ],
+      "cosine": 0.999999500000375,
+      "reference_diagonal": [
+        1000.0,
+        1.0
+      ],
+      "relative_frobenius": 0.000999999500000375,
+      "worst_relative_column": 1.0
+    }
+  },
+  "native_displacement_transplant_4b": {
+    "float32": {
+      "1": {
+        "basis": "recomputed scalar summaries; one displacement of each kind per layer",
+        "delta": {
+          "count": 18,
+          "max_absolute": 35.19511380711225,
+          "median_absolute": 1.0351164008592333,
+          "min_absolute": 0.014441022777099634,
+          "undefined": 0
+        },
+        "native_anchor_inserted_in_float32_tail": {
+          "count": 18,
+          "max_absolute": 24.43982692414714,
+          "median_absolute": 0.5367349034474511,
+          "min_absolute": 0.05890903778374331,
+          "undefined": 0
+        },
+        "random": {
+          "count": 18,
+          "max_absolute": 27.19557690625919,
+          "median_absolute": 0.7487315413571456,
+          "min_absolute": 0.09776583917169748,
+          "undefined": 0
+        }
+      },
+      "17": {
+        "basis": "recomputed scalar summaries; one displacement of each kind per layer",
+        "delta": {
+          "count": 18,
+          "max_absolute": 4.159607643933125,
+          "median_absolute": 0.6965141209703237,
+          "min_absolute": 0.08464810308668003,
+          "undefined": 0
+        },
+        "native_anchor_inserted_in_float32_tail": {
+          "count": 18,
+          "max_absolute": 14.537163033626735,
+          "median_absolute": 0.2521334447289412,
+          "min_absolute": 0.003157297623289021,
+          "undefined": 0
+        },
+        "random": {
+          "count": 18,
+          "max_absolute": 37.955530300408626,
+          "median_absolute": 1.2773392073095753,
+          "min_absolute": 0.04028951436775925,
+          "undefined": 0
+        }
+      },
+      "33": {
+        "basis": "recomputed scalar summaries; one displacement of each kind per layer",
+        "delta": {
+          "count": 18,
+          "max_absolute": 91.8969242001079,
+          "median_absolute": 0.12517927059081657,
+          "min_absolute": 0.009983309133839035,
+          "undefined": 0
+        },
+        "native_anchor_inserted_in_float32_tail": {
+          "count": 18,
+          "max_absolute": 12.454827815934939,
+          "median_absolute": 0.048704760115652265,
+          "min_absolute": 0.00016789940594310094,
+          "undefined": 0
+        },
+        "random": {
+          "count": 18,
+          "max_absolute": 26.83755282925549,
+          "median_absolute": 0.29912528869752386,
+          "min_absolute": 0.005256989923043155,
+          "undefined": 0
+        }
+      }
+    },
+    "native": {
+      "1": {
+        "basis": "recomputed scalar summaries; one displacement of each kind per layer",
+        "delta": {
+          "count": 18,
+          "max_absolute": 28.91111111111111,
+          "median_absolute": 0.47068866657568204,
+          "min_absolute": 0.09163549670648467,
+          "undefined": 0
+        },
+        "random": {
+          "count": 18,
+          "max_absolute": 7.844444444444444,
+          "median_absolute": 1.0058473389355742,
+          "min_absolute": 0.18120805369127516,
+          "undefined": 0
+        }
+      },
+      "17": {
+        "basis": "recomputed scalar summaries; one displacement of each kind per layer",
+        "delta": {
+          "count": 18,
+          "max_absolute": 2.3205741626794256,
+          "median_absolute": 0.5851635514018692,
+          "min_absolute": 0.04402622674533897,
+          "undefined": 0
+        },
+        "random": {
+          "count": 18,
+          "max_absolute": 6.617224880382775,
+          "median_absolute": 1.5600801068090788,
+          "min_absolute": 0.0684931506849315,
+          "undefined": 0
+        }
+      },
+      "33": {
+        "basis": "recomputed scalar summaries; one displacement of each kind per layer",
+        "delta": {
+          "count": 18,
+          "max_absolute": 7.0,
+          "median_absolute": 0.11992703627963265,
+          "min_absolute": 0.005208333333333333,
+          "undefined": 0
+        },
+        "random": {
+          "count": 18,
+          "max_absolute": 2.2666666666666666,
+          "median_absolute": 0.31295347134393925,
+          "min_absolute": 0.010416666666666666,
+          "undefined": 0
+        }
+      }
+    }
+  },
+  "order_commit": "3946277fc4fc842fbe769dc0d9241d00deb4d922",
+  "producer_commit": "e06512899bf94c1683597889f255c290ff80dba5",
+  "repeat_gate_source_audit": {
+    "call_line": 215,
+    "reproduction_line": 220,
+    "same_reference_expression": true
+  },
+  "same_anchor_12b_width_1_vs_8": {
+    "float32": {
+      "1": {
+        "anchor": {
+          "count": 18,
+          "max_absolute": 0.0007577346077573398,
+          "median_absolute": 2.0951682700262e-05,
+          "min_absolute": 1.4993423016624628e-06,
+          "undefined": 0
+        },
+        "arithmetic": {
+          "count": 18,
+          "max_absolute": 0.002475255673208859,
+          "median_absolute": 6.0020612643603245e-05,
+          "min_absolute": 4.9657812070719615e-06,
+          "undefined": 0
+        },
+        "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+        "observed": {
+          "count": 18,
+          "max_absolute": 0.0019569867881807615,
+          "median_absolute": 4.320932407506488e-05,
+          "min_absolute": 4.1424603965991586e-06,
+          "undefined": 0
+        },
+        "opposing_anchor_and_arithmetic_terms": 12
+      },
+      "24": {
+        "anchor": {
+          "count": 18,
+          "max_absolute": 4.0315978538735016e-05,
+          "median_absolute": 9.286901272344213e-06,
+          "min_absolute": 5.780409887420014e-07,
+          "undefined": 0
+        },
+        "arithmetic": {
+          "count": 18,
+          "max_absolute": 3.703843332718231e-05,
+          "median_absolute": 5.60934049533244e-06,
+          "min_absolute": 5.057858651492513e-07,
+          "undefined": 0
+        },
+        "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+        "observed": {
+          "count": 18,
+          "max_absolute": 4.501755037998691e-05,
+          "median_absolute": 7.3124944513826515e-06,
+          "min_absolute": 6.522207595084655e-07,
+          "undefined": 0
+        },
+        "opposing_anchor_and_arithmetic_terms": 13
+      },
+      "47": {
+        "anchor": {
+          "count": 18,
+          "max_absolute": 5.1913850400066e-05,
+          "median_absolute": 2.774037841636984e-06,
+          "min_absolute": 3.48226961797529e-07,
+          "undefined": 0
+        },
+        "arithmetic": {
+          "count": 18,
+          "max_absolute": 4.886621083024158e-06,
+          "median_absolute": 1.2083652484581532e-06,
+          "min_absolute": 0.0,
+          "undefined": 0
+        },
+        "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+        "observed": {
+          "count": 18,
+          "max_absolute": 5.556608108147768e-05,
+          "median_absolute": 2.30009365882442e-06,
+          "min_absolute": 1.2627271054159312e-07,
+          "undefined": 0
+        },
+        "opposing_anchor_and_arithmetic_terms": 12
+      }
+    },
+    "native": {
+      "1": {
+        "anchor": {
+          "count": 18,
+          "max_absolute": 4.854838709677419,
+          "median_absolute": 0.3298465829846583,
+          "min_absolute": 0.04675455181454133,
+          "undefined": 0
+        },
+        "arithmetic": {
+          "count": 18,
+          "max_absolute": 1.6290322580645162,
+          "median_absolute": 0.09560731046142187,
+          "min_absolute": 0.020020195901148,
+          "undefined": 0
+        },
+        "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+        "observed": {
+          "count": 18,
+          "max_absolute": 3.6550218340611353,
+          "median_absolute": 0.3699074074074074,
+          "min_absolute": 0.07065212944353438,
+          "undefined": 0
+        },
+        "opposing_anchor_and_arithmetic_terms": 12
+      },
+      "24": {
+        "anchor": {
+          "count": 18,
+          "max_absolute": 0.6835443037974683,
+          "median_absolute": 0.02854151316554853,
+          "min_absolute": 0.0,
+          "undefined": 0
+        },
+        "arithmetic": {
+          "count": 18,
+          "max_absolute": 0.43842364532019706,
+          "median_absolute": 0.028284289466671744,
+          "min_absolute": 0.005494505494505495,
+          "undefined": 0
+        },
+        "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+        "observed": {
+          "count": 18,
+          "max_absolute": 0.8860759493670886,
+          "median_absolute": 0.043397666599946705,
+          "min_absolute": 0.0,
+          "undefined": 0
+        },
+        "opposing_anchor_and_arithmetic_terms": 10
+      },
+      "47": {
+        "anchor": {
+          "count": 18,
+          "max_absolute": 0.14705882352941177,
+          "median_absolute": 0.03279443441388517,
+          "min_absolute": 0.0,
+          "undefined": 0
+        },
+        "arithmetic": {
+          "count": 18,
+          "max_absolute": 0.14705882352941177,
+          "median_absolute": 0.014143499136453175,
+          "min_absolute": 0.0,
+          "undefined": 0
+        },
+        "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+        "observed": {
+          "count": 18,
+          "max_absolute": 0.13559322033898305,
+          "median_absolute": 0.02223856354814615,
+          "min_absolute": 0.0,
+          "undefined": 0
+        },
+        "opposing_anchor_and_arithmetic_terms": 14
+      }
+    }
+  },
+  "same_anchor_4b_width_1_vs_64": {
+    "1": {
+      "anchor": {
+        "count": 18,
+        "max_absolute": 9.343921616891581,
+        "median_absolute": 0.5015370244565218,
+        "min_absolute": 0.024145884107511124,
+        "undefined": 0
+      },
+      "arithmetic": {
+        "count": 18,
+        "max_absolute": 9.75469829640573,
+        "median_absolute": 1.1077745606014426,
+        "min_absolute": 0.16521739130434782,
+        "undefined": 0
+      },
+      "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+      "observed": {
+        "count": 18,
+        "max_absolute": 2.0008367426404186,
+        "median_absolute": 0.756389800990298,
+        "min_absolute": 0.15286624203821655,
+        "undefined": 0
+      },
+      "opposing_anchor_and_arithmetic_terms": 14
+    },
+    "17": {
+      "anchor": {
+        "count": 18,
+        "max_absolute": 2.6363636363636362,
+        "median_absolute": 0.609561468327781,
+        "min_absolute": 0.02199045796478841,
+        "undefined": 0
+      },
+      "arithmetic": {
+        "count": 18,
+        "max_absolute": 0.3349282296650718,
+        "median_absolute": 0.03220774127281829,
+        "min_absolute": 0.00011722654380444301,
+        "undefined": 0
+      },
+      "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+      "observed": {
+        "count": 18,
+        "max_absolute": 2.971291866028708,
+        "median_absolute": 0.5962257368799425,
+        "min_absolute": 0.011619837403820164,
+        "undefined": 0
+      },
+      "opposing_anchor_and_arithmetic_terms": 6
+    },
+    "33": {
+      "anchor": {
+        "count": 18,
+        "max_absolute": 6.866666666666666,
+        "median_absolute": 0.11920543736716957,
+        "min_absolute": 0.010416666666666666,
+        "undefined": 0
+      },
+      "arithmetic": {
+        "count": 18,
+        "max_absolute": 0.06666666666666667,
+        "median_absolute": 0.0047323839949062925,
+        "min_absolute": 0.0,
+        "undefined": 0
+      },
+      "basis": "recomputed from committed scalar responses; shared anchors and cotangents",
+      "observed": {
+        "count": 18,
+        "max_absolute": 6.933333333333334,
+        "median_absolute": 0.11922647980977633,
+        "min_absolute": 0.010416666666666666,
+        "undefined": 0
+      },
+      "opposing_anchor_and_arithmetic_terms": 4
+    }
+  },
+  "schema_version": 1,
+  "sources_verified": 22,
+  "unexecuted_by_reviewer": [
+    "model forward or derivative",
+    "device access",
+    "recomputation of full maps from NPZ",
+    "full-anchor norm measurement",
+    "independent exact-repeat run",
+    "preregistration seal review pending P1-P6"
+  ]
+}
