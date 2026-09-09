@@ -495,3 +495,28 @@ the hardest thing the model emits.
 
 That is a better statement of the map's primary result than the pooled number, and it is only
 visible because a control killed a neighbouring claim first.
+
+### The zero-history cell, checked two further ways
+
+The claim now doing the most work is the one at **zero prior occurrences** — both spans equally
+unseen — so it was checked twice more before being leaned on.
+
+**Leave-one-out.** 21 of the 54 zero-history argument tokens come from `aggregate_report-0167`, the
+truncated episode that emitted a 200-token arithmetic expression. Removing it:
+
+| layer | all twelve | minus `aggregate_report-0167` |
+|---:|---:|---:|
+| 21 | +3.80 (n 54/65) | **+6.54** (n 33/60) |
+| 23 | +4.03 (n 54/65) | **+5.20** (n 33/60) |
+
+**The dominant episode was diluting the effect, not producing it** — the same direction deduplication
+moved it, and the second time today a control has moved a number upward.
+
+**Per episode.** Seven episodes have at least three zero-history tokens in both spans. **All seven
+are positive**, median +3.47 at layer 21 and +3.43 at 23. So it is not one episode, and it is not
+`aggregate_report-0167`, which the leave-one-out already showed working against it.
+
+**The honest bound.** Per-episode counts here are three to five argument tokens; seven of seven
+agreeing in sign is worth having and is not a significance test. What the cell supports is that at
+matched novelty the gap is at least as large as the pooled figure and probably larger, in every
+episode where it can be measured at all.
