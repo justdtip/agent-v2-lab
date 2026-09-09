@@ -245,3 +245,16 @@ Everything else in the draft is as ordered: the headline at r = 8 and the 0.5 de
 in advance, the twelve exploratory episodes chosen by rule, M = 12 fixed, the three-state reporting,
 and the sentence that a first result showing the 12B more predictive is, until the capacity rule
 and the controls, a measurement of the 12B being bigger.
+
+## Correction before the seal, Chief, 2026-09-10 — the unit of the bound is the episode
+
+From Codex's file-only review of the draft. §7 of the pre-registration computes n from decisions
+and transitions — 1,781, 4,122, 553 — but the design holds out by episode precisely because
+decisions within an episode are not independent, and the first state variable's bound counted
+episodes (n = 77 and n = 82 in its order). **Ruled: the unit is the episode, and the bounded
+observation is the episode mean.** At M = 12 and α = 0.05: E1 on the test split's 240 episodes
+gives ε_main ≈ 0.16; E2's ordinary transitions in the train split's 840 episodes give ε_ord ≈ 0.09;
+the corrective transitions are one per episode, so ε_sub = 0.11 stands. Both computations, the
+reason and the consequence for the claim are written into §7 before the seal; an episode-level
+bootstrap may be declared beside the Hoeffding form but does not replace it. The capture set is
+pinned by both digests, the file's sha256 and the logical triples', each named for what it is.
