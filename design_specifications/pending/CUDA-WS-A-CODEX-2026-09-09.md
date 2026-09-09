@@ -529,3 +529,5 @@ Report as before: a record directory under `research/records/`, sources pinned b
 loaded, nothing on the card changed.
 
 *2026-09-10, later:* the width-1 ladder landed on `cuda-ws-d` at `5b0feb7`/`15eddfa`; standing request 2 is live.
+
+*2026-09-10, later:* standing request 2 delivered at `2678218` (`WSA-LADDER-AUDIT-2026-09-09`), accepted in full and ruled in the WS-D order's correction of this date; merged. Standing request 1 stays live until the D-CRO's P1–P6 commit exists.

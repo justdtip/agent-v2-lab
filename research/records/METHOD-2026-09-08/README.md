@@ -763,6 +763,14 @@ card was idle. The rule that a suite reading is not a claim without its skip cou
 Chief's inferences as it does to anyone's numbers: *an inference is not a finding without the
 artefact that could have refused it.*
 
+**Addendum, Chief, 2026-09-10, later the same night.** A fifth correction of the same shape, caught
+by Codex's audit of the ladder within the hour: the WS-D order carried five statements from the
+D-CRO's summary of the ladder — every input perturbation landed, the loss was downstream, the step
+scaled by 2⁶, the minima were flanked within a factor of three, eighteen rows failed — and the
+saved cells refute or narrow each. *An order cites the artefact's field, not the message about it.*
+The producer's summary is a reporter, and the rule of the thirty-third entry applies to the Chief
+reading it.
+
 ## Thirty-third: the reporter that failed, jointly with the D-CRO
 
 Three defects in one day that no test suite was built to catch, because **neither was a check that
