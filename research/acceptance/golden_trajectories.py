@@ -113,6 +113,7 @@ class Turn:
     emissions: tuple[Emission, ...]
     forwards: dict[int, Forward]
     readings: dict[int, dict[str, list[int]]]
+    confidence: dict[int, float]
     emitted_count: int
     forwarded_count: int
     status: str
@@ -129,6 +130,15 @@ class Turn:
     def final_top(self, position: int) -> list[int]:
         """Recorded layer-34 top-k at ``position``, which is the model's own distribution."""
         return list(self.readings.get(position, {}).get("34", []))
+
+    def emitted_confidence(self, position: int) -> float | None:
+        """The model's own probability for the token emitted at ``position``.
+
+        Layer 34 is the model's own softmax, so at horizon 1 this is the probability of the
+        greedy choice. It is the quantity the P >= 0.99 rule reads: quantisation cannot move an
+        argmax that confident, so a flip there is a mask, position, entry or norm defect.
+        """
+        return self.confidence.get(position)
 
 
 @dataclass
@@ -283,6 +293,7 @@ def load_episode(path: Path) -> Episode:
     emissions: dict[int, list[Emission]] = {}
     forwards: dict[int, dict[int, Forward]] = {}
     readings: dict[int, dict[int, dict[str, list[int]]]] = {}
+    confidence: dict[int, dict[int, float]] = {}
 
     for event in events:
         kind = event.get("kind")
@@ -311,6 +322,11 @@ def load_episode(path: Path) -> Episode:
             )
         elif kind == "reading":
             readings.setdefault(event["turn"], {})[event["position"]] = event["top"]
+        elif kind == "rank" and event.get("layer") == 34 and event.get("horizon") == 1:
+            # A rank row is keyed by the *reading* position, whose forward predicts the token
+            # one position later. Storing it under the emission's own position keeps every
+            # consumer on one convention; the join is checked by record_consistency.
+            confidence.setdefault(event["turn"], {})[event["position"] + 1] = event["probability"]
 
     turns = tuple(
         Turn(
@@ -319,6 +335,7 @@ def load_episode(path: Path) -> Episode:
             emissions=tuple(sorted(emissions.get(index, []), key=lambda item: item.position)),
             forwards=forwards.get(index, {}),
             readings=readings.get(index, {}),
+            confidence=confidence.get(index, {}),
             emitted_count=ends.get(index, {}).get("emitted_count", len(emissions.get(index, []))),
             forwarded_count=ends.get(index, {}).get("forwarded_count", 0),
             status=ends.get(index, {}).get("status", "unrecorded"),
