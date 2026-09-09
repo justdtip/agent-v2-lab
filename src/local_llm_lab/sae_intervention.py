@@ -70,7 +70,7 @@ class SAEIntervention:
 
     def _encode(self, h):
         # Protect the original even from an encoder that normalizes its input in place.
-        return _vector(self.encoder(h.clone()), "encoder output", like=h)
+        return _vector(self.encoder(h.clone()), "encoder output", like=h).clone()
 
     def __call__(self, h):
         self._diagnostic = None
@@ -83,8 +83,7 @@ class SAEIntervention:
         if max(self.features) >= len(z):
             raise ValueError("selected feature outside encoder output")
         indices = torch.tensor(self.features, dtype=torch.long, device=h.device)
-        delta = torch.zeros_like(z)
-        delta[indices] = self.target_values - z[indices]
+        selected_delta = self.target_values - z[indices]
         if torch.is_tensor(self.decoder):
             if (
                 self.decoder.shape != (len(h), len(z))
@@ -92,8 +91,10 @@ class SAEIntervention:
                 or self.decoder.device != h.device
             ):
                 raise ValueError("decoder must match residual/feature shape, dtype and device")
-            direction = self.decoder @ delta
+            direction = self.decoder[:, indices] @ selected_delta
         else:
+            delta = torch.zeros_like(z)
+            delta[indices] = selected_delta
             direction = self.decoder(delta)
         _vector(direction, "decoder output", like=h)
         if direction.shape != h.shape:
@@ -106,16 +107,29 @@ class SAEIntervention:
                 raise ValueError("re-encoder output must preserve feature shape")
             mask = torch.ones_like(z, dtype=torch.bool)
             mask[indices] = False
+            # Subtract diagnostic values in CPU float64: finite fp16/fp32 readings
+            # can otherwise overflow when their signs differ. This does not change
+            # the model edit or the precision used by either encoding.
+            before_cpu = z.detach().to(device="cpu", dtype=torch.float64)
+            achieved_cpu = achieved.to(device="cpu", dtype=torch.float64)
+            target_cpu = self.target_values.detach().to(device="cpu", dtype=torch.float64)
+            selected_cpu, off_cpu = indices.cpu(), mask.cpu()
+            target_error = _vector(
+                achieved_cpu[selected_cpu] - target_cpu, "diagnostic target error"
+            )
+            off_change = _vector(
+                achieved_cpu[off_cpu] - before_cpu[off_cpu], "diagnostic off-target change"
+            )
             self._diagnostic = {
                 "kind": "sae_decoder_reencoding",
                 "basis": "measured-here",
                 "features": list(self.features),
-                "before": z[indices].detach().cpu().tolist(),
-                "target": self.target_values.detach().cpu().tolist(),
-                "achieved": achieved[indices].cpu().tolist(),
-                "target_error": (achieved[indices] - self.target_values).cpu().tolist(),
+                "before": before_cpu[selected_cpu].tolist(),
+                "target": target_cpu.tolist(),
+                "achieved": achieved_cpu[selected_cpu].tolist(),
+                "target_error": target_error.tolist(),
                 "off_target_features": torch.arange(len(z), device=h.device)[mask].cpu().tolist(),
-                "off_target_change": (achieved[mask] - z[mask]).cpu().tolist(),
+                "off_target_change": off_change.tolist(),
             }
         return replacement
 

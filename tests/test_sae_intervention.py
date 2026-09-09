@@ -170,3 +170,83 @@ def test_capture_applies_decoder_edit_at_requested_layer_and_position():
         actual = capture(ids).logits
         torch.testing.assert_close(actual[0, 1], expected, rtol=0, atol=0)
         assert torch.equal(actual[0, (0, 2)], baseline[0, (0, 2)])
+
+
+def test_reused_encoder_output_buffer_cannot_rewrite_before_diagnostic():
+    encoder, decoder, bias = dictionary()
+    buffer = torch.empty(2)
+
+    def buffered_encoder(h):
+        buffer.copy_(encoder(h))
+        return buffer
+
+    edit = SAEIntervention(
+        buffered_encoder, decoder, bias, features=(0,), target_values=torch.tensor([3.0])
+    )
+    edit(torch.tensor([1.5, 1.5, 4.0]))
+    diagnostic = edit.diagnostic_record()
+    assert diagnostic["before"] == [1.0]
+    assert diagnostic["achieved"] == [5.0]
+    assert diagnostic["off_target_change"] == [2.0]
+
+
+def test_sae_clamp_and_one_shot_through_real_hf_dynamic_cache():
+    from test_arch_torch import make_model
+    from test_torch_capture import Sink
+    from transformers.cache_utils import DynamicCache
+
+    from local_llm_lab.arch_torch import TorchArchitectureView
+    from local_llm_lab.torch_capture import TorchCapture
+
+    view = TorchArchitectureView.from_model(make_model())
+    sink = Sink()
+    cache = DynamicCache(config=view.model.config)
+    width = view.hidden_size
+    edit = SAEIntervention(
+        lambda h: h,
+        torch.eye(width),
+        torch.zeros(width),
+        features=(0, 1),
+        target_values=torch.tensor([1.0, 2.0]),
+    )
+    ids = torch.tensor([[1, 2, 3]])
+    with TorchCapture(view, sink, layers=(0, 1)) as capture:
+        capture.intervene(1, 1, lambda h: h + 0.25)
+        handle = capture.clamp(0, "emitted", edit)
+        capture(ids, past_key_values=cache, emitted_positions=[])
+        for absolute in (3, 4):
+            assert cache.get_seq_length() == absolute
+            capture(ids[:, :1], past_key_values=cache, emitted_positions=[absolute])
+            torch.testing.assert_close(sink.rows[0][1][0, 0, :2], torch.tensor([1.0, 2.0]))
+        record = capture.intervention_record
+        assert [len(row["applications"]) for row in record] == [1, 2]
+        assert all("diagnostic" in event for event in record[1]["applications"])
+        assert [event["absolute_position"] for event in record[1]["applications"]] == [3, 4]
+        handle.release()
+        capture(ids[:, :1], past_key_values=cache)
+        assert cache.get_seq_length() == 6
+        assert len(capture.intervention_record[1]["applications"]) == 2
+        # Release stops editing input residuals; it does not erase effects in the cache.
+        assert torch.equal(sink.rows[0][1], view.embed(ids[:, :1]))
+        handle = capture.clamp(0, 4, edit)
+        with pytest.raises(ValueError, match="already cached"):
+            capture(ids[:, :1], past_key_values=cache)
+        assert cache.get_seq_length() == 6
+        handle.release()
+
+
+def test_diagnostic_differences_do_not_overflow_finite_fp32_readings():
+    def encoder(h):
+        return torch.where(h > 0, torch.full_like(h, -3e38), torch.zeros_like(h))
+
+    edit = SAEIntervention(
+        encoder,
+        torch.tensor([[1e-38]]),
+        torch.zeros(1),
+        features=(0,),
+        target_values=torch.tensor([3e38]),
+    )
+    edit(torch.zeros(1))
+    record = edit.diagnostic_record()
+    assert record["target_error"][0] == record["achieved"][0] - record["target"][0]
+    json.dumps(record, allow_nan=False)
