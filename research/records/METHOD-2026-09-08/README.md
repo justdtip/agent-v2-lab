@@ -604,6 +604,34 @@ Here the Chief's version stays, being on both branches and verifying every file,
 SWE-2's the fetch-time digest sidecar and the offline check that the preflight rows need; the
 preflight rows and the render row are SWE-2's and are rebased onto it.
 
+## Twenty-ninth: a chained shell that committed past a check that had raised
+
+**D-CRO, 2026-09-10.** Resolving a merge conflict in the run order — both branches had appended to
+the same file — I wrote the resolution as one shell chain: dump the three versions, run a Python
+script that checked both sides were pure appends of the base and wrote the merged file, then
+`git add && git commit`. The Python assertion **fired**: one side was not a pure append, because my
+earlier resolution had inserted a section mid-file. The script exited nonzero and wrote nothing.
+The chain went on regardless — the commands after a heredoc are not joined to it by `&&` — and
+committed the working tree as git had left it after the conflicted merge: **the order file with
+its conflict markers in it**, under a message saying the sections were kept in order.
+
+It was caught before the push, by looking at the log before pushing, which is not a mechanism.
+The commit was reset to the pushed tip, the resolution redone with the write gated on every check
+and `git merge --abort` on any failure, and the corrected merge verified for markers before commit.
+Nothing reached origin.
+
+**The shape.** A check that raised, and a step that did not wait for it. It is this week's family
+one level down: the guard was live, it fired, and its firing gated nothing because the gate was a
+different process. The twenty-fourth entry's rule, that explicit-path `add` was care wearing a
+mechanism's clothes, applies to a chained shell exactly: a heredoc's exit status is not the chain's
+unless the chain is written to read it.
+
+**The rule.** A resolution, or any write whose correctness a check decides, is committed only from
+a step that reads that check's status — `test $? -eq 0 || { abort; exit 1; }` immediately after the
+heredoc, before `git add` — and a merge is verified free of markers *by grep in the commit step*,
+not by the message that claims it. The merge that did land here was made that way; the one that
+did not is why the rule is written down.
+
 ## Thirtieth: the device's first hour, in the Chief's name
 
 Four things in ninety minutes on paid hardware, each caught by a gate that already existed. A
@@ -618,3 +646,156 @@ magnitude that agrees across backends. **The rules.** A check reads the property
 that produced it. A patch is verified by grepping for its text, never by a test count. A chain
 commits on the test's exit status, never a pipe's. And every laptop yardstick is re-read on the
 device before it judges anything, since the first hour's job is to find which of them moved.
+
+## Thirty-first: the gate whose reference was a different model, in SWE-1's name
+
+The port's acceptance gate compared the torch bfloat16 implementation against the MLX **4-bit**
+recordings, and failed a run outright on any position where the recording had been at least 99%
+confident and the port disagreed. The reasoning was that quantisation moves near-ties and nothing
+else, so a confident flip has to be a mask, position, entry or norm defect. On the rented card it
+fired **twenty-four times** across 5,245 positions, with eleven of the twenty-four above P = 0.999
+and one at P = 1.000000. It looked exactly like a defect, and the distribution ruled out a
+threshold artefact: a rule crowding the 0.990–0.995 band would have been an instrument problem,
+and this was not that shape.
+
+It was not a defect. Running MLX at **bfloat16** over the same positions resolved twenty-one of
+the twenty-four to quantisation: both bfloat16 implementations produced the same token and only
+the 4-bit recording dissented, the P = 1.000000 case among them. The premise was simply false.
+Four-bit quantisation is not a perturbation of a model, it is a different model, and the recorded
+probability is *that* model's confidence in its own preference. It bounds nothing about the port.
+
+**A gate is only a defect test against a precision-matched reference.** Against a differently
+quantised one it measures the difference between the two precisions, and it will keep firing and
+keep finding nothing, at whatever cost per firing the hardware charges. The check ran clean for a
+day on the one episode anybody had measured, which is the other half of the lesson: a rule
+validated on 103 of 5,245 positions had not been validated.
+
+The three that survived taught the second rule. Measured as a **probability margin** they read
+0.12 to 0.64 and the instrument called all three "not a tie", which would have sent the team
+hunting a defect that was not there. But the logits are bfloat16, so the gaps between candidates
+are quantised to the bfloat16 grid, and softmax being monotone, `ln(p1/p2)` recovers the logit gap
+exactly without keeping the logits. Every gap came back an exact multiple of 0.25 — the bfloat16
+step at that magnitude, which is the check that it is the right grid — and the three sat at 0, 2
+and 1–3 units of last place. At one the reference's own top two were **exactly equal**: the argmax
+was settling a coin toss, and which side the port landed is not information about the port.
+
+**The rules.** A confident-flip check is a defect test only when the reference runs the port's
+precision; against anything else it reports observations and refuses to yield a verdict, in the
+type rather than in a comment. A disagreement whose gap on the reference lies within two ULPs of
+the dtype the logits are stored in is a **tie**: counted and reported as a tie, never as a flip
+and never folded into agreement. And a margin is measured in ULPs of the stored dtype, never as a
+probability, because probability hides the grid the numbers actually live on.
+
+### Addendum to the thirty-first, same author: the instrument's resolution is a measurement, not a setting
+
+Three things one position taught after the entry above was written, while the gate it re-based was
+being settled. Kept here rather than given a number of its own, on the Chief's ruling: it is the
+same finding continuing, not a second lesson.
+
+**The grid must be computed from the value.** bfloat16's spacing is `2^(⌊log₂|v|⌋ − 7)`, so it
+depends on the magnitude of the number being measured. One arm of this work fixed it once at an
+assumed magnitude and reported a 1.5-logit gap as six units of last place; the other took it per
+position and reported the same gap as three, because the logit is 66.0 and the step there is 0.5
+rather than 0.25. Both arms passed the check that every gap is an exact multiple of the grid —
+**that check cannot fail against a grid that is too fine**, since a multiple of 0.25 is also a
+multiple of 0.5. A resolution assumed once for a tensor is a setting; a resolution read off each
+value is a measurement, and only the second can be checked.
+
+**A defect is a claim about a margin, and the claim needs the port's own resolution beside the
+reference's.** A disagreement is attributable to the port only where the reference's margin
+exceeds the port's measured cross-device spread at that position. At `read-0108`/521 the
+reference is three units clear while the port is an exact tie on one device and five units the
+other way on another: the port's own arithmetic already spans the reference's margin, so no claim
+can be made and the position is **below resolution** — a third class beside tie and flip, counted
+and listed with both margins, never folded into agreement and never called a defect. The rule
+discriminates rather than excusing: at `chat-long-summary`/1912 the reference is three units clear
+and the port's devices differ by one, and that position is attributed to the port.
+
+**A count that does not sum is a class nobody named.** The re-based run reported 5,213 agreed, 30
+ties and 1 flip against 5,245 compared, and the missing position was not a rounding artefact: it
+was a disagreement outside the tie band that a **stale confidence gate** had silently dropped,
+because the rule still consulted the recording's probability — the *4-bit* model's — to decide
+whether a bfloat16-against-bfloat16 disagreement counted. The dropped position is the one now
+attributed to the port. The identity is asserted in the type: the four classes must add to the
+positions compared, or the report raises.
+
+**The rules.** Compute a dtype's resolution from the value, never once for the tensor, and
+distrust any check that a too-fine grid would also pass. State a defect as a margin that exceeds
+the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
+And make the classes sum, because the position with no class is the one nobody will look at.
+
+## Thirty-second: four corrections of the Chief's own work in one night, in the Chief's name
+
+**Chief, 2026-09-10.** Four of tonight's corrections were of my work, and they share a shape with
+each other more than with the reporter failures of the thirty-third.
+
+**A mechanism inferred from one statistic.** Row one of the golden test halved its step and the
+residual moved from 0.973 to 0.844, a ratio of 1.15 against the laptop's 3.9. I read that as a
+bfloat16 rounding floor, wrote it into the WS-D order as the reading, and ordered a control to test
+it. The artefact refused it within the hour: of 84,480 finite-difference columns, none was exactly
+zero, which a rounded-away response would have left. The Director's reading — a coordinate
+displaced 5.7 times its own size, a secant across a saturating response — was the one the same
+artefact supported, and the D-CRO then showed the displacement to be a constant of the geometry,
+0.01·√(L·d) at every layer to fifteen digits, so the depth gradient could not be the step either.
+*A mechanism is not inferred from a ratio when the artefact can refuse it directly. Ask what the
+artefact would show under each candidate before choosing one.*
+
+**A control across two forward paths.** The control I ordered compared float32 finite differences
+against the bfloat16 exact map. The Director caught it: the first hour's 69% finding was precisely
+that a promoted forward is a different function. *A control compares two estimators on one forward
+path, or it measures the path.*
+
+**A count with an unstated basis.** My corpus count keyed rows by `(task_id, step)` in a dictionary
+and overwrote the 930 rows that share a key. Nine of eleven figures reproduced; the other two did
+not until the D-CRO named the basis I had used without knowing it. *A count states its basis, and
+a script that produces one is written so that it cannot merge rows silently.*
+
+**A resolution estimated from two samples.** The rule I wrote for WS-B attributed a flip to the port
+where the reference's margin exceeded the port's cross-device spread *at that position* — one CPU
+reading and one CUDA reading. At one position the two happened to sit 1.0 ULP apart, and the rule
+claimed a defect that the corpus's own evidence, 5.0 ULP at another position, could not support.
+*A resolution is a distribution measured over the corpus, and its pre-registered statistic is the
+maximum.*
+
+What the four share: each was a reasonable inference stated as a finding one step before the
+measurement that would have settled it existed, on a night when that measurement was cheap and the
+card was idle. The rule that a suite reading is not a claim without its skip count applies to the
+Chief's inferences as it does to anyone's numbers: *an inference is not a finding without the
+artefact that could have refused it.*
+
+## Thirty-third: the reporter that failed, jointly with the D-CRO
+
+Three defects in one day that no test suite was built to catch, because **neither was a check that
+failed — both were a reporter that failed, and a reporter has no assertion to break.** The sentence
+is the D-CRO's and it is the entry.
+
+**Theirs.** A progress logger raised *after* the fit completed, and threw away twenty-seven minutes
+of forwards on paid hardware. The computation was correct and finished; the thing that was supposed
+to write it down destroyed it. The runbook's write-as-you-go rule was in force and was broken by the
+writer the rule exists to constrain.
+
+**Mine.** A flip printer capped its output at twelve flips per episode **in position order**. An
+episode with many near-ties pushed its confident flips past the cap, so a run reported twenty-four
+gating flips and the log carried twelve — and the record kept probabilities but not positions, so
+the other twelve existed nowhere at all. The cap was found only by trying to build the next test's
+input out of the log and coming up half short. **A display had decided a result.**
+
+**Mine again, one level down, and this is the half that generalises.** The classifier consulted a
+stale field — the 4-bit recording's probability — to decide whether a bfloat16-against-bfloat16
+disagreement counted, and dropped a whole class silently. What exposed it was not a test but an
+arithmetic identity: 5,213 agreed plus 30 ties plus 1 flip against 5,245 compared. Then the
+identity itself proved insufficient. When the spread parameter was loaded, keyed, and never passed
+to the function that reads it, the four classes **still summed** — 5,213 + 30 + 0 + 2 — and only an
+expected classification beside the identity showed that nothing had been classified.
+
+**Why suites miss this family.** A check that fires wrongly is a failing test. A reporter that
+summarises wrongly produces a plausible number, and plausible numbers pass. The three above were
+caught by, in order: a paid clock, an attempt to use the output for something else, and an
+arithmetic identity that then needed an expected value beside it. None of those is a test.
+
+**The rules.** Every reporter that summarises gets a test that feeds it a known set and asserts the
+summary it produces — the summary, not the computation behind it. A cap that can hide the evidence
+for the failure it is reporting is refused by construction: the gating rows are never truncated and
+the withheld count is stated, so a short list is never read as a complete one. And an identity
+guards a gate only beside an expected value, because a conservation law is satisfied by a system
+that has done nothing at all.
