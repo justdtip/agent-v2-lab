@@ -46,13 +46,16 @@ def _resolve_checkpoint(hf_id: str) -> str:
     shared artefact like the lock and the window: `models/` is git-ignored and exists once, in the
     primary, so a worktree resolving against its own root finds nothing. That is the same failure
     the box window had before `box_state_root`, from the same cause, and it is fixed the same way
-    and by the same reader.
+    -- but **not** through the same reader's override. `$AGENT_V2_BOX_STATE_DIR` redirects where
+    the lock and the window live, so an isolated run cannot take the machine's lock; a checkpoint
+    that followed it resolved into that scratch directory and did not exist, which is what a seat
+    in a worktree saw on 2026-09-09. The git-derived primary is what a checkpoint lives under.
     """
     if not hf_id.startswith(_LOCAL_CHECKPOINT_PREFIX):
         return hf_id
-    from local_llm_lab.runlock import box_state_root
+    from local_llm_lab.runlock import primary_checkout_root
 
-    return str((box_state_root() / hf_id).resolve())
+    return str((primary_checkout_root() / hf_id).resolve())
 
 
 @dataclass(frozen=True)

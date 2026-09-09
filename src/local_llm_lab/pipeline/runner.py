@@ -4,6 +4,7 @@ import contextlib
 import copy
 import sys
 import time
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -14,11 +15,11 @@ from local_llm_lab.pipeline.env import Fault, Simulator
 from local_llm_lab.pipeline.protocol import (
     DEFAULT_KEEP_LAST,
     SYSTEM_PROMPT,
-    system_prompt,
     assistant_message,
     build_prompt,
     parse_turn,
     strip_thinking,
+    system_prompt,
     tool_message,
     turn_is_complete,
     window_messages,
@@ -56,6 +57,8 @@ class Trajectory:
     difficulty: int = -1
     integrity: dict[str, Any] = field(default_factory=dict)
     think_tokens: int = 0
+    truncated: bool = False
+    repetition: dict[str, Any] = field(default_factory=dict)
     model: dict[str, Any] = field(default_factory=dict)
     horizon: int = (
         -1
@@ -177,20 +180,54 @@ class SnapshotCache:
             self.model(mx.array(prefix)[None, :], cache=self.cache)
             mx.eval(*(entry.state for entry in self.cache))
             self._prefix = prefix
-            self._states = [_copy_cache_state(entry.state) for entry in self.cache]
+            self._states = snapshot_cache(self.cache)
             self.encoded_tokens += len(token_ids)
             return suffix
         if prefix != self._prefix:
             raise ValueError("immutable prefix changed after snapshot creation")
         assert self._states is not None
-        for entry, state in zip(self.cache, self._states, strict=True):
-            entry.state = _copy_cache_state(state)
+        restore_cache(self.cache, self._states)
         self.reused_tokens += self.prefix_tokens
         self.encoded_tokens += len(suffix)
         return suffix
 
     def commit(self, token_ids: list[int], generated: list[int]) -> None:
         """The live cache may advance; the saved prefix snapshot remains unchanged."""
+
+
+def snapshot_cache(entries: list[Any]) -> list[tuple[Any, Any]]:
+    """Save everything that defines a cache entry, which is contents *and* position.
+
+    Saving ``state`` alone is a defect, and a silent one. ``mlx_lm``'s two cache kinds split
+    the job differently: ``KVCache.state``'s setter recovers the offset from the restored
+    array's own length, while ``RotatingKVCache.state``'s setter assigns keys and values and
+    nothing else -- its ``offset`` and ``_idx`` live in ``meta_state`` (``models/cache.py``,
+    the ``state`` and ``meta_state`` properties of each class).
+
+    So a snapshot of ``state`` alone round-trips correctly on a full-attention model and
+    restores a rotating layer to the right contents at the wrong position. Gemma 3 4B runs a
+    rotating cache on 29 of its 34 blocks, which is where this stops being theoretical. The
+    failure mode is wrong attention rather than an exception.
+    """
+    saved = []
+    for entry in entries:
+        meta = getattr(entry, "meta_state", None)
+        saved.append((_copy_cache_state(entry.state), meta))
+    return saved
+
+
+def restore_cache(entries: list[Any], saved: list[tuple[Any, Any]]) -> None:
+    """Restore contents then position, in that order and for that reason.
+
+    ``KVCache.state``'s setter derives the offset from the restored length, so ``state`` must
+    land first; ``meta_state`` then puts back the true offset and write index for the entries
+    that keep them there. An empty ``meta_state`` is the base class's "no metadata" value and
+    assigning it back would raise, so it is skipped.
+    """
+    for entry, (state, meta) in zip(entries, saved, strict=True):
+        entry.state = _copy_cache_state(state)
+        if meta:
+            entry.meta_state = meta
 
 
 def _copy_cache_state(value: Any) -> Any:
@@ -379,6 +416,19 @@ class HistoryCache:
         self._save()
 
 
+def is_torch_model(model: Any) -> bool:
+    """Whether ``model`` is a torch module, discovered structurally rather than by name.
+
+    The same principle the architecture view already follows: never consult a model-type
+    string. A missing torch is not an error here, it is simply an MLX process.
+    """
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - exercised only where torch is absent
+        return False
+    return isinstance(model, torch.nn.Module)
+
+
 def make_turn_cache(
     model: Any,
     view: ArchitectureView,
@@ -386,6 +436,19 @@ def make_turn_cache(
     *,
     prefix_tokens: int,
 ) -> TurnCacheBase | None:
+    if is_torch_model(model) and resolved.cache_strategy != "none":
+        # Refusing loudly is the point twice over. A silent fallback to no reuse would be a
+        # speed regression that no test fails on, and an MLX cache handed to a torch model
+        # would attend to the wrong keys rather than raise. The message names the plan section
+        # because whoever hits this reads the error, not the plan.
+        raise NotImplementedError(
+            f"cache strategy {resolved.cache_strategy!r} is refused under torch. "
+            "'trim' and 'snapshot' are implemented in pipeline.torch_cache and are not wired "
+            "in yet: each is an arm of the same acceptance gate as 'none' and must reproduce "
+            "the 'none' trajectories byte for byte within one backend, which needs the "
+            "tolerance runner's 'none' baseline against the real view first. 'history' is not "
+            "implemented. Plan section 16.8 carries the ruling."
+        )
     if resolved.cache_strategy == "trim":
         return TrimCache(model)
     if resolved.cache_strategy == "snapshot":
@@ -444,6 +507,222 @@ class _ThinkingTracker:
         )
 
 
+#: Cheap gate before the expensive completeness test: a closing token always adds one of
+#: these characters, so a piece without them cannot have closed the call.
+_COMPLETION_MARKS = ("`", "<", "|")
+
+#: Why a turn stopped. ``token_cap`` is the one that means the turn was cut off rather than
+#: finished, and a turn that ends there without a parseable action is a truncation, not a
+#: wrong answer.
+STOP_TOKEN = "stop_token"
+STOP_TURN_COMPLETE = "turn_complete"
+STOP_TOKEN_CAP = "token_cap"
+
+
+def _consume_stream(
+    stream: Any,
+    *,
+    ids: list[int],
+    thinking: _ThinkingTracker,
+    tokenizer: Any,
+    stop_ids: set[int],
+    capture: Any | None,
+    turn_cache: TurnCacheBase | None,
+) -> str:
+    """Apply the turn's stop rule to a stream of ``(token_id, text_piece)`` pairs.
+
+    Both backends feed this one function, so the stop semantics cannot drift between them.
+    That matters more than it looks: the golden records were produced under exactly this rule,
+    and two copies of it that agree today are two copies that can disagree later.
+    """
+    for token, piece in stream:
+        ids.append(token)
+        if capture is not None:
+            capture.emitted(token)
+        if isinstance(turn_cache, HistoryCache):
+            turn_cache.emitted(token)
+        decoded = tokenizer.decode(ids)
+        thinking.update(ids, decoded, tokenizer)
+        if token in stop_ids:
+            return STOP_TOKEN
+        if any(mark in piece for mark in _COMPLETION_MARKS) and turn_is_complete(
+            thinking.decoded_text(ids, tokenizer)
+        ):
+            return STOP_TURN_COMPLETE
+    return STOP_TOKEN_CAP
+
+
+def config_eos_ids(model: Any) -> frozenset[int]:
+    """Terminators from the model config's own id set, never from the tokenizer.
+
+    Gemma 3 declares ``eos_token_id: [1, 106]`` -- ``<eos>`` and ``<end_of_turn>`` -- and MLX
+    stops on that set. The tokenizer's ``eos_token_id`` is a single id and is not that set, so
+    taking it leaves ``<end_of_turn>`` unrecognised and every turn runs to the token cap.
+
+    This is measured rather than argued: in the golden records, token 106 is emitted on six of
+    the ninety-four turns and is the last token of each of them.
+    """
+    config = getattr(model, "config", None)
+    declared = getattr(config, "eos_token_id", None)
+    if declared is None:
+        raise ValueError(
+            "the model config declares no eos_token_id; refusing to fall back to the "
+            "tokenizer's single id, which is one marker where the config declares a set, so "
+            "any terminator outside it goes unrecognised and every turn runs to the token cap"
+        )
+    if isinstance(declared, int):
+        return frozenset({declared})
+    return frozenset(int(value) for value in declared)
+
+
+_DETERMINISM_PINNED = False
+
+
+def pin_torch_determinism() -> dict[str, Any] | None:
+    """Pin determinism once per process, through ``device.pin``, which owns the policy.
+
+    This function holds no settings of its own. It exists so that a loop entered without the
+    acceptance kit having run cannot take a number under unpinned settings, and it is a
+    once-per-process guard because ``pin`` reseeds and a per-turn reseed would be noise in the
+    record for no benefit under greedy decoding.
+
+    ``CUBLAS_WORKSPACE_CONFIG`` is read by cuBLAS at first use, so ``pin`` refuses rather than
+    reports success if CUDA is already initialised without it. That refusal is worth more than a
+    late best effort, and it is the kit's job to call ``pin`` first.
+    """
+    global _DETERMINISM_PINNED
+    if _DETERMINISM_PINNED:
+        return None
+    from local_llm_lab import device
+
+    reading = device.pin()
+    _DETERMINISM_PINNED = True
+    return reading
+
+
+def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -> Any:
+    """One forward through the capture wrapper, returning the model's own logits.
+
+    The seam WS-A fixed: the wrapper takes the cache as a keyword and returns the HF output,
+    whose ``.logits`` are the native ones. Hidden states do not come back here at all; they
+    reach the readout gate through the capture's sink, which is what keeps the readout a thing
+    compared against the model's head rather than a substitute for it.
+
+    ``view._ids`` is the view's own token-to-tensor conversion and carries the device and dtype
+    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop uses
+    it, and building the tensor here instead would leave it on the CPU while the model sat on a
+    GPU. The fallback exists for a stub view that has no such helper.
+    """
+    import torch
+
+    ids = view._ids(list(token_ids)) if hasattr(view, "_ids") else torch.tensor([list(token_ids)])
+    result = model(ids, cache=cache)
+    return result if torch.is_tensor(result) else result.logits
+
+
+def torch_greedy_stream(
+    model: Any,
+    view: ArchitectureView,
+    tokenizer: Any,
+    prompt_ids: Sequence[int],
+    max_tokens: int,
+    *,
+    eos_ids: Iterable[int],
+) -> Iterator[tuple[int, str]]:
+    """Greedy decode on torch, yielding ``(token_id, text_piece)`` like the MLX stream.
+
+    **The model's own head produces the token; the readout is never the producer.** The
+    capture wrapper hands back the model's logits and the readout gate then recomputes
+    ``native_readout(h)`` at layer 34 and *compares* it to them, recording the difference on
+    every forward. Generating from the readout instead would leave the gate comparing the
+    model's head against the thing that generated the token, which is the wrong way round and
+    would quietly change what the golden records mean.
+
+    **The prefill partition is the native one**: chunks of ``NATIVE_PREFILL_STEP_SIZE`` with
+    the final prompt token always separate. ``ForwardLedger.validate`` asserts it on every
+    forward, and a single-chunk prefill would produce different forward rows under an
+    identical trajectory.
+
+    **The lookahead is MLX's.** The forward for a token runs before that token is yielded, so
+    a turn of *n* emissions leaves *n* single-token forwards behind it and the last one's
+    argmax is never used. That is what makes the recorded forward at offset *p* the prediction
+    of position *p + 1*.
+
+    **EOS terminates and is kept.** ``eos_ids`` comes from the model config's own set, and the
+    token is yielded before the stream ends because the recorded emissions contain it.
+
+    ``cache_strategy: none`` refers to reuse *across turns*. Within a turn the cache is still
+    needed or decoding is quadratic, so the loop makes its own and drops it at the end.
+    """
+    import torch
+
+    pin_torch_determinism()
+    cache = view.make_cache()
+    generated: list[int] = []
+    previous_text = ""
+    terminators = frozenset(eos_ids)
+    # `no_grad` rather than `inference_mode` to match WS-A's own reference loop. Residuals
+    # reach the gate through the sink and an inference tensor is awkward to use later; there is
+    # no speed argument here worth diverging from the reference for.
+    with torch.no_grad():
+        logits = None
+        for prefill in prefill_passes(list(prompt_ids)):
+            logits = _forward_logits(model, view, prefill.input_ids, cache)
+        while len(generated) < max_tokens:
+            # Cast before the argmax: bfloat16 ties against a vocabulary this large are common
+            # and the reference resolves them in float32.
+            token = int(logits[0, -1].float().argmax().item())
+            generated.append(token)
+            text = tokenizer.decode(generated)
+            piece = text[len(previous_text) :]
+            previous_text = text
+            logits = _forward_logits(model, view, (token,), cache)
+            yield token, piece
+            if token in terminators:
+                return
+
+
+def generate_turn_tokens(
+    model: Any,
+    tokenizer: Any,
+    prompt_ids: Sequence[int],
+    max_tokens: int,
+    *,
+    view: ArchitectureView,
+    spec: ModelSpec,
+) -> tuple[list[int], str]:
+    """Torch generation from token ids, returning the tokens and why the turn stopped.
+
+    The acceptance harness needs both, and it starts from recorded ``prompt_ids`` rather than
+    from a prompt string, so it cannot go through the string-shaped entry point.
+    """
+    stop_ids = _stop_ids(tokenizer)
+    ids: list[int] = []
+    thinking = _ThinkingTracker(
+        enabled=spec.chat.thinking in {"inference", "trained"},
+        max_tokens=spec.chat.max_think_tokens,
+    )
+    reason = _consume_stream(
+        torch_greedy_stream(
+            model, view, tokenizer, prompt_ids, max_tokens, eos_ids=config_eos_ids(model)
+        ),
+        ids=ids,
+        thinking=thinking,
+        tokenizer=tokenizer,
+        stop_ids=stop_ids,
+        capture=None,
+        turn_cache=None,
+    )
+    return ids, reason
+
+
+def _stop_ids(tokenizer: Any) -> set[int]:
+    stop_ids: set[int] = set()
+    with contextlib.suppress(Exception):  # tokenizer wrappers vary
+        stop_ids.add(tokenizer.convert_tokens_to_ids("</tool_call>"))
+    return stop_ids
+
+
 def generate_turn_with_count(
     model: Any,
     tokenizer: Any,
@@ -454,6 +733,7 @@ def generate_turn_with_count(
     *,
     spec: ModelSpec,
     capture: Any | None = None,
+    view: ArchitectureView | None = None,
 ) -> tuple[str, int, int]:
     """Generate one assistant turn, stopping as soon as the tool call closes.
 
@@ -461,12 +741,23 @@ def generate_turn_with_count(
     When a thinking mode exhausts its budget, a closing tag is inserted into the raw output and
     generation continues until the visible note and tool call are complete.
     """
+    stop_ids = _stop_ids(tokenizer)
+    if is_torch_model(model):
+        return _generate_turn_torch(
+            model,
+            tokenizer,
+            prompt,
+            max_tokens,
+            turn_cache=turn_cache,
+            spec=spec,
+            capture=capture,
+            view=view,
+            sampler=sampler,
+            stop_ids=stop_ids,
+        )
+
     import mlx.core as mx
     from mlx_lm import stream_generate
-
-    stop_ids = set()
-    with contextlib.suppress(Exception):  # tokenizer wrappers vary
-        stop_ids.add(tokenizer.convert_tokens_to_ids("</tool_call>"))
 
     kwargs: dict[str, Any] = {}
     prompt_input: Any = prompt
@@ -509,21 +800,15 @@ def generate_turn_with_count(
             **kwargs,
         )
         try:
-            for response in stream:
-                ids.append(response.token)
-                if capture is not None:
-                    capture.emitted(response.token)
-                if isinstance(turn_cache, HistoryCache):
-                    turn_cache.emitted(response.token)
-                decoded = tokenizer.decode(ids)
-                thinking.update(ids, decoded, tokenizer)
-                if response.token in stop_ids:
-                    break
-                piece = response.text or ""
-                if any(mark in piece for mark in ("`", "<", "|")) and turn_is_complete(
-                    thinking.decoded_text(ids, tokenizer)
-                ):
-                    break
+            _consume_stream(
+                ((response.token, response.text or "") for response in stream),
+                ids=ids,
+                thinking=thinking,
+                tokenizer=tokenizer,
+                stop_ids=stop_ids,
+                capture=capture,
+                turn_cache=turn_cache,
+            )
         finally:
             if (capture is not None or isinstance(turn_cache, HistoryCache)) and callable(
                 getattr(stream, "close", None)
@@ -535,10 +820,163 @@ def generate_turn_with_count(
     return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
 
 
+def _generate_turn_torch(
+    model: Any,
+    tokenizer: Any,
+    prompt: str,
+    max_tokens: int,
+    *,
+    turn_cache: TurnCacheBase | None,
+    spec: ModelSpec,
+    capture: Any | None,
+    view: ArchitectureView | None,
+    sampler: Any,
+    stop_ids: set[int],
+) -> tuple[str, int, int]:
+    """Torch branch of :func:`generate_turn_with_count`.
+
+    Same thinking tracker, same stop rule, a hand-rolled greedy loop in place of
+    ``mlx_lm.stream_generate``. Only ``cache_strategy: none`` is implemented, which is what
+    stage two ran under and what the golden records exercise.
+    """
+    if view is None:
+        raise ValueError(
+            "torch generation needs the architecture view: the loop reads through "
+            "view.native_readout and builds its within-turn cache with view.make_cache"
+        )
+    if turn_cache is not None:
+        raise NotImplementedError(
+            "torch generation implements cache_strategy 'none' only; the reuse strategies "
+            "are deferred and the golden records never exercised them (WS-B)"
+        )
+    temperature = getattr(sampler, "sampling_temperature", None)
+    if temperature not in (None, 0.0):
+        # Silently ignoring a temperature would produce a plausible trajectory that no test
+        # fails on and that does not match the sampler the caller asked for.
+        raise NotImplementedError(
+            f"torch generation is greedy; the caller asked for temperature {temperature}"
+        )
+
+    prompt_ids = encode_prompt(tokenizer, prompt)
+    ids: list[int] = []
+    thinking = _ThinkingTracker(
+        enabled=spec.chat.thinking in {"inference", "trained"},
+        max_tokens=spec.chat.max_think_tokens,
+    )
+    context = (
+        capture.generation(model, tokenizer, prompt, turn_cache=None)
+        if capture is not None
+        else contextlib.nullcontext(model)
+    )
+    # The eos set comes from the model, not from the capture wrapper around it: a wrapper is
+    # not required to forward `.config`, and a missing set would silently become an empty one.
+    terminators = config_eos_ids(model)
+    with context as generation_model:
+        _consume_stream(
+            torch_greedy_stream(
+                generation_model, view, tokenizer, prompt_ids, max_tokens, eos_ids=terminators
+            ),
+            ids=ids,
+            thinking=thinking,
+            tokenizer=tokenizer,
+            stop_ids=stop_ids,
+            capture=capture,
+            turn_cache=None,
+        )
+    think_tokens = thinking.tokens if thinking.started else 0
+    return thinking.decoded_text(ids, tokenizer), len(ids), think_tokens
+
+
 def generate_turn(model: Any, tokenizer: Any, prompt: str, sampler: Any, max_tokens: int) -> str:
     """Text-only view of :func:`generate_turn_with_count`, for callers that ignore token counts."""
     spec, _, _ = _compatibility_runner_inputs(None, None, None)
     return generate_turn_with_count(model, tokenizer, prompt, sampler, max_tokens, spec=spec)[0]
+
+
+def call_signatures(steps: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """Each executed step as (tool name, its arguments), skipping unparsed turns.
+
+    Same convention as :func:`detect_loop`: a step carries its call under ``action``, and a
+    parse-error step carries none and is not a call.
+    """
+    signatures = []
+    for step in steps:
+        action = step.get("action")
+        if not action:
+            continue
+        arguments = action.get("arguments") or {}
+        signatures.append((str(action.get("name")), repr(sorted(arguments.items()))))
+    return signatures
+
+
+def longest_identical_run(signatures: list[tuple[str, str]]) -> int:
+    """The original column, with its original arithmetic, so old tables stay readable.
+
+    One call is a run of one and no calls is a run of none, which is why this is not simply
+    ``longest_period_run(signatures, 1)``: that function reports 0 when nothing repeats, and
+    changing the old column's values would silently rewrite every table that quoted it.
+
+    One difference from the records script this is lifted from: that version turned an
+    unparsed turn into the signature ``null`` rather than skipping it. It cannot change any
+    real trajectory, because a parse error ends the run, so at most one such step exists and it
+    is last. It would differ on a synthetic step list, and that is worth knowing rather than
+    discovering.
+    """
+    longest = 1 if signatures else 0
+    run = 1
+    for earlier, later in zip(signatures, signatures[1:], strict=False):
+        run = run + 1 if earlier == later else 1
+        longest = max(longest, run)
+    return longest
+
+
+def longest_period_run(signatures: list[tuple[str, str]], period: int) -> int:
+    """Length of the longest stretch that repeats with the given period.
+
+    A stretch counts only if it holds at least two full cycles, so a period is never read off
+    a sequence too short to show it.
+    """
+    if period < 1 or len(signatures) < 2 * period:
+        return 0
+    best = 0
+    start = 0
+    for index in range(period, len(signatures)):
+        if signatures[index] != signatures[index - period]:
+            start = index - period + 1
+        length = index - start + 1
+        if length >= 2 * period:
+            best = max(best, length)
+    return best
+
+
+def repetition_metrics(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Both repetition columns: the old identical-run one and a cycle-aware one.
+
+    ``longest_identical_run`` counts consecutive identical calls, which a model alternating two
+    failing calls defeats completely: it reads 1 while the trajectory loops. That column was
+    quoted across a day of comparison tables before the two-cycle was noticed, so it is kept
+    rather than replaced and the cycle-aware figure is reported beside it. A reader of an old
+    table can still find the number that table used.
+
+    ``cycle_period`` is the shortest period achieving ``longest_period_run``; a 1 means the two
+    columns describe the same repetition and anything larger means they do not.
+    """
+    signatures = call_signatures(steps)
+    identical = longest_identical_run(signatures)
+    best_length = longest_period_run(signatures, 1)
+    best_period = 1 if best_length else 0
+    for period in range(2, len(signatures) // 2 + 1):
+        length = longest_period_run(signatures, period)
+        if length > best_length:
+            best_length = length
+            best_period = period
+    return {
+        "longest_identical_run": identical,
+        "longest_period_run": best_length,
+        "cycle_period": best_period if best_length else 0,
+        "distinct_calls": len(set(signatures)),
+        "executed_calls": len(signatures),
+    }
 
 
 def detect_loop(steps: list[dict[str, Any]]) -> bool:
@@ -669,7 +1107,12 @@ def run_task(
         try:
             turn = parse_turn(action_text)
         except ActionParseError as error:
+            # A turn that ran out of budget and produced nothing parseable was cut off; it is
+            # not a model that answered wrongly. Scoring the two as one outcome charges the
+            # model for a cap we chose.
+            truncated = n_tokens >= max_tokens
             trajectory.parse_error = str(error)
+            trajectory.truncated = truncated
             trajectory.steps.append(
                 {
                     "index": index,
@@ -677,6 +1120,7 @@ def run_task(
                     "think_tokens": think_tokens,
                     "raw": raw,
                     "parse_error": str(error),
+                    "truncated": truncated,
                 }
             )
             if transcript is not None:
@@ -724,6 +1168,7 @@ def run_task(
         messages.append(tool_message(turn.action.name, observation))
     # The budget ran out only if neither finish nor a parse error ended the loop.
     trajectory.exhausted = not finished and trajectory.parse_error is None
+    trajectory.repetition = repetition_metrics(trajectory.steps)
     trajectory.verdict = simulator.verdict().as_dict()
     trajectory.elapsed_seconds = round(time.monotonic() - started, 2)
     if transcript is not None:

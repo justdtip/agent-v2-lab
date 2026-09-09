@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         "stamped_utc": datetime.now(UTC).isoformat(timespec="seconds"),
         "evidence": args.evidence,
         "reason": (
-            "issue 99: the lens carried no model identity, and two 2560-dimensional models are "
+            "issue 99: the lens carried no model identity, and two models of one hidden width are "
             "now on this box. Stamped in the sidecar rather than the archive so the published "
             "npz digest stays valid."
         ),

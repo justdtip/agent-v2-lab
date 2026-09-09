@@ -312,3 +312,77 @@ depends on noticing when your own preconditions lapse is care wearing a mechanis
 this record already says about the deduplication rule that its author broke an hour after writing it.
 The same shape, one level out: not a wrong belief about the data, a lapsed precondition about the
 world the command runs in.
+
+---
+
+## Twenty-first: a gate that compared the column that agreed
+
+**SWE-2's, caught on the laptop before a device was rented.** The multi-device gate said "one device
+and two produce the same loss curve to tolerance". With the blocks sharded and the root replicated
+outside any FSDP2 unit, the loss was bit-identical at step zero while the root's gradient was forty
+per cent wrong; over six steps the loss drifted 8.83e-04, inside any tolerance anyone would have
+written. Loss on identical weights and the same rows agrees by construction, and afterwards it is
+one step behind the parameters. The gate would have passed the configuration it existed to catch,
+and the damage would have surfaced as a run quietly optimising something else on rented hardware.
+
+**The rule.** A gate compares the quantity nearest the mechanism it guards, never one downstream of
+it: gradients and parameters for a training gate, residuals for a forward gate, the mask for a
+masking gate. A downstream number is reported beside the gate and passes nothing on its own. And a
+quantity that agrees by construction at the point of comparison (identical weights, same rows, step
+zero) is not evidence, whatever tolerance it clears.
+
+**Where it sits.** Beside the ninth and the eighteenth: a passing number produced by a comparison
+that could not fail. This one is the cleaner instance, because both columns were real measurements
+and the wrong one was the one the specification named.
+
+---
+
+## Twenty-second: two rules from the integration hour, and one reader that served two masters
+
+**Both SWE-2's, from wiring the torch trainer into the pipeline.** First, `Trainer` chose MPS on
+this laptop while the manifest said `cpu`, because the manifest recorded the request and not the
+object; the device is now read back off the model. Second, the chunked loss, which reaches around
+`forward` to avoid a 262,208-wide logit tensor, ran without the autocast that `accelerate` attaches
+to `forward` and without the unshard hooks that FSDP2 attaches there, and each absence surfaced as
+a separate bug. **The rule: anything that bypasses `forward` inherits none of what upstream attaches
+to it and must supply it itself.** The §16.7 wrapper dissolves both cases at once by making the
+chunked loss the forward that everything attaches to.
+
+**The third member, found by following the fix to its end.** With the wrapper handed to `Trainer`,
+`_save` branched on `isinstance(model, PreTrainedModel)`, found a wrapper, and wrote a bare state
+dict with `inner.*` keys and no config, silently, producing an artefact nothing downstream could
+load or name-match. So the rule is wider than `forward`: **upstream inspects the object it is
+handed, and a wrapper changes both what runs and what it is.** A wrapper must delegate what
+upstream branches on, and a test must assert the artefact is the kind of thing the next reader
+expects, not that a file exists.
+
+**The second rule, from two readings minutes apart.** `1115 passed, 1110 skipped` and `2211 passed,
+14 skipped` on the same tree, both truthful: a box window was open for the first and the suite
+correctly stood off every model-reaching test. **A suite reading is not a claim unless it carries
+its skip count and its window state on the same line.** "Full suite green" without them is the
+summary line of whichever run happened to be quoted.
+
+**And the Chief's, found by SWE-2 from a worktree.** "No stage can load a registered checkpoint
+from a worktree" was true for every process with `$AGENT_V2_BOX_STATE_DIR` set and false for every
+process without it: `_resolve_checkpoint` read the primary checkout through `box_state_root`, whose
+override exists so an isolated run cannot take the machine's lock, and a checkpoint that followed
+the override resolved into scratch. Two things shared one reader; only one may be redirected. The
+git-derived primary is now its own function and the checkpoint uses that. The shape is the eighth
+entry's again: a mechanism built for one purpose, reused for another because it was there, carrying
+a behaviour the second purpose never asked for.
+
+---
+
+## Twenty-third: a guard that passed the object it existed to catch, and a fixture that could not fail
+
+**SWE-2's, on the torch train stage.** A guard meant to refuse the multimodal wrapper tested for
+`.model` and `.lm_head`; the wrapper has both, so the guard passed it and the run failed later and
+elsewhere. **A guard that passes the object it exists to catch is worse than none, because its
+silence is read as evidence.** And nothing caught it because every fixture in the stream was built
+from `Gemma3TextConfig`, which saves `architectures: [Gemma3ForCausalLM]`, a config shape no
+registered checkpoint has: the suite exercised a stand-in that differed from the real thing in
+exactly the way that mattered. **A synthetic fixture carries the real artefact's declared type and
+key layout, or the path is untested by construction.** The Chief's own loader tests had the same
+shape, a made-up wrapper type over a Llama text config, and were corrected the same evening with a
+fixture mirrored from the snapshot's headers. It is the fourteenth entry's blind spot (the
+uncached tokenizer) with a different artefact.

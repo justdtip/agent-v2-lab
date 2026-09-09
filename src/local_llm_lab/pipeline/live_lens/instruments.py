@@ -137,7 +137,7 @@ def _stamped_identity(path: Path, archive, sha: str) -> LensIdentity:
         raise LensIdentityError(
             f"{path.name} carries no model identity and has no sidecar at {sidecar.name}. "
             "A lens that does not say which model it was fitted on is refused, not warned "
-            "about: Qwen3.5-4B and Gemma 3 4B are both 2560-dimensional and the wrong lens "
+            "about: Qwen3.5-4B and Gemma 3 4B share one hidden width and the wrong lens "
             "loads in silence. Stamp it with scripts/stamp_lens_identity.py."
         )
     meta = json.loads(sidecar.read_text())
@@ -239,6 +239,18 @@ class LensMaps:
     hidden_size: int
     num_layers: int
     identity: LensIdentity | None = None
+    #: The dtypes the maps were **stored in**, as a sorted tuple, before the upcast below.
+    #:
+    #: `load` casts whatever is on disk to float32 and always did; that is deliberate and unchanged.
+    #: What was missing is any way to ask what it cast *from*. Both hosted lenses are stored
+    #: float16, whose grid spacing is 2**-11 -- about 4.9e-4 relative per element -- so a comparison
+    #: against one has a storage floor beneath which a residual means "indistinguishable at storage
+    #: precision", not "agreement". Nothing could read that off a loaded lens, and the sidecar
+    #: asserted float32 unconditionally, so the floor was invisible from both ends.
+    #:
+    #: A tuple rather than one value because an archive may in principle mix them, and a single
+    #: value would have to pick one and would then be a measurement of the wrong array.
+    storage_dtype: tuple[str, ...] = ()
 
     @classmethod
     def load(
@@ -268,13 +280,20 @@ class LensMaps:
                     f"loaded against {identity.describe()}. Refusing: a lens of the right width "
                     "on the wrong model produces ranks that look exactly like a finding."
                 )
+            stored: set[str] = set()
             for name in archive.files:
                 if name == LENS_IDENTITY_KEY:
                     continue
                 if not name.startswith("J") or not name[1:].isdigit():
                     raise ValueError(f"invalid lens map name: {name}")
                 layer = int(name[1:]) + 1
-                a = np.array(archive[name], dtype=np.float32)
+                # Bound once: `archive[name]` on an NpzFile decompresses, so reading the dtype
+                # from one access and casting from a second decompressed every map twice. That was
+                # a regression introduced by recording `storage_dtype` at all, and it is exactly
+                # the size of the feature's cost if left in.
+                raw = archive[name]
+                stored.add(str(raw.dtype))
+                a = np.array(raw, dtype=np.float32)
                 if (
                     not 1 <= layer < num_layers
                     or a.shape != (hidden_size, hidden_size)
@@ -285,7 +304,7 @@ class LensMaps:
                 maps[layer] = a
         if not maps:
             raise ValueError("lens archive is empty")
-        return cls(maps, sha, hidden_size, num_layers, stamped)
+        return cls(maps, sha, hidden_size, num_layers, stamped, tuple(sorted(stored)))
 
     def apply(self, residual: np.ndarray, layer: int) -> np.ndarray:
         if residual.shape[-1] != self.hidden_size:

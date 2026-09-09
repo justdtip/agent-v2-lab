@@ -229,8 +229,9 @@ parallelism when more than one is present, **degrading to one GPU with no flag**
 **Consumes.** The registry's HF checkpoint (WS-E). Independent of WS-A except through `lora_targets`,
 which the shared base provides.
 
-**Golden test.** A 40-row smoke train on one GPU and on two produces the same loss curve to
-tolerance and an adapter `adapter_delta.py` reads; then arm 1's recipe (top-8 layers) reproduces the
+**Golden test.** A 40-row smoke train on one GPU and on two agrees **per parameter**: gradients at
+step zero and parameters after N steps to float32 epsilon, with the loss curve reported beside them
+and passing nothing on its own (§16.7); and `checkpoint_delta` reads the output; then arm 1's recipe (top-8 layers) reproduces the
 18-of-19 divergence result on the same checkpoint.
 
 **Budget.** ~180 new. **Deleted:** `training/gated_delta_chunked.py`, `gated_delta_chunkwise.py`
@@ -721,7 +722,8 @@ not be replaced by a torch template's tool role; that changes what the model was
 - **G-5, multi-GPU, a separate arm never folded in**: G-1 to G-4 again under each parallelism with
   its own bands, provenance recording device count, dtype, deterministic flags, TF32 state, pinned
   attention backend and all-reduce order. **Byte-identical trajectories are a within-backend,
-  fixed-topology property**; a sharded matmul reduces in a different order.
+  fixed-topology property**; a sharded matmul reduces in a different order. The one-versus-W-device
+  arm passes on per-parameter gradient and parameter agreement, never on the loss (§16.7).
 - Determinism on CUDA: `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`,
   TF32 off, a pinned SDPA backend.
 
@@ -1080,3 +1082,162 @@ evidence re-run on torch 2.14.0, the plan's floor, since the record's isolated r
 a 2,584-line copy of the diff that goes stale at the first edit. Then the full-checkpoint gates run
 locally under §16.1. Noted, not blocking: `residuals()` costs an observation forward plus the
 hand-run loop, which the graph-once estimator (§6.3) addresses for production.
+
+### 16.7 The multi-device gate compares gradients, not losses; the chunked loss runs inside the root unit
+
+SWE-2 built the two-device arm on CPU (FSDP2 accepts a `gloo` mesh in torch 2.14.0, so the whole
+gate is answerable on the laptop) and found that the gate as written would have passed a broken
+configuration. With the blocks sharded and the root left replicated outside any unit, FSDP2 reduces
+nothing for the embedding, final norm and tied head, so each rank keeps its own half-window gradient
+forever. At step zero, identical weights, before any update:
+
+| quantity | one device | two devices | relative |
+|---|---:|---:|---:|
+| loss | 4.1746088012 | 4.1746088012 | 0.00e+00 |
+| grad norm, sharded blocks | 1.89720254 | 1.89720254 | 2.17e-10 |
+| grad norm, root unit | 0.93408004 | 1.31364770 | **4.06e-01** |
+
+Loss at step zero on identical weights and the same rows is identical by construction and asserts
+nothing; afterwards it is one step behind the error (8.83e-04 over six steps, inside any tolerance
+anyone would have written). **Ruling, applied to every statement of the gate:** at step zero,
+per-parameter gradients agree between one device and W to float32 epsilon, as a max relative
+deviation per parameter and not a norm, so a wrong slice cannot hide inside a right norm; after N
+steps, per-parameter values agree likewise; the loss curve is reported and passes nothing. With the
+root reduced correctly the deviations are 5.39e-08 (loss), 3.79e-07 and 1.39e-07 (gradient norms):
+float32 epsilon, where reassociated summation lives. The rule behind it is in the method record: a
+gate compares the quantity nearest the mechanism, never one downstream of it.
+
+The cause was a design collision, and it is settled: `causal_lm_chunked_loss` reads `lm_head.weight`
+directly to avoid a 262,208-wide logit tensor, and FSDP2 unshards a parameter only inside its unit's
+forward, so touching the weight from outside raises the mixed Tensor/DTensor error. Neither hand
+all-reduce (a second reduction path, which is the standing invitation to the silent error above) nor
+the head as a per-chunk module call (unsharding the largest parameter once per chunk). The chunked
+loss moves **inside the root unit's forward**: a thin wrapper module whose forward runs the inner
+model and then the chunked cross-entropy against the raw weight; blocks sharded as units, the
+wrapper sharded as the root, holding the tied embedding, the norm and the head together as a tied
+pair must be. Inside that forward the weight is the unsharded tensor and the reduce-scatter hooks are
+armed, which is how the fused-linear-cross-entropy kernels run under FSDP2 in the wild. Cost: the
+root's parameters resident unsharded from forward through backward, once per step; the memory rung
+is `reshard_after_forward=True` on the root, measured per §10.2. The hand-reduced arm stays in the
+record as the negative control: the configuration the old gate passed.
+
+**Executed, SWE-2, 8f9a178 on `cuda-ws-c`.** The wrapper is built and sharded as the root (under
+tying the head *is* the embedding tensor, so the root holds one parameter and not a straddling
+pair), and the amended gate ran three arms against single-process training on the same rows,
+per parameter, `max|a − b|` over the tensor's own scale:
+
+| arm | loss, step 0 | grad, step 0 | value, final |
+|---|---:|---:|---:|
+| blocks and root sharded | 0.00e+00 | 1.80e-07 | 8.56e-06 |
+| blocks only, root hand-reduced | 0.00e+00 | 1.80e-07 | 8.58e-06 |
+| control: root reduced by nothing | 0.00e+00 | **1.67e+00** | **1.12e+00** |
+
+The control's loss is bit-identical to the correct runs while its gradient is 167% wrong and its
+parameters end 112% wrong. Two correct configurations sit at float32 epsilon and the broken one
+is off by more than one, so there is no tolerance at which the old gate separates them and none at
+which the new one fails to. `reshard_after_forward` on the root is recorded as the memory rung and
+not yet measured; that measurement is the device's. Two-rank `gloo` on CPU only; no CUDA, no NCCL,
+no real checkpoint.
+
+**Followed to its end (SWE-2, 909bd21): the wrapper is what `Trainer` is handed, and that caught a
+third member of the family.** `Trainer._save` branches on `isinstance(model, PreTrainedModel)`; the
+wrapper is not one, so it wrote a bare state dict with every tensor named `inner.*` and no
+`config.json`, nothing raised, and the artefact was one `checkpoint_delta` could not name-match and
+the registry could not load. `_save` now saves the inner model and the test asserts the checkpoint
+is a **model**: config present, no `inner.` prefix, loads with `from_pretrained`. The rule
+generalises: **upstream inspects the object it is handed; a wrapper changes both what runs and what
+it is.** Anything handed a wrapper in place of the `PreTrainedModel` inherits this silently, and the
+wrapper must also delegate `config` and the checkpointing methods or upstream reaches for them and
+finds nothing. Every seat that wraps a model reads this paragraph before handing the wrapper to
+anything of upstream's.
+
+**Two claims, kept separate (SWE-2, 41808bc).** The sharded path is validated per parameter on CPU
+in the two-device record; `stage_train_torch` runs, single-process; the two joined is **not done**.
+Handed more processes, `Trainer` and `accelerate` would distribute under their own default rather
+than the sharded path the order requires, invisibly, with the loss falling and a checkpoint
+written and every memory figure describing a configuration that never ran. So the stage refuses a
+multi-process run and names the gap. Wiring FSDP2 into the stage is WS-C's next task, validated to
+two `gloo` processes on CPU; NCCL and more ranks are the device's. Under tying,
+`lm_head.weight is embed_tokens.weight`: one parameter with two names, so no flat parameter
+straddles two units and there is nothing to shard by halves; that sentence is now in the code.
+
+### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
+
+SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
+stub could not have shown. Arming rollback (`activate_past_recording`) *after* a sliding window has
+filled does not raise: the cache reports the right offset and holds one key where six should be,
+and would attend over a five-token hole silently, so `enable_rollback` now refuses a cache that has
+already advanced. And an armed sliding layer stores everything rather than `window - 1` entries,
+so at the map's longest episode (2,749 positions against a 1,024 window, 29 of 34 layers sliding)
+the KV cache is 2.15x its bounded size. That is the measured need the deferral was waiting on, and
+it is a ratio of a small base: at this checkpoint's four KV heads and the class-default head
+dimension of 256, about 136 KB per token, roughly 380 MB armed against 180 MB bounded. SWE-1 read
+them off the loaded config (c36de39): 136.0 KiB per token, 177.9 MB bounded and 382.8 MB armed at
+2,749 positions, 2.152x. One trap for any model: `head_dim` here is the class default because the
+checkpoint's config leaves it null, and deriving it as hidden size over attention heads gives 320,
+a quarter too large; read the attribute, never derive it. Memory therefore does not decide. **Ruling:** every
+strategy stays refused under torch until the tolerance runner has its baseline at `none` against
+the view; then each strategy is its own arm of the same gate and must reproduce the `none`
+trajectories byte for byte within the backend. A strategy that changes one token is a defect, not
+a speed setting, because the golden records were made under one rule and a rewindable sliding
+cache is exactly where stored keys and the mask can part company.
+
+Separately, SWE-2 reported that no stage could load a registered `models/...` checkpoint from a
+worktree. The resolver was correct for every process without the override and wrong for every
+process with it: `_resolve_checkpoint` read the primary through `box_state_root`, whose
+`$AGENT_V2_BOX_STATE_DIR` redirect exists so an isolated run cannot take the machine's lock, and a
+checkpoint that followed the redirect resolved into scratch. Two things shared one reader and only
+one of them may be redirected. `primary_checkout_root()` is now the git-derived half on its own,
+the resolver uses it, and the test builds a real linked worktree whose primary has a space in its
+name, as the real one does. The registry comment that says "the project root" is frozen by the
+records' `registry_sha256` pins and stays; `models.py` carries the truth.
+
+Two rules from the same hour, both SWE-2's: anything that bypasses `forward` inherits none of what
+upstream attaches to it and must supply it itself; and a suite reading is not a claim unless it
+carries its skip count and window state on the same line.
+
+### 16.9 One text-only loader for the torch path, with no model class named
+
+Three seats were loading the checkpoint three ways: Codex's record companion named
+`Gemma3ForCausalLM` and `Gemma3TextConfig` with a listed vision-prefix set, SWE-1's tolerance
+baseline named `Gemma3ForCausalLM`, and SWE-2's train stage called `AutoModelForCausalLM` on a
+plain path, which does not load the official multimodal snapshot text-only at all. §16.3 forbids
+the first two in the package and the third is wrong for the checkpoint we have. `local_llm_lab.hf_text`
+is the **only** loader, because `AutoModelForCausalLM` on any checkpoint we have builds the
+multimodal wrapper: the official snapshot and the repository's own MLX conversion both declare
+`model_type: gemma3` and a `text_config`, so "plain path" is not a case that exists among the
+registry's entries (SWE-2, a9192a1). `checkpoint_metadata` reads the config and the safetensors
+headers and loads no tensor; a wrapper is detected from the checkpoint's own `text_config` and `language_model.` prefix,
+never from a model name; the text config goes through `AutoConfig.for_model`, the model through
+`AutoModelForCausalLM` with the prefix mapped away; and every non-text prefix in the header must be
+exactly the unexpected-key set, no more and no less. Codex's fail-closed checks are kept and
+generalised: missing, mismatched or errored keys refuse; a text tensor the model did not take or
+whose shape changed refuses; a tied weight that came back as two tensors refuses; a parameter on
+the wrong device or in the wrong dtype refuses. The report is a reading of the loaded object. Seven
+tests on tiny random models, plain and wrapped, with two foreign towers beside the text tower,
+one of them mirroring the official snapshot as it is on disk (`model_type: gemma3`,
+`architectures: [Gemma3ForConditionalGeneration]`, `text_config.model_type: gemma3_text`,
+`language_model.model.*` beside `vision_tower.*`, `__metadata__: {format: pt}`), and one
+proving the MLX conversion is refused by its own `format: mlx`, since nothing in its config
+distinguishes it from the snapshot. Two rules from SWE-2's guard that passed the object it
+existed to catch: **a synthetic fixture carries the real artefact's declared type and key layout,
+or the loader path is untested by construction**; and **a guard that passes the object it
+exists to catch is worse than none, because its silence is read as evidence.**
+Every torch load of a registered checkpoint goes through it: WS-B's baseline, WS-C's stage, WS-A's
+gates. The CUDA memory rung, a `device_map` under `accelerate` instead of a CPU load and a move,
+is deliberately not taken until measured.
+
+### 16.10 Lint: one auto-fix that is wrong, and one deliberate pass rather than four incidental ones
+
+SWE-2 found that ruff's SIM118 auto-fix rewrites `for key in handle.keys()` to `for key in handle`
+on the assumption of a mapping, and a safetensors `safe_open` handle is not one: the rewrite is
+applied by `ruff check --fix`, produces no finding and no import error, and fails only at runtime
+with "object is not iterable". Every reader of safetensors in this tree, in lens fitting, capture
+and the registry, is a candidate. **Rule:** `--fix` is never run blind over a file that reads
+safetensors; the `.keys()` call carries a `noqa: SIM118` with the reason beside it, so the next
+person is told rather than tempted. Three of SWE-2's own findings were real rather than cosmetic and
+are worth knowing as shapes: `Any` in annotations never imported, surviving only because
+`from __future__ import annotations` never evaluates them; a `zip` without `strict=` over two lists
+equal today, which is what stops a later edit truncating a batch in silence. The tree carries about
+75 older findings, mostly line length in records scripts; they are swept in one deliberate WS-E pass
+by one seat, not by incidental edits from four.
