@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "basis": "executed metadata fixtures and standard-library matrix arithmetic",
+  "source_files_match_git": 7,
+  "source_corruptions_refused": 7,
+  "analysis_reproduces": true,
+  "relocated_copy_reproduces": true,
+  "metadata_functions_extracted": 14,
+  "declared_field_mutations_refused": 10,
+  "missing_field_refusals": 10,
+  "nested_schema_corruptions_refused": 6,
+  "numeric_cells_match": 60,
+  "numeric_cell_corruptions_detected": 60,
+  "different_artifacts_same_declaration_both_accepted": true,
+  "different_declaration_control_refused": true,
+  "model_package_imports": false,
+  "ruff_F_E9": "All checks passed!",
+  "git_diff_check": "passed",
+  "analysis_sha256": "2307d7c593676fe65eea74eb5c56f0c9e605bfde49fd1576ac50fe4b07983141",
+  "reviewer_parent": "4df1225971c6d29dbe3e68289e763225d9a9b6d7",
+  "unexecuted": [
+    "model forwards",
+    "checkpoint loads",
+    "native pytest",
+    "real pairing registration",
+    "real A2"
+  ]
+}
