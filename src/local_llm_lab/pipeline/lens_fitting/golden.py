@@ -72,6 +72,7 @@ COMPARABLE_KEYS = {
     ),
     "pair_weighting": ("source_target_pairs", "per_prompt", "n_prompts", "n_skipped"),
     "precision": (
+        "capture_dtype",
         "device",
         "dtype",
         "dtypes_observed",
