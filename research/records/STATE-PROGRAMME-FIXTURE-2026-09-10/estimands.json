@@ -1,0 +1,95 @@
+{
+  "arm_means": {
+    "A_base": {
+      "D1": 0.0,
+      "D4": 0.0,
+      "D5": 1.0
+    },
+    "A_control": {
+      "D1": 0.0,
+      "D4": 0.0,
+      "D5": 1.0
+    },
+    "A_reuse": {
+      "D1": 1.0,
+      "D4": 1.0,
+      "D5": 0.0
+    },
+    "A_substitution": {
+      "D1": 1.0,
+      "D4": 1.0,
+      "D5": 0.0
+    },
+    "E_base": {
+      "D1": 1.0,
+      "D4": 1.0,
+      "D5": 0.0
+    },
+    "RA_dynamic": {
+      "D7": null,
+      "D8": null,
+      "D9": null
+    },
+    "RE_dynamic": {
+      "D7": 0.0,
+      "D8": 1.0,
+      "D9": 0.0
+    }
+  },
+  "estimands": {
+    "dynamic": {
+      "distance": null,
+      "measured": false,
+      "passes": null,
+      "rows": 0,
+      "tolerance": 0.0,
+      "untestable": false
+    },
+    "predictive": {
+      "distance": 0.0,
+      "measured": true,
+      "passes": null,
+      "reason": "degenerate: the pilot's update never varied, so epsilon is zero",
+      "rows": 3,
+      "tolerance": 0.0,
+      "untestable": true
+    },
+    "reuse": {
+      "distance": 0.0,
+      "measured": true,
+      "passes": true,
+      "rows": 3,
+      "tolerance": 0.25,
+      "untestable": false
+    },
+    "specificity": {
+      "distance": 0.0,
+      "measured": true,
+      "passes": true,
+      "rows": 3,
+      "tolerance": 0.16666666666666666,
+      "untestable": false
+    },
+    "substitution": {
+      "distance": 0.0,
+      "measured": true,
+      "passes": true,
+      "rows": 3,
+      "tolerance": 0.25,
+      "untestable": false
+    }
+  },
+  "level": "J-space vectors (diagnostic means); never a coefficient table",
+  "pilot_bernoulli_d4_falsified": {
+    "RA": 0.0,
+    "RE": 1.0
+  },
+  "retained": [
+    "D1",
+    "D4",
+    "D5"
+  ],
+  "rows": 50,
+  "rule": "an estimand with no scorable row is measured: false; a zero tolerance is untestable; neither is a pass",
+  "schema_version": 2
+}

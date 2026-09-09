@@ -1,0 +1,92 @@
+{
+  "budget": {
+    "epsilon_sub_derived": 0.25,
+    "epsilon_sub_final": 0.25,
+    "hours_at_derived": 9.08983293629717e-06,
+    "hours_bought": 100.0,
+    "hours_final": 9.08983293629717e-06,
+    "loosened": false,
+    "n_at_derived": 77,
+    "n_final": 77,
+    "rate_per_hour": 33884011.08782828,
+    "reason": "within budget at the derived tolerance"
+  },
+  "decoding": {
+    "estimand": "context-averaged outcome frequency over the task distribution (one outcome per context)",
+    "mode": "greedy",
+    "seed": 20260910,
+    "temperature": null
+  },
+  "derived_from": {
+    "pilot_row_count": 40,
+    "pilot_rows_sha256": "3e85f3bceea9ab17777cec27e36569b4b6ffc211fa321e45ba9ae103da538bc1"
+  },
+  "rules": {
+    "budget": "over budget loosens epsilon_sub and writes both numbers; never fewer diagnostics, never no control",
+    "drop": "a diagnostic whose bootstrap bound on |contrast| does not exceed zero is dropped with its reason; nothing is added after the pilot",
+    "seal": "the main stage refuses to start without this file and refuses to re-derive once a main row exists"
+  },
+  "schema_version": 1,
+  "tolerances": {
+    "M": 3,
+    "alpha": 0.05,
+    "d_min": 1.0,
+    "derivation": {
+      "closed_form_checks": [
+        {
+          "M": 10,
+          "epsilon": 0.05,
+          "n": 2397
+        },
+        {
+          "M": 10,
+          "epsilon": 0.075,
+          "n": 1066
+        }
+      ],
+      "d_min": "min over retained diagnostics of the (1 - alpha) bootstrap bound on |contrast|",
+      "epsilon_perp": "2 * epsilon_sub / 3",
+      "epsilon_pred, epsilon_dyn": "split-half log-loss gap of the pilot's fitted belief update",
+      "epsilon_reuse": "epsilon_sub",
+      "epsilon_sub": "d_min / 4",
+      "n": "ceil(ln(2M/alpha) / epsilon_sub^2)"
+    },
+    "dropped": [
+      {
+        "name": "D2",
+        "reason": "the state does not reach it: bound on |contrast| is 0.0000 \u2264 0 (lower 0.0000, upper 0.0000)"
+      },
+      {
+        "name": "D3",
+        "reason": "the state does not reach it: bound on |contrast| is 0.0000 \u2264 0 (lower 0.0000, upper 0.0000)"
+      },
+      {
+        "name": "D6",
+        "reason": "the state does not reach it: bound on |contrast| is 0.0000 \u2264 0 (lower 0.0000, upper 0.0000)"
+      },
+      {
+        "name": "D7",
+        "reason": "not reached: one arm produced no scorable transcript"
+      },
+      {
+        "name": "D8",
+        "reason": "not reached: one arm produced no scorable transcript"
+      },
+      {
+        "name": "D9",
+        "reason": "not reached: one arm produced no scorable transcript"
+      }
+    ],
+    "epsilon_dyn": 0.0,
+    "epsilon_perp": 0.16666666666666666,
+    "epsilon_pred": 0.0,
+    "epsilon_reuse": 0.25,
+    "epsilon_sub": 0.25,
+    "n": 77,
+    "retained": [
+      "D1",
+      "D4",
+      "D5"
+    ]
+  }
+}

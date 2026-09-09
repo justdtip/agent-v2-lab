@@ -1,0 +1,35 @@
+{
+  "checkpoint_digest": "fixture:0000000000000000",
+  "decoding": {
+    "estimand": "context-averaged outcome frequency over the task distribution (one outcome per context)",
+    "mode": "greedy",
+    "seed": 20260910,
+    "temperature": null
+  },
+  "device": {
+    "backend": "mlx",
+    "determinism": "UNPINNED",
+    "mlx": "0.32.2",
+    "pinned": null,
+    "platform": "Darwin 25.6.0 arm64",
+    "python": "3.13.7",
+    "torch": "2.14.0",
+    "transformers": "5.16.1"
+  },
+  "dictionary_layers": {
+    "1": "model.layers.0.output"
+  },
+  "faults": {
+    "rate": 0.3,
+    "seed": 7
+  },
+  "fixture": true,
+  "lens_identity": {
+    "base": "fixture",
+    "num_layers": 4
+  },
+  "registry_name": "fixture",
+  "schema_version": 1,
+  "tree_content_digest": "1dab0d76d704c83cefad52b743950162ff4afc12ffcf3b856f3fc8845aedc0fd",
+  "wrapper_version": "stub"
+}
