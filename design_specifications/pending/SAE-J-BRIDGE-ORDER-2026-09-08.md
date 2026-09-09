@@ -339,3 +339,139 @@ arms is that one of them is expected to fail.
 
 **And Codex's ordering is right**: run the raw arm first and record its overlap before looking at the
 other, so the first number is not chosen after seeing which convention agrees.
+
+---
+
+## Third amendment: three premises have moved, and what is true now. D-CRO, as lens owner, on the Chief's instruction, 2026-09-10
+
+The Director has asked whether the derivation has gaps and would work. This amendment says what is
+true of its preconditions today, each claim checked against a source rather than against a message,
+and it corrects two sentences of the derivation and one of this order.
+
+### 1. The checkpoint precondition is met. The dictionary is not on disk.
+
+**Met.** The bridge needs the dictionary and the lens on one checkpoint, and this order failed it
+because the evaluation entry was the 4-bit conversion. The bf16 entries now exist in the registry:
+`gemma3-4b-bf16` (`models/gemma-3-4b-it-bf16`, base `google/gemma-3-4b-it`) here, and
+`gemma3-4b-cuda-bf16` (`hf_id: google/gemma-3-4b-it`, the official unquantised snapshot, loaded
+text-only) on the device. Gemma Scope was trained on that snapshot. Stage A runs against either.
+
+**Not on disk, and the earlier sentence saying otherwise is withdrawn before it is repeated.** Both
+caches were inventoried. They hold **two 248-byte `config.json` files and no weights**: the global
+cache has `resid_post_all/layer_17_width_16k_l0_big` (`l0: 120`) and
+`resid_post/layer_17_width_16k_l0_big` (`l0: 150`); the project cache has the second only. Zero
+`params.safetensors` anywhere. This is the first amendment's footprint, unchanged. A1 needs no
+forward, which is true; it needs the 335.7 MB `params.safetensors` at each layer it reads, which is
+a download, by name, verified by hash and never by length, exactly as the second amendment says.
+
+One fact the inventory adds: **even the `l0_big` setting is not the same sparsity across the two
+suites** — 120 in the every-layer suite, 150 in the deep dive at the same hook and width. The second
+amendment's rule that a mixed set is not a series applies to the label `big` as well as to `medium`.
+
+### 2. "Do not build the causal-abstraction programme" rested on throughput, and throughput is the device's. Rewritten as the device-phase programme, with its preconditions named and their state.
+
+The mathematics was never the objection; the count was. The count stands: with ten fixed
+diagnostics at 95% confidence and tolerance 0.05, the derivation's Hoeffding bound (§10, the
+inequality at its line 984) gives `n ≥ log(2M/α)/ε² = 2,397` episodes per arm, recomputed. At this
+order's quoted laptop rate that is 6.4 days per arm, recomputed.
+
+**What that rate is, so the projection is honest.** Fifteen episodes in fifty-eight minutes is a
+lens-capture run — Gemma 3 4B at 4-bit, eight layers read at every forward, on a laptop under the
+R47 cap — not a decoding rate. No manifest reproducing that figure was found; the thirteen-episode
+pilot of 2026-09-07 took 30.9 minutes with six capture layers. **The device's episode rate is
+unmeasured.** For 2,397 episodes to take eight hours the card must decode at 19 times the laptop's
+capture rate; for two hours, 77 times. Both are plausible for a card decoding a 4B model without
+capture, and neither is a number. The first device run that generates episodes records its rate,
+and the corpus time is computed from that record, not from this paragraph.
+
+**The programme, and the four preconditions each with its state today:**
+
+| precondition | why | state |
+|---|---|---|
+| **a sampled decoding path** | the estimands of §§10–11 are total-variation distances between distributions over outcomes; a greedy loop yields point masses, and the derivation says so at its line 951 | **unmet on the device.** The MLX rollout samples (`rollout.py --temperature`, default 0.7; every training config sets 0.7). The torch path is greedy by construction: `runner.py:623 torch_greedy_stream`, and `evaluate.py:111` says it "cannot honour a temperature" and refuses one. A torch sampler is a small addition and it is a **change to what the device's runs measure**, so it lands as its own commit with the temperature in every manifest. |
+| **retained-state exchange for the carrier tests** | §12: replay identical tokens while resetting or exchanging retained state per layer, so the generated-text path and the retained-value path are tested separately | **seam present, intervention ordered after the migration.** Plan §6.7 names `intervene(layer, position, fn)` — present on `cuda-migration` in `torch_capture.py` — and the HF cache object, with `branch.py` (419 lines, kept) for branched continuations. Plan §13.2 is explicit that the **cache strategies themselves are not deferrable** and are WS-B's; what is deferred is the exchange intervention built on them. |
+| **the episode corpus generated on the device** | 2,397 per arm, independent episodes; token-level resampling is not a substitute (derivation line 1392) | **not started.** Depends on the sampler above. The 12B entry's note that the rendered corpus is byte-identical across sizes means one corpus serves 4B and 12B. |
+| **vector-level statistics, not coefficient-level** | the vocabulary directions are too correlated for the restricted Gram solves to be readable (§5.2, and the Gram caution already in Stage B) | **a rule of the analysis, met by writing it down here.** Every device-phase artifact reports contributions and distances at the level of J-space vectors; coefficient tables from a sparse solve are diagnostic only and carry the second amendment's two cautions. |
+
+**The order's "do not build" is therefore replaced by "build in this order, on the device":** the
+sampler; one episode corpus at a recorded rate; the discovery/alignment/evaluation split on separate
+task families (derivation line 1392); then §11's counterfactual substitution estimand, then §12's
+carrier tests, each against the tolerance the Director sets in advance. Nothing in this list runs on
+the laptop, and nothing in it is blocked by the mathematics.
+
+### 3. The 12B: the dictionary exists, and the question is alignment, not training
+
+The registry entry `gemma3-12b-cuda-bf16` landed 2026-09-10: `google/gemma-3-12b-it`, **48 blocks,
+hidden 3,840**, same tokenizer and template as the 4B. The dictionary question is answered by the hub
+rather than posed as a step:
+
+| | 4B | 12B |
+|---|---|---|
+| `google/gemma-scope-2-*-it` | exists | **exists** |
+| `resid_post_all` layers | 0–33, all 34 | **0–47, all 48** |
+| widths / sparsity | 16k, 262k / small, big | **16k, 262k / small, big** |
+| `params.safetensors`, 16k small | 335.7 MB | **503.5 MB** |
+| `examples.safetensors` | 815.7 MB | 815.4 MB |
+| deep dive layers | 9, 17, 22, 29 | 12, 24, 31, 41 |
+
+So **Gemma Scope 2 covers the 12B residual site at every layer**, in the same structure as the 4B,
+and the Director's route of training a dictionary from activation data on the device is **not
+needed for this site**. It stays available for a site or width the release does not publish, with
+the acceptance A2 already carries: a declared token budget, layer set, and an ε budget per site.
+
+What is *not* answered by the hub, and is a step:
+
+- **Hook alignment at 12B**, to be verified as it was for the 4B: the release's `model.layers.N.output`
+  is block N's output, which is this repository's probe layer N+1. Read the 12B `config.json` at one
+  layer and confirm the hook string before any readout; do not inherit the 4B's verification.
+- **No 12B lens exists.** The bridge needs the lens on the same checkpoint, and every lens this
+  programme holds is 4B. WS-D fits the 12B lens on the device through the same torch stage and the
+  same ν; until it exists there is no `J_L` to compose, and A1 at 12B is `top_k(W d_i)` only, which
+  is the shipped `top_logits` check and not the bridge.
+- **Cost at 12B.** `LD` would be `vocab × 16,384` per layer as before; `JD = J_L D` is
+  `3,840² × 16,384 ≈ 242 GFLOP` per layer, trivial; `W(JD)` column by column is
+  `262,208 × 3,840 × 16,384 ≈ 16.5 TFLOP` per layer, about the 4B's 22 TFLOP scaled by width.
+  Still CPU-feasible per layer and still not worth contending for the card.
+
+### 4. Two corrections verified against the sources, one to the derivation and one that confirms it
+
+**The derivation's endpoint sentence is unsupported and is struck.** Line 154 reads: *"Its default
+Sonnet implementation targets the penultimate residual; the main exposition uses a final-residual
+schematic."* Against the sources: the released code's default is `target = n_layers - 1`
+(`jlens/fitting.py:79`), and its recorder hooks the block's output, so the target is the **final
+block's output before the final norm**, with `unembed` supplying the norm. The Chief's verbatim
+reading of the paper (`CHIEF-JSPACE-PAPER-READING-2026-09-05.md`, line 16) records that the
+reference fit *"targets the final layer by default"*, and lists a **penultimate-layer target only as
+an A.7 robustness variant** (line 18). So the paper does mention a penultimate target — as a variant,
+alongside frozen-QK, self-only and future-only — and says nothing about it being Sonnet's default.
+The corrected sentence for the derivation: *the released code and the paper's reference fit target
+the final block's pre-norm output; a penultimate-layer target is one of the paper's A.7 variants.*
+The derivation's conclusion — endpoint, pair weights and output normalisation must be explicit —
+survives unchanged, and is what ν declares.
+
+**The derivation's pair-weight factor is confirmed by upstream's own words.** The paper defines the
+Jacobian as an expectation; the released README states it as `J_l = E[∂h_final/∂h_l]` over
+*"prompts, source positions, and all current-and-future target positions"*, and then names the
+precise estimator: *"cotangents summed over target positions, then averaged over source
+positions"*. The fitting docstring adds that this is *"the reduction used in the paper"*. That is
+exactly the derivation's `J^sum = ((T₀+1)/2) · E[K]` over uniform eligible pairs — a positive global
+factor that leaves directions and cones unchanged and that variable lengths turn into a prompt
+reweighting. Our ν declares it as `target_reduction: sum, not normalised` and
+`source_reduction: mean`, and the WS-D golden harness refuses a comparison whose ν differs in it.
+
+### What changes in the order's own text
+
+- **The one-line summary**, "*Do not build the causal-abstraction programme at all yet; our
+  throughput cannot reach its acceptance rule by three orders of magnitude*" — withdrawn. It reads:
+  *build the causal-abstraction programme on the device, in the order of §2 above, after the sampler
+  and one recorded-rate corpus exist.*
+- **"Preconditions, and one is currently unmet"** — the checkpoint clause is met; the section's
+  instruction to run against `gemma3-4b-bf16` stands, and `gemma3-4b-cuda-bf16` is its equivalent on
+  the device.
+- **"Do not build: the causal-abstraction programme"** — the section's two cautions that apply now
+  (averaging can cancel a causal sensitivity; retained transcripts confound mutual information) are
+  kept verbatim in the device-phase programme's analysis rules. Its cost paragraph is replaced by §2
+  above. Its 6.4-day figure was a capture rate and is not to be cited as a decoding rate.
+- **Stage A's status.** SWE-2 is building Stage A under this order as amended; no Stage A code is on
+  any branch yet, and the only "bridge" on a branch is Codex's transcript-lens lane, which is a
+  different instrument and is not this.
