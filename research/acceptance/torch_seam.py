@@ -65,7 +65,7 @@ def _residual_summary(rows):
     }
 
 
-def residual_precision_probe(view, ids, *, checkpoint=None):
+def residual_precision_probe(view, ids, *, checkpoint=None, include_controls=True):
     """Separate exact native-dtype seam agreement from a descriptive promoted-fp32 floor.
 
     One text-only native forward supplies independent frozen residual references through the
@@ -79,6 +79,7 @@ def residual_precision_probe(view, ids, *, checkpoint=None):
     and after each arm. It may stop execution, for example after persisting a memory reading.
     ``status=measured`` is execution evidence, not acceptance: the caller applies the declared
     zero seam gate and control margins at its required lengths. No tolerance is selected here.
+    include_controls=False reuses the two loop comparisons for the float32-loaded control.
     """
     if not torch.is_tensor(ids):
         rows = ids if isinstance(ids, (list, tuple)) else ()
@@ -232,15 +233,16 @@ def residual_precision_probe(view, ids, *, checkpoint=None):
                 **loop(promoted=True),
                 "basis": "existing residuals arithmetic: fp32 entry and run_block; descriptive",
             })
-            phase("mask_dispatch", lambda: control({
-                **loop(mask_control=True), "global_mask_block": global_index,
-                "basis": "every block receives the observed global attention mask; RoPE unchanged",
-            }))
-            phase("hook_site_off_by_one", lambda: control(hook_control()))
-            phase("entry_transform_omission", lambda: control({
-                **loop(omit_entry=True),
-                "basis": "raw stored embedding lookup bypassing the native entry transform",
-            }))
+            if include_controls:
+                phase("mask_dispatch", lambda: control({
+                    **loop(mask_control=True), "global_mask_block": global_index,
+                    "basis": "all blocks receive the observed global mask; RoPE unchanged",
+                }))
+                phase("hook_site_off_by_one", lambda: control(hook_control()))
+                phase("entry_transform_omission", lambda: control({
+                    **loop(omit_entry=True),
+                    "basis": "raw stored embedding lookup bypassing the native entry transform",
+                }))
         report["status"] = "measured"
         return report
     finally:
