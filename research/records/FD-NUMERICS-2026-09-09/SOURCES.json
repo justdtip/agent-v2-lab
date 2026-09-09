@@ -1,0 +1,45 @@
+{
+  "snapshot_utc": "2026-09-09T11:16:44.759091+00:00",
+  "remote_checkout_observed": "55a458dfda6fb11a8d390eaf69b64c48177da487",
+  "remote_alias": "rtx6000",
+  "remote_path_roots": [
+    "/workspace/wsd/out/golden-4b",
+    "/workspace/wsd/out/diagnose-4b",
+    "/workspace/wsd"
+  ],
+  "remote_source_sha256": {
+    "golden-report.json": "020c0623f1fcab92323d620c447cefc22ba9d27c840079e7136d6879ec22c882",
+    "manifest.json": "b295fd9605197be037c4455a4e7c84814e8a58b865055dd2a85cbb82c43500ee",
+    "nu-exact.json": "24ed42d3f26fdac27dc605920b7be5f3ee779cc8ca58e902aec7d048be987cfe",
+    "nu-finite-difference.json": "76f937d71f6246bd203cf8b49da45a10bbccac2e32e28d07b592bb38c7bddcdf",
+    "progress.jsonl": "1cb06c6c039f7025d02595bd7033b5b380704addfad4f99b8c07e79bf471ae12",
+    "rows.jsonl": "e92b4074e7f2e923a0d5dafe52648fa3b5289df21ce10769e34e1b73f8575f4d",
+    "diagnose.py": "bfc3cd98ed9e24ec73676faac25936ee7274921edbfda09793c5802a6ea40c33",
+    "golden.py": "0e53d5de0876ffdbe6c9ea74f3acf3fff7c29a5a1d14de40f08a8cce01af10db"
+  },
+  "transfer": "all eight local files match remote sha256sum; no maps or checkpoints copied",
+  "source_definition_commit": "b141fef9678b33185f31e595226ad15c4f632710",
+  "basis": "card measurements, local source inspection, and explicitly mathematical illustrative calculations; no new model runs",
+  "unexecuted": "a coherent whole-float32 FD versus whole-float32 AD control; this snapshot contains eight failed promoted-residual cells instead",
+  "files": {
+    "source/GIT-SOURCES.json": "720b5146141654e1571f1d5b659807fe6a0a77c438fab93197f0f5814bb031d3",
+    "source/card/diagnose.py": "bfc3cd98ed9e24ec73676faac25936ee7274921edbfda09793c5802a6ea40c33",
+    "source/card/golden-report.json": "020c0623f1fcab92323d620c447cefc22ba9d27c840079e7136d6879ec22c882",
+    "source/card/golden.py": "0e53d5de0876ffdbe6c9ea74f3acf3fff7c29a5a1d14de40f08a8cce01af10db",
+    "source/card/manifest.json": "b295fd9605197be037c4455a4e7c84814e8a58b865055dd2a85cbb82c43500ee",
+    "source/card/nu-exact.json": "24ed42d3f26fdac27dc605920b7be5f3ee779cc8ca58e902aec7d048be987cfe",
+    "source/card/nu-finite-difference.json": "76f937d71f6246bd203cf8b49da45a10bbccac2e32e28d07b592bb38c7bddcdf",
+    "source/card/progress.jsonl": "1cb06c6c039f7025d02595bd7033b5b380704addfad4f99b8c07e79bf471ae12",
+    "source/card/rows.jsonl": "e92b4074e7f2e923a0d5dafe52648fa3b5289df21ce10769e34e1b73f8575f4d",
+    "source/finite_difference.py.txt": "88e6cf937a3522ec5c94f16b9ac2a4cee83873070b84c0d53060f43b35e3b2b8",
+    "source/fixture-test.py.txt": "0030917d608e1f015e2afdfe5b1840d21452f50d19eae10e15d13f6172b549f1",
+    "source/golden-metrics.py.txt": "dc051a381db22fb26034c2fd8a03d1eafa1f836684e787820a5490c40915463d",
+    "source/laptop-jacobian.py.txt": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893",
+    "source/order.md": "833ac377aaae9bc84c53864e6aedb4cbec889fdcbfd26da5b35c705619da8381",
+    "source/papers/SOURCES.json": "19836f153f03d8bdeac8df9b0b7a3b6d54c24dccd19bba3f845445fb209de4f3",
+    "source/papers/adaptive-finite-difference.pdf": "ad829baaa90576bd9646bd6a10a085d6a6181a8fc72804b8167ab0773902eeae",
+    "source/papers/autodiff-pitfalls.pdf": "cfb595201cf8d8b775c7714e4ecfc61cc70eab165f7b9106a57620da7196688c",
+    "source/plan.md": "71b14adbd812aff9ec7950dac96bb9bc55cdad998e1cc582645d1e672167c4fb",
+    "source/upstream.py.txt": "1c1cc1c1ba7d6706d938f1b96bfd5028dc87cd000456a0a7c3b3762b2094615d"
+  }
+}

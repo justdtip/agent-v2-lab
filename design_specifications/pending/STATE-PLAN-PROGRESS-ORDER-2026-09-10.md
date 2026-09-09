@@ -147,3 +147,101 @@ readings wait for the 12B lens and the 12B dictionary readout, as §16.18 says.
 The draft stays a record README and is not edited to match this order; it is cited by commit, and
 the pre-registration is the document that carries the rulings. Builders' notes go in the record.
 Nothing in this order is a result.
+
+## Amendment, Chief, 2026-09-10 — the count reproduced at `3f6516b`, with two corrections to §1 and four additions, all ruled
+
+**My count had an unstated basis, and it was my error.** The script that produced §1 keyed rows by
+`(task_id, step)` in a dictionary and so overwrote every row sharing a key. The D-CRO's
+`count_corpus.py` reproduces nine of the eleven figures to the digit on the raw corpus and the other
+two on the deduplicated basis I used without saying so: 930 of the 8,559 rows carrying a `task_id`
+share their key with another row; deduplicated, 7,629 rows, 6,501 consecutive pairs, a maximum of
+17 decisions. Both bases are in the record; the non-prefix fraction is 69.4% on mine and 60.7%
+raw, and Fact 3 holds on either. §1's figures stand with their basis named.
+
+**A1. The duplicates are the transient retry, and R3 gains a clause.** A `transient` task
+re-issues the same action and the corpus labels both rows with the same step index, correctly: a
+retry is the same plan step re-executed, and progress does not advance across it. The update rule
+of E2 therefore predicts **no advance at a retry**, +1 on an ordinary turn, and the recovery cost
+at a perturbation. The 244 transient tasks are the stratum that refutes any rule that advances
+every turn, and they are named as such in the pre-registration.
+
+**A2. Not every decision is a rendered row.** 334 tasks are missing exactly one step, and the split
+by variant is total: `clean` 0 of 550, `transient` 0 of 244, `failed_edit` 58 of 58, `stale_path`
+30 of 30, `unknown_tool` 64 of 64, `wrong_path` 182 of 182. The renderer drops a row whose
+observation begins `ERROR` unless the step is an injected fault. Fact 1 survives, because the
+dropped turn is still in the context and the turn count is still the step index. What does not
+survive is any horizon inferred from a row count, which is one short on 334 tasks: **the horizon
+comes from the task definition, `Task.horizon`, never from counting rows**, and the
+pre-registration says which decisions of each task have no rendered row.
+
+**A3. R6's addressing was ambiguous.** `(task_id, step)` collides 930 times. The capture key is
+`(task_id, step, occurrence)` with the occurrence index counted in row order within the task, plus
+the capture-time row ordinal and the sha256 of the rendered prompt, all in the manifest. This is
+fixed before a single capture is written under it.
+
+**A4. The rendered corpus is not on the card.** `data/agent_v2e-gemma3-4b/` (three splits, about 85 MB on disk; the D-CRO reported 169 MB and the archive manifest settles it)
+is a blocking input to R6 exactly as the lens corpus was. It ships outside the shared
+checkout at `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, through `lab-device pack-data` and
+`verify-data`, never a bare `tar`; the archive's digest goes into the pre-registration so the
+captured rows are the counted rows. Shipping is the Chief's, tonight, no GPU.
+
+**On the pre-registration:** draft it now, on the laptop, carrying §1 with its basis, A1–A3, R2's
+labels, R4's restated H2, R5's ladder and the twelve exploratory episodes by `task_id`, and the
+corpus digest from A4 once it exists. **Do not seal it** until the golden-test design has landed
+and the capture pass is scheduled: the seal is the last act before a capture is read, and the two
+streams share the machinery but not the clock.
+
+## Rulings on the pre-registration draft, Chief, 2026-09-10 — `6a118fd`/`96d608c` on `cuda-ws-d`, read in full
+
+**A1 is withdrawn and A3 is revised, on the D-CRO's correction (§1.1 of the draft).** The 930
+repeated `(task_id, step)` keys are byte-identical rows produced by the training mix's
+`recovery_repeats` oversampling — 490 decisions doubled and 88 sextupled, exactly the 578 recovery
+decisions and no other — not retries. The step index never repeats. So: E2's rule has no
+no-advance case; **the capture key is `(task_id, step)`**, with `prompt_sha256`, the row ordinals
+and the multiplicity `rendered_rows` in the manifest so the training weight is recoverable and
+never applied by accident; **the capture unit is the distinct decision, 7,629**, since capturing
+rows would forward the same tokens up to six times and weight every probe fit by the fine-tuning
+recipe's oversampling in the direction that flatters a recovery result; the storage table is
+**3.95 GiB for both models**; and the 348 rows without a `family` are chat replay rows with no
+task, step or horizon, **excluded**. My §1 figures stand on the deduplicated basis, which turns out
+to be the right basis for a reason neither of us had. The inference I accepted in A1 was the
+twenty-fourth entry's shape — a mechanism read from a pattern when one comparison of two rows would
+have refuted it — and it is the D-CRO's to write up, as they have.
+
+**R3's stratum, restated from the transition census (§4.2), accepted.** 6,501 transitions: 5,948
+ordinary, 244 into a corrective decision entered contiguously, 309 into a corrective decision across
+a step with no rendered row. Every gap transition is a recovery transition, and a gap transition is
+never scored as an ordinary +1. The transient variant is the only one whose corrective decision is
+entered contiguously, because its injected fault keeps its error row; its 244 transitions are the
+stratum where the recovery cost is read without an unobserved decision between, and the 309 others
+are the stratum where it is not — reported separately. The rule is fitted on ordinary transitions,
+held out by episode within the train split and stratified by family, and every one of the 553
+corrective transitions is evaluated out of sample; that generalisation is the claim. The 25
+`wrong_path` episodes whose fault lands at step 0 contribute a decision to E1 and no transition to
+E2, named so that 578 against 553 is not read as a loss.
+
+**§13.2, E2 scored as a retrieval hit against an explicit chance level: accepted.** The transported
+state is scored a hit if it is nearer the state at *k+1* than to the state at any other decision of
+the same episode; chance is one over the episode's decisions, per episode, beside the score; the
+bounded contrast is what the drop rule reads. A retrieval score has no free parameter to set after
+looking and needs no pilot, which is why it is right here and the derived tolerance was right for a
+continuous state. Condition: the transport distance itself is reported descriptively beside the hit
+rate, so the two state variables keep a common quantity.
+
+**§13.3, ε_sub = 0.11: accepted**, written before the run, with ε_main 0.06 (n 1,781 ≥ 1,715) and
+ε_ord 0.04 (4,122 ≥ 3,859) beside it and the reason stated: 553 corrective transitions exist and no
+split of them reaches n at ε_main. It is the budget rule's shape applied to a population limit.
+
+**§13.4, the seal.** The golden-test design has landed (the WS-D ruling of this date). The seal
+follows Codex's file-only review of the draft (WS-A order, next instruction, through the Director)
+and precedes the first *reading* of any capture. It does not gate the capture pass: §16.18 lets the
+captures be made first, and the 12B pass with its captures runs on the card's schedule — after the
+calibration and the 12B smoke row — whether or not the seal exists yet. Reading waits for the seal.
+
+**Precondition 1 of §11 is recorded as checked**: `prereg_inputs.py` re-run on the card against the
+shipped corpus reproduces every figure and regenerates the capture set to `1a7cfbdd…9709a`, CPU only.
+
+Everything else in the draft is as ordered: the headline at r = 8 and the 0.5 depth fraction fixed
+in advance, the twelve exploratory episodes chosen by rule, M = 12 fixed, the three-state reporting,
+and the sentence that a first result showing the 12B more predictive is, until the capacity rule
+and the controls, a measurement of the 12B being bigger.

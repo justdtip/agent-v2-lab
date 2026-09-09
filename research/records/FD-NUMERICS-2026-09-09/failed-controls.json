@@ -1,0 +1,74 @@
+[
+  {
+    "event": "cell",
+    "elapsed_s": 203.27,
+    "upstream_layer": 0,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 0.01,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 203.33,
+    "upstream_layer": 0,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 0.001,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 203.39,
+    "upstream_layer": 0,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 0.0001,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 203.45,
+    "upstream_layer": 0,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 1e-05,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 404.6,
+    "upstream_layer": 32,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 0.01,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 405.83,
+    "upstream_layer": 32,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 0.001,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 407.06,
+    "upstream_layer": 32,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 0.0001,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  },
+  {
+    "event": "cell",
+    "elapsed_s": 408.29,
+    "upstream_layer": 32,
+    "capture_dtype": "promoted-float32",
+    "epsilon_scale": 1e-05,
+    "error": "RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16",
+    "basis": "measured-here"
+  }
+]

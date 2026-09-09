@@ -1,0 +1,32 @@
+{
+  "scope": "instrument numerical diagnosis; one row/two positions; no new model execution",
+  "measured": {
+    "native_cells": 8,
+    "promoted_cells_failed_before_result": 8,
+    "successful_float32_controls": 0,
+    "halving_ratio": 1.1528304594206111,
+    "layer1_norm_ratio_inferred": 0.1851779348290087,
+    "layer1_aligned_projection_fraction_inferred": 0.0028168433660268177
+  },
+  "mathematical_model": {
+    "basis": "illustrative error envelope, not a fit to Gemma",
+    "form": "A*h^2 + B/h + C with nonnegative coefficients; not an equality for observed vector errors",
+    "normalized_current_h": 1,
+    "counterexample_C": 0,
+    "counterexample_B_over_A": 0.5451586816097437,
+    "counterexample_halving_ratio": 1.152830459420611,
+    "counterexample_optimum_relative_h": 0.6483820436798062,
+    "warning": "The illustrative optimum is not a recommended step for the model; one ratio does not identify error components.",
+    "original_step_over_global_coordinate_RMS": 5.724334022399462,
+    "step_scale_basis": "exact norm/RMS identity for 128 by 2560 entries; not relative to the particular affected coordinate"
+  },
+  "interpretation": "Small-step instability is observed. Mixed truncation and arithmetic error is a leading explanation; forward-schedule mismatch remains unchecked. Failed dtype cells do not answer the float32 control.",
+  "unmeasured": [
+    "realized perturbation and midpoint shift",
+    "zero-response fraction before aggregation",
+    "same-primal same-batch zero-step hook check",
+    "matched whole-float32 FD versus AD",
+    "native AD versus float32 AD at the same stored primal",
+    "identity-subtracted map agreement"
+  ]
+}

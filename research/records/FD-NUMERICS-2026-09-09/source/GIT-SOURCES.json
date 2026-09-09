@@ -1,0 +1,40 @@
+{
+  "commit": "b141fef9678b33185f31e595226ad15c4f632710",
+  "files": {
+    "finite_difference.py.txt": {
+      "path": "src/local_llm_lab/pipeline/lens_fitting/finite_difference.py",
+      "sha256": "88e6cf937a3522ec5c94f16b9ac2a4cee83873070b84c0d53060f43b35e3b2b8",
+      "bytes": 17977
+    },
+    "upstream.py.txt": {
+      "path": "src/local_llm_lab/pipeline/lens_fitting/upstream.py",
+      "sha256": "1c1cc1c1ba7d6706d938f1b96bfd5028dc87cd000456a0a7c3b3762b2094615d",
+      "bytes": 48602
+    },
+    "laptop-jacobian.py.txt": {
+      "path": "src/local_llm_lab/pipeline/lens_fitting/jacobian.py",
+      "sha256": "18828abf4e732239d9dbc2e37edc73a2d0396feea73d661af4114fc57bace893",
+      "bytes": 38948
+    },
+    "golden-metrics.py.txt": {
+      "path": "src/local_llm_lab/pipeline/lens_fitting/golden.py",
+      "sha256": "dc051a381db22fb26034c2fd8a03d1eafa1f836684e787820a5490c40915463d",
+      "bytes": 15134
+    },
+    "fixture-test.py.txt": {
+      "path": "tests/test_lens_finite_difference.py",
+      "sha256": "0030917d608e1f015e2afdfe5b1840d21452f50d19eae10e15d13f6172b549f1",
+      "bytes": 12500
+    },
+    "plan.md": {
+      "path": "design_specifications/pending/CUDA-MIGRATION-PLAN-2026-09-09.md",
+      "sha256": "71b14adbd812aff9ec7950dac96bb9bc55cdad998e1cc582645d1e672167c4fb",
+      "bytes": 112410
+    },
+    "order.md": {
+      "path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "sha256": "833ac377aaae9bc84c53864e6aedb4cbec889fdcbfd26da5b35c705619da8381",
+      "bytes": 10186
+    }
+  }
+}
