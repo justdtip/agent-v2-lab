@@ -54,6 +54,14 @@ state reporting; the capture manifests bind the lens hashes, the corpus digests,
 positions and the arithmetic settings; the design (this order and the scripts' hashes) is committed
 before a capture is read.
 
+**The mass floor.** At note positions the model is writing prose, so the probability mass on the
+six tool-name tokens is small by construction, and the six-tool distribution there is a
+conditional reading — which tool, were it to act now — obtained by renormalising small numbers.
+Every six-tool reading therefore carries its raw mass, and a reading whose mass is below **1e-3**
+is reported as *unresolved*, not as a preference; W-4's trajectories and W-1's `P_note` profiles
+are computed only over resolved readings, with the unresolved count stated beside them. The floor
+is declared here, before any capture is read (the ladder audit's R4, applied).
+
 ## W-1. Ignition and competition
 
 *When the agent commits to a tool call, does the winning action's readout rise gradually through
