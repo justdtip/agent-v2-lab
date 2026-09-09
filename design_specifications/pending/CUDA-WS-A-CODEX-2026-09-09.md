@@ -557,3 +557,5 @@ producers against the ones that cannot.
 **Standing requests 3 and 4:** (3) a design review of the workspace-experiments order when it lands
 on main, before any capture is read; (4) an audit of each experiment's record when it lands on
 `cuda-migration`.
+
+*2026-09-11 UTC:* standing request 1 is live on `cuda-ws-d` at bbdc8dc (P1–P6 applied) and covers, with it, the plan-progress capture code at 144fa1c (`pipeline/state_programme/capture.py`, its 34 tests, and the resume shard numbering the D-CRO found and fixed); both are merged into `cuda-migration`. Standing request 3 (the workspace-experiments design) is live on main through 70c44bb, W-3b included.
