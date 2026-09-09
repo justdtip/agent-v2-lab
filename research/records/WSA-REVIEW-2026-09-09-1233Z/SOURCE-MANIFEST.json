@@ -1,0 +1,89 @@
+{
+  "basis": "file-only review of committed device evidence and corpus metadata",
+  "sources": {
+    "calibration/README.md": {
+      "bytes": 7852,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/README.md",
+      "sha256": "74dbb6efc34eb692bc5ff68a64b5bc6bf0b86ed4bbeb2732a95cbfee0e04aea1"
+    },
+    "calibration/batch-invariance.json": {
+      "bytes": 24473,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/batch-invariance.json",
+      "sha256": "176dee08f446192a431b56144051e3ea601ffb2abc287414424afb25643d6fe6"
+    },
+    "calibration/batch_invariance.py": {
+      "bytes": 5703,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/batch_invariance.py",
+      "sha256": "86d1d8e0864626dfb46fd68068d7466a011be0c5ed5602268d0dab4a651953c8"
+    },
+    "calibration/boundary.json": {
+      "bytes": 20148,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/boundary.json",
+      "sha256": "6ad23ee3ebf108644ddc36dbecdbbf381dcb49c6fc68012208c971b50103c29c"
+    },
+    "calibration/boundary.py": {
+      "bytes": 14756,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/boundary.py",
+      "sha256": "49f1f941e795342cd9e5c6b981e702562f663671ab4eb51426718a4e8b4968d5"
+    },
+    "calibration/manifest.json": {
+      "bytes": 2073,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/manifest.json",
+      "sha256": "8290bf32839dabf312cf9f19ed92c0097786a201ed0bc1a5a61706feb41a2f3a"
+    },
+    "orders/PLAN.md": {
+      "bytes": 18791,
+      "commit": "c030bed1226c1c11cb6968f434c3e4ebd978c514",
+      "path": "design_specifications/pending/STATE-PLAN-PROGRESS-ORDER-2026-09-10.md",
+      "sha256": "1d3710069497c14cb7f42cddbe835a9becab9c5cf4a17ebcc1965ed30ee5a9c5"
+    },
+    "orders/PROTOCOL.md": {
+      "bytes": 9221,
+      "commit": "558d424dccdec2c502653a5aa816e673693c67cf",
+      "path": "research/records/FD-NUMERICS-2026-09-09/RESOLUTION-PROTOCOL.md",
+      "sha256": "1eaf811eef67d072224013aa2737259a7c26df95098053af4b1ad95e766f784b"
+    },
+    "orders/WSA.md": {
+      "bytes": 38311,
+      "commit": "c030bed1226c1c11cb6968f434c3e4ebd978c514",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "sha256": "72ae7165a3bcff8ba8a159b13e7e36f3e8dd6a93585846a97aa067f4cec08bd4"
+    },
+    "orders/WSD.md": {
+      "bytes": 18890,
+      "commit": "c030bed1226c1c11cb6968f434c3e4ebd978c514",
+      "path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "sha256": "1a3f4a45da822478cc2b793d4e89c8d28436b415dc24f61c4f9a28046e37642f"
+    },
+    "plan/PREREGISTRATION.md": {
+      "bytes": 24273,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/PREREGISTRATION.md",
+      "sha256": "897b477c15d63b98cb6b41cddacf49cfc33824dd90d09117f05c008403ea7aa4"
+    },
+    "plan/capture-set.jsonl": {
+      "bytes": 2233977,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-set.jsonl",
+      "sha256": "98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d"
+    },
+    "plan/prereg-inputs.json": {
+      "bytes": 28958,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/prereg-inputs.json",
+      "sha256": "935a6eaca020d60c4c998eadbdd7c3577be10dc3404c0475fafe92795e30e04e"
+    },
+    "plan/prereg_inputs.py": {
+      "bytes": 14454,
+      "commit": "8b9812955e34a4379d3d43c2c280cc3cf319f9b3",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/prereg_inputs.py",
+      "sha256": "bb1de3e8d3249e94afe2606688efc524697a3489192f7b74fb07a23d9222f5ed"
+    }
+  }
+}
