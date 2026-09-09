@@ -88,3 +88,30 @@ Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full
   upstream; the fit-time selector is ours.
 - **`attn_implementation="eager"`** on the fitting model, or batched rows regress to sequential.
 - Upstream has one commit and is unmaintained; there is nothing to track and no runner to diff.
+
+## Upstream defaults, verified against the clone rather than reported
+
+**Checked at `581d398` before any of this reached code, because three of them are load-bearing for
+the adapter and one was not in anyone's message.**
+
+| claim | verified |
+|---|---|
+| `fit(max_seq_len=128, skip_first=16)` | **yes** — both are defaults of `fit` *and* of `jacobian_for_prompt` |
+| no fit-time position selector | **yes** — `jacobian_for_prompt` takes only `skip_first`; there is no `positions` parameter anywhere in the fit path |
+| `JacobianLens.apply(positions=)` exists at readout | **yes** |
+| upstream sets `attn_implementation` | **no** — it appears nowhere in `jlens/`, so the fitting model inherits transformers' default |
+
+So 128 tokens is the reference estimator's **definition**, not a Neuronpedia choice; the fit-time
+selector §6.2 needs is genuinely ours to add; and eager attention must be set by us because upstream
+never mentions it.
+
+**A fourth default, in the same class, that follows from reading the two signatures together.**
+`HFLensModel.encode` defaults to `max_length=512`, and `JacobianLens.apply` defaults to
+`max_seq_len=512`, while `jacobian_for_prompt` passes its own `max_seq_len=128` down into `encode`.
+**So upstream fits at 128 and reads out at 512 by default.** Nothing in either signature warns of it;
+a caller who fits with `fit(...)` and reads with `apply(...)`, both at their defaults, is applying a
+lens four times outside the length it was fitted at and will see no error.
+
+That is our own 21.8x extrapolation arriving from upstream's defaults rather than from our corpus,
+and it is a trap for anyone told to "use upstream directly". The adapter passes lengths explicitly
+at both ends and never relies on either default.
