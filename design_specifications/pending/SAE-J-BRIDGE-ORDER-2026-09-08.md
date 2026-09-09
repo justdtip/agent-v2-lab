@@ -475,3 +475,10 @@ reweighting. Our ν declares it as `target_reduction: sum, not normalised` and
 - **Stage A's status.** SWE-2 is building Stage A under this order as amended; no Stage A code is on
   any branch yet, and the only "bridge" on a branch is Codex's transcript-lens lane, which is a
   different instrument and is not this.
+
+**Correction to §1 of the third amendment, dated 2026-09-10.** The inventory that found zero
+`params.safetensors` was measured before the commit and was true when made. Three minutes before
+`b21b2a5` was committed, SWE-2 fetched layer 17 `l0_small` of the 4B dictionary into the primary
+cache (335,686,016 bytes, verified against the LFS digest; provenance in their A1 record). Plan
+§16.16 records both times. Every other layer remains a config file, and the sentence "A1 needs a
+download per layer it reads" stands for all of them but that one.
