@@ -15,7 +15,12 @@ from jlens.hooks import ActivationRecorder
 
 def _arguments(module, args, kwargs):
     """Bind exactly what the native caller supplied; invent no mask or rotary values."""
-    return dict(inspect.signature(module.forward).bind_partial(*args, **kwargs).arguments)
+    signature = inspect.signature(module.forward)
+    values = dict(signature.bind_partial(*args, **kwargs).arguments)
+    for name, parameter in signature.parameters.items():
+        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
+            values.update(values.pop(name, {}))
+    return values
 
 
 class TorchCapture(ActivationRecorder):
@@ -139,7 +144,8 @@ class TorchCapture(ActivationRecorder):
     def _before_block(self, index):
         def hook(module, args, kwargs):
             values = _arguments(module, args, kwargs)
-            h = values.pop("hidden_states", args[0] if args else None)
+            hidden_key = next(iter(inspect.signature(module.forward).parameters))
+            h = values.pop(hidden_key)
             self.layer_inputs[index] = values
             if index != 0:
                 return None
@@ -151,7 +157,7 @@ class TorchCapture(ActivationRecorder):
                 return None
             if args:
                 return (replacement, *args[1:]), kwargs
-            return args, {**kwargs, "hidden_states": replacement}
+            return args, {**kwargs, hidden_key: replacement}
 
         return hook
 
@@ -197,6 +203,7 @@ class TorchCapture(ActivationRecorder):
             cache = args[0] if args else kwargs.pop("cache")
             kwargs["past_key_values"] = self.view._unwrap_cache(cache)
             kwargs.setdefault("use_cache", cache is not None)
+        kwargs.setdefault("use_cache", kwargs.get("past_key_values") is not None)
         return self.model(input_ids=ids, **kwargs)
 
     def __enter__(self):

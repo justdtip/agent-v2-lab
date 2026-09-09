@@ -232,3 +232,36 @@ def test_direct_model_positional_cache_reports_absolute_offset():
     with TorchCapture(view, sink, layers=(2,)):
         view.model(ids, cache)
     assert sink.rows[2][0] == sink.outputs[0][0] == 8
+
+
+def test_wrapper_declares_no_cache_and_preserves_explicit_cache_choice():
+    view, sink, ids = fixture()
+    choices = []
+    handle = view.model.register_forward_pre_hook(
+        lambda module, args, kwargs: choices.append(kwargs.get("use_cache")), with_kwargs=True
+    )
+    try:
+        with TorchCapture(view, sink, layers=(2,)) as capture:
+            capture(ids)
+            capture(ids, past_key_values=SimpleNamespace(get_seq_length=lambda: 0))
+            capture(ids, use_cache=False, past_key_values=SimpleNamespace(get_seq_length=lambda: 0))
+        assert choices == [False, True, False]
+    finally:
+        handle.remove()
+
+
+def test_block_kwargs_are_flat_and_exclude_positional_hidden_alias():
+    view, sink, ids = fixture()
+
+    class ExtraKwargsBlock(nn.Module):
+        def forward(self, h, **kwargs):
+            return h * 2
+
+    view.model.layers[0] = ExtraKwargsBlock()
+    with TorchCapture(view, sink, layers=(0, 2)) as capture:
+        capture(ids)
+        assert capture.layer_inputs[0] == {
+            "attention_mask": "mask-0",
+            "position_embeddings": (0, 1),
+            "past_key_values": None,
+        }
