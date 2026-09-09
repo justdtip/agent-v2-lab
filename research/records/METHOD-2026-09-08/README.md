@@ -334,3 +334,31 @@ zero) is not evidence, whatever tolerance it clears.
 **Where it sits.** Beside the ninth and the eighteenth: a passing number produced by a comparison
 that could not fail. This one is the cleaner instance, because both columns were real measurements
 and the wrong one was the one the specification named.
+
+---
+
+## Twenty-second: two rules from the integration hour, and one reader that served two masters
+
+**Both SWE-2's, from wiring the torch trainer into the pipeline.** First, `Trainer` chose MPS on
+this laptop while the manifest said `cpu`, because the manifest recorded the request and not the
+object; the device is now read back off the model. Second, the chunked loss, which reaches around
+`forward` to avoid a 262,208-wide logit tensor, ran without the autocast that `accelerate` attaches
+to `forward` and without the unshard hooks that FSDP2 attaches there, and each absence surfaced as
+a separate bug. **The rule: anything that bypasses `forward` inherits none of what upstream attaches
+to it and must supply it itself.** The §16.7 wrapper dissolves both cases at once by making the
+chunked loss the forward that everything attaches to.
+
+**The second rule, from two readings minutes apart.** `1115 passed, 1110 skipped` and `2211 passed,
+14 skipped` on the same tree, both truthful: a box window was open for the first and the suite
+correctly stood off every model-reaching test. **A suite reading is not a claim unless it carries
+its skip count and its window state on the same line.** "Full suite green" without them is the
+summary line of whichever run happened to be quoted.
+
+**And the Chief's, found by SWE-2 from a worktree.** "No stage can load a registered checkpoint
+from a worktree" was true for every process with `$AGENT_V2_BOX_STATE_DIR` set and false for every
+process without it: `_resolve_checkpoint` read the primary checkout through `box_state_root`, whose
+override exists so an isolated run cannot take the machine's lock, and a checkpoint that followed
+the override resolved into scratch. Two things shared one reader; only one may be redirected. The
+git-derived primary is now its own function and the checkpoint uses that. The shape is the eighth
+entry's again: a mechanism built for one purpose, reused for another because it was there, carrying
+a behaviour the second purpose never asked for.
