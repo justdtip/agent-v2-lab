@@ -11,6 +11,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -83,6 +84,62 @@ def test_an_mlx_box_takes_exactly_the_path_it_always_did(monkeypatch) -> None:
 
     monkeypatch.setattr(runtime, "prepare_fit", reached)
     with pytest.raises(_Reached):
+        _cli().main(ARGV)
+
+
+def test_a_present_torch_stage_is_dispatched_to_and_the_refusal_is_not_printed(
+    monkeypatch, capsys
+) -> None:
+    """On the CUDA line the stage exists, and then this seam is a dispatch rather than a wall.
+
+    The module is injected rather than imported because it lives on `cuda-migration` only. That is
+    the point of the seam: one `scripts/lens_fit.py` on both branches, behaving differently only
+    because one of them has the stage.
+    """
+    import importlib
+
+    from local_llm_lab import device, models
+
+    monkeypatch.setattr(device, "backend", lambda: "torch")
+    monkeypatch.setattr(models, "load_model_spec", lambda name: f"spec:{name}")
+    seen = {}
+
+    def run(args, spec, *, progress=None):
+        seen.update(kind=args.kind, spec=spec)
+        return 0
+
+    stage = ModuleType("local_llm_lab.pipeline.lens_fitting.fit_torch")
+    stage.run = run
+    monkeypatch.setitem(
+        sys.modules, "local_llm_lab.pipeline.lens_fitting.fit_torch", stage
+    )
+    importlib.invalidate_caches()
+
+    assert _cli().main(ARGV) == 0
+    assert seen == {"kind": "regression", "spec": "spec:gemma3-4b"}
+    assert capsys.readouterr().out == "", "a dispatch must not also print the refusal"
+
+
+def test_a_real_import_failure_inside_the_stage_is_raised_and_not_read_as_absence(
+    monkeypatch,
+) -> None:
+    """The over-broad-catch shape, refused at the one place it would have been easy to write.
+
+    A stage that is present but cannot import `torch` is a broken box, not a backend without an
+    implementation. Reporting it as "not implemented" would send whoever reads the refusal to write
+    a stage that already exists.
+    """
+    import importlib
+
+    from local_llm_lab import device
+
+    monkeypatch.setattr(device, "backend", lambda: "torch")
+
+    def explode(name):
+        raise ModuleNotFoundError("No module named 'torch'", name="torch")
+
+    monkeypatch.setattr(importlib, "import_module", explode)
+    with pytest.raises(ModuleNotFoundError, match="torch"):
         _cli().main(ARGV)
 
 

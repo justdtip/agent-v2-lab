@@ -8,6 +8,7 @@ see the comment at that seam for why a refusal is the right answer and not a tem
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import sys
@@ -15,6 +16,18 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+#: The torch stage, which exists on the CUDA line only. Named once so the dispatch below and the
+#: refusal beside it cannot drift apart, and so `error.name` is compared against a constant rather
+#: than a string repeated at both ends.
+TORCH_STAGE_MODULE = "local_llm_lab.pipeline.lens_fitting.fit_torch"
+
+
+def load_model_spec_for(name: str):
+    """The registry lookup, deferred so a torch box does not import the MLX side to reach it."""
+    from local_llm_lab.models import load_model_spec
+
+    return load_model_spec(name)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,12 +80,33 @@ def main(argv: list[str] | None = None) -> int:
 
     backend = device.backend()
     if backend != "mlx":
+        # The dispatch, and the refusal behind it. `fit_torch` lives on the CUDA line only, so this
+        # one file is identical on both branches and neither has to carry a divergent copy of the
+        # seam: where the stage exists it runs, and where it does not the refusal explains itself.
+        #
+        # The `error.name` test is not defensive tidiness. Catching ImportError broadly here would
+        # turn *any* import failure inside the stage — a missing torch, a typo in a submodule — into
+        # "not implemented on this backend", which is the over-broad-catch shape this repository has
+        # now found four times. Only the stage module itself being absent reaches the refusal;
+        # anything else is a real failure and is raised with its own name.
+        #
+        # `import_module`, not `from ... import fit_torch`: the `from` form raises with `name` set
+        # to the *package*, so the discrimination above would compare against the wrong string and
+        # re-raise on the one case the refusal exists for. Found by this file's own tests.
+        try:
+            stage = importlib.import_module(TORCH_STAGE_MODULE)
+        except ModuleNotFoundError as error:
+            if error.name != TORCH_STAGE_MODULE:
+                raise
+        else:
+            return stage.run(args, load_model_spec_for(args.model), progress=None)
+
         # Deliberately a refusal and not a fall-through. Both fits below are MLX: `regression.py`
-        # has no torch port yet and `jacobian.py` is this repository's finite-difference estimator.
-        # Falling through on a torch-only box fails several imports deep, with an error about a
-        # missing module rather than about a missing fit, which is the failure this guard exists to
-        # replace. `run_native.py` shipped once without one; this is that lesson applied before
-        # rather than after.
+        # has no torch port on this branch and `jacobian.py` is this repository's finite-difference
+        # estimator. Falling through on a torch-only box fails several imports deep, with an error
+        # about a missing module rather than about a missing fit, which is the failure this guard
+        # exists to replace. `run_native.py` shipped once without one; this is that lesson applied
+        # before rather than after.
         #
         # The estimator sentence is the load-bearing one. When the torch path lands it will be
         # upstream's exact autograd, not a port of the finite-difference stage, so the two backends
@@ -91,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     "kind": args.kind,
                     "implemented_on": "mlx",
-                    "will_live_in": "local_llm_lab.pipeline.lens_fitting.upstream (WS-D)",
+                    "will_live_in": TORCH_STAGE_MODULE,
                     "estimator_here": "finite difference (lens_fitting/jacobian.py)",
                     "estimator_there": "exact autograd (upstream jlens)",
                     "not_interchangeable": (
