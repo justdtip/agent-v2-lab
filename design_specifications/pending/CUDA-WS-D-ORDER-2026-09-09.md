@@ -278,3 +278,53 @@ preserves the individual response vectors per position and direction before any 
 requires; the sign control computes the flipped even remainder it promises; and the native control's
 JSON links its runtime manifest and the frozen-token digest to the boundary manifest so the two
 runs form one provenance chain.
+
+## The width-1 ladder, Chief, 2026-09-10 — `5b0feb7`/`15eddfa`: float32 has a useful interval at every layer, native bfloat16 has none; the width rows and the first map inside an interval are ordered
+
+Row 39, positions {8, 127}, six directions × three cotangents, both precisions, width 1 throughout,
+28 seconds of card time. Median relative error |d_h − a| / |a| against autograd on the same forward:
+
+| precision | layer | k = 0 | k = 2 | k = 4 | k = 6 | k = 8 | k = 10 | k = 12 | k = 16 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| bf16 | 1 | 0.99 | 1.04 | 1.62 | 2.06 | 5.38 | 17.2 | 134 | 1.00 |
+| bf16 | 17 | 1.14 | 0.33 | 0.21 | 0.86 | 2.97 | 27.5 | | |
+| bf16 | 33 | 0.113 | 0.053 | 0.099 | 0.44 | 1.36 | 2.04 | | |
+| float32 | 1 | 0.98 | 0.93 | 0.65 | 0.15 | 1.1e-2 | 4.3e-3 | 6.0e-3 | 0.16 |
+| float32 | 17 | 1.29 | 0.35 | 3.2e-2 | 1.9e-3 | 5.8e-4 | 1.9e-3 | | |
+| float32 | 33 | 8.1e-2 | 1.3e-2 | 8.0e-4 | 8.6e-5 | 1.2e-4 | 7.0e-4 | | |
+
+**Findings, as the record states them.** Float32 has a proper minimum at every layer tested,
+flanked within about a factor of three on both sides, at k = 6, 8, 10 for layers 33, 17, 1: the
+shallower the source, the smaller the step it needs, by 2⁶ across three layers, which alone refutes
+one `epsilon_scale` for every layer. Native bfloat16 has no useful interval anywhere; at layer 1 the
+fraction of target components returned exactly equal between the two arms reaches 1.000 by k = 16,
+the difference is exactly zero, and the row pins at 1.00 — the loss measured before aggregation, the
+quantity the Director's audit said the zero-column count could not reach. The unchanged-input
+fraction is 0.000 in every cell, so the displacement always lands and the loss is downstream. At
+k = 0, the golden run's step, the error is about 100% at layer 1 in **both** precisions: the step
+alone was outside any useful interval, independent of precision. Two rows of the protocol's §6 fire
+together — truncation at the original step, and precision limiting native finite differences — and
+**the golden residual is not evidence about the model**. It does not refute saturation, and the
+record says so; it removes the need to invoke any mechanism for the disagreement. Eighteen scalar
+checks at one position on one row: the step to the full map is an inference and is marked as one.
+
+**The hook is sound at every width, measured.** Anchoring the capture at the width it replays at
+gives twelve bitwise-identical checks at widths 1, 64 and 256, while the eighteen anchored-at-one
+rows in the same run fail; the `and False` verdict is removed. Correction 2 applied: ε_main 0.17
+(the bound at 240 episodes is 0.1604 and 0.16 would need 242), ε_ord 0.09, ε_sub 0.11, the
+decision-unit numbers kept beside them and labelled; both digests pinned.
+
+**Consequence for the lenses fitted on the laptop, as an inference and marked as one:** they were
+fitted by finite differences in float32 at the same step rule, which this ladder places at k = 0 —
+about 98% relative error at layer 1, 129% at layer 17, 8% at layer 33 in float32 — under a
+different reduction (same-position rather than source-mean, target-sum). Until a directional check
+runs under their reduction, the MLX-fitted early- and mid-layer lenses are treated as not
+derivative estimates, and every published number that read through them is bounded by this table.
+
+**Ordered.** Step 3, the width rows at 64 and 256 with the anchor and forward at that width and
+§3.1's check first at each. Then **the first finite-difference maps fitted inside a demonstrated
+interval**: layer 33 at k = 6 and layer 1 at k = 10, in float32, at the width the anchored check has
+cleared with the exact map at the same width, ν carrying `epsilon_per_layer`, `forward_batch` and
+`anchor_batch`, a memory smoke row before the first float32 full map (`dim_batch` 32 if the smoke
+says so). Then the 12B smoke row alone, then the 12B exact fits with the captures. Timing is the
+D-CRO's by their own context; idle card time is the waste, an out-of-context seat the worse one.
