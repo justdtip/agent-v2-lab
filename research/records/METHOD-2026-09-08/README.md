@@ -785,6 +785,13 @@ control's amplification ratios went into the order from the D-CRO's messages; Co
 showed the first was a whole-matrix norm and the second divided by part of the input. Same rule,
 same night, same Chief.
 
+*A seventh, the next day (2026-09-11 UTC):* the workspace capture tokenised the rendered prompt with
+`add_special_tokens=True`, and the rendered prompt already carries its own `<bos>`, so every position
+would have shifted by one — [2, 2, 105] on a real row. It was caught before the pass ran, by the
+D-CRO's own finding that their capture code had been tested against an invented input, which sent
+me to check mine against a real row. The rule is theirs: *a test whose input is a fixture can
+validate code against a corpus that does not exist; pin at least one check against a real row.*
+
 ## Thirty-third: the reporter that failed, jointly with the D-CRO
 
 Three defects in one day that no test suite was built to catch, because **neither was a check that
