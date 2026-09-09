@@ -694,6 +694,19 @@ def fit_upstream_jacobian(
         | {
             "declared_device": device,
             "declared_dtype": dtype,
+            # The batch schedule, and it belongs in *precision* because it is part of the
+            # arithmetic path and not part of the position rule. `jacobian_for_prompt` replicates
+            # the prompt `dim_batch` times along the batch axis, runs **one** forward on that
+            # batch and retains the graph, so the function this estimator differentiates is the
+            # width-`dim_batch` forward, and its anchor is that forward's own trajectory.
+            # Measured on the card, 2026-09-09: the bf16 forward is not batch-invariant — with no
+            # hook present, not one of Gemma 3 4B's 34 blocks is bitwise identical between width 1
+            # and width 64, diverging at the first block and compounding to a mean absolute
+            # difference of 76.4 at the target (`WSD-FD-CALIBRATION-2026-09-10`). Two estimators at
+            # two widths are therefore two estimates of two functions, and the comparability gate
+            # has to be able to see that.
+            "forward_batch": int(dim_batch),
+            "anchor_batch": int(dim_batch),
             "backward_accumulation_dtype": observed["dtype"],
             "position_mean_dtype": "float32",
             "prompt_accumulation_dtype": "float64",

@@ -149,15 +149,86 @@ def test_the_result_carries_the_step_the_residual_is_a_function_of(upstream) -> 
 # ---------------------------------------------------------------- the golden comparison, for real
 
 
+def _matched_pair(upstream, *, width=D_MODEL, anchor=None, exact_width=None):
+    """An exact fit and a finite-difference fit that share their batch schedule.
+
+    Matching is not automatic and is the point of this helper. The exact path forwards the prompt
+    replicated `dim_batch` times and differentiates *that* forward; the finite-difference path
+    forwards at `direction_batch` and anchors on a capture taken at `anchor_batch`. The bf16 forward
+    is not batch-invariant, so a pair that disagrees on either width is a pair of estimates of two
+    different functions, and the gate refuses it. Every argument here is explicit for that reason.
+    """
+    corpus = {"synthetic": True}
+    exact_fit = adapter.fit_upstream_jacobian(
+        TinyLensModel(), make_rows(), dim_batch=exact_width or width,
+        max_seq_len=SEQ_LEN, upstream=upstream,
+    )
+    fd_fit = _fd(upstream, direction_batch=width, anchor_batch=width if anchor is None else anchor)
+    return (
+        adapter.declare_nu(exact_fit, num_layers=NUM_LAYERS, corpus=corpus),
+        adapter.declare_nu(fd_fit, num_layers=NUM_LAYERS, corpus=corpus,
+                           estimator=adapter.ESTIMATOR_FINITE_DIFFERENCE),
+    )
+
+
+def test_a_pair_whose_batch_schedule_differs_is_refused(upstream) -> None:
+    """The gate's newest field, and the one the golden run needed and did not have.
+
+    The bf16 forward is not batch-invariant: measured on the card with no hook present, not one of
+    Gemma 3 4B's 34 blocks is bitwise identical between batch 1 and batch 64, and the divergence
+    compounds from the first block to a mean absolute difference of 76.4 at the target
+    (`research/records/WSD-FD-CALIBRATION-2026-09-10`). So the batch width is part of the arithmetic
+    path, and two fits at two widths estimate two functions. The golden run compared an exact fit at
+    `dim_batch=64` with a finite-difference fit at `direction_batch=256` anchored at width 1, and the
+    gate passed, because it was never given the field. It is given it now.
+    """
+    exact_nu, fd_nu = _matched_pair(upstream, exact_width=D_MODEL - 3)
+    with pytest.raises(golden.NotComparable, match="sum of causes"):
+        golden.assert_estimator_is_the_only_difference(exact_nu, fd_nu)
+
+    # The anchor is a second, independent width, and a mismatch there is refused on its own.
+    exact_nu, fd_nu = _matched_pair(upstream, anchor=1)
+    assert fd_nu["precision"]["forward_batch"] == exact_nu["precision"]["forward_batch"]
+    assert fd_nu["precision"]["anchor_batch"] != exact_nu["precision"]["anchor_batch"]
+    with pytest.raises(golden.NotComparable, match="sum of causes"):
+        golden.assert_estimator_is_the_only_difference(exact_nu, fd_nu)
+
+
+def test_a_fit_that_declares_no_batch_schedule_is_refused_by_name(upstream) -> None:
+    """Absent must not compare equal to absent.
+
+    `_compared` drops a key missing from a block, so two fits that both say nothing about their
+    batch schedule would agree about it. That is the failure this whole gate exists to prevent, so
+    the requirement is presence and not merely equality, and the message says which fit is silent.
+    """
+    exact_nu, fd_nu = _matched_pair(upstream)
+    golden.assert_estimator_is_the_only_difference(exact_nu, fd_nu)  # the pair is good as it stands
+
+    for silenced in ("reference", "candidate"):
+        a, b = dict(exact_nu), dict(fd_nu)
+        target = a if silenced == "reference" else b
+        target["precision"] = {k: v for k, v in target["precision"].items()
+                               if k != "forward_batch"}
+        with pytest.raises(golden.NotComparable, match=f"the {silenced} fit declares no"):
+            golden.assert_estimator_is_the_only_difference(a, b)
+
+    # Both silent at once still refuses, which is the case a presence-blind gate would have passed.
+    a = {**exact_nu, "precision": {k: v for k, v in exact_nu["precision"].items()
+                                   if k not in ("forward_batch", "anchor_batch")}}
+    b = {**fd_nu, "precision": {k: v for k, v in fd_nu["precision"].items()
+                                if k not in ("forward_batch", "anchor_batch")}}
+    with pytest.raises(golden.NotComparable, match="declares no"):
+        golden.assert_estimator_is_the_only_difference(a, b)
+
+
 def test_the_two_estimators_differ_in_exactly_one_nu_field(exact, upstream) -> None:
     """The condition the harness enforces, met by construction rather than by discipline: both
-    fits are the same result type over the same rows on the same model."""
-    fd = _fd(upstream)
-    corpus = {"synthetic": True}
-    exact_nu = adapter.declare_nu(exact, num_layers=NUM_LAYERS, corpus=corpus)
-    fd_nu = adapter.declare_nu(
-        fd, num_layers=NUM_LAYERS, corpus=corpus, estimator=adapter.ESTIMATOR_FINITE_DIFFERENCE
-    )
+    fits are the same result type over the same rows on the same model.
+
+    The pair is now built at a **matched** batch schedule. Before 2026-09-09 this test passed on a
+    pair whose widths were 3 and 6, because the gate could not see them.
+    """
+    exact_nu, fd_nu = _matched_pair(upstream)
 
     golden.assert_estimator_is_the_only_difference(exact_nu, fd_nu)
 
@@ -170,16 +241,28 @@ def test_the_two_estimators_differ_in_exactly_one_nu_field(exact, upstream) -> N
     # estimator records its own knob there, and comparing the blocks would be a gate that no two
     # correct fits of one corpus could ever pass.
     assert exact_nu["position_weighting"] != fd_nu["position_weighting"]
-    assert exact_nu["position_weighting"]["dim_batch"] == 3
+    assert exact_nu["position_weighting"]["dim_batch"] == D_MODEL
     assert fd_nu["position_weighting"]["direction_batch"] == D_MODEL
+    # The knob appears twice on purpose and means two different things. In `position_weighting` it
+    # is each estimator's own batching detail and is not compared, because it does not change which
+    # positions were selected. In `precision` it is the width of the forward being differentiated,
+    # and it *is* compared, because the forward is not batch-invariant. Narrowing the first was
+    # right; concluding from that narrowing that the width did not matter anywhere was not.
+    assert exact_nu["precision"]["forward_batch"] == fd_nu["precision"]["forward_batch"] == D_MODEL
+    assert exact_nu["precision"]["anchor_batch"] == fd_nu["precision"]["anchor_batch"] == D_MODEL
 
 
-def test_the_golden_report_runs_end_to_end_with_a_real_second_operand(exact, upstream) -> None:
+def test_the_golden_report_runs_end_to_end_with_a_real_second_operand(upstream) -> None:
     """The whole thing at fixture scale: exact against finite difference, the controls gating it.
 
-    This is the run the device repeats with two arguments changed — a real model and real rows.
+    This is the run the device repeats with two arguments changed — a real model and real rows. Both
+    operands are fitted at the same batch schedule, which the device run did not do and could not
+    have known to do: see `research/records/WSD-FD-CALIBRATION-2026-09-10`.
     """
-    fd = _fd(upstream)
+    exact = adapter.fit_upstream_jacobian(
+        TinyLensModel(), make_rows(), dim_batch=D_MODEL, max_seq_len=SEQ_LEN, upstream=upstream
+    )
+    fd = _fd(upstream, direction_batch=D_MODEL, anchor_batch=D_MODEL)
     corpus = {"synthetic": True}
     reference = {
         adapter.repo_layer_of_upstream(i): np.asarray(m, np.float32)
@@ -269,12 +352,20 @@ def test_an_unknown_capture_path_is_refused_by_name(upstream) -> None:
         _fd(upstream, capture_dtype="float64")
 
 
-def test_the_golden_gate_refuses_two_fits_that_ran_different_arithmetic(exact, upstream) -> None:
-    """The gate that makes the finding a measurement of the estimator and not of the path."""
+def test_the_golden_gate_refuses_two_fits_that_ran_different_arithmetic(upstream) -> None:
+    """The gate that makes the finding a measurement of the estimator and not of the path.
+
+    Both operands are fitted at the exact fit's batch schedule, so the only thing left for the gate
+    to catch is the arithmetic path. Isolating one difference at a time is the whole discipline.
+    """
     corpus = {"synthetic": True}
-    native = _fd(upstream, capture_dtype="native")
-    promoted = _fd(upstream, capture_dtype="promoted-float32")
-    exact_nu = adapter.declare_nu(exact, num_layers=NUM_LAYERS, corpus=corpus)
+    matched = dict(direction_batch=D_MODEL, anchor_batch=D_MODEL)
+    exact_fit = adapter.fit_upstream_jacobian(
+        TinyLensModel(), make_rows(), dim_batch=D_MODEL, max_seq_len=SEQ_LEN, upstream=upstream
+    )
+    native = _fd(upstream, capture_dtype="native", **matched)
+    promoted = _fd(upstream, capture_dtype="promoted-float32", **matched)
+    exact_nu = adapter.declare_nu(exact_fit, num_layers=NUM_LAYERS, corpus=corpus)
     kw = dict(num_layers=NUM_LAYERS, corpus=corpus,
               estimator=adapter.ESTIMATOR_FINITE_DIFFERENCE)
 

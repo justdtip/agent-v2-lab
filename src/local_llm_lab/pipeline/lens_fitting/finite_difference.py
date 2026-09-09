@@ -142,6 +142,7 @@ def fit_finite_difference_jacobian(
     epsilon_scale: float = DEFAULT_EPSILON_SCALE,
     capture_dtype: str = "native",
     direction_batch: int = 64,
+    anchor_batch: int = 1,
     max_seq_len: int,
     device: str = "cpu",
     dtype: str = "float32",
@@ -194,6 +195,8 @@ def fit_finite_difference_jacobian(
         )
     if not isinstance(direction_batch, int) or direction_batch < 1:
         raise ValueError(f"direction_batch must be a positive integer; got {direction_batch!r}")
+    if not isinstance(anchor_batch, int) or anchor_batch < 1:
+        raise ValueError(f"anchor_batch must be a positive integer; got {anchor_batch!r}")
     if not np.isfinite(epsilon_scale) or epsilon_scale <= 0:
         raise ValueError(f"epsilon_scale must be positive and finite; got {epsilon_scale!r}")
 
@@ -241,17 +244,26 @@ def fit_finite_difference_jacobian(
             continue
 
         with torch.no_grad():
+            # The width the anchor is recorded at. It defaults to one, which is what every fit
+            # before 2026-09-09 did and is preserved so that no existing artefact silently changes
+            # meaning; but the bf16 forward is **not** batch-invariant, so a base recorded at width
+            # one is not a point on the trajectory the perturbed forwards at `direction_batch`
+            # travel along. Setting it equal to `direction_batch` makes the anchor and the
+            # difference share a function, which is what a comparison against an autograd fit needs.
+            # Which anchor a run uses is declared in ν and the golden gate compares it; the choice
+            # itself belongs to the resolution protocol's §3. See WSD-FD-CALIBRATION-2026-09-10.
+            anchor_ids = ids if anchor_batch == 1 else ids.expand(anchor_batch, -1)
             with ActivationRecorder(wrapped.layers, at=[*sources, target]) as recorder:
-                wrapped.forward(ids)
+                wrapped.forward(anchor_ids)
                 # `native` keeps each block's own dtype, so the perturbed forward runs the
                 # arithmetic the exact estimator runs; `promoted-float32` is the older path, kept
                 # because it is the one a caller may want to *measure* against native rather than
                 # inherit by accident.
                 base = {
                     layer: (
-                        recorder.activations[layer].detach().clone()
+                        recorder.activations[layer][:1].detach().clone()
                         if capture_dtype == "native"
-                        else recorder.activations[layer].detach().float()
+                        else recorder.activations[layer][:1].detach().float()
                     )
                     for layer in (*sources, target)
                 }
@@ -323,6 +335,15 @@ def fit_finite_difference_jacobian(
 
     precision = dict(observed)
     precision["capture_dtype"] = capture_dtype
+    # The perturbed forwards run one direction per batch row, so the function differenced here is
+    # the width-`direction_batch` forward. The base residual, though, is recorded by an ordinary
+    # **batch-one** forward above, and the bf16 forward is not batch-invariant, so the anchor is
+    # not a point on the trajectory the difference is taken along. Both widths are declared, and
+    # they are declared separately, because they are genuinely two different things and the golden
+    # comparison needs to refuse a pair that disagrees on either. See
+    # `research/records/WSD-FD-CALIBRATION-2026-09-10`.
+    precision["forward_batch"] = int(direction_batch)
+    precision["anchor_batch"] = int(anchor_batch)
     precision["backward_accumulation_dtype"] = "float64"
     precision["note"] = (
         "no autograd graph is built: this estimator differences forward passes, so the "
