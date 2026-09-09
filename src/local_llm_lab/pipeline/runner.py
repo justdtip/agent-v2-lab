@@ -180,20 +180,54 @@ class SnapshotCache:
             self.model(mx.array(prefix)[None, :], cache=self.cache)
             mx.eval(*(entry.state for entry in self.cache))
             self._prefix = prefix
-            self._states = [_copy_cache_state(entry.state) for entry in self.cache]
+            self._states = snapshot_cache(self.cache)
             self.encoded_tokens += len(token_ids)
             return suffix
         if prefix != self._prefix:
             raise ValueError("immutable prefix changed after snapshot creation")
         assert self._states is not None
-        for entry, state in zip(self.cache, self._states, strict=True):
-            entry.state = _copy_cache_state(state)
+        restore_cache(self.cache, self._states)
         self.reused_tokens += self.prefix_tokens
         self.encoded_tokens += len(suffix)
         return suffix
 
     def commit(self, token_ids: list[int], generated: list[int]) -> None:
         """The live cache may advance; the saved prefix snapshot remains unchanged."""
+
+
+def snapshot_cache(entries: list[Any]) -> list[tuple[Any, Any]]:
+    """Save everything that defines a cache entry, which is contents *and* position.
+
+    Saving ``state`` alone is a defect, and a silent one. ``mlx_lm``'s two cache kinds split
+    the job differently: ``KVCache.state``'s setter recovers the offset from the restored
+    array's own length, while ``RotatingKVCache.state``'s setter assigns keys and values and
+    nothing else -- its ``offset`` and ``_idx`` live in ``meta_state`` (``models/cache.py``,
+    the ``state`` and ``meta_state`` properties of each class).
+
+    So a snapshot of ``state`` alone round-trips correctly on a full-attention model and
+    restores a rotating layer to the right contents at the wrong position. Gemma 3 4B runs a
+    rotating cache on 29 of its 34 blocks, which is where this stops being theoretical. The
+    failure mode is wrong attention rather than an exception.
+    """
+    saved = []
+    for entry in entries:
+        meta = getattr(entry, "meta_state", None)
+        saved.append((_copy_cache_state(entry.state), meta))
+    return saved
+
+
+def restore_cache(entries: list[Any], saved: list[tuple[Any, Any]]) -> None:
+    """Restore contents then position, in that order and for that reason.
+
+    ``KVCache.state``'s setter derives the offset from the restored length, so ``state`` must
+    land first; ``meta_state`` then puts back the true offset and write index for the entries
+    that keep them there. An empty ``meta_state`` is the base class's "no metadata" value and
+    assigning it back would raise, so it is skipped.
+    """
+    for entry, (state, meta) in zip(entries, saved, strict=True):
+        entry.state = _copy_cache_state(state)
+        if meta:
+            entry.meta_state = meta
 
 
 def _copy_cache_state(value: Any) -> Any:
