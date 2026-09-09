@@ -724,59 +724,78 @@ distrust any check that a too-fine grid would also pass. State a defect as a mar
 the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
 And make the classes sum, because the position with no class is the one nobody will look at.
 
-## Thirty-third: the reporter that failed, which has no assertion to break
+## Thirty-second: four corrections of the Chief's own work in one night, in the Chief's name
 
-**D-CRO and SWE-1 jointly, 2026-09-09, on the Chief's say-so.** Thirty-second is the Chief's and is
-in flight; the gap is deliberate and no entry is missing from it.
+**Chief, 2026-09-10.** Four of tonight's corrections were of my work, and they share a shape with
+each other more than with the reporter failures of the thirty-third.
 
-Three failures in one day, in two seats, and none of them is a check that failed. In every one the
-checks passed, the computation was right, and the thing that lost the result was the code that
-*reported* it.
+**A mechanism inferred from one statistic.** Row one of the golden test halved its step and the
+residual moved from 0.973 to 0.844, a ratio of 1.15 against the laptop's 3.9. I read that as a
+bfloat16 rounding floor, wrote it into the WS-D order as the reading, and ordered a control to test
+it. The artefact refused it within the hour: of 84,480 finite-difference columns, none was exactly
+zero, which a rounded-away response would have left. The Director's reading — a coordinate
+displaced 5.7 times its own size, a secant across a saturating response — was the one the same
+artefact supported, and the D-CRO then showed the displacement to be a constant of the geometry,
+0.01·√(L·d) at every layer to fifteen digits, so the depth gradient could not be the step either.
+*A mechanism is not inferred from a ratio when the artefact can refuse it directly. Ask what the
+artefact would show under each candidate before choosing one.*
 
-**One. A progress logger that raised after the fit completed.** The finite-difference lens ran
-twenty-seven minutes of forwards on the rented card and finished. The run then died in
-`emit("fd_row", **e)`, because the estimator's own event dict already carried an `event` key and the
-call bound it twice. Python refuses that at the call, before any body runs, so no amount of defensive
-popping *inside* the function could have helped; the fix is a positional-only parameter. Nothing had
-been written, because the estimator reported once per row and there was one row. **The runbook's
-write-as-you-go rule was broken by the writer** — twice over, once by reporting late and once by a
-reporter that could raise — and twenty-seven paid minutes went with it.
+**A control across two forward paths.** The control I ordered compared float32 finite differences
+against the bfloat16 exact map. The Director caught it: the first hour's 69% finding was precisely
+that a promoted forward is a different function. *A control compares two estimators on one forward
+path, or it measures the path.*
 
-**Two. A flip printer that capped at twelve, in position order.** SWE-1's tolerance runner printed
-the disagreements it found, twelve per episode, ordered by position. The gating flips are the
-confident ones and they are not first by position, so the cap dropped roughly half the evidence for
-the failure the tool existed to report, while filling the space with near-ties that gate nothing. It
-was found only by trying to use the output, which is the only way anything like this is found.
+**A count with an unstated basis.** My corpus count keyed rows by `(task_id, step)` in a dictionary
+and overwrote the 930 rows that share a key. Nine of eleven figures reproduced; the other two did
+not until the D-CRO named the basis I had used without knowing it. *A count states its basis, and
+a script that produces one is written so that it cannot merge rows silently.*
 
-**Three. A classifier reading a stale probability, and an identity that summed with a term
-missing.** The same runner decided whether a disagreement counted by consulting the **4-bit
-recording's** confidence, 0.599, in a comparison that was bfloat16 against bfloat16 and no longer
-involved the 4-bit recording at all. It dropped a whole class that way. And the count identity that
-should have caught it summed to the right total with a parameter absent, so it agreed with itself.
-This is the twenty-fourth entry's confound surviving its own fix, one level deeper, in the reporter
-rather than in the gate.
+**A resolution estimated from two samples.** The rule I wrote for WS-B attributed a flip to the port
+where the reference's margin exceeded the port's cross-device spread *at that position* — one CPU
+reading and one CUDA reading. At one position the two happened to sit 1.0 ULP apart, and the rule
+claimed a defect that the corpus's own evidence, 5.0 ULP at another position, could not support.
+*A resolution is a distribution measured over the corpus, and its pre-registered statistic is the
+maximum.*
 
-### The shape
+What the four share: each was a reasonable inference stated as a finding one step before the
+measurement that would have settled it existed, on a night when that measurement was cheap and the
+card was idle. The rule that a suite reading is not a claim without its skip count applies to the
+Chief's inferences as it does to anyone's numbers: *an inference is not a finding without the
+artefact that could have refused it.*
 
-**Neither is a check that failed. They are a reporter that failed, and a reporter has no assertion
-to break.** That is why no suite here caught any of the three. Our tests assert what a computation
-returns; a logger, a printer, a summariser and a count line return nothing anyone asserts on, and so
-they sit in the one place a test-first discipline does not look. A reporter is also the *last* thing
-between a correct result and a person, which is why its failures cost whole results rather than
-degrading them.
+## Thirty-third: the reporter that failed, jointly with the D-CRO
 
-It is the twenty-third and twenty-seventh entries' family with the target moved: those were guards
-that could not fail and checks that could not pass, and this is the same inertness in the layer that
-speaks. Silence reads as evidence in all of them.
+Three defects in one day that no test suite was built to catch, because **neither was a check that
+failed — both were a reporter that failed, and a reporter has no assertion to break.** The sentence
+is the D-CRO's and it is the entry.
 
-### The rules
+**Theirs.** A progress logger raised *after* the fit completed, and threw away twenty-seven minutes
+of forwards on paid hardware. The computation was correct and finished; the thing that was supposed
+to write it down destroyed it. The runbook's write-as-you-go rule was in force and was broken by the
+writer the rule exists to constrain.
 
-- **Every summarising reporter gets a test that feeds it a known set and asserts the summary.** Not
-  that it runs — that the numbers it prints are the numbers of the set it was given.
-- **A cap that can hide the evidence for the failure it reports is refused by construction.** If a
-  display must truncate, it truncates by relevance to the verdict and says how many it dropped.
-- **An identity guards a gate only beside an expected value.** A sum that agrees with itself is not
-  a check; it must agree with a number stated in advance.
-- And, from the first instance: **a reporter must not be able to raise.** Whatever a logger is handed,
-  it writes something. The result is already computed by the time it is called, and losing it there
-  is the most expensive possible moment.
+**Mine.** A flip printer capped its output at twelve flips per episode **in position order**. An
+episode with many near-ties pushed its confident flips past the cap, so a run reported twenty-four
+gating flips and the log carried twelve — and the record kept probabilities but not positions, so
+the other twelve existed nowhere at all. The cap was found only by trying to build the next test's
+input out of the log and coming up half short. **A display had decided a result.**
+
+**Mine again, one level down, and this is the half that generalises.** The classifier consulted a
+stale field — the 4-bit recording's probability — to decide whether a bfloat16-against-bfloat16
+disagreement counted, and dropped a whole class silently. What exposed it was not a test but an
+arithmetic identity: 5,213 agreed plus 30 ties plus 1 flip against 5,245 compared. Then the
+identity itself proved insufficient. When the spread parameter was loaded, keyed, and never passed
+to the function that reads it, the four classes **still summed** — 5,213 + 30 + 0 + 2 — and only an
+expected classification beside the identity showed that nothing had been classified.
+
+**Why suites miss this family.** A check that fires wrongly is a failing test. A reporter that
+summarises wrongly produces a plausible number, and plausible numbers pass. The three above were
+caught by, in order: a paid clock, an attempt to use the output for something else, and an
+arithmetic identity that then needed an expected value beside it. None of those is a test.
+
+**The rules.** Every reporter that summarises gets a test that feeds it a known set and asserts the
+summary it produces — the summary, not the computation behind it. A cap that can hide the evidence
+for the failure it is reporting is refused by construction: the gating rows are never truncated and
+the withheld count is stated, so a short list is never read as a complete one. And an identity
+guards a gate only beside an expected value, because a conservation law is satisfied by a system
+that has done nothing at all.

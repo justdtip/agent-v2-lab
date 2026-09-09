@@ -208,6 +208,17 @@ can be made from it. At 1912 it does not, and that position is the corpus's one 
 **Gate FAIL, on one position in 5,245, and the failure is legible.** That is a different object
 from the twenty-four it reported the day before, which were legible only after two more runs.
 
+**Superseded by ruling, and the headline above is kept as computed.** The Chief has since ruled
+that the port's resolution is the corpus-wide **maximum** of its cross-device discrepancy, not a
+two-sample spread at one position: 521's own 5.0 ULP is evidence about the port's arithmetic
+everywhere, so a 3.0 ULP margin at 1912 lies inside what the port has already been seen to do.
+Under that rule the corpus reads **5,213 / 30 / 2 / 0** and the gate passes. The table above is
+the two-sample rule and is kept beside it, because a headline should say which rule computed it.
+The corpus-wide measurement — the signed top-two gap at every compared position on both devices,
+with median, 99th percentile and maximum — is not yet made, so nothing here is restated on it
+yet. The reference's own spread is unmeasured, one MLX device only, and is assumed no finer than
+the port's; that assumption is stated because it is not measured.
+
 ### Two corrections this pass forced
 
 **The ULP grid must come from the value.** `flip-margins.json` recorded 521's reference gap as
@@ -261,6 +272,11 @@ stops rather than hides, which is better news for that arm than either of us had
 put to it changes shape accordingly: not "does a promotion hide", but whether the restore writes
 back in the block's own dtype, and whether anything **downcasts** a saved float32 activation to
 make it fit. The gate is still right; the reason given for it here was wrong.
+
+In that shape it is the right question for the **cache-exchange port**, which E3 of the
+plan-progress order waits on, and it is noted here rather than acted on: the cache strategies stay
+refused until each reproduces the `none` trajectories within the backend, and this is what to ask
+of the restore before that arm lands.
 
 **Gate 6 is UNAVAILABLE**, correctly: the backend loads, and the lens read path is not ported.
 That is WS-A's producing side, unchanged by anything here.
