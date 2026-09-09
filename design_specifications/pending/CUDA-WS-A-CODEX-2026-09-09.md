@@ -282,3 +282,27 @@ say of each which was taken on an idle box.
 Reviews continue to land here under a dated heading naming your commit. Two rules from tonight apply
 to every seat: commit with `git commit -- <paths>` in a shared checkout, never bare; and a suite
 reading is not a claim without its skip count and the box state on the same line.
+
+## Review of the three tasks, 2026-09-10 — `4aaab19`, merged into `cuda-migration` at `6b22d44`
+
+**Verdict: all three pass; merged.** Checked against the merge result itself: the branch's torch
+tests through the seam, the estimator's fixtures, the rules suite, the device and loader tests,
+162 passed; the record's own gate tests, 88 passed; the merge-tree clean against the integration
+tip. Every CUDA measurement remains unexecuted, as the checklist says in its first line.
+
+1. **The graph-once estimator.** `torch_jacobian.jacobian_for_prompt_vjp`: upstream's recorder,
+   layer convention and position rule unchanged, one forward, batched one-hot cotangents at every
+   selected target position through `torch.autograd.grad(..., is_grads_batched=True)`, source mean
+   over the same selection, no target-count division, hooks removed on every failure path. Exact
+   against unmodified upstream at float32 epsilon under `eager` and `sdpa`, remainder batches
+   preserved, the selector local rather than a patch of upstream's global, and the warmed
+   end-to-end batching ratio at least one under both kernels. Its memory claim is the device's.
+2. **The device gate script.** Loads through `hf_text.checkpoint_metadata` and
+   `load_text_causal_lm`, its own loader copy gone; `device.pin` before the first device use; every
+   number carries a basis; the `native_dtype_loop` phase is the seam-exactness arm gated at zero;
+   the precision arm declared, the controls gated outside the floor; resume verified.
+3. **The checklist.** Prepared on fixtures, every CUDA row marked unexecuted, the technique stated
+   without reference to our code, and the laptop bases with their box state.
+
+Nothing further is asked of WS-A on the laptop. The next thing Codex does is on the device, in the
+order the checklist gives, and its record comes back here under a dated heading.
