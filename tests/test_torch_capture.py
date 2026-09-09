@@ -272,3 +272,251 @@ def test_block_kwargs_are_flat_and_exclude_positional_hidden_alias():
             "position_embeddings": (0, 1),
             "past_key_values": None,
         }
+
+
+def test_emitted_clamp_reapplies_through_cache_and_release_stops_it():
+    view, sink, ids = fixture()
+    expected_prefill = view.model(ids).logits
+    offset = [0]
+    cache = SimpleNamespace(get_seq_length=lambda: offset[0])
+    with TorchCapture(view, sink, layers=(1, 2)) as capture:
+        handle = capture.clamp(1, "emitted", lambda h: torch.full_like(h, 7))
+        prefill = capture(ids, cache=cache, emitted_positions=[]).logits
+        assert torch.equal(prefill, expected_prefill)
+        for absolute in (3, 4):
+            offset[0] = absolute
+            actual = capture(ids[:, :1], cache=cache, emitted_positions=[absolute]).logits
+            assert torch.equal(actual[0, 0], torch.full((3,), 21.0))
+        handle.release()
+        assert handle.released
+        offset[0] = 5
+        after_release = capture(ids[:, :1], cache=cache).logits
+        assert torch.equal(after_release, view.model(ids[:, :1]).logits)
+        record = capture.intervention_record[0]
+        assert record["mode"] == "clamp"
+        assert record["selection"] == {"kind": "emitted"}
+        assert record["released"] is True
+        assert [row["absolute_position"] for row in record["applications"]] == [3, 4]
+        assert [row["forward_index"] for row in record["applications"]] == [1, 2]
+        assert [row["cache_offset"] for row in record["applications"]] == [3, 4]
+
+
+def test_absolute_clamp_reapplies_on_recomputation_but_refuses_cached_past():
+    view, sink, ids = fixture()
+    offset = [0]
+    cache = SimpleNamespace(get_seq_length=lambda: offset[0])
+    calls = []
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        handle = capture.clamp(1, 1, lambda h: calls.append(True) or h + 1)
+        capture(ids, cache=cache)
+        capture(ids, cache=cache)
+        assert calls == [True, True]
+        offset[0] = 3
+        with pytest.raises(ValueError, match="already cached"):
+            capture(ids[:, :1], cache=cache)
+        handle.release()
+        capture(ids[:, :1], cache=cache)
+
+
+def test_one_shot_and_clamp_compose_in_registration_order_and_record_distinct_modes():
+    view, sink, ids = fixture()
+    offset = [0]
+    cache = SimpleNamespace(get_seq_length=lambda: offset[0])
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        assert capture.intervene(1, 1, lambda h: torch.ones_like(h)) is capture
+        capture.clamp(1, "emitted", lambda h: h * 5)
+        actual = capture(ids, cache=cache, emitted_positions=[1]).logits
+        assert torch.equal(actual[0, 1], torch.full((3,), 15.0))
+        offset[0] = 3
+        capture(ids[:, :1], cache=cache, emitted_positions=[3])
+        record = capture.intervention_record
+        assert [row["mode"] for row in record] == ["one_shot", "clamp"]
+        assert [len(row["applications"]) for row in record] == [1, 2]
+        assert record[0]["selection"] == {"kind": "absolute", "position": 1}
+        assert record[0]["released"] is False
+
+
+@pytest.mark.parametrize("positions", [None, [0, 0], [True], [0.0], [-1], [3], "0"])
+def test_emitted_metadata_fails_closed_before_block_forward(positions):
+    view, sink, ids = fixture()
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        capture.clamp(1, "emitted", lambda h: h)
+        with pytest.raises(ValueError, match="emitted_positions"):
+            capture(ids, emitted_positions=positions)
+        assert not capture.layer_inputs
+        assert not capture.intervention_record[0]["applications"]
+        assert not capture._forwarding
+        capture(ids, emitted_positions=[])
+
+
+def test_active_emitted_clamp_requires_wrapper_metadata_and_strips_it_from_model():
+    view, sink, ids = fixture()
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        capture.clamp(1, "emitted", lambda h: h)
+        with pytest.raises(ValueError, match="emitted_positions"):
+            capture(ids)
+        with pytest.raises(ValueError, match="emitted_positions"):
+            view.model(ids)
+        # This model has no **kwargs: success proves metadata was not sent to forward.
+        capture(ids, emitted_positions=[])
+        with pytest.raises(ValueError, match="emitted_positions"):
+            view.model(ids)
+
+
+def test_emitted_selection_is_explicit_and_absolute_for_multi_token_cached_chunk():
+    view, sink, ids = fixture()
+    cache = SimpleNamespace(get_seq_length=lambda: 5)
+    expected = view.model(ids).logits
+    with TorchCapture(view, sink, layers=(0, 2)) as capture:
+        capture.clamp(0, "emitted", lambda h: torch.ones_like(h))
+        actual = capture(ids, cache=cache, emitted_positions=(5, 7)).logits
+        assert torch.equal(actual[0, [0, 2]], torch.full((2, 3), 6.0))
+        assert torch.equal(actual[0, 1], expected[0, 1])
+        assert [
+            row["absolute_position"] for row in capture.intervention_record[0]["applications"]
+        ] == [5, 7]
+        with pytest.raises(ValueError, match="emitted_positions"):
+            capture(ids, cache=cache, emitted_positions=[4])
+
+
+def test_clamp_release_does_not_reindex_one_shot_application_state():
+    view, sink, ids = fixture()
+    offset = [0]
+    cache = SimpleNamespace(get_seq_length=lambda: offset[0])
+    calls = []
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        handle = capture.clamp(1, "emitted", lambda h: h)
+        capture.intervene(1, 1, lambda h: calls.append(True) or h)
+        capture(ids, cache=cache, emitted_positions=[])
+        handle.release()
+        handle.release()
+        offset[0] = 3
+        capture(ids[:, :1], cache=cache)
+        assert calls == [True]
+        assert capture.intervention_record[0]["released"]
+        assert len(capture.intervention_record[1]["applications"]) == 1
+
+
+def test_clamp_mutations_during_forward_refuse_and_handle_survives_failure():
+    view, sink, ids = fixture()
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        handle = capture.clamp(1, 0, lambda h: handle.release() or h)
+        with pytest.raises(RuntimeError, match="during a forward"):
+            capture(ids)
+        assert not handle.released
+        handle.release()
+        capture.clamp(1, 0, lambda h: capture.clamp(1, 1, lambda x: x) or h)
+        with pytest.raises(RuntimeError, match="during a forward"):
+            capture(ids)
+    assert all(not layer._forward_hooks and not layer._forward_pre_hooks for layer in view.layers)
+
+
+def test_clamp_at_tuple_output_preserves_donor_gradient_and_unselected_vectors():
+    view, sink, ids = fixture()
+    expected = view.model(ids).logits
+    donor = torch.tensor([4.0, 5.0, 6.0], requires_grad=True)
+    seen = []
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        capture.clamp(2, 1, lambda h: donor)
+        hook = view.layers[1].register_forward_hook(lambda m, a, out: seen.append(out[1]))
+        try:
+            actual = capture(ids).logits
+        finally:
+            hook.remove()
+        assert seen == ["preserved"]
+        assert torch.equal(actual[0, 1], donor)
+        assert torch.equal(actual[0, (0, 2)], expected[0, (0, 2)])
+        actual.sum().backward()
+        assert torch.equal(donor.grad, torch.ones_like(donor))
+
+
+def test_intervention_record_snapshots_json_safe_diagnostics_without_graphs():
+    import json
+
+    view, sink, ids = fixture()
+
+    class DiagnosticPatch:
+        def __init__(self):
+            self.last = None
+
+        def __call__(self, h):
+            self.last = {"target": [2.0], "attained": [1.5], "off_target_change": [0.25]}
+            return h + 1
+
+        def diagnostic_record(self):
+            return self.last
+
+    patch = DiagnosticPatch()
+    with TorchCapture(view, sink, layers=(1, 2)) as capture:
+        capture.clamp(1, 1, patch)
+        capture(ids)
+        patch.last["attained"][0] = 99.0
+        record = capture.intervention_record
+        assert record[0]["layer"] == 1
+        assert record[0]["applications"][0]["diagnostic"]["attained"] == [1.5]
+        json.dumps(record, allow_nan=False)
+        record[0]["applications"].clear()
+        assert len(capture.intervention_record[0]["applications"]) == 1
+
+
+@pytest.mark.parametrize("diagnostic", [{"value": float("nan")}, {"value": torch.tensor(1.0)}])
+def test_intervention_refuses_non_json_diagnostics(diagnostic):
+    view, sink, ids = fixture()
+
+    class Patch:
+        def __call__(self, h):
+            return h
+
+        def diagnostic_record(self):
+            return diagnostic
+
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        capture.clamp(1, 0, Patch())
+        with pytest.raises(ValueError, match="diagnostic"):
+            capture(ids)
+
+
+@pytest.mark.parametrize("layer, position", [(True, 0), (3, 0), (1, True), (1, -1), (1, "last")])
+def test_clamp_invalid_registration_does_not_install_hooks(layer, position):
+    view, sink, _ = fixture()
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        with pytest.raises(ValueError, match="intervention"):
+            capture.clamp(layer, position, lambda h: h)
+        assert not capture.intervention_record
+
+
+def test_caught_native_recursive_forward_cannot_unlock_outer_intervention_mutations():
+    view, sink, ids = fixture()
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        def recursive_patch(h):
+            with pytest.raises(RuntimeError, match="recursive"):
+                view.model(ids)
+            with pytest.raises(RuntimeError, match="during a forward"):
+                handle.release()
+            with pytest.raises(RuntimeError, match="during a forward"):
+                capture.intervene(1, 1, lambda x: x)
+            assert capture._forwarding
+            return h
+
+        handle = capture.clamp(1, 0, recursive_patch)
+        capture(ids)
+        assert not capture._forwarding
+        assert not handle.released
+        assert len(sink.outputs) == 1
+        assert len(capture.intervention_record[0]["applications"]) == 1
+        handle.release()
+        capture(ids)
+        assert len(sink.outputs) == 2
+
+
+def test_uncaught_native_recursive_forward_releases_outer_forward_guard():
+    view, sink, ids = fixture()
+    with TorchCapture(view, sink, layers=(2,)) as capture:
+        handle = capture.clamp(1, 0, lambda h: view.model(ids).logits[0, 0])
+        with pytest.raises(RuntimeError, match="recursive"):
+            capture(ids)
+        assert not capture._forwarding
+        assert not sink.outputs
+        handle.release()
+        capture(ids)
+        assert len(sink.outputs) == 1
