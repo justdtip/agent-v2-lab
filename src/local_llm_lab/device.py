@@ -31,6 +31,9 @@ __all__ = [
     "CUBLAS_ENV",
     "DEVICE_ENV",
     "R47_FRACTION",
+    "DEVICE_FRACTION",
+    "BUDGET_ENV",
+    "budget_fraction",
     "backend",
     "budget",
     "clear_cache",
@@ -51,6 +54,12 @@ CUBLAS_DETERMINISTIC = ":4096:8"
 BACKENDS = ("mlx", "torch")
 #: The fraction of the device's grantable memory a workload may plan for: R47, the lens guard's 0.6.
 R47_FRACTION = 0.6
+#: The Director's standing rule of 2026-09-10: the laptop's ceiling was for usability, and a
+#: rented card has no user to keep responsive. On CUDA the only constraint is not to exhaust the
+#: device and crash, so the planning cap is nearly all of it, with a margin for the driver's own
+#: context, fragmentation and the allocator's reserve. ``LLL_BUDGET_FRACTION`` overrides both.
+DEVICE_FRACTION = 0.95
+BUDGET_ENV = "LLL_BUDGET_FRACTION"
 
 _pinned: dict[str, Any] | None = None
 
@@ -371,10 +380,30 @@ def device_info(device: Any = None) -> dict[str, Any] | dict[int, dict[str, Any]
     return _per_device(device, cuda, cpu)
 
 
-def budget(fraction: float = R47_FRACTION, device: Any = None) -> int | dict[int, int]:
-    """The R47 planning cap: ``fraction`` of what the device grants, on MLX its recommended working
-    set, on CUDA the device total, on CPU host memory. What §10.2 sizes a batch under."""
+def budget_fraction() -> float:
+    """The planning fraction: the environment's if set, else 0.95 on CUDA and 0.6 elsewhere."""
+    named = os.environ.get(BUDGET_ENV)
+    if named:
+        return float(named)
+    if backend() == "torch":
+        import torch
+
+        if torch.cuda.is_available():
+            return DEVICE_FRACTION
+    return R47_FRACTION
+
+
+def budget(fraction: float | None = None, device: Any = None) -> int | dict[int, int]:
+    """The planning cap: ``fraction`` of what the device grants, on MLX its recommended working
+    set, on CUDA the device total, on CPU host memory. What §10.2 sizes a batch under.
+
+    ``None`` takes :func:`budget_fraction`: 0.6 on the laptop, where the ceiling exists so the
+    box stays usable, and 0.95 on a CUDA device, where the Director's rule of 2026-09-10 leaves
+    one constraint only, not to exhaust the card.
+    """
     _before_cuda()
+    if fraction is None:
+        fraction = budget_fraction()
     if not 0 < fraction <= 1:
         raise ValueError(f"fraction must lie in (0, 1]; got {fraction!r}")
     info = device_info(device)

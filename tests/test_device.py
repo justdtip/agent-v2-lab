@@ -174,7 +174,7 @@ def test_the_six_calls_on_cpu_torch_say_what_they_cannot_do(torch_cpu):
     info = device.device_info()
     assert info["backend"] == "torch" and info["device"] == "cpu"
     assert info["memory_size"] > 0
-    assert device.budget() == int(device.R47_FRACTION * info["memory_size"])
+    assert device.budget() == int(device.budget_fraction() * info["memory_size"])
     assert device.budget(0.5) == int(0.5 * info["memory_size"])
     with pytest.raises(ValueError, match="fraction"):
         device.budget(0)
@@ -232,8 +232,10 @@ def test_the_cuda_form_takes_an_index_a_string_none_or_all(torch_cpu, monkeypatc
         "memory_free": 501,
         "capability": "9.0",
     }
-    assert device.budget(device="all") == {0: 600, 1: int(0.6 * 1001)}
-    assert device.budget() == 600
+    # 0.95 of each card under the Director's rule of 2026-09-10; the laptop keeps 0.6.
+    assert device.budget(device="all") == {0: 950, 1: int(0.95 * 1001)}
+    assert device.budget(fraction=0.6, device="all") == {0: 600, 1: int(0.6 * 1001)}
+    assert device.budget() == 950
     device.clear_cache()
 
 
@@ -283,3 +285,17 @@ def test_the_shims_readers_set_the_workspace_default_so_a_later_pin_is_not_refus
     assert device.describe()["cublas_workspace_before_cuda"] is False
     with pytest.raises(RuntimeError, match="before the first CUDA use"):
         device.pin(seed=3)
+
+
+def test_the_planning_fraction_is_the_laptops_off_cuda_and_nearly_all_of_a_card_on_it(monkeypatch):
+    """The Director's rule of 2026-09-10: the laptop's ceiling was for usability; the card has
+    one constraint, not to exhaust itself."""
+    torch = pytest.importorskip("torch")
+    monkeypatch.delenv(device.BUDGET_ENV, raising=False)
+    monkeypatch.setenv(device.BACKEND_ENV, "torch")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    assert device.budget_fraction() == device.R47_FRACTION == 0.6
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert device.budget_fraction() == device.DEVICE_FRACTION == 0.95
+    monkeypatch.setenv(device.BUDGET_ENV, "0.5")
+    assert device.budget_fraction() == 0.5
