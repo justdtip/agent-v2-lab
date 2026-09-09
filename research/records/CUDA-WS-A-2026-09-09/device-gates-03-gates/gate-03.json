@@ -1,0 +1,4032 @@
+{
+  "number_schema": "value-basis-v1",
+  "gate": {
+    "value": 3,
+    "basis": "measured-here"
+  },
+  "identity": {
+    "tree_hash": "ae407d80ce77b9921cc2290f27374c87a504c042e0ab54e588f49ee0b49d58e6",
+    "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+    "device": "{\"CUBLAS_WORKSPACE_CONFIG\": \":4096:8\", \"backend\": \"torch\", \"cublas_workspace_before_cuda\": true, \"cuda_available\": true, \"cudnn_benchmark\": false, \"cudnn_deterministic\": true, \"determinism\": \"pinned\", \"deterministic_algorithms\": true, \"device\": \"cuda:0\", \"device_count\": 1, \"device_names\": [\"NVIDIA RTX PRO 6000 Blackwell Workstation Edition\"], \"float32_matmul_precision\": \"highest\", \"mlx\": null, \"pinned\": {\"attn_implementation\": \"eager\", \"deterministic\": true, \"seed\": 0}, \"platform\": \"Linux 6.17.0-35-generic x86_64\", \"python\": \"3.13.15\", \"tf32_cudnn\": false, \"tf32_matmul\": false, \"threads\": 1, \"torch\": \"2.14.0\", \"transformers\": \"5.16.1\"}",
+    "input_digest": "c90dcbd0d8ee25e5",
+    "source_commit": "dfce88caad5810d4d233f76e2db63651a3c970fb",
+    "diff_stat": "",
+    "smoke": false
+  },
+  "source_commit": "dfce88caad5810d4d233f76e2db63651a3c970fb",
+  "checkpoint_sha256": {
+    "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+    "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+    "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+  },
+  "device_description": {
+    "python": "3.13.15",
+    "platform": "Linux 6.17.0-35-generic x86_64",
+    "mlx": null,
+    "torch": "2.14.0",
+    "transformers": "5.16.1",
+    "pinned": {
+      "seed": {
+        "value": 0,
+        "basis": "measured-here"
+      },
+      "deterministic": true,
+      "attn_implementation": "eager"
+    },
+    "determinism": "pinned",
+    "backend": "torch",
+    "device": "cuda:0",
+    "cuda_available": true,
+    "device_count": {
+      "value": 1,
+      "basis": "measured-here"
+    },
+    "device_names": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "deterministic_algorithms": true,
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false,
+    "tf32_matmul": false,
+    "tf32_cudnn": false,
+    "float32_matmul_precision": "highest",
+    "threads": {
+      "value": 1,
+      "basis": "measured-here"
+    },
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "cublas_workspace_before_cuda": true
+  },
+  "status": "pass",
+  "precision": "float32",
+  "measurement": {
+    "tokens": {
+      "value": 64,
+      "basis": "measured-here"
+    },
+    "status": "measured",
+    "phases": {
+      "native_capture": {
+        "status": "measured",
+        "dtype": "torch.float32",
+        "layers": [
+          {
+            "value": 0,
+            "basis": "measured-here"
+          },
+          {
+            "value": 1,
+            "basis": "measured-here"
+          },
+          {
+            "value": 2,
+            "basis": "measured-here"
+          },
+          {
+            "value": 3,
+            "basis": "measured-here"
+          },
+          {
+            "value": 4,
+            "basis": "measured-here"
+          },
+          {
+            "value": 5,
+            "basis": "measured-here"
+          },
+          {
+            "value": 6,
+            "basis": "measured-here"
+          },
+          {
+            "value": 7,
+            "basis": "measured-here"
+          },
+          {
+            "value": 8,
+            "basis": "measured-here"
+          },
+          {
+            "value": 9,
+            "basis": "measured-here"
+          },
+          {
+            "value": 10,
+            "basis": "measured-here"
+          },
+          {
+            "value": 11,
+            "basis": "measured-here"
+          },
+          {
+            "value": 12,
+            "basis": "measured-here"
+          },
+          {
+            "value": 13,
+            "basis": "measured-here"
+          },
+          {
+            "value": 14,
+            "basis": "measured-here"
+          },
+          {
+            "value": 15,
+            "basis": "measured-here"
+          },
+          {
+            "value": 16,
+            "basis": "measured-here"
+          },
+          {
+            "value": 17,
+            "basis": "measured-here"
+          },
+          {
+            "value": 18,
+            "basis": "measured-here"
+          },
+          {
+            "value": 19,
+            "basis": "measured-here"
+          },
+          {
+            "value": 20,
+            "basis": "measured-here"
+          },
+          {
+            "value": 21,
+            "basis": "measured-here"
+          },
+          {
+            "value": 22,
+            "basis": "measured-here"
+          },
+          {
+            "value": 23,
+            "basis": "measured-here"
+          },
+          {
+            "value": 24,
+            "basis": "measured-here"
+          },
+          {
+            "value": 25,
+            "basis": "measured-here"
+          },
+          {
+            "value": 26,
+            "basis": "measured-here"
+          },
+          {
+            "value": 27,
+            "basis": "measured-here"
+          },
+          {
+            "value": 28,
+            "basis": "measured-here"
+          },
+          {
+            "value": 29,
+            "basis": "measured-here"
+          },
+          {
+            "value": 30,
+            "basis": "measured-here"
+          },
+          {
+            "value": 31,
+            "basis": "measured-here"
+          },
+          {
+            "value": 32,
+            "basis": "measured-here"
+          },
+          {
+            "value": 33,
+            "basis": "measured-here"
+          },
+          {
+            "value": 34,
+            "basis": "measured-here"
+          }
+        ],
+        "retained_residual_bytes": {
+          "value": 22937600,
+          "basis": "measured-here"
+        },
+        "method": "TorchCapture block hooks during one text-only native observer forward"
+      },
+      "native_dtype_loop": {
+        "status": "measured",
+        "by_layer": {
+          "0": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 29.251068115234375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "1": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 13118.361328125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "2": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 14630.970703125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "3": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 20073.380859375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "4": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 25200.64453125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "5": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 51397.015625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "6": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 73509.640625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "7": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 88612.953125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "8": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 106997.90625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "9": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 118919.9921875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "10": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 141163.5625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "11": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 155082.5,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "12": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 167610.59375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "13": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 187920.34375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "14": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 210067.375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "15": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 235764.5625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "16": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 243325.640625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "17": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 246902.9375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "18": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 262170.71875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "19": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 265712.53125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "20": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 267603.03125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "21": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 268201.34375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "22": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 270118.59375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "23": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 274307.34375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "24": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 283561.84375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "25": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 284403.6875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "26": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 288438.625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "27": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 289407.875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "28": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 291086.6875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "29": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 294416.96875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "30": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 297771.25,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "31": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 298680.375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "32": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 241377.9375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "33": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 213370.640625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "34": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 151916.0625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          }
+        },
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "exact": true,
+        "method": "_block at the native entry dtype, without run_block's fp32 promotion"
+      },
+      "promoted_fp32_loop": {
+        "status": "measured",
+        "by_layer": {
+          "0": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 29.251068115234375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "1": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 13118.361328125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "2": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 14630.970703125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "3": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 20073.380859375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "4": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 25200.64453125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "5": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 51397.015625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "6": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 73509.640625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "7": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 88612.953125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "8": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 106997.90625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "9": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 118919.9921875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "10": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 141163.5625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "11": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 155082.5,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "12": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 167610.59375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "13": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 187920.34375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "14": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 210067.375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "15": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 235764.5625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "16": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 243325.640625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "17": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 246902.9375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "18": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 262170.71875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "19": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 265712.53125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "20": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 267603.03125,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "21": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 268201.34375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "22": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 270118.59375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "23": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 274307.34375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "24": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 283561.84375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "25": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 284403.6875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "26": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 288438.625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "27": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 289407.875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "28": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 291086.6875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "29": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 294416.96875,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "30": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 297771.25,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "31": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 298680.375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "32": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 241377.9375,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "33": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 213370.640625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "34": {
+            "actual_dtype": "torch.float32",
+            "native_dtype": "torch.float32",
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "native_max_abs": {
+              "value": 151916.0625,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          }
+        },
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "method": "existing residuals arithmetic: fp32 entry and run_block; descriptive"
+      }
+    },
+    "by_layer": {
+      "0": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 29.251068115234375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "1": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 13118.361328125,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "2": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 14630.970703125,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "3": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 20073.380859375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "4": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 25200.64453125,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "5": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 51397.015625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "6": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 73509.640625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "7": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 88612.953125,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "8": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 106997.90625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "9": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 118919.9921875,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "10": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 141163.5625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "11": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 155082.5,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "12": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 167610.59375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "13": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 187920.34375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "14": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 210067.375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "15": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 235764.5625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "16": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 243325.640625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "17": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 246902.9375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "18": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 262170.71875,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "19": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 265712.53125,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "20": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 267603.03125,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "21": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 268201.34375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "22": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 270118.59375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "23": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 274307.34375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "24": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 283561.84375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "25": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 284403.6875,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "26": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 288438.625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "27": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 289407.875,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "28": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 291086.6875,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "29": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 294416.96875,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "30": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 297771.25,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "31": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 298680.375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "32": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 241377.9375,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "33": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 213370.640625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      },
+      "34": {
+        "actual_dtype": "torch.float32",
+        "native_dtype": "torch.float32",
+        "max_abs": {
+          "value": 0.0,
+          "basis": "measured-here"
+        },
+        "native_max_abs": {
+          "value": 151916.0625,
+          "basis": "measured-here"
+        },
+        "max_norm_relative": {
+          "value": 0.0,
+          "basis": "measured-here"
+        }
+      }
+    },
+    "max_abs": {
+      "value": 0.0,
+      "basis": "measured-here"
+    },
+    "max_norm_relative": {
+      "value": 0.0,
+      "basis": "measured-here"
+    },
+    "method": "existing residuals arithmetic: fp32 entry and run_block; descriptive",
+    "acceptance": {
+      "status": "pass",
+      "relative_bound": {
+        "value": 0.001,
+        "basis": "expected"
+      }
+    }
+  },
+  "structure": {
+    "num_layers": {
+      "value": 34,
+      "basis": "measured-here"
+    },
+    "hidden_size": {
+      "value": 2560,
+      "basis": "measured-here"
+    },
+    "vocab_size": {
+      "value": 262208,
+      "basis": "measured-here"
+    },
+    "attention_spans": [
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding",
+      "global",
+      "sliding",
+      "sliding",
+      "sliding",
+      "sliding"
+    ],
+    "upstream_source_blocks": [
+      {
+        "value": 0,
+        "basis": "measured-here"
+      },
+      {
+        "value": 1,
+        "basis": "measured-here"
+      },
+      {
+        "value": 2,
+        "basis": "measured-here"
+      },
+      {
+        "value": 3,
+        "basis": "measured-here"
+      },
+      {
+        "value": 4,
+        "basis": "measured-here"
+      },
+      {
+        "value": 5,
+        "basis": "measured-here"
+      },
+      {
+        "value": 6,
+        "basis": "measured-here"
+      },
+      {
+        "value": 7,
+        "basis": "measured-here"
+      },
+      {
+        "value": 8,
+        "basis": "measured-here"
+      },
+      {
+        "value": 9,
+        "basis": "measured-here"
+      },
+      {
+        "value": 10,
+        "basis": "measured-here"
+      },
+      {
+        "value": 11,
+        "basis": "measured-here"
+      },
+      {
+        "value": 12,
+        "basis": "measured-here"
+      },
+      {
+        "value": 13,
+        "basis": "measured-here"
+      },
+      {
+        "value": 14,
+        "basis": "measured-here"
+      },
+      {
+        "value": 15,
+        "basis": "measured-here"
+      },
+      {
+        "value": 16,
+        "basis": "measured-here"
+      },
+      {
+        "value": 17,
+        "basis": "measured-here"
+      },
+      {
+        "value": 18,
+        "basis": "measured-here"
+      },
+      {
+        "value": 19,
+        "basis": "measured-here"
+      },
+      {
+        "value": 20,
+        "basis": "measured-here"
+      },
+      {
+        "value": 21,
+        "basis": "measured-here"
+      },
+      {
+        "value": 22,
+        "basis": "measured-here"
+      },
+      {
+        "value": 23,
+        "basis": "measured-here"
+      },
+      {
+        "value": 24,
+        "basis": "measured-here"
+      },
+      {
+        "value": 25,
+        "basis": "measured-here"
+      },
+      {
+        "value": 26,
+        "basis": "measured-here"
+      },
+      {
+        "value": 27,
+        "basis": "measured-here"
+      },
+      {
+        "value": 28,
+        "basis": "measured-here"
+      },
+      {
+        "value": 29,
+        "basis": "measured-here"
+      },
+      {
+        "value": 30,
+        "basis": "measured-here"
+      },
+      {
+        "value": 31,
+        "basis": "measured-here"
+      },
+      {
+        "value": 32,
+        "basis": "measured-here"
+      }
+    ],
+    "upstream_target_block": {
+      "value": 33,
+      "basis": "measured-here"
+    },
+    "source_residuals": [
+      {
+        "value": 1,
+        "basis": "measured-here"
+      },
+      {
+        "value": 2,
+        "basis": "measured-here"
+      },
+      {
+        "value": 3,
+        "basis": "measured-here"
+      },
+      {
+        "value": 4,
+        "basis": "measured-here"
+      },
+      {
+        "value": 5,
+        "basis": "measured-here"
+      },
+      {
+        "value": 6,
+        "basis": "measured-here"
+      },
+      {
+        "value": 7,
+        "basis": "measured-here"
+      },
+      {
+        "value": 8,
+        "basis": "measured-here"
+      },
+      {
+        "value": 9,
+        "basis": "measured-here"
+      },
+      {
+        "value": 10,
+        "basis": "measured-here"
+      },
+      {
+        "value": 11,
+        "basis": "measured-here"
+      },
+      {
+        "value": 12,
+        "basis": "measured-here"
+      },
+      {
+        "value": 13,
+        "basis": "measured-here"
+      },
+      {
+        "value": 14,
+        "basis": "measured-here"
+      },
+      {
+        "value": 15,
+        "basis": "measured-here"
+      },
+      {
+        "value": 16,
+        "basis": "measured-here"
+      },
+      {
+        "value": 17,
+        "basis": "measured-here"
+      },
+      {
+        "value": 18,
+        "basis": "measured-here"
+      },
+      {
+        "value": 19,
+        "basis": "measured-here"
+      },
+      {
+        "value": 20,
+        "basis": "measured-here"
+      },
+      {
+        "value": 21,
+        "basis": "measured-here"
+      },
+      {
+        "value": 22,
+        "basis": "measured-here"
+      },
+      {
+        "value": 23,
+        "basis": "measured-here"
+      },
+      {
+        "value": 24,
+        "basis": "measured-here"
+      },
+      {
+        "value": 25,
+        "basis": "measured-here"
+      },
+      {
+        "value": 26,
+        "basis": "measured-here"
+      },
+      {
+        "value": 27,
+        "basis": "measured-here"
+      },
+      {
+        "value": 28,
+        "basis": "measured-here"
+      },
+      {
+        "value": 29,
+        "basis": "measured-here"
+      },
+      {
+        "value": 30,
+        "basis": "measured-here"
+      },
+      {
+        "value": 31,
+        "basis": "measured-here"
+      },
+      {
+        "value": 32,
+        "basis": "measured-here"
+      },
+      {
+        "value": 33,
+        "basis": "measured-here"
+      }
+    ],
+    "target_residual": {
+      "value": 34,
+      "basis": "measured-here"
+    },
+    "entry_residual": {
+      "value": 0,
+      "basis": "measured-here"
+    },
+    "expected_from_header_config": {
+      "num_layers": {
+        "value": 34,
+        "basis": "expected"
+      },
+      "hidden_size": {
+        "value": 2560,
+        "basis": "expected"
+      },
+      "vocab_size": {
+        "value": 262208,
+        "basis": "expected"
+      },
+      "attention_spans": [
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding"
+      ]
+    }
+  },
+  "loading": {
+    "path": "/workspace/.hf_home/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
+    "wrapper": true,
+    "model_type": "gemma3_text",
+    "architecture": "Gemma3ForCausalLM",
+    "key_mapping": {
+      "^language_model\\.": ""
+    },
+    "other_prefixes": [
+      "multi_modal_projector",
+      "vision_tower"
+    ],
+    "unexpected_keys": {
+      "count": {
+        "value": 439,
+        "basis": "measured-here"
+      },
+      "prefixes": [
+        "multi_modal_projector",
+        "vision_tower"
+      ],
+      "note": "the full list is under loading_info; it equals the checkpoint's non-text tensors exactly, checked above"
+    },
+    "storage_dtypes": [
+      "BF16"
+    ],
+    "safetensors_format": [
+      "pt"
+    ],
+    "text_bytes": {
+      "value": 7760526336,
+      "basis": "measured-here"
+    },
+    "checkpoint_text_tensors": {
+      "value": 444,
+      "basis": "measured-here"
+    },
+    "model_state_tensors": {
+      "value": 445,
+      "basis": "measured-here"
+    },
+    "tied_keys": {
+      "lm_head.weight": "model.embed_tokens.weight"
+    },
+    "device": "cuda",
+    "dtype": "float32",
+    "attn_implementation": "eager",
+    "save_layout": "the model's own; the load-time prefix mapping is not reverted on save",
+    "sha256": {
+      "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+      "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+      "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+    },
+    "loading_info": {
+      "missing_keys": [],
+      "unexpected_keys": [
+        "multi_modal_projector.mm_input_projection_weight",
+        "multi_modal_projector.mm_soft_emb_norm.weight",
+        "vision_tower.vision_model.embeddings.patch_embedding.bias",
+        "vision_tower.vision_model.embeddings.patch_embedding.weight",
+        "vision_tower.vision_model.embeddings.position_embedding.weight",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.v_proj.weight",
+        "vision_tower.vision_model.post_layernorm.bias",
+        "vision_tower.vision_model.post_layernorm.weight"
+      ],
+      "mismatched_keys": [],
+      "error_msgs": []
+    }
+  },
+  "memory": [
+    {
+      "phase": "before_load",
+      "elapsed_seconds": {
+        "value": 6.125035869888961,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 839770112,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 838881280,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 0,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 0,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "before_bfloat16_load",
+      "elapsed_seconds": {
+        "value": 6.127035080920905,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 839823360,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 838881280,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 0,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 0,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "after_bfloat16_load",
+      "elapsed_seconds": {
+        "value": 10.201273913029581,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 874405888,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7760528896,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7760528896,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/gate_1_structure",
+      "elapsed_seconds": {
+        "value": 10.202937491238117,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 874438656,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7760528896,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7760528896,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/native_capture",
+      "elapsed_seconds": {
+        "value": 10.221190142910928,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 947261440,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7760529408,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7760530944,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/native_capture",
+      "elapsed_seconds": {
+        "value": 10.611820977181196,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1518067712,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7821625856,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/native_dtype_loop",
+      "elapsed_seconds": {
+        "value": 10.613469726871699,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1518235648,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7821625856,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/native_dtype_loop",
+      "elapsed_seconds": {
+        "value": 10.645239318255335,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1542504448,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7821625856,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/promoted_fp32_loop",
+      "elapsed_seconds": {
+        "value": 10.646699280943722,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1542709248,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 7821625856,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/promoted_fp32_loop",
+      "elapsed_seconds": {
+        "value": 10.726224440149963,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676083200,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/mask_dispatch",
+      "elapsed_seconds": {
+        "value": 10.727896043099463,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676328960,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/mask_dispatch",
+      "elapsed_seconds": {
+        "value": 10.75270107621327,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676333056,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/hook_site_off_by_one",
+      "elapsed_seconds": {
+        "value": 10.754159696865827,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676390400,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/hook_site_off_by_one",
+      "elapsed_seconds": {
+        "value": 10.75788960326463,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676394496,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/entry_transform_omission",
+      "elapsed_seconds": {
+        "value": 10.75952026899904,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676492800,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/entry_transform_omission",
+      "elapsed_seconds": {
+        "value": 10.784645705949515,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676492800,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7806028288,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/precision_probe_complete",
+      "elapsed_seconds": {
+        "value": 10.78658919222653,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1676627968,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/before_rotary_rounding",
+      "elapsed_seconds": {
+        "value": 10.789092855993658,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1677086720,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/rotary_rounding",
+      "elapsed_seconds": {
+        "value": 10.808827584143728,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1677090816,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/64/assessed",
+      "elapsed_seconds": {
+        "value": 10.811291371006519,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1677107200,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/native_capture",
+      "elapsed_seconds": {
+        "value": 10.819182496983558,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1677492224,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794094592,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8193667584,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/native_capture",
+      "elapsed_seconds": {
+        "value": 10.860061511863023,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1677574144,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8482001920,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/native_dtype_loop",
+      "elapsed_seconds": {
+        "value": 10.862649744842201,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1678274560,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8482001920,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/native_dtype_loop",
+      "elapsed_seconds": {
+        "value": 10.925972428172827,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1678278656,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8482001920,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/promoted_fp32_loop",
+      "elapsed_seconds": {
+        "value": 10.928505064919591,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1678389248,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8482001920,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/promoted_fp32_loop",
+      "elapsed_seconds": {
+        "value": 11.148453032132238,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1678790656,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/mask_dispatch",
+      "elapsed_seconds": {
+        "value": 11.151323066093028,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1679773696,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/mask_dispatch",
+      "elapsed_seconds": {
+        "value": 11.207678026054054,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1679794176,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/hook_site_off_by_one",
+      "elapsed_seconds": {
+        "value": 11.21043288288638,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1679966208,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/hook_site_off_by_one",
+      "elapsed_seconds": {
+        "value": 11.21665813587606,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1679994880,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/entry_transform_omission",
+      "elapsed_seconds": {
+        "value": 11.219493465032429,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680199680,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/entry_transform_omission",
+      "elapsed_seconds": {
+        "value": 11.276074311230332,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680220160,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 8062861824,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/precision_probe_complete",
+      "elapsed_seconds": {
+        "value": 11.279224583879113,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680396288,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/before_rotary_rounding",
+      "elapsed_seconds": {
+        "value": 11.403957343194634,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680949248,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/rotary_rounding",
+      "elapsed_seconds": {
+        "value": 11.458514592144638,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680961536,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "bfloat16/1400/assessed",
+      "elapsed_seconds": {
+        "value": 11.462488028220832,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680982016,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 7794083328,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "after_bfloat16_release",
+      "elapsed_seconds": {
+        "value": 11.683294724207371,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680986112,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 33554432,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "before_float32_load",
+      "elapsed_seconds": {
+        "value": 11.691976191010326,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1680986112,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 8633688064,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 33554432,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 8729579520,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "after_float32_load",
+      "elapsed_seconds": {
+        "value": 17.499432444106787,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1682477056,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15554609664,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15554609664,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/gate_1_structure",
+      "elapsed_seconds": {
+        "value": 17.5050823520869,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683808256,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15554609664,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15554609664,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/native_capture",
+      "elapsed_seconds": {
+        "value": 17.51324674487114,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683808256,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15554610176,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15554611712,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/native_capture",
+      "elapsed_seconds": {
+        "value": 17.537223948165774,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683865600,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15578498560,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/native_dtype_loop",
+      "elapsed_seconds": {
+        "value": 17.541109307203442,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683873792,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15578498560,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/native_dtype_loop",
+      "elapsed_seconds": {
+        "value": 17.572439552284777,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683873792,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15578498560,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/promoted_fp32_loop",
+      "elapsed_seconds": {
+        "value": 17.576340331230313,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683910656,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15578498560,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/promoted_fp32_loop",
+      "elapsed_seconds": {
+        "value": 17.60779641289264,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683914752,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15578498560,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/float32_comparison_complete",
+      "elapsed_seconds": {
+        "value": 17.611865479964763,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683951616,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15554609664,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    },
+    {
+      "phase": "float32/64/assessed",
+      "elapsed_seconds": {
+        "value": 17.615978699177504,
+        "basis": "measured-here"
+      },
+      "rss_bytes": {
+        "value": 1683984384,
+        "basis": "measured-here"
+      },
+      "process_peak_bytes": {
+        "value": 24962326528,
+        "basis": "measured-here"
+      },
+      "peak_method": "fresh-process lifetime high-water mark; CPU counter cannot reset",
+      "allocated_bytes": {
+        "value": 15554609664,
+        "basis": "measured-here"
+      },
+      "device_peak_bytes": {
+        "value": 15608776192,
+        "basis": "measured-here"
+      },
+      "device_peak_method": "CUDA allocated tensor peak, not total occupancy"
+    }
+  ],
+  "memory_method": "original attempt readings through the completed unit"
+}
