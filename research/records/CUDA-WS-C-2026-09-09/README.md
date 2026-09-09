@@ -359,3 +359,47 @@ saving and it is the Chief's call, not one to take silently in a gate.
 CPU and `gloo` only. Nothing here has run on CUDA or NCCL, on more than two processes, on a real
 checkpoint, or at any size where the memory arithmetic bites. The model's shape is read from
 `tiny_gemma3.json` so that nothing in the script names a layer count or a width.
+
+---
+
+## Proposed test for the padding finding, recorded so the claim and its test travel together
+
+**Not run, and not mine to run.** This is an MLX-box measurement the Chief is putting to the
+Director and the D-CRO as a candidate probe. It is recorded here because a mechanism without a test
+beside it is the shape of claim this programme has agreed to stop making.
+
+**Why it is worth minutes of the box.** The supervised slot is the position immediately after the
+final end-of-turn token. Generation normally stops there, so nothing else constrains the model's
+distribution at that position — which makes it both the place a trace would survive and the place
+nobody would look. And `!` is an ordinary emittable token rather than an inert pad, so if a stop
+rule ever fails and generation runs past end-of-turn, the first token sampled is drawn from exactly
+the distribution this supervision shaped.
+
+**The measurement.** `P(id 0 | context ending in end-of-turn)` on **held-out** rows, read at the
+model's own output distribution — the final layer, which is exact — and optionally through the lens
+profile for depth.
+
+**Three arms and two controls, because the primary contrast alone cannot separate the accounts.**
+
+| arm | what it tests |
+|---|---|
+| base against arm 1's checkpoint | the primary contrast: did the supervision leave a trace at all |
+| arm 1 at 400, 800 and 1,200 | **dose-response**: exposure rises with steps, so a trace driven by this supervision should rise monotonically and a distributional drift need not |
+| `P(!)` at *other* positions in the same rows | **position control**: separates "the model now likes `!` generally" from "the model learned `!` at this one slot", which is the only version that is this finding |
+
+The checkpoints all exist; no training is needed. One model load, held-out rows only.
+
+**Declared in advance, since the direction is predictable and this programme counts that as a
+conflict.** I expect a rise at the slot, because the supervision is 100% of untruncated rows at a
+fixed position with no competing signal. If it is absent, that is the more informative result and
+the more useful one: it closes the mechanism as unmeasurable at 0.09% of the supervised tokens, and
+that number then bounds every similar artefact anyone finds later.
+
+**What closes it either way.** A rise confined to the slot, monotonic in exposure, makes the
+mechanism a finding. Flat at the slot and flat across checkpoints closes it. A rise everywhere in
+the distribution is a different result about training drift and is not this finding.
+
+**One limit to carry.** The lens read is a bonus, not the measurement: the end-of-turn position of
+an agentic row sits far outside the lens's fitted position range, so a depth profile there inherits
+the extrapolation this record's own map section could not bound. The final-layer read does not, and
+it is sufficient to answer the question.
