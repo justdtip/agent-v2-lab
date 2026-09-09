@@ -471,3 +471,36 @@ the same seat; then, on the laptop, the capture code to the contract (width 1, k
 checkout) with tests, and P1–P6 with the remaining C2 items; the 12B exact fits with the captures run
 only when the capture code meets the contract. `cuda-ws-d` is reviewed and merged in the morning,
 where SWE-2's registry declaration meets the D-CRO's ν fields.
+
+## The same-anchor control, Chief, 2026-09-10 — `5c1c004`/`6c94626`: the width shift is the anchor at depth and the arithmetic at the first layer; what survives everywhere is conditioning
+
+The protocol's same-anchor decomposition, fourteen seconds of card time, identity residual exactly
+0.0 in all 54 cells:
+
+| layer | anchor moved by | observed shift | anchor term | arithmetic term |
+|---:|---:|---:|---:|---:|
+| 1 | 0.19% | 0.756 | 0.502 | 1.108 |
+| 17 | 1.5% | 0.596 | 0.610 | 0.032 |
+| 33 | 8.8% | 0.119 | 0.119 | 0.005 |
+
+**Ruled wording.** At layers 17 and 33 the width shift is the anchor: hold the point fixed and change
+only the width, and the bfloat16 derivative barely moves. "No width-independent bf16 Jacobian" is
+**withdrawn for those layers.** At layer 1 the arithmetic term is real and the larger, the two partly
+opposing, where thirty-two blocks of backward accumulation run below the source. What survives at
+every depth is **conditioning**: a 0.19% move of the anchor at layer 1 moves the derivative read at
+it by 50%, which is not about batching at all. The float32 fitting policy stands on the stability
+evidence — the float32 derivative moved 1e-5 under the same change — and not on the attribution.
+Ordered: the same anchor displacement inserted into the float32 path, which separates an
+ill-conditioned function from ill-conditioned arithmetic, before the 12B lens is read at early
+layers.
+
+R1, R3, R4, R5 and the width fix are applied at `6c94626`: the k = 16 median was four input no-ops
+outvoting two live directions, and the maps are fitted inside the representable region (unchanged-
+input fraction 0.000 through k = 10); a width-one failure could never have entered `boundary.py`'s
+failure list, and every matched schedule now gates by intervention; the headline reads *no broadly
+accurate native-bf16 interval has been demonstrated over this tested grid*; an absolute-error floor
+is declared and the small-signal cell is *unresolved*; the minima differ by 16 in normalised units
+and "a single `epsilon_scale` is refuted" is withdrawn in favour of *the estimator's k = 0 sits far
+outside every layer's interval*; the laptop inference is unknown; the ladder norms one replica with
+a fixture. Queued for the morning: R2's unreduced archive, the float32 no-op boundary at each new
+precision, `responses.npz` durable per unit, the capture code to the contract, P1–P6 with C2.
