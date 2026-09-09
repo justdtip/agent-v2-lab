@@ -392,3 +392,42 @@ every weight came back freshly initialised, because the reader it used treats mi
 warning. **An assertion that an artefact loads is worth nothing unless the loader fails closed**: a
 tolerant reader turns a corrupted artefact into a passing test, which is the guard that passes
 the object it exists to catch, applied to the reader instead of the guard.
+
+---
+
+## Twenty-fourth: the shared index, or why explicit-path `add` was not enough
+
+**The Chief's, the same shape as the nineteenth, one mechanism deeper.** Commit `9ae4444` says it
+pins upstream `jlens` in the cuda extra. It also deletes `pipeline/lens_fitting/upstream.py` and
+`tests/test_lens_upstream.py`, 1,862 lines, and says nothing about them. The D-CRO had staged that
+removal, step three of their announced move to `cuda-ws-d`, in the shared checkout's one index;
+I added my two files by explicit path, as the nineteenth entry's rule requires, and then ran a
+bare `git commit`, which commits everything staged. The rule against `add -A` protected against
+staging someone else's changes myself. It did not protect against committing changes someone else
+had staged, because `add` and `commit` are two gates and the rule covered one.
+
+**The removal is the D-CRO's and intended**: both files are on `cuda-ws-d`, and `9ae4444`'s parent
+has both, so nothing is lost. The message is wrong, and it is on origin, so this entry and the
+naming commit that carries it are the forward fix; no history is rewritten.
+
+**The rule, sharpened into a mechanism.** In a shared checkout, commit with a pathspec:
+`git commit -- <paths>`, which takes only those paths whether or not anything else is staged, and
+read `git status --short` before every commit, treating any staged entry that is not yours as a
+stop. `git add` by explicit path stays; it was never the whole of the discipline.
+
+**The message the removal was meant to carry, in the D-CRO's words, so it is on record beside the
+commit that swallowed it:** "Move WS-D's adapter off the main line to `cuda-ws-d`, per plan §15.
+`pipeline/lens_fitting/upstream.py` and `tests/test_lens_upstream.py` are CUDA-line work and the
+main line takes none. Both are on `cuda-ws-d` at `5121083` with all four adversarial fixes and 35
+tests. `local_llm_lab/upstream_ref.py` deliberately stays on main with its own
+`tests/test_upstream_ref.py`: it is the single import seam that WS-A and WS-D share, it is not
+backend code, and moving it would recreate the two-import-paths problem it was written to close.
+The 880-line intermediate of the adapter first reached main at `4383fda` under a documentation
+message, swept in by a `git add -A`. This is where it leaves."
+
+**And the D-CRO's statement of the shape, which is the better one.** "`git add -A` was safe until a
+subagent wrote concurrently; explicit-path `git add` was safe until a second seat committed from the
+same index. Both times the command was unchanged, the checkout was unchanged, and only the world
+around it moved. A rule that protects you *given* an assumption about who else is touching the
+index is care wearing a mechanism's clothes; `git commit -- <paths>` does not depend on that
+assumption, which is why it is the one that survives."

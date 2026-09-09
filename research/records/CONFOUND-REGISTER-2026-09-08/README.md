@@ -476,3 +476,36 @@ they will look — which is the whole argument for logging a latent defect at al
 It is also the day's recurring shape at the level of a cache: `state` is the quantity that *looks*
 like the cache's contents, and position lives one field away in `meta_state`. A round-trip through
 the obvious accessor is a check on the thing next to the mechanism.
+
+---
+
+## Audited and clear: twelve loop-closure sites, no recorded number affected
+
+**SWE-2's lint pass flagged twelve `B023` sites — a function defined in a loop closing over the loop
+variable. That class can mean a recorded figure was computed over the wrong iteration, so each was
+checked against the one question that decides it: is the closure called *inside* its defining
+iteration, or after it.**
+
+**All twelve are inside. Nothing on disk is affected.**
+
+The twelve ruff hits are four distinct closures; ruff reports one per captured variable per line.
+
+| script | closure | captures | called | verdict |
+|---|---|---|---|---|
+| `ARM-A-DIVERGENCE-2026-09-07/build_report.py:242` | `g(k)` | `row` | in the same `add(...)` on the next line | harmless |
+| `jlens-hosted-qwen35-4b-2026-09-05/query_cosine.py:69` | `med_cos(idx)` | `Qn` | next line, twice, same iteration | harmless |
+| `scripts/fixed_history_lens.py:263` | `turn_logp(m)` | `n_p`, `ids_full` | next line, three times, same iteration | harmless |
+| `scripts/cache_split_diagnostic.py:142` | `run_rest(cache)` | `cut`, `bS`, `ids` | lines 150, 153, 156, all in the same iteration | harmless |
+
+**One correction to the brief, and it makes the concern more reasonable rather than less.** The
+sites are not all "under `research/`": three are, and **nine are in `scripts/`**. But
+`fixed_history_lens.py` and `cache_split_diagnostic.py` are both cited as sources by the
+`ARM-A-DIVERGENCE-2026-09-07` report — the first in its own source line, the second by its
+`run-queue.sh` and `build_report.py`. **So the nine outside `research/` are the ones that most
+directly back published numbers**, and the audit would have been worth running even if the
+directory in the brief had been right.
+
+**Why a clean result is logged at all.** A negative audit that is not written down is an audit
+somebody runs again. The question that settles this class is one line — *called inside the loop or
+after it* — and recording the answer per site means the next lint pass over the same twelve costs a
+glance rather than an afternoon.
