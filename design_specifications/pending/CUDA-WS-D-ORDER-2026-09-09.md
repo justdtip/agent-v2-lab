@@ -281,6 +281,8 @@ runs form one provenance chain.
 
 ## The width-1 ladder, Chief, 2026-09-10 — `5b0feb7`/`15eddfa`: float32 has a useful interval at every layer, native bfloat16 has none; the width rows and the first map inside an interval are ordered
 
+*Superseded in part by the correction that follows it: five of its statements are withdrawn or narrowed on Codex's ladder audit.*
+
 Row 39, positions {8, 127}, six directions × three cotangents, both precisions, width 1 throughout,
 28 seconds of card time. Median relative error |d_h − a| / |a| against autograd on the same forward:
 
@@ -330,6 +332,8 @@ says so). Then the 12B smoke row alone, then the 12B exact fits with the capture
 D-CRO's by their own context; idle card time is the waste, an out-of-context seat the worse one.
 
 ## The width rows, Chief, 2026-09-10 — `9380e74`: in bfloat16 the derivative itself depends on the batch width; the lenses are fitted in float32 from here
+
+*Superseded in part: the same-anchor control below withdraws "no width-independent bf16 Jacobian" at layers 17 and 33 (the shift there is the anchor), and the width audit shows the width-64 ladder's step was eight times its rung; the float32 fitting policy stands on the float32 stability figures alone.*
 
 Relative change of the autograd directional derivative `a = (Jᵀw)ᵀv` from width 1 to width 64,
 over eighteen direction-and-cotangent pairs, nothing else changed:
@@ -440,6 +444,8 @@ digest and gate outcomes archived with each run.
 
 ## The first maps inside an interval, Chief, 2026-09-10 — `17bb82d`: the golden test passes on its own terms in float32 at width 1
 
+*Superseded in part: "worst relative difference" is the relative Frobenius error of the full layer map, and the float32 maps' repeat gate compared the reference with itself and is unexecuted (M1, M2 below).*
+
 | | first golden run | this one |
 |---|---|---|
 | precision | native bf16 | coherent float32, TF32 off, `highest` matmul |
@@ -474,6 +480,8 @@ where SWE-2's registry declaration meets the D-CRO's ν fields.
 
 ## The same-anchor control, Chief, 2026-09-10 — `5c1c004`/`6c94626`: the width shift is the anchor at depth and the arithmetic at the first layer; what survives everywhere is conditioning
 
+*Superseded in part: "a 0.19% move of the anchor" is one position's movement while the intervention moved the whole sequence (map-and-anchor audit, M3); the measured fact is a substantial change under the sampled displacement, and no condition number is claimed.*
+
 The protocol's same-anchor decomposition, fourteen seconds of card time, identity residual exactly
 0.0 in all 54 cells:
 
@@ -506,6 +514,8 @@ a fixture. Queued for the morning: R2's unreduced archive, the float32 no-op bou
 precision, `responses.npz` durable per unit, the capture code to the contract, P1–P6 with C2.
 
 ## The 12B smoke row and the 12B same-anchor control, Chief, 2026-09-10 — `a7467c0`: float32 at width 1 is comfortable at 12B and width-stable at every depth
+
+*Scope note: "at every depth" means the three sampled layers; the smoke fits one layer of one 128-token row and does not bound an all-layer or long-context graph (map-and-anchor audit).*
 
 Per-process allocated, width 1, idle card, 52 seconds across two runs:
 
@@ -541,6 +551,8 @@ fits with the captures only once the capture code meets the contract. `cuda-ws-d
 merged first thing.
 
 ## The float32 displacement control, Chief, 2026-09-10 — `e771c2b`: the conditioning is the function's, and an early-layer lens does not transport to a nearby anchor
+
+*Superseded in part: the amplification figures (539×, 245×, 46×, 39×, 1.4×) are withdrawn as condition estimates and "benign at the last block" does not follow from a median (M3 below; the layer-33 maximum is 91.9). The rule stands as policy: early-layer cross-path readings refused until the pairing is measured, and SWE-2's bridge refuses at every sampled layer.*
 
 The same anchor displacement the width change produced natively, applied in coherent float32 at
 width 1 with no schedule change, nine seconds of card time, 108 cells:
