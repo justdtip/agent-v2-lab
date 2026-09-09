@@ -100,6 +100,30 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
     ("prompt chars, min", "budget", "prompt_length_chars.min", 1824, r"minimum 1,824"),
     ("exploratory positions", "budget", "exploratory_stratum.positions_total", 15776,
      r"About 15,776 positions"),
+    # The cross-fitting folds. The digest is what the seal fixes, so it is pinned to the line that
+    # states it and the fold table is pinned row by row: a fold table that drifts from the
+    # assignment would be a description of folds nobody used.
+    ("fold assignment digest", "folds", "assignment_sha256",
+     "c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c",
+     r"`c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c`"),
+    ("fold seed", "folds", "seed", 20260910, r"Seed \*\*20260910\*\*"),
+    ("folds", "folds", "folds", 5, r"K = 5 folds, assigned by"),
+    ("fold 0 size", "folds", "per_fold.0", 220, r"\| 0 \| 220 \| 108 \| 47 \| 38 \| 10 \| 11 \| 6 \|"),
+    ("fold 1 size", "folds", "per_fold.1", 232, r"\| 1 \| 232 \| 111 \| 50 \| 38 \| 15 \| 12 \| 6 \|"),
+    ("fold 2 size", "folds", "per_fold.2", 226, r"\| 2 \| 226 \| 110 \| 50 \| 34 \| 15 \| 11 \| 6 \|"),
+    ("fold 3 size", "folds", "per_fold.3", 224, r"\| 3 \| 224 \| 112 \| 48 \| 34 \| 12 \| 12 \| 6 \|"),
+    ("fold 4 size", "folds", "per_fold.4", 226, r"\| 4 \| 226 \| 109 \| 49 \| 38 \| 12 \| 12 \| 6 \|"),
+    ("episodes in the folds", "folds", "episodes", 1128, r"K = 5 folds"),
+    # The tolerance rows. Each pins its n beside the n it needs, because that pairing is the whole
+    # point of the table and the place two roundings were caught.
+    ("eps_main row", "inputs", "tasks.per_split.test", 240,
+     r"E1 on the test split \| episodes \| 240 \| \*\*0\.17\*\* \| 214"),
+    ("eps_ord row", "inputs", "tasks.per_split.train", 840,
+     r"train split \| episodes \| 840 \| \*\*0\.09\*\* \| 763"),
+    ("corrective pooled row", "inputs", "e2_transition_census.by_kind.into_recovery", 244,
+     r"contiguous \(`transient`\) \| 244 \| 0\.1591 \| \*\*0\.16\*\* \| 242"),
+    ("across a gap row", "inputs", "e2_transition_census.by_kind.into_recovery_across_a_gap", 309,
+     r"across a gap \| 309 \| 0\.1414 \| \*\*0\.15\*\* \| 275"),
 )
 
 
@@ -132,6 +156,7 @@ def artefacts() -> dict[str, object]:
     return {
         "inputs": json.loads((HERE / "prereg-inputs.json").read_text()),
         "budget": json.loads((HERE / "capture-budget.json").read_text()),
+        "folds": json.loads((HERE / "folds.json").read_text()),
         "file": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                  for path in sorted(HERE.iterdir()) if path.is_file()},
     }
@@ -174,6 +199,8 @@ def main() -> int:
         print(f"{len(failures)} claim(s) do not check out: {', '.join(failures)}")
         return 1
     print(f"all {len(CLAIMS) + 12} claims check out against the computed artefacts.")
+    print("  (coverage is what these claims pin, not the whole document; a section with no claim "
+          "here is unchecked, not verified)")
     return 0
 
 
