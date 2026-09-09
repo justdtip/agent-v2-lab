@@ -147,3 +147,46 @@ readings wait for the 12B lens and the 12B dictionary readout, as §16.18 says.
 The draft stays a record README and is not edited to match this order; it is cited by commit, and
 the pre-registration is the document that carries the rulings. Builders' notes go in the record.
 Nothing in this order is a result.
+
+## Amendment, Chief, 2026-09-10 — the count reproduced at `3f6516b`, with two corrections to §1 and four additions, all ruled
+
+**My count had an unstated basis, and it was my error.** The script that produced §1 keyed rows by
+`(task_id, step)` in a dictionary and so overwrote every row sharing a key. The D-CRO's
+`count_corpus.py` reproduces nine of the eleven figures to the digit on the raw corpus and the other
+two on the deduplicated basis I used without saying so: 930 of the 8,559 rows carrying a `task_id`
+share their key with another row; deduplicated, 7,629 rows, 6,501 consecutive pairs, a maximum of
+17 decisions. Both bases are in the record; the non-prefix fraction is 69.4% on mine and 60.7%
+raw, and Fact 3 holds on either. §1's figures stand with their basis named.
+
+**A1. The duplicates are the transient retry, and R3 gains a clause.** A `transient` task
+re-issues the same action and the corpus labels both rows with the same step index, correctly: a
+retry is the same plan step re-executed, and progress does not advance across it. The update rule
+of E2 therefore predicts **no advance at a retry**, +1 on an ordinary turn, and the recovery cost
+at a perturbation. The 244 transient tasks are the stratum that refutes any rule that advances
+every turn, and they are named as such in the pre-registration.
+
+**A2. Not every decision is a rendered row.** 334 tasks are missing exactly one step, and the split
+by variant is total: `clean` 0 of 550, `transient` 0 of 244, `failed_edit` 58 of 58, `stale_path`
+30 of 30, `unknown_tool` 64 of 64, `wrong_path` 182 of 182. The renderer drops a row whose
+observation begins `ERROR` unless the step is an injected fault. Fact 1 survives, because the
+dropped turn is still in the context and the turn count is still the step index. What does not
+survive is any horizon inferred from a row count, which is one short on 334 tasks: **the horizon
+comes from the task definition, `Task.horizon`, never from counting rows**, and the
+pre-registration says which decisions of each task have no rendered row.
+
+**A3. R6's addressing was ambiguous.** `(task_id, step)` collides 930 times. The capture key is
+`(task_id, step, occurrence)` with the occurrence index counted in row order within the task, plus
+the capture-time row ordinal and the sha256 of the rendered prompt, all in the manifest. This is
+fixed before a single capture is written under it.
+
+**A4. The rendered corpus is not on the card.** `data/agent_v2e-gemma3-4b/` (three splits, about
+170 MB) is a blocking input to R6 exactly as the lens corpus was. It ships outside the shared
+checkout at `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, through `lab-device pack-data` and
+`verify-data`, never a bare `tar`; the archive's digest goes into the pre-registration so the
+captured rows are the counted rows. Shipping is the Chief's, tonight, no GPU.
+
+**On the pre-registration:** draft it now, on the laptop, carrying §1 with its basis, A1–A3, R2's
+labels, R4's restated H2, R5's ladder and the twelve exploratory episodes by `task_id`, and the
+corpus digest from A4 once it exists. **Do not seal it** until the golden-test design has landed
+and the capture pass is scheduled: the seal is the last act before a capture is read, and the two
+streams share the machinery but not the clock.
