@@ -235,7 +235,7 @@ def test_the_cuda_form_takes_an_index_a_string_none_or_all(torch_cpu, monkeypatc
     # 0.95 of each card under the Director's rule of 2026-09-10; the laptop keeps 0.6.
     assert device.budget(device="all") == {0: 950, 1: int(0.95 * 1001)}
     assert device.budget(fraction=0.6, device="all") == {0: 600, 1: int(0.6 * 1001)}
-    assert device.budget() == 600
+    assert device.budget() == 950
     device.clear_cache()
 
 
