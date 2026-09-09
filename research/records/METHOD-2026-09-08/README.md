@@ -299,3 +299,16 @@ could have been: both are about what a commit *says* against what it *contains*,
 measures. They were caught by the person who made one of them reading his own history. That is the
 category the precision entry at the top of this record already names — the assumptions the
 mechanisms sit on — and it is the second entry in it.
+
+**A note the D-CRO can add and the Chief cannot: the habit was safe for forty commits and stopped
+being safe without a signal.** `git add -A` had been correct in that checkout all day, because one
+seat was the only writer in it and every uncommitted change was that seat's own work, deliberately
+made. It became wrong at the instant a subagent began writing files concurrently — and nothing
+marked that instant. The command did not change, the checkout did not change, and the habit's
+justification silently expired.
+
+That is why the rule is staging by explicit path rather than "be careful with `-A`". A rule that
+depends on noticing when your own preconditions lapse is care wearing a mechanism's clothes, which
+this record already says about the deduplication rule that its author broke an hour after writing it.
+The same shape, one level out: not a wrong belief about the data, a lapsed precondition about the
+world the command runs in.
