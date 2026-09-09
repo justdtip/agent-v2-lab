@@ -355,3 +355,59 @@ with its diagnostic scored over swapped-state pairs in both the pilot and the ma
 SWE-1's sampler is on `cuda-migration`, the sampled branch of §2 on the policy seam, the refusal
 lifted by name and the estimand named per mode as now. The device driver's three obligations stand
 as listed in the addendum.
+
+**D10's two-file maker, D-CRO, 2026-09-10 — the relation test is generated and scored in both
+stages, and one construction the order did not specify is flagged.**
+
+`family.make_relation_pairs` builds a `RelationPair`: one directory with two named summaries, two
+episodes with swapped states (A present and B absent, then A absent and B present), one prompt
+string in both that names the two files and not their states. Both experts replay cleanly through
+the real environment. The pilot and the main run generate one relation pair per matched pair and
+run both episodes (arms `T1`/`T2`); D1–D9 are scored on file B's context in each episode, and D10 is
+scored over the two episodes and carried on the `T2` row, so a reader finds the relation where its
+second half was decided. The main run resumes relation pairs on the same key as the rest.
+
+**The construction to review.** The derivation table contrasts arm E against arm A, and D10 is a
+single indicator per relation pair with no arms of its own. It enters the table as a contrast
+against its own negation: E is "the action on B follows B's state" (D10), A is "the action on B
+follows A's state" (`D10_follows_A`), and under swapped states A's state is the negation of B's in
+every episode, so the two indicators are logical negations wherever both are scorable. A policy
+that acts on B by B's state contrasts at +1, one that acts on B by A's state at −1, and chance at 0,
+which the drop rule drops. This is the relation test's own sentence — "the one B's state implies,
+not A's" — turned into the table's shape, derived from the same rows and never scored separately.
+The relation estimand reports the distance from "the action on B always follows B's state" at the
+substitution tolerance, since it is a substitution claim about file B. If the Chief wants the
+relation held out of the table and reported only as its own estimand, the change is one branch in
+`derive_tolerances`.
+
+Regenerated fixture record: 60 pilot rows and 60 main rows (six arms per pair); retained D1, D4,
+D5, **D10** (M = 4), `n = 82`; relation passes by construction under the scripted expert, as the
+other stub-facing estimands do and as labelled; predictive untestable; dynamic not measured. 51
+state tests; the full suite exits 0 on the branch.
+
+The near-miss of the last round is the method record's twenty-ninth entry, in my name, with the
+gating I redid it with as the rule.
+
+**The sampled branch of §2, D-CRO, 2026-09-10 — built on the sampler's presence, the refusal
+lifted by name.** SWE-1's sampler is on `cuda-migration` at b29c509 (`pipeline/sampled_decode.py`,
+`runner.torch_sampled_stream`). The script now imports it by name: present, `--decoding sampled`
+constructs a `SampledDecoding` and runs whole; absent from the branch the script runs from, the
+refusal stands, worded as before; a real import failure inside the sampler is raised, not read as
+absence — the same discrimination the lens-fit seam uses. There is no `--temperature` flag any
+more: the sampled object owns the temperature and refuses any value but the ruled one by name, so
+a second place to say it would only be a second place to say it wrongly.
+
+The manifest's `decoding` block is `decoding_manifest`'s for either mode, with the estimand named
+per mode beside it: a greedy record carries no temperature and no seed because greedy has neither;
+a sampled record carries temperature 1.0, truncation `none`, the sampler's name and backend, the
+seed and where it came from, the kernel set and the reproducibility note. The seal carries the
+block, and **the resume key carries the mode**, so a greedy record is never resumed as a sampled
+one; the refusal names `decoding_mode`. On the laptop the seed is stated (`--seed`); on the device
+it is `None` and reads the pin, which the non-fixture preflight already requires.
+
+**What a fixture run proves about the sampled mode, stated so it is not over-read:** the plumbing
+and the provenance. The scripted policy decodes nothing, so no draw happens here; the draws are the
+device driver's, which hands the same `SampledDecoding` to the runner as its sampler. The sampled
+fixture run is a test, not a committed record; the committed record stays greedy.
+
+54 state tests; the full suite exits 0 on the branch.

@@ -2,26 +2,31 @@
   "arm_means": {
     "A_base": {
       "D1": 0.0,
+      "D10": null,
       "D4": 0.0,
       "D5": 1.0
     },
     "A_control": {
       "D1": 0.0,
+      "D10": null,
       "D4": 0.0,
       "D5": 1.0
     },
     "A_reuse": {
       "D1": 1.0,
+      "D10": null,
       "D4": 1.0,
       "D5": 0.0
     },
     "A_substitution": {
       "D1": 1.0,
+      "D10": null,
       "D4": 1.0,
       "D5": 0.0
     },
     "E_base": {
       "D1": 1.0,
+      "D10": null,
       "D4": 1.0,
       "D5": 0.0
     },
@@ -53,6 +58,14 @@
       "rows": 3,
       "tolerance": 0.0,
       "untestable": true
+    },
+    "relation": {
+      "distance": 0.0,
+      "measured": true,
+      "passes": true,
+      "rows": 5,
+      "tolerance": 0.25,
+      "untestable": false
     },
     "reuse": {
       "distance": 0.0,
@@ -87,9 +100,10 @@
   "retained": [
     "D1",
     "D4",
-    "D5"
+    "D5",
+    "D10"
   ],
-  "rows": 50,
+  "rows": 60,
   "rule": "an estimand with no scorable row is measured: false; a zero tolerance is untestable; neither is a pass",
   "schema_version": 2
 }

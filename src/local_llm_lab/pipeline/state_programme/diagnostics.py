@@ -161,6 +161,27 @@ def d10_relation(pair_a: Context, pair_b: Context) -> float | None:
     return 1.0 if (a == float(a_present)) and (b == float(b_present)) else 0.0
 
 
+def d10_follows_a(ctx_b_ep1: Context, ctx_b_ep2: Context, ctx_a_ep1: Context, ctx_a_ep2: Context) -> float | None:
+    """The relation test's other arm: the action on file B follows **A's** state.
+
+    Under swapped states A's state is the negation of B's in every episode, so this is the logical
+    negation of :func:`d10_relation` wherever both are scorable. Recording it as the "A" arm turns
+    D10 into an ordinary E-versus-A contrast for the derivation table: a policy that acts on B by
+    B's state contrasts at +1, one that acts on B by A's state at −1, and chance at 0, which the drop
+    rule drops. It is derived from the same rows and never scored separately by a model.
+    """
+    b = d10_relation(ctx_b_ep1, ctx_b_ep2)
+    if b is None:
+        return None
+    return 1.0 - b
+
+
+def relation_scores(ctx_b_ep1: Context, ctx_b_ep2: Context) -> dict[str, float | None]:
+    """D10 for the E arm and its A-arm negation, from B's context in the two episodes."""
+    b = d10_relation(ctx_b_ep1, ctx_b_ep2)
+    return {"D10": b, "D10_follows_A": None if b is None else 1.0 - b}
+
+
 DIAGNOSTICS: dict[str, Callable[[Context], float | None]] = {
     "D1": d1_reads_target,
     "D2": d2_searches,
@@ -181,4 +202,5 @@ def score(c: Context) -> dict[str, float | None]:
     return {name: fn(c) for name, fn in DIAGNOSTICS.items()}
 
 
-__all__ = ["DIAGNOSTICS", "M", "RELATION", "Context", "d10_relation", "score"]
+__all__ = ["DIAGNOSTICS", "M", "RELATION", "Context", "d10_follows_a", "d10_relation",
+           "relation_scores", "score"]

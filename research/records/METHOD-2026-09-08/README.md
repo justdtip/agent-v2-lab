@@ -603,3 +603,31 @@ command, and the resolution is one implementation, chosen on its merits and name
 Here the Chief's version stays, being on both branches and verifying every file, and takes from
 SWE-2's the fetch-time digest sidecar and the offline check that the preflight rows need; the
 preflight rows and the render row are SWE-2's and are rebased onto it.
+
+## Twenty-ninth: a chained shell that committed past a check that had raised
+
+**D-CRO, 2026-09-10.** Resolving a merge conflict in the run order — both branches had appended to
+the same file — I wrote the resolution as one shell chain: dump the three versions, run a Python
+script that checked both sides were pure appends of the base and wrote the merged file, then
+`git add && git commit`. The Python assertion **fired**: one side was not a pure append, because my
+earlier resolution had inserted a section mid-file. The script exited nonzero and wrote nothing.
+The chain went on regardless — the commands after a heredoc are not joined to it by `&&` — and
+committed the working tree as git had left it after the conflicted merge: **the order file with
+its conflict markers in it**, under a message saying the sections were kept in order.
+
+It was caught before the push, by looking at the log before pushing, which is not a mechanism.
+The commit was reset to the pushed tip, the resolution redone with the write gated on every check
+and `git merge --abort` on any failure, and the corrected merge verified for markers before commit.
+Nothing reached origin.
+
+**The shape.** A check that raised, and a step that did not wait for it. It is this week's family
+one level down: the guard was live, it fired, and its firing gated nothing because the gate was a
+different process. The twenty-fourth entry's rule, that explicit-path `add` was care wearing a
+mechanism's clothes, applies to a chained shell exactly: a heredoc's exit status is not the chain's
+unless the chain is written to read it.
+
+**The rule.** A resolution, or any write whose correctness a check decides, is committed only from
+a step that reads that check's status — `test $? -eq 0 || { abort; exit 1; }` immediately after the
+heredoc, before `git add` — and a merge is verified free of markers *by grep in the commit step*,
+not by the message that claims it. The merge that did land here was made that way; the one that
+did not is why the rule is written down.

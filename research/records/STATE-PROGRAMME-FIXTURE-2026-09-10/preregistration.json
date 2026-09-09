@@ -2,24 +2,27 @@
   "budget": {
     "epsilon_sub_derived": 0.25,
     "epsilon_sub_final": 0.25,
-    "hours_at_derived": 9.08983293629717e-06,
+    "hours_at_derived": 1.0480117810571014e-05,
     "hours_bought": 100.0,
-    "hours_final": 9.08983293629717e-06,
+    "hours_final": 1.0480117810571014e-05,
     "loosened": false,
-    "n_at_derived": 77,
-    "n_final": 77,
-    "rate_per_hour": 33884011.08782828,
+    "n_at_derived": 82,
+    "n_final": 82,
+    "rate_per_hour": 31297358.0954553,
     "reason": "within budget at the derived tolerance"
   },
   "decoding": {
     "estimand": "context-averaged outcome frequency over the task distribution (one outcome per context)",
     "mode": "greedy",
-    "seed": 20260910,
-    "temperature": null
+    "sampler": {
+      "backend": "torch",
+      "function": "argmax in float32",
+      "name": "torch_greedy_stream"
+    }
   },
   "derived_from": {
-    "pilot_row_count": 40,
-    "pilot_rows_sha256": "3e85f3bceea9ab17777cec27e36569b4b6ffc211fa321e45ba9ae103da538bc1"
+    "pilot_row_count": 60,
+    "pilot_rows_sha256": "4d28d02fb9abb52d3b6f54f597c0aee14d6a84a1b57b56bd764b0dd93dabcb66"
   },
   "rules": {
     "budget": "over budget loosens epsilon_sub and writes both numbers; never fewer diagnostics, never no control",
@@ -28,7 +31,7 @@
   },
   "schema_version": 1,
   "tolerances": {
-    "M": 3,
+    "M": 4,
     "alpha": 0.05,
     "d_min": 1.0,
     "derivation": {
@@ -82,11 +85,12 @@
     "epsilon_pred": 0.0,
     "epsilon_reuse": 0.25,
     "epsilon_sub": 0.25,
-    "n": 77,
+    "n": 82,
     "retained": [
       "D1",
       "D4",
-      "D5"
+      "D5",
+      "D10"
     ]
   }
 }

@@ -56,8 +56,10 @@ def test_rate_is_measured_here_and_the_pilot_has_both_arms_and_a_reliability_arm
     rate = json.loads((out / "rate.json").read_text())
     rows = read_rows(out / "pilot" / "rows.jsonl")
     assert rate["basis"] == "measured-here" and rate["mode"] == "greedy"
-    assert rate["episodes"] == len(rows) == 5 * 2 + 5 * 2
-    assert {r["arm"] for r in rows} == {"E", "A", "RE", "RA"}
+    assert rate["episodes"] == len(rows) == 5 * 2 + 5 * 2 + 5 * 2
+    assert {r["arm"] for r in rows} == {"E", "A", "RE", "RA", "T1", "T2"}
+    # The relation test is generated and scored in the pilot: D10 on every second episode.
+    assert all("D10" in r["scores"] for r in rows if r["arm"] == "T2")
     assert any(r["falsified"] for r in rows if r["arm"].startswith("R"))
     # A falsified exists-arm episode was told the file is absent, and the scripted expert still
     # tried to read it: the diagnostics see a contradiction, so D7 is scorable there.
@@ -70,10 +72,11 @@ def test_the_seal_carries_the_derived_table_and_the_pilot_digest(tmp_path) -> No
     _fixture_run(out)
     seal = require_seal(out)
     t = seal["tolerances"]
-    assert set(t["retained"]) <= {f"D{i}" for i in range(1, 10)} and t["M"] == len(t["retained"])
+    assert set(t["retained"]) <= {f"D{i}" for i in range(1, 11)} and t["M"] == len(t["retained"])
     assert "D1" in t["retained"] and "D5" in t["retained"], "the expert's contrast is exact"
+    assert "D10" in t["retained"], "the relation contrast is +1 under the expert and is retained"
     assert t["epsilon_sub"] == t["d_min"] / 4 and t["n"] >= 1
-    assert seal["derived_from"]["pilot_row_count"] == 20
+    assert seal["derived_from"]["pilot_row_count"] == 30  # 5 pairs x (E, A, RE, RA, T1, T2)
     assert len(seal["derived_from"]["pilot_rows_sha256"]) == 64
     assert seal["budget"]["reason"]
 
@@ -107,7 +110,10 @@ def test_estimands_are_distances_with_tolerances_and_the_stub_says_it_is_a_stub(
     out = tmp_path / "rec"
     _fixture_run(out)
     e = json.loads((out / "estimands.json").read_text())
-    assert set(e["estimands"]) == {"substitution", "specificity", "reuse", "predictive", "dynamic"}
+    assert set(e["estimands"]) == {
+        "substitution", "specificity", "reuse", "predictive", "dynamic", "relation"
+    }
+    assert e["estimands"]["relation"]["measured"] and e["estimands"]["relation"]["distance"] == 0.0
     keys = {"distance", "tolerance", "rows", "measured", "untestable", "passes"}
     assert all(keys <= set(v) for v in e["estimands"].values())
     assert "coefficient table" in e["level"]
@@ -122,7 +128,7 @@ def test_the_main_run_carries_the_reliability_arm_so_a_contradiction_can_exist(t
     _fixture_run(out)
     rows = read_rows(out / "main" / "rows.jsonl")
     arms = {r["arm"] for r in rows if r["condition"] == "base"}
-    assert arms == {"E", "A", "RE", "RA"}
+    assert arms == {"E", "A", "RE", "RA", "T1", "T2"}
     base = [r for r in rows if r["condition"] == "base"]
     assert any(r["falsified"] for r in base if r["arm"] in ("RE", "RA"))
     assert all(r["falsified"] is False for r in base if r["arm"] in ("E", "A"))
@@ -163,7 +169,7 @@ def test_a_non_fixture_preflight_refuses_an_unpinned_device(tmp_path, monkeypatc
     monkeypatch.setattr(device, "describe", lambda: {"determinism": "UNPINNED", "python": "x"})
     inputs = dict(registry_name="r", checkpoint_digest="d", lens_identity={"base": "b"},
                   dictionary_layers={"1": "h"}, wrapper_version="w", decoding="greedy",
-                  temperature=None, seed=1, fault_rate=0.1, fault_seed=1)
+                  seed=1, fault_rate=0.1, fault_seed=1)
     with pytest.raises(ValueError, match="UNPINNED"):
         sp.preflight(root=ROOT, fixture=False, **inputs)
     assert sp.preflight(root=ROOT, fixture=True, **inputs)["device"]["determinism"] == "UNPINNED"
@@ -181,10 +187,77 @@ def test_the_readme_is_written_from_the_files_and_names_each_ones_source(tmp_pat
     assert "untestable (degenerate tolerance)" in text
 
 
-def test_sampled_decoding_is_refused_by_name_until_it_is_built(tmp_path, capsys) -> None:
+def test_sampled_decoding_is_refused_by_name_only_where_the_sampler_is_absent(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    """The refusal is lifted by the sampler's presence, not by a flag: absent, it refuses by
+    name; a real import failure inside the sampler is raised, not read as absence."""
+    import importlib
+
+    real = importlib.import_module
+    module = "local_llm_lab.pipeline.sampled_decode"
+
+    def absent(name, *a, **k):
+        if name == module:
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(importlib, "import_module", absent)
     assert _cli().main(["--out", str(tmp_path / "s"), "--decoding", "sampled", "--fixture"]) == 3
     err = capsys.readouterr().err
-    assert "ruled" in err and "SWE-1" in err and "refused by name" in err
+    assert "ruled" in err and module in err and "refused by name" in err
+
+    def broken(name, *a, **k):
+        if name == module:
+            raise ModuleNotFoundError("No module named 'torch'", name="torch")
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(importlib, "import_module", broken)
+    with pytest.raises(ModuleNotFoundError, match="torch"):
+        _cli().main(["--out", str(tmp_path / "t"), "--decoding", "sampled", "--fixture"])
+
+
+def test_the_sampled_branch_runs_whole_and_records_the_ruling_in_its_manifest(tmp_path) -> None:
+    """§2's sampled branch on fixtures: the plumbing and the provenance, not a draw."""
+    out = tmp_path / "rec"
+    argv = ["--out", str(out), "--decoding", "sampled", "--fixture", "--pilot-pairs", "3",
+            "--main-pairs", "2", "--fault-rate", "0.4", "--seed", "11"]
+    assert _cli().main(argv) == 0
+    manifest = json.loads((out / "manifest.json").read_text())
+    d = manifest["decoding"]
+    assert d["mode"] == "sampled" and d["temperature"] == 1.0 and d["truncation"] == "none"
+    assert d["sampler"] == {
+        "name": "torch_sampled_stream",
+        "function": "torch.multinomial over the full softmax",
+        "backend": "torch",
+    }
+    assert d["seed"] == 11 and d["seed_source"] and "kernel" in d["note"].lower()
+    assert "distribution" in d["estimand"] and "context-averaged" not in d["estimand"]
+    assert json.loads((out / "rate.json").read_text())["mode"] == "sampled"
+    assert json.loads((out / "preregistration.json").read_text())["decoding"]["mode"] == "sampled"
+    rows = read_rows(out / "main" / "rows.jsonl")
+    assert all(r["resume_parts"]["decoding_mode"] == "sampled" for r in rows)
+
+
+def test_a_greedy_manifest_carries_no_temperature_and_no_seed_in_its_decoding_block(tmp_path):
+    out = tmp_path / "rec"
+    _fixture_run(out)
+    d = json.loads((out / "manifest.json").read_text())["decoding"]
+    assert d["mode"] == "greedy" and d["sampler"]["name"] == "torch_greedy_stream"
+    assert "temperature" not in d and "seed" not in d
+    assert "context-averaged" in d["estimand"]
+
+
+def test_a_greedy_record_is_not_resumed_as_a_sampled_one(tmp_path) -> None:
+    out = tmp_path / "rec"
+    _fixture_run(out)
+    manifest = json.loads((out / "manifest.json").read_text())
+    sampled = dict(manifest, decoding=dict(manifest["decoding"], mode="sampled"))
+    policy = sp.ScriptedPolicy()
+    pairs = make_existence_pairs("main", 3, 1, seed="20260910:main")
+    with pytest.raises(RuntimeError, match=r"differ: \['decoding_mode'\]"):
+        sp.main_run(out, manifest=sampled, pairs=pairs, policy=policy,
+                    wrapper=sp.scripted_wrapper(policy, pairs))
 
 
 def test_a_non_empty_record_directory_is_refused(tmp_path) -> None:
