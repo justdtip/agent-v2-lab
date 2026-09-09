@@ -108,6 +108,25 @@ modules' `is_sliding`, which must agree: five global layers in the 4B (blocks 6,
 eight in the 12B, every sixth block, checked on the device. Reported per model. This is the reviewer's carrier question measured directly,
 and the ruling of this morning in the run orders cites it.
 
+## W-3b. The carrier masked
+
+*The D-CRO measured (`carrier_ablation.py`, pre-registration §4.3) that on this corpus the note
+carries the step five times over in one sentence and no text-removal rule strips the progress
+without changing the next-action clause for eleven of twelve families, so the reviewer's carrier
+ablation cannot be done in the text without changing the task. It can be done in the attention.*
+
+On the 300-sample, per decision, a second and third forward beside the ordinary one: the carrier
+spans masked **as keys** for every query at or after the current turn's start (the task statement
+never masked; kinds selectable — the notes, the calls, the results, the hidden placeholders, each
+alone and all together), and a **random-span mask of equal token count** as the control. Read at
+`P_note` and `P_act`: the model's own six-tool distribution and the lens readout per layer, against
+the unmasked forward. A taken action that survives the mask was carried in the residual before the
+mask point; one that snaps to the tool prior was re-read from the carrier; the random control says
+how much any mask of that size costs. Reported per kind, per model, with the unmasked and the
+random arms beside, three-state. **Not the pre-registered E2 arm**: if it behaves, it becomes E2's
+ablation arm by a later ruling; the pre-registration keeps *arm not constructible in the text* and
+promises nothing here.
+
 ## W-4. Report or computation
 
 *Is the action already readable where the note begins, so the note reports a decision made, or only
