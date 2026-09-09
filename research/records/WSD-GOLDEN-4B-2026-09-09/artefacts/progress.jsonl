@@ -1,0 +1,50 @@
+{"event": "pinned", "elapsed_s": 1.03, "determinism": "pinned"}
+{"event": "loaded", "elapsed_s": 5.73, "seconds": 4.69, "dtype": "bfloat16", "device": "cuda", "attn": "eager", "checkpoint_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff"}
+{"event": "wrapped", "elapsed_s": 5.74, "n_layers": 34, "d_model": 2560, "upstream": {"repository": "neuronpedia/jacobian-lens", "licence": "Apache-2.0", "path": "/workspace/agent-v2-lab/.venv/lib/python3.13/site-packages", "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e", "expected_commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e", "commit_matches_expected": true, "vendored": false}}
+{"event": "wrote", "elapsed_s": 5.8, "file": "manifest.json", "bytes": 2649}
+{"event": "exact_fit", "elapsed_s": 21.24, "seconds": 15.44, "layers": 33, "n_prompts": 1, "n_valid": 2, "peak_gib": 43.949, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 109.06, "file": "exact-maps.npz", "layers": 33}
+{"event": "gate_exactness", "elapsed_s": 124.9, "state": "passed", "expected": 0.0, "measured": 0.0, "seconds": 15.84, "basis": "measured-here"}
+{"event": "fd_layer", "elapsed_s": 48.4, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 0, "layers_done": 1, "layers_total": 33, "epsilon": 101.567939453125}
+{"event": "fd_layer", "elapsed_s": 97.5, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 1, "layers_done": 2, "layers_total": 33, "epsilon": 108.12462890625}
+{"event": "fd_layer", "elapsed_s": 147.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 2, "layers_done": 3, "layers_total": 33, "epsilon": 139.979990234375}
+{"event": "fd_layer", "elapsed_s": 196.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 3, "layers_done": 4, "layers_total": 33, "epsilon": 142.251630859375}
+{"event": "fd_layer", "elapsed_s": 246.7, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 4, "layers_done": 5, "layers_total": 33, "epsilon": 283.35013671875}
+{"event": "fd_layer", "elapsed_s": 296.7, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 5, "layers_done": 6, "layers_total": 33, "epsilon": 349.55359375}
+{"event": "fd_layer", "elapsed_s": 346.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 6, "layers_done": 7, "layers_total": 33, "epsilon": 395.45761718750003}
+{"event": "fd_layer", "elapsed_s": 396.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 7, "layers_done": 8, "layers_total": 33, "epsilon": 528.959453125}
+{"event": "fd_layer", "elapsed_s": 446.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 8, "layers_done": 9, "layers_total": 33, "epsilon": 769.13609375}
+{"event": "fd_layer", "elapsed_s": 496.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 9, "layers_done": 10, "layers_total": 33, "epsilon": 925.345859375}
+{"event": "fd_layer", "elapsed_s": 546.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 10, "layers_done": 11, "layers_total": 33, "epsilon": 1406.00140625}
+{"event": "fd_layer", "elapsed_s": 596.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 11, "layers_done": 12, "layers_total": 33, "epsilon": 1807.92390625}
+{"event": "fd_layer", "elapsed_s": 646.8, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 12, "layers_done": 13, "layers_total": 33, "epsilon": 2002.1976562500001}
+{"event": "fd_layer", "elapsed_s": 696.9, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 13, "layers_done": 14, "layers_total": 33, "epsilon": 2148.4146875}
+{"event": "fd_layer", "elapsed_s": 746.9, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 14, "layers_done": 15, "layers_total": 33, "epsilon": 2360.43625}
+{"event": "fd_layer", "elapsed_s": 796.9, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 15, "layers_done": 16, "layers_total": 33, "epsilon": 2627.25875}
+{"event": "fd_layer", "elapsed_s": 846.9, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 16, "layers_done": 17, "layers_total": 33, "epsilon": 3011.375}
+{"event": "fd_layer", "elapsed_s": 897.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 17, "layers_done": 18, "layers_total": 33, "epsilon": 3178.854375}
+{"event": "fd_layer", "elapsed_s": 956.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 18, "layers_done": 19, "layers_total": 33, "epsilon": 3327.3093750000003}
+{"event": "fd_layer", "elapsed_s": 1006.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 19, "layers_done": 20, "layers_total": 33, "epsilon": 3509.9353125000002}
+{"event": "fd_layer", "elapsed_s": 1056.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 20, "layers_done": 21, "layers_total": 33, "epsilon": 3662.8296875}
+{"event": "fd_layer", "elapsed_s": 1106.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 21, "layers_done": 22, "layers_total": 33, "epsilon": 3851.0593750000003}
+{"event": "fd_layer", "elapsed_s": 1156.0, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 22, "layers_done": 23, "layers_total": 33, "epsilon": 4111.6196875000005}
+{"event": "fd_layer", "elapsed_s": 1206.1, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 23, "layers_done": 24, "layers_total": 33, "epsilon": 4138.290625}
+{"event": "fd_layer", "elapsed_s": 1256.1, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 24, "layers_done": 25, "layers_total": 33, "epsilon": 4343.8228125000005}
+{"event": "fd_layer", "elapsed_s": 1306.1, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 25, "layers_done": 26, "layers_total": 33, "epsilon": 4681.2265625}
+{"event": "fd_layer", "elapsed_s": 1356.2, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 26, "layers_done": 27, "layers_total": 33, "epsilon": 5122.1140625}
+{"event": "fd_layer", "elapsed_s": 1406.2, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 27, "layers_done": 28, "layers_total": 33, "epsilon": 5640.636875}
+{"event": "fd_layer", "elapsed_s": 1456.2, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 28, "layers_done": 29, "layers_total": 33, "epsilon": 6635.25125}
+{"event": "fd_layer", "elapsed_s": 1506.2, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 29, "layers_done": 30, "layers_total": 33, "epsilon": 6952.855625}
+{"event": "fd_layer", "elapsed_s": 1556.3, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 30, "layers_done": 31, "layers_total": 33, "epsilon": 7504.82}
+{"event": "fd_layer", "elapsed_s": 1606.3, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 31, "layers_done": 32, "layers_total": 33, "epsilon": 7693.88}
+{"event": "fd_layer", "elapsed_s": 1656.3, "estimator": "finite-difference", "row_index": 39, "upstream_layer": 32, "layers_done": 33, "layers_total": 33, "epsilon": 8817.745}
+{"event": "fd_row", "elapsed_s": 1781.2, "estimator": "finite-difference", "index": 39, "seq_len": 128, "n_valid_positions": 2, "split": "held"}
+{"event": "fd_fit", "elapsed_s": 1781.36, "seconds": 1656.45, "layers": 33, "capture_dtype": "native", "peak_gib": 10.25, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 1802.97, "file": "fd-maps.npz", "layers": 33}
+{"event": "epsilon_schedule", "elapsed_s": 1852.52, "upstream_layer": 16, "repo_layer": 17, "epsilon_scale_coarse": 0.01, "epsilon_scale_fine": 0.005, "residual_coarse": 0.9725245889056763, "residual_fine": 0.8435972357934115, "ratio": 1.1528304594206111, "laptop_basis_ratio": 3.9, "basis": "measured-here", "seconds": 49.55}
+{"event": "control_wrong_corpus", "elapsed_s": 1868.01, "seconds": 15.48, "row_index": 84, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 1868.01, "file": "nu-exact.json", "bytes": 3821}
+{"event": "wrote", "elapsed_s": 1868.01, "file": "nu-finite-difference.json", "bytes": 8077}
+{"event": "wrote", "elapsed_s": 1873.7, "file": "golden-report.json", "bytes": 13528}
+{"event": "golden", "elapsed_s": 1873.7, "worst": 1.0245060303809754, "at_or_below_floor": false, "controls": {"transposed": true, "layer_shifted": true, "wrong_corpus": true}, "basis": "measured-here"}
+{"event": "done", "elapsed_s": 1873.7, "total_minutes": 31.23}

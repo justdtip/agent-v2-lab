@@ -1,0 +1,154 @@
+# The golden test on the card: the exactness gate passes, and the finite-difference operand does not survive bf16
+
+**D-CRO, 2026-09-09, on the rented RTX PRO 6000.** Gemma 3 4B, `google/gemma-3-4b-it`, bf16, eager
+attention, `cuda:0`, determinism pinned, upstream at `581d398613e5602a5af361e1c34d3a92ea82ba8e`
+checked inline and matching. Every figure below is `basis: measured-here` unless it says otherwise.
+Artefacts under `/workspace/wsd/out/`; the run wrote each result as it completed.
+
+**The short form.** The gate that has no tolerance passed exactly. The measurement the workstream
+exists to produce did not, and the reason is not the model: the finite-difference estimator is
+**noise-dominated at bf16 everywhere except adjacent to the target**, and there is no step size at
+which it recovers the exact map at the shallow layers. That is a result about the instrument, and
+the instrument's own controls are what said so.
+
+## 1. What passed
+
+| gate | expected | measured |
+|---|---|---|
+| upstream provenance, commit and vendoring | `581d398…`, `vendored: false` | matched, from the installed distribution |
+| exact estimator reproduces itself | **exactly 0.0** | **0.0**, 33 layers, twice, 15.8 s |
+| controls formally separate | each further than the candidate | all three, but see §4 |
+
+The exactness gate is the one the order fixed at zero rather than at a tolerance, on the argument
+that a nonzero value there is nondeterminism and a tolerance would hide it. On CUDA, with
+`device.pin`, it is zero.
+
+## 2. What the golden comparison produced
+
+Exact autograd against finite difference, same rows, same two positions, same model object, same
+declared precision, `capture_dtype: native` on both. Worst relative difference **1.0245**, and the
+per-layer shape is the finding:
+
+| repo layer | relative difference | cosine |
+|---:|---:|---:|
+| 1 | 1.0142 | **+0.015** |
+| 9 | 0.9967 | +0.112 |
+| 17 | 0.9725 | +0.295 |
+| 25 | 0.8500 | +0.528 |
+| 33 | 0.5690 | +0.825 |
+
+A cosine of 0.015 is not a noisy estimate of a map. It is noise. The agreement climbs monotonically
+with proximity to the target, which is what a signal attenuated through blocks looks like, not what
+an estimator difference looks like.
+
+**The step-halving check said so before the per-layer table did.** The order requires one layer at
+the halved step so the fixture's divide-by-four is shown on the card. The fixture gives 3.9. The card
+gave **1.15** — 0.9725 against 0.8436 at layer 17. A central difference whose error does not fall
+with the step is not truncation-limited, and that single number is what turned a disappointing
+residual into a diagnosis.
+
+## 3. The diagnosis, run because of that ratio
+
+Four decades of step size at the worst layer and the mildest, in the model's own bf16 and in
+promoted float32. Six point eight minutes.
+
+| upstream layer | path | epsilon scale | epsilon | relative | cosine |
+|---:|---|---:|---:|---:|---:|
+| 0 | native | 1e-2 | 101.6 | 1.014 | +0.015 |
+| 0 | native | 1e-3 | 10.16 | 1.214 | **+0.157** |
+| 0 | native | 1e-4 | 1.016 | 5.288 | +0.005 |
+| 0 | native | 1e-5 | 0.102 | 45.73 | **−0.005** |
+| 32 | native | 1e-2 | 8818 | 0.569 | +0.825 |
+| 32 | native | 1e-3 | 881.8 | **0.286** | **+0.959** |
+| 32 | native | 1e-4 | 88.18 | 0.413 | +0.911 |
+| 32 | native | 1e-5 | 8.818 | 1.391 | +0.427 |
+| 0 and 32 | promoted-float32 | all four | — | raises | see §5 |
+
+**At layer 32 the curve is textbook**: truncation error falling as the step falls, roundoff rising
+below it, a minimum at 1e-3. That minimum is still a **29% relative difference**, which is not
+agreement between two estimators of one quantity.
+
+**At layer 0 there is no minimum worth having.** The best cosine over four decades is 0.157, and by
+1e-5 the relative difference is 45.7 with a *negative* cosine: the estimate is roundoff amplified by
+1/2ε. The roundoff wall arrives before the truncation error becomes small, so the window in which a
+central difference works does not exist there at this precision.
+
+The mechanism is consistent across both tables. A perturbation at layer L reaches the target through
+33−L blocks; the change it makes to the target shrinks with that distance, and bf16 carries about
+eight bits of mantissa, so the difference of two nearly-equal forwards loses the signal to
+cancellation first at the layers furthest from the target. The depth gradient in §2 and the missing
+minimum at layer 0 are the same fact seen twice.
+
+## 4. Two things the controls say that the pass/fail does not
+
+The report records all three controls as separating, and they do, but the margins are the point:
+
+| control | worst relative | margin over the candidate |
+|---|---:|---:|
+| transposed | 1.414 | **1.38×** |
+| wrong corpus | 1.466 | **1.43×** |
+| layer-shifted | 238.0 | 232× |
+
+**The candidate is 38% closer to the reference than a transposed lens.** The harness's own rule is
+that a control which barely separates is not a control; here it is the *candidate* that is barely
+distinguishable from a deliberately wrong lens, which is the same sentence from the other end.
+
+**And the layer-shifted control separates for the wrong reason.** The reference maps' Frobenius norms
+are 18,417 at layer 1 and 77.4 at layer 33 — a factor of 238 across depth — so shifting the layers
+compares maps of wildly different magnitude and the control passes on scale rather than on geometry.
+It is a weak control in this regime and should be normalised before it is trusted. That was not
+visible on the fixture, whose four layers have comparable norms.
+
+## 5. A correction to something I wrote yesterday
+
+I recorded the arithmetic-path hazard as *"loud on a fixture, invisible on the model that matters"*,
+reasoning that a real HF block would silently promote a float32 tensor while the toy fixture raised.
+**On this model it raises too**, at every step and both layers:
+`RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::BFloat16`.
+
+So the promoted path is not merely refused by the golden gate, it is **unavailable** on a bf16 Gemma,
+and my justification for the gate was wrong even though the gate itself is right. The gate stands on
+the plain ground that two fits which ran different arithmetic are not two measurements of one
+quantity. WS-A's 69.4% figure must therefore come from promoting the whole block rather than from
+injecting a promoted tensor into a bf16 one, and those are different experiments; whoever owns that
+row should say which it was.
+
+## 6. What this means for the golden test, and what I recommend
+
+The golden test as specified — finite difference against exact autograd on the same rows — **cannot
+be run at bf16 on this model**. It is not a threshold question: at the shallow layers there is no
+step at which the estimator is measuring the Jacobian at all.
+
+Three routes, and the choice is the Chief's:
+
+1. **Both estimators at float32.** Load the model in float32 and repeat. The exact side peaked at
+   43.9 GiB in bf16; float32 roughly doubles the activation term, which is plausible inside 96 GiB
+   but must be smoked before it is scheduled. This is the experiment that decides whether the
+   estimator is unusable *in principle* or unusable *at this precision*, and it is the one I would
+   run next.
+2. **Restrict the comparison to the layers where it is defined.** Report the estimator difference
+   only where a step window exists, with the window measured per layer, and say plainly that the
+   shallow layers are not measured. That is honest but it is a much smaller claim than the
+   workstream was ordered to make.
+3. **Retire the finite-difference operand.** Its own docstring says it exists to be run once and
+   retired; this may be that once, with the answer being that the two estimators cannot be compared
+   at the precision the programme runs at.
+
+**Rows two and three are not queued.** The Chief authorised extending the subset from one row to
+three. Extending a measurement whose instrument is noise at most layers would spend fifty-four
+minutes of a rented card to average three noisy estimates, so the extension waits on the precision
+question above. That is the one instruction in today's orders I have not carried out, and this
+paragraph is why.
+
+## 7. Provenance
+
+Run at 10:26–10:58Z, 31.2 minutes, under the `d-cro` window with `AGENT_V2_BOX_STATE_DIR=/workspace/box-d-cro`,
+sharing the card with no other GPU job at the time. Diagnosis at 11:00–11:07Z, 6.8 minutes. One row
+of the held split, drawn with seed 20260910, index 39; the wrong-corpus control is index 84. Two
+positions per row, index 8 and the last. `max_seq_len` 128, `direction_batch` 256, epsilon scale
+0.01 for the main run. The subset departure from three rows to one, and the 48.23 s per row per
+layer that forced it, are in `manifest.json` and were written before the run.
+
+Timings are wall clock on a shared card and carry `basis: shared-card` where the runbook requires it;
+the per-process allocated peaks — 43.9 GiB exact, 10.25 GiB finite difference — are per-process and
+stay valid.
