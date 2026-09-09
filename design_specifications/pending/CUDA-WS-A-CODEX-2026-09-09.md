@@ -168,3 +168,58 @@ believing it, with MLX not loaded. The float32-loaded run is a control for the G
 Two standing rules from tonight: in a worktree set `PYTHONPATH=<worktree>/src` or the tests exercise
 main's code (§16.4); stage by explicit path and read `git log --stat` over the range before every
 push (METHOD-2026-09-08).
+
+## Review of the edit round, 2026-09-09 late — through `e0a05cf`
+
+**Verdict: the three edits pass; the fourth arrived unasked and is accepted; the branch merges into
+`cuda-migration` at `6106ea8`.** Checked here, not read off the record: the branch's tests against
+its own source through the seam on torch 2.14.0, the rules suite on the actual merge result, the
+allowlist line, the patch files gone.
+
+1. `jlens` is reached through `load_upstream()` in the view, the capture and the acceptance helpers;
+   a missing clone skips with the seam's message, a second copy refuses. Done.
+2. Evidence rerun on torch 2.14.0 (`development-torch214.json`), and the record says which run
+   each number came from, including the scanner failure before the allowlist line. Done.
+3. `arch_base.py` in the approved-modules list, with `arch_torch.py` asserted as still scanned.
+   Done, and the second assertion is the better half.
+4. `WS-A.patch` and `patch.json` gone. Done.
+5. `input_device` on the view, reporting the embedding's placement without moving the model: not
+   asked for, accepted, because WS-D's `CorpusLensModel.register` reads exactly that attribute off
+   upstream's model contract, and the two seats now agree on it by construction.
+
+**The precision diagnosis is accepted as the transferable technique**, and it is the answer to the
+question §16.1 left open. On a fixture holding the same bf16-rounded weights in both copies: the
+float32 loop against float32 native is exactly zero at 64 and 1,400 tokens; the promoted loop
+against **float32 native** is below 0.073%, which is the rotary-table and mask rounding §16.1 said to
+declare; the promoted loop against **bf16 native** is 0.6–1.1%, which is bf16 block arithmetic and
+not the seam. So a cross-precision comparison includes more than rotary rounding, the record says so,
+and the 1.24% at 64 tokens on the checkpoint is consistent with it without yet being isolated.
+
+**Ruling on gates 1–4 under bf16 loading, which the record correctly asked for rather than
+assumed.** The registered 1e-3 bound was written for a comparison at one precision and stays: it
+governs the float32 loop against float32 native (exact on the fixture; the GPU host's control, where
+a 14.5 GiB float32 load costs nothing) and every within-backend exact comparison. It does not
+govern a cross-precision comparison, and no tolerance chosen after the fact may. On the laptop the
+gate has three parts:
+
+- **Seam exactness at the model's own dtype, gated at zero.** Add the arm the diagnosis is missing:
+  the hand-run loop in bf16, through `_block` without promotion, against bf16 native, at 64 and
+  1,400 tokens on the checkpoint. Same modules, same kwargs, same dtype: the expected value is
+  exactly zero, as the float32 arm is on the fixture, and any nonzero is a seam error and not
+  precision. This isolates the 1.24% with no extra memory.
+- **The precision floor, declared and not gated.** The promoted loop against bf16 native, as
+  measured, recorded beside the rotary-table deviation (2^-9 measured) and the fixture's
+  decomposition, as the floor beneath which a cross-precision residual means nothing.
+- **The controls, gated outside the floor.** Mask dispatch at 1,400 tokens on the checkpoint, and
+  the hook-site and entry-transform controls, must each fail by a margin the floor cannot explain;
+  on the fixture the mask control was 21% against a 1% floor.
+
+Then the measured peak beside the 9.8 GiB projection and the 10.656 GiB cap, per §10.2, and the
+graph-once estimator (§6.3) starts. The refused first attempt is the lock doing its job: another
+seat's suite had MLX mapped, and the wrapper stopped before loading anything.
+
+**Next instruction.** (1) The bf16-loop arm above, at both lengths, in `cpu_gates.py`'s report.
+(2) The three controls at 1,400 on the checkpoint, each against the declared floor. (3) Peak memory
+measured and recorded. (4) Fetch `cuda-migration`; your branch is merged there and WS-B's tolerance
+runner will run against your view first. (5) Then §6.3. Reviews continue to land here, under a
+dated heading naming your commit.
