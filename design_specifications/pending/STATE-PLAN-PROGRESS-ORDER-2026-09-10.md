@@ -179,8 +179,8 @@ pre-registration says which decisions of each task have no rendered row.
 the capture-time row ordinal and the sha256 of the rendered prompt, all in the manifest. This is
 fixed before a single capture is written under it.
 
-**A4. The rendered corpus is not on the card.** `data/agent_v2e-gemma3-4b/` (three splits, about
-170 MB) is a blocking input to R6 exactly as the lens corpus was. It ships outside the shared
+**A4. The rendered corpus is not on the card.** `data/agent_v2e-gemma3-4b/` (three splits, about 85 MB on disk; the D-CRO reported 169 MB and the archive manifest settles it)
+is a blocking input to R6 exactly as the lens corpus was. It ships outside the shared
 checkout at `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, through `lab-device pack-data` and
 `verify-data`, never a bare `tar`; the archive's digest goes into the pre-registration so the
 captured rows are the counted rows. Shipping is the Chief's, tonight, no GPU.
