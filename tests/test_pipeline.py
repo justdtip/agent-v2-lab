@@ -32,10 +32,13 @@ from local_llm_lab.pipeline.tasks import FAMILIES, VARIANTS, make_tasks
 def test_the_registry_lists_every_declared_backbone() -> None:
     """A literal list, so adding a model is a deliberate edit here rather than a silent one.
 
-    It was three names, then four when `gemma3-4b` landed with the Gemma pivot, and is five now
-    that the bf16 twin exists: 4-bit for the pilot and the evaluation, bf16 for lens fitting,
-    because the hosted Jacobian lens was fitted on bf16 and a comparison against it should not
-    also be a comparison of precisions.
+    It was three names, then four when `gemma3-4b` landed with the Gemma pivot, five when the bf16
+    twin arrived (4-bit for the pilot and the evaluation, bf16 for lens fitting, because the hosted
+    Jacobian lens was fitted on bf16 and a comparison against it should not also be a comparison
+    of precisions), and is six now that the CUDA twin exists: the same bf16 weights under the
+    `hf_id` the torch backend loads, so a cross-backend comparison is not also a comparison of
+    checkpoints. Registry entries are WS-E's, and this line moves in the same commit as the YAML;
+    the sixth entry landed without it and the tree was red for an afternoon.
 
     This test is in a file that reaches the model library, so it was skipped under the window that
     verified the four-name landing and the tree was red until that line moved. The skip count in a
@@ -47,6 +50,7 @@ def test_the_registry_lists_every_declared_backbone() -> None:
     assert registered_models() == [
         "gemma3-4b",
         "gemma3-4b-bf16",
+        "gemma3-4b-cuda-bf16",
         "qwen25-coder-3b",
         "qwen35-4b",
         "qwen35-9b",

@@ -92,7 +92,15 @@ def write_lens(
             "layers": sorted(expected),
             "hidden_size": hidden_size,
             "num_layers": num_layers,
-            "dtype": "float32",
+            # Read from the arrays actually written, not asserted. This said "float32"
+            # unconditionally, which was true for everything this writer produces and false for the
+            # two hosted lenses whose sidecars were written elsewhere -- and a field that is right
+            # by luck reads exactly like one that is right by measurement. The loader now reports
+            # the same quantity as `storage_dtype`, so the two ends agree or a comparison can say
+            # they do not.
+            "dtype": sorted(
+                {str(np.asarray(a).dtype) for name, a in arrays.items() if name.startswith("J")}
+            ),
             "npz_bytes": path.stat().st_size,
             "layer_convention": "J{L-1}; h @ J.T = h @ W; final layer is identity",
         }
