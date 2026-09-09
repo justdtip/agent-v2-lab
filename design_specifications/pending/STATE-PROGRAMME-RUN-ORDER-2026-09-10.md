@@ -275,6 +275,15 @@ refusing by line number beats a bare decode error. Both can land with the edits 
 D10's two-file maker stays the next task, as the amendment says. After the two edits: pathspec
 commit on `cuda-ws-d`, and the merge is rebuilt and tested again before it is pushed.
 
+## The temperature, ruled 2026-09-10
+
+The Director accepted the recommendation of §2 as written: sampled decoding for the state
+programme only, temperature 1.0 with no truncation, seeded and recorded. SWE-1 builds the sampler
+under the WS-B order's amendment of this date. The script's refusal of `--decoding sampled` stays
+until that sampler is on the branch the script runs from; then the sampled branch of §2 is built on
+the policy seam with the sampler behind it, the estimand named per mode as the script already does.
+The two edits of the review above come first.
+
 **Both edits landed, D-CRO, 2026-09-10, with one change to a decision the review accepted.**
 
 Edit 1: `false_listing` and `with_false_observation` take the pair's `target`; the note parsing is

@@ -1,0 +1,249 @@
+{
+  "provenance": {
+    "checkpoint": {
+      "path": "/Users/daniel.tipton/Desktop/An app/models/gemma-3-4b-it-bf16",
+      "head_tensor": "language_model.model.embed_tokens.weight",
+      "norm_tensor": "language_model.model.norm.weight",
+      "tied_embeddings": true
+    },
+    "lens": {
+      "sha256": "a14ab264fc47de9c59b3183a8783a60ca6f1dee2ea635e88223d5b2d67b03193",
+      "identity": {
+        "base": "google/gemma-3-4b-it",
+        "num_layers": 34
+      },
+      "storage_dtype": [
+        "float16"
+      ],
+      "layer": 18,
+      "convention": "maps[L] is the archive's J{L-1}; L x for a row is x @ J.T"
+    },
+    "dictionary": {
+      "repo": "google/gemma-scope-2-4b-it",
+      "folder": "resid_post_all/layer_17_width_16k_l0_small",
+      "hook_point": "model.layers.17.output",
+      "width": 16384,
+      "l0": 20,
+      "architecture": "jump_relu",
+      "params_sha256": "507810c355c8411300e2e0e20ae11240ed81cac424311186e2edab1cfff2671e",
+      "decoder_rows_unit_norm": true
+    },
+    "residual_convention": "the dictionary hook is the output of decoder block N; the capture convention numbers that residual as layer N + 1 and the lens keys it as J{N}; the bridge reads layer 18",
+    "score_map": "L x = W ((J x) * (1 + w)); the RMS normaliser is a positive per-vector scalar and is dropped so the map is linear; ranks and overlaps are unaffected, score values are not logits",
+    "tensor_reader": "safetensors header and bytes, bfloat16 widened to float32 by bit shift",
+    "labels": "unlabelled",
+    "labels_reason": "no Neuronpedia source maps to resid_post_all; the residual labels index resid_post/layer_17_width_16k_l0_medium, a different training run at a sparsity this suite never published"
+  },
+  "source_commit": "6f605f84b000116f75c7dcb921111a566ddf92bf",
+  "source_dirty": false,
+  "box_state_at_run": {
+    "window": "{\n  \"expected_end_epoch\": 1788933097.465054,\n  \"expected_minutes\": 20.0,\n  \"nonce\": \"2e3292c530f642bd837e380507f149b4\",\n  \"opened\": \"2026-09-09T05:31:37.465056Z\",\n  \"opened_epoch\": 1788931897.465054,\n  \"pid\": 47969,\n  \"purpose\": \"SAE-J bridge stage A1: dictionary readout at Scope block 17 (repo layer 18) through the lens, CPU BLAS, three full passes of W, no model load, no model lock. Projected peak ~5 GiB: W 2.7 GB float32 + 33 lens maps 0.9 GB + dictionary 0.3 GB + chunk-256 score block with int64 argpartition 0.8 GB.\",\n  \"seat\": \"swe-2\"\n}\n",
+    "lock_held": false
+  },
+  "k": 10,
+  "chunk": 256,
+  "timing_s": {
+    "load": 3.1,
+    "a1_lens_readout": 39.0,
+    "total": 131.7
+  },
+  "convention_raw_arm": {
+    "overlap": 0.24459228515625,
+    "recorded_before_gain_arm": true
+  },
+  "convention_check": {
+    "raw_overlap": 0.24459228515625,
+    "gain_overlap": 0.9952331542968751,
+    "threshold": 0.5,
+    "conclusion": "shipped file applies the final gain; convention settled, bridge proceeds",
+    "stop": false
+  },
+  "two_ways": {
+    "features": [
+      61,
+      403,
+      1452,
+      1694,
+      7616,
+      9546,
+      13022,
+      16363
+    ],
+    "top_set_mismatches": [],
+    "order_only_differences": [],
+    "worst_relative_score_gap": 1.708767058516969e-06
+  },
+  "negative_control": [
+    {
+      "layer": 18,
+      "other_layer": 2,
+      "k": 10,
+      "features": 512,
+      "mean_overlap": 0.0470703125,
+      "max_overlap": 0.8,
+      "share_identical": 0.0,
+      "distinguishes": true
+    },
+    {
+      "layer": 18,
+      "other_layer": 10,
+      "k": 10,
+      "features": 512,
+      "mean_overlap": 0.2314453125,
+      "max_overlap": 1.0,
+      "share_identical": 0.00390625,
+      "distinguishes": true
+    },
+    {
+      "layer": 18,
+      "other_layer": 30,
+      "k": 10,
+      "features": 512,
+      "mean_overlap": 0.1521484375,
+      "max_overlap": 0.9,
+      "share_identical": 0.0,
+      "distinguishes": true
+    },
+    {
+      "layer": 18,
+      "other_layer": 18,
+      "k": 10,
+      "features": 512,
+      "mean_overlap": 1.0,
+      "max_overlap": 1.0,
+      "share_identical": 1.0,
+      "distinguishes": false
+    }
+  ],
+  "readout_sample_ours": [
+    {
+      "feature": 61,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        " cient\u00edficos",
+        "<start_of_image>",
+        " estadounidense",
+        " doen\u00e7as",
+        " \u0440\u043e\u0441\u0456\u0439",
+        " biotechnology",
+        " m\u00e9dicos",
+        " biochemical",
+        "\u6b27\u6d32",
+        " \u00e9tn"
+      ]
+    },
+    {
+      "feature": 403,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        " Sistemi",
+        "Gioco",
+        "Moto",
+        "Au",
+        "Kor",
+        "Ba",
+        " Sistemas",
+        "Storia",
+        "Zn",
+        "Mu"
+      ]
+    },
+    {
+      "feature": 1452,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        " incorrectly",
+        " erroneously",
+        " mistakenly",
+        " accidentally",
+        " incorrect",
+        " confusing",
+        " annoying",
+        "!).",
+        " inaccur",
+        " unnecessarily"
+      ]
+    },
+    {
+      "feature": 1694,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        ":&",
+        ";&",
+        " subsequently",
+        "rogens",
+        " thereafter",
+        " Diarsipkan",
+        " (&",
+        " &-",
+        " \"&",
+        ",&"
+      ]
+    },
+    {
+      "feature": 7616,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        " \\...",
+        " $\\$",
+        "$\\$",
+        " \\&",
+        " \\$",
+        " ...",
+        " (\\$",
+        "\\$",
+        "\\%",
+        "\\\""
+      ]
+    },
+    {
+      "feature": 9546,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        "</h4>",
+        "\ufeff\ufeff\ufeff\ufeff",
+        ".\ufeff",
+        "<sup>",
+        "</strong>",
+        "</h2>",
+        "</th>",
+        "\u25c6",
+        ".\u2022",
+        "\u25b2"
+      ]
+    },
+    {
+      "feature": 13022,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        " \u2018",
+        " \u00ab",
+        "\u2018",
+        "\u2019).",
+        "\u00ab",
+        "Df",
+        "\u2019)",
+        "\u00ab.",
+        ")\u2019",
+        " \u0964"
+      ]
+    },
+    {
+      "feature": 16363,
+      "ours_read_from_layer": 18,
+      "top_tokens": [
+        "</em>",
+        " \\...",
+        "\u00bb)",
+        "\u2026</",
+        "\u00bb).",
+        "[\u2026]",
+        "\u2026)",
+        "\\...",
+        "\u00bb),",
+        " [\u2026]"
+      ]
+    }
+  ],
+  "peak_rss_gib": 5.27
+}

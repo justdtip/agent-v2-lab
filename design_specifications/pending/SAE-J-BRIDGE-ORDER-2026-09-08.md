@@ -533,3 +533,30 @@ distribution of `|e| / |h|` and the active-feature count with the dominance thre
 declared input, whose real inputs are the device's after A2's first forward. **Stage B stays
 unbuilt** on this order's own condition: A2's residual share on real activations is what justifies
 it. A1 at layers other than 18 waits for the map to name them.
+
+## Review of the three additions, Chief, 2026-09-10 — `9af0abf` on `cuda-ws-c`, merged into `cuda-migration` at `628a6b4`
+
+**Verdict: passes; merged.** Against the merge result: full suite 2,574 passed, 10 skipped at nine
+sites for absent worktree artefacts, with user warnings promoted to errors, under the Chief's
+window at 06:10Z; the torch set 164 passed; no deletion on either side since the base. The
+identity check is three-way and refuses when it cannot compare, which is the non-inert form: a
+config naming no model and a lens carrying no identity are refused, not passed; the registry
+round-trip test pins that every entry's name, hf id and base resolve to one string, and the real
+config's `google/gemma-3-4b-it` is checked against the real lens identity in the gated test. The
+adapter hands the wrapper the transposed decoder, the bias apart, and an encoder computing in the
+declared precision and casting the code to the residual's dtype, with the read-only views of the
+raw reader copied first and the warning that found that promoted to an error in the test; the
+wrapper's residual identity holds through it on the A2 fixture. The reconstruction-budget gate
+echoes its threshold and returns the mask `decompose_position` accepts. The record's after-review
+section, the exploratory heading on the sweep, and the shipped-file wording are as asked; the
+`-qq` note is the honest form of a count read from progress marks.
+
+**Next, SWE-2**, a delegation from WS-E, device-free: `lab-device preflight` gains dictionary rows
+and a render row. For each dictionary layer the registry entry or the run names: present in the
+primary cache, verified against the hub's declared digest for its exact path (the `fetch-dictionary`
+mechanism, reused, with an offline form that reads a digest recorded at fetch time), and its config's
+`model_name` equal to the entry's `base` through `base_of_artifact`, each a row with a basis. And a
+render row: the corpus rendered under the entry reproduces the split digests the manifest of the
+laptop render records, so the 12B re-render assertion in the runbook is a command, not a sentence.
+Tests with stubs and a fixture corpus; pathspec commit on `cuda-ws-c`; review and merge as before.
+Stage B and A1 at other layers wait for the device's numbers as recorded.
