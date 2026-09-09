@@ -16,7 +16,7 @@
     "trainable_top_layers": 2
   },
   "load": {
-    "path": "/private/tmp/stage_gate3/checkpoint",
+    "path": "/private/tmp/stage_gate4/checkpoint",
     "wrapper": true,
     "model_type": "gemma3_text",
     "architecture": "Gemma3ForCausalLM",
