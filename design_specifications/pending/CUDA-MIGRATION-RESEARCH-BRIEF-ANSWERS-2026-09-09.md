@@ -24,25 +24,29 @@ only the backward is batched. A `register_forward_hook` therefore fires exactly 
 functorch hazards about hooks and in-place mutation apply to `vmap` over a *forward*, which is not
 what this does.
 
-**The performance is the finding, and it inverts under the default attention setting.** Measured,
-CPU, 6 layers, d_model 64, seq 48, 16 cotangents:
+**CORRECTION, 2026-09-09, after landing the tests.** An earlier version of this section reported
+that batching is *slower* than the sequential loop under `sdpa`. That was a warm-up artefact and
+it is withdrawn. The missing batching rule costs a **one-time first-call penalty**, not a per-call
+one. Measured, per call in milliseconds, same fixture:
 
-| `attn_implementation` | vmap | sequential loop | speedup | batching-rule fallback |
-|---|---|---|---|---|
-| `sdpa` (default) | 26.0 ms | 16.0 ms | **0.61x** | yes |
-| `eager` | 8.5 ms | 18.3 ms | **2.15x** | no |
+| `attn_implementation` | batched, call 1 | batched, steady | sequential | first-call ratio | steady ratio |
+|---|---|---|---|---|---|
+| `sdpa` | 22.9 | 9.2 | 13.6 | 0.62x | **1.50x** |
+| `eager` | 10.0 | 9.9 | 15.1 | 1.56x | **1.48x** |
 
-Under `sdpa`, torch emits `UserWarning: we have not yet implemented the batching rule for
-aten::_scaled_dot_product_flash_attention_for_cpu_backward`, falls back to a per-sample loop, and
-is **slower than the code it replaces**. Under `eager` it does what the plan expects.
+So **batching is worth about 1.5x under both implementations**, and the `sdpa` fallback costs
+roughly 14 ms once. Against a fit that runs `ceil(d_model / dim_batch)` backward passes per prompt
+over a thousand prompts, a one-time cost is irrelevant.
 
-**The plan mischaracterises what it replaces.** §6.3 describes upstream as retaining the whole
-graph. It does not: `ActivationRecorder(..., start_graph_at=min(source_layers))`
-(`jlens/hooks.py`, `jlens/fitting.py:155`) marks the earliest source activation as the graph root,
-so the retained graph spans **only the blocks between source and target**. Upstream also already
-batches cotangents, `dim_batch: int = 8` (`jlens/fitting.py:106`). The proposal is one batching
-scheme replacing another, not the introduction of batching, and the memory baseline is
-`dim_batch` copies of a narrow block range, not of the model.
+**What this does to the ruling.** The §1 argument for `attn_implementation="eager"` collapses: the
+Jacobian path does not need it. The §2 argument stands on its own and is unaffected, so `eager`
+may still be right, but for determinism reasons only. The two justifications I described as
+converging do not converge; one of them was an artefact.
+
+The error is worth naming because it is one I had already written down. A single-shot timing on
+the first call is warm-up contaminated, and taking the best of several runs is the fix. Writing
+the test with best-of-three is what surfaced it, which is an argument for landing measurements as
+tests rather than keeping them as scripts.
 
 **There is a blocker in the `vjp` route that the plan does not mention, and it is in our own
 hooks.** `ActivationRecorder` calls `tensor.requires_grad_(True)` on an intermediate and returns
@@ -90,10 +94,10 @@ the `vmap` path but not on the `is_grads_batched` path, so a warning-based asser
 fire for the change I am recommending. The timing ratio is the reliable signal.
 
 **Verdict: works with this change** — use
-`torch.autograd.grad(..., is_grads_batched=True)` with the hooks as they are, and
-`attn_implementation="eager"`. Under the default attention setting the change is a regression, on
-CPU measured and on CUDA expected for five layers in six. Restate §6.3's memory comparison against
-what upstream actually does.
+`torch.autograd.grad(..., is_grads_batched=True)` with the hooks as they are. It needs no hook
+rewrite, and it is about 1.5x faster than the sequential loop under both `eager` and `sdpa` in
+steady state. Do not adopt `eager` on this account; §2 decides that question. Restate §6.3's
+memory comparison against what upstream actually does.
 
 ---
 
