@@ -124,6 +124,11 @@ class TorchArchitectureView(ArchitectureViewBase):
         self._logit_softcap = getattr(self.config, "final_logit_softcapping", None)
         self._observing = False
 
+    @property
+    def input_device(self) -> torch.device:
+        """The existing embedding's device; observing the view never moves its model."""
+        return self._embed_tokens.weight.device
+
     @classmethod
     def from_model(cls, model: Any) -> TorchArchitectureView:
         try:

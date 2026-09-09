@@ -16,13 +16,17 @@ import pytest
 from local_llm_lab import spawn
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = ("local_llm_lab.arch_torch", "local_llm_lab.torch_capture")
+MODULES = (
+    "local_llm_lab.arch_torch",
+    "local_llm_lab.torch_capture",
+    "research.acceptance.torch_seam",
+)
 
 
 def run_child(source, *args, env=None):
     child_env = {
         **os.environ,
-        "PYTHONPATH": str(ROOT / "src"),
+        "PYTHONPATH": os.pathsep.join((str(ROOT / "src"), str(ROOT))),
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     if env:

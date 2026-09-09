@@ -68,6 +68,25 @@ def test_discovery_calls_upstream(monkeypatch):
     assert view.tie_word_embeddings
 
 
+@pytest.mark.parametrize("device", ["cpu", "meta"])
+def test_input_device_observes_embedding_without_moving_model(device, monkeypatch):
+    from local_llm_lab.arch_torch import TorchArchitectureView
+
+    with torch.device(device):
+        model = make_model()
+    parameters = [(parameter, parameter.device) for parameter in model.parameters()]
+
+    def refuse_move(*args, **kwargs):
+        raise AssertionError("constructing or reading a view must not move the model")
+
+    monkeypatch.setattr(model, "to", refuse_move)
+    view = TorchArchitectureView.from_model(model)
+    assert view.input_device == model.model.embed_tokens.weight.device == torch.device(device)
+    assert all(parameter.device == original for parameter, original in parameters)
+    with pytest.raises(AttributeError):
+        view.input_device = torch.device("cpu")
+
+
 def test_public_call_signatures_are_unchanged():
     from local_llm_lab.arch import ArchitectureView
     from local_llm_lab.arch_torch import TorchArchitectureView

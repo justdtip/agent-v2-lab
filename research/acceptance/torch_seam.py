@@ -8,9 +8,11 @@ Development execution on a small model is not full-checkpoint golden acceptance.
 from __future__ import annotations
 
 import torch
-from jlens.fitting import _check_layer_indices
 
 from local_llm_lab.arch_torch import TorchCapture
+from local_llm_lab.upstream_ref import load_upstream
+
+_check_layer_indices = load_upstream().fitting._check_layer_indices
 
 
 def structural_report(view):
