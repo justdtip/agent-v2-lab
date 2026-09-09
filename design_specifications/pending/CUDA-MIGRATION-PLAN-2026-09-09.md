@@ -617,3 +617,145 @@ Companion documents, each naming files, interfaces, golden tests and budgets fro
 - `CUDA-WS-C-ORDER-2026-09-09.md` — full fine-tuning under FSDP, multi-GPU optional.
 - `CUDA-WS-D-ORDER-2026-09-09.md` — the lens un-port and the six extensions, for the D-CRO.
 - WS-E is the Chief's and needs no order.
+
+---
+
+## 13. What the survey corrected, verified, and what it left for the Director
+
+Thirty-one Opus agents — nine readers, a verifier on each reader's two most consequential claims, a
+planner — with eleven of fourteen adversarial claims refuted and the planner re-verifying the
+load-bearing ones against the installed `transformers` 5.16.1 and the records. Everything below
+marked **V** the planner read; the rest I checked against my own reads of the same files. Where the
+survey and this plan disagreed, the survey was right in every case below.
+
+### 13.1 The seam: four corrections
+
+- **The per-block bundle is `(mask, (cos, sin), position_ids)`** and the `(cos, sin)` pair is per
+  **layer type** (**V** `modeling_gemma3.py:558-561`), so one rope pair would give five of six Gemma
+  blocks the wrong base. `cache_position` is not required (**V** zero occurrences).
+- **`cache.layers[i]` is already the per-block handle** (**V** `cache_utils.py:1271, 1306`), with
+  `get_seq_length()` and `crop()`; the adapter is ~5 lines, not 40. Two traps: `crop` takes a
+  **negative** count and returns nothing where `trim_prompt_cache` returned the count `runner.py:135`
+  tests; and `.state` carries keys and values but **not position** on either backend — which means
+  **`SnapshotCache` restore is already broken on Gemma's 29 rotating layers today, on MLX**
+  (`runner.py:187`). An existing defect to fix, not a fidelity target.
+- **`NativeCapture.__enter__` imports `Qwen3NextAttention` unconditionally** (**V** `arch.py:974-977`),
+  so the injection seam cannot be entered on any model without mlx_lm's Qwen module. Conditional on
+  head capture. And the HF model returns `CausalLMOutputWithPast` and takes `past_key_values=`, a
+  calling-convention leak at `arch.py:965-966` and `session.py:410`.
+- **`residuals()` is a float32-per-block recomputation, not a capture** (**V** `arch.py:313, 457,
+  465`), and `native_residuals` is the true capture that **no probe consumes**. Hooks reproduce the
+  native path; substituting them silently changes what every probe and the Jacobian's `pre_norm_tail`
+  see. **That is a decision, Q5 below, not a port.** Two additions to the contract: `view.input_device`
+  (placement is the caller's; `from_model` never moves a model) and `view.vocab_size`.
+
+### 13.2 Things this plan had wrong
+
+- **The three cache strategies are not deferrable.** `history` is `qwen35-4b`'s declared default with
+  equivalence recorded; `trim` is the default model's. With `cache.layers` the shim is ~35 lines. WS-B
+  carries them.
+- **The registry does not gain a `backend` field.** Identity is `base` + `training`;
+  `load_model_spec` matches on `hf_id`; one entry naming two artefacts is what that split was invented
+  to prevent, and it would change the `registry_sha256` committed in records. **One entry per CUDA
+  artefact, zero parser lines, the five existing YAMLs byte-identical.**
+- **Packaging has a blocker before torch is considered**: `transformers`, `numpy`, `pyyaml`,
+  `huggingface_hub`, `safetensors` are imported at module scope in nineteen files and arrive
+  **transitively through `mlx-lm`**. Promote them first; then extras `[mlx]` / `[cuda]` — extras and
+  not markers, because MLX wheels are macOS-arm64-only and a Linux box cannot resolve them.
+- **Emitted tokens in the golden corpus are 5,245, not 4,801** (the smaller figure was agentic-only).
+  Corpus, verified: 5,439 `forward`, 5,245 `emitted`, 94 `begin_turn`, 534,990 `rank`, 114,621
+  `reading`.
+- **The un-port changes the estimator's ν and must say so.** Our MLX fit uses the same-position
+  reduction (requirements §2); upstream sums over targets. `profiles.py` already keeps `jacobian`
+  distinct from `hosted-jacobian`. WS-D's adapter supports both through the selector and **declares
+  which**; the lens fitted under upstream's default is not the same estimator as the one under ours.
+- **The finite-difference saving is one factor of ~15.5x**, all from the layer loop, not 16–33x; and
+  the step rule had a local precedent (`jlens.py:1029-1031`). Whether FD stays or autograd replaces it
+  is **Q3**, not an implementer's call.
+- The reuse ledger: the survey's counts replace mine below.
+
+### 13.3 Divergences this plan did not list (survey §3, numbered as there)
+
+**10** EOS is never appended by the MLX loop and three downstream sites rely on it; HF `generate`
+appends it. **11** EOS comes from the config's id set `[1, 106]`, never `tokenizer.eos_token_id`, or
+every turn becomes a 200-token runaway. **12** The `</tool_call>` stop set is a no-op on Gemma (unk id
+3) and stays byte-for-byte. **13** **The prefill partition at 2,048 is part of the record**
+(`NATIVE_PREFILL_STEP_SIZE`, asserted by `ForwardLedger.validate` every forward); HF prefills in one
+chunk, so chunk explicitly or the forward rows change shape under an identical trajectory. **14**
+**TF32 must be off** — `torch.backends.cuda.matmul.allow_tf32 = False` /
+`set_float32_matmul_precision("highest")` — or every fp32 unembed and lens matmul is silently
+re-quantised to ten mantissa bits; nothing in the repository says so because MLX has no TF32. **15**
+R18: native-precision capture, one float32 cast at pooling — in tension with 13.1's fourth item; Q5.
+**20** LoRA `scale` is literal in MLX and `alpha/r` in PEFT (`scale: 32.0` at `r=16` is
+`lora_alpha=512`); matters to the `[mlx]` path only now. **21** `iters` counts micro-batches. **22**
+mlx-lm's batch order, padding to `1 + 32·ceil(L/32)`, and **unweighted** accumulation where HF is
+token-weighted: reproduce or record the departure. **23** The observation re-roling convention must
+not be replaced by a torch template's tool role; that changes what the model was shown. **25**
+`_resolve_checkpoint` stays confined to `models/` paths; torch entries name HF ids.
+
+### 13.4 The acceptance gate, as the survey specified it — adopted over §7
+
+- **G-0, no model, first hour, blocks everything**: `read_record` and `validate_events` over all
+  fifteen episodes on the new box; plus one MLX-versus-MLX self-replay on the laptop with
+  `logits_sha256` armed, to prove the harness is not what changed.
+- **G-1, unblocks everything**: `residual_source_agreement` at 64 and 1,400 tokens. MLX baseline: gate
+  0.0 at both; control 0.0 at 64 and 5.3125 at 1,400. CUDA criterion pre-registered: **≤ 1e-3
+  relative at every layer in bf16**, the control exceeding it by two orders at 1,400. **Three**
+  negative controls, each shown to bite at 1,400 and not at 64 — mask dispatch, hook-site off-by-one,
+  entry-transform omission — and **the controlled number must not be bit-identical to the
+  uncontrolled one**, which is how R56(e) was found.
+- **G-2, teacher-forced golden trajectories** via `replay_record` with `logits_sha256` **dropped**
+  from the key (it cannot match across backends) and `argmax` armed; **and** the second enforcement
+  site at `profiles.py:306-315`, which compares a measured float, must be exempted or it fails.
+  Attribution from the data: at layer 34 all 5,245 emitted tokens are rank 1, 80.06% at P ≥ 0.99,
+  2.19% below 0.5. **A single argmax flip at P ≥ 0.99 fails the run outright**; quantisation cannot
+  move it, so it is a mask, position, entry or norm defect. Then a free-running greedy replay of the
+  three chat episodes, because teacher forcing hides accumulation.
+- **G-3, the readout gate, decode and prefill reported separately**: MLX baseline is all 5,339 decode
+  forwards at exactly 0.0 and the 100 prefill forwards at 0.375–0.75. A gate that does not split them
+  fails on a fact already true. **Logit distance needs no sidecar**: at layer 34 the rank rows'
+  probabilities are the model's own softmax, so `log(p_a/p_b) = z_a − z_b` exactly, ~9,391 gaps.
+- **G-4, golden lens reads, paired**: per-token Δrank and McNemar on the rank-1 indicator; the
+  layer-convention off-by-one is six to ten sigma per layer and catches itself on episode one.
+- **G-5, multi-GPU, a separate arm never folded in**: G-1 to G-4 again under each parallelism with
+  its own bands, provenance recording device count, dtype, deterministic flags, TF32 state, pinned
+  attention backend and all-reduce order. **Byte-identical trajectories are a within-backend,
+  fixed-topology property**; a sharded matmul reduces in a different order.
+- Determinism on CUDA: `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`,
+  TF32 off, a pinned SDPA backend.
+
+### 13.5 The reuse ledger, the survey's, replacing §4
+
+In-scope source 26,062 of 44,739 lines. **New 1,473 — 5.7% of in-scope — against 22,833 kept, 1,338
+edited, 695 replaced by upstream, 18,677 deferred, 1,196 deleted. Net source delta −418.** Seventeen
+lines kept, edited or replaced for every new line. Tests are a further ~1,450 new. The per-subsystem
+table is in the survey record and its counts are the ones to hold seats to.
+
+### 13.6 Seat assignment: where the survey and the plan differ, and what stands
+
+The survey put lens fitting on an engineer and training on Codex in a later phase; this plan put the
+lens on the D-CRO — who owns the lens science and closed the analyses every extension rests on — and
+training on Engineer 2. **The plan's assignment stands, having been dispatched**, with the survey's
+Phase 0 (packaging and registry) taken by the Chief now, and its G-0 to G-5 adopted as the harness
+Engineer 1 builds to the Chief's specification.
+
+### 13.7 Four decisions for the Director, from the survey
+
+- **Q1, refined.** One lock per **device** (by UUID, not index — `CUDA_VISIBLE_DEVICES` makes indices
+  lie), one window per **box**; a fully sharded run announces the window **and** takes every device's
+  lock. Host RAM is the window's business, not a fifth lock.
+- **Q2, sharpened.** bf16 stands, and the acceptance test becomes three-tier: a **fresh MLX-bf16
+  stage-two run** on `gemma-3-4b-it-bf16` as the Tier-1 comparator, so the divergence under test is
+  kernel reduction order and not a quantisation scheme; G-1 to G-4 as Tier 2; and **the existing
+  4-bit rows demoted explicitly from acceptance test to sanity reference** — argmax, ids, shapes,
+  counts only — so no one later cites a 4-bit-versus-bf16 rank delta as a finding. The programme's
+  own `QUANT-GAP-2026-09-05` measured that boundary as the worst-agreeing readout.
+- **Q3.** Finite differences or exact autograd for the Jacobian: defer to the pre-registered c-sweep
+  (§15 of the fitting requirements). A layer with no plateau is instrument-limited and autograd is
+  the remedy; a plateau keeps the current estimator. Either way the same-position reduction is
+  preserved and declared, and the fitted lens stays distinct from the hosted one in `profiles.py`.
+- **Q5.** The residual capture dtype. Move to the native path, declare it as a **measurement change**
+  in the record, re-run rather than re-record R18a's manual-versus-native comparison, and accept that
+  the `--residual-source manual` arm changes meaning. The alternative — hooks that reproduce an fp32
+  recomputation nobody chose — costs several hundred unbudgeted lines to preserve an artefact of one
+  cast. **Taken in the open, not inherited.**

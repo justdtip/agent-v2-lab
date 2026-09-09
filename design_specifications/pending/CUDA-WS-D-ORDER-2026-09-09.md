@@ -60,3 +60,19 @@ tolerance, a span selector over all spans likewise. That is the regression test 
 ## Budget
 
 ~80 adapter, ~45 regression edits, ~400 extensions; ~450 deleted.
+
+---
+
+## Corrections from the survey (plan §13), which supersede anything above they contradict
+
+Read plan §13 in full. The items below are the ones that change this order.
+- **The un-port changes ν and must declare it.** Our MLX fit uses the same-position reduction;
+  upstream sums over targets. The adapter supports **both** through the selector, the sidecar
+  records which, and `profiles.py` keeps `jacobian` distinct from `hosted-jacobian`. A lens fitted
+  under upstream's default is not the same estimator as ours; the un-port golden test compares
+  like with like by running upstream's ν.
+- **Finite differences versus exact autograd is Q3, the Director's**, decided by the pre-registered
+  c-sweep: no plateau means instrument-limited and autograd; a plateau keeps the estimator. The
+  saving is ~15.5x from the layer loop, not more.
+- The residual dtype your regression fit consumes is **Q5**; `residual_source` in the artefact must
+  name it either way.

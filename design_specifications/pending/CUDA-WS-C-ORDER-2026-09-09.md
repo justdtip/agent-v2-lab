@@ -65,3 +65,18 @@ micro-batch chosen under the R47 fraction, and the window declaration carrying t
 
 ~180 new; ~40 edited in `depth_expansion`; `gated_delta_*` deleted; `train_grpo.py` deferred pending
 the survey's ruling.
+
+---
+
+## Corrections from the survey (plan §13), which supersede anything above they contradict
+
+Read plan §13 in full. The items below are the ones that change this order.
+- `iters` in every training config counts **micro-batches**, not optimizer steps (`iters_unit:
+  batches`); 1,200 at accumulation 4 is 300 HF steps. No test catches this; you do.
+- mlx-lm's batch order (length-sort, fixed batches, permutation from numpy's global state, seeded
+  at `cli.py:282-326`), padding to `1 + 32·ceil(L/32)`, and **unweighted** accumulation where HF is
+  token-weighted: reproduce or **record the departure**, never silently.
+- The `[mlx]` path keeps LoRA, where `scale` is literal and PEFT's is `alpha/r`; irrelevant to full
+  fine-tuning, relevant if anyone compares against an MLX adapter record.
+- `adapter_delta`'s exact SVD via QR of the rank-r factors has no full-FT analogue; `checkpoint_delta`
+  takes the full SVD of the materialised difference and the record says so.

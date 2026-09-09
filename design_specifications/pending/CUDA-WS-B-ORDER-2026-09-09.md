@@ -57,3 +57,26 @@ trajectories, then the lens reads through the hosted lens against the recorded `
 ## Budget
 
 ~60 new in the runner, ~250 in the harness, ~40 in the verdict and loop metric; ~300 deferred.
+
+---
+
+## Corrections from the survey (plan §13), which supersede anything above they contradict
+
+Read plan §13 in full. The items below are the ones that change this order.
+
+- **The three cache strategies are in your first cut, not deferred**: `history` is `qwen35-4b`'s
+  declared default with equivalence recorded and `trim` is the default model's; ~35 lines over
+  `cache.layers`. `SnapshotCache` restore is broken on MLX today (position not in `.state`); fix it.
+- **EOS is never appended by the loop** and three downstream sites depend on that; HF `generate`
+  appends it. **EOS ids come from the config's set `[1, 106]`**, never `tokenizer.eos_token_id`.
+  The `</tool_call>` stop-set expression stays byte-for-byte; it is a no-op on Gemma by design. The
+  decode-loop reference is `mlx_lm/generate.py:424-470` **and 715-753**; the trailing yield at
+  741-753 is what delivers EOS on six turns.
+- **Prefill in chunks of 2,048**, final token separate, asserted by `ForwardLedger.validate`.
+- **The golden corpus has 5,245 emitted tokens, not 4,801.** G-2 drives `replay_record` with
+  `logits_sha256` **dropped** from the key and `argmax` armed, and must also exempt the second
+  enforcement site at `profiles.py:306-315`. **One argmax flip at P ≥ 0.99 fails the run outright.**
+  Then a free-running replay of the three chat episodes.
+- G-3 reports decode and prefill **separately**: MLX reads exactly 0.0 on all 5,339 decode forwards
+  and 0.375–0.75 on the 100 prefill forwards. `replay.py` needs a `readout_factory=` seam (~14 lines).
+- TF32 off; deterministic algorithms on; `CUBLAS_WORKSPACE_CONFIG=:4096:8`; SDPA backend pinned.

@@ -90,3 +90,34 @@ size 1 being the single-device case.
 ~450 new lines for 1–3 against 1,120 kept; ~120 for 4. Everything marked unexecuted until the gate
 above it passes on CPU, and the manifest of what passed at which commit ships with the branch so the
 remote's first hour attributes any failure to the device change.
+
+---
+
+## Corrections from the survey (plan §13), which supersede anything above they contradict
+
+Read plan §13 in full. The items below are the ones that change this order.
+
+- The per-block bundle is `(attention_mask, (cos, sin), position_ids)` with `(cos, sin)` **per layer
+  type**; one rope pair gives five of six blocks the wrong base. `cache_position` is not needed.
+- `cache.layers[i]` is the per-block handle already. `crop` takes a **negative** count; return the
+  trimmed count yourself. `.state` carries no position on either backend — `SnapshotCache` restore
+  is broken on MLX today; fix, do not reproduce.
+- `create_causal_mask(allow_is_causal_skip=True)` may return `None` meaning *use `is_causal`* — the
+  same trap as MLX's `"causal"` sentinel. Pin it `False` or handle the `None` route explicitly.
+- `NativeCapture.__enter__` imports `Qwen3NextAttention` unconditionally; make it conditional on head
+  capture. The HF model returns `CausalLMOutputWithPast` and takes `past_key_values=`; unwrap
+  `.logits` where `arch.py:965` and `session.py:410` expect a tensor.
+- Add `view.input_device` and `view.vocab_size` to the contract. `from_model` never calls `.to()`.
+- **`residuals()` takes a capture dtype.** Today it is fp32-per-block recomputation; hooks give the
+  native path that no probe consumes. Which one the torch view's `residuals()` returns is **Q5**, the
+  Director's; build both behind the parameter and default to whatever he rules.
+- **TF32 off** before any fp32 matmul: `torch.backends.cuda.matmul.allow_tf32 = False`,
+  `torch.set_float32_matmul_precision("highest")`. Set in `device.py`, printed by the diagnosis kit.
+- **Prefill in chunks of 2,048** (`NATIVE_PREFILL_STEP_SIZE`), final prompt token separate, or the
+  forward rows change shape under an identical trajectory.
+- Stable top-k tie-break by ascending token id (`session.py:106-111`); `torch.topk` guarantees no
+  order. Competition ranks are one-based (`records.py:62`); `jlens/vis.py::_ranks_of` is zero-based.
+- **G-1 has three negative controls**, each biting at 1,400 and not at 64: mask dispatch, hook-site
+  off-by-one, entry-transform omission — and the controlled number must not be bit-identical to the
+  uncontrolled one. Pre-registered criterion: ≤ 1e-3 relative per layer in bf16, control two orders
+  above it.
