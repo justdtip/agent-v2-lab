@@ -1,0 +1,131 @@
+{
+  "basis": "measured-here",
+  "exploratory_stratum": {
+    "basis": "assumed",
+    "by_episode": [
+      {
+        "basis": "assumed",
+        "final_step": 13,
+        "positions": 1793,
+        "task_id": "test-aggregate_report-0011-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 13,
+        "positions": 2914,
+        "task_id": "test-batch_update-0010-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 1,
+        "positions": 530,
+        "task_id": "test-calculate-0002-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 9,
+        "positions": 1889,
+        "task_id": "test-conditional_update-0009-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 10,
+        "positions": 1845,
+        "task_id": "test-cross_reference-0008-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 11,
+        "positions": 1628,
+        "task_id": "test-ledger_reconcile-0007-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 2,
+        "positions": 662,
+        "task_id": "test-list-0005-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 7,
+        "positions": 1672,
+        "task_id": "test-pointer_chain-0006-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 1,
+        "positions": 607,
+        "task_id": "test-read-0000-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 2,
+        "positions": 707,
+        "task_id": "test-search-0001-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 3,
+        "positions": 739,
+        "task_id": "test-synthesis-0003-clean"
+      },
+      {
+        "basis": "assumed",
+        "final_step": 3,
+        "positions": 790,
+        "task_id": "test-update-0004-clean"
+      }
+    ],
+    "chars_per_token": 4.0,
+    "episodes": 12,
+    "per_model_gib": {
+      "gemma3-12b-cuda-bf16": 5.529,
+      "gemma3-4b-cuda-bf16": 2.633
+    },
+    "positions_total": 15776,
+    "total_gib": 8.162,
+    "unit": "every position of the final decision of each pre-registered episode"
+  },
+  "main_stratum": {
+    "decisions": 7629,
+    "per_model_gib": {
+      "gemma3-12b-cuda-bf16": 2.674,
+      "gemma3-4b-cuda-bf16": 1.273
+    },
+    "total_gib": 3.947,
+    "unit": "one decision position per distinct decision"
+  },
+  "models": {
+    "gemma3-12b-cuda-bf16": {
+      "bytes_per_position": 376320,
+      "capture_dtype": "native",
+      "config": "configs/models/gemma3-12b-cuda-bf16.yaml",
+      "element_bytes": 2,
+      "hf_id": "google/gemma-3-12b-it",
+      "hidden": 3840,
+      "layers": 48,
+      "residuals_per_position": 49,
+      "shape_source": "google/gemma-3-12b-it config",
+      "verified_on_device": false
+    },
+    "gemma3-4b-cuda-bf16": {
+      "bytes_per_position": 179200,
+      "capture_dtype": "native",
+      "config": "configs/models/gemma3-4b-cuda-bf16.yaml",
+      "element_bytes": 2,
+      "hf_id": "google/gemma-3-4b-it",
+      "hidden": 2560,
+      "layers": 34,
+      "residuals_per_position": 35,
+      "shape_source": "google/gemma-3-4b-it config",
+      "verified_on_device": false
+    }
+  },
+  "prompt_length_chars": {
+    "max": 14316,
+    "median": 4738,
+    "min": 1824,
+    "n": 7629,
+    "note": "characters, not tokens: no Gemma tokenizer is present on the laptop, so the token figures in the order are the Chief's and are re-measured on the card"
+  }
+}
