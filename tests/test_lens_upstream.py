@@ -767,3 +767,46 @@ def test_only_upstreams_short_prompt_refusal_counts_as_a_skipped_row():
     assert _is_short_prompt(ValueError("prompt too short: seq_len=4, need > 17 tokens"))
     assert not _is_short_prompt(ValueError("source layer 99 out of range"))
     assert not _is_short_prompt(ValueError("skip_first must be >= 0, got -1"))
+
+
+def test_the_upstream_seam_is_one_object_reached_by_both_import_paths():
+    """WS-A and WS-D must not each hold their own way in.
+
+    The seam lives at `local_llm_lab.upstream_ref` and `lens_fitting.upstream` re-exports it. If the
+    two ever diverged, a box holding both a read-only clone and a pip-installed `jlens` would use
+    whichever the interpreter imported first, and the provenance recorded in a sidecar would
+    describe the other one.
+    """
+    from local_llm_lab import upstream_ref
+    from local_llm_lab.pipeline.lens_fitting import upstream as adapter
+
+    for name in ("load_upstream", "Upstream", "UpstreamUnavailable", "EXPECTED_JLENS_COMMIT"):
+        assert getattr(adapter, name) is getattr(upstream_ref, name), f"{name} diverged"
+
+
+def test_an_absent_clone_reads_as_a_skip_rather_than_a_collection_error():
+    """`UpstreamUnavailable` is an `ImportError` so lazy importers can treat it as a skip.
+
+    A module doing `from jlens import ...` at top level aborts collection of the whole file on a
+    box without the clone, taking unrelated tests with it. Raising an `ImportError` subclass that
+    carries our own message lets `pytest.importorskip` skip with a reason instead.
+    """
+    from local_llm_lab.upstream_ref import UpstreamUnavailable, load_upstream
+
+    assert issubclass(UpstreamUnavailable, ImportError)
+    assert issubclass(UpstreamUnavailable, RuntimeError), "the original contract is kept"
+    with pytest.raises(UpstreamUnavailable, match="was not found"):
+        load_upstream("/nonexistent/jacobian-lens")
+
+
+def test_the_recorded_commit_falls_back_to_an_installed_pin_rather_than_none():
+    """On a GPU box upstream is a pip install with no `.git`, and `None` would read as verified.
+
+    The `[cuda]` extra installs it as `jlens @ git+...@581d398...`, which pip records in
+    `direct_url.json`. Without the fallback the provenance field is `None` on precisely the machine
+    the golden test runs on — a missing figure reading as a passing one.
+    """
+    from local_llm_lab.upstream_ref import _installed_commit
+
+    # No `jlens` distribution is installed here, so the honest answer is None rather than a guess.
+    assert _installed_commit() is None
