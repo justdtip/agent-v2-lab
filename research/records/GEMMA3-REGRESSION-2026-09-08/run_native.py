@@ -1,4 +1,22 @@
-"""One registered native regression run, under the normal shared window and lock."""
+"""One registered native regression run, under the normal shared window and lock.
+
+Guarded like every other records script that reaches the model. This one holds the model-run lock
+and loads a 4B checkpoint, so running it by hand -- by a reader retracing the record, or by a test
+sweep -- starts a model process outside R47, R48 and the issue-83 lock. It arrived on this branch
+with the regression record on 2026-09-09 and the repository-rule tests caught it immediately; the
+guard is added rather than the rule relaxed.
+
+The record's content is untouched. This adds a refusal and changes nothing the run produced.
+"""
+import sys as _sys
+
+if __name__ == "__main__" and "--i-am-a-record" not in _sys.argv:
+    _sys.exit(
+        "refusing to run: this file is the record of the native regression fit, not a launcher. "
+        "It takes the model-run lock and loads a 4B checkpoint. Re-run it deliberately with "
+        "--i-am-a-record, inside an announced box window."
+    )
+
 import hashlib
 import json
 import runpy

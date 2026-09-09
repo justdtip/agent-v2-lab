@@ -90,3 +90,81 @@ size 1 being the single-device case.
 ~450 new lines for 1–3 against 1,120 kept; ~120 for 4. Everything marked unexecuted until the gate
 above it passes on CPU, and the manifest of what passed at which commit ships with the branch so the
 remote's first hour attributes any failure to the device change.
+
+---
+
+## Corrections from the survey (plan §13), which supersede anything above they contradict
+
+Read plan §13 in full. The items below are the ones that change this order.
+
+- The per-block bundle is `(attention_mask, (cos, sin), position_ids)` with `(cos, sin)` **per layer
+  type**; one rope pair gives five of six blocks the wrong base. `cache_position` is not needed.
+- `cache.layers[i]` is the per-block handle already. `crop` takes a **negative** count; return the
+  trimmed count yourself. `.state` carries no position on either backend — `SnapshotCache` restore
+  is broken on MLX today; fix, do not reproduce.
+- `create_causal_mask(allow_is_causal_skip=True)` may return `None` meaning *use `is_causal`* — the
+  same trap as MLX's `"causal"` sentinel. Pin it `False` or handle the `None` route explicitly.
+- `NativeCapture.__enter__` imports `Qwen3NextAttention` unconditionally; make it conditional on head
+  capture. The HF model returns `CausalLMOutputWithPast` and takes `past_key_values=`; unwrap
+  `.logits` where `arch.py:965` and `session.py:410` expect a tensor.
+- Add `view.input_device` and `view.vocab_size` to the contract. `from_model` never calls `.to()`.
+- **`residuals()` takes a capture dtype.** Today it is fp32-per-block recomputation; hooks give the
+  native path that no probe consumes. Which one the torch view's `residuals()` returns is **Q5**, the
+  Director's; build both behind the parameter and default to whatever he rules.
+- **TF32 off** before any fp32 matmul: `torch.backends.cuda.matmul.allow_tf32 = False`,
+  `torch.set_float32_matmul_precision("highest")`. Set in `device.py`, printed by the diagnosis kit.
+- **Prefill in chunks of 2,048** (`NATIVE_PREFILL_STEP_SIZE`), final prompt token separate, or the
+  forward rows change shape under an identical trajectory.
+- Stable top-k tie-break by ascending token id (`session.py:106-111`); `torch.topk` guarantees no
+  order. Competition ranks are one-based (`records.py:62`); `jlens/vis.py::_ranks_of` is zero-based.
+- **G-1 has three negative controls**, each biting at 1,400 and not at 64: mask dispatch, hook-site
+  off-by-one, entry-transform omission — and the controlled number must not be bit-identical to the
+  uncontrolled one. Pre-registered criterion: ≤ 1e-3 relative per layer in bf16, control two orders
+  above it.
+
+
+## The Research Division's answers (plan §14) supersede the above where they conflict
+
+Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
+- **`attn_implementation="eager"`** on the model the view wraps, **for determinism**: under `sdpa`
+  Gemma runs two attention kernels per forward. The batching-rule argument is withdrawn (plan §14.2,
+  `c0e4233`): batched rows are ~1.5x faster than sequential under both implementations at steady
+  state; the missing rule costs one first call only.
+- **§6.3 uses `torch.autograd.grad(..., is_grads_batched=True)`**, not `vjp` + `vmap`; upstream's
+  `ActivationRecorder` then works unchanged. The acceptance test for the rewrite is a **timing ratio**
+  ≥ 1 against sequential on a small fixture. Never `output_hidden_states=True`; never
+  `register_full_backward_hook`; never `flash_attention_2`.
+- Cache offsets from `get_seq_length()` / `get_mask_sizes()`, never `keys.shape[-2]`; call
+  `activate_past_recording()` on every sliding layer at construction if anything will rewind.
+- The memory claim in your §4 was against a straw man: upstream fits at 128 tokens by default. Restate
+  it: the saving is the forward tape saved once, at whatever context length *we* choose.
+
+## Amendment, 2026-09-09 evening — review of `8edb4cd`, and the answer to the memory question
+
+Reviewed in full (plan §16.5). Passes on substance; three edits before it merges into
+`cuda-migration`, which now exists on origin:
+
+1. **Reach `jlens` through the seam.** `arch_torch.py` and `torch_capture.py` import it at module
+   top level and nothing declares it, so in the shared venv both test files ERROR at collection and
+   abort the whole run. Import through `load_upstream()` (being relocated to
+   `local_llm_lab/upstream_ref.py`; until then it lives in `pipeline/lens_fitting/upstream.py`) and
+   add `pytest.importorskip` for `jlens` in both test files, so a missing clone is a skip with a
+   reason. Plan §16.2.
+2. **Re-run the evidence on torch 2.14.0**, the plan's floor; the record's isolated runtime was
+   2.9.1. The 79 branch tests pass here on 2.14.0 with the clone on the path; the record should say
+   the same from your side.
+3. **Do not merge `WS-A.patch` / `patch.json`.** A record cites the commit range and its shas; a
+   2,584-line copy of the diff is a second source of truth that is stale at the first edit.
+
+**The memory question: no larger host.** Load the checkpoint in its stored bf16 and let
+`_call_promoted` upcast per block: the hand-run matmuls are the same arithmetic on the same numbers
+as a float32 load (an exact upcast of the same bf16 values) at 7.2 GiB resident. Declare the one
+thing that differs — the natively observed rotary tables and masks are bf16 — by reporting the max
+deviation between the rotary module evaluated in float32 and the observed tables at the gate's
+length, as one number in the record. Unembed scored rows only (`cached_logits` / `native_readout`);
+the fp32 `unembed` promotes the tied 2.7 GB head per call. Measure the ~8.5 GiB projection before
+believing it, with MLX not loaded. The float32-loaded run is a control for the GPU host. Plan §16.1.
+
+Two standing rules from tonight: in a worktree set `PYTHONPATH=<worktree>/src` or the tests exercise
+main's code (§16.4); stage by explicit path and read `git log --stat` over the range before every
+push (METHOD-2026-09-08).
