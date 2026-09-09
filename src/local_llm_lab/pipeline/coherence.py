@@ -271,7 +271,7 @@ def coherence_summary(
 ) -> dict[str, Any]:
     """The coherence section of an evaluation summary."""
     records = [trajectory_events(t, window=window, tools=tools) for t in trajectories]
-    for record, trajectory in zip(records, trajectories):
+    for record, trajectory in zip(records, trajectories, strict=True):
         record["task_id"] = getattr(trajectory, "task_id", None)
         record["family"] = getattr(trajectory, "family", None)
         record["variant"] = getattr(trajectory, "variant", None)

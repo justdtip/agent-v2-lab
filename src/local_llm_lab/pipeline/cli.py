@@ -30,7 +30,7 @@ from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.preflight import artifact_path as preflight_artifact_path
 from local_llm_lab.pipeline.preflight import require_preflight, run_preflight
-from local_llm_lab.pipeline.report import load_summaries, render
+from local_llm_lab.pipeline.report import load_summaries
 from local_llm_lab.pipeline.rollout import run_rollout
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.pipeline.transcript import Transcript

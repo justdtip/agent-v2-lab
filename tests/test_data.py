@@ -563,12 +563,12 @@ def test_protected_datasets_refuse_writes_even_with_the_override(monkeypatch, tm
 
 def test_protected_datasets_guard_the_real_repository_paths() -> None:
     """Pin the R21 protected list and prove the guard rejects the real directories."""
-    assert PROTECTED_DATASETS == {
+    assert {
         "data/agent_v2",
         "data/agent_v2b",
         "data/agent_v2c",
         "data/chat_replay",
-    }
+    } == PROTECTED_DATASETS
     for name in sorted(PROTECTED_DATASETS):
         with pytest.raises(ProtectedDatasetError):
             guard_dataset_write(PROJECT_ROOT / name, overwrite=True)
@@ -671,7 +671,7 @@ def test_render_dataset_carries_task_content_verbatim_and_rerenders_only(
         source_rows = read_jsonl(source / f"{role}.jsonl")
         rendered_rows = read_jsonl(output / f"{role}.jsonl")
         assert len(rendered_rows) == len(source_rows) == manifest["outputs"][role]["rows"]
-        for original, rendered in zip(source_rows, rendered_rows):
+        for original, rendered in zip(source_rows, rendered_rows, strict=True):
             payloads = []
             for row in (original, rendered):
                 stripped = {
@@ -814,7 +814,7 @@ def test_render_rows_verbatim_chat_fallback_is_an_explicit_allowlist() -> None:
     In a controlled arm, silent is the failure mode to fear: a rollout or expert row that
     somehow lost its tool call must raise, never be rendered as chat.
     """
-    assert data_module.CHAT_COMPLETION_SOURCES == {"pre-expansion-policy-replay"}
+    assert {"pre-expansion-policy-replay"} == data_module.CHAT_COMPLETION_SOURCES
     chat_row = {
         "messages": [
             {"role": "user", "content": "hi"},

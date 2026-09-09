@@ -310,7 +310,7 @@ def test_gradients_match_the_reference_loop_within_tolerance(chunk: int) -> None
         argnums=(0, 1, 2, 3, 4),
     )(*arguments)
 
-    for expected, got in zip(reference, actual):
+    for expected, got in zip(reference, actual, strict=True):
         assert expected.shape == got.shape
         assert _close(got, expected, rtol=1e-3, atol=1e-4), _worst(got, expected)
 
@@ -493,9 +493,11 @@ def test_the_installer_restores_the_binding_when_the_body_raises() -> None:
     library = importlib.import_module("mlx_lm.models.gated_delta")
     original = library.gated_delta_ops
 
-    with pytest.raises(RuntimeError, match="training blew up"):
-        with gdw.install_chunkwise_gated_delta(64):
-            raise RuntimeError("training blew up")
+    with (
+        pytest.raises(RuntimeError, match="training blew up"),
+        gdw.install_chunkwise_gated_delta(64),
+    ):
+        raise RuntimeError("training blew up")
 
     assert library.gated_delta_ops is original
 
@@ -553,6 +555,8 @@ def test_the_training_backbone_installs_nothing_for_a_dense_arm(monkeypatch) -> 
 
 def test_an_unknown_recurrence_mode_is_rejected() -> None:
     cli = importlib.import_module("local_llm_lab.pipeline.cli")
-    with pytest.raises(ValueError, match="gated_delta_mode"):
-        with cli._training_backbone(64, mode="quadratic"):
-            pass
+    with (
+        pytest.raises(ValueError, match="gated_delta_mode"),
+        cli._training_backbone(64, mode="quadratic"),
+    ):
+        pass

@@ -22,11 +22,12 @@ import statistics
 import sys
 import tempfile
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, fields
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from subprocess import SubprocessError
-from typing import Any, Callable, Mapping, Sequence, TextIO
+from typing import Any, TextIO
 
 from local_llm_lab import spawn
 
@@ -54,7 +55,7 @@ _START_GUTTER = " "
 
 def _utc_now() -> str:
     """UTC ISO 8601 with a trailing ``Z`` rather than ``+00:00``."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _duration(seconds: float) -> str:
@@ -277,7 +278,7 @@ class RunLog:
         stdout: TextIO | None = None,
         stderr: TextIO | None = None,
         clock: Callable[[], float] = time.monotonic,
-    ) -> "RunLog":
+    ) -> RunLog:
         """Open ``output/run.log`` and ``output/events.jsonl`` in append mode and record the start.
 
         Append rather than truncate so a resumed or re-entered stage adds to the record
@@ -432,10 +433,7 @@ class RunLog:
         total_n = int(total)
         fraction = (step_n / total_n) if total_n > 0 else 0.0
         eta: float | None
-        if step_n <= 0 or total_n <= 0:
-            eta = None
-        else:
-            eta = elapsed / step_n * (total_n - step_n)
+        eta = None if step_n <= 0 or total_n <= 0 else elapsed / step_n * (total_n - step_n)
         body = f"[{label} {step_n}/{total_n} {fraction * 100:.0f}%]"
         rendered = _format_fields(fields)
         if rendered:
@@ -482,7 +480,7 @@ class RunLog:
         self._run_log.close()
         self._events.close()
 
-    def __enter__(self) -> "RunLog":
+    def __enter__(self) -> RunLog:
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -566,7 +564,7 @@ class HealthThresholds:
         block: Mapping[str, Any] | None,
         *,
         memory_budget_gib: float | None,
-    ) -> "HealthThresholds":
+    ) -> HealthThresholds:
         """Build from the optional ``train.health:`` mapping.
 
         The memory budget comes from the model registry; the config block overrides it
@@ -771,7 +769,10 @@ class TrainingHealth:
         needed = self._thresholds.val_rising_reports
         if len(self._val_reports) >= needed:
             window = [report["val_loss"] for report in self._val_reports[-needed:]]
-            rising = all(later > earlier for earlier, later in zip(window, window[1:]))
+            # Pairwise over consecutive reports, so the second sequence is one shorter by design.
+            rising = all(
+                later > earlier for earlier, later in zip(window, window[1:], strict=False)
+            )
             if rising and not self._val_rising_active:
                 self._val_rising_active = True
                 self._record(

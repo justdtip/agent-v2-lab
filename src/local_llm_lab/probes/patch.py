@@ -609,7 +609,8 @@ def _value_pattern(value: str) -> str:
 
 def _common_prefix_length(left: Sequence[int], right: Sequence[int]) -> int:
     count = 0
-    for a, b in zip(left, right):
+    # Deliberately unequal: a common prefix is exactly the case where they differ in length.
+    for a, b in zip(left, right, strict=False):
         if a != b:
             break
         count += 1
@@ -979,7 +980,7 @@ def _message_contents(
     ]
     observations = [
         message["content"]
-        for message, original in zip(windowed, messages)
+        for message, original in zip(windowed, messages, strict=True)
         if message.get("role") == "tool"
         and isinstance(message.get("content"), str)
         and message["content"] == original.get("content")
