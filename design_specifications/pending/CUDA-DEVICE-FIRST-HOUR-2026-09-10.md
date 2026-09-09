@@ -73,8 +73,9 @@ identical number would be a coincidence.
 ## 4. WS-D — the lens un-port's golden test (D-CRO)
 
 The finite-difference lens against upstream's exact-autograd lens on the same corpus and
-checkpoint, both float32 on disk, through `fit_upstream_jacobian`; the command and its record are
-named in the WS-D record when `cuda-ws-d` merges.
+checkpoint, both float32 on disk, through `fit_upstream_jacobian` on `cuda-ws-d` (5121083, 35
+tests, all four adversarial fixes). The D-CRO's device checklist is
+`research/records/WSD-DEVICE-CHECKLIST-2026-09-09/` and is this section in full.
 
 | what | must produce | laptop basis |
 |---|---:|---:|
