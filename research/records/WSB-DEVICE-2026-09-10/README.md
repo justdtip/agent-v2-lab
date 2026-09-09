@@ -1,4 +1,4 @@
-# WS-B on the rented card: the CUDA seam is faithful, and the acceptance gate fails anyway
+# WS-B on the rented card: the CUDA seam is faithful, and the gate that failed was measuring the wrong thing
 
 **RTX PRO 6000 Blackwell, 97,887 MiB, torch 2.14.0+cu130, transformers 5.16.1, Python 3.13.15,
 2026-09-10.** Determinism pinned before the first CUDA use every run: TF32 off both paths,
@@ -13,11 +13,19 @@ other to within one position in 5,245, and thirteen of fifteen episodes produce 
 set of confident disagreements on both. Two independent CUDA runs of the same episode are
 byte-identical. Nothing here is a CUDA defect.
 
-**The acceptance gate fails.** Twenty-four positions where the MLX recording's own probability
-was at least 0.99 produced a different argmax. My rule says that is a defect and not
-quantisation. The rule fires on CPU exactly as it fires on CUDA, so whatever it has found was
-already true on the laptop and was invisible because **only one of the fifteen episodes had ever
-been measured**, and that one episode is clean.
+**The acceptance gate failed, and the gate was wrong.** Twenty-four positions where the MLX
+recording's own probability was at least 0.99 produced a different argmax, which my rule calls a
+defect. It fires on CPU exactly as on CUDA, so it was already true on the laptop and invisible
+because **only one of the fifteen episodes had ever been measured**, and that one is clean.
+The precision-matched arm (§2a) then resolved it: **twenty-one of the twenty-four are
+quantisation** — MLX at bfloat16 agrees with torch and only the 4-bit record dissents — and the
+remaining **three are ties at the bfloat16 grid**, gaps of nought to six units of last place.
+No port defect is implicated at any of them. The rule's premise, that quantisation cannot move a
+confident argmax, is false at 4-bit, and the rule needs a precision-matched reference and a
+margin in ULPs before it can call anything a defect.
+
+Nothing here says the port is correct; it says these twenty-four positions were never evidence
+against it. What stands as positive evidence is the device-consistency above and WS-A's gates.
 
 ---
 
@@ -43,7 +51,11 @@ agreement, same flip positions, same peak. Pinning holds and no kernel drifts.
 `cuda:0`. The laptop projected 7.56 GiB and measured 7.88 GiB on CPU. The projection was low by
 4.8% against the single-episode figure and by 16.5% against the corpus, in the safe direction.
 
-**Speed.** `calculate-0158` takes 4.0 s on the card against 83.5 s on the laptop's CPU.
+**Speed.** `calculate-0158` takes 4.0 s on the card against 83.5 s on the laptop's CPU, taken
+while the card was idle. The recapture's per-episode timings in `cuda-all15-v2.json` were taken
+while the D-CRO's fit shared the card and run 2.29x slower than the same episodes in
+`cuda-all15.json`; **treat every timing in the v2 file as `shared-card`**. The agreement figures
+are unaffected and identical, and the peak is per-process allocated, so it stands.
 
 ---
 
@@ -84,12 +96,65 @@ argues against the mask-dispatch hypothesis the checklist named as the thing to 
 
 Nothing I ran distinguishes these, and I am not going to pick between them from the armchair.
 
-**The test that would.** Compare torch bfloat16 against **MLX bfloat16** on the same prompts:
-same precision, different framework, quantisation removed from the comparison. Confident flips
-that survive are the port; confident flips that vanish were the 4-bit gap and the hard rule needs
-restating in terms of a precision-matched reference. That run needs MLX, so it is a laptop run,
-and it is small: **`confident-flips.json` in this directory is its input** — all twenty-four
-positions with turn, position, recorded and produced token, and the recorded probability.
+**The test that would, and did.** Compare torch bfloat16 against **MLX bfloat16**: same
+precision, different framework, quantisation removed. Authorised by the Chief and run on the
+laptop, because only the laptop has MLX. It is §2a below, and it settles the question.
+
+`confident-flips.json` was its input — all twenty-four positions with turn, position, recorded
+and produced token, and the recorded probability.
+
+---
+
+## 2a. The precision-matched arm: the premise was wrong, and the port is not implicated
+
+`scripts/mlx_reference.py`, teacher-forced over the turns carrying the twenty-four positions,
+MLX bfloat16 against the torch bfloat16 the card produced. At each position: if MLX agrees with
+torch, the 4-bit record is the outlier and the premise was wrong; if MLX still produces the
+recorded token, torch differs from MLX with quantisation excluded, and that is the port.
+
+| verdict | count |
+|---|---:|
+| **quantisation** — the two bfloat16 implementations agree, the 4-bit record is the outlier | **21** |
+| **port** — MLX at matched precision still produces the recorded token | **3** |
+
+So twenty-one of the twenty-four were never evidence about the port at all. **The hard rule's
+premise was wrong**: 4-bit quantisation moves confident argmaxes, and the recorded probability
+is the 4-bit model's confidence in its own preference, which does not bound what a bfloat16
+model will do. `batch_update-0166` position 735, the P = 1.000000 case that looked most like a
+defect, is quantisation: both bfloat16 frameworks produce 107 and only the 4-bit record says
+2818.
+
+**The three that remained are ties, not defects** (`scripts/flip_margin.py`). The instrument
+that says so is the logit gap, not the probability margin — and measuring the probability
+margin first was a mistake worth recording, because it called all three "not a tie" at
+margins of 0.12 to 0.64. The logits are **bfloat16**, so their gaps are quantised to the
+bfloat16 grid; softmax is monotone, so `ln(p1/p2)` recovers the gap exactly. Every gap came
+back an exact multiple of 0.25, which is the bfloat16 step at the magnitude these logits sit
+at — the check that it is the right grid:
+
+| position | recorded P (4-bit) | MLX gap | torch gap |
+|---|---:|---:|---:|
+| `read-0108` turn 0 position 521 | 0.999739 | 6 ULP | **0 ULP** |
+| `update-0028` turn 0 position 556 | 0.999873 | 2 ULP | 2 ULP, opposite sign |
+| `list-0149` turn 0 position 522 | 0.991508 | 1 ULP | 3 ULP, **same token** |
+
+At `read-0108` the two candidates are **exactly equal in bfloat16** and the argmax is settling a
+coin toss. At `update-0028` the same 2-ULP gap points opposite ways in the two frameworks. At
+`list-0149`, torch on the laptop CPU picks the *recorded* token, agreeing with MLX: that
+position was one of the two episodes where the card's CPU and CUDA already differed, so the
+verdict of "port" was a device tie, not a framework disagreement.
+
+**Reading: no port defect is implicated at any of the twenty-four positions.** Twenty-one are
+quantisation and three are ties at the resolution of the numbers being compared.
+
+**One honest limit.** The margin arm ran torch on the laptop's CPU, not the card's CUDA, so for
+`list-0149` it did not reproduce the exact run that produced the verdict. That is why the row
+above says what it says rather than claiming the verdict was wrong.
+
+**What the rule should become.** "A confident flip is a defect" needs a precision-matched
+reference and a margin measured in ULPs of the stored dtype. Against a differently-quantised
+recording it is not a defect test, and this corpus is the demonstration: it fired twenty-four
+times and found nothing.
 
 ---
 
@@ -177,8 +242,9 @@ the resolver device-aware rather than leaving a flag people must remember.
 
 ## 6. Files
 
-**`confident-flips.json` — the twenty-four failing positions, which is the input to the test
-§2 names.** `cuda-all15-v2.json` / `.jsonl` and `cuda-v2.log` — the recapture that produced it,
+**`mlx-bf16-arm.json` / `.jsonl` — the precision-matched arm, one row per position with its
+verdict. `flip-margins.json` — the logit gaps in ULPs for the three that arm left open.**
+`confident-flips.json` — the twenty-four failing positions, the input to both. `cuda-all15-v2.json` / `.jsonl` and `cuda-v2.log` — the recapture that produced it,
 identical to the first run in every figure. `cuda-all15.json` / `.jsonl`, `cpu-all15.json` /
 `.jsonl` — the two full-corpus runs, per-episode rows written and flushed as each completed. `cuda-0158-run1/run2` — the determinism pair.
 `accidental-cpu-0158-run1.*` — the first measurement of the day, kept because it is the evidence
