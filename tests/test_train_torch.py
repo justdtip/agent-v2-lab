@@ -157,14 +157,14 @@ def test_the_mlx_backend_does_not_reach_the_torch_branch(monkeypatch) -> None:
     assert not called
 
 
-def test_a_multi_process_run_is_refused_rather_than_distributed_by_default(monkeypatch) -> None:
-    """The gap is named in code, because the alternative is invisible.
+def test_a_multi_process_run_is_refused_until_the_joined_path_has_a_number(monkeypatch) -> None:
+    """Two claims kept as two, in code.
 
-    FSDP2 is validated per parameter on CPU in the two-device record, and is not wired into this
-    stage. Handed more than one process, `Trainer` and `accelerate` distribute under their own
-    default: the loss would fall, a checkpoint would be written, and the memory arithmetic every
-    device decision rests on would describe a configuration that never ran. A refusal in the first
-    hour on rented hardware is the cheapest possible version of finding that out.
+    FSDP2 *is* wired: `fsdp_arguments` builds the configuration and the stage passes it. What does
+    not exist yet is the number for the **joined** path -- this stage driving that configuration
+    through `Trainer` -- against the per-parameter gate the standalone path passed. The refusal
+    comes off when that number exists and not before, because the alternative is a stage that
+    appears to work under a strategy nobody measured.
     """
     from local_llm_lab.pipeline.train_torch import require_supported_distribution
 
@@ -176,7 +176,63 @@ def test_a_multi_process_run_is_refused_rather_than_distributed_by_default(monke
     monkeypatch.setenv("LLL_BACKEND", "torch")
     from local_llm_lab.pipeline import cli
 
-    with pytest.raises(NotImplementedError, match="not wired here"):
+    with pytest.raises(NotImplementedError, match="per-parameter agreement gate"):
         cli.stage_train(
             {"train": {}, "model": "x", "output": Path("/nonexistent"), "seed": 1}, None
         )
+
+
+def test_fsdp_is_configured_only_above_world_size_one() -> None:
+    """World size one is not an FSDP rung: it silently zeros some gradients (pytorch #144045)."""
+    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
+
+    from local_llm_lab.pipeline.train_torch import decoder_layer_class_name, fsdp_arguments
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    model = wrap_with_chunked_loss(
+        Gemma3ForCausalLM(
+            Gemma3TextConfig(
+                vocab_size=32, hidden_size=16, intermediate_size=32, num_hidden_layers=2,
+                num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+            )
+        ),
+        chunk_size=4,
+    )
+
+    assert fsdp_arguments(model, world_size=1) == {}
+
+    config = fsdp_arguments(model, world_size=2)
+    assert config["fsdp"] == "full_shard"
+    # Version pinned explicitly: it is upstream's default today, and a default that moves under a
+    # recorded run is a difference nothing would report.
+    assert config["fsdp_config"]["version"] == 2
+    assert config["fsdp_config"]["state_dict_type"] == "FULL_STATE_DICT"
+    # The block class is read off the model, not written in source, so this file does not go
+    # quietly wrong on the next architecture.
+    assert config["fsdp_config"]["transformer_layer_cls_to_wrap"] == ["Gemma3DecoderLayer"]
+    assert decoder_layer_class_name(model) == "Gemma3DecoderLayer"
+
+
+def test_the_block_class_is_read_through_whatever_is_wrapping_the_model() -> None:
+    """`Trainer` wraps what it is handed, and what it is handed is already our wrapper."""
+    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
+
+    from local_llm_lab.pipeline.train_torch import decoder_layer_class_name
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    inner = Gemma3ForCausalLM(
+        Gemma3TextConfig(
+            vocab_size=32, hidden_size=16, intermediate_size=32, num_hidden_layers=2,
+            num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+        )
+    )
+    wrapped = wrap_with_chunked_loss(inner, chunk_size=4)
+
+    class _Distributed(torch.nn.Module):
+        def __init__(self, module):
+            super().__init__()
+            self.module = module
+
+    assert decoder_layer_class_name(inner) == "Gemma3DecoderLayer"
+    assert decoder_layer_class_name(wrapped) == "Gemma3DecoderLayer"
+    assert decoder_layer_class_name(_Distributed(wrapped)) == "Gemma3DecoderLayer"

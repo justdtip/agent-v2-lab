@@ -39,8 +39,19 @@ DEFAULT_LOSS_CHUNK = 512
 
 
 def base_model_of(model: Any) -> Any:
-    """The decoder stack beneath a causal-LM head, through any wrapper `Trainer` has applied."""
-    inner = getattr(model, "module", model)  # DDP / FSDP1 wrappers expose `.module`
+    """The causal LM beneath whatever is wrapping it.
+
+    Three layers can sit above it and each names its child differently: DDP and FSDP1 expose
+    ``.module``; :func:`wrap_with_chunked_loss` exposes ``.inner``. Unwrapping repeatedly rather
+    than once means the order they are applied in does not matter, which it otherwise would --
+    `Trainer` wraps what it is handed, and what it is handed is already our wrapper.
+    """
+    inner = model
+    for _ in range(4):  # bounded: a cycle here should raise below, not spin
+        nxt = getattr(inner, "module", None) or getattr(inner, "inner", None)
+        if nxt is None or nxt is inner:
+            break
+        inner = nxt
     if not hasattr(inner, "model") or not hasattr(inner, "lm_head"):
         raise TypeError(
             f"{type(inner).__name__} is not a causal LM with `.model` and `.lm_head`; this loss "

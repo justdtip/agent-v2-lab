@@ -40,24 +40,23 @@ ATTENTION = "eager"
 def require_supported_distribution(world_size: int) -> None:
     """Refuse a multi-process run rather than silently training under the wrong strategy.
 
-    This stage has **not** wired FSDP2 yet. Handed more than one process, `Trainer` and `accelerate`
-    would happily distribute the run under their own default, which is not the sharded path the
-    order requires and would not be visible in anything the run reports -- the loss would fall, the
-    checkpoint would be written, and the memory arithmetic every device decision rests on would be
-    describing a configuration that never ran.
+    FSDP2 **is** now wired: :func:`fsdp_arguments` builds the configuration and the stage passes it.
+    What does not yet exist is the number. The standalone sharded path was checked per parameter
+    against single-process training in ``two_device_agreement.py``; the *joined* path -- that
+    configuration driven through `Trainer` by this stage -- has not been through the same gate.
 
-    The sharded path is validated on CPU in
-    ``research/records/CUDA-WS-C-2026-09-09/two_device_agreement.py``, per parameter against
-    single-process training; wiring it into this stage is what remains. Until then the first hour on
-    rented hardware should meet a refusal naming the gap, which is the whole point of a diagnostic
-    first hour.
+    Those are two claims and this refusal keeps them two. It comes off when the joined path passes
+    the per-parameter gate the standalone path passed, and not before, because the alternative is a
+    stage that appears to work under a strategy nobody measured: the loss falls, the checkpoint is
+    written, and the memory arithmetic every device decision rests on describes a configuration
+    that never ran.
     """
     if world_size > 1:
         raise NotImplementedError(
-            f"world size {world_size}: this stage runs single-process only. FSDP2 is validated in "
-            "research/records/CUDA-WS-C-2026-09-09/two_device_agreement.py but is not wired here, "
-            "and `Trainer` would otherwise distribute this run under its own default strategy "
-            "without saying so. Run single-process, or wire FSDP2 before claiming a sharded run."
+            f"world size {world_size}: FSDP2 is configured by fsdp_arguments() but the joined path "
+            "-- this stage driving that configuration through Trainer -- has not passed the "
+            "per-parameter agreement gate that the standalone path passed in "
+            "research/records/CUDA-WS-C-2026-09-09. Run single-process until that number exists."
         )
 
 
@@ -74,8 +73,55 @@ def rendered_rows(dataset: Any) -> list[dict[str, Any]]:
     return rows
 
 
+def decoder_layer_class_name(model: Any) -> str:
+    """The block class FSDP2 wraps, read off the model rather than written here.
+
+    Naming ``Gemma3DecoderLayer`` in source would make this file wrong for the next architecture
+    and, worse, wrong silently: an auto-wrap policy that matches nothing shards nothing and trains
+    without complaint. Plan 10.1's rule about dimensions applies to model names for the same
+    reason.
+    """
+    from local_llm_lab.training.torch_full import base_model_of
+
+    layers = base_model_of(model).model.layers
+    if not len(layers):
+        raise ValueError("model has no decoder layers to wrap")
+    return type(layers[0]).__name__
+
+
+def fsdp_arguments(model: Any, *, world_size: int) -> dict[str, Any]:
+    """`TrainingArguments` fields for FSDP2, or nothing at world size one.
+
+    **World size one is not a rung.** FSDP2 at one rank silently zeros gradients for some parameter
+    shapes in non-root units (pytorch #144045), so the single-device path is plain training and the
+    sharded path begins at two. Any claim that they agree is therefore a measurement between two
+    different code paths, and the record says so rather than implying one path.
+
+    `version: 2` is `transformers` 5.16's own default and is passed explicitly, because a default
+    that changes underneath a recorded run is a difference nothing would report.
+    """
+    if world_size < 2:
+        return {}
+    return {
+        "fsdp": "full_shard",
+        "fsdp_config": {
+            "version": 2,
+            "transformer_layer_cls_to_wrap": [decoder_layer_class_name(model)],
+            # The memory rung when a device is short; measured on the device, never assumed.
+            "reshard_after_forward": True,
+            # A checkpoint must be loadable by name, so it is gathered rather than sharded on save.
+            "state_dict_type": "FULL_STATE_DICT",
+        },
+    }
+
+
 def build_training_arguments(
-    recipe: FullFinetuneConfig, *, output: Path, seed: int, selected: str
+    recipe: FullFinetuneConfig,
+    *,
+    output: Path,
+    seed: int,
+    selected: str,
+    fsdp: dict[str, Any] | None = None,
 ) -> Any:
     """`Trainer`'s arguments, with the device forced to the one the shim chose.
 
@@ -87,6 +133,7 @@ def build_training_arguments(
     from transformers import TrainingArguments
 
     return TrainingArguments(
+        **(fsdp or {}),
         use_cpu=selected == "cpu",
         output_dir=str(output / "checkpoints"),
         max_steps=recipe.max_steps,
@@ -129,7 +176,8 @@ def stage_train_torch(
     )
     from local_llm_lab.tuner_data import load_rendered_splits
 
-    require_supported_distribution(int(os.environ.get("WORLD_SIZE", "1")))
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    require_supported_distribution(world_size)
     seed = int(config["seed"])
     # Before anything imports or touches the device: the workspace variable is read at cuBLAS's
     # first use, so a pin after that point reports a determinism the run does not have.
@@ -192,14 +240,20 @@ def stage_train_torch(
     }
     (output / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-    selected = device.select()
-    arguments = build_training_arguments(recipe, output=output, seed=seed, selected=selected)
-    # One object is handed to `Trainer`, and would be handed to `fully_shard` on a sharded run: the
-    # loss runs inside this wrapper's forward, so autocast, the accumulation window and the unshard
-    # hooks all attach to the one forward that runs. The explicit autocast dtype stays inside the
-    # loss regardless -- a nested autocast of the same dtype costs nothing and documents which
-    # precision the loss owns rather than inherits.
+    # One object is handed to `Trainer`, and to `fully_shard` on a sharded run: the loss runs inside
+    # this wrapper's forward, so autocast, the accumulation window and the unshard hooks all attach
+    # to the one forward that runs. The explicit autocast dtype stays inside the loss regardless --
+    # a nested autocast of the same dtype costs nothing and documents which precision the loss owns
+    # rather than inherits.
     wrapped = wrap_with_chunked_loss(model, autocast_dtype=torch.bfloat16)
+    selected = device.select()
+    arguments = build_training_arguments(
+        recipe,
+        output=output,
+        seed=seed,
+        selected=selected,
+        fsdp=fsdp_arguments(wrapped, world_size=world_size),
+    )
     trainer = make_loss_module_trainer_class()(
         model=wrapped,
         args=arguments,
