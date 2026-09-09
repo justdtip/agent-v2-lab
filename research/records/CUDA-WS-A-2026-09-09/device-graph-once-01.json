@@ -1,0 +1,262 @@
+{
+  "tool": "device_graph_once.py",
+  "rows": "6 (exactness) and 7 (timing); row 8 not here",
+  "source_commit": "8773a1d178740c3c26df04331232ba37607771b5",
+  "device": {
+    "python": "3.13.15",
+    "platform": "Linux 6.17.0-35-generic x86_64",
+    "mlx": null,
+    "torch": "2.14.0",
+    "transformers": "5.16.1",
+    "pinned": {
+      "seed": 0,
+      "deterministic": true,
+      "attn_implementation": "eager"
+    },
+    "determinism": "pinned",
+    "backend": "torch",
+    "device": "cuda:0",
+    "cuda_available": true,
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "deterministic_algorithms": true,
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false,
+    "tf32_matmul": false,
+    "tf32_cudnn": false,
+    "float32_matmul_precision": "highest",
+    "threads": 8,
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "cublas_workspace_before_cuda": true
+  },
+  "device_selected": "cuda:0",
+  "upstream": {
+    "repository": "neuronpedia/jacobian-lens",
+    "licence": "Apache-2.0",
+    "path": "/workspace/agent-v2-lab/.venv/lib/python3.13/site-packages",
+    "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "expected_commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "commit_matches_expected": true,
+    "vendored": false
+  },
+  "fixture": {
+    "width": 64,
+    "blocks": 6,
+    "vocab": 128,
+    "tokens": 64,
+    "timing_tokens": 48,
+    "dim_batch": 16,
+    "seed": 0
+  },
+  "exactness": {
+    "eager": {
+      "tokens": 64,
+      "source_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "target_block": 5,
+      "tensors_on": "cuda:0",
+      "errors_by_layer": {
+        "0": {
+          "max_abs": {
+            "value": 2.384185791015625e-07,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 1.3708229653423053e-07,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "1": {
+          "max_abs": {
+            "value": 2.384185791015625e-07,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 1.5289792794257032e-07,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "2": {
+          "max_abs": {
+            "value": 1.7881393432617188e-07,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 1.2685034483843409e-07,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "3": {
+          "max_abs": {
+            "value": 5.960464477539063e-08,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 4.807858733571547e-08,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "4": {
+          "max_abs": {
+            "value": 5.960464477539063e-08,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 5.2875401337515e-08,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        }
+      },
+      "all_within_float32_epsilon": true
+    },
+    "sdpa": {
+      "tokens": 64,
+      "source_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "target_block": 5,
+      "tensors_on": "cuda:0",
+      "errors_by_layer": {
+        "0": {
+          "max_abs": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "1": {
+          "max_abs": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "2": {
+          "max_abs": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "3": {
+          "max_abs": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        },
+        "4": {
+          "max_abs": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "max_norm_relative": {
+            "value": 0.0,
+            "basis": "measured-here"
+          },
+          "within_float32_epsilon": true
+        }
+      },
+      "all_within_float32_epsilon": true
+    }
+  },
+  "timing": {
+    "eager": {
+      "tokens": 48,
+      "source_blocks": [
+        1,
+        3
+      ],
+      "target_block": 4,
+      "dim_batch": 16,
+      "batched_seconds": {
+        "value": [
+          0.05223136115819216,
+          0.05232791369780898,
+          0.05247858911752701
+        ],
+        "basis": "shared-card"
+      },
+      "sequential_seconds": {
+        "value": [
+          0.5046390048228204,
+          0.5123223839327693,
+          0.5121440379880369
+        ],
+        "basis": "shared-card"
+      },
+      "sequential_over_batched": {
+        "value": 9.661609302013586,
+        "basis": "shared-card"
+      },
+      "best_of": 3,
+      "all_within_float32_epsilon": true,
+      "note": "taken while another seat held the card"
+    },
+    "sdpa": {
+      "tokens": 48,
+      "source_blocks": [
+        1,
+        3
+      ],
+      "target_block": 4,
+      "dim_batch": 16,
+      "batched_seconds": {
+        "value": [
+          0.06408754736185074,
+          0.06208425015211105,
+          0.062193726655095816
+        ],
+        "basis": "shared-card"
+      },
+      "sequential_seconds": {
+        "value": [
+          0.5094343791715801,
+          0.5070381909608841,
+          0.5095236389897764
+        ],
+        "basis": "shared-card"
+      },
+      "sequential_over_batched": {
+        "value": 8.166937503772738,
+        "basis": "shared-card"
+      },
+      "best_of": 3,
+      "all_within_float32_epsilon": true,
+      "note": "taken while another seat held the card"
+    }
+  },
+  "status": "pass"
+}
