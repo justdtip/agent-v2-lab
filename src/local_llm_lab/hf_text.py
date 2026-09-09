@@ -202,6 +202,13 @@ def load_text_causal_lm(
     if devices != {torch.device(device).type} or dtypes != {dtype}:
         raise ValueError(f"loaded parameters are on {sorted(devices)} in {sorted(dtypes)}")
     model.eval().requires_grad_(False)
+    # `save_pretrained(save_original_format=True)`, the default, reverts the conversions the
+    # load applied, read from this attribute; a wrapper loaded under the prefix mapping would
+    # save `language_model.model.*` tensors under a config that names the causal LM, an artefact
+    # nothing reads (SWE-2, 7f5c6e4). Cleared, the save recomputes only the architecture's own
+    # conversions and drops the prefix change: the model saves in its own layout, and what it
+    # saves loads back through this function as a plain checkpoint.
+    model._weight_conversions = None
 
     report = {
         "path": meta["path"],
@@ -220,6 +227,7 @@ def load_text_causal_lm(
         "device": sorted(devices)[0],
         "dtype": sorted(dtypes)[0],
         "attn_implementation": getattr(model.config, "_attn_implementation", None),
+        "save_layout": "the model's own; the load-time prefix mapping is not reverted on save",
         "sha256": meta["sha256"],
         "loading_info": {
             key: sorted(value) if isinstance(value, (set, list, tuple)) else value
