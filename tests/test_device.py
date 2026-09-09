@@ -264,12 +264,22 @@ def test_the_shims_readers_set_the_workspace_default_so_a_later_pin_is_not_refus
     torch = pytest.importorskip("torch")
     monkeypatch.delenv(device.CUBLAS_ENV, raising=False)
     monkeypatch.setattr(device, "_pinned", None)
+    monkeypatch.setattr(device, "_workspace_before_cuda", None)
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: False)
     device._before_cuda()
     assert os.environ[device.CUBLAS_ENV] == device.CUBLAS_DETERMINISTIC
-    # A context that exists with the variable at the deterministic value: pin proceeds.
+    # A context that now exists, created after the default was set: pin proceeds and the reading
+    # says the workspace was set before the context, which is what preflight's row reads.
     monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
-    assert device.pin(seed=3)["determinism"] == "pinned"
-    # A context that exists with the variable unset, created outside the shim: still refused.
+    reading = device.pin(seed=3)
+    assert reading["determinism"] == "pinned"
+    assert reading["cublas_workspace_before_cuda"] is True
+    # A context that exists with the variable unset, created outside the shim: the readers set
+    # nothing, the fact is recorded as false, and pin still refuses.
     monkeypatch.delenv(device.CUBLAS_ENV)
+    monkeypatch.setattr(device, "_workspace_before_cuda", None)
+    device._before_cuda()
+    assert device.CUBLAS_ENV not in os.environ
+    assert device.describe()["cublas_workspace_before_cuda"] is False
     with pytest.raises(RuntimeError, match="before the first CUDA use"):
         device.pin(seed=3)

@@ -339,7 +339,6 @@ def preflight(args: argparse.Namespace) -> int:
                     "not available" + (" (allowed: --allow-cpu)" if args.allow_cpu else ""),
                 )
             )
-        initialised_before = torch.cuda.is_initialized()
         reading = device.pin(seed=args.seed, attention="eager")
         pinned = (
             reading["determinism"] == "pinned"
@@ -347,10 +346,14 @@ def preflight(args: argparse.Namespace) -> int:
             and reading.get("tf32_matmul") is False
             and reading.get(device.CUBLAS_ENV) == device.CUBLAS_DETERMINISTIC
         )
+        # The property, not the order of calls: the shim's readers run before the pin and set the
+        # cuBLAS workspace default first, and the shim records whether the deterministic value was
+        # in the environment when the context was created. The first device run failed this row
+        # by testing the order instead.
         rows.append(
             _row(
-                "determinism pinned before first CUDA use",
-                pinned and not initialised_before,
+                "determinism pinned, workspace set before first CUDA use",
+                pinned and reading.get("cublas_workspace_before_cuda") is True,
                 json.dumps(
                     {
                         k: reading.get(k)
@@ -359,6 +362,7 @@ def preflight(args: argparse.Namespace) -> int:
                             "deterministic_algorithms",
                             "tf32_matmul",
                             device.CUBLAS_ENV,
+                            "cublas_workspace_before_cuda",
                             "attn_implementation" if "attn_implementation" in reading else "pinned",
                         )
                     }

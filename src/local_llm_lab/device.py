@@ -130,6 +130,11 @@ def pin(seed: int = 0, *, deterministic: bool = True, attention: str = "eager") 
                 f"set it to {CUBLAS_DETERMINISTIC!r} or call pin() before the first CUDA use"
             )
         os.environ[CUBLAS_ENV] = CUBLAS_DETERMINISTIC
+        global _workspace_before_cuda
+        if _workspace_before_cuda is None:
+            # Past the refusal above: either no context exists yet, or one exists that was created
+            # with the deterministic value already in the environment.
+            _workspace_before_cuda = True
         torch.use_deterministic_algorithms(True)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
@@ -182,23 +187,38 @@ def describe() -> dict[str, Any]:
             threads=torch.get_num_threads(),
         )
         out[CUBLAS_ENV] = os.environ.get(CUBLAS_ENV)
+        out["cublas_workspace_before_cuda"] = _workspace_before_cuda
     return out
 
 
 # ------------------------------------------------------------------ the six calls, two ways
 
 
+#: Whether the deterministic cuBLAS workspace setting was in the environment when the CUDA
+#: context was created, as far as this process can know: decided the first time the shim touches
+#: the device, ``None`` until then; ``describe`` reports it and the preflight row reads it.
+_workspace_before_cuda: bool | None = None
+
+
 def _before_cuda() -> None:
-    """Set the cuBLAS workspace default before this shim creates a CUDA context.
+    """Set the cuBLAS workspace default before this shim creates a CUDA context, and record it.
 
     cuBLAS reads ``CUBLAS_WORKSPACE_CONFIG`` at first use, and :func:`pin` refuses to run after a
     context exists with it unset. The shim's own readers (``device_info``, ``budget``, the memory
     calls) create that context, and on the first device run ``preflight`` read the device before
-    it pinned and was refused by its own rule. Setting the default here keeps the readers
-    pin-compatible: a later ``pin`` finds the variable already at the deterministic value. A
-    context created *outside* the shim with the variable unset is still refused, as before.
+    it pinned and was refused by its own rule. So the readers set the default first, when no
+    context exists yet, and record that they did; a later ``pin`` then finds the variable at the
+    deterministic value. When a context already exists, nothing is set here, so a context created
+    outside the shim with the variable unset is still refused by ``pin``, as before.
     """
-    os.environ.setdefault(CUBLAS_ENV, CUBLAS_DETERMINISTIC)
+    global _workspace_before_cuda
+    import torch
+
+    if _workspace_before_cuda is not None:
+        return
+    if not torch.cuda.is_initialized():
+        os.environ.setdefault(CUBLAS_ENV, CUBLAS_DETERMINISTIC)
+    _workspace_before_cuda = os.environ.get(CUBLAS_ENV) == CUBLAS_DETERMINISTIC
 
 
 def _cuda_indices(device: Any) -> list[int] | None:
