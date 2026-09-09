@@ -1,0 +1,65 @@
+{
+  "mode": "fsdp2",
+  "world_size": 2,
+  "backend": "gloo",
+  "mesh": "DeviceMesh((2,), 'cpu', stride=(1,))",
+  "torch": "2.14.0",
+  "model_shape": {
+    "vocab_size": 64,
+    "hidden_size": 32,
+    "intermediate_size": 64,
+    "num_hidden_layers": 6,
+    "num_attention_heads": 4,
+    "num_key_value_heads": 2,
+    "head_dim": 8,
+    "sliding_window": 8,
+    "rms_norm_eps": 1e-06,
+    "use_cache": false
+  },
+  "settings": {
+    "rows": 40,
+    "steps": 4,
+    "accum": 4,
+    "batch": 2,
+    "learning_rate": 0.001,
+    "seed": 20260902,
+    "loss_chunk": 16
+  },
+  "gradient_clipping": "off, so any deviation is attributable to sharding alone",
+  "sharded": "blocks and the root unit (tied embedding, final norm, head)",
+  "failure": null,
+  "curve": [
+    {
+      "step": 0,
+      "loss": 4.174608801165197,
+      "grad_norm": 2.114682717033037,
+      "grad_norm_blocks": 1.8972025386633409,
+      "grad_norm_root": 0.9340800399364084,
+      "tokens": 117
+    },
+    {
+      "step": 1,
+      "loss": 4.180447289703089,
+      "grad_norm": 2.2162527470895603,
+      "grad_norm_blocks": 1.8706547472237431,
+      "grad_norm_root": 1.1884557440945358,
+      "tokens": 109
+    },
+    {
+      "step": 2,
+      "loss": 4.1615706799077055,
+      "grad_norm": 1.8955787545381415,
+      "grad_norm_blocks": 1.5967636594802654,
+      "grad_norm_root": 1.0215501115557486,
+      "tokens": 102
+    },
+    {
+      "step": 3,
+      "loss": 4.1794467329168,
+      "grad_norm": 1.59783425237436,
+      "grad_norm_blocks": 1.3324325764898994,
+      "grad_norm_root": 0.8818717180912531,
+      "tokens": 147
+    }
+  ]
+}

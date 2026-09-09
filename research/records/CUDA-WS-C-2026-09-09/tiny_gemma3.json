@@ -1,0 +1,13 @@
+{
+  "_why": "The shape lives here and not in the script. Plan 10.1: nothing in source names a dimension, so the agreement gate reads its model from data and would run unchanged against any Gemma 3 config. These values are a fixture chosen to be small and to contain at least one globally-attending layer, not a claim about any model.",
+  "vocab_size": 64,
+  "hidden_size": 32,
+  "intermediate_size": 64,
+  "num_hidden_layers": 6,
+  "num_attention_heads": 4,
+  "num_key_value_heads": 2,
+  "head_dim": 8,
+  "sliding_window": 8,
+  "rms_norm_eps": 1e-06,
+  "use_cache": false
+}

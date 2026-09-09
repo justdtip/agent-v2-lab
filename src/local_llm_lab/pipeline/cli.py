@@ -30,7 +30,7 @@ from local_llm_lab.pipeline.evaluate import run_evaluation, wilson
 from local_llm_lab.pipeline.prefer import run_prefer
 from local_llm_lab.pipeline.preflight import artifact_path as preflight_artifact_path
 from local_llm_lab.pipeline.preflight import require_preflight, run_preflight
-from local_llm_lab.pipeline.report import load_summaries, render
+from local_llm_lab.pipeline.report import load_summaries
 from local_llm_lab.pipeline.rollout import run_rollout
 from local_llm_lab.pipeline.tasks import GENERATOR_VERSION
 from local_llm_lab.pipeline.transcript import Transcript
@@ -849,6 +849,18 @@ def _log_fallbacks(runlog: RunLog, fallbacks: dict[str, int] | str) -> None:
 
 
 def stage_train(config: dict[str, Any], iters: int | None, resume_from: Path | None = None) -> None:
+    # The backend is read here and nowhere else in this stage, so the MLX path below is reached by
+    # exactly the same code it always was. The import is deferred rather than module-scope: a run on
+    # the MLX backend must not pay for torch, and a tree without torch must still import this module
+    # (plan 12.1, and the suite's import-closure rule).
+    from local_llm_lab import device
+
+    if device.backend() == "torch":
+        from local_llm_lab.pipeline.train_torch import stage_train_torch
+
+        stage_train_torch(config, iters=iters, resume_from=resume_from)
+        return
+
     from local_llm_lab.pipeline.live_lens.preflight import training_preflight
 
     launch = training_preflight(config['train'], load_model_spec(config['model']), iters=iters)

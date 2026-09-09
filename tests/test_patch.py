@@ -596,7 +596,12 @@ def test_scoring_stability_fails_closed_without_recorded_values_or_judgements() 
         patch.DropJudgement(1, ("12", "13"), "head"),
     )
     with pytest.raises(ValueError, match="carries no bound/HEAD value-drop judgements"):
-        patch.PatchCase(_Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ()).scoring_version_stable
+        # The bare access IS the call under test: `scoring_version_stable` is a property, so
+        # reading it is what raises. B018 reads it as a useless expression; removing it would
+        # delete the assertion.
+        _ = patch.PatchCase(
+            _Task("test-aggregate_report-0-clean", "aggregate_report"), 0, ()
+        ).scoring_version_stable
 
 
 def test_dry_selection_recomputes_eligibility_for_evaluations_shaped_like_the_saved_runs() -> None:
@@ -2107,7 +2112,7 @@ def _windowed_messages(*, observations=("OBS zero", "OBS one", "OBS two"), last_
         {"role": "system", "content": system},
         {"role": "user", "content": "TASK reconcile the ledger"},
     ]
-    for index, (note, observation) in enumerate(zip(notes, observations)):
+    for index, (note, observation) in enumerate(zip(notes, observations, strict=True)):
         messages.append(assistant_message(note, Action("read_file", {"path": f"inv/{index}"})))
         messages.append(tool_message("read_file", observation))
     return messages
