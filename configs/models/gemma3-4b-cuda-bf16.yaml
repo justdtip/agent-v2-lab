@@ -7,16 +7,16 @@
 # `memory.budget_gib` is a unified-memory number and is re-measured per device (plan §10.2), and
 # `cache.strategy: none` is the only strategy the golden records exercised.
 name: gemma3-4b-cuda-bf16
-# Our own conversion of Google's authenticated weights, made on this box under one window and
-# verified text-only: no vision configuration and zero vision tensors (provenance at e029857).
-# `models/` marks it as a checkpoint in this repository; the registry resolves it against the
-# project root, so a stage running from a worktree finds the same file as one running from here.
-#
-# The bf16 entry exists so lens fitting is not also a comparison of precisions: the hosted
-# Jacobian lens was fitted on bf16 weights. The 4-bit entry `gemma3-4b` is the pilot's and the
-# evaluation's, because the Qwen pilot ran 4-bit and the two-panel comparison is like for like
-# only there. The two are otherwise identical and that is the point — a run's provenance names
-# exactly which one ran.
+# The torch path's entry: Google's official multimodal snapshot, `google/gemma-3-4b-it`, read from
+# the HF cache in the primary checkout (no download; `hf_text.load_text_causal_lm` loads its text
+# tower and leaves the vision tower behind, failing closed on every other gap). It is a wrapper
+# checkpoint: `model_type: gemma3`, `text_config.model_type: gemma3_text`, 444 text tensors under
+# `language_model.` beside 439 vision and projector tensors, `__metadata__: {format: pt}`. The
+# repository's own conversions (`models/gemma-3-4b-it-bf16`, `-4bit`) carry `format: mlx` and are
+# refused by the torch loader by name: they are the MLX entries' checkpoints, not this one's. The
+# same bf16 tensors underlie both, which is why the MLX golden records correspond to this entry.
+# This comment replaced one inherited verbatim from the MLX bf16 entry, which made three claims
+# that were false of the snapshot (SWE-2, 2026-09-09).
 hf_id: google/gemma-3-4b-it
 # The model these weights are, as opposed to `hf_id`, which is where they live. Both Gemma
 # entries are conversions of one upstream model at two precisions, and a Jacobian lens is fitted

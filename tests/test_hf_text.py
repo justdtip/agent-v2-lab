@@ -219,3 +219,45 @@ def test_the_repositorys_mlx_conversion_is_refused_by_its_own_format(official_la
     (mlx / "config.json").write_text(json.dumps(config))
     with pytest.raises(ValueError, match="format \\['mlx'\\].*another runtime"):
         hf_text.checkpoint_metadata(mlx)
+
+
+def test_a_loaded_wrapper_saves_in_its_own_layout_and_reloads_fail_closed(
+    official_layout, tmp_path
+):
+    """SWE-2's defect, 7f5c6e4: loader right, save right, the pair wrote an unreadable artefact.
+
+    `save_pretrained` reverts the load-time key mapping by default, so a wrapper loaded under
+    the prefix mapping saved `language_model.model.*` tensors under a config naming the causal
+    LM. The control below reproduces that with a bare `from_pretrained` so the hazard is pinned
+    in this transformers rather than remembered; the loader's output saves in its own layout and
+    loads back through the fail-closed reader with every tensor equal. A tolerant reload would
+    have passed either way with freshly initialised weights, which is why the reader here is
+    `hf_text` and not the model class.
+    """
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    root, _ = official_layout
+    meta = hf_text.checkpoint_metadata(root)
+
+    # Control: the default save after a bare mapped load reverts the mapping.
+    text_config = dict(meta["text_config"])
+    bare = AutoModelForCausalLM.from_pretrained(
+        root,
+        config=AutoConfig.for_model(text_config.pop("model_type"), **text_config),
+        key_mapping={r"^language_model\.": ""},
+        local_files_only=True,
+    )
+    bare.save_pretrained(tmp_path / "control", safe_serialization=True)
+    control_keys = set(safetensors_torch.load_file(tmp_path / "control" / "model.safetensors"))
+    assert all(k.startswith(hf_text.TEXT_PREFIX) for k in control_keys), sorted(control_keys)[:3]
+
+    # The loader's output saves in the model's own layout and round-trips fail-closed.
+    model, report = hf_text.load_text_causal_lm(root, dtype="float32")
+    assert "own" in report["save_layout"]
+    model.save_pretrained(tmp_path / "resaved", safe_serialization=True)
+    resaved_keys = set(safetensors_torch.load_file(tmp_path / "resaved" / "model.safetensors"))
+    assert not any(k.startswith(hf_text.TEXT_PREFIX) for k in resaved_keys)
+    again, report_again = hf_text.load_text_causal_lm(tmp_path / "resaved", dtype="float32")
+    assert report_again["wrapper"] is False and report_again["architecture"] == "Gemma3ForCausalLM"
+    for name, tensor in model.state_dict().items():
+        assert torch.equal(again.state_dict()[name], tensor), name

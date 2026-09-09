@@ -1223,9 +1223,29 @@ distinguishes it from the snapshot. Two rules from SWE-2's guard that passed the
 existed to catch: **a synthetic fixture carries the real artefact's declared type and key layout,
 or the loader path is untested by construction**; and **a guard that passes the object it
 exists to catch is worse than none, because its silence is read as evidence.**
+
+**Two more from the same seat, writing the joined gate (7f5c6e4).** First, a model loaded under a
+key mapping saves with the mapping reversed by default (`save_pretrained(save_original_format=True)`),
+so the loader and the save are each correct and together write `language_model.model.*` tensors
+under a config that says `Gemma3ForCausalLM`: an artefact nothing reads. The stage now saves in
+the model's own layout, and the loader neutralises the stored mapping so a plain save cannot
+reverse it. Second, the assertion that let it through: "the checkpoint reloads" via
+`Gemma3ForCausalLM.from_pretrained`, where missing keys are a warning, so every weight came back
+freshly initialised and the assertion was satisfied by a model that had learned nothing. **An
+assertion that an artefact loads is worth nothing unless the loader fails closed; `hf_text` is
+the only reader in tests as well as in code.** Also verified against disk: both repository
+conversions carry `format: mlx` and the snapshot `format: pt`, so the refusal blocks
+`gemma3-4b-bf16` and the torch path's entry, `gemma3-4b-cuda-bf16`, loads as a wrapper with 439
+non-text tensors beside 444 text ones.
 Every torch load of a registered checkpoint goes through it: WS-B's baseline, WS-C's stage, WS-A's
 gates. The CUDA memory rung, a `device_map` under `accelerate` instead of a CPU load and a move,
 is deliberately not taken until measured.
+
+**The counted run, owed since the resolver commit.** Main at 7e4c34e under the Chief's own window,
+so the model-reaching files ran rather than skipped: **2,123 passed, 0 skipped, 0 failed in 122 s**,
+and `tests/torch` 6 passed. Every earlier "full suite green" of the day lacked its count because
+`addopts` already carries `-q` and a second `-q` suppresses the summary line; the exit codes were
+real, the counts were not captured, and that is the Chief's, twice.
 
 ### 16.10 Lint: one auto-fix that is wrong, and one deliberate pass rather than four incidental ones
 

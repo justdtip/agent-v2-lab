@@ -1692,3 +1692,39 @@ def test_a_checkpoint_resolves_to_the_primary_even_under_the_box_state_override(
     assert not cache.is_relative_to(linked) and not cache.is_relative_to(scratch)
     monkeypatch.setenv("HF_HOME", str(tmp_path / "explicit"))
     assert configure_local_cache() == tmp_path / "explicit"
+
+
+def test_announce_refuses_a_holder_that_is_this_commands_own_terminal_less_shell(
+    tmp_path, monkeypatch, capsys, unredirected_window_path
+) -> None:
+    """The trap wearing the fix's clothes (SWE-1, 2026-09-09).
+
+    `--holder-pid $$` from a harness shell names the shell the harness discards the moment the
+    command exits, so the window read "holder not running" for the whole of a 96-second run.
+    The seat had the R61(c) rule in hand and used its flag, and still fed it the value that
+    defeats it. The refusal is for that one shape: the holder is this command's parent, the
+    parent is a shell, and there is no terminal. An interactive shell and a launcher script are
+    both left alone, because both persist for the block.
+    """
+    state = tmp_path / "state"
+    (state / "outputs").mkdir(parents=True)
+    monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(state))
+    parent = os.getppid()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    common = ["--seat", "swe-1", "--purpose", "a run", "--minutes", "5"]
+
+    monkeypatch.setattr(runlock, "_process_table", lambda: [(parent, 1, 1, "/bin/bash -c x")])
+    assert runlock._window_cli(["announce", *common, "--holder-pid", str(parent)]) == 1
+    refusal = capsys.readouterr().err
+    assert "parent shell with no terminal" in refusal and "runlock run" in refusal
+    assert not (state / runlock.WINDOW_RELATIVE_PATH).exists(), "no dead window was written"
+    # The default holder is the same parent, and is refused the same way from a harness shell.
+    assert runlock._window_cli(["announce", *common]) == 1
+
+    # A launcher script as the parent persists and is a legitimate holder.
+    monkeypatch.setattr(runlock, "_process_table", lambda: [(parent, 1, 1, "python launch.py")])
+    assert runlock._window_cli(["announce", *common, "--holder-pid", str(parent)]) == 0
+    assert capsys.readouterr().out.startswith("export ")
+    runlock.end_window(os.environ.get(runlock.WINDOW_HOLDER_ENV, "")) if hasattr(
+        runlock, "end_window"
+    ) else None
