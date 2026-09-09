@@ -893,3 +893,56 @@ def test_the_runner_classifies_a_known_set_and_not_merely_a_summing_one(tmp_path
     assert counts["below_resolution"] == 0 and counts["flips"] == 2, (
         "and is still wrong, which is why the identity needs an expected value beside it"
     )
+
+
+def test_corrupting_each_class_in_turn_changes_the_summary_that_reports_it() -> None:
+    """The strong form of the reporter rule, after the D-CRO's self-test.
+
+    Feeding a known set and asserting the summary catches a reporter that says nothing. It does
+    not catch one whose answer is insensitive to an input it claims to read — their pinning
+    check passed a corrupted document because it searched the whole file rather than the line,
+    and the self-test that was meant to catch *that* corrupted the wrong digit. So each class is
+    corrupted at its own input in turn, and the class that should move is asserted to move.
+    """
+
+    def report(readings, spreads):
+        flips = [
+            tolerance.Flip(
+                0,
+                position,
+                11,
+                12,
+                0.5,
+                reference_gap_ulps=readings[position],
+                port_spread_ulps=spreads.get(position),
+            )
+            for position in sorted(readings)
+        ]
+        return tolerance.AgreementReport(
+            "ep", compared=len(flips) + 1, agreed=1, flips=flips, reference=tolerance.MLX_BF16
+        )
+
+    readings = {1: 1.0, 2: 3.0, 3: 3.0}
+    spreads = {3: 1.0, 2: 5.0}
+    clean = report(readings, spreads).counts()
+    assert clean == {"agreed": 1, "ties": 1, "below_resolution": 1, "flips": 1}
+
+    widened = report({**readings, 1: 3.0}, spreads).counts()
+    assert widened["ties"] == 0 and widened["flips"] == 2, (
+        "a tie whose reference gap is widened past the band must stop being reported as a tie"
+    )
+
+    withheld = report(readings, {3: 1.0}).counts()
+    assert withheld["below_resolution"] == 0 and withheld["flips"] == 2, (
+        "a spread the reporter no longer has must stop being reported as covering anything"
+    )
+
+    narrowed = report(readings, {**spreads, 3: 9.0}).counts()
+    assert narrowed["flips"] == 0 and narrowed["below_resolution"] == 2, (
+        "a flip the port's spread now covers must stop being attributed to the port"
+    )
+
+    for corrupted in (widened, withheld, narrowed):
+        assert sum(corrupted.values()) == 4, (
+            "every corruption still sums, which is why the identity alone proves nothing"
+        )
