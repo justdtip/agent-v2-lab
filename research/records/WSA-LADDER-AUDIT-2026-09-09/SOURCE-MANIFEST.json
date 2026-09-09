@@ -1,0 +1,85 @@
+{
+  "basis": "file-only audit; device results are producer measurements",
+  "order_commit": "3abe17af28c8f74f87744e1fd5309d7750d81670",
+  "producer_commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+  "sources": {
+    "calibration/README.md": {
+      "bytes": 15779,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/README.md",
+      "sha256": "2f98a010a7ab19fa047ddfe61ec88de6598215c24ac54c4d5de54043f991e1bf"
+    },
+    "calibration/artefacts/boundary-anchored.json": {
+      "bytes": 20106,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/boundary-anchored.json",
+      "sha256": "3427c480c4d27d80685bed2fe56058dcb5684a38fd9cf6f5c9d7b36f9991d603"
+    },
+    "calibration/artefacts/ladder-deep.jsonl": {
+      "bytes": 183944,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/ladder-deep.jsonl",
+      "sha256": "fb443b4f48337258a8f1f4550cd6a38b29beeff9e94ef080205edbc00f1c6dbd"
+    },
+    "calibration/artefacts/ladder.jsonl": {
+      "bytes": 557885,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/ladder.jsonl",
+      "sha256": "a1881efc48bea440c0cb6770067a780b2bd9fb1a04efd30c4cbbde822a4128cb"
+    },
+    "calibration/artefacts/manifest.json": {
+      "bytes": 1957,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/manifest.json",
+      "sha256": "1e296b6104d2b58446a63012cf2f6adc42c8f5b9f7282b86497df8198931dd70"
+    },
+    "calibration/artefacts/progress.jsonl": {
+      "bytes": 5861,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/progress.jsonl",
+      "sha256": "1c4e9e1071e54fcd6b8e44067410dc0a51d67ad3e5a302271715c479c215aad4"
+    },
+    "calibration/batch_invariance.py": {
+      "bytes": 6187,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/batch_invariance.py",
+      "sha256": "2f5ca442560e33805232482ec87ef4b5d6552f2162bd128cad6e29765f390c78"
+    },
+    "calibration/boundary.py": {
+      "bytes": 17044,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/boundary.py",
+      "sha256": "27da948db9fe5efb2934ae60884e87830c18cea192974e08c73aa48e7b9a9d3d"
+    },
+    "calibration/ladder.py": {
+      "bytes": 14860,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/ladder.py",
+      "sha256": "d5002fbee1f5ae1b725ceef0f65eec8a1538128c4a663c5e24673e12ca218b70"
+    },
+    "orders/PREREGISTRATION.md": {
+      "bytes": 27403,
+      "commit": "15eddfab489ea4e3e977b161fabc6351d9448686",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/PREREGISTRATION.md",
+      "sha256": "4c45fd55c9a9fb6430e6a14bf265692fe8db4935e0f864a484a9dd4586f13b47"
+    },
+    "orders/PROTOCOL.md": {
+      "bytes": 9221,
+      "commit": "558d424dccdec2c502653a5aa816e673693c67cf",
+      "path": "research/records/FD-NUMERICS-2026-09-09/RESOLUTION-PROTOCOL.md",
+      "sha256": "1eaf811eef67d072224013aa2737259a7c26df95098053af4b1ad95e766f784b"
+    },
+    "orders/WSA.md": {
+      "bytes": 40179,
+      "commit": "3abe17af28c8f74f87744e1fd5309d7750d81670",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "sha256": "ce0fb311d0b31cd00c94ab2f3bbf922b1be044553b27f1c7bbebf1a3e6e0883d"
+    },
+    "orders/WSD.md": {
+      "bytes": 24431,
+      "commit": "3abe17af28c8f74f87744e1fd5309d7750d81670",
+      "path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "sha256": "a474b2eab727b131e47d828286952ed69af7d0b37c5d55d15aa41534009c7979"
+    }
+  }
+}
