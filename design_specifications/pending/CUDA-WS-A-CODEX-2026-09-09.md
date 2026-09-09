@@ -334,3 +334,58 @@ clamp on a cached position fails closed the way the existing intervention does.
 **4. Model-agnostic**, as everything: no layer count, no width, no family class; the layer list and
 the feature set come from the caller. Pathspec commit on `codex/cuda-torch-seam`, merged after
 review as before. Its device use is the state programme's, ordered after the migration validates.
+
+## Review of the wrapper, 2026-09-10 — `ff3b1b4`, merged into `cuda-migration` at `e8dbcc3`
+
+**Verdict: passes on all four points; merged.** Checked against the merge result itself, not the
+branch: the intervention and capture tests, the architecture view, the graph-once estimator, the
+upstream seam, the rules suite, the device shim, the loader and the import-tree guard, 218 passed,
+0 skipped, under the Chief's own window at 05:43Z; the merge-tree clean against the integration
+tip, and no deletion on main since the last integration base for the seat's main merge to carry
+forward. The source was read in full.
+
+1. **The decoder intervention** is the derivation's line: encode, take the selected difference,
+   synthesise only the selected decoder directions, add to the original. The base reconstruction
+   residual is preserved for the whole vector, not only off `F`, and the test states the identity
+   exactly in float32 rather than to a tolerance. Bias is checked and never added, since it cancels.
+   The decoder is the derivation's `[residual, feature]` matrix or a linear bias-free callable, and
+   the module says which; a square dictionary could hide a transposed matrix from the shape check,
+   which no real dictionary is.
+2. **The re-encoding diagnostic** reports the target error and every unselected feature's change as
+   numbers, and the counterexample is the right kind: target 3, achieved 5, another feature moved
+   by 2, residual unchanged. The encoder output is cloned before re-encoding, because a reusable
+   output buffer rewrote the baseline during Codex's own review and reported a false zero; the
+   failing regression is kept.
+3. **Clamp mode** reapplies on every forward that recomputes the position, is released explicitly
+   through a handle, and the record separates `one_shot` from `clamp` per registration with a
+   per-application event carrying forward index, cache offset, absolute position and the
+   diagnostic snapshot. "Every emitted position" is implemented as positions the caller declares
+   on each forward, and that is the correct reading: the capture cannot see which input tokens
+   were sampled, and inferring it from cache shape would have been a guess written as a fact. A
+   clamp on a cached position refuses before any block runs, and the cache length is unchanged.
+   Both refusals during a forward, and the recursive-forward case in its caught and uncaught forms,
+   are tested; the counter that keeps a caught recursive rejection from unlocking the outer forward
+   is the subtle piece and it is right.
+4. **Model-agnostic**: no layer count, width or family class anywhere; the layer list and the
+   feature set are the caller's.
+
+**Two notes for other seats, not edits to this work.** SWE-2's loader hands the wrapper the
+decoder in `[residual, feature]` orientation, which for the Gemma Scope 2 parameters means the
+transpose of the stored matrix, and the encoder callable returns the residual's dtype and device,
+so the dictionary's precision is the loader's declared choice. The full off-target vector per
+application is right for fixtures and wrong at corpus scale, where a clamp across an episode
+would hold dictionary-width lists per emitted token; the summary form below is ordered so the run
+script (`STATE-PROGRAMME-RUN-ORDER-2026-09-10.md`) has it.
+
+## Next instruction, 2026-09-10, third — the diagnostic's summary form, on fixtures
+
+One small addition, device-free. `SAEIntervention` takes `diagnostic="full" | "summary"`, default
+`full`. Under `summary` the selected features keep `before`, `target`, `achieved` and
+`target_error` in full, and the off-target change is reduced to its count of nonzero entries, its
+maximum absolute value, its L1 norm and the eight largest entries by magnitude as
+`(feature, change)` pairs; the record names the mode in the diagnostic's `kind`. Tests: the summary
+is the reduction of the full form on the existing fixture, exactly; the capture record carries
+either form; an off-target change of zero everywhere summarises to zeros, not to an absence. No
+change to the edit itself and no change to the full form. Pathspec commit on
+`codex/cuda-torch-seam`, merged after review as before. After it, nothing further on the laptop:
+the device arms in the checklist are next, in their order.

@@ -1464,7 +1464,11 @@ penultimate target only as a variant; the paper's expectation over pairs and the
 targets differ by the positive factor the derivation derives; the released code has no J-space
 construction; Gemma Scope 2 covers the 4B, 12B and 27B instruction-tuned residual sites at every
 layer, so no dictionary needs training for this family, while Gemma 4 exists on the hub with no
-dictionaries at all; the 4B dictionary is **not** on the laptop, only its config files.
+dictionaries at all; the 4B dictionary was not on the laptop when the amendment measured it,
+and one layer is now: `resid_post_all` layer 17 `l0_small`, fetched by SWE-2 at 05:11:53Z on
+2026-09-10 through the primary cache and verified against the hub's LFS digest, three minutes
+before the amendment's commit, so both statements were true when made. Every other layer is
+a config file until `lab-device fetch-dictionary --all-layers` runs after the Director logs in.
 
 **Build before the device, all on fixtures:** Stage A, the exact score decomposition (SWE-2, in
 progress); the dictionary loader and JumpReLU encoder with the hook alignment as a test and the
