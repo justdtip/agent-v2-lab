@@ -724,6 +724,45 @@ distrust any check that a too-fine grid would also pass. State a defect as a mar
 the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
 And make the classes sum, because the position with no class is the one nobody will look at.
 
+## Thirty-second: four corrections of the Chief's own work in one night, in the Chief's name
+
+**Chief, 2026-09-10.** Four of tonight's corrections were of my work, and they share a shape with
+each other more than with the reporter failures of the thirty-third.
+
+**A mechanism inferred from one statistic.** Row one of the golden test halved its step and the
+residual moved from 0.973 to 0.844, a ratio of 1.15 against the laptop's 3.9. I read that as a
+bfloat16 rounding floor, wrote it into the WS-D order as the reading, and ordered a control to test
+it. The artefact refused it within the hour: of 84,480 finite-difference columns, none was exactly
+zero, which a rounded-away response would have left. The Director's reading — a coordinate
+displaced 5.7 times its own size, a secant across a saturating response — was the one the same
+artefact supported, and the D-CRO then showed the displacement to be a constant of the geometry,
+0.01·√(L·d) at every layer to fifteen digits, so the depth gradient could not be the step either.
+*A mechanism is not inferred from a ratio when the artefact can refuse it directly. Ask what the
+artefact would show under each candidate before choosing one.*
+
+**A control across two forward paths.** The control I ordered compared float32 finite differences
+against the bfloat16 exact map. The Director caught it: the first hour's 69% finding was precisely
+that a promoted forward is a different function. *A control compares two estimators on one forward
+path, or it measures the path.*
+
+**A count with an unstated basis.** My corpus count keyed rows by `(task_id, step)` in a dictionary
+and overwrote the 930 rows that share a key. Nine of eleven figures reproduced; the other two did
+not until the D-CRO named the basis I had used without knowing it. *A count states its basis, and
+a script that produces one is written so that it cannot merge rows silently.*
+
+**A resolution estimated from two samples.** The rule I wrote for WS-B attributed a flip to the port
+where the reference's margin exceeded the port's cross-device spread *at that position* — one CPU
+reading and one CUDA reading. At one position the two happened to sit 1.0 ULP apart, and the rule
+claimed a defect that the corpus's own evidence, 5.0 ULP at another position, could not support.
+*A resolution is a distribution measured over the corpus, and its pre-registered statistic is the
+maximum.*
+
+What the four share: each was a reasonable inference stated as a finding one step before the
+measurement that would have settled it existed, on a night when that measurement was cheap and the
+card was idle. The rule that a suite reading is not a claim without its skip count applies to the
+Chief's inferences as it does to anyone's numbers: *an inference is not a finding without the
+artefact that could have refused it.*
+
 ## Thirty-third: the reporter that failed, jointly with the D-CRO
 
 Three defects in one day that no test suite was built to catch, because **neither was a check that
