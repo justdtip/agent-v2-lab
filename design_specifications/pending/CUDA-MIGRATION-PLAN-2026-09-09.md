@@ -1420,4 +1420,7 @@ are both taken:
    nothing else. It is WS-D's, small, and its own record says it exists to be run once and retired,
    which is what the ledger's deletion of the finite-difference machinery meant.
 
-The golden number is the second; the first is what the hour can have while the second is built.
+**Checked, and the first branch is void:** the records hold no finite-difference Gemma lens, no
+artefact declaring an estimator and no Jacobian archive, and fitting one under MLX now is the
+long laptop run §16.12 forbids. The golden number comes from the second branch alone, the torch
+finite-difference reference over the view's `tail`, built on fixtures and run on the device.
