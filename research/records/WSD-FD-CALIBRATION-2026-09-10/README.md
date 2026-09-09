@@ -277,7 +277,78 @@ exhausted the card: 94.71 GiB in use, a 320 MiB allocation refused. It is record
 that reason, not as a result. Widths 1 and 64 answer the question the row was for, and a third point
 would sharpen the slope rather than change the finding.
 
-## 9. What follows
+## 9. The golden test, done right: two maps fitted inside a demonstrated interval
+
+Everything the first golden run could not have known. Coherent float32, because the ladder measured
+that native bf16 has no useful interval. Width one on both sides, so the comparability gate's new
+`forward_batch` and `anchor_batch` agree by construction rather than by luck. And each layer at the
+step its **own** ladder minimum names, because the ladder also measured that one `epsilon_scale` for
+every layer is refuted — the two minima are a factor of 64 apart.
+
+| | first golden run | this run |
+|---|---|---|
+| precision | native bf16 | coherent float32, TF32 off, `highest` matmul |
+| forward width | exact 64, difference 256, anchor 1 | **1 on both sides, anchor 1** |
+| step | `epsilon_scale` 0.01 at every layer | k = 10 at layer 1, k = 6 at layer 33 |
+| worst relative difference | **1.0245** | **0.00485** (L1), **0.00286** (L33) |
+| cosine at repo layer 1 | 0.015 | **0.9999907** |
+| cosine at repo layer 33 | 0.825 | **0.9999962** |
+
+**Layer 1's cosine went from 0.015 to 0.9999907.** The residual is two to three orders of magnitude
+smaller than the first run's, and the first run's was the workstream's headline number for a week.
+
+Both gates hold. The exact estimator reproduces itself at exactly 0.0. The transposed control
+separates by 292× at layer 1 and 348× at layer 33, so the finding is not a number any wrong lens
+would also produce. And both findings sit **above** the float32 storage floor of 5.96e-8, so the
+agreement is a measurement rather than two maps indistinguishable at the precision they are stored in
+— which, as the report's own wording says, is not agreement.
+
+**The scalar ladder predicted the map.** At layer 1, k = 10, the ladder's median relative error over
+eighteen direction-and-cotangent pairs was 4.3e-3 and the map's worst over 2,560 columns is 4.85e-3.
+At layer 33, k = 6, the ladder gave 8.6e-5 and the map's worst is 2.9e-3; a worst over 2,560 columns
+being some tens of times a median over eighteen scalars is what those two statistics do, and the
+layer-1 agreement is the more informative of the two. Neither was tuned to the other: the k came from
+the ladder before either map existed.
+
+**What is not gated here.** The layer-shifted control could not be constructed. It needs a second
+layer in the same map to shift to, and each map has one layer, because each layer needs its own step.
+That is recorded in both reports as `available: false` with the reason, not omitted. A two-layer
+finite-difference map at two different steps is a lens no single `epsilon_scale` describes, and
+declaring one would be the next design question rather than a detail.
+
+**One row, one prompt, two layers, two positions.** The first golden run had the same shape and its
+number stood for a week; this one replaces it and inherits the same limits.
+
+### 9.1 A deviation from the ruling, and why
+
+The ruling named layer 33 at k = 6 and layer 1 at k = 10, at width 64. Those two k are the
+**width-one** minima, and the width rows — measured after the ruling was written — show the intervals
+move with width: at width 64 layer 33's minimum is k = 8, not 6, and layer 1 has no demonstrated
+interval at all, still falling at k = 10 with 4.5e-2. Fitting at width 64 with the ruled k would put
+layer 33 sixteen times off its own best and layer 1 outside any demonstrated interval, which is the
+one precondition the protocol sets for fitting a full map at all. So the k are the ruling's and the
+width is one. The deviation and its reason are in the run's manifest as well as here.
+
+### 9.2 Cost and provenance
+
+| stage | seconds | peak GiB |
+|---|---:|---:|
+| memory smoke, one layer | 2.9 | 14.56 |
+| exact float32 map, layer 1 | 75.0 | 15.35 |
+| finite-difference map, layer 1, k = 10 | 312.0 | 14.57 |
+| exact float32 map, layer 33 | 2.6 | 14.56 |
+| finite-difference map, layer 33, k = 6 | 312.8 | 14.57 |
+
+Twelve minutes on the card for the whole thing, against 26.5 minutes for the single bf16 row the
+first golden run took. The smoke row was run first as ruled and came in at 14.56 GiB, comfortably
+under the 43.9 GiB the bf16 exact side peaked at, because width one is the schedule now.
+
+The card's checkout is on `cuda-migration` and predates the ν batch fields, so this ran against a
+worktree of `cuda-ws-d` at `9380e74` outside the shared checkout, at `/workspace/wsd/ws-d`, reached
+by pushing the branch to the card's own bare repository. Nothing was written into
+`/workspace/agent-v2-lab`'s working tree.
+
+## 10. What follows
 
 1. **The width rows**, per the Chief's step 3: the same directions, cotangents and a few steps at
    widths 64 and 256, anchor and forward at that width, with §3.1's anchored-at-width check repeated
@@ -287,7 +358,7 @@ would sharpen the slope rather than change the finding.
 3. **The step rule is not a constant.** Its useful value moved by 2⁶ across three layers here, so a
    single `epsilon_scale` for every layer is refuted by this table whatever else is true.
 
-## 10. Provenance
+## 11. Provenance
 
 Card: RTX PRO 6000 Blackwell, determinism pinned, `float32_matmul_precision: highest`,
 `cudnn_deterministic: true`, `deterministic_algorithms: true`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`.
