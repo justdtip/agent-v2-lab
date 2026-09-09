@@ -129,10 +129,13 @@ def main(argv: list[str] | None = None) -> int:
     measured["non_prefix_pairs"] = non_prefix
     measured["non_prefix_fraction"] = round(non_prefix / pairs, 4) if pairs else None
 
-    # `(task_id, step)` is **not** unique: a transient retry re-issues the same plan step, and the
-    # corpus labels both rows with that step. So there are two defensible bases for any per-task
-    # count, and the order's figures are the deduplicated one. Both are reported, because a count
-    # whose basis is unstated is a count nobody can reproduce.
+    # `(task_id, step)` is **not** unique, and the reason is `recovery_repeats` in `data.py`: the
+    # training split repeats each corrective row two or six times, byte for byte, to weight it in
+    # the fine-tuning mix. So a repeated key is one decision written several times, not several
+    # decisions, and the deduplicated basis is the one that counts decisions. Both are reported,
+    # because a count whose basis is unstated is a count nobody can reproduce.
+    # (This comment first said the repeats were a transient retry. They are not; see the record's
+    # correction and `prereg_inputs.py`, which refuses if a repeated key is not an identical row.)
     deduped = {task: sorted({step for step, _ in entries}) for task, entries in
                ((task, [(s, p) for s, p in entries]) for task, entries in by_task.items())}
     dedup_counts = [len(v) for v in deduped.values()]

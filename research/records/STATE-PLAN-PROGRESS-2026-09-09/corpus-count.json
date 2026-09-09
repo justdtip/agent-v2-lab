@@ -13,7 +13,7 @@
     "tasks_train": 840,
     "tasks_valid": 48
   },
-  "data": "/Users/daniel.tipton/Desktop/An app/data/agent_v2e-gemma3-4b",
+  "data": "data/agent_v2e-gemma3-4b",
   "disagreements": [
     {
       "key": "consecutive_pairs",

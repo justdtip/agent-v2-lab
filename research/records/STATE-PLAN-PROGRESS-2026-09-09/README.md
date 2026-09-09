@@ -190,6 +190,12 @@ is **69.4%**, and 4,509 of 7,431 is **60.7%**. Fact 3's conclusion is unaffected
 
 ### Addition 1: the duplicates are the transient retry, and they say something E2 needs
 
+> **Withdrawn, 2026-09-09, later the same evening. This reading is wrong.** The duplicates
+> are not retries; they are byte-identical copies made by `recovery_repeats` in the training
+> split. The original text is kept below because the Chief's A1 was ruled on it and a reader
+> needs to see what was ruled on. The correction is at the end of this appendix, and the
+> pre-registration carries it in §1.1.
+
 A `transient` task inserts a retry of the **same action**, and the corpus labels both rows with the
 **same step index** — `train-search-0313-transient` carries step 1 twice, both from the expert. That
 is semantically right: a retry is the same plan step re-executed, and plan progress does not advance
@@ -228,6 +234,12 @@ will be one short on 334 tasks.
 
 ### Addition 3: R6's row addressing needs a third component
 
+> **Superseded by the same correction.** The collisions are real, but they are copies of one
+> decision rather than distinct rows, so the key needs *fewer* components, not more:
+> `(task_id, step)` addresses a decision uniquely once the copies are recognised. A3's
+> occurrence index would have addressed identical inputs. Correction at the end of this
+> appendix.
+
 R6 says *"Rows are enumerated through `task_id` and `step`."* With 930 collisions that key does not
 address a row. It needs the occurrence index within the task, or a row ordinal assigned at capture
 time and carried in the manifest. This is cheap to fix now and unfixable after 8,907 captures are
@@ -240,3 +252,61 @@ which has no such directory. R6's capture pass reads those rows, so this is a bl
 same way the lens corpus was, and it is better named now than at minute fifty of a window. Copying
 it is 169 MB and no GPU; it must land **outside** the shared checkout, since `data/` was ignored only
 after this corpus was made and the resume key hashes untracked files.
+
+---
+
+## Correction, D-CRO, 2026-09-09, before the pre-registration was drafted
+
+**Additions 1 and 3 above are wrong, and A1 and A3 of the Chief's amendment rest on them.** Found
+while building the pre-registration's capture set, by asking what a repeated `(task_id, step)` key
+addresses rather than what it means.
+
+Every one of the 930 repeats is a **byte-identical row** — prompt, completion and metadata, checked
+by digest over the whole row, zero exceptions. Multiplicity is 2 or 6 and nothing else. The decisions
+that carry them are exactly the 578 rows flagged `recovery`, all of them, and no other row in the
+corpus. The mechanism is `pipeline/data.py`, in the training split only:
+
+```python
+if split_spec.role == "train":
+    expert_rows = [row for row in expert_rows for _ in range(_repeats(row, recovery_repeats))]
+```
+
+with `recovery_repeats: {transient: 2, wrong_path: 2, unknown_tool: 2, stale_path: 6, failed_edit: 6}`
+recorded in the corpus provenance. That reproduces the counts exactly: 490 doubled (transient 244 +
+wrong_path 182 + unknown_tool 64) and 88 sextupled (failed_edit 58 + stale_path 30), so
+490 + 88×5 = 930. The shuffle that follows scatters the copies, which is why they looked like
+separate events and why row order within a task means nothing.
+
+**What I did wrong.** I read `train-search-0313-transient` carrying step 1 twice, saw that a
+transient task re-issues an action, and stopped. The two rows are identical; a retry would have made
+them differ, because the first attempt's turn would be in the second's context. Comparing them would
+have taken one line and would have refuted the reading immediately. The general form is the
+twenty-fourth entry's again: **a mechanism inferred from a pattern, when the artefact could have been
+asked directly.**
+
+**What changes.**
+
+1. **A1 has nothing to predict.** The step index never repeats as two decisions, so E2's rule needs
+   no no-advance clause and the 244 transient tasks are not the stratum that refutes a rule advancing
+   every turn. They are still the informative stratum, for a better reason: transient is the only
+   variant whose corrective decision is entered *contiguously*, because its fault is injected and its
+   error row is kept. The other four lose the failing row, so their 309 recovery transitions span a
+   decision that was never rendered.
+2. **A3's key should be smaller, not larger.** `(task_id, step)` addresses a decision uniquely.
+   The prompt sha256 stays in the manifest, and the multiplicity is carried as `rendered_rows` so
+   the training weight is recoverable without being applied by accident.
+3. **The capture unit is the distinct decision, 7,629 of them**, not 8,907 rows. Capturing rows would
+   forward the same tokens up to six times and would weight any probe fit by the fine-tuning recipe's
+   oversampling — silently, and in the direction that flatters a recovery result.
+4. **The Chief's §1 figures were right and are unaffected.** 7,629, 6,501 and a maximum of 17 is the
+   deduplicated basis, and deduplicating by `(task_id, step)` turns out to be the correct operation —
+   for a reason neither of us had at the time.
+
+Scripts: `prereg_inputs.py` builds the capture set and refuses if any repeated key is not a
+byte-identical row; `capture_budget.py` recomputes the storage table on the corrected unit;
+`check_prereg.py` pins every figure in `PREREGISTRATION.md` to those artefacts and has a
+`--self-test` that corrupts each pinned line and asserts the check rejects it.
+
+**One more of mine, small.** I reported the corpus as 169 MB. It is 85 MB. I read the `total 169176`
+line of `ls -l`, which counts 512-byte blocks, as kilobytes. The Chief corrected it in A4 from the
+archive manifest.
