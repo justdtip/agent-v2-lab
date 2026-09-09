@@ -299,6 +299,34 @@ def test_probe_capture_dtype_round_trips_through_the_registry(declared: str) -> 
     assert spec.probes.capture_dtype == declared
 
 
+@pytest.mark.parametrize("name", ["gemma3-4b-cuda-bf16", "gemma3-12b-cuda-bf16"])
+def test_the_cuda_gemma_entries_declare_a_float32_lens_fit(name: str) -> None:
+    """WS-D, the width rows: there is no width-independent bfloat16 Jacobian at these layers."""
+    spec = load_model_spec(name)
+
+    assert spec.probe_lens_fit_dtype == "float32"
+    assert spec.probes.lens_fit_dtype == "float32"
+    # And it is not the capture's dtype: the ruling separates the two deliberately.
+    assert spec.probes.capture_dtype == "native"
+
+
+def test_lens_fit_dtype_round_trips_and_is_absent_where_undeclared() -> None:
+    raw = _registry_mapping(None)
+    assert "lens_fit_dtype" not in raw["probes"]
+    assert models._model_spec_from_mapping(raw, source="test").probes.lens_fit_dtype is None
+
+    raw["probes"]["lens_fit_dtype"] = "bfloat16"
+    assert models._model_spec_from_mapping(raw, source="test").probe_lens_fit_dtype == "bfloat16"
+
+
+def test_an_unknown_lens_fit_dtype_is_refused_by_name() -> None:
+    raw = _registry_mapping(None)
+    raw["probes"]["lens_fit_dtype"] = "float16"
+
+    with pytest.raises(ValueError, match="probes.lens_fit_dtype must be one of"):
+        models._model_spec_from_mapping(raw, source="test")
+
+
 def test_probe_capture_dtype_defaults_to_native_when_the_registry_omits_it() -> None:
     raw = _registry_mapping(None)
     assert "capture_dtype" not in raw["probes"]

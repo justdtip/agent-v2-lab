@@ -703,6 +703,24 @@ def fit_upstream_jacobian(
 # ------------------------------------------------------------------------------ declared ν
 
 
+def _fit_precision_block(fit: UpstreamJacobianFit) -> dict:
+    """The fit's measured precision block, with ``fit_dtype`` named as the ruling names it.
+
+    The width-rows ruling requires ν to carry ``fit_dtype``, ``forward_batch`` and
+    ``anchor_batch``. The block already carries the dtype the forward was **measured** running
+    in, under the key ``dtype``, so ``fit_dtype`` is that measurement under the ruling's name and
+    not a second one taken elsewhere: a fit cannot have been in two precisions, and two keys that
+    could disagree would be a defect rather than a record. The two widths are the fitter's own
+    (WS-D) and are passed through untouched where it records them; nothing is invented here, so a
+    fit predating that work carries ``None`` and a reader can see it was never declared.
+    """
+    precision = dict(fit.precision)
+    precision.setdefault("fit_dtype", precision.get("dtype"))
+    for width in ("forward_batch", "anchor_batch"):
+        precision.setdefault(width, None)
+    return precision
+
+
 def declare_nu(
     fit: UpstreamJacobianFit,
     *,
@@ -772,7 +790,7 @@ def declare_nu(
             ),
         },
         "corpus": dict(corpus),
-        "precision": dict(fit.precision),
+        "precision": _fit_precision_block(fit),
         "upstream": dict(fit.provenance),
         "decoder_depth": int(num_layers),
     }

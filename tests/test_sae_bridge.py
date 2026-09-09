@@ -637,3 +637,71 @@ def test_reconstruction_budget_refuses_the_wrong_shape_and_an_undeclared_thresho
         B.reconstruction_budget(d, np.ones((2, d.hidden_size + 1), np.float32), dominance=0.5)
     with pytest.raises(ValueError, match="zero residual"):
         B.reconstruction_budget(d, np.zeros((1, d.hidden_size), np.float32), dominance=0.5)
+
+
+# ------------------------------------------------------------------- lens fit precision
+
+FLOAT32_NU = {"precision": {"dtype": "float32", "fit_dtype": "float32",
+                            "forward_batch": 1, "anchor_batch": 1}}  # fmt: skip
+BF16_NU = {"precision": {"dtype": "bfloat16", "fit_dtype": "bfloat16",
+                         "forward_batch": 64, "anchor_batch": 1}}  # fmt: skip
+SILENT_NU = {"precision": {"dtype": "bfloat16", "device": "cpu"}}
+
+
+def test_a_lens_that_does_not_say_what_it_was_fitted_in_is_refused_by_a_declaring_registry(parts):
+    """The width rows: an undeclared fit is not assumed to be the declared one."""
+    d, _, lens = parts
+    with pytest.raises(ValueError, match="carries no `fit_dtype`"):
+        B.hook_alignment(d, lens, lens_fit_dtype="float32", nu=SILENT_NU)
+    # A lens with no nu at all is the same absence and refuses the same way.
+    with pytest.raises(ValueError, match="carries no `fit_dtype`"):
+        B.hook_alignment(d, lens, lens_fit_dtype="float32", nu=None)
+
+
+def test_the_registry_and_the_lens_must_agree_on_the_fit_precision(parts):
+    d, _, lens = parts
+    with pytest.raises(ValueError, match="fit_dtype 'bfloat16'.*lens_fit_dtype 'float32'"):
+        B.hook_alignment(d, lens, lens_fit_dtype="float32", nu=BF16_NU)
+    # And the other way round, so the check is not one-sided.
+    with pytest.raises(ValueError, match="fit_dtype 'float32'.*lens_fit_dtype 'bfloat16'"):
+        B.hook_alignment(d, lens, lens_fit_dtype="bfloat16", nu=FLOAT32_NU)
+    layer = B.layer_for_hook(d.hook_point)
+    assert B.hook_alignment(d, lens, lens_fit_dtype="float32", nu=FLOAT32_NU) == layer
+
+
+def test_both_silent_is_recorded_as_undeclared_rather_than_refused(parts):
+    """Every lens fitted before the ruling, upstream's hosted one included."""
+    d, _, lens = parts
+    layer = B.layer_for_hook(d.hook_point)
+    assert B.hook_alignment(d, lens) == layer
+    assert B.hook_alignment(d, lens, nu=SILENT_NU) == layer
+    record = B.fit_precision_record(SILENT_NU, declared=None)
+    assert record["status"] == "undeclared"
+    assert record["fit_dtype"] is None and record["declared_by_registry"] is None
+    assert "does not say what arithmetic" in record["note"]
+    assert "path_term" not in record
+
+
+def test_a_float32_lens_on_a_native_capture_carries_the_declared_path_term():
+    record = B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="native")
+    assert record["status"] == "declared"
+    assert record["forward_batch"] == 1 and record["anchor_batch"] == 1
+    assert record["path_term"]["relative"] == 0.0124
+    assert record["path_term"]["at"] == "64 tokens"
+    assert "declared" in record["path_term"]["basis"]
+    # The term is the cost of the *path difference*: no difference, no term.
+    same = B.fit_precision_record(FLOAT32_NU, declared="float32", capture_dtype="float32")
+    assert "path_term" not in same
+
+
+def test_the_fit_precision_lands_in_the_provenance_block(parts):
+    d, u, lens = parts
+    record = B.fit_precision_record(FLOAT32_NU, declared="float32")
+    block = B.bridge_provenance(
+        d, lens, u, 10, dictionary_repo="r", dictionary_folder="f", fit_precision=record
+    )
+    assert block["lens"]["fit_precision"]["fit_dtype"] == "float32"
+    assert block["lens"]["fit_precision"]["path_term"]["relative"] == 0.0124
+    # Absent by default, so an artefact that did not check cannot look as though it had.
+    plain = B.bridge_provenance(d, lens, u, 10, dictionary_repo="r", dictionary_folder="f")
+    assert plain["lens"]["fit_precision"] is None

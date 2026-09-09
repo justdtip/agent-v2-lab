@@ -93,6 +93,15 @@ cache:
 probes:
   layer_fractions: [0.167, 0.333, 0.5, 0.667, 0.833, 1.0]
   capture_dtype: native
+  # What a lens for this entry must have been fitted in, and it is not the capture's dtype above.
+  # WS-D order, "The width rows" (9380e74): in bfloat16 the autograd directional derivative moves
+  # by a median 76% at layer 1 when only the forward's batch width changes, against 1e-5 in
+  # float32 -- so there is no width-independent bfloat16 Jacobian at these layers and a bf16 map
+  # is a derivative of the rounding structure as much as of the model. Lenses are fitted in
+  # float32 from here; captures stay native at width 1, being readings of the deployed
+  # computation, and a float32 lens read against a native capture carries the path difference as
+  # a declared term rather than as agreement.
+  lens_fit_dtype: float32
 memory:
   budget_gib: 22
 policies: {}
