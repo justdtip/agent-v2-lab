@@ -229,8 +229,9 @@ parallelism when more than one is present, **degrading to one GPU with no flag**
 **Consumes.** The registry's HF checkpoint (WS-E). Independent of WS-A except through `lora_targets`,
 which the shared base provides.
 
-**Golden test.** A 40-row smoke train on one GPU and on two produces the same loss curve to
-tolerance and an adapter `adapter_delta.py` reads; then arm 1's recipe (top-8 layers) reproduces the
+**Golden test.** A 40-row smoke train on one GPU and on two agrees **per parameter**: gradients at
+step zero and parameters after N steps to float32 epsilon, with the loss curve reported beside them
+and passing nothing on its own (§16.7); and `checkpoint_delta` reads the output; then arm 1's recipe (top-8 layers) reproduces the
 18-of-19 divergence result on the same checkpoint.
 
 **Budget.** ~180 new. **Deleted:** `training/gated_delta_chunked.py`, `gated_delta_chunkwise.py`
@@ -721,7 +722,8 @@ not be replaced by a torch template's tool role; that changes what the model was
 - **G-5, multi-GPU, a separate arm never folded in**: G-1 to G-4 again under each parallelism with
   its own bands, provenance recording device count, dtype, deterministic flags, TF32 state, pinned
   attention backend and all-reduce order. **Byte-identical trajectories are a within-backend,
-  fixed-topology property**; a sharded matmul reduces in a different order.
+  fixed-topology property**; a sharded matmul reduces in a different order. The one-versus-W-device
+  arm passes on per-parameter gradient and parameter agreement, never on the loss (§16.7).
 - Determinism on CUDA: `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`,
   TF32 off, a pinned SDPA backend.
 
@@ -1080,3 +1082,41 @@ evidence re-run on torch 2.14.0, the plan's floor, since the record's isolated r
 a 2,584-line copy of the diff that goes stale at the first edit. Then the full-checkpoint gates run
 locally under §16.1. Noted, not blocking: `residuals()` costs an observation forward plus the
 hand-run loop, which the graph-once estimator (§6.3) addresses for production.
+
+### 16.7 The multi-device gate compares gradients, not losses; the chunked loss runs inside the root unit
+
+SWE-2 built the two-device arm on CPU (FSDP2 accepts a `gloo` mesh in torch 2.14.0, so the whole
+gate is answerable on the laptop) and found that the gate as written would have passed a broken
+configuration. With the blocks sharded and the root left replicated outside any unit, FSDP2 reduces
+nothing for the embedding, final norm and tied head, so each rank keeps its own half-window gradient
+forever. At step zero, identical weights, before any update:
+
+| quantity | one device | two devices | relative |
+|---|---:|---:|---:|
+| loss | 4.1746088012 | 4.1746088012 | 0.00e+00 |
+| grad norm, sharded blocks | 1.89720254 | 1.89720254 | 2.17e-10 |
+| grad norm, root unit | 0.93408004 | 1.31364770 | **4.06e-01** |
+
+Loss at step zero on identical weights and the same rows is identical by construction and asserts
+nothing; afterwards it is one step behind the error (8.83e-04 over six steps, inside any tolerance
+anyone would have written). **Ruling, applied to every statement of the gate:** at step zero,
+per-parameter gradients agree between one device and W to float32 epsilon, as a max relative
+deviation per parameter and not a norm, so a wrong slice cannot hide inside a right norm; after N
+steps, per-parameter values agree likewise; the loss curve is reported and passes nothing. With the
+root reduced correctly the deviations are 5.39e-08 (loss), 3.79e-07 and 1.39e-07 (gradient norms):
+float32 epsilon, where reassociated summation lives. The rule behind it is in the method record: a
+gate compares the quantity nearest the mechanism, never one downstream of it.
+
+The cause was a design collision, and it is settled: `causal_lm_chunked_loss` reads `lm_head.weight`
+directly to avoid a 262,208-wide logit tensor, and FSDP2 unshards a parameter only inside its unit's
+forward, so touching the weight from outside raises the mixed Tensor/DTensor error. Neither hand
+all-reduce (a second reduction path, which is the standing invitation to the silent error above) nor
+the head as a per-chunk module call (unsharding the largest parameter once per chunk). The chunked
+loss moves **inside the root unit's forward**: a thin wrapper module whose forward runs the inner
+model and then the chunked cross-entropy against the raw weight; blocks sharded as units, the
+wrapper sharded as the root, holding the tied embedding, the norm and the head together as a tied
+pair must be. Inside that forward the weight is the unsharded tensor and the reduce-scatter hooks are
+armed, which is how the fused-linear-cross-entropy kernels run under FSDP2 in the wild. Cost: the
+root's parameters resident unsharded from forward through backward, once per step; the memory rung
+is `reshard_after_forward=True` on the root, measured per §10.2. The hand-reduced arm stays in the
+record as the negative control: the configuration the old gate passed.

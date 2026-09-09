@@ -63,8 +63,10 @@ micro-batch chosen under the R47 fraction, and the window declaration carrying t
 
 - A 40-row smoke train on CPU with a tiny model runs the loop, the cadence, the checkpoint and the
   manifest end to end.
-- On the remote: one device and two devices produce the same loss curve to tolerance on the same
-  rows, and `checkpoint_delta` reads the output.
+- One device and two devices agree **per parameter** on the same rows: gradients at step zero and
+  parameters after N steps to float32 epsilon, as a max relative deviation per parameter; the loss
+  curve is reported beside them and passes nothing on its own (amendment A6). Answerable on CPU
+  under `gloo` before any device is rented; `checkpoint_delta` reads the output.
 - Arm 1's recipe (train top-8 layers only) reproduces **both** its checkpoints, 800 and 1,200, under
   full fine-tuning, each scored on the full 180-task split beside its MLX counterpart, or the
   difference is recorded as the finding. The criterion is pre-registered here, before any
@@ -138,3 +140,13 @@ The ARM1 record carries the same amendment.
 **A5. The two rule-test failures on `cuda-ws-c` are not WS-C's.** `cuda-ws-c` is thirteen commits
 behind main, one of them `d6dc41f`, the refusal guard on `GEMMA3-REGRESSION-2026-09-08/run_native.py`.
 Merge main; they clear.
+
+**A6. The gate compared the wrong column, and the chunked loss belongs inside the root unit.**
+SWE-2's two-device arm on CPU showed the loss bit-identical at step zero while the root unit's
+gradient was forty per cent wrong, because a root left outside any FSDP2 unit is never reduced. The
+golden test above now requires per-parameter gradient agreement at step zero and per-parameter value
+agreement after N steps; the loss is reported and passes nothing. And the chunked cross-entropy,
+which reads `lm_head.weight` directly, moves inside the root unit's forward through a thin wrapper
+module that is sharded as the root, so FSDP2 owns every parameter and no second reduction path
+exists. Plan §16.7 carries the tables and the reasoning; the hand-reduced arm stays in the record as
+the negative control.
