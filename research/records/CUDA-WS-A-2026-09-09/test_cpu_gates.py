@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import sys
@@ -21,7 +22,8 @@ def tiny_checkpoint(tmp_path):
     torch = pytest.importorskip("torch")
     transformers = pytest.importorskip("transformers")
     safetensors = pytest.importorskip("safetensors.torch")
-    config = transformers.Gemma3TextConfig(
+    config = transformers.AutoConfig.for_model(
+        "gemma3_text",
         vocab_size=64,
         hidden_size=16,
         intermediate_size=32,
@@ -34,7 +36,9 @@ def tiny_checkpoint(tmp_path):
         max_position_embeddings=2048,
     )
     torch.manual_seed(123)
-    reference = transformers.Gemma3ForCausalLM(config).to(dtype=torch.bfloat16).eval()
+    reference = (
+        transformers.AutoModelForCausalLM.from_config(config).to(dtype=torch.bfloat16).eval()
+    )
     checkpoint = {
         f"language_model.{key}": value.detach().clone()
         for key, value in reference.state_dict().items()
@@ -45,7 +49,13 @@ def tiny_checkpoint(tmp_path):
         checkpoint, str(tmp_path / "model.safetensors"), metadata={"format": "pt"}
     )
     (tmp_path / "config.json").write_text(
-        json.dumps({"model_type": "gemma3", "text_config": config.to_dict()})
+        json.dumps(
+            {
+                "model_type": "gemma3",
+                "architectures": ["Gemma3ForConditionalGeneration"],
+                "text_config": config.to_dict(),
+            }
+        )
     )
     return reference
 
@@ -53,7 +63,9 @@ def tiny_checkpoint(tmp_path):
 def test_hf_loads_every_text_tensor_and_preserves_native_tying(tmp_path):
     torch = pytest.importorskip("torch")
     reference = tiny_checkpoint(tmp_path)
-    loaded, audit = gates.load_text_model(gates.checkpoint_metadata(tmp_path))
+    from local_llm_lab.hf_text import load_text_causal_lm
+
+    loaded, audit = load_text_causal_lm(tmp_path, dtype="bfloat16", device="cpu")
     assert audit["loading_info"]["missing_keys"] == []
     assert set(audit["loading_info"]["unexpected_keys"]) == {"vision_tower.fixture.weight"}
     assert set(loaded.state_dict()) == set(reference.state_dict())
@@ -70,19 +82,26 @@ def test_missing_text_weight_fails_closed(tmp_path):
     state = safetensors.load_file(str(path))
     del state["language_model.model.layers.0.mlp.down_proj.weight"]
     safetensors.save_file(state, str(path), metadata={"format": "pt"})
+    from local_llm_lab.hf_text import load_text_causal_lm
+
     with pytest.raises(ValueError, match="missing_keys"):
-        gates.load_text_model(gates.checkpoint_metadata(tmp_path))
+        load_text_causal_lm(tmp_path, dtype="bfloat16", device="cpu")
 
 
-def test_unknown_nontext_tensor_fails_closed(tmp_path):
+def test_shared_loader_discovers_foreign_towers_from_headers(tmp_path):
     safetensors = pytest.importorskip("safetensors.torch")
     tiny_checkpoint(tmp_path)
     path = tmp_path / "model.safetensors"
     state = safetensors.load_file(str(path))
     state["foreign.weight"] = state.pop("vision_tower.fixture.weight")
     safetensors.save_file(state, str(path), metadata={"format": "pt"})
-    with pytest.raises(ValueError, match="unrecognised"):
-        gates.checkpoint_metadata(tmp_path)
+    from local_llm_lab.hf_text import checkpoint_metadata, load_text_causal_lm
+
+    metadata = checkpoint_metadata(tmp_path)
+    assert metadata["other"] == {"foreign.weight"}
+    loaded, report = load_text_causal_lm(tmp_path, dtype="bfloat16", device="cpu")
+    assert report["unexpected_keys"] == ["foreign.weight"]
+    assert not hasattr(loaded, "foreign")
 
 
 def test_ids_reject_short_and_boolean_data(tmp_path):
@@ -184,9 +203,24 @@ def test_structure_checks_each_header_dimension_and_span():
             gates.verify_structure(damaged, config)
 
 
-def test_completed_normal_measurement_survives_rotary_failure(monkeypatch):
+def install_probe_stub(monkeypatch, report):
+    def probe(view, ids, *, checkpoint):
+        checkpoint("native_dtype_loop", {"status": "running"})
+        checkpoint(
+            "native_dtype_loop", valid_measurement(64)["precision_probe"]["native_dtype_loop"]
+        )
+        return report
+
+    monkeypatch.setitem(
+        sys.modules,
+        "research.acceptance.torch_seam",
+        SimpleNamespace(residual_precision_probe=probe),
+    )
+
+
+def test_completed_probe_survives_rotary_failure(monkeypatch):
     measured, saved = {}, []
-    monkeypatch.setattr(gates, "compare_retained", lambda *args: {"by_layer": {0: 0.0}})
+    install_probe_stub(monkeypatch, {"status": "measured", "tokens": 64})
 
     def fail(*args):
         raise ValueError("rotary failure")
@@ -194,27 +228,112 @@ def test_completed_normal_measurement_survives_rotary_failure(monkeypatch):
     monkeypatch.setattr(gates, "rotary_rounding", fail)
     with pytest.raises(ValueError, match="rotary failure"):
         gates.measure_length(
-            None, [1, 2], lambda phase: saved.append(json.loads(json.dumps(measured))), measured
+            SimpleNamespace(num_layers=1),
+            list(range(64)),
+            lambda phase: saved.append(copy.deepcopy(measured)),
+            measured,
         )
-    assert measured["normal"] == {"status": "measured", "by_layer": {0: 0.0}}
+    assert measured["precision_probe"]["status"] == "measured"
     assert measured["rotary_rounding"]["status"] == "failed"
-    assert measured["mask_dispatch_control"]["status"] == "unexecuted"
-    assert any(row["normal"]["status"] == "measured" for row in saved)
+    assert any(row["precision_probe"]["status"] == "measured" for row in saved)
 
 
-def test_completed_normal_measurement_survives_memory_stop(monkeypatch):
+def test_completed_probe_phase_survives_memory_stop(monkeypatch):
     measured = {}
-    monkeypatch.setattr(gates, "compare_retained", lambda *args: {"by_layer": {0: 0.0}})
+    install_probe_stub(monkeypatch, {"status": "measured", "tokens": 64})
 
     def checkpoint(phase):
-        if phase == "normal":
-            assert measured["normal"]["status"] == "measured"
+        if measured["phases"].get(phase, {}).get("status") == "measured":
             raise RuntimeError("memory stop")
 
     with pytest.raises(RuntimeError, match="memory stop"):
-        gates.measure_length(None, [1, 2], checkpoint, measured)
-    assert measured["normal"]["status"] == "measured"
+        gates.measure_length(SimpleNamespace(num_layers=1), list(range(64)), checkpoint, measured)
+    assert measured["phases"]["native_dtype_loop"]["status"] == "measured"
+    assert measured["phases"]["native_dtype_loop"]["max_abs"] == 0.0
     assert measured["rotary_rounding"]["status"] == "unexecuted"
+
+
+def valid_measurement(length):
+    def arm(error):
+        return {
+            "status": "measured",
+            "max_abs": error,
+            "max_norm_relative": error,
+            "by_layer": {
+                i: {"max_abs": error, "native_max_abs": 1.0, "max_norm_relative": error}
+                for i in range(2)
+            },
+        }
+
+    native = {**arm(0.0), "exact": True}
+    controls = {
+        name: arm(0.2)
+        for name in ("mask_dispatch", "hook_site_off_by_one", "entry_transform_omission")
+    }
+    if length == 64:
+        controls["mask_dispatch"] = arm(0.0)
+    return {
+        "tokens": length,
+        "rotary_rounding": {"status": "measured", "max_abs": 0.002},
+        "precision_probe": {
+            "status": "measured",
+            "tokens": length,
+            "native_dtype_loop": native,
+            "promoted_fp32_loop": arm(0.1),
+            "controls": controls,
+        },
+    }
+
+
+def test_gate_accepts_exact_seam_without_gating_cross_precision_floor():
+    # A 10% floor is deliberately above the old bound; it is descriptive, not accepted accuracy.
+    rows = [valid_measurement(length) for length in gates.LENGTHS]
+    outcome = gates.assess_gate2(rows, num_layers=1)
+    assert outcome["status"] == "pass"
+    assert outcome["cross_precision_bound"] is None
+
+
+@pytest.mark.parametrize("problem", ["nonzero", "missing_site", "nonfinite", "invalid_zero_scale"])
+def test_gate_rejects_invalid_same_dtype_evidence(problem):
+    rows = [valid_measurement(length) for length in gates.LENGTHS]
+    native = rows[1]["precision_probe"]["native_dtype_loop"]
+    if problem == "nonzero":
+        native["by_layer"][0]["max_abs"] = 1e-30
+    elif problem == "missing_site":
+        del native["by_layer"][0]
+    elif problem == "nonfinite":
+        native["by_layer"][0]["max_norm_relative"] = float("nan")
+    else:
+        native["by_layer"][0]["native_max_abs"] = 0.0
+        native["by_layer"][0]["max_abs"] = 1e-30
+    assert gates.assess_gate2(rows, num_layers=1)["status"] == "fail"
+
+
+@pytest.mark.parametrize("problem", ["missing_control", "equal_floor", "below_floor", "short_mask"])
+def test_gate_rejects_controls_that_do_not_establish_the_required_difference(problem):
+    rows = [valid_measurement(length) for length in gates.LENGTHS]
+    controls = rows[1]["precision_probe"]["controls"]
+    if problem == "missing_control":
+        del controls["entry_transform_omission"]
+    elif problem == "short_mask":
+        mask = rows[0]["precision_probe"]["controls"]["mask_dispatch"]
+        mask.update(max_abs=1e-30, max_norm_relative=1e-30)
+        for row in mask["by_layer"].values():
+            row.update(max_abs=1e-30, max_norm_relative=1e-30)
+    else:
+        relative = 0.1 if problem == "equal_floor" else 0.01
+        controls["mask_dispatch"].update(max_abs=relative, max_norm_relative=relative)
+        for row in controls["mask_dispatch"]["by_layer"].values():
+            row.update(max_abs=relative, max_norm_relative=relative)
+    assert gates.assess_gate2(rows, num_layers=1)["status"] == "fail"
+
+
+def test_gate_refuses_missing_or_duplicate_lengths():
+    assert gates.assess_gate2([valid_measurement(64)], num_layers=1)["status"] == "incomplete"
+    assert (
+        gates.assess_gate2([valid_measurement(64), valid_measurement(64)], num_layers=1)["status"]
+        == "incomplete"
+    )
 
 
 def test_atomic_record_failure_preserves_previous_json(tmp_path, monkeypatch):
@@ -283,3 +402,47 @@ def test_final_save_error_is_not_hidden_without_an_original_error(tmp_path, monk
         gates.finish_report(
             tmp_path / "record.json", {"memory": []}, time.monotonic(), preserving_exception=False
         )
+
+
+def test_gate_refuses_inconsistent_control_aggregate():
+    rows = [valid_measurement(length) for length in gates.LENGTHS]
+    control = rows[1]["precision_probe"]["controls"]["entry_transform_omission"]
+    for row in control["by_layer"].values():
+        row["max_norm_relative"] = 0.0
+    assert gates.assess_gate2(rows, num_layers=1)["status"] == "fail"
+
+
+def test_gate_accepts_zero_reference_only_when_error_and_relative_are_zero():
+    rows = [valid_measurement(length) for length in gates.LENGTHS]
+    for measured in rows:
+        probe = measured["precision_probe"]
+        for arm in (
+            probe["native_dtype_loop"],
+            probe["promoted_fp32_loop"],
+            *probe["controls"].values(),
+        ):
+            arm["by_layer"][0] = {"max_abs": 0.0, "native_max_abs": 0.0, "max_norm_relative": 0.0}
+    assert gates.assess_gate2(rows, num_layers=1)["status"] == "pass"
+
+
+def test_native_seam_failure_stops_before_precision_floor(monkeypatch):
+    measured, phases = {}, []
+
+    def probe(view, ids, *, checkpoint):
+        arm = valid_measurement(64)["precision_probe"]["native_dtype_loop"]
+        arm["by_layer"][1]["max_abs"] = 1e-30
+        checkpoint("native_dtype_loop", arm)
+        pytest.fail("precision floor must not start after native seam failure")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "research.acceptance.torch_seam",
+        SimpleNamespace(residual_precision_probe=probe),
+    )
+    with pytest.raises(RuntimeError, match="native dtype seam failed"):
+        gates.measure_length(
+            SimpleNamespace(num_layers=1), list(range(64)), phases.append, measured
+        )
+    assert measured["acceptance"]["status"] == "fail"
+    assert measured["rotary_rounding"]["status"] == "unexecuted"
+    assert phases[-1] == "native_dtype_exactness_failure"

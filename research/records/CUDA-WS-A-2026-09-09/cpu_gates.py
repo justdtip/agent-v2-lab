@@ -1,8 +1,8 @@
 """Local, explicitly executed CPU calibration for WS-A; never a CUDA launcher.
 
-This record companion measures the complete residual-comparison allocation at 64 and 1,400
-positions. It does not promote a measurement to full acceptance: the unresolved precision
-comparison and the two additional control conventions are recorded as unexecuted gates.
+This record companion checks same-dtype seam exactness at 64 and 1,400 positions, records
+the promoted cross-precision floor, and requires controls to exceed that floor. Gates 3–4
+remain explicitly unexecuted; passing these measurements is not complete CUDA acceptance.
 """
 
 from __future__ import annotations
@@ -18,13 +18,10 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 GIB = 2**30
 LENGTHS = (64, 1400)
-KEY_MAPPING = {r"^language_model\.": ""}
-VISION_PREFIXES = ("vision_tower.", "multi_modal_projector.")
 
 
 def sha256(path):
@@ -33,102 +30,6 @@ def sha256(path):
         for block in iter(lambda: stream.read(4 * 1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def checkpoint_metadata(path):
-    """Read local safetensors headers; tensor loading remains HF's responsibility."""
-    root = Path(path).resolve(strict=True)
-    if not root.is_dir():
-        raise ValueError("checkpoint must be an existing local directory")
-    config = json.loads((root / "config.json").read_text())
-    if config.get("model_type") != "gemma3" or "text_config" not in config:
-        raise ValueError("this record companion requires the official Gemma 3 wrapper config")
-    tensors, hashes = {}, {"config.json": sha256(root / "config.json")}
-    shards = sorted(root.glob("*.safetensors"))
-    if not shards:
-        raise ValueError("checkpoint has no local safetensors shards")
-    for shard in shards:
-        with shard.open("rb") as stream:
-            size_bytes = stream.read(8)
-            if len(size_bytes) != 8:
-                raise ValueError("truncated safetensors header")
-            header = json.loads(stream.read(int.from_bytes(size_bytes, "little")))
-        hashes[shard.name] = sha256(shard)
-        for name, entry in header.items():
-            if name == "__metadata__":
-                continue
-            if name in tensors:
-                raise ValueError(f"duplicate checkpoint tensor: {name}")
-            if not name.startswith(("language_model.", *VISION_PREFIXES)):
-                raise ValueError(f"unrecognised checkpoint tensor: {name}")
-            if entry["dtype"] != "BF16":
-                raise ValueError(f"checkpoint is not uniformly stored bf16: {name}")
-            tensors[name] = entry
-    text = {
-        key.removeprefix("language_model."): value
-        for key, value in tensors.items()
-        if key.startswith("language_model.")
-    }
-    if not text:
-        raise ValueError("checkpoint has no text tensors")
-    return {
-        "path": str(root),
-        "config": config,
-        "tensors": tensors,
-        "text": text,
-        "sha256": hashes,
-        "text_bf16_bytes": sum(math.prod(value["shape"]) * 2 for value in text.values()),
-    }
-
-
-def load_text_model(metadata):
-    """Use HF's native loading/conversion, then fail closed on every text loading gap."""
-    import torch
-    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
-
-    config = Gemma3TextConfig(**metadata["config"]["text_config"])
-    model, info = Gemma3ForCausalLM.from_pretrained(
-        metadata["path"],
-        config=config,
-        dtype=torch.bfloat16,
-        attn_implementation="eager",
-        local_files_only=True,
-        output_loading_info=True,
-        key_mapping=KEY_MAPPING,
-    )
-    for field in ("missing_keys", "mismatched_keys", "error_msgs", "conversion_errors"):
-        if info.get(field):
-            raise ValueError(f"text checkpoint load failed: {field}={info[field]}")
-    expected_vision = {key for key in metadata["tensors"] if key.startswith(VISION_PREFIXES)}
-    if set(info.get("unexpected_keys", ())) != expected_vision:
-        raise ValueError("unexpected keys differ from the header's exact vision/projector set")
-    state = model.state_dict()
-    for key, entry in metadata["text"].items():
-        if key not in state or tuple(state[key].shape) != tuple(entry["shape"]):
-            raise ValueError(f"text tensor missing or shape changed: {key}")
-    tied = model.all_tied_weights_keys
-    uncovered = set(state) - set(metadata["text"])
-    if any(key not in tied or tied[key] not in metadata["text"] for key in uncovered):
-        raise ValueError(f"model contains unaccounted text tensors: {sorted(uncovered)}")
-    for target, source in tied.items():
-        if state[target].data_ptr() != state[source].data_ptr():
-            raise ValueError(f"native weight tying was not restored: {target}")
-    if any(
-        tensor.device.type != "cpu" or tensor.dtype != torch.bfloat16
-        for tensor in model.parameters()
-    ):
-        raise ValueError("loaded parameters are not exclusively CPU bf16")
-    model.eval().requires_grad_(False)
-    serial_info = {
-        key: sorted(value) if isinstance(value, set) else value for key, value in info.items()
-    }
-    return model, {
-        "key_mapping": KEY_MAPPING,
-        "loading_info": serial_info,
-        "checkpoint_text_tensors": len(metadata["text"]),
-        "model_state_tensors": len(state),
-        "tied_keys": tied,
-    }
 
 
 def read_ids(path):
@@ -182,8 +83,8 @@ def verify_structure(measured, text_config):
         "hidden_size": text_config.hidden_size,
         "vocab_size": text_config.vocab_size,
         "attention_spans": [
-            {"sliding_attention": "sliding", "full_attention": "global"}[kind]
-            for kind in text_config.layer_types
+            {"sliding_attention": "sliding", "full_attention": "global"}.get(kind)
+            for kind in getattr(text_config, "layer_types", [None] * text_config.num_hidden_layers)
         ],
     }
     for field, value in expected.items():
@@ -200,34 +101,6 @@ def memory_reading():
         "rss_bytes": psutil.Process().memory_info().rss,
         "process_peak_bytes": int(high if sys.platform == "darwin" else high * 1024),
         "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset",
-    }
-
-
-def compare_retained(view, ids):
-    """The same two view paths, with all requested tensors simultaneously retained."""
-    import torch
-
-    layers = range(view.num_layers + 1)
-    loop, native = view.residuals(ids, layers), view.native_residuals(ids, layers)
-    rows = {}
-    for layer in loop:
-        actual, reference = loop[layer].float(), native[layer].float()
-        difference = float((actual - reference).abs().max())
-        scale = float(reference.abs().max())
-        rows[layer] = {
-            "max_abs": difference,
-            "native_max_abs": scale,
-            "max_norm_relative": difference / scale if scale else None,
-        }
-    if any(not math.isfinite(row["max_abs"]) for row in rows.values()):
-        raise ValueError("non-finite residual comparison")
-    retained = sum(t.numel() * t.element_size() for t in (*loop.values(), *native.values()))
-    assert not torch.is_grad_enabled()
-    return {
-        "by_layer": rows,
-        "retained_residual_bytes": retained,
-        "relative_definition": "max(abs(loop-native)) / max(abs(native)); descriptive",
-        "memory_while_retained": memory_reading(),
     }
 
 
@@ -265,40 +138,153 @@ def rotary_rounding(view, ids):
 
 
 def measure_length(view, ids, checkpoint, measurement):
-    """Persist each completed phase before checking its peak or beginning the next phase."""
+    """Persist shared-probe phase reports before checking memory and starting the next phase."""
+    from research.acceptance.torch_seam import residual_precision_probe
+
     measurement.update(
         tokens=len(ids),
-        normal={"status": "unexecuted"},
+        precision_probe={"status": "unexecuted"},
+        phases={},
         rotary_rounding={"status": "unexecuted"},
-        mask_dispatch_control={"status": "unexecuted"},
-        controls_unexecuted=["hook-site off-by-one", "entry-transform omission"],
-        interpretation="native bf16 versus promoted fp32 includes block rounding, not only RoPE",
     )
 
-    def measure_phase(name, operation):
-        measurement[name] = {"status": "running"}
-        try:
-            checkpoint(f"before_{name}")
-            measurement[name] = {"status": "measured", **operation()}
-            checkpoint(name)
-        except Exception:
+    def progress(phase, phase_report):
+        # Copy scalar metadata only; the shared helper owns every tensor and releases each arm.
+        measurement["phases"][phase] = dict(phase_report)
+        checkpoint(phase)
+        if (
+            phase == "native_dtype_loop"
+            and phase_report.get("status") == "measured"
+            and not native_exact(phase_report, num_layers=view.num_layers)
+        ):
+            measurement["acceptance"] = {
+                "status": "fail",
+                "reason": "native dtype seam is not exact",
+            }
+            checkpoint("native_dtype_exactness_failure")
+            raise RuntimeError("native dtype seam failed; later diagnostic arms are unexecuted")
+
+    try:
+        measurement["precision_probe"] = {"status": "running"}
+        measurement["precision_probe"] = residual_precision_probe(view, ids, checkpoint=progress)
+        checkpoint("precision_probe_complete")
+        measurement["rotary_rounding"] = {"status": "running"}
+        checkpoint("before_rotary_rounding")
+        measurement["rotary_rounding"] = {"status": "measured", **rotary_rounding(view, ids)}
+        checkpoint("rotary_rounding")
+    except Exception:
+        for name in ("precision_probe", "rotary_rounding"):
             if measurement[name]["status"] == "running":
                 measurement[name]["status"] = "failed"
-            raise
-
-    measure_phase("normal", lambda: compare_retained(view, ids))
-    measure_phase("rotary_rounding", lambda: rotary_rounding(view, ids))
-    original = view._observe_forward
-
-    def global_mask_only(tokens, cache=None):
-        entry, bundles = original(tokens, cache)
-        global_index = next(i for i in bundles if view.attention_span(i) == "global")
-        mask = bundles[global_index]["attention_mask"]
-        return entry, {i: {**values, "attention_mask": mask} for i, values in bundles.items()}
-
-    with patch.object(view, "_observe_forward", global_mask_only):
-        measure_phase("mask_dispatch_control", lambda: compare_retained(view, ids))
+        raise
     return measurement
+
+
+def valid_precision_arm(arm, *, num_layers):
+    """Require every site and recompute scalar summaries before using a gate value."""
+    if not isinstance(arm, dict) or arm.get("status") != "measured":
+        return False
+    rows = arm.get("by_layer", {})
+    expected_layers = set(range(num_layers + 1))
+    try:
+        if len(rows) != len(expected_layers) or {int(key) for key in rows} != expected_layers:
+            return False
+        values = [arm["max_abs"], arm["max_norm_relative"]]
+        values.extend(
+            value[field]
+            for value in rows.values()
+            for field in ("max_abs", "native_max_abs", "max_norm_relative")
+        )
+        if not all(
+            type(value) in (int, float) and math.isfinite(value) and value >= 0 for value in values
+        ):
+            return False
+        for row in rows.values():
+            scale, error = row["native_max_abs"], row["max_abs"]
+            if scale == 0 and error != 0:
+                return False
+            relative = error / scale if scale else 0.0
+            if row["max_norm_relative"] != relative:
+                return False
+        return all(
+            arm[field] == max(row[field] for row in rows.values())
+            for field in ("max_abs", "max_norm_relative")
+        )
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+
+
+def native_exact(arm, *, num_layers):
+    return (
+        valid_precision_arm(arm, num_layers=num_layers)
+        and arm.get("exact") is True
+        and arm["max_abs"] == 0.0
+    )
+
+
+def assess_precision_length(measurement, *, num_layers):
+    """Apply the dated ruling; no bound is applied to the cross-precision floor."""
+    checks = {}
+    tokens = measurement.get("tokens")
+    probe = measurement.get("precision_probe", {})
+
+    def valid_arm(arm):
+        return valid_precision_arm(arm, num_layers=num_layers)
+
+    native = probe.get("native_dtype_loop", {})
+    floor = probe.get("promoted_fp32_loop", {})
+    checks["complete_probe"] = probe.get("status") == "measured" and probe.get("tokens") == tokens
+    checks["native_dtype_exact"] = native_exact(native, num_layers=num_layers)
+    checks["precision_floor_recorded"] = valid_arm(floor)
+    rotary = measurement.get("rotary_rounding", {})
+    rotary_error = rotary.get("max_abs")
+    checks["rotary_rounding_recorded"] = (
+        rotary.get("status") == "measured"
+        and type(rotary_error) in (int, float)
+        and math.isfinite(rotary_error)
+        and rotary_error >= 0
+    )
+    controls = probe.get("controls", {})
+    required_controls = ("mask_dispatch", "hook_site_off_by_one", "entry_transform_omission")
+    for name in required_controls:
+        control = controls.get(name, {})
+        checks[f"{name}_measured"] = valid_arm(control)
+        if tokens == max(LENGTHS):
+            checks[f"{name}_outside_floor"] = (
+                valid_arm(control)
+                and valid_arm(floor)
+                and control["max_norm_relative"] > floor["max_norm_relative"]
+            )
+    if tokens == min(LENGTHS):
+        mask = controls.get("mask_dispatch", {})
+        checks["short_mask_control_exact"] = valid_arm(mask) and mask["max_abs"] == 0.0
+    checks["required_length"] = tokens in LENGTHS
+    return {
+        "status": "pass" if all(checks.values()) else "fail",
+        "checks": checks,
+        "rule": "native exact zero; long controls strictly above the global precision floor",
+    }
+
+
+def assess_gate2(measurements, *, num_layers):
+    """Both required lengths must be present exactly once; absent evidence can never pass."""
+    lengths = [item.get("tokens") for item in measurements]
+    if sorted(lengths, key=str) != sorted(LENGTHS, key=str):
+        return {
+            "status": "incomplete",
+            "reason": "requires exactly one result at each declared length",
+        }
+    results = {
+        str(item["tokens"]): assess_precision_length(item, num_layers=num_layers)
+        for item in measurements
+    }
+    return {
+        "status": "pass" if all(item["status"] == "pass" for item in results.values()) else "fail",
+        "by_length": results,
+        "native_dtype_bound": 0.0,
+        "cross_precision_bound": None,
+        "threshold_changed": False,
+    }
 
 
 def write_report(path, report):
@@ -360,6 +346,7 @@ def main(argv=None):
         "device": "cpu",
         "weights_dtype": "bfloat16",
         "diagnostic_dtype": "float32",
+        "seam_comparison_dtype": "bfloat16",
         "attention": "eager",
         "cap_gib": args.cap_gib,
         "projected_peak_gib": args.projected_peak_gib,
@@ -402,10 +389,11 @@ def main(argv=None):
         os.environ.update(LLL_BACKEND="torch", LLL_DEVICE="cpu", HF_HUB_OFFLINE="1")
         import torch
         from packaging.version import Version
-        from transformers import Gemma3TextConfig
+        from transformers import AutoConfig
 
         from local_llm_lab import device
         from local_llm_lab.arch_torch import TorchArchitectureView
+        from local_llm_lab.hf_text import checkpoint_metadata, load_text_causal_lm
         from research.acceptance.torch_seam import structural_report
 
         if Version(torch.__version__.split("+")[0]) < Version("2.14.0"):
@@ -415,20 +403,30 @@ def main(argv=None):
         report["runtime"] = device.pin(seed=0, attention="eager")
         report["resolved_arch_source"] = str(sys.modules[TorchArchitectureView.__module__].__file__)
         metadata = checkpoint_metadata(args.checkpoint)
-        if metadata["text_bf16_bytes"] >= args.cap_gib * GIB:
+        if metadata["storage_dtypes"] != ["BF16"]:
+            raise ValueError("this CPU run requires text weights stored uniformly in bf16")
+        if metadata["text_bytes"] >= args.cap_gib * GIB:
             raise RuntimeError("text weights alone exceed the explicit memory cap")
         ids, report["tokens"] = read_ids(args.token_ids)
-        report["checkpoint"] = {key: metadata[key] for key in ("path", "sha256", "text_bf16_bytes")}
+        report["checkpoint"] = {
+            key: metadata[key] for key in ("path", "sha256", "text_bytes", "storage_dtypes")
+        }
         checkpoint("before_load")
         with torch.no_grad():
-            model, report["loading"] = load_text_model(metadata)
+            model, report["loading"] = load_text_causal_lm(
+                metadata["path"], dtype="bfloat16", attn_implementation="eager", device="cpu"
+            )
+            if report["loading"]["sha256"] != metadata["sha256"]:
+                raise ValueError("checkpoint hashes changed between preflight and the shared load")
             checkpoint("after_load")
             view = TorchArchitectureView.from_model(model)
             if max(ids[: max(LENGTHS)]) >= view.vocab_size:
                 raise ValueError("supplied token IDs exceed the loaded model vocabulary")
             report["gates"]["1"] = {"status": "running"}
+            header_config = dict(metadata["text_config"])
+            model_type = header_config.pop("model_type")
             checked_structure = verify_structure(
-                structural_report(view), Gemma3TextConfig(**metadata["config"]["text_config"])
+                structural_report(view), AutoConfig.for_model(model_type, **header_config)
             )
             report["gates"]["1"] = {"status": "pass", **checked_structure}
             checkpoint("gate_1_structure")
@@ -443,15 +441,23 @@ def main(argv=None):
                     lambda phase, length=length: checkpoint(f"{length}/{phase}"),
                     measured,
                 )
-            report["gates"]["2"] = {
-                "status": "measured_not_accepted",
-                "reason": "precision comparison and extra negative controls require resolution",
-                "registered_bf16_relative_bound": 1e-3,
-                "threshold_changed": False,
-            }
-            report["gates"]["3"]["reason"] = "ordered after gate 2 acceptance"
-            report["gates"]["4"]["reason"] = "ordered after gate 2 acceptance"
-            report["status"] = "calibrated; acceptance incomplete"
+                measured["acceptance"] = assess_precision_length(
+                    measured, num_layers=view.num_layers
+                )
+                save()
+                if measured["acceptance"]["status"] != "pass":
+                    report["gates"]["2"] = {
+                        "status": "fail",
+                        "failing_length": length,
+                        "result": measured["acceptance"],
+                    }
+                    raise RuntimeError("residual precision gate failed; later gates are unexecuted")
+            report["gates"]["2"] = assess_gate2(report["measurements"], num_layers=view.num_layers)
+            if report["gates"]["2"]["status"] != "pass":
+                raise RuntimeError("incomplete residual precision gate evidence")
+            report["gates"]["3"]["reason"] = "not executed by this bounded calibration companion"
+            report["gates"]["4"]["reason"] = "not executed by this bounded calibration companion"
+            report["status"] = "gates 1–2 passed; gates 3–4 unexecuted"
             checkpoint("complete")
     except Exception as error:
         report["status"] = "stopped"
@@ -459,7 +465,20 @@ def main(argv=None):
         if report["gates"]["1"]["status"] == "running":
             report["gates"]["1"]["status"] = "fail"
         if report["gates"]["2"]["status"] == "calibration_running":
-            report["gates"]["2"]["status"] = "incomplete"
+            failed = [
+                item
+                for item in report["measurements"]
+                if item.get("acceptance", {}).get("status") == "fail"
+            ]
+            report["gates"]["2"] = (
+                {
+                    "status": "fail",
+                    "failing_length": failed[-1]["tokens"],
+                    "result": failed[-1]["acceptance"],
+                }
+                if failed
+                else {"status": "incomplete"}
+            )
         raise
     finally:
         finish_report(
