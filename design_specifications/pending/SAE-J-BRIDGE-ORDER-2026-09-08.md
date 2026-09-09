@@ -573,3 +573,28 @@ undecided row is the row doing its job. The render row refuses a different sourc
 and names the differing split after one. The missing-file row names the fetch command with the
 layer read off the folder's layout. Nothing further for SWE-2 on the laptop; Stage B and A1 at
 other layers wait for the device's numbers.
+
+## Ruling, Chief, 2026-09-10 — Codex's bridge-pairing audit (`WSA-BRIDGE-PAIRING-AUDIT-2026-09-10`, `4df1225`): a measured layer is not a measured pairing
+
+The guard at `c4f2f9f` (merged 80857a2) is correct today because its pairing table is empty: every
+declared cross-precision or cross-width reading is refused, at every sampled layer, and the
+same-path and no-capture cases are allowed. The defect is in how the refusal will lift. `path_pairing`
+keys on model and layer only, and any non-empty entry — even `{'relative': 0.004}` with no scope —
+lifts the refusal for every crossing at that layer: a different capture precision, a different
+width, the fit/capture direction reversed. The existing test inserts exactly such a bare number and
+expects acceptance, so it encodes the defect.
+
+**Ruled, for SWE-2, before any pairing is registered.** (B1) A registered pairing carries the
+identity of the pair it measured — fit precision, capture precision, fit width, capture width, which
+side is the lens's path and which the capture's, the lens's ν digest, the positions or reduction
+and endpoint, and the context length it was measured at — and the guard compares **every** field to
+the reading proposed; a measurement missing any field is unmeasured; the no-capture path stays
+allowed. Reuse the existing ν, artefact-identity and position fields rather than a new naming.
+Tests mutate each bound field independently: the matching fixture is accepted, and changing either
+precision, either width, the direction, the lens identity, the positions or the context leaves that
+pairing unmeasured; a measurement at one layer still does not transfer to its neighbour. (B2) The
+"no amplification ratio anywhere" test validates the table's schema recursively and corrupts each
+supported nesting location, checking the quantity's meaning and location rather than banning
+numbers. (B3) One copied median (layer 33, native, the equal-norm random arm) reads 0.313000 against
+0.312953 recomputed; write the declared precision consistently. Laptop only; the technique is the
+audit's — test non-transfer as well as lookup.
