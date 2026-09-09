@@ -403,3 +403,37 @@ absolute-error floor beside relative error so a small reference signal reads *un
 and k = 10 carried as candidate settings; the two maps labelled as the test of the projection-to-
 column inference, with J − I and FD − I beside the errors; manifests, frozen invocation, progress
 events, frozen-token digest and measured autocast state bound to every record.
+
+## Correction, Chief, 2026-09-10 — Codex's width audit (`WSA-WIDTH-AUDIT-2026-09-09`, `d037454`): the widened ladder's step was eight times its rung; the autograd drift stands, its cause is not yet isolated; the path term is context, not an error bar
+
+**W1.** The widened ladder took its norm over all 64 replicated copies, so every width-64 step was
+√64 = 8 times the width-1 step at the same rung (recorded ratios 8.00 in float32, 7.8–8.0 native).
+"Float32 at width 64 still converges, one or two rungs deeper and two to five times looser" is
+withdrawn: width-64 rung k is width-1 rung k − 3 in physical step, the even-rung grids supply no
+equal-h pairs, and at layer 1 the width-64 minimum's small-step side was never measured. The
+production fitter uses one replica's norm and is not affected; the ladder is corrected to the same,
+with a fixture that repeating a batch does not change the per-row step. The width-64 FD rows stand
+as within-schedule measurements at their stated h. **Before the two float32 maps are cited, the
+record states their realized h against the width-1 ladder's; a map that inherited the batched norm
+sits three rungs off its label and is re-run at the corrected step.**
+
+**W2.** The autograd drift reproduces (0.7564 / 0.5962 / 0.1192 native; ~1e-5 float32) and is
+independent of W1. Its attribution is not isolated: the measured `a_64(x_64) − a_1(x_1)` mixes
+changed arithmetic with a changed anchor, and a smooth function can move its derivative by the
+observed proportion between two anchors a fraction of a percent apart. The protocol's same-anchor
+control is ordered: width fixed with the two saved anchors inserted in turn, then anchor fixed
+across widths 1 and 64, per-projection vectors kept, both brackets reported. Until it exists the
+wording is *native-path autograd readings at their respective anchors are strongly
+schedule-sensitive for the tested projections, and the matched float32 readings are far more
+stable*; "a derivative of the rounding structure" is withdrawn. The float32 fitting policy stands
+on the stability evidence and is not reopened.
+
+**W3.** The 1.24% at 64 tokens is historical context and not an error bar for a float32 lens read
+against a native capture: relative readout error has its own denominator, and normalisation,
+ranking and thresholded dictionary activations add questions a raw-residual percentage cannot
+answer. That application difference is **unmeasured** until a paired comparison at the reading's
+own positions and context exists; the bridge's constant is amended to say so (SWE-2).
+
+**Provenance:** `responses.npz` written durably per completed unit with a hash and index, bound to
+its scalar cells; width-specific manifests, observed precision settings, frozen invocation, token
+digest and gate outcomes archived with each run.
