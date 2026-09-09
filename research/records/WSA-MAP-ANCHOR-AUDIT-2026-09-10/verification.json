@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "basis": "executed locally, file-only; no model/native tests or device access",
+  "source_count": 22,
+  "source_bytes_match_pinned_git": true,
+  "all_changed_sources_refused": 22,
+  "analysis_reproduces_exactly": true,
+  "relocated_copy_reproduces_exactly": true,
+  "same_reference_bug_detected": true,
+  "independent_reference_mutation_no_longer_detected_as_same": true,
+  "corrupted_displacement_ratio_refused": true,
+  "corrupted_same_anchor_raw_response_refused": true,
+  "analytic_known_answer_cases": [
+    "weak_column",
+    "independent_repeat",
+    "partial_input_norm",
+    "one_random_direction_is_not_every_direction"
+  ],
+  "python_syntax": "passed",
+  "ruff_F_E9": "All checks passed!",
+  "git_diff_check": "passed",
+  "model_imports_absent": true,
+  "scalars_checked": 270,
+  "analysis_sha256": "9e5d037c17516a6cb2de6fca9c5e4341f46d50e6a1bb0180b249c8475bb1a65d",
+  "reviewer_parent": "d037454890bd1aabb9cf1bd88344610ad8bfdd23",
+  "unexecuted": [
+    "model computations",
+    "native pytest",
+    "matrix NPZ reanalysis",
+    "full-anchor norm reconstruction",
+    "device access"
+  ]
+}

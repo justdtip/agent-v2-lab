@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "reviewer_parent": "d037454890bd1aabb9cf1bd88344610ad8bfdd23",
+  "producer_commit": "e06512899bf94c1683597889f255c290ff80dba5",
+  "order_commit": "3946277fc4fc842fbe769dc0d9241d00deb4d922",
+  "scope": "File-only audit of reported full-map agreement, independent-repeat gate, and anchor-displacement interpretations. No model or device execution.",
+  "sources": [
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/README.md",
+      "snapshot": "source/README.md",
+      "sha256": "8fcf71c8ae1ca7efa84dcc89343d22306c62cdb5ad4234f16f7d24d267b866a3",
+      "bytes": 37668
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/golden_float32.py",
+      "snapshot": "source/golden_float32.py",
+      "sha256": "31709c0277424b17f30c5e3acc664de6c2a45b28dab0207a5507c3b5e26731b0",
+      "bytes": 12709
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/same_anchor.py",
+      "snapshot": "source/same_anchor.py",
+      "sha256": "c69cf590b0aa429c6f770b0f2184eb52824cd5c86e9e1afbbc321ae5c37aaaac",
+      "bytes": 8175
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/smoke_12b.py",
+      "snapshot": "source/smoke_12b.py",
+      "sha256": "f2ffdfba42c67c237467fae2eed7fee191b756303dbd90ab0135ffd3b6f5bef1",
+      "bytes": 10089
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/displacement_control.py",
+      "snapshot": "source/displacement_control.py",
+      "sha256": "024232b1819910356a2a5bb782366093be9ab62ae392f9909270f185dac750c2",
+      "bytes": 8599
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/same-anchor.jsonl",
+      "snapshot": "source/artefacts/same-anchor.jsonl",
+      "sha256": "657575cfad545e4501e03321b211f4f64aca41dfab4d8221da30bfd11c73375e",
+      "bytes": 23552
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/same-anchor-12b-native.jsonl",
+      "snapshot": "source/artefacts/same-anchor-12b-native.jsonl",
+      "sha256": "777eb8df6f10cc3fbd7bd46bf999c6c05b74c5494eef5f08358ae9c79b47da4c",
+      "bytes": 19595
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/same-anchor-12b-float32.jsonl",
+      "snapshot": "source/artefacts/same-anchor-12b-float32.jsonl",
+      "sha256": "d07bfd8993115354e74955c5a47211c0478d94827848ce0a44349c6efd97672e",
+      "bytes": 21266
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/displacement.jsonl",
+      "snapshot": "source/artefacts/displacement.jsonl",
+      "sha256": "4992a08e5e275d6f6cdcbb536d3c9edcf5ac2eec6ce05bb9a54e1e524062f20d",
+      "bytes": 35687
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/progress.jsonl",
+      "snapshot": "source/artefacts/progress.jsonl",
+      "sha256": "3ce40459435a94010f1bf5389c4903cad4da0713f3f63d978a3745f723660349",
+      "bytes": 1791
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/golden-report-L1.json",
+      "snapshot": "source/artefacts/golden-f32/golden-report-L1.json",
+      "sha256": "ba2c55aa223306af107539346417314e34b29d78afdc79cb4322fc42d7796c9b",
+      "bytes": 1741
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/golden-report-L33.json",
+      "snapshot": "source/artefacts/golden-f32/golden-report-L33.json",
+      "sha256": "36d227c09dc6b6b9dc47f8048b3320f3b7ce5bfeadbcb7c69cd0dab1c6c61d56",
+      "bytes": 1738
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/manifest.json",
+      "snapshot": "source/artefacts/golden-f32/manifest.json",
+      "sha256": "8db0d67818c74b365f2236ece1e0db4835a479fd937227cb888036fe0a5480bc",
+      "bytes": 2147
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/nu-exact-L1.json",
+      "snapshot": "source/artefacts/golden-f32/nu-exact-L1.json",
+      "sha256": "62ddca2bbf5568e892bd9ef71d03cb5d4f4d3f1cb2deceeb2d73571011b6315d",
+      "bytes": 3196
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/nu-exact-L33.json",
+      "snapshot": "source/artefacts/golden-f32/nu-exact-L33.json",
+      "sha256": "99f81fb27a87a9cd009ed880095b5a0f86de4cf9b5e3c1d89d2067bd4926445d",
+      "bytes": 3198
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/nu-finite-difference-L1.json",
+      "snapshot": "source/artefacts/golden-f32/nu-finite-difference-L1.json",
+      "sha256": "9d521a4168e53370b6915e5f98b3d7c36627e718ebb50e27a95f34c07fc3b4da",
+      "bytes": 3863
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/nu-finite-difference-L33.json",
+      "snapshot": "source/artefacts/golden-f32/nu-finite-difference-L33.json",
+      "sha256": "dc9c6f4501dffe432982eda0608647128383e31c0371aab1110d68ac4b78028e",
+      "bytes": 3852
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/progress.jsonl",
+      "snapshot": "source/artefacts/golden-f32/progress.jsonl",
+      "sha256": "0a3d471d5ef01388e9064fc026b80178ceac49c9f07ecf9ce450e255398304e3",
+      "bytes": 2664
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/golden-f32/summary.json",
+      "snapshot": "source/artefacts/golden-f32/summary.json",
+      "sha256": "bc5de1c2555c05ed6f48883373741bfcff44214424e5d76b52d81e39959db608",
+      "bytes": 492
+    },
+    {
+      "commit": "e06512899bf94c1683597889f255c290ff80dba5",
+      "repository_path": "src/local_llm_lab/pipeline/lens_fitting/golden.py",
+      "snapshot": "source/library/golden.py",
+      "sha256": "ded780fe322693145653e0f95434ef058bc1711b957d222ea3c0700bd683b2f6",
+      "bytes": 17141
+    },
+    {
+      "commit": "3946277fc4fc842fbe769dc0d9241d00deb4d922",
+      "repository_path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "snapshot": "source/orders/ws-a.md",
+      "sha256": "f87b45ad2b51d150d69da59e9210c04daeb8fa9a2002700e854e4c9faf886f91",
+      "bytes": 40427
+    },
+    {
+      "commit": "3946277fc4fc842fbe769dc0d9241d00deb4d922",
+      "repository_path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "snapshot": "source/orders/ws-d.md",
+      "sha256": "71a362740be2e98c6acf65db7a1f356cd1e669dfc9969a0f98c3767e68d024ca",
+      "bytes": 40160
+    }
+  ]
+}

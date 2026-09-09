@@ -1,0 +1,17 @@
+{"event": "loaded", "elapsed_s": 5.72, "seconds": 4.69, "dtype": "torch.float32", "attn": "eager", "checkpoint_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff", "tf32": false, "float32_matmul_precision": "highest"}
+{"event": "wrote", "elapsed_s": 5.79, "file": "manifest.json", "bytes": 2147}
+{"event": "smoke", "elapsed_s": 8.56, "seconds": 2.77, "peak_gib": 14.562, "layers": 1, "dim_batch": 1, "precision": "float32", "note": "one source layer, width 1; the bf16 exact side peaked at 43.9 GiB at dim_batch 64", "basis": "measured-here"}
+{"event": "exact_fit", "elapsed_s": 83.57, "repo_layer": 1, "seconds": 75.01, "layers": 1, "peak_gib": 15.347, "forward_batch": 1, "anchor_batch": 1, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 84.14, "file": "nu-exact-L1.json", "bytes": 3196}
+{"event": "fd_fit", "elapsed_s": 396.12, "repo_layer": 1, "k": 10, "epsilon_scale": 9.765625e-06, "seconds": 311.98, "peak_gib": 14.57, "epsilon_per_layer": {"0": {"min": 0.09921077728271485, "max": 0.09921077728271485, "mean": 0.09921077728271485}}, "forward_batch": 1, "anchor_batch": 1, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 396.69, "file": "nu-finite-difference-L1.json", "bytes": 3863}
+{"event": "wrote", "elapsed_s": 396.79, "file": "golden-report-L1.json", "bytes": 1741}
+{"event": "golden", "elapsed_s": 396.79, "repo_layer": 1, "k": 10, "worst_relative": 0.004847986291516893, "exact_reproduces_itself": 0.0, "controls_separate": true, "at_or_below_storage_floor": false, "basis": "measured-here"}
+{"event": "exact_fit", "elapsed_s": 399.38, "repo_layer": 33, "seconds": 2.59, "layers": 1, "peak_gib": 14.562, "forward_batch": 1, "anchor_batch": 1, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 399.98, "file": "nu-exact-L33.json", "bytes": 3198}
+{"event": "fd_fit", "elapsed_s": 712.8, "repo_layer": 33, "k": 6, "epsilon_scale": 0.00015625, "seconds": 312.82, "peak_gib": 14.57, "epsilon_per_layer": {"32": {"min": 137.94705078125, "max": 137.94705078125, "mean": 137.94705078125}}, "forward_batch": 1, "anchor_batch": 1, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 713.4, "file": "nu-finite-difference-L33.json", "bytes": 3852}
+{"event": "wrote", "elapsed_s": 713.49, "file": "golden-report-L33.json", "bytes": 1738}
+{"event": "golden", "elapsed_s": 713.49, "repo_layer": 33, "k": 6, "worst_relative": 0.0028639612301082336, "exact_reproduces_itself": 0.0, "controls_separate": true, "at_or_below_storage_floor": false, "basis": "measured-here"}
+{"event": "wrote", "elapsed_s": 713.49, "file": "summary.json", "bytes": 492}
+{"event": "done", "elapsed_s": 713.49, "layers": [1, 33]}
