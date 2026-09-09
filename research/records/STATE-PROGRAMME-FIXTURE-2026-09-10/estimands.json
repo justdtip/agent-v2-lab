@@ -1,0 +1,59 @@
+{
+  "arm_means": {
+    "A_base": {
+      "D1": 0.0,
+      "D4": 0.0,
+      "D5": 1.0
+    },
+    "A_control": {
+      "D1": 0.0,
+      "D4": 0.0,
+      "D5": 1.0
+    },
+    "A_reuse": {
+      "D1": 1.0,
+      "D4": 1.0,
+      "D5": 0.0
+    },
+    "A_substitution": {
+      "D1": 1.0,
+      "D4": 1.0,
+      "D5": 0.0
+    },
+    "E_base": {
+      "D1": 1.0,
+      "D4": 1.0,
+      "D5": 0.0
+    }
+  },
+  "estimands": {
+    "predictive": {
+      "distance": 0.0,
+      "passes": true,
+      "tolerance": 0.0
+    },
+    "reuse": {
+      "distance": 0.0,
+      "passes": true,
+      "tolerance": 0.25
+    },
+    "specificity": {
+      "distance": 0.0,
+      "passes": true,
+      "tolerance": 0.16666666666666666
+    },
+    "substitution": {
+      "distance": 0.0,
+      "passes": true,
+      "tolerance": 0.25
+    }
+  },
+  "level": "J-space vectors (diagnostic means); never a coefficient table",
+  "retained": [
+    "D1",
+    "D4",
+    "D5"
+  ],
+  "rows": 25,
+  "schema_version": 1
+}

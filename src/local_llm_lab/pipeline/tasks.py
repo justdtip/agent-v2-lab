@@ -1554,6 +1554,16 @@ _MAKERS = {
     "synthesis": _synthesis,
     "update": _update,
     "list": _list,
+    # The state programme's existence family (STATE-PROGRAMME-RUN-ORDER-2026-09-10 §4). Registered
+    # here beside `_list` as the order says, and deliberately **not** in `FAMILIES`: `make_tasks`
+    # assigns families by `index % len(FAMILIES)` and every recorded corpus's task ids and R28
+    # fingerprints are keyed to that cycle, so a thirteenth entry would move every task after it.
+    # Reached through `state_programme.family.make_existence_pairs`, the way the P2 and J-space
+    # splits are reached through their own factories. Imported lazily to keep this module's import
+    # closure where it is.
+    "existence": lambda split, index, level, rng: __import__(
+        "local_llm_lab.pipeline.state_programme.family", fromlist=["_existence"]
+    )._existence(split, index, level, rng),
     "pointer_chain": _pointer_chain,
     "ledger_reconcile": _ledger_reconcile,
     "cross_reference": _cross_reference,
