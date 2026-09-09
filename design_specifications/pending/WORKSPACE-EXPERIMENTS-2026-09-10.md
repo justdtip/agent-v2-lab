@@ -118,7 +118,7 @@ ablation cannot be done in the text without changing the task. It can be done in
 On the 300-sample, per decision, a second and third forward beside the ordinary one: the carrier
 spans masked **as keys** for every query at or after the current turn's start (the task statement
 never masked; kinds selectable — the notes, the calls, the results, the hidden placeholders, each
-alone and all together), and a **random-span mask of equal token count** as the control. Read at
+alone and all together), and a **random-span mask of equal token count** as the control; and two further arms that mask **the current turn's note** as keys for the queries after it, alone and together with the carriers, so that the action position reads without the note the model has just written — the report-or-computation question in intervention form: an action that survives was decided before the note, one that snaps to the prior was read off it. Read at
 `P_note` and `P_act`: the model's own six-tool distribution and the lens readout per layer, against
 the unmasked forward. A taken action that survives the mask was carried in the residual before the
 mask point; one that snaps to the tool prior was re-read from the carrier; the random control says
