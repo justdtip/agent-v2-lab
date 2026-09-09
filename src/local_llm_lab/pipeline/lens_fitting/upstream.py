@@ -44,7 +44,7 @@ import os
 import sys
 import time
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -87,8 +87,8 @@ ESTIMATOR_FINITE_DIFFERENCE = "finite-difference"
 #: Environment variable naming the read-only upstream clone, for boxes that keep it elsewhere.
 JLENS_PATH_ENV = "JLENS_PATH"
 
-#: Where the clone lives by convention on this box and in the migration plan. Tried after the
-#: environment variable and after an already-importable ``jlens``; never vendored, never edited.
+#: Where the clone lives by convention on this box and in the migration plan. Tried only when
+#: neither an argument nor ``$JLENS_PATH`` names one; never vendored, never edited.
 DEFAULT_JLENS_PATHS = (
     PROJECT_ROOT / "reference" / "jacobian-lens",
     Path.home() / "reference" / "jacobian-lens",
@@ -112,6 +112,16 @@ class CotangentSelectionError(Exception):
     warning. A selector that silently empties on some rows would shrink the prompt count through
     that path and the fit would still return a lens — a missing figure reading as a passing one.
     This exception is shaped so that it cannot be swallowed by that ``except``.
+    """
+
+
+class MixedPrecisionModel(ValueError):
+    """The fitting model has more than one dtype or device across its blocks.
+
+    Refused rather than described, because the sidecar declares one precision and the backward
+    accumulates in the target block's, so a mixed model has no single true answer to put there.
+    Reachable on the CUDA leg through `device_map="auto"`, bitsandbytes quantisation and
+    `_keep_in_fp32_modules`, none of which are exotic.
     """
 
 
@@ -146,7 +156,9 @@ class Upstream:
             "path": str(self.path),
             "commit": self.commit,
             "expected_commit": EXPECTED_JLENS_COMMIT,
-            "commit_matches_expected": None if self.commit is None else self.commit == EXPECTED_JLENS_COMMIT,
+            "commit_matches_expected": None
+            if self.commit is None
+            else self.commit == EXPECTED_JLENS_COMMIT,
             "vendored": False,
         }
 
@@ -169,26 +181,25 @@ def _clone_commit(path: Path) -> str | None:
 def load_upstream(path: str | Path | None = None) -> Upstream:
     """Import ``jlens`` from the read-only reference clone.
 
-    Search order: the explicit argument, ``$JLENS_PATH``, an already-importable ``jlens`` (a pinned
-    install), then :data:`DEFAULT_JLENS_PATHS`. The clone is put on ``sys.path``; it is never copied
-    into this package, because a vendored estimator would make the golden test a comparison of our
-    transcription against itself.
+    If ``path`` or ``$JLENS_PATH`` names a clone, **that one and only that one** is used — a named
+    path that is wrong raises rather than falling back, because a fit run against a clone the caller
+    did not choose is a measurement of an artefact nobody chose. With neither given, the
+    :data:`DEFAULT_JLENS_PATHS` are tried and then an already-importable ``jlens`` (a pinned
+    install). The clone goes on ``sys.path``; it is never copied into this package, because a
+    vendored estimator would make the golden test a comparison of our transcription against itself.
 
     Raises:
         UpstreamUnavailable: naming every path tried, so the fix is obvious from the message.
     """
+    named = path if path is not None else os.environ.get(JLENS_PATH_ENV)
+    # An explicit path that is wrong must fail, not be silently replaced by a default: a fit run
+    # against a clone the caller did not name is a measurement of an artefact nobody chose.
+    candidates = [Path(named).expanduser()] if named else list(DEFAULT_JLENS_PATHS)
     tried: list[str] = []
-    candidates: list[Path] = []
-    for candidate in (path, os.environ.get(JLENS_PATH_ENV)):
-        if candidate:
-            candidates.append(Path(candidate).expanduser())
-    explicit = list(candidates)
-    candidates.extend(DEFAULT_JLENS_PATHS)
 
     for candidate in candidates:
-        marker = candidate / "jlens" / "fitting.py"
         tried.append(str(candidate))
-        if not marker.is_file():
+        if not (candidate / "jlens" / "fitting.py").is_file():
             continue
         root = str(candidate.resolve())
         if root not in sys.path:
@@ -198,7 +209,7 @@ def load_upstream(path: str | Path | None = None) -> Upstream:
 
         found = Path(fitting.__file__).resolve().parents[1]
         if found != candidate.resolve():
-            # A different jlens was already imported in this interpreter. Say so rather than
+            # A different jlens was already imported into this interpreter. Say so rather than
             # reporting the path we wanted as the path we used.
             raise UpstreamUnavailable(
                 f"jlens is already imported from {found}, but {candidate} was requested. "
@@ -206,9 +217,8 @@ def load_upstream(path: str | Path | None = None) -> Upstream:
             )
         return Upstream(fitting, lens, candidate.resolve(), _clone_commit(candidate))
 
-    if not explicit:
-        # Only fall back to an installed jlens when no path was demanded; an explicit path that
-        # is wrong must fail, not be quietly replaced by whatever is on sys.path.
+    if not named:
+        # No clone on this box, but an installed or already-imported jlens is a legitimate pin.
         try:
             import jlens.fitting as fitting
             import jlens.lens as lens
@@ -260,11 +270,14 @@ def default_position_selector(
 
     Returned as a closure over the upstream function object rather than a reimplementation, so
     "the default selector is upstream's behaviour" is true by construction and not by a test that
-    happens to agree today.
+    happens to agree today. The function object is captured **now**, not looked up per call: while
+    an explicit selector is installed, ``jlens.fitting.valid_position_mask`` is this adapter's
+    trampoline, and a late lookup would make the default selector call itself forever.
     """
     up = upstream or load_upstream()
+    mask_fn = up.fitting.valid_position_mask
     skip = up.skip_first_default if skip_first is None else int(skip_first)
-    return lambda seq_len: up.valid_position_mask(seq_len, skip_first=skip)
+    return lambda seq_len: mask_fn(seq_len, skip_first=skip)
 
 
 def _check_mask(mask: Any, seq_len: int, torch_module: ModuleType) -> Any:
@@ -285,6 +298,32 @@ def _check_mask(mask: Any, seq_len: int, torch_module: ModuleType) -> Any:
     return mask
 
 
+def _runs(chosen: list[int]) -> list[list[int]]:
+    """``[start, stop)`` pairs covering exactly ``chosen``, so the fingerprint is lossless.
+
+    A contiguous band is one pair, which is why this costs almost nothing in the ordinary case and
+    still distinguishes two selectors that pick the same count over the same span.
+    """
+    runs: list[list[int]] = []
+    for position in chosen:
+        if runs and position == runs[-1][1]:
+            runs[-1][1] = position + 1
+        else:
+            runs.append([position, position + 1])
+    return runs
+
+
+def _is_short_prompt(error: Exception) -> bool:
+    """Whether a ValueError from upstream is its short-prompt refusal rather than a real defect.
+
+    Matched on the message because upstream raises a bare ``ValueError`` for both this and a bad
+    layer index, and only this one describes a row we may legitimately skip. Brittle to upstream's
+    wording by construction -- and upstream is one unmaintained commit, so the wording will not
+    move. If it ever does, this stops skipping and starts raising, which is the safe direction.
+    """
+    return "prompt too short" in str(error)
+
+
 def selector_descriptor(selector: PositionSelector, *, probe_lengths: Sequence[int]) -> dict:
     """A serialisable fingerprint of a selector, for ν and for checkpoint compatibility checks.
 
@@ -299,7 +338,14 @@ def selector_descriptor(selector: PositionSelector, *, probe_lengths: Sequence[i
     for seq_len in probe_lengths:
         try:
             mask = _check_mask(selector(int(seq_len)), int(seq_len), torch)
+        # Narrowed on the Chief's reading: catching ValueError by class absorbed *any* ValueError
+        # from inside upstream as a counted skip, including ones that mean the fit is wrong rather
+        # than the row is short. Upstream raises it from exactly two places, and only the
+        # short-prompt one is a legitimate skip; `_check_layer_indices` is pre-validated above, so
+        # anything else reaching here is a defect and must not read as a skipped row.
         except (CotangentSelectionError, ValueError) as error:
+            if not isinstance(error, CotangentSelectionError) and not _is_short_prompt(error):
+                raise
             rows.append({"seq_len": int(seq_len), "selected": None, "refused": str(error)})
             continue
         chosen = mask.nonzero(as_tuple=True)[0].tolist()
@@ -310,6 +356,14 @@ def selector_descriptor(selector: PositionSelector, *, probe_lengths: Sequence[i
                 "first": int(chosen[0]),
                 "last": int(chosen[-1]),
                 "contiguous": chosen == list(range(chosen[0], chosen[-1] + 1)),
+                # The exact selection, not a summary of it. An adversarial pass built two selectors
+                # differing only in which interior positions they chose -- {20..28, 38} against
+                # {20..26, 29, 30, 38} -- and the four summary numbers were identical, so the whole
+                # position_weighting block and its sha256 collided while J differed by 17.5% of
+                # scale. A fingerprint that cannot separate two incomparable lenses is not a
+                # fingerprint; it is the appearance of one. Stored as a run-length encoding because
+                # the common case is contiguous and the cost is then three integers.
+                "runs": _runs(chosen),
             }
         )
     payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -373,13 +427,25 @@ class CorpusLensModel:
         self._rows[key] = tensor if device is None else tensor.to(device)
         return key
 
-    def encode(self, text: str, *, max_length: int = 512) -> Any:
+    def encode(self, text: str, *, max_length: int | None = None) -> Any:
         """Return the frozen ids for a registered row, truncated exactly as upstream would.
 
         ``jacobian_for_prompt`` does ``input_ids.expand(dim_batch, -1)``, which requires shape
         ``[1, seq_len]``. One row at a time, never a padded batch: upstream's HF forward passes no
         attention mask, so anything padded would be wrong the moment it were introduced.
+
+        ``max_length`` has **no default here**, unlike ``HFLensModel.encode``, which defaults to 512
+        while ``jacobian_for_prompt`` passes its own 128 down into it. That mismatch is the trap the
+        order names: fit at 128, read out at 512, no warning from either signature. This adapter
+        never relies on either default, at either end, so an omitted length is an error rather than
+        a silent 512.
         """
+        if max_length is None:
+            raise ValueError(
+                "CorpusLensModel.encode requires an explicit max_length. Upstream's HFLensModel "
+                "defaults it to 512 while jacobian_for_prompt passes 128, and a lens read four "
+                "times outside its fitted length raises no error anywhere."
+            )
         if text not in self._rows:
             raise KeyError(
                 f"no corpus row registered under {text!r}; CorpusLensModel.encode never "
@@ -398,14 +464,56 @@ def _observed_precision(model: Any) -> dict:
     returned J is float32 CPU either way. The dtype of the artefact therefore tells you nothing
     about the precision it was computed in, which is why it is measured here and declared.
     """
+    # Every block, not the first parameter of the first one. An adversarial pass found the earlier
+    # version accepting `dtype="float32"` for a model whose blocks 1..N were bf16 -- and the
+    # docstring above says why that is the wrong sample: the cotangent inherits the *target*
+    # block's dtype, so a one-sample read of block 0 measures the one block that does not set the
+    # accumulation precision. Same hole on device, which is the `device_map="auto"` shape: blocks
+    # spread over cpu and mps declared "cpu". A real, precise measurement of the wrong artefact,
+    # inside the function written to stop exactly that.
+    dtypes: dict[str, int] = {}
+    devices: dict[str, int] = {}
+    grads: set[bool] = set()
     for block in model.layers:
         for parameter in block.parameters():
-            return {
-                "device": parameter.device.type,
-                "dtype": str(parameter.dtype).removeprefix("torch."),
-                "requires_grad": bool(parameter.requires_grad),
-            }
-    raise ValueError("model.layers has no parameters; cannot observe device or dtype")
+            dtypes[str(parameter.dtype).removeprefix("torch.")] = 1
+            devices[parameter.device.type] = 1
+            grads.add(bool(parameter.requires_grad))
+    if not dtypes:
+        raise ValueError("model.layers has no parameters; cannot observe device or dtype")
+    if len(dtypes) > 1 or len(devices) > 1:
+        raise MixedPrecisionModel(
+            "the fitting model is not uniform, so no single declared precision describes the run: "
+            f"dtypes {sorted(dtypes)}, devices {sorted(devices)}. The backward accumulates in the "
+            "target block's dtype, so a mixed model produces a J whose precision the sidecar cannot "
+            "state. Cast the model, or fit each uniform shard and merge."
+        )
+    return {
+        "device": next(iter(devices)),
+        "dtype": next(iter(dtypes)),
+        "dtypes_observed": sorted(dtypes),
+        "devices_observed": sorted(devices),
+        "blocks_measured": len(list(model.layers)),
+        "requires_grad": bool(next(iter(grads))) if len(grads) == 1 else None,
+        "attn_implementation": _observed_attention(model),
+    }
+
+
+def _observed_attention(model: Any) -> str | None:
+    """Which attention kernel the fitting model is using, or ``None`` when it cannot be read.
+
+    ``attn_implementation`` appears nowhere in ``jlens``, so the fitting model inherits
+    transformers' default, and the order requires ``eager`` or batched rows regress to sequential.
+    Recorded, not enforced: on a hand-rolled model there is no config to read, and ``None`` is the
+    honest value for "not determined" — it must not be written as ``"eager"`` merely because that is
+    what we hoped for.
+    """
+    for candidate in (model, getattr(model, "inner", None)):
+        config = getattr(getattr(candidate, "hf_model", candidate), "config", None)
+        chosen = getattr(config, "_attn_implementation", None) if config is not None else None
+        if isinstance(chosen, str):
+            return chosen
+    return None
 
 
 def _require_frozen(model: Any) -> None:
@@ -459,7 +567,7 @@ def fit_upstream_jacobian(
     position_selector: PositionSelector | None = None,
     skip_first: int | None = None,
     dim_batch: int = 8,
-    max_seq_len: int = 128,
+    max_seq_len: int,
     device: str = "cpu",
     dtype: str = "float32",
     split: str | None = "fit",
@@ -479,6 +587,14 @@ def fit_upstream_jacobian(
     Prompts are weighted **equally**, matching upstream's ``fit()``, regardless of how many valid
     positions each contributed. That makes the corpus's length distribution part of the estimator,
     which is also declared.
+
+    ``max_seq_len`` is **required**, with no default. Upstream fits at 128 by default and reads out
+    at 512 by default (``HFLensModel.encode`` and ``JacobianLens.apply`` both default to 512, while
+    ``jacobian_for_prompt`` passes its own 128 down into ``encode``), and neither signature warns
+    that the two differ. The order's rule is that this adapter passes lengths explicitly at both
+    ends and relies on neither default; a required argument is how that rule is enforced rather than
+    remembered. 128 is the reference estimator's definition and the length the hosted lenses were
+    fitted at, so it is what the golden test passes — deliberately, in the caller, in writing.
 
     Args:
         model: anything satisfying upstream's ``LensModel``. Wrapped in :class:`CorpusLensModel`
@@ -521,7 +637,9 @@ def fit_upstream_jacobian(
     if resolved_target < 0:
         resolved_target += n_layers
     sources = (
-        list(range(resolved_target)) if source_layers is None else sorted({int(s) for s in source_layers})
+        list(range(resolved_target))
+        if source_layers is None
+        else sorted({int(s) for s in source_layers})
     )
     if not sources or sources[0] < 0 or sources[-1] >= resolved_target:
         raise ValueError(
@@ -542,10 +660,26 @@ def fit_upstream_jacobian(
     skipped: list[dict] = []
     n_done = 0
 
-    def _patched(seq_len: int, *, skip_first: int = 0) -> Any:  # noqa: ARG001 - upstream's signature
+    def _patched(seq_len: int, *, skip_first: int = 0) -> Any:
+        # `skip_first` is upstream's keyword and is accepted so the call site is unchanged; an
+        # explicit selector owns the whole position rule, so it is deliberately ignored here.
+        del skip_first
         return _check_mask(selector(int(seq_len)), int(seq_len), torch)
 
     if selector is not None:
+        # Refuse a nested fit while the module attribute is already substituted. The patch is a
+        # module global with exactly one call site, so a second concurrent fit would silently take
+        # the first one's selector and produce a lens whose declared position rule is another run's.
+        # The restore is in a `finally`, so this only fires on genuine nesting, never on a leaked
+        # patch from a failed call.
+        if getattr(original_mask_fn, "_wsd_patched", False):
+            raise CotangentSelectionError(
+                "a selector fit is already in progress on this process: "
+                "jlens.fitting.valid_position_mask is already substituted. Nested selector fits "
+                "would share one module global and the inner run's declared position rule would be "
+                "the outer run's. Run them in sequence."
+            )
+        _patched._wsd_patched = True
         up.fitting.valid_position_mask = _patched
     try:
         for row in rows:
@@ -605,7 +739,9 @@ def fit_upstream_jacobian(
 
     probe_lengths = sorted({record["seq_len"] for record in per_prompt})
     described = selector_descriptor(
-        selector if selector is not None else default_position_selector(skip_first=skip, upstream=up),
+        selector
+        if selector is not None
+        else default_position_selector(skip_first=skip, upstream=up),
         probe_lengths=probe_lengths,
     )
     return UpstreamJacobianFit(
@@ -682,12 +818,21 @@ def declare_nu(
                 "J scales with the number of selected target positions, so fits at different "
                 "max_seq_len or different band widths are not comparable in magnitude"
             ),
+            "readout_warning": (
+                "this lens was fitted at the max_seq_len recorded here; upstream's readout "
+                "defaults (HFLensModel.encode and JacobianLens.apply, both 512) are larger than "
+                "its fit default (128) and neither warns, so a readout beyond the fitted length "
+                "is extrapolation and must be passed explicitly"
+            ),
             "n_valid_positions": {
                 "min": min(valid) if valid else None,
                 "max": max(valid) if valid else None,
                 "total": int(sum(valid)) if valid else None,
             },
-            "seq_len": {"min": min(lengths) if lengths else None, "max": max(lengths) if lengths else None},
+            "seq_len": {
+                "min": min(lengths) if lengths else None,
+                "max": max(lengths) if lengths else None,
+            },
         },
         "pair_weighting": {
             "source_target_pairs": "causal, p' >= p, within the selected set",
@@ -721,7 +866,9 @@ def read_declared_nu(path: Path) -> dict:
     path = Path(path)
     sidecar = path.with_suffix(".json")
     if not sidecar.exists():
-        raise MissingDeclaredNu(f"{path.name} has no sidecar at {sidecar.name}, so it declares no ν")
+        raise MissingDeclaredNu(
+            f"{path.name} has no sidecar at {sidecar.name}, so it declares no ν"
+        )
     meta = json.loads(sidecar.read_text())
     if not isinstance(meta, dict) or "nu" not in meta:
         raise MissingDeclaredNu(
@@ -753,32 +900,58 @@ def read_declared_nu(path: Path) -> dict:
 
 
 def assert_orientation_matches_upstream(
-    loaded: LensMaps,
+    maps: LensMaps | dict[int, np.ndarray],
     fit: UpstreamJacobianFit,
     *,
     upstream: Upstream | None = None,
     seed: int = 0,
     atol: float = 1e-4,
 ) -> dict:
-    """Check the written artefact transports like upstream's lens, at every layer.
+    """Check that maps keyed by **repo layer** transport like upstream's lens, at every layer.
 
     Both sides are ``residual @ J.T`` with ``J`` in ``[output, input]`` orientation, and the
     converter that produced the hosted lenses adds no transpose. That is a claim about two lines of
     code in two repositories, and a claim is not a check: this runs a random probe through
-    upstream's own :meth:`JacobianLens.transport` and through our :meth:`LensMaps.apply`, at every
-    layer, and compares. A transposed artefact fails it because ``J`` is not symmetric; a
-    layer-shifted artefact fails it because layer ``L`` would carry block ``L``'s map instead of
-    block ``L-1``'s.
+    upstream's own :meth:`JacobianLens.transport` at block ``L-1`` and through our transport at repo
+    layer ``L``, and compares. A transposed artefact fails it because ``J`` is not symmetric; a
+    layer-shifted artefact fails it because layer ``L`` would carry a different block's map.
+
+    Note exactly what this is a check **of**, because a check whose scope is misread is worse than
+    none. It checks *an artefact against the fit it claims to come from*. ``write_lens`` already
+    round-trips its own archive, but that check is symmetric — the writer's ``J{L-1}`` and the
+    loader's ``L = i + 1`` are inverses, so they agree even if both are wrong. This one is
+    asymmetric: it goes through upstream's transport, the convention we are converting *from*, so it
+    catches a transpose or a shift introduced anywhere between the fit and the loaded file. It
+    cannot say anything about whether the fit itself is right — that is the golden test's job, not
+    this one's. Run it on a **loaded** :class:`LensMaps`: run on the same dict the caller is about
+    to write, it compares a value with itself and cannot fail.
+
+    Args:
+        maps: a loaded :class:`LensMaps` (the useful case), or a plain ``{repo_layer: array}`` dict.
 
     Returns:
-        Per-layer max absolute deviation, so the caller can record what the check measured rather
-        than only that it passed.
+        Per-layer max absolute deviation, so a record can say what the check measured rather than
+        only that it passed.
     """
     import torch
 
     up = upstream or load_upstream()
+    if isinstance(maps, LensMaps):
+        available = set(maps.maps)
+
+        def transport(probe: np.ndarray, layer: int) -> np.ndarray:
+            return maps.apply(probe, layer)
+    else:
+        available = set(maps)
+
+        def transport(probe: np.ndarray, layer: int) -> np.ndarray:
+            return probe @ np.asarray(maps[layer]).T
+
     reference = up.lens.JacobianLens(
-        {layer: torch.from_numpy(np.ascontiguousarray(matrix)) for layer, matrix in fit.jacobians.items()},
+        {
+            layer: torch.from_numpy(np.ascontiguousarray(matrix, dtype=np.float32))
+            for layer, matrix in fit.jacobians.items()
+        },
         n_prompts=fit.n_prompts,
         d_model=fit.d_model,
     )
@@ -787,15 +960,15 @@ def assert_orientation_matches_upstream(
     deviations: dict[str, float] = {}
     for index in sorted(fit.jacobians):
         layer = repo_layer_of_upstream(index)
-        if layer not in loaded.maps:
-            raise ValueError(f"artefact has no map at repo layer {layer} (upstream {index})")
+        if layer not in available:
+            raise ValueError(f"artefact has no map at repo layer {layer} (upstream block {index})")
         theirs = reference.transport(probe, index).numpy()
-        ours = loaded.apply(probe.numpy(), layer)
+        ours = transport(probe.numpy(), layer)
         deviation = float(np.max(np.abs(theirs - ours)))
         scale = float(np.max(np.abs(theirs))) or 1.0
         if not deviation <= atol * scale:
             raise ValueError(
-                f"repo layer {layer} does not transport like upstream layer {index}: max deviation "
+                f"repo layer {layer} does not transport like upstream block {index}: max deviation "
                 f"{deviation:.3e} against tolerance {atol * scale:.3e}. The artefact is in a "
                 "different orientation or a different layer convention than J{L-1}."
             )
@@ -813,6 +986,7 @@ def write_upstream_lens(
     corpus: dict,
     metadata: dict | None = None,
     estimator: str = ESTIMATOR_EXACT_AUTOGRAD,
+    kind: str | None = None,
     upstream: Upstream | None = None,
 ) -> dict:
     """Convert upstream indices to repo layers, write the artefact, then verify what was written.
@@ -823,17 +997,36 @@ def write_upstream_lens(
     layers ``1..num_layers-1``, which is exactly upstream's default source set ``0..n_layers-2``
     shifted by one; layer ``num_layers`` is the identity by construction and is never stored.
 
-    After the write, :func:`assert_orientation_matches_upstream` reloads the file through
-    ``LensMaps.load`` and checks it transports the way upstream's lens does. The conversion above is
-    two characters wide and undetectable by geometry, so it is checked rather than asserted in prose.
+    The orientation check runs **after** the write, on the file reloaded through ``LensMaps.load``,
+    and that is not a convenience: run on the ``maps`` dict this function is about to hand to
+    ``write_lens``, it would compare the line above with itself and could never fail. Run on the
+    reloaded artefact it crosses three independent pieces — ``repo_layer_of_upstream`` here,
+    ``write_lens``'s ``J{layer-1}`` key, and ``LensMaps.load``'s ``layer = i + 1`` — against
+    upstream's own transport, and any one of them moving breaks it.
+
+    The consequence, stated rather than hidden: the sidecar ``write_lens`` writes cannot carry the
+    check's numbers, because the check is performed on the file the sidecar describes. The sidecar
+    carries the convention as a *statement*; the executed deviations are in the returned dict, under
+    ``orientation_check``, for the caller's run record. Returned keys are therefore a superset of
+    the sidecar's, and this paragraph is where that is recorded.
+
+    ``kind`` is ``hosted-jacobian`` only when the fit took upstream's own position rule — that is
+    what ``profiles.py`` means by the label, and it is what makes a lens comparable with the hosted
+    ones. A fit through the selector seam is a **declared departure** (§6.2 bands are a different
+    estimator by construction and are never compared to the hosted lens as if they were one), so it
+    is not labelled automatically: the caller must name its kind. Guessing here would let a band
+    fit read as a hosted-recipe fit, which is the whole failure the ν block exists to prevent.
+
+    Returns:
+        The sidecar dict, plus ``orientation_check`` (per-layer max deviation, measured post-write).
     """
     up = upstream or load_upstream()
     expected_sources = set(range(num_layers - 1))
     if set(fit.jacobians) != expected_sources:
         raise ValueError(
-            f"a complete artefact needs upstream layers {min(expected_sources)}..{max(expected_sources)}; "
-            f"this fit has {sorted(fit.jacobians)}. Merge shards before writing -- write_lens "
-            "refuses a partial lens, deliberately."
+            f"a complete artefact needs upstream blocks 0..{num_layers - 2}; this fit has "
+            f"{sorted(fit.jacobians)}. Merge shards with JacobianLens.merge before writing -- "
+            "write_lens refuses a partial lens, deliberately."
         )
     if fit.target_layer != num_layers - 1:
         raise ValueError(
@@ -843,13 +1036,24 @@ def write_upstream_lens(
 
     # The one place the convention is converted. Repo layer L <- upstream block L-1.
     maps = {repo_layer_of_upstream(index): matrix for index, matrix in fit.jacobians.items()}
-    assert set(maps) == set(range(1, num_layers)), "layer conversion must cover 1..num_layers-1"
+    if set(maps) != set(range(1, num_layers)):
+        raise ValueError("layer conversion must cover exactly repo layers 1..num_layers-1")
+
+    if kind is None:
+        if not fit.selector.get("upstream_default_path"):
+            raise ValueError(
+                "this fit used the cotangent selector, so it is a declared departure from "
+                "upstream's ν and cannot be labelled 'hosted-jacobian' by default. Pass kind= "
+                "explicitly: a band or span lens read as a hosted-recipe lens is exactly the "
+                "confusion the ν block exists to prevent."
+            )
+        kind = "hosted-jacobian"
 
     nu = declare_nu(fit, num_layers=num_layers, corpus=corpus, estimator=estimator)
     payload = dict(metadata or {})
     payload |= {
         "schema_version": 1,
-        "kind": "hosted-jacobian",
+        "kind": kind,
         "nu": nu,
         # Repeated at the top level so a shallow reader deciding comparability does not have to
         # dig, and cannot read a lens of one estimator as a lens of the other.
@@ -876,5 +1080,6 @@ def write_upstream_lens(
         num_layers=num_layers,
         identity=identity,
     )
-    written["orientation_check"] = assert_orientation_matches_upstream(loaded, fit, upstream=up)
-    return written
+    return written | {
+        "orientation_check": assert_orientation_matches_upstream(loaded, fit, upstream=up)
+    }

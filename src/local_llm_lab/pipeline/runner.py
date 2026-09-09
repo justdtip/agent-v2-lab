@@ -57,6 +57,8 @@ class Trajectory:
     difficulty: int = -1
     integrity: dict[str, Any] = field(default_factory=dict)
     think_tokens: int = 0
+    truncated: bool = False
+    repetition: dict[str, Any] = field(default_factory=dict)
     model: dict[str, Any] = field(default_factory=dict)
     horizon: int = (
         -1
@@ -756,6 +758,92 @@ def generate_turn(model: Any, tokenizer: Any, prompt: str, sampler: Any, max_tok
     return generate_turn_with_count(model, tokenizer, prompt, sampler, max_tokens, spec=spec)[0]
 
 
+def call_signatures(steps: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """Each executed step as (tool name, its arguments), skipping unparsed turns.
+
+    Same convention as :func:`detect_loop`: a step carries its call under ``action``, and a
+    parse-error step carries none and is not a call.
+    """
+    signatures = []
+    for step in steps:
+        action = step.get("action")
+        if not action:
+            continue
+        arguments = action.get("arguments") or {}
+        signatures.append((str(action.get("name")), repr(sorted(arguments.items()))))
+    return signatures
+
+
+def longest_identical_run(signatures: list[tuple[str, str]]) -> int:
+    """The original column, with its original arithmetic, so old tables stay readable.
+
+    One call is a run of one and no calls is a run of none, which is why this is not simply
+    ``longest_period_run(signatures, 1)``: that function reports 0 when nothing repeats, and
+    changing the old column's values would silently rewrite every table that quoted it.
+
+    One difference from the records script this is lifted from: that version turned an
+    unparsed turn into the signature ``null`` rather than skipping it. It cannot change any
+    real trajectory, because a parse error ends the run, so at most one such step exists and it
+    is last. It would differ on a synthetic step list, and that is worth knowing rather than
+    discovering.
+    """
+    longest = 1 if signatures else 0
+    run = 1
+    for earlier, later in zip(signatures, signatures[1:], strict=False):
+        run = run + 1 if earlier == later else 1
+        longest = max(longest, run)
+    return longest
+
+
+def longest_period_run(signatures: list[tuple[str, str]], period: int) -> int:
+    """Length of the longest stretch that repeats with the given period.
+
+    A stretch counts only if it holds at least two full cycles, so a period is never read off
+    a sequence too short to show it.
+    """
+    if period < 1 or len(signatures) < 2 * period:
+        return 0
+    best = 0
+    start = 0
+    for index in range(period, len(signatures)):
+        if signatures[index] != signatures[index - period]:
+            start = index - period + 1
+        length = index - start + 1
+        if length >= 2 * period:
+            best = max(best, length)
+    return best
+
+
+def repetition_metrics(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Both repetition columns: the old identical-run one and a cycle-aware one.
+
+    ``longest_identical_run`` counts consecutive identical calls, which a model alternating two
+    failing calls defeats completely: it reads 1 while the trajectory loops. That column was
+    quoted across a day of comparison tables before the two-cycle was noticed, so it is kept
+    rather than replaced and the cycle-aware figure is reported beside it. A reader of an old
+    table can still find the number that table used.
+
+    ``cycle_period`` is the shortest period achieving ``longest_period_run``; a 1 means the two
+    columns describe the same repetition and anything larger means they do not.
+    """
+    signatures = call_signatures(steps)
+    identical = longest_identical_run(signatures)
+    best_length = longest_period_run(signatures, 1)
+    best_period = 1 if best_length else 0
+    for period in range(2, len(signatures) // 2 + 1):
+        length = longest_period_run(signatures, period)
+        if length > best_length:
+            best_length = length
+            best_period = period
+    return {
+        "longest_identical_run": identical,
+        "longest_period_run": best_length,
+        "cycle_period": best_period if best_length else 0,
+        "distinct_calls": len(set(signatures)),
+        "executed_calls": len(signatures),
+    }
+
+
 def detect_loop(steps: list[dict[str, Any]]) -> bool:
     """Pure repetition check over the executed steps of a trajectory.
 
@@ -884,7 +972,12 @@ def run_task(
         try:
             turn = parse_turn(action_text)
         except ActionParseError as error:
+            # A turn that ran out of budget and produced nothing parseable was cut off; it is
+            # not a model that answered wrongly. Scoring the two as one outcome charges the
+            # model for a cap we chose.
+            truncated = n_tokens >= max_tokens
             trajectory.parse_error = str(error)
+            trajectory.truncated = truncated
             trajectory.steps.append(
                 {
                     "index": index,
@@ -892,6 +985,7 @@ def run_task(
                     "think_tokens": think_tokens,
                     "raw": raw,
                     "parse_error": str(error),
+                    "truncated": truncated,
                 }
             )
             if transcript is not None:
@@ -939,6 +1033,7 @@ def run_task(
         messages.append(tool_message(turn.action.name, observation))
     # The budget ran out only if neither finish nor a parse error ended the loop.
     trajectory.exhausted = not finished and trajectory.parse_error is None
+    trajectory.repetition = repetition_metrics(trajectory.steps)
     trajectory.verdict = simulator.verdict().as_dict()
     trajectory.elapsed_seconds = round(time.monotonic() - started, 2)
     if transcript is not None:
