@@ -1139,6 +1139,28 @@ which the new one fails to. `reshard_after_forward` on the root is recorded as t
 not yet measured; that measurement is the device's. Two-rank `gloo` on CPU only; no CUDA, no NCCL,
 no real checkpoint.
 
+**Followed to its end (SWE-2, 909bd21): the wrapper is what `Trainer` is handed, and that caught a
+third member of the family.** `Trainer._save` branches on `isinstance(model, PreTrainedModel)`; the
+wrapper is not one, so it wrote a bare state dict with every tensor named `inner.*` and no
+`config.json`, nothing raised, and the artefact was one `checkpoint_delta` could not name-match and
+the registry could not load. `_save` now saves the inner model and the test asserts the checkpoint
+is a **model**: config present, no `inner.` prefix, loads with `from_pretrained`. The rule
+generalises: **upstream inspects the object it is handed; a wrapper changes both what runs and what
+it is.** Anything handed a wrapper in place of the `PreTrainedModel` inherits this silently, and the
+wrapper must also delegate `config` and the checkpointing methods or upstream reaches for them and
+finds nothing. Every seat that wraps a model reads this paragraph before handing the wrapper to
+anything of upstream's.
+
+**Two claims, kept separate (SWE-2, 41808bc).** The sharded path is validated per parameter on CPU
+in the two-device record; `stage_train_torch` runs, single-process; the two joined is **not done**.
+Handed more processes, `Trainer` and `accelerate` would distribute under their own default rather
+than the sharded path the order requires, invisibly, with the loss falling and a checkpoint
+written and every memory figure describing a configuration that never ran. So the stage refuses a
+multi-process run and names the gap. Wiring FSDP2 into the stage is WS-C's next task, validated to
+two `gloo` processes on CPU; NCCL and more ranks are the device's. Under tying,
+`lm_head.weight is embed_tokens.weight`: one parameter with two names, so no flat parameter
+straddles two units and there is nothing to shard by halves; that sentence is now in the code.
+
 ### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
 
 SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
@@ -1173,3 +1195,49 @@ records' `registry_sha256` pins and stays; `models.py` carries the truth.
 Two rules from the same hour, both SWE-2's: anything that bypasses `forward` inherits none of what
 upstream attaches to it and must supply it itself; and a suite reading is not a claim unless it
 carries its skip count and window state on the same line.
+
+### 16.9 One text-only loader for the torch path, with no model class named
+
+Three seats were loading the checkpoint three ways: Codex's record companion named
+`Gemma3ForCausalLM` and `Gemma3TextConfig` with a listed vision-prefix set, SWE-1's tolerance
+baseline named `Gemma3ForCausalLM`, and SWE-2's train stage called `AutoModelForCausalLM` on a
+plain path, which does not load the official multimodal snapshot text-only at all. §16.3 forbids
+the first two in the package and the third is wrong for the checkpoint we have. `local_llm_lab.hf_text`
+is the **only** loader, because `AutoModelForCausalLM` on any checkpoint we have builds the
+multimodal wrapper: the official snapshot and the repository's own MLX conversion both declare
+`model_type: gemma3` and a `text_config`, so "plain path" is not a case that exists among the
+registry's entries (SWE-2, a9192a1). `checkpoint_metadata` reads the config and the safetensors
+headers and loads no tensor; a wrapper is detected from the checkpoint's own `text_config` and `language_model.` prefix,
+never from a model name; the text config goes through `AutoConfig.for_model`, the model through
+`AutoModelForCausalLM` with the prefix mapped away; and every non-text prefix in the header must be
+exactly the unexpected-key set, no more and no less. Codex's fail-closed checks are kept and
+generalised: missing, mismatched or errored keys refuse; a text tensor the model did not take or
+whose shape changed refuses; a tied weight that came back as two tensors refuses; a parameter on
+the wrong device or in the wrong dtype refuses. The report is a reading of the loaded object. Seven
+tests on tiny random models, plain and wrapped, with two foreign towers beside the text tower,
+one of them mirroring the official snapshot as it is on disk (`model_type: gemma3`,
+`architectures: [Gemma3ForConditionalGeneration]`, `text_config.model_type: gemma3_text`,
+`language_model.model.*` beside `vision_tower.*`, `__metadata__: {format: pt}`), and one
+proving the MLX conversion is refused by its own `format: mlx`, since nothing in its config
+distinguishes it from the snapshot. Two rules from SWE-2's guard that passed the object it
+existed to catch: **a synthetic fixture carries the real artefact's declared type and key layout,
+or the loader path is untested by construction**; and **a guard that passes the object it
+exists to catch is worse than none, because its silence is read as evidence.**
+Every torch load of a registered checkpoint goes through it: WS-B's baseline, WS-C's stage, WS-A's
+gates. The CUDA memory rung, a `device_map` under `accelerate` instead of a CPU load and a move,
+is deliberately not taken until measured.
+
+### 16.10 Lint: one auto-fix that is wrong, and one deliberate pass rather than four incidental ones
+
+SWE-2 found that ruff's SIM118 auto-fix rewrites `for key in handle.keys()` to `for key in handle`
+on the assumption of a mapping, and a safetensors `safe_open` handle is not one: the rewrite is
+applied by `ruff check --fix`, produces no finding and no import error, and fails only at runtime
+with "object is not iterable". Every reader of safetensors in this tree, in lens fitting, capture
+and the registry, is a candidate. **Rule:** `--fix` is never run blind over a file that reads
+safetensors; the `.keys()` call carries a `noqa: SIM118` with the reason beside it, so the next
+person is told rather than tempted. Three of SWE-2's own findings were real rather than cosmetic and
+are worth knowing as shapes: `Any` in annotations never imported, surviving only because
+`from __future__ import annotations` never evaluates them; a `zip` without `strict=` over two lists
+equal today, which is what stops a later edit truncating a batch in silence. The tree carries about
+75 older findings, mostly line length in records scripts; they are swept in one deliberate WS-E pass
+by one seat, not by incidental edits from four.

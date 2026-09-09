@@ -77,6 +77,7 @@ __all__ = [
     "announce_window",
     "run_under_window",
     "box_state_root",
+    "primary_checkout_root",
     "mark_items_for_a_foreign_window",
     "blocking_window",
     "end_window",
@@ -202,6 +203,39 @@ WINDOW_RELATIVE_PATH = Path("outputs/.box-window.json")
 BOX_STATE_DIR_ENV = "AGENT_V2_BOX_STATE_DIR"
 
 
+def primary_checkout_root() -> Path:
+    """The primary checkout's root, read from git, for every checkout on this machine.
+
+    The git-derived half of :func:`box_state_root`, on its own because two different things
+    used to share one reader. The lock and the window may be **redirected** by
+    ``$AGENT_V2_BOX_STATE_DIR`` so an isolated run cannot take the machine's lock; a converted
+    checkpoint under ``models/`` may not, because it exists once, in the primary, and a process
+    that followed the redirect resolved it into a scratch directory and found nothing. That is
+    how a seat in a worktree read "no stage can load a registered checkpoint" on 2026-09-09,
+    while the resolver was correct for every process without the override.
+
+    A linked worktree's ``.git`` is a file reading ``gitdir: <primary>/.git/worktrees/<name>``;
+    the primary is the parent of that ``.git`` directory, split on the first colon so a path
+    with spaces survives. A directory ``.git`` means this checkout is the primary.
+    """
+    marker = PROJECT_ROOT / ".git"
+    try:
+        if marker.is_file():
+            text = marker.read_text(encoding="utf-8").strip()
+            if text.startswith("gitdir:"):
+                gitdir = Path(text.split(":", 1)[1].strip())
+                if not gitdir.is_absolute():
+                    gitdir = (PROJECT_ROOT / gitdir).resolve()
+                for parent in gitdir.parents:
+                    if parent.name == ".git":
+                        return parent.parent
+    except OSError:
+        # An unreadable `.git` is not a reason to refuse; it is a reason to behave as the
+        # checkout's own root, which is what happened before this function existed.
+        pass
+    return PROJECT_ROOT
+
+
 def box_state_root() -> Path:
     """The one directory the box's lock and window live under, for every checkout on this machine.
 
@@ -224,22 +258,7 @@ def box_state_root() -> Path:
     override = os.environ.get(BOX_STATE_DIR_ENV)
     if override:
         return Path(override)
-    marker = PROJECT_ROOT / ".git"
-    try:
-        if marker.is_file():
-            text = marker.read_text(encoding="utf-8").strip()
-            if text.startswith("gitdir:"):
-                gitdir = Path(text.split(":", 1)[1].strip())
-                if not gitdir.is_absolute():
-                    gitdir = (PROJECT_ROOT / gitdir).resolve()
-                for parent in gitdir.parents:
-                    if parent.name == ".git":
-                        return parent.parent
-    except OSError:
-        # An unreadable `.git` is not a reason to refuse; it is a reason to behave as the
-        # checkout's own root, which is what happened before this function existed.
-        pass
-    return PROJECT_ROOT
+    return primary_checkout_root()
 
 
 #: The announcing command exports this with the window's nonce, and every child inherits it. That

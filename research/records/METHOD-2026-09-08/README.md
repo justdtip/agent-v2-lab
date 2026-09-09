@@ -348,6 +348,14 @@ a separate bug. **The rule: anything that bypasses `forward` inherits none of wh
 to it and must supply it itself.** The §16.7 wrapper dissolves both cases at once by making the
 chunked loss the forward that everything attaches to.
 
+**The third member, found by following the fix to its end.** With the wrapper handed to `Trainer`,
+`_save` branched on `isinstance(model, PreTrainedModel)`, found a wrapper, and wrote a bare state
+dict with `inner.*` keys and no config, silently, producing an artefact nothing downstream could
+load or name-match. So the rule is wider than `forward`: **upstream inspects the object it is
+handed, and a wrapper changes both what runs and what it is.** A wrapper must delegate what
+upstream branches on, and a test must assert the artefact is the kind of thing the next reader
+expects, not that a file exists.
+
 **The second rule, from two readings minutes apart.** `1115 passed, 1110 skipped` and `2211 passed,
 14 skipped` on the same tree, both truthful: a box window was open for the first and the suite
 correctly stood off every model-reaching test. **A suite reading is not a claim unless it carries
@@ -362,3 +370,19 @@ the override resolved into scratch. Two things shared one reader; only one may b
 git-derived primary is now its own function and the checkpoint uses that. The shape is the eighth
 entry's again: a mechanism built for one purpose, reused for another because it was there, carrying
 a behaviour the second purpose never asked for.
+
+---
+
+## Twenty-third: a guard that passed the object it existed to catch, and a fixture that could not fail
+
+**SWE-2's, on the torch train stage.** A guard meant to refuse the multimodal wrapper tested for
+`.model` and `.lm_head`; the wrapper has both, so the guard passed it and the run failed later and
+elsewhere. **A guard that passes the object it exists to catch is worse than none, because its
+silence is read as evidence.** And nothing caught it because every fixture in the stream was built
+from `Gemma3TextConfig`, which saves `architectures: [Gemma3ForCausalLM]`, a config shape no
+registered checkpoint has: the suite exercised a stand-in that differed from the real thing in
+exactly the way that mattered. **A synthetic fixture carries the real artefact's declared type and
+key layout, or the path is untested by construction.** The Chief's own loader tests had the same
+shape, a made-up wrapper type over a Llama text config, and were corrected the same evening with a
+fixture mirrored from the snapshot's headers. It is the fourteenth entry's blind spot (the
+uncached tokenizer) with a different artefact.
