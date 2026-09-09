@@ -2,10 +2,11 @@
 
     .venv/bin/python scripts/state_programme.py --out <dir> --decoding greedy [--fixture]
 
-``--decoding sampled`` is accepted by the parser and refused at run time until SWE-1's sampled path
-lands: the Director has not ruled on the temperature, and a script that ran sampled today would be
-making that ruling by default. Greedy runs whole. A record made in one mode is not compared with one
-made in the other; the manifest names the estimand per mode.
+``--decoding sampled`` is accepted by the parser and refused at run time until SWE-1's sampler is on
+the branch this script runs from. The temperature is ruled (2026-09-10): sampled decoding for the
+state programme only, temperature 1.0 with no truncation, seeded and recorded in every manifest.
+Greedy runs whole. A record made in one mode is not compared with one made in the other; the
+manifest names the estimand per mode.
 
 ``--fixture`` drives the whole script with a scripted policy, the real environment, a fixture lens
 identity and dictionary, and a stub wrapper, on a handful of episodes, writing every artefact §6
@@ -21,9 +22,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 SAMPLED_UNBUILT = (
-    "sampled decoding is not built: the temperature is unruled (plan §16.16) and the sampled path "
-    "is SWE-1's. Run --decoding greedy; the record names its estimand as the context-averaged "
-    "outcome frequency."
+    "sampled decoding is ruled (2026-09-10: temperature 1.0, no truncation, seeded, for the state "
+    "programme only) and its sampler is SWE-1's under the WS-B order's amendment; it is not on the "
+    "branch this script runs from yet, so --decoding sampled is refused by name until it is. Run "
+    "--decoding greedy; the record names its estimand as the context-averaged outcome frequency."
 )
 
 

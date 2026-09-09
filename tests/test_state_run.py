@@ -183,7 +183,8 @@ def test_the_readme_is_written_from_the_files_and_names_each_ones_source(tmp_pat
 
 def test_sampled_decoding_is_refused_by_name_until_it_is_built(tmp_path, capsys) -> None:
     assert _cli().main(["--out", str(tmp_path / "s"), "--decoding", "sampled", "--fixture"]) == 3
-    assert "temperature is unruled" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "ruled" in err and "SWE-1" in err and "refused by name" in err
 
 
 def test_a_non_empty_record_directory_is_refused(tmp_path) -> None:
