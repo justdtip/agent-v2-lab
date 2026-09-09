@@ -504,3 +504,38 @@ and "a single `epsilon_scale` is refuted" is withdrawn in favour of *the estimat
 outside every layer's interval*; the laptop inference is unknown; the ladder norms one replica with
 a fixture. Queued for the morning: R2's unreduced archive, the float32 no-op boundary at each new
 precision, `responses.npz` durable per unit, the capture code to the contract, P1–P6 with C2.
+
+## The 12B smoke row and the 12B same-anchor control, Chief, 2026-09-10 — `a7467c0`: float32 at width 1 is comfortable at 12B and width-stable at every depth
+
+Per-process allocated, width 1, idle card, 52 seconds across two runs:
+
+| | bf16 | coherent float32 |
+|---|---:|---:|
+| weights loaded | 22.01 GiB | 43.97 GiB |
+| free after load | 72.11 | 38.12 |
+| exact fit, one layer, `dim_batch = 1` | 22.11 peak, 3.9 s | 44.10 peak, 6.0 s |
+| the VJP control at width 8 | 31.96 peak | 59.01 peak |
+
+**A float32 12B exact fit at width 1 is comfortable**: 44 GiB against 95, six seconds a layer for one
+row; the promotion is the whole of the cost, and there is no memory argument against the fitting
+policy at the larger model.
+
+The same-anchor control on the 12B, width 1 against 8, both precisions, identity 0.0 in all 108
+cells: bf16 anchor-dominated at every depth (observed 0.370 at layer 1 falling to 0.022 at layer 47;
+anchor 0.330, 0.029, 0.033; arithmetic 0.096, 0.028, 0.014); **coherent float32 width-stable at
+every depth by four to five orders of magnitude** (4.3e-5, 7.3e-6, 2.3e-6). The bf16 pattern is not
+compared with the 4B's — that control changed the width by 64 and this one by 8, and the arithmetic
+term scales with the schedule perturbation — and only the within-model trend is claimed.
+
+**A control that could not fail, caught and closed:** the first 12B run promoted to float32 before
+the control, so the two anchors differed by 4.6e-7 and both terms vanished by construction; the
+native run was added, the precision is an argument, and the trap is named in the script's help. It
+belongs in the method entry after the sweep. §9 carries the realized-h line: both maps at the
+width-1 ladder's h to ratio 1.0000000000, for two independent reasons.
+
+**Queued for the morning, in order:** the capture code to the contract with tests; P1–P6 with the
+remaining C2 items; R2's unreduced archive, the float32 no-op boundary before the first derivative
+at each new precision, `responses.npz` durable per unit, and the float32 leg of the
+anchor-displacement control (the bf16 displacement inserted into the float32 path); the 12B exact
+fits with the captures only once the capture code meets the contract. `cuda-ws-d` is reviewed and
+merged first thing.
