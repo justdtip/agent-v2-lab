@@ -138,3 +138,33 @@ Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full
   `activate_past_recording()` on every sliding layer at construction if anything will rewind.
 - The memory claim in your §4 was against a straw man: upstream fits at 128 tokens by default. Restate
   it: the saving is the forward tape saved once, at whatever context length *we* choose.
+
+## Amendment, 2026-09-09 evening — review of `8edb4cd`, and the answer to the memory question
+
+Reviewed in full (plan §16.5). Passes on substance; three edits before it merges into
+`cuda-migration`, which now exists on origin:
+
+1. **Reach `jlens` through the seam.** `arch_torch.py` and `torch_capture.py` import it at module
+   top level and nothing declares it, so in the shared venv both test files ERROR at collection and
+   abort the whole run. Import through `load_upstream()` (being relocated to
+   `local_llm_lab/upstream_ref.py`; until then it lives in `pipeline/lens_fitting/upstream.py`) and
+   add `pytest.importorskip` for `jlens` in both test files, so a missing clone is a skip with a
+   reason. Plan §16.2.
+2. **Re-run the evidence on torch 2.14.0**, the plan's floor; the record's isolated runtime was
+   2.9.1. The 79 branch tests pass here on 2.14.0 with the clone on the path; the record should say
+   the same from your side.
+3. **Do not merge `WS-A.patch` / `patch.json`.** A record cites the commit range and its shas; a
+   2,584-line copy of the diff is a second source of truth that is stale at the first edit.
+
+**The memory question: no larger host.** Load the checkpoint in its stored bf16 and let
+`_call_promoted` upcast per block: the hand-run matmuls are the same arithmetic on the same numbers
+as a float32 load (an exact upcast of the same bf16 values) at 7.2 GiB resident. Declare the one
+thing that differs — the natively observed rotary tables and masks are bf16 — by reporting the max
+deviation between the rotary module evaluated in float32 and the observed tables at the gate's
+length, as one number in the record. Unembed scored rows only (`cached_logits` / `native_readout`);
+the fp32 `unembed` promotes the tied 2.7 GB head per call. Measure the ~8.5 GiB projection before
+believing it, with MLX not loaded. The float32-loaded run is a control for the GPU host. Plan §16.1.
+
+Two standing rules from tonight: in a worktree set `PYTHONPATH=<worktree>/src` or the tests exercise
+main's code (§16.4); stage by explicit path and read `git log --stat` over the range before every
+push (METHOD-2026-09-08).

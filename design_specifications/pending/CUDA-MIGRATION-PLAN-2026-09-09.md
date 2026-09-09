@@ -559,8 +559,9 @@ seats, and neither waits on the other.
 
 Nothing CUDA can run until the device is rented, and the device costs money while it idles. So:
 
-- **Every workstream develops and validates on CPU torch in float32**, against the MLX golden
-  records, on this machine. What passes on CPU is recorded — gate by gate, at a commit — in a
+- **Every workstream develops and validates on CPU torch with float32 arithmetic**, against the MLX
+  golden records, on this machine — weights loaded in the checkpoint's bf16 and promoted per block
+  by the view, not loaded as float32, which does not fit the R47 cap (§16.1). What passes on CPU is recorded — gate by gate, at a commit — in a
   manifest the branch carries, so that on the remote a failure is attributable to *the device
   change* and nothing else.
 - **A remote diagnosis kit ships with the branch**: `scripts/acceptance_gates.py`, the seven §7
@@ -1000,3 +1001,69 @@ banner, and a `--self-test` plants token flips and requires divergence at the pl
 the discipline: a harness that passes trivially and says so, with a check that proves the comparison
 can fail. Two rule-test failures on that branch are the guard the D-CRO added at `d6dc41f`, which the
 branch predates; a merge from the main line resolves them.
+
+## 16. Evening amendments, 2026-09-09
+
+### 16.1 The CPU gates load bf16, promote per block, and declare the rope dtype
+
+Codex's WS-A record measured what §12.1 asked for and found it does not fit: the text weights alone
+are 14.46 GiB in float32 against R47's 10.66 GiB cap, before activations or logits. The ruling is
+not a larger host. `google/gemma-3-4b-it` is stored in bf16, so a float32 load is an exact upcast of
+the same values, and the view's `_call_promoted` performs that upcast per block at call time: the
+hand-run loop's matmuls at bf16 loading are **the same arithmetic on the same numbers** as at float32
+loading, with 7.2 GiB resident instead of 14.5 and a ~0.4 GiB transient per block. What is *not* the
+same is the natively observed bundle: the rotary tables and masks come out of the native forward in
+the model's dtype, so a bf16-loaded gate runs float32 arithmetic over bf16-rounded `cos`/`sin`,
+where the MLX golden computed its rope in float32. That difference is real, small (bf16 rounds at
+2^-8), and must be declared rather than absorbed: the gate record reports, for its sequence length,
+the maximum deviation between the model's rotary module evaluated in float32 and the observed
+tables, as one number beside the residual agreement. Two more constraints from the same arithmetic:
+the fp32 `unembed` promotes the tied 262,208 × 2,560 head (2.7 GB) per call, so gates unembed scored
+rows only, through `cached_logits` or `native_readout`, never a full sequence; and the projection
+(7.2 + 0.4 + 0.7 GiB of native bf16 logits at 1,400 tokens ≈ 8.5 GiB) is measured before it is
+believed, per §10.2, with MLX not loaded. The float32-loaded comparison is a control for the GPU
+host, where 14.5 GiB is nothing. Daniel's Q5 (capture dtype) is adjacent and still his.
+
+### 16.2 One seam for reaching upstream
+
+`load_upstream()` (WS-D) is the only way `jlens` enters an interpreter: it takes `$JLENS_PATH` or the
+reference clone, puts it first on `sys.path`, refuses a second jlens the interpreter already holds,
+and records the commit in ν. WS-A's `arch_torch.py` and `torch_capture.py` imported `jlens` at module
+top level with nothing declaring it; in the shared venv both test files ERROR at collection and abort
+the run, and beside a pip-installed jlens the seam would correctly refuse them. Ruling: the D-CRO
+relocates the seam to a top-level `upstream_ref.py` (no lens-fitting imports; re-exported where it
+was), Codex imports through it, `UpstreamUnavailable` also subclasses `ImportError` so a missing clone
+is a skip with a message and never a collection error, and the `[cuda]` extra pins
+`jlens @ git+https://github.com/anthropics/jacobian-lens@581d398…` for a fresh box, with
+`_clone_commit` reading the install's `direct_url.json`. Never vendored, as §2 says.
+
+### 16.3 Gemma 3 is the constraint, not the target
+
+Daniel, this evening: larger models are expected as soon as the hardware allows; Gemma 3 4B is what
+the laptop can hold, not a preference; the representations in larger models are the interesting
+ones. Consequence: model-agnosticism is the deliverable, not a courtesy. The WS-A view already
+discovers through upstream's `_find_layout` with our paths as fallback, reads `attention_span` from
+`config.layer_types`, and refuses what it cannot represent instead of mislabelling it; the
+acceptance kit takes any HF causal LM. §10 is the main path, since a 27B or 70B model never fits
+the laptop and "local-first" is a development discipline for the 4B only. Every ruling from here
+asks whether it holds for a model nobody has named.
+
+### 16.4 Worktrees and the shared venv
+
+The venv's editable install resolves `local_llm_lab` to the main checkout's `src/`. In any seat
+worktree, without `PYTHONPATH=<worktree>/src`, the tests exercise main's code and new modules do not
+import. Confirmed in `cuda-ws-c`. Every seat runs with that variable set, and a record's "tests
+passed" names the source path they resolved to.
+
+### 16.5 WS-A review
+
+Read in full by the Chief: `arch.py` diff (a pure extraction, AST-identical contracts, the MLX
+suite green on the branch), `arch_base.py`, `arch_torch.py`, `torch_capture.py`, the record and the
+acceptance primitives; 79 branch tests pass on torch 2.14.0 with the clone on the path; the dry-run
+merge into `cuda-migration` is clean. Verdict: **passes on substance, not merged yet**, three edits
+first: (1) imports through the §16.2 seam and `importorskip` in both torch test files; (2) the
+evidence re-run on torch 2.14.0, the plan's floor, since the record's isolated runtime was 2.9.1;
+(3) `WS-A.patch` and `patch.json` do not merge — a record cites the commit range, it does not carry
+a 2,584-line copy of the diff that goes stale at the first edit. Then the full-checkpoint gates run
+locally under §16.1. Noted, not blocking: `residuals()` costs an observation forward plus the
+hand-run loop, which the graph-once estimator (§6.3) addresses for production.
