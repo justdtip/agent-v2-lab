@@ -227,7 +227,73 @@ row is dropped, and the episode's first rendered decision is already the correct
 contribute a decision to E1 and no transition to E2, and they are named here so that a count of 578
 recovery decisions against 553 recovery transitions is not later read as a loss.
 
-### 4.3 E3 — retention within a pass. Ordered after the cache-exchange port, and not before
+### 4.3 The carrier-ablation arm and the re-read diagnostic
+
+Ruled 2026-09-10 from an external reading of the programme description, and it closes a hole this
+document had. The transcript is a **redundantly available** carrier: `keep_last = 2` hides a tool
+result two turns on, but the model's own note carries the state in words and attention can re-read
+it. So a substitution test on residual features can report "no state" when the state is simply being
+re-read from the text, and clamping features does not stop that. Three parts:
+
+1. **A carrier-ablation arm.** The transcript re-rendered with the state-bearing fact removed from
+   the note after the state-bearing position, so that a surviving effect must be carried by the
+   model. For plan progress the removal targets the plan's progress statement.
+2. **A direct re-read diagnostic at every decision position**: attention mass from the decision
+   position onto the carrier tokens, per layer and head. The sliding window is the handle — the
+   local layers see 1,024 tokens, so a carrier further back is reachable only through the global
+   layers, and that is a testable difference rather than an assumption.
+3. **E2 scored with and without the arm**, the difference reported as the carrier's share.
+
+**Part 2 is orderable as it stands. Part 1 is not yet, and this section says why rather than
+promising a rule that does not exist.**
+
+**The note is not a note with a progress field. It is a running state summary in which nearly every
+clause is a function of the step.** `pipeline/tasks.py` composes it as one `thought` string per step,
+and one episode of `batch_update` shows the shape:
+
+```
+step 1: Inspected 0 of 4. Next: worker-0.ini mode=observe -> mode=strict. queue: worker-0.ini …; pending: …
+step 6: Applied 1 of 4.  Next: worker-1.ini mode=safe -> mode=fast.       queue: worker-1.ini …; pending: …
+```
+
+The step index is recoverable from the counter, from the phase word, from which item is named next,
+from the queue's remaining length and from the pending list — five carriers in one sentence, and
+`aggregate_report` and `conditional_update` carry two counters at once ("values so far: 18; split
+after 3 of 6", "loads so far: …; highest so far: …; Reading service 3 of 5"). Removing the counter
+alone removes a label.
+
+**So a removal rule is accepted only against a measurement, and `carrier_ablation.py` is it.** For
+each episode it strips a candidate clause from every note and reports the mean share of steps still
+told apart by what is left: 1.0 means the rule removed a label and left the carrier, and the floor of
+1/n means the notes have become indistinguishable and the step is no longer readable from them.
+
+| candidate rule | families moved off 1.0 |
+|---|---|
+| the explicit counter | 1 of 12 (`batch_update`, to 0.777) |
+| counter and queue | the same 1 |
+| counter, queue and next item | the same 1 |
+
+**Eleven of twelve families are untouched by every rule I wrote**, and the diagnostic says why: the
+counter pattern matches no note at all in eight of them, because their progress is carried by
+accumulator lists ("values so far", "loads so far", "approved:"), by a shrinking pending list, or by
+the terminal answer itself. This is a negative result about my candidate rules and not about the
+ruling.
+
+**The tension the pre-registration must state, because it may not be resolvable on this corpus.**
+The clause that names the next action *is* the progress: "Next: worker-1.ini" is meaningful only
+because worker-0 is done. Removing the progress may therefore not leave a well-formed note, and an
+ablation that also removes the next action changes what the model is asked to do rather than what it
+knows. Where no rule reaches the floor while leaving the action intact, the family is reported as
+**arm not constructible**, with the measured share beside it, and E2 there is scored without the arm
+and labelled as unablated. That is a worse result than a clean ablation and it is better than an arm
+that removes a label and is read as removing the carrier.
+
+**The acceptance criterion, fixed here before any rule is written:** a removal rule is used only if it
+drives `distinguishable_share` to within 1/n of its floor on the family's episodes **and** leaves the
+tool call and the next-action clause byte-identical. Both halves are checked by the harness, per
+family, and the passing rules with their measured shares go into the seal.
+
+### 4.4 E3 — retention within a pass. Ordered after the cache-exchange port, and not before
 
 Whether the state at the decision position depends on the retained activations of earlier positions
 or is recomputed from the recent tokens, bounded by the sliding window: the local layers see 1,024
@@ -454,5 +520,9 @@ controls run, a measurement of the 12B being bigger.**
    transitions as independent observations when the design holds out by episode, which they are not.
    The correction is the Chief's, through Codex's file-only review, and it is applied rather than
    argued with. Whether to put an episode-level bootstrap beside the Hoeffding floor is open.
-4. The golden-test control design has not landed, and the capture pass is not scheduled. Until both,
-   this document stays unsealed.
+4. **The carrier-ablation arm's removal rule** (§4.3) does not exist for eleven of twelve families,
+   and may not exist for some of them at all, because the clause that names the next action is the
+   progress. The acceptance criterion and the harness are fixed; the rules are not written. The
+   re-read diagnostic is unaffected and is orderable now.
+5. The golden-test control design has landed. The capture pass is not scheduled, and the seal follows
+   Codex's file-only review of this draft. Until then this document stays unsealed.
