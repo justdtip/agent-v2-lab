@@ -813,14 +813,21 @@ argmax agreement with the survey's attribution rule (a flip at P ≥ 0.99 fails 
 divergence-index distribution with a floor, top-5 Jaccard, and per-step KL percentiles against the
 recorded layer-34 distributions. The free-running cross-backend token match is struck.
 
-### 14.2 `attn_implementation="eager"` on both the Jacobian path and the replay path
+### 14.2 `attn_implementation="eager"` on the replay path — for determinism, and for that alone
 
-One flag, two independent reasons. Under `sdpa`, Gemma 3 runs **two attention kernels in one
+**Corrected by the Research Division at `c0e4233`: one of the two reasons below was a warm-up
+artefact and is withdrawn.** Best-of-three steady-state timing shows batched Jacobian rows about
+**1.5x faster than sequential under both implementations** — `sdpa` 9.2 ms against 13.6, `eager`
+9.9 against 15.1; re-run here, 1.66x and 1.61x — and the missing batching rule costs a one-time
+first-call penalty of 22.9 ms, nothing per call after. The batching argument for `eager` collapses;
+the determinism argument stands alone and is unaffected. Two justifications described as converging
+did not converge. The test that caught it was written best-of-three, which is the argument for
+landing a measurement as a test rather than a script.
+
+One flag, now **one** reason. Under `sdpa`, Gemma 3 runs **two attention kernels in one
 forward** — sliding layers always carry an explicit 4D mask and cannot take the `is_causal` fast
 path, full layers receive `None` and can — which is a dispatch split inside every forward. And the
-efficient-attention backward has **no batching rule** (pytorch #117016, open; its fix unmerged), so
-batched Jacobian rows under `sdpa` fall back to sequential on five layers in six: measured **0.65x**
-on CPU against **1.50x** under `eager`. `flash_attention_2` is a hard error under `torch.func`.
+efficient-attention backward has **no batching rule** (pytorch #117016, open; its fix unmerged), — which the corrected measurement shows costs a first-call warm-up only, not throughput; **withdrawn as a reason for `eager`**. `flash_attention_2` is a hard error under `torch.func`.
 `torch.use_deterministic_algorithms(True)` is mostly a backward-pass list and does nothing about
 reduction order; replay is batch one, unpadded, identically chunked.
 
@@ -926,3 +933,18 @@ MLX record, replay and suite run on this machine; the D-CRO has surfaced that to
 directly, since the failure would look like a broken repository rather than a missing extra. The
 full suite with torch present: 2,123 passed, nothing skipped — `transformers` takes different code
 paths with torch importable, and they are clean.
+
+### 14.9 Two things from landing the measurements as tests
+
+`tests/torch/` holds the batching-ratio, cache-trap and mask-dispatch tests, both attention
+implementations asserted faster than sequential because both are. **Writing the timing best-of-three
+is what exposed the warm-up artefact** that had passed as a finding in a report; a script would have
+published it. The general rule: **a measurement that will be relied on is landed as a test, so it is
+re-run on every version rather than believed once.**
+
+A trap for whoever extends that directory: **`tests/torch/__init__.py` must not exist.** A package
+named `torch` under `tests/` shadows the real one and breaks collection with an error that looks
+nothing like the cause. The directory is deliberately a namespace.
+
+For the record: torch was installed at 10:04:06 and `accelerate` at 10:07:41, before the Research
+Division read the brief, and pinned at 10:21:08 by the Chief. The Director installed it.

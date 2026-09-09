@@ -126,8 +126,10 @@ Read plan §13 in full. The items below are the ones that change this order.
 ## The Research Division's answers (plan §14) supersede the above where they conflict
 
 Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full.
-- **`attn_implementation="eager"`**, always, on the model the view wraps. Under `sdpa` Gemma runs two
-  attention kernels per forward and the efficient backward has no batching rule.
+- **`attn_implementation="eager"`** on the model the view wraps, **for determinism**: under `sdpa`
+  Gemma runs two attention kernels per forward. The batching-rule argument is withdrawn (plan §14.2,
+  `c0e4233`): batched rows are ~1.5x faster than sequential under both implementations at steady
+  state; the missing rule costs one first call only.
 - **§6.3 uses `torch.autograd.grad(..., is_grads_batched=True)`**, not `vjp` + `vmap`; upstream's
   `ActivationRecorder` then works unchanged. The acceptance test for the rewrite is a **timing ratio**
   ≥ 1 against sequential on a small fixture. Never `output_hidden_states=True`; never

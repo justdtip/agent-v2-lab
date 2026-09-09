@@ -86,7 +86,8 @@ Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full
   construction** and are recorded as a declared departure with their own memory model, never
   compared to the hosted lens as if they were one. The position selector exists only at readout
   upstream; the fit-time selector is ours.
-- **`attn_implementation="eager"`** on the fitting model, or batched rows regress to sequential.
+- **`attn_implementation="eager"`** on the fitting model for determinism only; that batched rows
+  regress under `sdpa` was a warm-up artefact, withdrawn (plan §14.2, `c0e4233`).
 - Upstream has one commit and is unmaintained; there is nothing to track and no runner to diff.
 
 ## Upstream defaults, verified against the clone rather than reported
