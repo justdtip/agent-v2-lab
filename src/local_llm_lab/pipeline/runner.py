@@ -576,6 +576,26 @@ def pin_torch_determinism() -> None:
     _DETERMINISM_PINNED = True
 
 
+def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -> Any:
+    """One forward through the capture wrapper, returning the model's own logits.
+
+    The seam WS-A fixed: the wrapper takes the cache as a keyword and returns the HF output,
+    whose ``.logits`` are the native ones. Hidden states do not come back here at all; they
+    reach the readout gate through the capture's sink, which is what keeps the readout a thing
+    compared against the model's head rather than a substitute for it.
+
+    ``view._ids`` is the view's own token-to-tensor conversion and carries the device and dtype
+    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop
+    uses it, and building the tensor here instead would leave it on the CPU while the model sat
+    on a GPU. The fallback exists for a stub view that has no such helper.
+    """
+    import torch
+
+    ids = view._ids(list(token_ids)) if hasattr(view, "_ids") else torch.tensor([list(token_ids)])
+    result = model(ids, cache=cache)
+    return result if torch.is_tensor(result) else result.logits
+
+
 def torch_greedy_stream(
     model: Any,
     view: ArchitectureView,
@@ -617,17 +637,22 @@ def torch_greedy_stream(
     generated: list[int] = []
     previous_text = ""
     terminators = frozenset(eos_ids)
-    with torch.inference_mode():
+    # `no_grad` rather than `inference_mode` to match WS-A's own reference loop. Residuals
+    # reach the gate through the sink and an inference tensor is awkward to use later; there is
+    # no speed argument here worth diverging from the reference for.
+    with torch.no_grad():
         logits = None
         for prefill in prefill_passes(list(prompt_ids)):
-            logits = model(torch.tensor([list(prefill.input_ids)], dtype=torch.long), cache)
+            logits = _forward_logits(model, view, prefill.input_ids, cache)
         while len(generated) < max_tokens:
-            token = int(torch.argmax(logits[0, -1]).item())
+            # Cast before the argmax: bfloat16 ties against a vocabulary this large are common
+            # and the reference resolves them in float32.
+            token = int(logits[0, -1].float().argmax().item())
             generated.append(token)
             text = tokenizer.decode(generated)
             piece = text[len(previous_text) :]
             previous_text = text
-            logits = model(torch.tensor([[token]], dtype=torch.long), cache)
+            logits = _forward_logits(model, view, (token,), cache)
             yield token, piece
             if token in terminators:
                 return

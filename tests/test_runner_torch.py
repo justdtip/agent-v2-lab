@@ -125,9 +125,12 @@ class _StubModel(torch.nn.Module):
         )
         self.step = 0
 
-    def forward(self, tokens: torch.Tensor, cache: _StubCache | None = None) -> torch.Tensor:
-        if cache is not None:
-            cache.widths.append(int(tokens.shape[1]))
+    def forward(self, tokens: torch.Tensor, *, cache: _StubCache | None = None) -> torch.Tensor:
+        # Keyword-only on purpose. WS-A's wrapper is called as `wrapped(ids, cache=cache)`, and
+        # that is the one part of the seam a stub cannot otherwise hold the loop to.
+        if cache is None:
+            raise AssertionError("the cache must reach the model, as a keyword, every forward")
+        cache.widths.append(int(tokens.shape[1]))
         token = self.script[self.step] if self.step < len(self.script) else 0
         self.step += 1
         logits = torch.zeros(1, int(tokens.shape[1]), self.vocab_size)
@@ -378,3 +381,65 @@ def test_both_backends_stop_at_the_same_index(monkeypatch, pieces: list[str]) ->
 
     assert torch_count == mlx_count, "the two backends stopped at different tokens"
     assert torch_text == mlx_text
+
+
+class _HFStyleOutput:
+    """What an HF causal-LM forward actually returns: an object carrying `.logits`."""
+
+    def __init__(self, logits: torch.Tensor) -> None:
+        self.logits = logits
+        self.past_key_values = None
+
+
+class _WrappedModel(_StubModel):
+    """A model behind the capture wrapper: same logits, delivered in an HF output object."""
+
+    def forward(self, tokens: torch.Tensor, *, cache: _StubCache | None = None):
+        return _HFStyleOutput(super().forward(tokens, cache=cache))
+
+
+class _ViewWithIds(_StubView):
+    """A view that owns token-to-tensor conversion, as WS-A's real one does."""
+
+    def __init__(self, vocab_size: int) -> None:
+        super().__init__(vocab_size)
+        self.id_calls: list[list[int]] = []
+
+    def _ids(self, token_ids) -> torch.Tensor:
+        self.id_calls.append(list(token_ids))
+        return torch.tensor([list(token_ids)], dtype=torch.long)
+
+
+def test_the_loop_unwraps_an_hf_output_and_a_bare_tensor_alike() -> None:
+    tokenizer = _StubTokenizer(CALL_PIECES)
+    size = TOKEN_BASE + len(CALL_PIECES) + 1
+    script = _DISCARDED_PREFILL_LOGITS + [TOKEN_BASE + index for index in range(len(CALL_PIECES))]
+
+    wrapped = _WrappedModel(script, vocab_size=size)
+    view = _StubView(vocab_size=size)
+    from_output = _generate(wrapped, view, tokenizer, [7, 8, 9], 4)
+
+    bare = _StubModel(script, vocab_size=size)
+    plain_view = _StubView(vocab_size=size)
+    from_tensor = _generate(bare, plain_view, tokenizer, [7, 8, 9], 4)
+
+    assert from_output == from_tensor, (
+        "the wrapper returns the HF output object and a stub returns the tensor; the loop must "
+        "read the same native logits out of both"
+    )
+
+
+def test_the_view_converts_the_tokens_when_it_can() -> None:
+    """The view carries device and dtype; building the tensor here would strand it on the CPU."""
+    tokenizer = _StubTokenizer(CALL_PIECES)
+    size = TOKEN_BASE + len(CALL_PIECES) + 1
+    script = _DISCARDED_PREFILL_LOGITS + [TOKEN_BASE + index for index in range(len(CALL_PIECES))]
+    view = _ViewWithIds(vocab_size=size)
+    model = _WrappedModel(script, vocab_size=size)
+
+    prompt_ids = [7, 8, 9, 10]
+    _generate(model, view, tokenizer, prompt_ids, 3)
+
+    assert view.id_calls[0] == prompt_ids[:-1], "the prefill chunk goes through the view"
+    assert view.id_calls[1] == prompt_ids[-1:], "so does the final prompt token, on its own"
+    assert all(len(call) == 1 for call in view.id_calls[2:]), "and every decode step after it"
