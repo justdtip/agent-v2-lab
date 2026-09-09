@@ -80,7 +80,7 @@ DEFAULT_EPSILON_SCALE = 0.01
 #: dtype and not share this. `native` writes the perturbation back in the block's own dtype, which
 #: is the path upstream's exact estimator runs; `promoted-float32` writes float32 back, so every
 #: block above the source runs promoted. They are different arithmetic, and on CUDA at 1,400 tokens
-#: they differ by 69.4% (WS-A, 2026-09-11). A golden comparison across them is not a measurement of
+#: they differ by 69.4% (WS-A, 2026-09-09). A golden comparison across them is not a measurement of
 #: the estimator, which is why `golden.COMPARABLE_KEYS` refuses it.
 CAPTURE_DTYPES = ("native", "promoted-float32")
 
@@ -192,7 +192,7 @@ def fit_finite_difference_jacobian(
     # On the compute device, not on the CPU the fixture happens to use. The basis, the position
     # mask and the perturbation all meet the model's activations, and a CPU tensor meeting a CUDA
     # one raises at the first real fit rather than at any test on a CPU-only box (found on the
-    # card, 2026-09-11). The accumulator stays on the CPU in float64 deliberately: it is the one
+    # card, 2026-09-09). The accumulator stays on the CPU in float64 deliberately: it is the one
     # tensor whose precision decides the result and the one that is cheap to keep off the device.
     compute_device = torch.device(observed["device"])
     basis = torch.eye(d_model, dtype=torch.float32, device=compute_device)
@@ -265,7 +265,7 @@ def fit_finite_difference_jacobian(
                 # Per layer, not per row. At Gemma width one row is half an hour of forwards, and
                 # a callback that fires only at the end of it is the runbook's forbidden shape:
                 # a tool that reports once at the end, on a paid card, cannot say what failed or
-                # where. Learned by losing twenty-seven minutes of exactly that (2026-09-11).
+                # where. Learned by losing twenty-seven minutes of exactly that (2026-09-09).
                 if progress is not None:
                     progress({
                         "event": "layer",

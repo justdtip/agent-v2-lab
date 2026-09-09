@@ -234,7 +234,7 @@ def test_the_perturbation_keeps_the_block_dtype_under_native_and_promotes_under_
 
     Two fits of one checkpoint can declare the same weight dtype and not share this. On CUDA at
     1,400 tokens the promoted path differs from native bf16 by 69.4% (WS-A on the device,
-    2026-09-11), so a golden comparison across the two paths is not a measurement of the estimator.
+    2026-09-09), so a golden comparison across the two paths is not a measurement of the estimator.
     """
     from local_llm_lab.pipeline.lens_fitting.finite_difference import _perturbation
 

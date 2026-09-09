@@ -403,7 +403,7 @@ def _observed_precision(model: Any) -> dict:
     # that reads activations and lets the model's own forward carry them runs "native"; one that
     # writes a promoted tensor back into a block's output makes every block above it run in that
     # promotion instead. On CUDA at 1,400 tokens the promoted-float32 path differs from native
-    # bf16 by 69.4% (WS-A on the device, 2026-09-11), so two fits of one checkpoint can declare
+    # bf16 by 69.4% (WS-A on the device, 2026-09-09), so two fits of one checkpoint can declare
     # the same dtype and have run different arithmetic. Native is the truth for any estimator that
     # does not replace an activation; the one that does overrides this field and says so.
     if len(dtypes) > 1 or len(devices) > 1:
