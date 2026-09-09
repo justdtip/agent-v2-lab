@@ -131,7 +131,9 @@ def load_full_finetune_config(payload: dict[str, Any], *, root: Path) -> FullFin
     if unit == "batches" and accumulation > 1:
         departures.append(
             f"cadence converted from micro-batches to optimizer steps by //{accumulation}: "
-            + ", ".join(f"{key} {train[key]}->{converted[key]}" for key in CADENCE_KEYS if key in train)
+            + ", ".join(
+                f"{key} {train[key]}->{converted[key]}" for key in CADENCE_KEYS if key in train
+            )
         )
     if rounded:
         departures.append(

@@ -18,8 +18,9 @@ decision for whoever is comparing against those records.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
     import torch
@@ -57,7 +58,7 @@ class CausalCollator:
         if self.pad_strategy not in ("longest", "mlx"):
             raise ValueError(f"pad_strategy must be 'longest' or 'mlx'; got {self.pad_strategy!r}")
 
-    def __call__(self, features: Sequence[dict[str, Any]]) -> dict[str, "torch.Tensor"]:
+    def __call__(self, features: Sequence[dict[str, Any]]) -> dict[str, torch.Tensor]:
         import torch
 
         if not features:
@@ -71,7 +72,7 @@ class CausalCollator:
         attention_mask = torch.zeros((len(rows), width), dtype=torch.long)
         labels = torch.full((len(rows), width), IGNORE_INDEX, dtype=torch.long)
 
-        for index, (row, offset) in enumerate(zip(rows, offsets)):
+        for index, (row, offset) in enumerate(zip(rows, offsets, strict=True)):
             length = len(row)
             if offset > length:
                 raise ValueError(

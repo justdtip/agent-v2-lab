@@ -49,6 +49,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 
 def _rows(count: int, vocab: int, seed: int) -> list[dict]:
@@ -85,7 +86,8 @@ def _build_model(config_path: Path, seed: int):
     import torch
     from transformers import Gemma3ForCausalLM, Gemma3TextConfig
 
-    payload = {k: v for k, v in json.loads(config_path.read_text()).items() if not k.startswith("_")}
+    raw = json.loads(config_path.read_text())
+    payload = {key: value for key, value in raw.items() if not key.startswith("_")}
     torch.manual_seed(seed)
     return Gemma3ForCausalLM(Gemma3TextConfig(**payload)), payload
 
@@ -117,8 +119,6 @@ def main() -> None:
     import torch.distributed as dist
 
     from local_llm_lab.training.collator import CausalCollator
-    from local_llm_lab.training.torch_full import causal_lm_chunked_loss
-
     from local_llm_lab.training.torch_full import wrap_with_chunked_loss
 
     rank = int(os.environ.get("RANK", "0"))

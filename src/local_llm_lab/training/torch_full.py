@@ -142,9 +142,9 @@ def causal_lm_chunked_loss(
     inputs: dict[str, Any],
     *,
     chunk_size: int = DEFAULT_LOSS_CHUNK,
-    num_items_in_batch: "torch.Tensor | int | None" = None,
-    autocast_dtype: "torch.dtype | None" = None,
-) -> "torch.Tensor":
+    num_items_in_batch: torch.Tensor | int | None = None,
+    autocast_dtype: torch.dtype | None = None,
+) -> torch.Tensor:
     """Cross-entropy for a causal LM without materialising the whole logit tensor.
 
     **This loss owns its own precision context, and has to.** It calls the decoder stack directly
@@ -201,7 +201,7 @@ def wrap_with_chunked_loss(
     model: Any,
     *,
     chunk_size: int = DEFAULT_LOSS_CHUNK,
-    autocast_dtype: "torch.dtype | None" = None,
+    autocast_dtype: torch.dtype | None = None,
 ) -> Any:
     """Put the chunked loss *inside* a module, so FSDP2 can own every parameter it touches.
 
@@ -250,11 +250,11 @@ def wrap_with_chunked_loss(
 
         def forward(
             self,
-            input_ids: "torch.Tensor",
-            labels: "torch.Tensor",
-            attention_mask: "torch.Tensor | None" = None,
-            num_items_in_batch: "torch.Tensor | int | None" = None,
-        ) -> "torch.Tensor":
+            input_ids: torch.Tensor,
+            labels: torch.Tensor,
+            attention_mask: torch.Tensor | None = None,
+            num_items_in_batch: torch.Tensor | int | None = None,
+        ) -> torch.Tensor:
             return causal_lm_chunked_loss(
                 self.inner,
                 {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask},
@@ -279,11 +279,11 @@ def make_loss_module_trainer_class() -> Any:
     upstream's: activation checkpointing, the accumulation window and its ``num_items_in_batch``,
     ``accelerator.clip_grad_norm_`` under whatever strategy is active, the schedule and the cadence.
 
-    ``_save`` saves the **inner** model. `Trainer._save` checks ``isinstance(model, PreTrainedModel)``
-    and, failing that, writes a bare state dict -- which would name every tensor ``inner.*`` and emit
-    no ``config.json``, producing a checkpoint that `checkpoint_delta` cannot name-match against its
-    base and the registry cannot load. Nothing would raise; the run would finish and the artefact
-    would be wrong.
+    ``_save`` saves the **inner** model. `Trainer._save` checks
+    ``isinstance(model, PreTrainedModel)`` and, failing that, writes a bare state dict -- which
+    would name every tensor ``inner.*`` and emit no ``config.json``, producing a checkpoint that
+    `checkpoint_delta` cannot name-match against its base and the registry cannot load. Nothing
+    would raise; the run would finish and the artefact would be wrong.
     """
     from transformers import Trainer
 

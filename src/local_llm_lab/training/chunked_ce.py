@@ -37,11 +37,11 @@ IGNORE_INDEX = -100
 
 
 def _chunk_loss(
-    hidden: "torch.Tensor",
-    weight: "torch.Tensor",
-    bias: "torch.Tensor | None",
-    labels: "torch.Tensor",
-) -> "torch.Tensor":
+    hidden: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+    labels: torch.Tensor,
+) -> torch.Tensor:
     import torch.nn.functional as F
 
     logits = F.linear(hidden, weight, bias)
@@ -56,13 +56,13 @@ def _chunk_loss(
 
 
 def chunked_linear_cross_entropy(
-    hidden_states: "torch.Tensor",
-    weight: "torch.Tensor",
-    labels: "torch.Tensor",
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    labels: torch.Tensor,
     *,
     chunk_size: int = 512,
-    bias: "torch.Tensor | None" = None,
-) -> "tuple[torch.Tensor, torch.Tensor]":
+    bias: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Return ``(summed_loss, supervised_token_count)`` for already-shifted inputs.
 
     ``hidden_states`` is ``(N, H)`` and ``labels`` is ``(N,)``: the caller does the shift, so that
@@ -105,8 +105,8 @@ def chunked_linear_cross_entropy(
 
 
 def shift_for_causal_lm(
-    hidden_states: "torch.Tensor", labels: "torch.Tensor"
-) -> "tuple[torch.Tensor, torch.Tensor]":
+    hidden_states: torch.Tensor, labels: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Drop the last position's hidden state and the first label, then flatten.
 
     The forward at position ``p`` predicts position ``p + 1``. Written once, here, because this

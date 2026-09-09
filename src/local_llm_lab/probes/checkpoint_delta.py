@@ -33,9 +33,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     import numpy as np
@@ -71,12 +72,15 @@ def _shard_map(directory: Path) -> dict[str, str]:
     from safetensors import safe_open
 
     with safe_open(str(single), framework="np") as handle:
-        return {key: single.name for key in handle.keys()}
+        # `.keys()` and not iteration: ruff's SIM118 rewrites this to `for key in handle`,
+        # which assumes a mapping. A safetensors handle is not one -- it raises
+        # `'builtins.safe_open' object is not iterable` -- so the rule is wrong here.
+        return {key: single.name for key in handle.keys()}  # noqa: SIM118
 
 
 def _iter_common_weights(
     finetuned: Path, base: Path, suffixes: tuple[str, ...] | None
-) -> Iterator[tuple[str, "np.ndarray", "np.ndarray"]]:
+) -> Iterator[tuple[str, np.ndarray, np.ndarray]]:
     """Yield ``(key, tuned, base)`` one tensor at a time; never holds two checkpoints in memory."""
     import numpy as np
     from safetensors import safe_open

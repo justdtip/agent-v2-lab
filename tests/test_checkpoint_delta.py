@@ -28,7 +28,10 @@ def _write(directory: Path, tensors: dict[str, np.ndarray]) -> Path:
     from safetensors.numpy import save_file
 
     directory.mkdir(parents=True, exist_ok=True)
-    save_file({k: v.astype(np.float32) for k, v in tensors.items()}, str(directory / "model.safetensors"))
+    save_file(
+        {name: value.astype(np.float32) for name, value in tensors.items()},
+        str(directory / "model.safetensors"),
+    )
     return directory
 
 
@@ -116,7 +119,8 @@ def test_a_module_set_that_matches_nothing_is_an_error(tmp_path: Path) -> None:
 
 
 def test_checkpoints_of_different_architectures_are_refused(tmp_path: Path) -> None:
-    base = _write(tmp_path / "base", {"model.layers.0.self_attn.q_proj.weight": np.ones((DIM, DIM))})
+    key = "model.layers.0.self_attn.q_proj.weight"
+    base = _write(tmp_path / "base", {key: np.ones((DIM, DIM))})
     tuned = _write(tmp_path / "tuned", {"something.else.weight": np.ones((DIM, DIM))})
     with pytest.raises(CheckpointDeltaError, match="share no tensor names"):
         per_layer_perturbation(tuned, base)

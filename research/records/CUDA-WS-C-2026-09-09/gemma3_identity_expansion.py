@@ -23,6 +23,7 @@ from pathlib import Path
 import torch
 from transformers import Gemma3ForCausalLM, Gemma3TextConfig
 
+
 # The insertion rule under test. The copy inherits the type of the block it copies, so every
 # original layer keeps its own attention type and only its position moves.
 def insert_identity_block(model: Gemma3ForCausalLM, after: int) -> int:
@@ -53,6 +54,11 @@ def insert_identity_block(model: Gemma3ForCausalLM, after: int) -> int:
         layer.self_attn.layer_idx = index
         layer.self_attn.layer_type = types[index]
     return after + 1
+
+
+def _globals(layer_types) -> list[int]:
+    """Which positions attend over the whole context, which an insertion silently moves."""
+    return [index for index, kind in enumerate(layer_types) if kind == "full_attention"]
 
 
 def build_tiny(seed: int) -> tuple[Gemma3ForCausalLM, Gemma3TextConfig]:
@@ -94,8 +100,8 @@ def main() -> None:
             "added_index": added,
             "source_type": config.layer_types[after],
             "max_abs_delta_logits": (got - baseline).abs().max().item(),
-            "global_layers_before": [i for i, t in enumerate(config.layer_types) if t == "full_attention"],
-            "global_layers_after": [i for i, t in enumerate(expanded.config.layer_types) if t == "full_attention"],
+            "global_layers_before": _globals(config.layer_types),
+            "global_layers_after": _globals(expanded.config.layer_types),
         })
 
     worst = max(row["max_abs_delta_logits"] for row in rows)

@@ -46,7 +46,7 @@ def _rows(seed: int = 0) -> list[dict]:
     """Forty rows of uneven length, because equal-length rows hide the reduction that matters."""
     generator = torch.Generator().manual_seed(seed)
     rows = []
-    for index in range(ROWS):
+    for _ in range(ROWS):
         length = int(torch.randint(12, 40, (1,), generator=generator))
         ids = torch.randint(1, VOCAB, (length,), generator=generator).tolist()
         rows.append({"input_ids": ids, "prompt_length": length // 3})

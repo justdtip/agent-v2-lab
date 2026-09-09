@@ -150,7 +150,9 @@ def test_the_mlx_backend_does_not_reach_the_torch_branch(monkeypatch) -> None:
         raise AssertionError("the torch branch was entered on the mlx backend")
 
     monkeypatch.setattr("local_llm_lab.pipeline.train_torch.stage_train_torch", _fail)
-    with pytest.raises(Exception):  # it proceeds into the MLX path and fails on a bare config
+    # It proceeds into the MLX path, which fails on a bare config. The type is not the point;
+    # what is asserted is that the torch branch was not the thing that ran.
+    with pytest.raises((KeyError, ValueError, TypeError, FileNotFoundError, OSError)):
         cli.stage_train({"train": {}, "model": "x", "output": Path("/nonexistent")}, iters=None)
     assert not called
 
@@ -175,4 +177,6 @@ def test_a_multi_process_run_is_refused_rather_than_distributed_by_default(monke
     from local_llm_lab.pipeline import cli
 
     with pytest.raises(NotImplementedError, match="not wired here"):
-        cli.stage_train({"train": {}, "model": "x", "output": Path("/nonexistent"), "seed": 1}, None)
+        cli.stage_train(
+            {"train": {}, "model": "x", "output": Path("/nonexistent"), "seed": 1}, None
+        )
