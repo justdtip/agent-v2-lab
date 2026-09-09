@@ -180,17 +180,49 @@ box-state directory:
 Agreement rises by four points for no change to the port. That gap was the two precisions, and
 the old gate was reading it as the port's error.
 
-**The one that remains: `read-0108` turn 0 position 521, reference gap 3.0 ULP.** The reference
-prefers token 2234; the port produces 1399. It sits one ULP outside the band, and I am reporting
-it rather than widening the band to clear it — a threshold moved to make a run green is not a
-threshold. It is also the position where torch's *own* two devices disagree: the laptop's CPU
-puts the two candidates at an exact tie there while the card's CUDA prefers 1399, so the port is
-at the edge of its own resolution at a position where the reference is three steps clear.
-Whether three ULPs is a defect or a band drawn one step too tight is the Chief's to rule; the
-evidence for either is in `rebased-cuda.json`.
+### The classes, ruled and measured
 
-**So the gate is FAIL, on one position, and the failure is legible.** That is a different object
-from the twenty-four it reported yesterday, which were legible only after two more runs.
+The Chief ruled the surviving position **not a defect and the band unmoved**, and added a third
+class: a disagreement is attributed to the port only where the reference's margin exceeds the
+port's **measured cross-device spread** at that position. Both margins are now measured rather
+than argued, one reading per device:
+
+| position | reference margin | port on CPU | port on CUDA | spread | class |
+|---|---:|---:|---:|---:|---|
+| `read-0108` t0 p521 | 3.0 ULP | exact tie | −5.0 ULP | 5.0 | **below resolution** |
+| `chat-long-summary` t1 p1912 | 3.0 ULP | exact tie | −1.0 ULP | 1.0 | **attributed to the port** |
+
+At 521 the port's own arithmetic already spans the reference's margin, so no claim about the port
+can be made from it. At 1912 it does not, and that position is the corpus's one defect claim.
+
+**The final line, and it sums:**
+
+| class | count |
+|---|---:|
+| agreed | 5,213 |
+| ties, reference within 2 ULP | 30 |
+| below resolution | 1 |
+| attributed to the port | 1 |
+| **total** | **5,245** |
+
+**Gate FAIL, on one position in 5,245, and the failure is legible.** That is a different object
+from the twenty-four it reported the day before, which were legible only after two more runs.
+
+### Two corrections this pass forced
+
+**The ULP grid must come from the value.** `flip-margins.json` recorded 521's reference gap as
+1.5 logits at an assumed `bf16_ulp` of 0.25 — six ULPs. The re-based run reported three. The
+re-based run is right: the top logit there is **66.00**, exponent 2⁶, so the step is **0.5** and
+1.5 logits is 3.0 ULP. `chat-long-summary`/1912 is |v| = 34.75, exponent 2⁵, step 0.25, gap 0.75
+= 3.0 ULP. The "every gap is an exact multiple of the grid" check passed in both arms and could
+not have failed: a multiple of 0.25 is also a multiple of 0.5, so the check cannot detect a grid
+that is too fine. `bf16_ulp` now takes the logit itself.
+
+**A stale confidence gate was dropping a class.** 5,213 + 30 + 1 = 5,244 of 5,245, and the missing
+position was not an artefact: it is 1912, dropped because the rule still consulted the
+*recording's* probability — the 4-bit model's, 0.599 — to decide whether a bfloat16-against-
+bfloat16 disagreement counted. That gate is gone; the recording's confidence is now descriptive
+only, and `counts()` raises unless the four classes add to the positions compared.
 
 ---
 
@@ -289,8 +321,10 @@ the resolver device-aware rather than leaving a flag people must remember.
 
 ## 6. Files
 
-**`rebased-cuda.json` / `.jsonl` / `.log` — the corpus re-based on the precision-matched
-reference, which is the number that counts. `mlx-bf16-reference.json` / `.jsonl` — the reference
+**`classified-cuda.json` / `.jsonl` — the final four-class run, which is the number that counts.
+`port-spreads.json` — the port's cross-device spread per outstanding position, with
+`margins-cpu.json` and `margins-cuda.json` the readings behind it.** `rebased-cuda.json` /
+`.jsonl` / `.log` — the re-based run before the third class existed. `mlx-bf16-reference.json` / `.jsonl` — the reference
 itself, every deciding position with its top-two gap in ULPs.** `mlx-bf16-arm.json` / `.jsonl` —
 the precision-matched arm, one row per position with its verdict. `flip-margins.json` — the logit gaps in ULPs for the three that arm left open.**
 `confident-flips.json` — the twenty-four failing positions, the input to both. `cuda-all15-v2.json` / `.jsonl` and `cuda-v2.log` — the recapture that produced it,

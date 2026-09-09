@@ -685,3 +685,40 @@ type rather than in a comment. A disagreement whose gap on the reference lies wi
 the dtype the logits are stored in is a **tie**: counted and reported as a tie, never as a flip
 and never folded into agreement. And a margin is measured in ULPs of the stored dtype, never as a
 probability, because probability hides the grid the numbers actually live on.
+
+## Thirty-second: the instrument's resolution is a measurement, not a setting, in SWE-1's name
+
+Three things one position taught, after the thirty-first entry had already re-based the gate onto
+a precision-matched reference and left a single flip standing.
+
+**The grid must be computed from the value.** bfloat16's spacing is `2^(⌊log₂|v|⌋ − 7)`, so it
+depends on the magnitude of the number being measured. One arm of this work fixed it once at an
+assumed magnitude and reported a 1.5-logit gap as six units of last place; the other took it per
+position and reported the same gap as three, because the logit is 66.0 and the step there is 0.5
+rather than 0.25. Both arms passed the check that every gap is an exact multiple of the grid —
+**that check cannot fail against a grid that is too fine**, since a multiple of 0.25 is also a
+multiple of 0.5. A resolution assumed once for a tensor is a setting; a resolution read off each
+value is a measurement, and only the second can be checked.
+
+**A defect is a claim about a margin, and the claim needs the port's own resolution beside the
+reference's.** A disagreement is attributable to the port only where the reference's margin
+exceeds the port's measured cross-device spread at that position. At `read-0108`/521 the
+reference is three units clear while the port is an exact tie on one device and five units the
+other way on another: the port's own arithmetic already spans the reference's margin, so no claim
+can be made and the position is **below resolution** — a third class beside tie and flip, counted
+and listed with both margins, never folded into agreement and never called a defect. The rule
+discriminates rather than excusing: at `chat-long-summary`/1912 the reference is three units clear
+and the port's devices differ by one, and that position is attributed to the port.
+
+**A count that does not sum is a class nobody named.** The re-based run reported 5,213 agreed, 30
+ties and 1 flip against 5,245 compared, and the missing position was not a rounding artefact: it
+was a disagreement outside the tie band that a **stale confidence gate** had silently dropped,
+because the rule still consulted the recording's probability — the *4-bit* model's — to decide
+whether a bfloat16-against-bfloat16 disagreement counted. The dropped position is the one now
+attributed to the port. The identity is asserted in the type: the four classes must add to the
+positions compared, or the report raises.
+
+**The rules.** Compute a dtype's resolution from the value, never once for the tensor, and
+distrust any check that a too-fine grid would also pass. State a defect as a margin that exceeds
+the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
+And make the classes sum, because the position with no class is the one nobody will look at.
