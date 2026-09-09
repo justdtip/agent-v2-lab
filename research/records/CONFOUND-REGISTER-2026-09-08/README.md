@@ -441,8 +441,31 @@ four ways here:
 | any registry entry setting `cache.equivalence_verified` | **none** — all six are `null` |
 | `models.py` resolution | `auto` becomes `snapshot` only when that field is not `None` (`models.py:231`) |
 | every Gemma record's manifest | `cache_strategy: "none"` in stage one, the corrected run and stage two |
-| the recorded reason | `auto:equivalence_unverified`, three occurrences, no `auto:equivalence_verified` anywhere |
+| ~~the recorded reason~~ | ~~`auto:equivalence_unverified`, three occurrences~~ — **wrong, corrected below** |
 | Qwen3.5 | declares no sliding or rotating layers, so its snapshot path never met a rotating cache |
+
+**Correction, 2026-09-09, from SWE-1's independent check of the registry — and my "verified four
+ways" had a hole in exactly the place a count instead of a location always does.**
+
+The three Gemma entries declare `strategy: none` **explicitly**, so their recorded reason is
+`explicit:none`. `auto:equivalence_unverified` never described them: it appears in one qwen35-4b
+source-inspection record and nowhere else. My grep counted three occurrences of the string and
+attributed them to the Gemma runs without checking which file they were in — and one of the two
+files matching by the time anyone re-ran it was **this entry**, quoting itself.
+
+The Gemma run manifests record no reason field at all, so there was nothing there to have checked.
+
+**And the containment is one field wider than reported.** No registry entry sets
+`equivalence_verified`, so `SnapshotCache` was never constructed for **any** registered model, not
+only for Gemma. Engaging the defect on Gemma needed **two** registry changes — `strategy` from
+`none` to `auto`, *and* `equivalence_verified` set — not one. Verified from the registry:
+
+| entry | `strategy` | `equivalence_verified` |
+|---|---|---|
+| `gemma3-4b`, `gemma3-4b-bf16`, `gemma3-4b-cuda-bf16` | `none` | `null` |
+| `qwen35-4b` | `history` | `null` |
+
+Still latent, still zero results affected, one field further from engaging than first written.
 
 **Why it belongs in this register rather than only in the method record.** It never produced a wrong
 number, so it is not an error anyone made; it is a **confound that was one configuration change
