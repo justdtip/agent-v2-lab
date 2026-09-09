@@ -15,11 +15,14 @@ rented device is attributable to the device change and to nothing else.
 | CUDA available | no |
 | MPS available | yes, unused |
 | default dtype | float32 |
-| determinism | pinned at the generation loop's entry by `pin_torch_determinism` until `device.py` lands, which it prefers when present: TF32 off, deterministic algorithms on, `CUBLAS_WORKSPACE_CONFIG=:4096:8` |
+| determinism | `device.pin(attention="eager")`, called by the kit before the first gate, printing what `pin` read back rather than what it was asked for |
 
-`CUBLAS_WORKSPACE_CONFIG` must be set before CUDA initialises to have any effect, so its real
-home is the environment or `device.py`'s import. Setting it at the loop entry is the interim
-and is stated at the function rather than assumed.
+`device.py` owns the policy and this workstream holds none of its own. The kit calls `pin`
+first and prints the reading, so a run whose pin was refused says so rather than looking
+configured. `CUBLAS_WORKSPACE_CONFIG` is read by cuBLAS at first use, so `pin` refuses when
+CUDA is already initialised without it; that refusal reaching the operator is the point of
+pinning at the top of the kit. `pin_torch_determinism` remains as a once-per-process guard on
+the generation loop so a loop entered without the kit cannot take a number unpinned.
 
 ## Gate status
 
@@ -105,24 +108,48 @@ Cycle-aware loop metric beside the original one, truncation as a distinct outcom
 reason. A test pins that the 0.999 quantile of a thousand samples is the 999th and not the
 largest. **No band has been measured**; that needs both backends live.
 
-### The tolerance half of G-2 — `38e8504`
+### The tolerance half of G-2, and its runner
 
 Teacher-forced agreement, the P ≥ 0.99 hard rule, the divergence profile with a floor, and
-top-k Jaccard. All four are built and unit-tested; none has been run against a port.
+top-k Jaccard, with `run_tolerance` driving all of them from one pass. Built and unit-tested;
+none has been run against a port, because there is no port to run against.
+
+**Teacher forcing is one forward per turn, not one per token.** Feeding the whole recorded
+sequence and reading the argmax at each position gives exactly the prediction that position
+would have made with the recorded prefix ahead of it, because attention is causal. The runner
+checks the returned row count against the sequence length rather than trusting it: an
+off-by-one there shifts every comparison by one position and still produces a plausible
+agreement rate, which is the failure this programme has already paid for once.
+
+Only two things gate. A flip where the recorded probability was at least 0.99 fails the run,
+and an episode that parts company below the divergence floor fails it. Everything else is
+reported. Jaccard is over sets, so producing the right token plus extras is not a perfect
+score; a test pins that, so it is not later "fixed" into a top-1 agreement rate wearing a
+Jaccard's name.
 
 ## Corrections taken from the survey, and one sent back
 
 **Taken.** The readout is no longer the producer: the loop generates from the model's own head
 and `native_readout` is the thing compared against it, never substituted for it. The prefill
-partition is the native one. EOS comes from the config's id set. Determinism is pinned. The
-three cache reuse strategies move into the first cut and are **not yet implemented**;
-`make_turn_cache` still raises on them under torch, which is the correct interim because an
-MLX cache handed to a torch model attends to the wrong keys rather than raising.
+partition is the native one. EOS comes from the config's id set. Determinism is pinned.
 
-**Sent back.** *Per-step KL percentiles against the recorded layer-34 distributions cannot be
-computed.* The records store the top-k token ids at layer 34 and the probability of the
-emitted token, and never a distribution. `symmetric_kl` is therefore live-against-live only
-and raises when handed anything whose mass does not sum to one.
+The three cache reuse strategies were briefly moved into the first cut and are **deferred
+again**, on the Chief's ruling: a cache strategy changes memory and time, not the tokens,
+unless it changes which keys are attended, which is exactly why a sliding cache must not
+promise rollback. They are built when a measured need on the device says so. `make_turn_cache`
+refuses them under torch meanwhile, because an MLX cache handed to a torch model attends to the
+wrong keys rather than raising.
+
+**Sent back, and accepted.** *Per-step KL percentiles against the recorded final-layer
+distributions cannot be computed.* **No recorded distribution exists at layer 34.** The records
+store the top-k token ids there and the probability of the emitted token, and never a
+distribution; a divergence needs both sides in full. `symmetric_kl` is therefore
+live-against-live only and raises when handed anything whose mass does not sum to one, with the
+message saying that a top-k slice is not a distribution. The sentence is in this file at the
+Chief's request so the statistic is not proposed again.
+
+The three that survive are teacher-forced argmax agreement under the P ≥ 0.99 rule, the floored
+divergence profile, and top-k Jaccard, which survives precisely because it needs ids only.
 
 ## Test suite
 
@@ -149,7 +176,7 @@ line and came across in the same merge.
 | gate 6 entirely | WS-A's view and the hosted lens read path |
 | every G-2 tolerance statistic | a produced side from a loaded backend |
 | the readout band's actual value | both backends live on the same prefix |
-| `trim`, `snapshot`, `history` on torch | implementation; `SnapshotCache` restore is broken on MLX today because position is not in `.state`, so it is a fix and not a port |
+| `trim`, `snapshot`, `history` on torch | **deferred on purpose**, per the ledger and the Chief's ruling. A cache strategy changes memory and time, not the tokens, unless it changes which keys are attended, which is why a sliding cache must not promise rollback. They are built when a measured need on the device says so. `make_turn_cache` refuses them under torch meanwhile. The MLX `SnapshotCache` position defect is separately **fixed**, since it was live rather than a porting question. |
 | `attn_implementation="eager"` on the replay model | WS-A's loading path |
 
 ## The seam, as ruled

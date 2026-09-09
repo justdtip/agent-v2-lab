@@ -574,40 +574,26 @@ def config_eos_ids(model: Any) -> frozenset[int]:
 _DETERMINISM_PINNED = False
 
 
-def pin_torch_determinism() -> None:
-    """TF32 off, deterministic algorithms on, workspace and matmul precision fixed.
+def pin_torch_determinism() -> dict[str, Any] | None:
+    """Pin determinism once per process, through ``device.pin``, which owns the policy.
 
-    ``device.py`` owns this once it lands (WS-A/WS-E) and is preferred when present; this is
-    the interim so that no torch number is taken under unpinned settings.
+    This function holds no settings of its own. It exists so that a loop entered without the
+    acceptance kit having run cannot take a number under unpinned settings, and it is a
+    once-per-process guard because ``pin`` reseeds and a per-turn reseed would be noise in the
+    record for no benefit under greedy decoding.
 
-    ``CUBLAS_WORKSPACE_CONFIG`` must be set before CUDA initialises to have any effect. Setting
-    it here is late for a process that has already touched CUDA, so it is set with ``setdefault``
-    and the real home for it is the environment or ``device.py``'s import. Deterministic
-    algorithms are mostly a backward-pass list and do not fix reduction order, which is why the
-    determinism test is CUDA against CUDA within one build rather than across backends.
+    ``CUBLAS_WORKSPACE_CONFIG`` is read by cuBLAS at first use, so ``pin`` refuses rather than
+    reports success if CUDA is already initialised without it. That refusal is worth more than a
+    late best effort, and it is the kit's job to call ``pin`` first.
     """
     global _DETERMINISM_PINNED
     if _DETERMINISM_PINNED:
-        return
-    try:
-        from local_llm_lab import device  # type: ignore[attr-defined]
+        return None
+    from local_llm_lab import device
 
-        device.configure()
-        _DETERMINISM_PINNED = True
-        return
-    except (ImportError, AttributeError):
-        pass
-    import os
-
-    import torch
-
-    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
-    torch.use_deterministic_algorithms(True, warn_only=True)
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    with contextlib.suppress(AttributeError):  # newer torch only
-        torch.backends.cuda.matmul.fp32_precision = "ieee"
+    reading = device.pin()
     _DETERMINISM_PINNED = True
+    return reading
 
 
 def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -> Any:
@@ -619,9 +605,9 @@ def _forward_logits(model: Any, view: ArchitectureView, token_ids, cache: Any) -
     compared against the model's head rather than a substitute for it.
 
     ``view._ids`` is the view's own token-to-tensor conversion and carries the device and dtype
-    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop
-    uses it, and building the tensor here instead would leave it on the CPU while the model sat
-    on a GPU. The fallback exists for a stub view that has no such helper.
+    with it. It is private, and it is nonetheless the right call: WS-A's own reference loop uses
+    it, and building the tensor here instead would leave it on the CPU while the model sat on a
+    GPU. The fallback exists for a stub view that has no such helper.
     """
     import torch
 
