@@ -37,11 +37,18 @@ for _path in (_ROOT / "src", _ROOT / "research" / "acceptance"):
 import golden_trajectories as golden  # noqa: E402
 import tolerance  # noqa: E402
 
-#: The registry entry whose weights torch can load. The pilot ran MLX 4-bit; this is the same
-#: base at a different precision, and that difference is part of what is being measured. The
-#: path comes from the registry rather than from this file, so a run inside a worktree resolves
-#: to the same weights as one in the primary checkout.
-CHECKPOINT_ENTRY = "gemma3-4b-bf16"
+#: The registry entry torch can load. **Not** ``gemma3-4b-bf16``: that one's weights are the
+#: MLX conversion, whose safetensors header says ``format: mlx`` outright, and handing it to
+#: ``from_pretrained`` would refuse or load something else. This entry is the upstream HF
+#: checkpoint, already in the local cache, and it is the same bf16 tensors the MLX conversion
+#: was made from, which is why the golden records correspond to it at all.
+CHECKPOINT_ENTRY = "gemma3-4b-cuda-bf16"
+
+#: The snapshot is the multimodal checkpoint, so the text weights carry a ``language_model.``
+#: prefix and the vision tower rides along. Both from WS-A's ``cpu_gates.py``; lifting that
+#: loader into the package is WS-E's and this mirrors it rather than diverging from it.
+KEY_MAPPING = {r"^language_model\.": ""}
+VISION_PREFIXES = ("vision_tower.", "multi_modal_projector.")
 
 
 def _require_own_window() -> None:
@@ -67,9 +74,52 @@ def _require_own_window() -> None:
     print(f"box window (ours): {held.seat} -- {held.purpose}")
 
 
+def _snapshot(repo_id: str) -> Path:
+    """The cached snapshot for ``repo_id``, from the primary checkout, without the network.
+
+    ``configure_local_cache`` points the cache at ``PROJECT_ROOT``, which inside a worktree is
+    the worktree, whose ``.cache`` is empty. The weights are a shared artefact like the lock,
+    the window and ``models/``: they exist once, in the primary checkout. This is the same
+    failure ``_resolve_checkpoint`` documents for local checkpoints, arriving through a
+    different reader, so it is fixed here the same way.
+
+    ``box_state_root`` is that reader and it carries a known flaw: ``$AGENT_V2_BOX_STATE_DIR``
+    redirects it so an isolated run cannot take the machine's lock, and weights must not follow
+    that redirect. Plan §16.8 has SWE-2 splitting the git-derived half out as
+    ``primary_checkout_root``; when it lands this call moves to it. The redirect is unset here
+    and the run records which path it read, so the caveat is visible rather than assumed away.
+    """
+    import os
+
+    from huggingface_hub import snapshot_download
+
+    from local_llm_lab.runlock import box_state_root
+
+    root = box_state_root()
+    if os.environ.get("AGENT_V2_BOX_STATE_DIR"):
+        raise SystemExit(
+            "AGENT_V2_BOX_STATE_DIR is set, so the shared-state reader is redirected and the "
+            "weights would be looked for in scratch. Unset it, or wait for "
+            "primary_checkout_root (plan section 16.8)."
+        )
+    cache = root / ".cache" / "huggingface" / "hub"
+    # Passed rather than exported: huggingface_hub reads its environment at import time, so
+    # setting HF_HOME here is a no-op once anything has already imported it.
+    print(f"weights cache: {cache}")
+    return Path(snapshot_download(repo_id, local_files_only=True, cache_dir=str(cache)))
+
+
 def _load(checkpoint: Path):
+    """Text-only load that fails closed, mirroring WS-A's ``cpu_gates.load_text_model``.
+
+    The vision tower is expected to be left behind and every *other* gap is an error: a
+    missing text key, a shape change or a conversion failure would otherwise load a model that
+    runs and is not the one the records were made from.
+    """
+    import json
+
     import torch
-    from transformers import AutoTokenizer, Gemma3ForCausalLM
+    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
 
     from local_llm_lab import device
     from local_llm_lab.arch_torch import TorchArchitectureView
@@ -77,18 +127,36 @@ def _load(checkpoint: Path):
     reading = device.pin(attention="eager")
     print(f"determinism: {reading.get('determinism')}, attention: eager, dtype bfloat16 on cpu")
 
+    raw = json.loads((checkpoint / "config.json").read_text())
+    config = Gemma3TextConfig(**raw["text_config"])
     started = time.monotonic()
-    model = Gemma3ForCausalLM.from_pretrained(
-        checkpoint, dtype=torch.bfloat16, attn_implementation="eager"
-    ).eval()
+    model, info = Gemma3ForCausalLM.from_pretrained(
+        checkpoint,
+        config=config,
+        dtype=torch.bfloat16,
+        attn_implementation="eager",
+        local_files_only=True,
+        output_loading_info=True,
+        key_mapping=KEY_MAPPING,
+    )
+    for field in ("missing_keys", "mismatched_keys", "error_msgs", "conversion_errors"):
+        if info.get(field):
+            raise SystemExit(f"text checkpoint load failed: {field}={info[field]}")
+    unexpected = set(info.get("unexpected_keys", ()))
+    if any(not key.startswith(VISION_PREFIXES) for key in unexpected):
+        raise SystemExit(
+            "the load left behind keys that are not the vision tower: "
+            f"{sorted(key for key in unexpected if not key.startswith(VISION_PREFIXES))[:5]}"
+        )
+    model = model.eval()
     model.requires_grad_(False)
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     view = TorchArchitectureView.from_model(model)
     print(
         f"loaded in {time.monotonic() - started:.1f}s: {view.num_layers} layers, "
-        f"hidden {view.hidden_size}, vocab {view.vocab_size}"
+        f"hidden {view.hidden_size}, vocab {view.vocab_size}; "
+        f"{len(unexpected)} vision keys left behind"
     )
-    return model, tokenizer, view
+    return model, view
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -111,8 +179,8 @@ def main(argv: list[str] | None = None) -> int:
     from local_llm_lab.models import load_model_spec
     from local_llm_lab.torch_capture import TorchCapture
 
-    checkpoint = arguments.checkpoint or Path(load_model_spec(CHECKPOINT_ENTRY).hf_id)
-    model, _, view = _load(checkpoint)
+    checkpoint = arguments.checkpoint or _snapshot(load_model_spec(CHECKPOINT_ENTRY).hf_id)
+    model, view = _load(checkpoint)
 
     class _Sink:
         """The capture needs a sink; teacher forcing reads logits and no residuals."""

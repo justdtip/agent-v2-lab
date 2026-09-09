@@ -59,6 +59,10 @@ __all__ = [
 #: A flip at or above this recorded probability is a defect and not a rounding difference.
 HARD_CONFIDENCE = 0.99
 
+#: Rows ranked per block when reading logits. Small enough that the float32 copy is tens of
+#: megabytes rather than gigabytes; large enough that the loop is not the cost.
+_RANK_ROWS = 256
+
 
 @dataclass(frozen=True)
 class Flip:
@@ -393,13 +397,21 @@ def torch_forward_rows(model, view, *, top_k: int = 5):
         with torch.no_grad():
             for chunk in prefill_passes(list(sequence)):
                 logits = _forward_logits(model, view, chunk.input_ids, cache)
-                # float32 before the ranking, for the same reason the decode loop casts: ties
-                # in bfloat16 against a vocabulary this size are common.
-                top = logits[0].float().topk(top_k, dim=-1).indices
-                rows.extend(
-                    (int(top[local, 0]), tuple(int(value) for value in top[local]))
-                    for local in range(top.shape[0])
-                )
+                # Rank in row blocks, never whole-tensor. A full 2,048-token chunk against a
+                # 262,208-entry vocabulary is 1.07 GB in bfloat16 and 2.15 GB the instant it is
+                # cast to float32, on top of 7.3 GiB of weights inside a 10.656 GiB cap. The
+                # cast is still needed -- ties in bfloat16 at this vocabulary size are common
+                # and the decode loop resolves them in float32 -- so it happens per block and
+                # the block is dropped.
+                for start in range(0, logits.shape[1], _RANK_ROWS):
+                    block = logits[0, start : start + _RANK_ROWS].float()
+                    top = block.topk(top_k, dim=-1).indices
+                    rows.extend(
+                        (int(top[local, 0]), tuple(int(value) for value in top[local]))
+                        for local in range(top.shape[0])
+                    )
+                    del block, top
+                del logits
         return rows
 
     return forward
