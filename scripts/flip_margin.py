@@ -169,6 +169,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verdict", default="port", help="which verdict's rows to read")
     parser.add_argument("--json", type=Path)
     parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="the port's snapshot directory; required off the laptop, because the weights cache "
+        "is resolved from the primary checkout and the device keeps its under $HF_HOME",
+    )
+    parser.add_argument(
         "--torch-only",
         action="store_true",
         help="read the port only, for a box with no MLX: the card, whose own margin at a "
@@ -200,14 +206,17 @@ def main(argv: list[str] | None = None) -> int:
 
     device_name = device_module.select()
     mlx_checkpoint = Path(load_model_spec("gemma3-4b-bf16").hf_id)
-    cache = primary_checkout_root() / ".cache" / "huggingface" / "hub"
-    torch_checkpoint = Path(
-        snapshot_download(
-            load_model_spec("gemma3-4b-cuda-bf16").hf_id,
-            cache_dir=str(cache),
-            local_files_only=True,
+    if arguments.checkpoint is not None:
+        torch_checkpoint = arguments.checkpoint
+    else:
+        cache = primary_checkout_root() / ".cache" / "huggingface" / "hub"
+        torch_checkpoint = Path(
+            snapshot_download(
+                load_model_spec("gemma3-4b-cuda-bf16").hf_id,
+                cache_dir=str(cache),
+                local_files_only=True,
+            )
         )
-    )
     if not arguments.torch_only:
         print(f"MLX bfloat16:   {mlx_checkpoint}")
     print(f"torch bfloat16: {torch_checkpoint}")
