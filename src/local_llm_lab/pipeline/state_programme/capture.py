@@ -45,6 +45,13 @@ CAPTURE_DTYPE = "native"
 
 DEFAULT_SHARD_SIZE = 256
 
+#: What a corpus row must carry for this module to be able to capture from it. Declared, and checked
+#: against a real row by `tests/test_state_capture.py`, because the first version of this module
+#: read `row["ids"]` — the *lens* corpus's shape — and the agent corpus has no such key. Every test
+#: passed, because every test built its own row and supplied one. A fixture that constructs its own
+#: input can validate code against a corpus that does not exist.
+REQUIRED_ROW_FIELDS = ("messages", "prompt", "metadata")
+
 
 class ContractViolation(ValueError):
     """A cell the capture contract does not describe, refused before anything is written."""
@@ -133,10 +140,12 @@ def capture_decisions(
 ) -> dict:
     """Capture one decision position per decision, writing each shard as it completes.
 
-    `forward` is the seam: it takes the row's token ids and returns
-    `(residuals, seq_len, token_index, layers, d_model, device, dtype)`, where `residuals` is the
-    stack of every layer's residual at the decision position. Passing it in keeps this function
-    testable without a model, and keeps the contract checks in one place rather than in the caller.
+    `forward` is the seam: it takes the **corpus row** and returns a mapping with `residuals`,
+    `seq_len`, `token_index`, `layers`, `d_model`, `device` and `dtype`, where `residuals` is the
+    stack of every layer's residual at the decision position. It takes the row rather than a list of
+    ids because this corpus carries the rendered `prompt` as a string and no ids, so tokenization
+    belongs to the caller that owns the tokenizer. Passing it in keeps this function testable
+    without a model, and keeps the contract checks in one place rather than in the caller.
 
     Shards are written as they fill, and the manifest line for a cell is appended only after its
     shard is on disk, so an interrupted run leaves a manifest that describes exactly what exists.
@@ -167,7 +176,14 @@ def capture_decisions(
                 f"{decision['prompt_sha256'][:12]} the capture set was enumerated under. The "
                 "corpus has changed since the set was fixed; re-enumerate rather than capture."
             )
-        result = forward(row["ids"])
+        absent = [field for field in REQUIRED_ROW_FIELDS if field not in row]
+        if absent:
+            raise ContractViolation(
+                f"{key}: the corpus row declares no {absent}. This corpus carries the rendered "
+                "`prompt` as a string and no token ids; the caller's `forward` owns tokenization "
+                "and is handed the row, not an id list."
+            )
+        result = forward(row)
         cell = {
             **{k: decision[k] for k in
                ("task_id", "step", "split", "family", "variant", "difficulty", "recovery",
@@ -238,6 +254,7 @@ __all__ = [
     "CAPTURE_DTYPE",
     "FORWARD_BATCH",
     "REQUIRED_CELL_FIELDS",
+    "REQUIRED_ROW_FIELDS",
     "CaptureTarget",
     "ContractViolation",
     "assert_contract",

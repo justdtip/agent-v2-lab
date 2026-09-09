@@ -26,10 +26,12 @@ def _decision(**overrides) -> dict:
 
 
 def _row(task="test-read-0000-clean", step=1, text="a") -> dict:
+    """A row of the shape the **agent** corpus actually has: a rendered prompt string, no ids."""
     return {
         "metadata": {"task_id": task, "step": step, "family": "read", "variant": "clean"},
         "messages": [{"role": "user", "content": text}, {"role": "assistant", "content": "b"}],
-        "ids": [1, 2, 3, 4],
+        "prompt": f"<bos>{text}<start_of_turn>model\n",
+        "completion": "b<end_of_turn>",
     }
 
 
@@ -46,13 +48,36 @@ def _cell(**overrides) -> dict:
 
 
 def _forward(layers=2, d_model=4):
-    def run(ids):
+    def run(row):
+        ids = list(range(len(row["prompt"].split())))or [0]
         return {
             "residuals": torch.zeros(layers + 1, d_model, dtype=torch.bfloat16),
             "seq_len": len(ids), "token_index": len(ids) - 1, "layers": layers,
             "d_model": d_model, "device": "cpu", "dtype": "torch.bfloat16",
         }
     return run
+
+
+def test_the_module_reads_only_fields_a_real_corpus_row_has() -> None:
+    """The check that would have caught it: assert the assumption against the corpus, not a fixture.
+
+    The first version of this module read `row["ids"]`, which is the *lens* corpus's shape. The
+    agent corpus has `messages`, `prompt`, `completion` and `metadata` and no ids. Every test passed,
+    because every test built its own row and helpfully supplied one. A fixture that constructs its
+    own input validates the code against a corpus that does not exist, so this pins the declared
+    fields against a real row and skips only when the corpus is genuinely absent.
+    """
+    import json
+    from pathlib import Path
+
+    corpus = Path("data/agent_v2e-gemma3-4b/test.jsonl")
+    if not corpus.exists():
+        pytest.skip(f"{corpus} is not on this machine")
+    with corpus.open(encoding="utf-8") as stream:
+        real = json.loads(next(line for line in stream if line.strip()))
+    missing = [field for field in capture.REQUIRED_ROW_FIELDS if field not in real]
+    assert not missing, f"the module requires {missing}, which a real corpus row does not carry"
+    assert "ids" not in real, "this corpus has no token ids; the seam must own tokenization"
 
 
 # ------------------------------------------------------------------- the contract's own refusals
