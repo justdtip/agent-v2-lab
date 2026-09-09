@@ -1,0 +1,12 @@
+{
+  "adaptive-finite-difference.pdf": {
+    "url": "https://optimization-online.org/wp-content/uploads/2021/10/8633.pdf",
+    "sha256": "ad829baaa90576bd9646bd6a10a085d6a6181a8fc72804b8167ab0773902eeae",
+    "bytes": 1015406
+  },
+  "autodiff-pitfalls.pdf": {
+    "url": "https://uhra.herts.ac.uk/id/eprint/26445/3/WIREs_Data_Min_Knowl_-_2024_-_H_ckelheim_-_A_taxonomy_of_automatic_differentiation_pitfalls.pdf",
+    "sha256": "cfb595201cf8d8b775c7714e4ecfc61cc70eab165f7b9106a57620da7196688c",
+    "bytes": 1935587
+  }
+}

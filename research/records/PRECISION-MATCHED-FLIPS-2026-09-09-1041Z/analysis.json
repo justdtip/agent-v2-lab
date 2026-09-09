@@ -1,0 +1,98 @@
+{
+  "scope": "selected-position instrument comparability; not a full-corpus acceptance or model-behavior finding",
+  "counts": {
+    "selected": {
+      "value": 24,
+      "basis": "derived from original card-CUDA flip identities"
+    },
+    "bf16_agrees": {
+      "value": 21,
+      "basis": "joined card-CUDA and laptop-MLX readings"
+    },
+    "bf16_disagrees": {
+      "value": 3,
+      "basis": "joined card-CUDA and laptop-MLX readings"
+    },
+    "remaining_within_reference_2_ulp": {
+      "value": 2,
+      "basis": "derived from later laptop-MLX reference"
+    },
+    "remaining_outside_reference_2_ulp": {
+      "value": 1,
+      "basis": "derived from later laptop-MLX reference"
+    }
+  },
+  "remaining_positions": [
+    {
+      "episode": "agentic-d2-update-0028",
+      "turn": 0,
+      "position": 556,
+      "recorded_token": 9560,
+      "produced_token": 623,
+      "recorded_probability": 0.9998726844787598,
+      "mlx_bf16_token": 9560,
+      "bf16_cuda_agrees": false,
+      "source_verdict": "port",
+      "reference_gap": 0.5,
+      "reference_gap_ulps": 1.0,
+      "reference_within_2_ulp": true,
+      "outcome_basis": "card CUDA bf16 joined to laptop MLX bf16",
+      "probability_basis": "original laptop MLX 4-bit reference",
+      "gap_basis": "later laptop MLX bf16 reference; actual-top1-spacing producer"
+    },
+    {
+      "episode": "agentic-d2-read-0108",
+      "turn": 0,
+      "position": 521,
+      "recorded_token": 2234,
+      "produced_token": 1399,
+      "recorded_probability": 0.9997387528419495,
+      "mlx_bf16_token": 2234,
+      "bf16_cuda_agrees": false,
+      "source_verdict": "port",
+      "reference_gap": 1.5,
+      "reference_gap_ulps": 3.0,
+      "reference_within_2_ulp": false,
+      "outcome_basis": "card CUDA bf16 joined to laptop MLX bf16",
+      "probability_basis": "original laptop MLX 4-bit reference",
+      "gap_basis": "later laptop MLX bf16 reference; actual-top1-spacing producer"
+    },
+    {
+      "episode": "agentic-d2-list-0149",
+      "turn": 0,
+      "position": 522,
+      "recorded_token": 107,
+      "produced_token": 564,
+      "recorded_probability": 0.9915077686309814,
+      "mlx_bf16_token": 107,
+      "bf16_cuda_agrees": false,
+      "source_verdict": "port",
+      "reference_gap": 0.25,
+      "reference_gap_ulps": 1.0,
+      "reference_within_2_ulp": true,
+      "outcome_basis": "card CUDA bf16 joined to laptop MLX bf16",
+      "probability_basis": "original laptop MLX 4-bit reference",
+      "gap_basis": "later laptop MLX bf16 reference; actual-top1-spacing producer"
+    }
+  ],
+  "source_commits": [
+    "df2f0a3e75715528e1f2db4fcd535ad9d59f5b65",
+    "00e88b037415c22dca535ac75aaa5ab1a3026937"
+  ],
+  "canonical_record": "research/records/WSB-DEVICE-2026-09-10/",
+  "limits": [
+    "The 24 rows were selected by original MLX 4-bit P >= .99 and CUDA disagreement; not a random or exhaustive precision-matched sample.",
+    "Matched agreement supports the 4-bit reference as the outlier, conditional on source-declared checkpoint and input identity.",
+    "MLX arm and margin reports omit complete checkpoint/input digests and do not seal raw logits. File hashes identify saved evidence, not the omitted execution inputs.",
+    "Earlier margins use torch laptop CPU, not the original CUDA run; two CPU top1 choices differ from their original CUDA produced_token.",
+    "The original 0.25 ULP denominator was assumed at magnitude 32. Multiples of a chosen spacing cannot establish the true spacing.",
+    "The later reference computes spacing from its actual top1; its 1,3,1 ULP values supersede the original MLX assumed-scale 1,6,2 for this comparison.",
+    "The later artifact stores gaps and ratios, not the raw top1 logits; spacing provenance rests on the pinned producer.",
+    "A rule-defined near tie is not proof of an arithmetic cause. One to several ULPs are not exact ties.",
+    "log(p1/p2) reconstructs gaps approximately from saved float probabilities; no claim of exact real arithmetic.",
+    "No model loads, GPU operations, run changes, or timing claims occur in this analysis."
+  ],
+  "versions": {
+    "matplotlib": "3.11.1"
+  }
+}
