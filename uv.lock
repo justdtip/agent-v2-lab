@@ -509,6 +509,17 @@ wheels = [
 ]
 
 [[package]]
+name = "jlens"
+version = "0.1.0"
+source = { git = "https://github.com/anthropics/jacobian-lens?rev=581d398613e5602a5af361e1c34d3a92ea82ba8e#581d398613e5602a5af361e1c34d3a92ea82ba8e" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+
+[[package]]
 name = "llguidance"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -542,6 +553,7 @@ dependencies = [
 [package.optional-dependencies]
 cuda = [
     { name = "accelerate" },
+    { name = "jlens" },
     { name = "peft" },
     { name = "safetensors" },
     { name = "torch" },
@@ -564,6 +576,7 @@ requires-dist = [
     { name = "datasets", specifier = ">=2.14,<4" },
     { name = "huggingface-hub", specifier = ">=1.29.0" },
     { name = "jinja2", specifier = ">=3.1" },
+    { name = "jlens", marker = "extra == 'cuda'", git = "https://github.com/anthropics/jacobian-lens?rev=581d398613e5602a5af361e1c34d3a92ea82ba8e" },
     { name = "mlx-lm", extras = ["train"], marker = "extra == 'mlx'", specifier = "==0.31.3" },
     { name = "mlx-tune", marker = "extra == 'mlx'", specifier = "==0.6.0" },
     { name = "numpy", specifier = ">=2.5.2" },
