@@ -49,6 +49,9 @@ parser.add_argument("--precisions", default="native,float32")
 parser.add_argument("--layers", default="1,17,33")
 parser.add_argument("--ladder-k", default="0,2,4,6,8,10",
                     help="the declared trial ladder, as exponents k in h0 * 2**-k")
+parser.add_argument("--width", type=int, default=1,
+                    help="the forward width; the anchor is captured at this width too, so the "
+                         "anchor and the difference share a function")
 args = parser.parse_args()
 
 OUT = args.out
@@ -121,6 +124,8 @@ mask = torch.zeros(seq_len, dtype=torch.bool, device=ids.device)
 mask[8] = True
 mask[seq_len - 1] = True
 POSITION = 8   # the perturbed source position; one, so the check is directional and not an average
+WIDTH = args.width
+batched_ids = ids if WIDTH == 1 else ids.expand(WIDTH, -1)
 
 generator = torch.Generator(device="cpu").manual_seed(DIRECTION_SEED)
 directions = [("coordinate", i, torch.nn.functional.one_hot(torch.tensor(i), d_model).float())
@@ -138,7 +143,9 @@ for j in range(COTANGENTS - 1):
 emit("frozen", row_index=row.get("index"), seq_len=seq_len, d_model=d_model,
      repo_layers=list(repo_layers), position=POSITION, ladder_k=list(LADDER_K),
      directions=[(k, i) for k, i, _ in directions], cotangents=[(k, i) for k, i, _ in cotangents],
-     direction_seed=DIRECTION_SEED, width=1)
+     direction_seed=DIRECTION_SEED, width=WIDTH, anchor_batch=WIDTH,
+     frozen_token_sha256=__import__("hashlib").sha256(
+         json.dumps(row["ids"][:MAX_SEQ]).encode()).hexdigest())
 
 (OUT / "manifest.json").write_text(json.dumps({
     "schema_version": 1, "seat": "d-cro", "stage": "resolution protocol §4, width 1",
@@ -146,7 +153,7 @@ emit("frozen", row_index=row.get("index"), seq_len=seq_len, d_model=d_model,
     "corpus": {"manifest": str(args.corpus), "split": "held"},
     "row": {"index": row.get("index"), "seq_len": seq_len},
     "position": POSITION, "repo_layers": list(repo_layers), "target_upstream": target,
-    "forward_batch": 1, "anchor_batch": 1,
+    "forward_batch": WIDTH, "anchor_batch": WIDTH,
     "reduction": "perturb one source position; target summed over the selected positions",
     "epsilon_scale": EPSILON_SCALE, "ladder_k": list(LADDER_K),
     "direction_seed": DIRECTION_SEED,
@@ -163,26 +170,49 @@ def replace(base):
     return hook
 
 
+def unchanged_residual_holds(layer):
+    """§3.1's check, at this width, with a capture made at this width. Run before any derivative.
+
+    At zero step the perturbed position is irrelevant — the hook replaces the whole tensor — so this
+    is *one* intervention per layer and is counted as one. Six entries reported as six checks would
+    be five more than the evidence.
+    """
+    with torch.no_grad():
+        with ActivationRecorder(wrapped.layers, at=[layer, target]) as recorder:
+            wrapped.forward(batched_ids)
+        anchor = recorder.activations[layer].detach().clone()
+        reference = recorder.activations[target].detach().clone()
+        handle = wrapped.layers[layer].register_forward_hook(replace(anchor))
+        try:
+            with ActivationRecorder(wrapped.layers, at=[target]) as inner:
+                wrapped.forward(batched_ids)
+                observed = inner.activations[target].detach()
+        finally:
+            handle.remove()
+    return bool(torch.equal(reference, observed))
+
+
 def reduced(activation):
     """The target, reduced as declared: summed over the selected positions, float32.
 
     Promoted before the sum, never after: summing two nearly equal bf16 numbers in bf16 and casting
     the result is a measurement of bf16's spacing rather than of the model.
     """
-    return activation.float()[0][mask].sum(dim=0)
+    return activation.float()[0][mask].sum(dim=0)  # row 0; every row carries the same prompt
 
 
 def forward_target(layer, base):
     handle = wrapped.layers[layer].register_forward_hook(replace(base))
     try:
         with ActivationRecorder(wrapped.layers, at=[target]) as inner:
-            wrapped.forward(ids)
+            wrapped.forward(batched_ids)
             return inner.activations[target]
     finally:
         handle.remove()
 
 
 rows_out = []
+responses: dict[str, object] = {}
 for precision in args.precisions.split(","):
     if precision == "float32":
         model.to(torch.float32)
@@ -192,9 +222,22 @@ for precision in args.precisions.split(","):
 
     with torch.no_grad():
         with ActivationRecorder(wrapped.layers, at=[*sources.values(), target]) as recorder:
-            wrapped.forward(ids)
+            wrapped.forward(batched_ids)
         base = {layer: recorder.activations[layer].detach().clone()
                 for layer in (*sources.values(), target)}
+
+    # §3.1 at this width, before any derivative is read. It gates rather than reports: a hook that
+    # does not reproduce its own width's forward makes every number below meaningless.
+    for repo_layer, layer in sources.items():
+        holds = unchanged_residual_holds(layer)
+        emit("unchanged_residual", precision=precision, width=WIDTH, repo_layer=repo_layer,
+             anchor="width", bitwise_identical=holds, interventions=1, basis="measured-here")
+        if not holds:
+            raise SystemExit(
+                f"the unchanged-residual check fails at width {WIDTH}, repo layer {repo_layer}, "
+                "with a capture made at that width: the hook does not reproduce this width's own "
+                "forward, so no derivative here is interpretable. Repair the seam first."
+            )
 
     for repo_layer, layer in sources.items():
         source = base[layer]
@@ -212,7 +255,7 @@ for precision in args.precisions.split(","):
             )
             try:
                 with ActivationRecorder(wrapped.layers, at=[target]) as inner:
-                    wrapped.forward(ids)
+                    wrapped.forward(batched_ids)
                     scalar = (reduced(inner.activations[target]) * w.to("cuda:0")).sum()
             finally:
                 handle.remove()
@@ -230,8 +273,11 @@ for precision in args.precisions.split(","):
                     h = h0 * (2.0 ** -k)
                     plus_in = source.clone()
                     minus_in = source.clone()
-                    plus_in[0, POSITION] += (h * v_dev).to(source.dtype)
-                    minus_in[0, POSITION] -= (h * v_dev).to(source.dtype)
+                    # Every row of the batch carries the same prompt and takes the same
+                    # perturbation, so the batch reproduces the schedule without turning into a
+                    # different experiment: the width is the arithmetic path, not extra directions.
+                    plus_in[:, POSITION] += (h * v_dev).to(source.dtype)
+                    minus_in[:, POSITION] -= (h * v_dev).to(source.dtype)
                     # §5: what actually landed, not what was asked for.
                     dplus = (plus_in.float() - source.float())[0, POSITION]
                     dminus = (source.float() - minus_in.float())[0, POSITION]
@@ -240,11 +286,20 @@ for precision in args.precisions.split(","):
                     unchanged = float((dplus[support] == 0).float().mean()) if support.any() else None
                     v_actual = ((plus_in.float() - minus_in.float())[0, POSITION] / (2 * h)).cpu()
 
-                    tplus = reduced(forward_target(layer, plus_in))
-                    tminus = reduced(forward_target(layer, minus_in))
+                    raw_plus = forward_target(layer, plus_in).float()[0][mask]
+                    raw_minus = forward_target(layer, minus_in).float()[0][mask]
+                    # Individual responses, per selected target position, kept before the sum.
+                    # Codex's C2: summary statistics cannot be revisited after averaging, and the
+                    # whole argument of this record is that an aggregate can hide a dead response.
+                    responses[f"{precision}|L{repo_layer}|{dkind}:{dindex}|k{k}"] = (
+                        (raw_plus - raw_minus).cpu().numpy()
+                    )
+                    tplus, tminus = raw_plus.sum(dim=0), raw_minus.sum(dim=0)
                     odd = (tplus - tminus)
                     even = (tplus + tminus - 2 * zero)
-                    equal_outputs = float(torch.eq(tplus, tminus).float().mean())
+                    equal_outputs = float(torch.eq(raw_plus, raw_minus).float().mean())
+                    per_position_odd = [float(torch.linalg.vector_norm(r))
+                                        for r in (raw_plus - raw_minus)]
 
                     for ckind, cindex, w in cotangents:
                         w_dev = w.to("cuda:0")
@@ -270,7 +325,9 @@ for precision in args.precisions.split(","):
                             "unchanged_input_fraction_in_support": unchanged,
                             "equal_output_fraction": equal_outputs,
                             "odd_norm": float(torch.linalg.vector_norm(odd)),
+                            "odd_norm_per_target_position": per_position_odd,
                             "even_remainder_norm": float(torch.linalg.vector_norm(even)),
+                            "width": WIDTH, "anchor_batch": WIDTH,
                             "basis": "measured-here",
                         }
                         rows_out.append(entry)
@@ -285,6 +342,13 @@ for precision in args.precisions.split(","):
                           and r["repo_layer"] == repo_layer and r["precision"] == precision),
                          default=None))
     emit("precision_done", precision=precision, rows=len(rows_out))
+
+import numpy as np  # noqa: E402
+
+np.savez_compressed(OUT / "responses.npz", **responses)
+emit("responses", cells=len(responses),
+     bytes=(OUT / "responses.npz").stat().st_size,
+     note="the odd response per selected target position, before the sum, one array per cell")
 
 (OUT / "ladder-summary.json").write_text(json.dumps({
     "basis": "measured-here", "cells": len(rows_out),

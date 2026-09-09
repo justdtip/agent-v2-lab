@@ -229,7 +229,55 @@ ordering as the full map's compression — measured at a matched schedule and on
 not the batch artefact of §3 either. The step from these eighteen scalar checks to the 84,480-column
 map is an inference and is marked as one.
 
-## 8. What follows
+## 8. The width rows: in bf16 the derivative itself depends on the batch width
+
+The Chief's step 3, run after the width-1 answer existed rather than inside it. Same row, same
+position, same six directions and three cotangents, same ladder; anchor and forward at the width, and
+autograd at the width too, so nothing crosses a schedule. §3.1's unchanged-residual check runs first
+at each width **and gates**: it is bitwise identical at every width and precision, one intervention
+per layer, so the derivatives below are read through a hook that reproduces its own width's forward.
+
+**The refactor that added width support reproduces the width-1 numbers exactly** — 648 of 648 cells,
+`d_h` and `a` bit for bit — so §6's table stands unchanged and the width rows extend it rather than
+replacing it.
+
+**The headline is not the finite differences. It is the autograd value.** `a = (Jᵀw)ᵀv` is the
+derivative itself, and it moves when the batch width changes:
+
+| precision | layer | min | median | max |
+|---|---:|---:|---:|---:|
+| native bf16 | 1 | 0.153 | **0.756** | 2.00 |
+| native bf16 | 17 | 0.012 | **0.596** | 2.97 |
+| native bf16 | 33 | 0.010 | **0.119** | 6.93 |
+| float32 | 1 | 5.5e-6 | **2.7e-5** | 5.3e-3 |
+| float32 | 17 | 2.2e-6 | **2.1e-5** | 6.6e-5 |
+| float32 | 33 | 1.4e-7 | **3.3e-6** | 1.9e-3 |
+
+relative change from width 1 to width 64, over the eighteen direction-and-cotangent pairs.
+
+**In bf16 there is no width-independent Jacobian at these layers.** Change nothing but the batch
+width of the forward and the directional derivative moves by a median of 76% at layer 1, 60% at layer
+17 and 12% at layer 33, and by more than 100% in the worst pairs. The map is a property of the
+schedule as much as of the model. In float32 the same change moves it by parts in a hundred thousand,
+which is the arithmetic noise of a different reduction order and nothing more.
+
+That is the schedule term of the protocol's §3 decomposition, measured. It also settles what the ν
+field added at `1dee10d` is worth: not a bookkeeping nicety, but up to a factor of two.
+
+**Finite differences at width 64, for completeness.** Float32 still converges, with the interval
+moved one or two rungs deeper and the best agreement two to five times looser — 2.0e-4 at layer 33
+(k=8, against 8.6e-5 at k=6 at width 1), 6.1e-4 at layer 17, 4.5e-2 at layer 1 and still falling.
+Both arms share the width, so the batch offset is common to them; what does not cancel is its
+variation with the perturbation, and that is the larger floor. The bf16 rows at width 64 are not
+comparable to the bf16 rows at width 1 **at all**, because their reference `a` is a different number:
+a relative error against a reference that moved 76% measures the pair, not the estimator.
+
+**Width 256 did not run.** The retained graph for the autograd pass at width 256 with eager attention
+exhausted the card: 94.71 GiB in use, a 320 MiB allocation refused. It is recorded as not run for
+that reason, not as a result. Widths 1 and 64 answer the question the row was for, and a third point
+would sharpen the slope rather than change the finding.
+
+## 9. What follows
 
 1. **The width rows**, per the Chief's step 3: the same directions, cotangents and a few steps at
    widths 64 and 256, anchor and forward at that width, with §3.1's anchored-at-width check repeated
@@ -239,7 +287,7 @@ map is an inference and is marked as one.
 3. **The step rule is not a constant.** Its useful value moved by 2⁶ across three layers here, so a
    single `epsilon_scale` for every layer is refuted by this table whatever else is true.
 
-## 9. Provenance
+## 10. Provenance
 
 Card: RTX PRO 6000 Blackwell, determinism pinned, `float32_matmul_precision: highest`,
 `cudnn_deterministic: true`, `deterministic_algorithms: true`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`.
