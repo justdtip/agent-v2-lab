@@ -56,15 +56,19 @@ Cache strategies stay refused until each reproduces the `none` trajectories byte
 
 ## 3. WS-C — training, sharded (SWE-2)
 
-`torchrun --nproc_per_node=<N> research/records/CUDA-WS-C-2026-09-09/stage_agreement.py --mode
-fsdp2 ...` against `--mode plain`, then the stage on the real recipe:
+The WS-C record (`research/records/CUDA-WS-C-2026-09-09/WS-C-RECORD.md`) carries this section in
+full; its order is the one to run, cheapest and most diagnostic first, so an hour that goes wrong
+goes wrong early and for a nameable reason. The device arms compare GPU against GPU, so every local
+figure is the expected magnitude and never a bit target: kernels and reduction order differ, and an
+identical number would be a coincidence.
 
-| what | must produce | laptop basis |
-|---|---:|---:|
-| joined FSDP2 gate under NCCL, N ranks | per-parameter gradient agreement at step zero to float32 epsilon; values after N steps | 1.24e-07 gradients, 0.0 values, two `gloo` CPU processes |
-| arm 1's recipe at both checkpoints, 800 and 1,200, full fine-tuning, scored on the 180-task split | both scores beside their MLX counterparts; full-split passes is the pre-registered criterion | MLX: 159 and 175 of 180 |
-| the R60(c) memory measurement; `reshard_after_forward` as a rung | measured, then chosen | none |
-| every departure from the MLX recipe | in the run manifest | listed in the WS-C record |
+| step | must produce | laptop basis | a mismatch means |
+|---|---:|---:|---|
+| 1. the environment says what it is (seconds, no model) | the determinism block | the CPU block, every field but `device` matching | `pin()` ran after something touched the device, and every later number inherits it |
+| 2. the sharded path under NCCL (minutes, tiny checkpoint) | per-parameter gradient deviation at step zero | 1.24e-07, same script | above ~1e-5 is the port, not arithmetic; first check both arms consumed the same rows. **Never accept a loss-curve agreement in its place**: the broken configuration gave a bit-identical loss beside a gradient wrong by 1.67 relative |
+| 3. the memory arithmetic meets the device (one step at the cap, real checkpoint) | measured peak | 16 bytes per parameter, 68.8 GB at 4.30B; logits 2.82 GB unchunked against 0.54 GB at chunk 512 | above: the trainable slice is larger than intended; far below: the freezing opened less than intended |
+| 4. the reshard rung (`reshard_after_forward` both ways) | the rung, measured | none, and none claimed | this step creates the rung |
+| 5. arm 1 at both checkpoints, full fine-tuning, the 180-task split | both scores beside their MLX counterparts | 175 of 180 at 1,200; 159 at 800; full-split passes is the pre-registered criterion | the four moving variables are stated so a difference is not read as a failed reproduction |
 
 ## 4. WS-D — the lens un-port's golden test (D-CRO)
 
