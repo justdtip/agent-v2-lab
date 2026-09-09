@@ -268,7 +268,11 @@ re-read from the text, and clamping features does not stop that. Three parts:
 3. **E2 scored with and without the arm**, the difference reported as the carrier's share.
 
 **Part 2 is orderable as it stands. Part 1 is not yet, and this section says why rather than
-promising a rule that does not exist.**
+promising a rule that does not exist.** What is pre-registered here is the **text-removal** arm and
+only that. An arm built some other way — masking the carrier spans as attention keys, say, which
+truncates the carrier without touching a token — is a different intervention with a different
+failure mode, and if one is ever ruled into E2 it is ruled in by an amendment that says so. This
+document does not promise it and must not be read as anticipating it.
 
 **The note is not a note with a progress field. It is a running state summary in which nearly every
 clause is a function of the step.** `pipeline/tasks.py` composes it as one `thought` string per step,
