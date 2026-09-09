@@ -232,3 +232,14 @@ place of its own copy; the report it returns carries the same fields plus the st
 the sha256 per file. And the three worktree readers that resolved shared artefacts against the
 running checkout (`models/`, the HF cache) now resolve against the git-derived primary,
 `runlock.primary_checkout_root()`, never through the box-state override.
+
+**Superseding note, 2026-09-10 early — the next instruction's arms run on the device, not on CPU.**
+The Director: "All subsequent runs will use the rented GPU. Do not plan for long runs that will tie
+up this box. Test as much as you can, but accept we may need to resolve bugs in the actual
+environment." So items (1) to (3) of the next instruction above, the bf16-loop arm, the three
+controls at 1,400 tokens and the measured peak, are the device's first hour, with `cpu_gates.py`
+becoming the device gate script: the CPU calibration figures you have (1.24% at 64 tokens, the
+rotary rounding at 2^-9, the 9.8 GiB projection) are what the device's numbers are compared
+against. On this box from here: fixture tests only. Item (4), fetching `cuda-migration`, stands;
+item (5), the graph-once estimator, is written and tested here on fixtures and run there. Plan
+§16.12.
