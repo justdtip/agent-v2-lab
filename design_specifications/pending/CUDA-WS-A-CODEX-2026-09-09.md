@@ -141,7 +141,7 @@ Read plan §14 and `CUDA-MIGRATION-RESEARCH-BRIEF-ANSWERS-2026-09-09.md` in full
 
 ## Amendment, 2026-09-09 evening — review of `8edb4cd`, and the answer to the memory question
 
-Reviewed in full (plan §16.5). Passes on substance; three edits before it merges into
+Reviewed in full (plan §16.6). Passes on substance; three edits before it merges into
 `cuda-migration`, which now exists on origin:
 
 1. **Reach `jlens` through the seam.** `arch_torch.py` and `torch_capture.py` import it at module
