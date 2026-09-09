@@ -1,0 +1,2584 @@
+diff --git a/research/acceptance/torch_seam.py b/research/acceptance/torch_seam.py
+new file mode 100644
+index 0000000..a7706b8
+--- /dev/null
++++ b/research/acceptance/torch_seam.py
+@@ -0,0 +1,92 @@
++"""Small WS-A acceptance primitives for the shared remote gate runner.
++
++The caller loads a model, declares its device/dtype/attention implementation and supplies
++frozen token IDs. These functions never download weights, choose a device or infer a tolerance.
++Development execution on a small model is not full-checkpoint golden acceptance.
++"""
++
++from __future__ import annotations
++
++import torch
++from jlens.fitting import _check_layer_indices
++
++from local_llm_lab.arch_torch import TorchCapture
++
++
++def structural_report(view):
++    sources, target = _check_layer_indices(None, None, view.num_layers)
++    return {
++        "num_layers": view.num_layers,
++        "hidden_size": view.hidden_size,
++        "vocab_size": view.vocab_size,
++        "attention_spans": [view.attention_span(i) for i in range(view.num_layers)],
++        "upstream_source_blocks": sources,
++        "upstream_target_block": target,
++        "source_residuals": [i + 1 for i in sources],
++        "target_residual": target + 1,
++        "entry_residual": 0,
++    }
++
++
++def decode_readout_probe(view, prompt_ids, *, steps, readout=True, control=None):
++    """Capture native greedy decisions and the actual row-wise final-residual readout.
++
++    The normal comparison mirrors LiveLensSession.output: norm/unembed one residual row
++    against the corresponding native logit row. The controls alter only the comparator inputs,
++    so they cannot change the generated history. A missing comparator reports None, not zero.
++    The returned distribution is evidence from which a separately declared gate is calibrated;
++    this helper never selects or relaxes the gate itself.
++    """
++    if type(steps) is not int or steps < 1:
++        raise ValueError("steps must be a positive integer")
++    if control not in (None, "skew_after_prefill", "corrupt_residual"):
++        raise ValueError("unknown readout control")
++    if not readout and control is not None:
++        raise ValueError("a readout control requires the comparator")
++    errors, emitted, identity_failures = [], [], []
++
++    class Probe:
++        final = None
++        readout_top = None
++
++        def residual(self, layer, offset, h):
++            self.final = h
++
++        def output(self, offset, ids, logits):
++            if self.final is None:
++                raise ValueError("final residual was not captured")
++            error = None
++            if readout:
++                error = 0.0
++                for local in range(len(ids)):
++                    h = self.final[0, local]
++                    if control == "corrupt_residual":
++                        h = h.clone()
++                        h[0] += 1.0
++                    predicted = view.native_readout(h).float()
++                    native = logits[0, local].float()
++                    if control == "skew_after_prefill" and offset > 0:
++                        native = native + 1.0
++                    error = max(error, float((predicted - native).abs().max()))
++                self.readout_top = int(view.native_readout(self.final[0, -1]).float().argmax())
++            errors.append(error)
++            self.final = None
++
++    probe = Probe()
++    cache = view.make_cache()
++    ids = view._ids(prompt_ids)
++    with torch.no_grad(), TorchCapture(view, probe, layers=(view.num_layers,)) as wrapped:
++        for step in range(steps):
++            result = wrapped(ids, cache=cache)
++            logits = result if torch.is_tensor(result) else result.logits
++            token = int(torch.softmax(logits[0, -1].float(), dim=-1).argmax())
++            emitted.append(token)
++            if readout and probe.readout_top != token:
++                identity_failures.append(step)
++            ids = view._ids([token])
++    return {
++        "emitted_ids": emitted,
++        "identity_failures": identity_failures,
++        "readout_errors": errors,
++        "control": control,
++    }
+diff --git a/research/records/CUDA-WS-A-2026-09-09/README.md b/research/records/CUDA-WS-A-2026-09-09/README.md
+new file mode 100644
+index 0000000..1ed0052
+--- /dev/null
++++ b/research/records/CUDA-WS-A-2026-09-09/README.md
+@@ -0,0 +1,97 @@
++# WS-A: torch seam implemented; full-checkpoint CPU gates need a resource ruling
++
++Source: `a639cae`, branch `codex/cuda-torch-seam`, based on the requested `2b7905f`.
++The fetch of `origin cuda-migration` reported no such remote ref; the exact requested commit was
++already in the local repository and is the base. The primary checkout was not changed.
++
++**85 CPU/backend-neutral checks passed**, with real MLX imports blocked. Ruff and whitespace checks
++passed. `verification.json` binds the source, tests, dependency and measurement evidence. The first
++commit, `82d7149`, extracted the shared base; the moved policy/index/cache/span contracts remain
++AST-identical. The native MLX regression suite is unexecuted, not reported green.
++
++## Finding, transferable technique, implementation
++
++The migration exposed a numerical contract that a method-signature port misses: MLX promotes a
++float32 activation multiplied by bf16 weights; torch Linear refuses that mixture. A CPU regression
++reproduced the dtype error. The torch hand-run path now uses the library's stateless functional call
++with just the current module's parameters/buffers promoted. Native weights retain their dtype and
++parameter identity; native capture keeps native dtype. This is tested on a tiny CPU bf16 model in
++addition to the float32 development gates. It is not CUDA evidence or a checkpoint precision change.
++
++Observation must also inherit **cached entry positions**, not just masks. Observing entry at zero
++and masks at the live offset failed a controlled position-dependent entry test. The entry and block
++argument bundles now come from one native observation using a copy of the supplied cache. Detached
++clones supply the cache copy's tensor values, allowing an ordinary eval model whose cache carries a
++gradient graph; the caller's cache and graph are not replaced. Observation is a real additional
++text forward, with autograd disabled, and the cache copy is an explicit resource cost.
++
++Implementation reuses upstream `anthropics/jacobian-lens` at
++`581d398613e5602a5af361e1c34d3a92ea82ba8e` (Apache-2.0):
++
++- `TorchArchitectureView` delegates discovery to `_find_layout`, with the prior repository paths
++  only as fallback. Shared validation and LoRA traversal live in `arch_base.py`; public call
++  signatures match the MLX view. Native norm/readout delegates to `HFLensModel.unembed` without
++  invoking its constructor's parameter-freezing/tokenizer changes.
++- The view observes native block arguments, including masks, rotary embeddings and position IDs.
++  Hand-running reuses those arguments. Boolean masks retain their Boolean meaning. It supports
++  the DynamicCache adapter and upstream crop semantics; a sliding cache does not promise rollback.
++  Unported recurrent backbones and head/span capture are refused explicitly.
++- `TorchCapture` subclasses `ActivationRecorder` and delegates block recording/lifecycle to it.
++  It adds entry/kwargs/output hooks and the existing sink protocol. `intervene(layer, position, fn)`
++  replaces a native vector; addition and interchange are functions on the same seam. Tests cover
++  gradients, absolute cached positions, direct model calls, repeated decoding and cleanup on errors.
++- `research/acceptance/torch_seam.py` supplies structural and readout probe functions for the shared
++  acceptance runner. It does not load checkpoints, select devices or choose acceptance thresholds.
++
++The index test calls upstream `_check_layer_indices`: upstream block outputs 0–32 and target 33
++map to repository residuals 1–33 and target 34. Entry residual 0 is separate. A second native HF
++layout (GPT-2, including tuple block outputs) also has exact residual-source agreement in the CPU test.
++
++## Executed evidence, in gate order
++
++1. **Full-size structural discovery passed on meta tensors**, from the official Gemma checkpoint's
++   config: 34 layers, width 2,560, vocabulary 262,208, and the configured sliding/global spans.
++   No checkpoint tensor data was loaded for this check.
++2. **Small random HF Gemma, CPU float32/eager:** residual-source maximum error is exactly 0.0 at
++   64 and 1,400 tokens. The mask-dispatch negative control is 0.0 at 64 and reaches 0.212559253 at
++   1,400. The model has three blocks and width 16; these are not Gemma 4B residual measurements.
++3. **Same development model:** final-layer readout top-1 matches all three emitted greedy decisions.
++4. **Same development model:** the row-wise readout maximum is 1.4901161193847656e-08. Both controls
++   are detected: skew only after prefill, and corrupted residual. Missing readout reports `None`;
++   a performed zero-error comparison reports `0.0`. This distribution does not set the checkpoint
++   or CUDA tolerance.
++
++`development-results.json` carries the individual figures, versions and structural report.
++`measure_development.py` reproduces this small-model evidence and the metadata/header audit without
++loading weights. The default isolated runtime is torch 2.9.1, Transformers 5.16.1, CPU, one thread,
++deterministic algorithms and eager attention. The shared environment was not changed.
++
++## Why the actual checkpoint gates have not run
++
++Header-only inspection finds **3,880,263,168 text parameters: 14.455107 GiB in float32**. The full
++multimodal checkpoint is 16.019044 GiB before activations, logits or loading copies. Both exceed the
++previous R47 cap of **10.656006 GiB**. No local exception or different CPU threshold has been assumed.
++
++Torch is eager: `native_residuals` currently executes the model head for every input position.
++Unlike the old lazy MLX path, discarded vocabulary logits are still allocated. Per-layer diagnostic
++promotion, observation-cache copies and full output logits belong in the real resource measurement.
++
++The official weights are local, but the MLX text-only conversion is not assumed to be a drop-in HF
++checkpoint. Its historical wrapper config and key names need the registry/loader's verified mapping.
++WS-E owns that loader. The model is never downloaded or loaded by this workstream's gate primitives.
++
++The sampled stage-two records provide frozen input/emitted IDs, logit hashes, argmax and readout
++errors. They do not provide full logits or residual arrays in the inspected events. Hashes cannot
++establish a cross-backend maximum-logit-error distribution. That is a separate evidence requirement
++for the cross-backend harness; it does not prevent within-backend readout identity once the CPU load
++is authorized and feasible.
++
++**Full-checkpoint gates 2–4, CUDA/MPS, the estimator rewrite, sharding and the 2,816-token resource
++measurement remain unexecuted.** The estimator has not been started: the brief explicitly puts it
++after the four real gates. The next required decision is the CPU memory envelope/window or a larger
++host for those gates. No new model lock or machine window was taken.
++
++One historical attribution should not transfer into a new finding: the earlier 21 GiB regression
++proposal was an incorrect, unexecuted allocation projection. This workstream did not demonstrate
++that it was caused by an autograd graph. Upstream's replicated Jacobian graph is a separate source
++fact and the future graph-once rewrite addresses that estimator.
+diff --git a/research/records/CUDA-WS-A-2026-09-09/development-results.json b/research/records/CUDA-WS-A-2026-09-09/development-results.json
+new file mode 100644
+index 0000000..4e79cfb
+--- /dev/null
++++ b/research/records/CUDA-WS-A-2026-09-09/development-results.json
+@@ -0,0 +1,266 @@
++{
++  "source_commit": "a639cae",
++  "scope": "small randomly initialized real HF model; not full-checkpoint acceptance",
++  "device": "cpu",
++  "dtype": "float32",
++  "attention": "eager",
++  "threads": 1,
++  "deterministic_algorithms": true,
++  "versions": {
++    "torch": "2.9.1",
++    "transformers": "5.16.1",
++    "jlens": "0.1.0",
++    "numpy": "2.3.2",
++    "pytest": "9.1.1"
++  },
++  "small_model_structure": {
++    "num_layers": 3,
++    "hidden_size": 16,
++    "vocab_size": 64,
++    "attention_spans": [
++      "sliding",
++      "global",
++      "sliding"
++    ],
++    "upstream_source_blocks": [
++      0,
++      1
++    ],
++    "upstream_target_block": 2,
++    "source_residuals": [
++      1,
++      2
++    ],
++    "target_residual": 3,
++    "entry_residual": 0
++  },
++  "development_gate_2": [
++    {
++      "tokens": 64,
++      "normal_max_abs_by_layer": {
++        "0": 0.0,
++        "1": 0.0,
++        "2": 0.0,
++        "3": 0.0
++      },
++      "broken_mask_max_abs_by_layer": {
++        "0": 0.0,
++        "1": 0.0,
++        "2": 0.0,
++        "3": 0.0
++      }
++    },
++    {
++      "tokens": 1400,
++      "normal_max_abs_by_layer": {
++        "0": 0.0,
++        "1": 0.0,
++        "2": 0.0,
++        "3": 0.0
++      },
++      "broken_mask_max_abs_by_layer": {
++        "0": 0.0,
++        "1": 0.15618959069252014,
++        "2": 0.1424400806427002,
++        "3": 0.21255925297737122
++      }
++    }
++  ],
++  "development_gates_3_and_4": {
++    "baseline": {
++      "emitted_ids": [
++        25,
++        25,
++        25
++      ],
++      "identity_failures": [],
++      "readout_errors": [
++        1.4901161193847656e-08,
++        0.0,
++        0.0
++      ],
++      "control": null
++    },
++    "controls": [
++      {
++        "emitted_ids": [
++          25,
++          25,
++          25
++        ],
++        "identity_failures": [],
++        "readout_errors": [
++          1.4901161193847656e-08,
++          1.0,
++          1.0
++        ],
++        "control": "skew_after_prefill"
++      },
++      {
++        "emitted_ids": [
++          25,
++          25,
++          25
++        ],
++        "identity_failures": [],
++        "readout_errors": [
++          0.028138980269432068,
++          0.03189244866371155,
++          0.03370816260576248
++        ],
++        "control": "corrupt_residual"
++      }
++    ],
++    "observed_max_error": 1.4901161193847656e-08,
++    "threshold_scope": "observed development distribution only; no checkpoint/CUDA bound"
++  },
++  "missing_readout": {
++    "emitted_ids": [
++      25,
++      25,
++      25
++    ],
++    "identity_failures": [],
++    "readout_errors": [
++      null,
++      null,
++      null
++    ],
++    "control": null
++  },
++  "full_model_structural_metadata": {
++    "num_layers": 34,
++    "hidden_size": 2560,
++    "vocab_size": 262208,
++    "attention_spans": [
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "global",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "global",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "global",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "global",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding",
++      "global",
++      "sliding",
++      "sliding",
++      "sliding",
++      "sliding"
++    ],
++    "upstream_source_blocks": [
++      0,
++      1,
++      2,
++      3,
++      4,
++      5,
++      6,
++      7,
++      8,
++      9,
++      10,
++      11,
++      12,
++      13,
++      14,
++      15,
++      16,
++      17,
++      18,
++      19,
++      20,
++      21,
++      22,
++      23,
++      24,
++      25,
++      26,
++      27,
++      28,
++      29,
++      30,
++      31,
++      32
++    ],
++    "upstream_target_block": 33,
++    "source_residuals": [
++      1,
++      2,
++      3,
++      4,
++      5,
++      6,
++      7,
++      8,
++      9,
++      10,
++      11,
++      12,
++      13,
++      14,
++      15,
++      16,
++      17,
++      18,
++      19,
++      20,
++      21,
++      22,
++      23,
++      24,
++      25,
++      26,
++      27,
++      28,
++      29,
++      30,
++      31,
++      32,
++      33
++    ],
++    "target_residual": 34,
++    "entry_residual": 0,
++    "device": "meta",
++    "weights_loaded": false
++  },
++  "checkpoint_header_audit": {
++    "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
++    "header_sha256": {
++      "model-00001-of-00002.safetensors": "db8cfcd5085f625253e6ccd7790b4a1bdeae18cb3586355492e783c661376663",
++      "model-00002-of-00002.safetensors": "5d4b4ecbeb8931ed4bef02926673cb407db949c750629d95420b5deee640f0de"
++    },
++    "parameters": {
++      "text": 3880263168,
++      "vision_and_projector": 419816304
++    },
++    "fp32_tensor_gib": {
++      "text": 14.455106735229492,
++      "vision_and_projector": 1.5639376044273376
++    },
++    "basis": "tensor shapes from safetensors headers only; tensor bytes were not read"
++  },
++  "full_checkpoint_gates_2_3_4": "unexecuted",
++  "cuda": "unexecuted",
++  "estimator_rewrite": "not started; gated by full-checkpoint gates 1-4"
++}
+diff --git a/research/records/CUDA-WS-A-2026-09-09/development-summary.log b/research/records/CUDA-WS-A-2026-09-09/development-summary.log
+new file mode 100644
+index 0000000..fb64eec
+--- /dev/null
++++ b/research/records/CUDA-WS-A-2026-09-09/development-summary.log
+@@ -0,0 +1 @@
++{"small_model_gate2": [{"tokens": 64, "normal_max_abs_by_layer": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.0}, "broken_mask_max_abs_by_layer": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.0}}, {"tokens": 1400, "normal_max_abs_by_layer": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.0}, "broken_mask_max_abs_by_layer": {"0": 0.0, "1": 0.15618959069252014, "2": 0.1424400806427002, "3": 0.21255925297737122}}], "readout_max_error": 1.4901161193847656e-08, "full_model_meta": {"num_layers": 34, "hidden_size": 2560, "vocab_size": 262208, "attention_spans": ["sliding", "sliding", "sliding", "sliding", "sliding", "global", "sliding", "sliding", "sliding", "sliding", "sliding", "global", "sliding", "sliding", "sliding", "sliding", "sliding", "global", "sliding", "sliding", "sliding", "sliding", "sliding", "global", "sliding", "sliding", "sliding", "sliding", "sliding", "global", "sliding", "sliding", "sliding", "sliding"], "upstream_source_blocks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], "upstream_target_block": 33, "source_residuals": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33], "target_residual": 34, "entry_residual": 0, "device": "meta", "weights_loaded": false}, "weights_loaded": false}
+diff --git a/research/records/CUDA-WS-A-2026-09-09/measure_development.py b/research/records/CUDA-WS-A-2026-09-09/measure_development.py
+new file mode 100644
+index 0000000..f8b8300
+--- /dev/null
++++ b/research/records/CUDA-WS-A-2026-09-09/measure_development.py
+@@ -0,0 +1,100 @@
++"""Reproduce small-model evidence and a metadata-only full-shape check; never load weights."""
++from pathlib import Path
++import hashlib
++import importlib.metadata
++import json
++import runpy
++from unittest.mock import patch
++
++import torch
++from transformers import Gemma3ForCausalLM, Gemma3TextConfig
++
++from local_llm_lab.arch_torch import TorchArchitectureView
++from research.acceptance.torch_seam import decode_readout_probe, structural_report
++
++ROOT = Path(__file__).resolve().parents[3]
++RECORD = Path(__file__).resolve().parent
++SNAPSHOT = Path('/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767')
++
++def main():
++    torch.set_num_threads(1)
++    torch.use_deterministic_algorithms(True)
++    make_model = runpy.run_path(str(ROOT / 'tests/test_arch_torch.py'))['make_model']
++    view = TorchArchitectureView.from_model(make_model())
++    observed = []
++    for length in (64, 1400):
++        ids = torch.arange(length) % view.vocab_size
++        normal = view.residual_source_agreement(ids, range(view.num_layers + 1))
++        original = view._observe_forward
++        def broken(ids, cache=None):
++            entry, masks = original(ids, cache)
++            for index in masks:
++                masks[index] = {**masks[index], 'attention_mask': masks[1]['attention_mask']}
++            return entry, masks
++        with patch.object(view, '_observe_forward', broken):
++            control = view.residual_source_agreement(ids, range(view.num_layers + 1))
++        assert max(normal.values()) == 0.0
++        assert (max(control.values()) > 0.0) == (length > view.config.sliding_window)
++        observed.append({'tokens': length, 'normal_max_abs_by_layer': normal,
++                         'broken_mask_max_abs_by_layer': control})
++    baseline = decode_readout_probe(view, [1, 5, 9, 3], steps=3)
++    tolerance = max(baseline['readout_errors'])
++    controls = [decode_readout_probe(view, [1, 5, 9, 3], steps=3, control=control)
++                for control in ('skew_after_prefill', 'corrupt_residual')]
++    assert not baseline['identity_failures']
++    assert controls[0]['readout_errors'][0] <= tolerance
++    assert min(controls[0]['readout_errors'][1:]) > tolerance
++    assert min(controls[1]['readout_errors']) > tolerance
++    small_structure = structural_report(view)
++    del view
++    config_data = json.loads((SNAPSHOT / 'config.json').read_text())
++    config = Gemma3TextConfig(**config_data['text_config'])
++    with torch.device('meta'):
++        meta_model = Gemma3ForCausalLM(config)
++    full_structure = structural_report(TorchArchitectureView.from_model(meta_model))
++    assert (full_structure['num_layers'], full_structure['hidden_size']) == (34, 2560)
++    full_structure['device'] = 'meta'
++    full_structure['weights_loaded'] = False
++    parameters = {'text': 0, 'vision_and_projector': 0}
++    headers = {}
++    for path in sorted(SNAPSHOT.glob('*.safetensors')):
++        with path.open('rb') as stream:
++            size = int.from_bytes(stream.read(8), 'little')
++            raw = stream.read(size)
++        headers[path.name] = hashlib.sha256(raw).hexdigest()
++        for key, tensor in json.loads(raw).items():
++            if key == '__metadata__':
++                continue
++            count = 1
++            for dimension in tensor['shape']:
++                count *= dimension
++            category = 'text' if key.startswith('language_model.') else 'vision_and_projector'
++            parameters[category] += count
++    report = {
++        'source_commit': 'a639cae',
++        'scope': 'small randomly initialized real HF model; not full-checkpoint acceptance',
++        'device': 'cpu', 'dtype': 'float32', 'attention': 'eager',
++        'threads': 1, 'deterministic_algorithms': True,
++        'versions': {name: importlib.metadata.version(name) for name in
++                     ('torch', 'transformers', 'jlens', 'numpy', 'pytest')},
++        'small_model_structure': small_structure,
++        'development_gate_2': observed,
++        'development_gates_3_and_4': {'baseline': baseline, 'controls': controls,
++            'observed_max_error': tolerance,
++            'threshold_scope': 'observed development distribution only; no checkpoint/CUDA bound'},
++        'missing_readout': decode_readout_probe(TorchArchitectureView.from_model(make_model()),
++                            [1, 5, 9, 3], steps=3, readout=False),
++        'full_model_structural_metadata': full_structure,
++        'checkpoint_header_audit': {'path': str(SNAPSHOT), 'header_sha256': headers,
++            'parameters': parameters,
++            'fp32_tensor_gib': {k: value * 4 / 2**30 for k, value in parameters.items()},
++            'basis': 'tensor shapes from safetensors headers only; tensor bytes were not read'},
++        'full_checkpoint_gates_2_3_4': 'unexecuted', 'cuda': 'unexecuted',
++        'estimator_rewrite': 'not started; gated by full-checkpoint gates 1-4',
++    }
++    (RECORD / 'development-results.json').write_text(json.dumps(report, indent=2) + '\n')
++    print(json.dumps({'small_model_gate2': observed, 'readout_max_error': tolerance,
++                      'full_model_meta': full_structure, 'weights_loaded': False}))
++
++if __name__ == '__main__':
++    main()
+diff --git a/research/records/CUDA-WS-A-2026-09-09/verification.json b/research/records/CUDA-WS-A-2026-09-09/verification.json
+new file mode 100644
+index 0000000..785a3cb
+--- /dev/null
++++ b/research/records/CUDA-WS-A-2026-09-09/verification.json
+@@ -0,0 +1,103 @@
++{
++  "schema_version": 1,
++  "base_commit": "2b7905f",
++  "source_commit": "a639cae",
++  "branch": "codex/cuda-torch-seam",
++  "upstream": {
++    "repository": "https://github.com/anthropics/jacobian-lens",
++    "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
++    "license": "Apache-2.0",
++    "reuse": [
++      "jlens.hooks.ActivationRecorder",
++      "jlens.hf._find_layout",
++      "jlens.hf.HFLensModel.unembed",
++      "jlens.fitting._check_layer_indices"
++    ]
++  },
++  "tests": {
++    "passed": 85,
++    "failed": 0,
++    "cpu_threads": 1,
++    "deterministic_algorithms": true,
++    "files": [
++      "tests/test_arch_base.py",
++      "tests/test_arch_observation.py",
++      "tests/test_arch_torch.py",
++      "tests/test_torch_capture.py"
++    ],
++    "real_mlx_imports": "blocked; only explicit test doubles permitted",
++    "command": "PYTHONPATH=src:. .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_arch_base.py tests/test_arch_observation.py tests/test_arch_torch.py tests/test_torch_capture.py",
++    "actual_execution": "same pytest arguments through a Python wrapper setting CPU threads, deterministic algorithms, and the MLX import barrier",
++    "verification_harness_initial_failure": "a MetaPathFinder raising in find_spec prevented Transformers availability detection; switched to an actual-import guard before final successful run"
++  },
++  "lint": "Ruff passed on all changed source/tests; git diff --check passed",
++  "source_sha256": {
++    "src/local_llm_lab/arch.py": "5cfcca8e341e52d08ea76908770ee450c674fb9144486e41e5644d333edf8722",
++    "src/local_llm_lab/arch_base.py": "df7bb2b4fac8286a24656b88ef05b5a82ba8f37505165882262be5fd916e5dbe",
++    "src/local_llm_lab/arch_torch.py": "0a8a20dd55b768e51dbc84d853e0200fa773da4ee976010f75a494746c96285e",
++    "src/local_llm_lab/torch_capture.py": "8f88b2c98f52c8652689af56309e3a2b0ce09e40f557a04cfcd189fb0710a74d",
++    "research/acceptance/torch_seam.py": "c43287fcbbc55894e8f9f2020b0d4b6ed48e6d90c5e07da1c932cba1b9ecd7e0",
++    "tests/test_arch_base.py": "b90487e18c4a803029d2147aae7d5ac30b979283888ac5c74f47b75cdbc618b8",
++    "tests/test_arch_observation.py": "ade018e35e84ce71c69665889d9dbfefd438e7dcebb7a6750f690c960084ddda",
++    "tests/test_arch_torch.py": "a33369e858c581ddb16ca72b5c0adb0f71a92f091f4b5fab621fc0324823569c",
++    "tests/test_torch_capture.py": "c338cabe895791f1b718f9005337654a15a333ff6ecc92f0cbf3714da814a923"
++  },
++  "development_measurement": {
++    "path": "development-results.json",
++    "sha256": "e182ee12de3722f6d75e576caf0f5f6b294baa5fe170ce0d725551a3a581188c"
++  },
++  "gates": [
++    {
++      "gate": 1,
++      "status": "structural_pass_on_meta",
++      "source_commit": "a639cae",
++      "num_layers": 34,
++      "hidden_size": 2560,
++      "weights_loaded": false,
++      "basis": "official checkpoint config instantiated as real HF model on meta; upstream layer numbering pinned"
++    },
++    {
++      "gate": 2,
++      "status": "full_checkpoint_unexecuted",
++      "development_status": "passed_small_cpu_model",
++      "tokens": [
++        64,
++        1400
++      ],
++      "max_abs_error": 0.0,
++      "negative_control": "zero at64; nonzero at1400"
++    },
++    {
++      "gate": 3,
++      "status": "full_checkpoint_unexecuted",
++      "development_status": "passed_small_cpu_model",
++      "decode_steps": 3
++    },
++    {
++      "gate": 4,
++      "status": "full_checkpoint_unexecuted",
++      "development_status": "both_controls_detected_on_small_cpu_model",
++      "tolerance_scope": "development fixture only; not checkpoint or CUDA"
++    },
++    {
++      "gate": 5,
++      "status": "unexecuted",
++      "implementation": "not_started",
++      "reason": "graph-once estimator explicitly waits for full-checkpoint gates1-4"
++    }
++  ],
++  "unexecuted": [
++    "full-checkpoint CPU fp32 gates2-4",
++    "native MLX regression suite",
++    "cross-backend golden trajectory/logit comparison",
++    "CUDA and MPS",
++    "graph-once estimator and sharding",
++    "2816-token target memory measurement"
++  ],
++  "resource_blocker": {
++    "text_fp32_tensor_gib": 14.455106735229492,
++    "reference_r47_cap_gib": 10.656005859375,
++    "basis": "safetensors headers only; before activations, retained residuals, eager vocabulary logits, load copies",
++    "decision_needed": "applicable CPU memory/window ruling or defer full-checkpoint validation to a larger host"
++  }
++}
+diff --git a/src/local_llm_lab/arch.py b/src/local_llm_lab/arch.py
+index 8283690..f49507c 100644
+--- a/src/local_llm_lab/arch.py
++++ b/src/local_llm_lab/arch.py
+@@ -13,37 +13,23 @@ from collections.abc import Callable, Sequence
+ from contextlib import AbstractContextManager
+ from typing import Any, Literal
+ 
++from .arch_base import (
++    _ATTENTION_KIND,
++    _LINEAR_ATTENTION_KIND,
++    _TEXT_MODULE_MEMBERS,
++    _TEXT_MODULE_PATHS,
++    LORA_POLICIES,
++    ArchitectureViewBase,
++    _validate_hidden_span,
++    _validate_scored_position,
++)
++
+ __all__ = ["ArchitectureView", "LORA_POLICIES", "NativeCapture"]
+ 
+ _ACTIVE_CAPTURES: set[int] = set()
+ 
+-LORA_POLICIES = frozenset({"auto", "attention+mlp", "all-linear"})
+-
+-_TEXT_MODULE_PATHS = ((), ("model",), ("language_model", "model"))
+-_TEXT_MODULE_MEMBERS = ("embed_tokens", "layers", "norm")
+-_ATTENTION_KIND = "attention"
+-_LINEAR_ATTENTION_KIND = "linear_attention"
+-_DENSE_LORA_SUFFIXES = (
+-    "q_proj",
+-    "k_proj",
+-    "v_proj",
+-    "o_proj",
+-    "gate_proj",
+-    "up_proj",
+-    "down_proj",
+-)
+-_LINEAR_ATTENTION_LORA_SUFFIXES = (
+-    "in_proj_qkvz",
+-    "in_proj_ba",
+-    "in_proj_qkv",
+-    "in_proj_z",
+-    "in_proj_b",
+-    "in_proj_a",
+-    "out_proj",
+-)
+-
+ 
+-class ArchitectureView:
++class ArchitectureView(ArchitectureViewBase):
+     """A model-type-independent view of one decoder's embeddings, blocks, and readout."""
+ 
+     def __init__(self, model: Any, text_module: Any) -> None:
+@@ -386,58 +372,16 @@ class ArchitectureView:
+                 return False
+         return True
+ 
+-    def lora_targets(self, policy: str | tuple[str, ...]) -> tuple[str, ...]:
+-        """Resolve a policy to explicit, existing linear-module paths."""
+-        modules = self._linear_modules()
+-        available = {path for _, path, _ in modules}
+-        if isinstance(policy, tuple):
+-            if not policy:
+-                raise ValueError("explicit LoRA targets must not be empty")
+-            if len(set(policy)) != len(policy):
+-                raise ValueError("explicit LoRA targets must not contain duplicates")
+-            unknown = tuple(path for path in policy if path not in available)
+-            if unknown:
+-                raise ValueError(f"unknown LoRA target(s): {', '.join(unknown)}")
+-            return policy
+-        if policy not in LORA_POLICIES:
+-            raise ValueError(
+-                f"unknown LoRA policy {policy!r}; expected one of {sorted(LORA_POLICIES)}"
+-            )
+-        if policy == "auto":
+-            hybrid = any(
+-                self.layer_kind(index) == _LINEAR_ATTENTION_KIND
+-                for index in range(self.num_layers)
+-            )
+-            policy = "all-linear" if hybrid else "attention+mlp"
+-        suffixes = list(_DENSE_LORA_SUFFIXES)
+-        if policy == "all-linear":
+-            suffixes.extend(_LINEAR_ATTENTION_LORA_SUFFIXES)
+-        selected: list[str] = []
+-        for suffix in suffixes:
+-            for block_index, path, _ in modules:
+-                if path.rsplit(".", 1)[-1] != suffix:
+-                    continue
+-                if suffix in _LINEAR_ATTENTION_LORA_SUFFIXES and self.layer_kind(
+-                    block_index
+-                ) != _LINEAR_ATTENTION_KIND:
+-                    continue
+-                if path not in selected:
+-                    selected.append(path)
+-        if not selected:
+-            raise ValueError(f"LoRA policy {policy!r} matched no linear modules")
+-        return tuple(selected)
+-
+-    def lora_parameter_count(self, keys: tuple[str, ...], rank: int) -> int:
+-        """Count implied LoRA A/B parameters without changing or dequantizing weights."""
+-        if isinstance(rank, bool) or not isinstance(rank, int) or rank <= 0:
+-            raise ValueError(f"LoRA rank must be a positive integer; got {rank!r}")
+-        resolved = set(self.lora_targets(tuple(keys)))
+-        total = 0
+-        for _, path, module in self._linear_modules():
+-            if path in resolved:
+-                output_size, input_size = _linear_dimensions(module)
+-                total += rank * (input_size + output_size)
+-        return total
++
++    @staticmethod
++    def _linear_types() -> tuple[type, ...]:
++        import mlx.nn as nn
++
++        return nn.Linear, nn.QuantizedLinear
++
++    @staticmethod
++    def _linear_dimensions(module: Any) -> tuple[int, int]:
++        return _linear_dimensions(module)
+ 
+     def residuals(self, ids: Any, layers: Sequence[int]) -> dict[int, Any]:
+         """Capture requested residual indices in one pass, stopping at the deepest index."""
+@@ -668,69 +612,6 @@ class ArchitectureView:
+ 
+         return apply_tail
+ 
+-    def _cache_entries(self, cache: list[Any] | None) -> list[Any | None]:
+-        """One cache entry per block, or one ``None`` per block when running uncached."""
+-        if cache is None:
+-            return [None] * self.num_layers
+-        entries = list(cache)
+-        if len(entries) != self.num_layers:
+-            raise ValueError(
+-                f"cache must contain one entry per block; got {len(entries)} "
+-                f"for {self.num_layers}"
+-            )
+-        return entries
+-
+-    def _first_cache(self, cache: list[Any | None], kind: str) -> Any | None:
+-        for index, entry in enumerate(cache):
+-            if self.layer_kind(index) == kind:
+-                return entry
+-        return None
+-
+-    def _linear_modules(self) -> list[tuple[int, str, Any]]:
+-        """Every linear projection per block, seen through adapter wrappers.
+-
+-        Loading a policy with an adapter (``mlx_lm.load(..., adapter_path=...)``) replaces
+-        each projection with a ``LoRALinear``: a plain ``nn.Module`` that keeps the original at
+-        ``.linear``. The wrapper is not a linear type, and its child sits at ``<path>.linear``,
+-        whose suffix matches no LoRA target. So a wrapper is reported under *its own* path with
+-        the *base* module, and the base is not reported a second time. Paths therefore stay
+-        identical with or without an adapter, which adapter comparison and provenance rely on,
+-        and dimension readers receive the module that owns ``weight`` and ``bits``.
+-        """
+-        import mlx.nn as nn
+-
+-        linear_types = (nn.Linear, nn.QuantizedLinear)
+-        found: list[tuple[int, str, Any]] = []
+-        for index, block in enumerate(self.blocks):
+-            if not callable(getattr(block, "named_modules", None)):
+-                continue
+-            entries = [(path, module) for path, module in block.named_modules() if path]
+-            wrapped: dict[str, Any] = {}
+-            for path, module in entries:
+-                if isinstance(module, linear_types):
+-                    continue
+-                base = getattr(module, "linear", None)
+-                if isinstance(base, linear_types):
+-                    wrapped[path] = base
+-            for path, module in entries:
+-                if path in wrapped:
+-                    found.append((index, path, wrapped[path]))
+-                    continue
+-                if any(path.startswith(prefix + ".") for prefix in wrapped):
+-                    continue
+-                if isinstance(module, linear_types):
+-                    found.append((index, path, module))
+-        return found
+-
+-    def _validate_block_index(self, index: int) -> int:
+-        if (
+-            isinstance(index, bool)
+-            or not isinstance(index, int)
+-            or not 0 <= index < self.num_layers
+-        ):
+-            raise ValueError(f"block index must lie in [0, {self.num_layers - 1}]; got {index!r}")
+-        return index
+-
+ 
+ def _mask_shape(mask: Any) -> tuple[int, ...] | None:
+     """The mask's shape for the record, or ``None`` where the route produced no array.
+@@ -785,39 +666,6 @@ def _cache_offset(entry: Any | None) -> int:
+     return offset
+ 
+ 
+-def _validate_scored_position(position: Any, length: int) -> int:
+-    """Resolve the scored row, allowing Python's negative indexing from the end."""
+-    if isinstance(position, bool) or not isinstance(position, int):
+-        raise ValueError(f"scored position must be an integer; got {position!r}")
+-    if not -length <= position < length:
+-        raise ValueError(
+-            f"scored position must lie in [{-length}, {length - 1}]; got {position}"
+-        )
+-    return position
+-
+-
+-def _validate_hidden_span(span: Any, total: int) -> tuple[int, int]:
+-    """Check one half-open ``(start, end)`` span against the key range it must lie in.
+-
+-    An empty or inverted span is rejected rather than ignored: it would hide nothing while the
+-    arm still reported itself as masked, which is the failure mode that reads as a null.
+-    """
+-    try:
+-        pair = tuple(span)
+-    except TypeError as error:
+-        raise ValueError(f"hidden span must be a (start, end) pair; got {span!r}") from error
+-    if len(pair) != 2 or any(
+-        isinstance(value, bool) or not isinstance(value, int) for value in pair
+-    ):
+-        raise ValueError(f"hidden span must be a pair of integers; got {span!r}")
+-    start, end = pair
+-    if not 0 <= start < end <= total:
+-        raise ValueError(
+-            f"hidden span must satisfy 0 <= start < end <= {total}; got {span!r}"
+-        )
+-    return start, end
+-
+-
+ def _embedding_dimensions(embedding: Any) -> tuple[int, int]:
+     quantized_vocab = getattr(embedding, "num_embeddings", None)
+     quantized_hidden = getattr(embedding, "dims", None)
+diff --git a/src/local_llm_lab/arch_base.py b/src/local_llm_lab/arch_base.py
+new file mode 100644
+index 0000000..056278f
+--- /dev/null
++++ b/src/local_llm_lab/arch_base.py
+@@ -0,0 +1,192 @@
++"""Backend-neutral architecture contracts, shared without importing an array runtime.
++
++Residual layer L is the output of block L-1; layer zero is the model's observed
++entry residual and the final residual is before the installed final norm.
++Backend views supply their own linear types and physical weight dimensions.
++"""
++
++from __future__ import annotations
++
++from typing import Any
++
++LORA_POLICIES = frozenset({"auto", "attention+mlp", "all-linear"})
++
++_TEXT_MODULE_PATHS = ((), ("model",), ("language_model", "model"))
++_TEXT_MODULE_MEMBERS = ("embed_tokens", "layers", "norm")
++_ATTENTION_KIND = "attention"
++_LINEAR_ATTENTION_KIND = "linear_attention"
++_DENSE_LORA_SUFFIXES = (
++    "q_proj",
++    "k_proj",
++    "v_proj",
++    "o_proj",
++    "gate_proj",
++    "up_proj",
++    "down_proj",
++)
++_LINEAR_ATTENTION_LORA_SUFFIXES = (
++    "in_proj_qkvz",
++    "in_proj_ba",
++    "in_proj_qkv",
++    "in_proj_z",
++    "in_proj_b",
++    "in_proj_a",
++    "out_proj",
++)
++
++
++
++class ArchitectureViewBase:
++    """Index, cache-cardinality and LoRA contracts shared by backend views.
++
++    Subclasses own ``blocks``, ``num_layers`` and ``layer_kind`` and provide
++    ``_linear_types()`` and ``_linear_dimensions(module)``. Traversal reports
++    adapter wrappers under the same paths as their underlying projections.
++    """
++
++    def lora_targets(self, policy: str | tuple[str, ...]) -> tuple[str, ...]:
++        """Resolve a policy to explicit, existing linear-module paths."""
++        modules = self._linear_modules()
++        available = {path for _, path, _ in modules}
++        if isinstance(policy, tuple):
++            if not policy:
++                raise ValueError("explicit LoRA targets must not be empty")
++            if len(set(policy)) != len(policy):
++                raise ValueError("explicit LoRA targets must not contain duplicates")
++            unknown = tuple(path for path in policy if path not in available)
++            if unknown:
++                raise ValueError(f"unknown LoRA target(s): {', '.join(unknown)}")
++            return policy
++        if policy not in LORA_POLICIES:
++            raise ValueError(
++                f"unknown LoRA policy {policy!r}; expected one of {sorted(LORA_POLICIES)}"
++            )
++        if policy == "auto":
++            hybrid = any(
++                self.layer_kind(index) == _LINEAR_ATTENTION_KIND
++                for index in range(self.num_layers)
++            )
++            policy = "all-linear" if hybrid else "attention+mlp"
++        suffixes = list(_DENSE_LORA_SUFFIXES)
++        if policy == "all-linear":
++            suffixes.extend(_LINEAR_ATTENTION_LORA_SUFFIXES)
++        selected: list[str] = []
++        for suffix in suffixes:
++            for block_index, path, _ in modules:
++                if path.rsplit(".", 1)[-1] != suffix:
++                    continue
++                if suffix in _LINEAR_ATTENTION_LORA_SUFFIXES and self.layer_kind(
++                    block_index
++                ) != _LINEAR_ATTENTION_KIND:
++                    continue
++                if path not in selected:
++                    selected.append(path)
++        if not selected:
++            raise ValueError(f"LoRA policy {policy!r} matched no linear modules")
++        return tuple(selected)
++
++    def lora_parameter_count(self, keys: tuple[str, ...], rank: int) -> int:
++        """Count implied LoRA A/B parameters without changing or dequantizing weights."""
++        if isinstance(rank, bool) or not isinstance(rank, int) or rank <= 0:
++            raise ValueError(f"LoRA rank must be a positive integer; got {rank!r}")
++        resolved = set(self.lora_targets(tuple(keys)))
++        total = 0
++        for _, path, module in self._linear_modules():
++            if path in resolved:
++                output_size, input_size = self._linear_dimensions(module)
++                total += rank * (input_size + output_size)
++        return total
++
++    def _cache_entries(self, cache: list[Any] | None) -> list[Any | None]:
++        """One cache entry per block, or one ``None`` per block when running uncached."""
++        if cache is None:
++            return [None] * self.num_layers
++        entries = list(cache)
++        if len(entries) != self.num_layers:
++            raise ValueError(
++                f"cache must contain one entry per block; got {len(entries)} "
++                f"for {self.num_layers}"
++            )
++        return entries
++
++    def _first_cache(self, cache: list[Any | None], kind: str) -> Any | None:
++        for index, entry in enumerate(cache):
++            if self.layer_kind(index) == kind:
++                return entry
++        return None
++
++    def _linear_modules(self) -> list[tuple[int, str, Any]]:
++        """Every linear projection per block, seen through adapter wrappers.
++
++        Loading a policy with an adapter (``mlx_lm.load(..., adapter_path=...)``) replaces
++        each projection with a ``LoRALinear``: a plain ``nn.Module`` that keeps the original at
++        ``.linear``. The wrapper is not a linear type, and its child sits at ``<path>.linear``,
++        whose suffix matches no LoRA target. So a wrapper is reported under *its own* path with
++        the *base* module, and the base is not reported a second time. Paths therefore stay
++        identical with or without an adapter, which adapter comparison and provenance rely on,
++        and dimension readers receive the module that owns ``weight`` and ``bits``.
++        """
++        linear_types = self._linear_types()
++        found: list[tuple[int, str, Any]] = []
++        for index, block in enumerate(self.blocks):
++            if not callable(getattr(block, "named_modules", None)):
++                continue
++            entries = [(path, module) for path, module in block.named_modules() if path]
++            wrapped: dict[str, Any] = {}
++            for path, module in entries:
++                if isinstance(module, linear_types):
++                    continue
++                base = getattr(module, "linear", None)
++                if isinstance(base, linear_types):
++                    wrapped[path] = base
++            for path, module in entries:
++                if path in wrapped:
++                    found.append((index, path, wrapped[path]))
++                    continue
++                if any(path.startswith(prefix + ".") for prefix in wrapped):
++                    continue
++                if isinstance(module, linear_types):
++                    found.append((index, path, module))
++        return found
++
++    def _validate_block_index(self, index: int) -> int:
++        if (
++            isinstance(index, bool)
++            or not isinstance(index, int)
++            or not 0 <= index < self.num_layers
++        ):
++            raise ValueError(f"block index must lie in [0, {self.num_layers - 1}]; got {index!r}")
++        return index
++
++
++def _validate_scored_position(position: Any, length: int) -> int:
++    """Resolve the scored row, allowing Python's negative indexing from the end."""
++    if isinstance(position, bool) or not isinstance(position, int):
++        raise ValueError(f"scored position must be an integer; got {position!r}")
++    if not -length <= position < length:
++        raise ValueError(
++            f"scored position must lie in [{-length}, {length - 1}]; got {position}"
++        )
++    return position
++
++
++def _validate_hidden_span(span: Any, total: int) -> tuple[int, int]:
++    """Check one half-open ``(start, end)`` span against the key range it must lie in.
++
++    An empty or inverted span is rejected rather than ignored: it would hide nothing while the
++    arm still reported itself as masked, which is the failure mode that reads as a null.
++    """
++    try:
++        pair = tuple(span)
++    except TypeError as error:
++        raise ValueError(f"hidden span must be a (start, end) pair; got {span!r}") from error
++    if len(pair) != 2 or any(
++        isinstance(value, bool) or not isinstance(value, int) for value in pair
++    ):
++        raise ValueError(f"hidden span must be a pair of integers; got {span!r}")
++    start, end = pair
++    if not 0 <= start < end <= total:
++        raise ValueError(
++            f"hidden span must satisfy 0 <= start < end <= {total}; got {span!r}"
++        )
++    return start, end
+diff --git a/src/local_llm_lab/arch_torch.py b/src/local_llm_lab/arch_torch.py
+new file mode 100644
+index 0000000..df8769e
+--- /dev/null
++++ b/src/local_llm_lab/arch_torch.py
+@@ -0,0 +1,403 @@
++"""Torch implementation of the existing residual interface, observed through HF hooks.
++
++Discovery and native readout delegate to jacobian-lens. Model loading, parameter freezing,
++attention-kernel selection and precision remain the caller's decisions. Importing this module
++never imports MLX or selects CUDA/MPS.
++"""
++
++from __future__ import annotations
++
++import copy
++import inspect
++from collections.abc import Callable, Sequence
++from typing import Any
++
++import torch
++from jlens import hf
++from torch.utils._pytree import tree_leaves
++from transformers.cache_utils import DynamicCache
++
++from local_llm_lab.arch_base import (
++    _TEXT_MODULE_MEMBERS,
++    _TEXT_MODULE_PATHS,
++    ArchitectureViewBase,
++    _validate_scored_position,
++)
++from local_llm_lab.torch_capture import TorchCapture
++
++__all__ = ["TorchArchitectureView", "TorchCapture"]
++
++
++def _promote_bundle(value, dtype):
++    """Promote additive/rotary values with diagnostic arithmetic; preserve Boolean predicates."""
++    if torch.is_tensor(value):
++        return value.to(dtype) if value.is_floating_point() else value
++    if isinstance(value, dict):
++        return {key: _promote_bundle(item, dtype) for key, item in value.items()}
++    if isinstance(value, tuple):
++        return tuple(_promote_bundle(item, dtype) for item in value)
++    return value
++
++
++def _call_promoted(module, h, kwargs):
++    """MLX promotes a mixed-precision matmul; torch requires explicit matching operands.
++
++    Use torch's stateless call with only this module's promoted parameters/buffers. Native
++    weights are never converted in place; the temporary diagnostic workspace is per block,
++    not a second full model. Gradients through the hidden input remain available.
++    """
++    replacements = {
++        name: value.to(h.dtype)
++        for name, value in (*module.named_parameters(), *module.named_buffers())
++        if value.is_floating_point() and value.dtype != h.dtype
++    }
++    if replacements:
++        return torch.func.functional_call(module, replacements, (h,), kwargs)
++    return module(h, **kwargs)
++
++
++class _CacheEntry:
++    """One layer's view of a shared HF cache; no snapshot/reuse state is promised."""
++
++    def __init__(self, cache, index):
++        self.cache, self.index = cache, index
++
++    @property
++    def offset(self):
++        return int(self.cache.get_seq_length(self.index))
++
++    def is_trimmable(self):
++        # A sliding cache discards old keys; crop's existence cannot recover them.
++        return callable(getattr(self.cache, "crop", None)) and not any(
++            getattr(layer, "is_sliding", False) for layer in self.cache.layers
++        )
++
++    def crop(self, tokens_to_remove):
++        if not self.is_trimmable():
++            raise ValueError("sliding cache cannot guarantee prefix trimming")
++        self.cache.crop(tokens_to_remove)
++
++
++class TorchArchitectureView(ArchitectureViewBase):
++    """The ArchitectureView contract on an existing HF model, without loading or mutating it."""
++
++    def __init__(self, model: Any, text_module: Any) -> None:
++        self.model, self.text_module = model, text_module
++        try:
++            layout = hf._find_layout(model)
++        except ValueError:
++            if not all(hasattr(text_module, name) for name in _TEXT_MODULE_MEMBERS):
++                raise
++            layout = hf.Layout("")
++        else:
++            if hf._resolve_attr_path(model, layout.path) is not text_module:
++                raise ValueError("explicit text module disagrees with upstream discovery")
++        self.layout = layout
++        self.blocks = list(getattr(text_module, layout.layers))
++        self.layers = self.blocks
++        if not self.blocks:
++            raise ValueError("text module must contain at least one decoder block")
++        self.num_layers = len(self.blocks)
++        self._embed_tokens = getattr(text_module, layout.embed)
++        self._final_norm = getattr(text_module, layout.norm)
++        self.vocab_size, self.hidden_size = self._embed_tokens.weight.shape
++        self._lm_head = getattr(model, layout.lm_head, None)
++        if self._lm_head is None:
++            self._lm_head = getattr(getattr(model, "language_model", None), layout.lm_head, None)
++        if self._lm_head is None:
++            raise ValueError("could not locate the native unembedding")
++        if tuple(self._lm_head.weight.shape) != (self.vocab_size, self.hidden_size):
++            raise ValueError("lm_head dimensions must be (vocab_size, hidden_size)")
++        self._unembed_module = self._lm_head
++        self.tie_word_embeddings = self._lm_head.weight is self._embed_tokens.weight
++        config = getattr(text_module, "config", model.config)
++        self.config = config.get_text_config() if hasattr(config, "get_text_config") else config
++        if any(kind == "linear_attention" for kind in getattr(self.config, "layer_types", ())):
++            raise NotImplementedError("recurrent architectures remain on the MLX path")
++        if any(bool(getattr(block, "is_linear", False)) for block in self.blocks):
++            raise NotImplementedError("recurrent architectures remain on the MLX path")
++        self._logit_softcap = getattr(self.config, "final_logit_softcapping", None)
++        self._observing = False
++
++    @classmethod
++    def from_model(cls, model: Any) -> TorchArchitectureView:
++        try:
++            layout = hf._find_layout(model)
++        except ValueError:
++            # The repository's prior structural convention is a fallback, never an alternative
++            # selected by model name. Upstream already supports more layouts than it does.
++            for path in _TEXT_MODULE_PATHS:
++                candidate = model
++                for member in path:
++                    candidate = getattr(candidate, member, None)
++                if candidate is not None and all(
++                    hasattr(candidate, member) for member in _TEXT_MODULE_MEMBERS
++                ):
++                    return cls(model, candidate)
++            raise
++        return cls(model, hf._resolve_attr_path(model, layout.path))
++
++    @staticmethod
++    def _linear_types():
++        return (torch.nn.Linear,)
++
++    @staticmethod
++    def _linear_dimensions(module):
++        shape = tuple(module.weight.shape)
++        if len(shape) != 2 or min(shape) <= 0:
++            raise ValueError(f"linear weight must have positive rank-2 shape; got {shape}")
++        return shape
++
++    def layer_kind(self, index: int) -> str:
++        self._validate_block_index(index)
++        return "attention"
++
++    def attention_span(self, index: int) -> str | None:
++        index = self._validate_block_index(index)
++        kinds = getattr(self.config, "layer_types", None)
++        if kinds is None:
++            return None
++        if len(kinds) != self.num_layers:
++            raise ValueError("config.layer_types must contain one entry per block")
++        return {"sliding_attention": "sliding", "full_attention": "global"}.get(kinds[index])
++
++    def _ids(self, ids):
++        ids = torch.as_tensor(ids, dtype=torch.long, device=self._embed_tokens.weight.device)
++        if ids.ndim == 1:
++            ids = ids.unsqueeze(0)
++        if ids.ndim != 2:
++            raise ValueError(f"token ids must have one or two dimensions; got {ids.ndim}")
++        return ids
++
++    def _unwrap_cache(self, cache):
++        if cache is None:
++            return None
++        if isinstance(cache, DynamicCache):
++            return cache
++        entries = self._cache_entries(cache)
++        if all(entry is None for entry in entries):
++            return None
++        if not all(isinstance(entry, _CacheEntry) for entry in entries):
++            raise ValueError("expected per-layer entries from make_cache")
++        shared = entries[0].cache
++        if any(entry.cache is not shared or entry.index != i for i, entry in enumerate(entries)):
++            raise ValueError("cache entries must belong to one native cache in layer order")
++        return shared
++
++    def make_cache(self) -> list[Any]:
++        cache = DynamicCache(config=self.config)
++        return [_CacheEntry(cache, index) for index in range(self.num_layers)]
++
++    @property
++    def cache_trimmable(self) -> bool:
++        return all(entry.is_trimmable() for entry in self.make_cache())
++
++    def _observe_forward(self, ids: Any, cache: Any = None):
++        """Capture the entry and opaque arguments actually dispatched to each native block.
++
++        This is a real text forward with pre-hooks, not a reconstruction of masks or RoPE.
++        Observation runs without autograd. A supplied cache is copied because the observing
++        forward must not advance the caller's cache before the hand-run forward uses it.
++        That extra forward and copy are explicit costs; no cache-reuse strategy is ported here.
++        """
++        if self._observing:
++            raise RuntimeError("nested architecture observation is unsupported")
++        self._observing = True
++        handles, entry, seen = [], [], {}
++        try:
++            for index, block in enumerate(self.blocks):
++                signature = inspect.signature(block.forward)
++
++                def observe(module, args, kwargs, *, index=index, signature=signature):
++                    bound = signature.bind(*args, **kwargs).arguments
++                    # Preserve extra native kwargs rather than invent a family-specific list.
++                    values = dict(bound)
++                    for key, parameter in signature.parameters.items():
++                        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
++                            values.update(values.pop(key, {}))
++                    hidden_key = next(iter(signature.parameters))
++                    hidden = values.pop(hidden_key)
++                    if index == 0:
++                        entry.append(hidden)
++                    values.pop("past_key_values", None)
++                    values.pop("past_key_value", None)
++                    seen[index] = values
++
++                handles.append(block.register_forward_pre_hook(observe, with_kwargs=True))
++            native_cache = self._unwrap_cache(cache)
++            observed_cache = None
++            if native_cache is not None:
++                # Deep-copy native cache structure, using detached clones for tensor leaves.
++                # torch forbids deepcopy(nonleaf_tensor); observation needs values, not its graph.
++                leaves = tree_leaves([vars(native_cache), *[vars(x) for x in native_cache.layers]])
++                memo = {id(x): x.detach().clone() for x in leaves if torch.is_tensor(x)}
++                observed_cache = copy.deepcopy(native_cache, memo)
++            with torch.no_grad():
++                self.text_module(
++                    input_ids=self._ids(ids),
++                    past_key_values=observed_cache,
++                    use_cache=observed_cache is not None,
++                )
++        finally:
++            for handle in handles:
++                handle.remove()
++            self._observing = False
++        if len(entry) != 1 or len(seen) != self.num_layers:
++            raise ValueError("native forward did not visit the complete discovered decoder")
++        return entry[0], seen
++
++    def embed(self, ids: Any) -> Any:
++        return self._observe_forward(self._ids(ids))[0].float()
++
++    def masks(
++        self,
++        h: Any,
++        cache: list[Any] | None,
++        *,
++        hidden_spans: Sequence[tuple[int, int]] | None = None,
++        record: dict[str, Any] | None = None,
++    ) -> dict[str, Any]:
++        if hidden_spans is not None:
++            raise ValueError("hidden_spans is deferred on a dense backbone")
++        stand_in = torch.zeros(
++            h.shape[:2], dtype=torch.long, device=self._embed_tokens.weight.device
++        )
++        _, observed = self._observe_forward(stand_in, cache)
++        if record is not None:
++            native_cache = self._unwrap_cache(cache)
++            mask = observed[0].get("attention_mask")
++            record.update(
++                attention_mask_route="model helper, unmodified",
++                hidden_spans=(),
++                query_tokens=int(h.shape[1]),
++                cache_offset=0 if native_cache is None else int(native_cache.get_seq_length()),
++                attention_mask_shape=None if mask is None else tuple(mask.shape),
++            )
++        return observed
++
++    def _block(self, index, h, masks, cache_i):
++        index = self._validate_block_index(index)
++        if index not in masks:
++            raise ValueError(f"missing mask for block {index}")
++        kwargs = dict(masks[index])
++        signature = inspect.signature(self.blocks[index].forward)
++        cache_key = (
++            "past_key_value" if "past_key_value" in signature.parameters else "past_key_values"
++        )
++        kwargs[cache_key] = cache_i.cache if cache_i is not None else None
++        kwargs = _promote_bundle(kwargs, h.dtype)
++        result = _call_promoted(self.blocks[index], h, kwargs)
++        return result if torch.is_tensor(result) else result[0]
++
++    def run_block(self, index: int, h: Any, masks: dict[str, Any], cache_i: Any | None) -> Any:
++        return self._block(index, h, masks, cache_i).float()
++
++    def final_norm(self, h: Any) -> Any:
++        return _call_promoted(self._final_norm, h, {}).float()
++
++    def native_readout(self, h: Any) -> Any:
++        # Reuse upstream's norm/device/dtype/softcap implementation without its constructor,
++        # whose parameter-freezing and tokenizer mutations are not a view's authority.
++        return hf.HFLensModel.unembed(self, h)
++
++    def unembed(self, h: Any) -> Any:
++        logits = _call_promoted(self._lm_head, h, {})
++        if self._logit_softcap is not None:
++            logits = self._logit_softcap * torch.tanh(logits / self._logit_softcap)
++        return logits.float()
++
++    def _wanted(self, layers):
++        wanted = sorted({int(layer) for layer in layers})
++        if not wanted or wanted[0] < 0 or wanted[-1] > self.num_layers:
++            raise ValueError(f"layers must be a non-empty sequence within [0, {self.num_layers}]")
++        return wanted
++
++    def residuals(self, ids: Any, layers: Sequence[int]) -> dict[int, Any]:
++        wanted = self._wanted(layers)
++        h, observed = self._observe_forward(self._ids(ids))
++        h = h.float()
++        captured = {0: h} if 0 in wanted else {}
++        for index in range(wanted[-1]):
++            h = self.run_block(index, h, observed, None)
++            if index + 1 in wanted:
++                captured[index + 1] = h
++        return captured
++
++    def native_residuals(self, ids: Any, layers: Sequence[int]) -> dict[int, Any]:
++        wanted = self._wanted(layers)
++        captured = {}
++
++        class Collect:
++            def residual(self, layer, offset, h):
++                captured[layer] = h
++
++            def output(self, offset, ids, logits):
++                pass
++
++        try:
++            with TorchCapture(self, Collect(), layers=wanted) as wrapped:
++                wrapped(self._ids(ids))
++            if set(captured) != set(wanted):
++                raise ValueError("native capture did not emit every requested residual")
++            return dict(captured)
++        finally:
++            captured.clear()
++
++    def residual_source_agreement(self, ids: Any, layers: Sequence[int]) -> dict[int, float]:
++        loop, native = self.residuals(ids, layers), self.native_residuals(ids, layers)
++        return {
++            layer: float((loop[layer].float() - native[layer].float()).abs().max())
++            for layer in sorted(loop)
++        }
++
++    def diagnostic_native_final_residual(self, ids: Any) -> Any:
++        h, observed = self._observe_forward(self._ids(ids))
++        for index in range(self.num_layers):
++            h = self._block(index, h, observed, None)
++        return self._final_norm(h)
++
++    def cached_logits(
++        self,
++        ids: Any,
++        cache: list[Any] | None,
++        *,
++        hidden_spans: Sequence[tuple[int, int]] | None = None,
++        position: int = -1,
++        record: dict[str, Any] | None = None,
++    ) -> Any:
++        entries = self._cache_entries(cache)
++        if hidden_spans is not None:
++            raise ValueError("hidden_spans is deferred on a dense backbone")
++        h, masks = self._observe_forward(self._ids(ids), entries)
++        h = h.float()
++        index = _validate_scored_position(position, int(h.shape[1]))
++        if record is not None:
++            mask = masks[0].get("attention_mask")
++            native_cache = self._unwrap_cache(entries)
++            record.update(
++                attention_mask_route="model helper, unmodified",
++                hidden_spans=(),
++                query_tokens=int(h.shape[1]),
++                cache_offset=0 if native_cache is None else int(native_cache.get_seq_length()),
++                attention_mask_shape=None if mask is None else tuple(mask.shape),
++            )
++        for block_index in range(self.num_layers):
++            h = self.run_block(block_index, h, masks, entries[block_index])
++        return self.unembed(self.final_norm(h)[:, index, :])
++
++    def tail(self, layer: int) -> Callable[[Any], Any]:
++        if (
++            isinstance(layer, bool)
++            or not isinstance(layer, int)
++            or not 0 <= layer <= self.num_layers
++        ):
++            raise ValueError(f"layer must lie in [0, {self.num_layers}]; got {layer!r}")
++
++        def apply_tail(h):
++            hidden = h.float()
++            masks = self.masks(hidden, None)
++            for index in range(layer, self.num_layers):
++                hidden = self.run_block(index, hidden, masks, None)
++            return self.final_norm(hidden)
++
++        return apply_tail
+diff --git a/src/local_llm_lab/torch_capture.py b/src/local_llm_lab/torch_capture.py
+new file mode 100644
+index 0000000..b8d08c3
+--- /dev/null
++++ b/src/local_llm_lab/torch_capture.py
+@@ -0,0 +1,239 @@
++"""Native torch capture extending Anthropic's Apache-2.0 ActivationRecorder.
++
++Upstream owns block hook installation and graph-preserving activation recording. This
++adapter adds our residual numbering, native input observation and replacement interventions.
++"""
++
++from __future__ import annotations
++
++import inspect
++import math
++
++import torch
++from jlens.hooks import ActivationRecorder
++
++
++def _arguments(module, args, kwargs):
++    """Bind exactly what the native caller supplied; invent no mask or rotary values."""
++    signature = inspect.signature(module.forward)
++    values = dict(signature.bind_partial(*args, **kwargs).arguments)
++    for name, parameter in signature.parameters.items():
++        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
++            values.update(values.pop(name, {}))
++    return values
++
++
++class TorchCapture(ActivationRecorder):
++    """Sink-compatible native capture, preserving tensors' dtype and autograd graph.
++
++    Layer zero is the input of block zero; layer L is block L-1's output before the
++    final normalization. ``intervene(L, p, fn)`` gives ``fn`` a cloned hidden vector
++    at absolute position p, and replaces that vector with its same-shape/dtype/device
++    result. Multiple interventions compose in registration order. They apply once per
++    fresh-prefill sequence; attempting an uncaptured past position fails closed.
++
++    ``layer_inputs`` retains native block keyword bundles without hidden states, so
++    observing kwargs does not itself retain every residual. Native outputs remain in
++    upstream's ``activations`` only at requested/intervened blocks until the next
++    forward or context exit. Attention/head capture is not ported.
++    """
++
++    def __init__(
++        self, view, sink, *, layers, attention_blocks=(), injection=None, head_vectors=True
++    ):
++        self.view, self.model, self.sink = view, view.model, sink
++        self.layers = set(layers)
++        if not self.layers or any(
++            type(i) is not int or not 0 <= i <= view.num_layers for i in self.layers
++        ):
++            raise ValueError("capture layers outside model")
++        if tuple(attention_blocks):
++            raise NotImplementedError("torch attention/head capture is not ported")
++        self.attention_blocks, self.head_vectors = set(), head_vectors
++        self.injection = injection
++        self.layer_inputs = {}
++        self.entry_residual = None
++        self._active = False
++        self._forwarding = False
++        self._offset = 0
++        self._ids = None
++        self._interventions = []
++        self._applied = set()
++        super().__init__(view.layers, (layer - 1 for layer in self.layers if layer))
++        if injection is not None:
++            layer, position, delta = injection
++            if (
++                type(layer) is not int
++                or not 1 <= layer <= view.num_layers
++                or len(delta) != view.hidden_size
++                or any(not math.isfinite(float(value)) for value in delta)
++            ):
++                raise ValueError("invalid injection layer, source or direction")
++
++            def add(h):
++                direction = torch.as_tensor(delta, device=h.device, dtype=h.dtype)
++                return h if not bool(torch.any(direction != 0)) else h + direction
++
++            self.intervene(layer, position, add)
++
++    def __getattr__(self, name):
++        return getattr(self.model, name)
++
++    def intervene(self, layer, position, fn):
++        """Register a position replacement; add and interchange are ordinary functions."""
++        if (
++            type(layer) is not int
++            or not 0 <= layer <= self.view.num_layers
++            or type(position) is not int
++            or position < 0
++            or not callable(fn)
++        ):
++            raise ValueError("invalid intervention layer, position or function")
++        if self._forwarding:
++            raise RuntimeError("cannot register interventions during a forward")
++        if layer and layer - 1 not in self._indices:
++            if self._active:
++                self._handles.append(
++                    self._blocks[layer - 1].register_forward_hook(self._make_hook(layer - 1))
++                )
++            self._indices = sorted({*self._indices, layer - 1})
++        self._interventions.append((layer, position, fn))
++        return self
++
++    def _replace(self, layer, h):
++        for number, (target, position, fn) in enumerate(self._interventions):
++            local = position - self._offset
++            if target != layer or number in self._applied or not 0 <= local < h.shape[1]:
++                continue
++            replacement = fn(h[0, local].clone())
++            if (
++                not torch.is_tensor(replacement)
++                or replacement.shape != h[0, local].shape
++                or replacement.dtype != h.dtype
++                or replacement.device != h.device
++            ):
++                raise ValueError("intervention replacement must preserve shape, dtype and device")
++            result = h.clone()
++            result[0, local] = replacement
++            h = result
++            self._applied.add(number)
++        return h
++
++    def _before_model(self, module, args, kwargs):
++        if self._forwarding:
++            raise RuntimeError("capture cannot observe recursive model forwards")
++        supplied = _arguments(module, args, kwargs)
++        ids = supplied.get("input_ids", args[0] if args else None)
++        if not torch.is_tensor(ids) or ids.ndim != 2 or ids.shape[0] != 1:
++            raise ValueError("capture supports an unpadded batch of one")
++        cache = supplied.get("past_key_values")
++        self._offset = int(cache.get_seq_length()) if cache is not None else 0
++        self._ids = ids
++        self.activations.clear()
++        self.layer_inputs.clear()
++        self.entry_residual = None
++        if self._offset == 0:
++            self._applied.clear()
++        if any(
++            position < self._offset and i not in self._applied
++            for i, (_, position, _) in enumerate(self._interventions)
++        ):
++            raise ValueError("intervention source is already cached; rebuild from a fresh prefill")
++        self._forwarding = True
++
++    def _before_block(self, index):
++        def hook(module, args, kwargs):
++            values = _arguments(module, args, kwargs)
++            hidden_key = next(iter(inspect.signature(module.forward).parameters))
++            h = values.pop(hidden_key)
++            self.layer_inputs[index] = values
++            if index != 0:
++                return None
++            replacement = self._replace(0, h)
++            if 0 in self.layers:
++                self.entry_residual = replacement
++                self.sink.residual(0, self._offset, replacement)
++            if replacement is h:
++                return None
++            if args:
++                return (replacement, *args[1:]), kwargs
++            return args, {**kwargs, hidden_key: replacement}
++
++        return hook
++
++    def _make_hook(self, index):
++        record = super()._make_hook(index)
++
++        def hook(module, inputs, output):
++            h = output if torch.is_tensor(output) else output[0]
++            replacement = self._replace(index + 1, h)
++            updated = output
++            if replacement is not h:
++                if torch.is_tensor(output):
++                    updated = replacement
++                elif isinstance(output, tuple):
++                    updated = (replacement, *output[1:])
++                elif isinstance(output, list):
++                    updated = [replacement, *output[1:]]
++                else:
++                    raise TypeError("intervention requires tensor, tuple or list block output")
++            record(module, inputs, updated)
++            if index + 1 in self.layers:
++                self.sink.residual(index + 1, self._offset, self.activations[index])
++            return updated if updated is not output else None
++
++        return hook
++
++    def _after_model(self, module, args, kwargs, output):
++        self._forwarding = False
++        if output is not None:
++            logits = (
++                output
++                if torch.is_tensor(output)
++                else (output.logits if hasattr(output, "logits") else output[0])
++            )
++            self.sink.output(self._offset, self._ids[0].tolist(), logits)
++
++    def __call__(self, ids, *args, **kwargs):
++        if not self._active:
++            raise RuntimeError("native capture must be entered before forwarding")
++        if args or "cache" in kwargs:
++            if len(args) > 1 or (args and "cache" in kwargs) or "past_key_values" in kwargs:
++                raise TypeError("pass only one cache")
++            cache = args[0] if args else kwargs.pop("cache")
++            kwargs["past_key_values"] = self.view._unwrap_cache(cache)
++            kwargs.setdefault("use_cache", cache is not None)
++        kwargs.setdefault("use_cache", kwargs.get("past_key_values") is not None)
++        return self.model(input_ids=ids, **kwargs)
++
++    def __enter__(self):
++        if self._active:
++            raise RuntimeError("native capture cannot be nested")
++        self._active = True
++        try:
++            super().__enter__()
++            for index, block in enumerate(self._blocks):
++                self._handles.append(
++                    block.register_forward_pre_hook(self._before_block(index), with_kwargs=True)
++                )
++            self._handles.append(
++                self.model.register_forward_pre_hook(self._before_model, with_kwargs=True)
++            )
++            self._handles.append(
++                self.model.register_forward_hook(
++                    self._after_model, with_kwargs=True, always_call=True
++                )
++            )
++        except BaseException:
++            self.__exit__(None, None, None)
++            raise
++        return self
++
++    def __exit__(self, *exc):
++        try:
++            super().__exit__(*exc)
++        finally:
++            self._active = self._forwarding = False
++            self.activations.clear()
++            self.layer_inputs.clear()
++            self.entry_residual = self._ids = None
+diff --git a/tests/test_arch_base.py b/tests/test_arch_base.py
+new file mode 100644
+index 0000000..5e16285
+--- /dev/null
++++ b/tests/test_arch_base.py
+@@ -0,0 +1,174 @@
++"""Backend-neutral architecture contracts, with no backend import or model load."""
++
++from __future__ import annotations
++
++import inspect
++from types import SimpleNamespace
++
++import pytest
++
++from local_llm_lab.arch import ArchitectureView
++from local_llm_lab.arch_base import (
++    ArchitectureViewBase,
++    _validate_hidden_span,
++    _validate_scored_position,
++)
++
++
++class Linear:
++    def __init__(self, output=7, input=3):
++        self.weight = SimpleNamespace(shape=(output, input))
++
++
++class OtherLinear(Linear):
++    pass
++
++
++class Wrapped:
++    def __init__(self, linear):
++        self.linear = linear
++
++
++class Block:
++    def __init__(self, entries, *, recurrent=False):
++        self.entries = entries
++        self.is_linear = recurrent
++
++    def named_modules(self):
++        yield "", self
++        yield from self.entries
++
++
++class View(ArchitectureViewBase):
++    def __init__(self, blocks):
++        self.blocks = blocks
++        self.num_layers = len(blocks)
++
++    def layer_kind(self, index):
++        return "linear_attention" if self.blocks[index].is_linear else "attention"
++
++    @staticmethod
++    def _linear_types():
++        return (Linear, OtherLinear)
++
++    @staticmethod
++    def _linear_dimensions(module):
++        return module.weight.shape
++
++
++def _view():
++    q = Linear()
++    return View([
++        Block([
++            ("mlp.down_proj", Linear()),
++            ("self_attn.q_proj", Wrapped(q)),
++            ("self_attn.q_proj.linear", q),
++            ("self_attn.q_proj.lora_a", Linear()),
++            ("self_attn.v_proj", OtherLinear()),
++            ("self_attn.in_proj_qkvz", Linear()),
++        ]),
++        Block([("linear_attn.in_proj_qkvz", Linear(5, 2))], recurrent=True),
++    ])
++
++
++def test_policy_order_wrapper_paths_and_hybrid_auto_stay_unchanged():
++    view = _view()
++    assert view.lora_targets("attention+mlp") == (
++        "self_attn.q_proj", "self_attn.v_proj", "mlp.down_proj",
++    )
++    assert view.lora_targets("auto") == (
++        "self_attn.q_proj", "self_attn.v_proj", "mlp.down_proj",
++        "linear_attn.in_proj_qkvz",
++    )
++    assert view.lora_parameter_count(("self_attn.q_proj", "linear_attn.in_proj_qkvz"), 2) == 34
++    assert not any(".linear" in path or ".lora_a" in path for _, path, _ in view._linear_modules())
++
++
++def test_explicit_targets_preserve_user_order_and_count_each_block():
++    view = View([Block([("q_proj", Linear())]), Block([("q_proj", Linear(9, 2))])])
++    assert view.lora_targets(("q_proj",)) == ("q_proj",)
++    assert view.lora_parameter_count(("q_proj",), 2) == 42
++
++
++@pytest.mark.parametrize("policy", [(), ("missing",), ("self_attn.q_proj",) * 2, "unknown"])
++def test_invalid_lora_policy_is_rejected(policy):
++    with pytest.raises(ValueError):
++        _view().lora_targets(policy)
++
++
++@pytest.mark.parametrize("rank", [True, False, 0, -1, 1.0])
++def test_lora_rank_must_be_positive_integer(rank):
++    with pytest.raises(ValueError, match="positive integer"):
++        _view().lora_parameter_count(("self_attn.q_proj",), rank)
++
++
++@pytest.mark.parametrize("value", [True, False, -1, 2, 1.0, "1"])
++def test_block_index_contract(value):
++    with pytest.raises(ValueError, match="block index must lie"):
++        _view()._validate_block_index(value)
++
++
++def test_valid_block_indices_cache_cardinality_and_kind_selection():
++    view = _view()
++    assert [view._validate_block_index(i) for i in (0, 1)] == [0, 1]
++    assert view._cache_entries(None) == [None, None]
++    caches = [object(), object()]
++    assert view._cache_entries(caches) == caches
++    assert view._first_cache(caches, "linear_attention") is caches[1]
++    assert view._first_cache(caches, "absent") is None
++    with pytest.raises(ValueError, match="one entry per block"):
++        view._cache_entries([None])
++
++
++@pytest.mark.parametrize("position", [-3, -1, 0, 2])
++def test_scored_position_retains_python_negative_index(position):
++    assert _validate_scored_position(position, 3) == position
++
++
++@pytest.mark.parametrize("position", [True, False, -4, 3, 0.0, "1"])
++def test_invalid_scored_position(position):
++    with pytest.raises(ValueError):
++        _validate_scored_position(position, 3)
++
++
++def test_hidden_span_is_half_open_and_keeps_offsets():
++    assert _validate_hidden_span((0, 3), 3) == (0, 3)
++    assert _validate_hidden_span([1, 2], 3) == (1, 2)
++
++
++@pytest.mark.parametrize("span", [None, (), (1,), (0, 1, 2), (True, 2), (0, 2.0),
++                                  (-1, 2), (1, 1), (2, 1), (0, 4)])
++def test_invalid_hidden_span_fails_closed(span):
++    with pytest.raises(ValueError):
++        _validate_hidden_span(span, 3)
++
++
++def test_mlx_view_inherits_the_shared_public_contract():
++    assert issubclass(ArchitectureView, ArchitectureViewBase)
++    for name in ("lora_targets", "lora_parameter_count", "_validate_block_index", "_cache_entries"):
++        assert getattr(ArchitectureView, name) is getattr(ArchitectureViewBase, name)
++    assert str(inspect.signature(ArchitectureView.lora_targets)) == (
++        "(self, policy: 'str | tuple[str, ...]') -> 'tuple[str, ...]'"
++    )
++
++
++def test_mlx_backend_hooks_keep_quantized_dimension_count(monkeypatch):
++    import sys
++    from types import ModuleType
++
++    class QuantizedLinear(Linear):
++        bits = 4
++
++    nn = ModuleType("mlx.nn")
++    nn.Linear = Linear
++    nn.QuantizedLinear = QuantizedLinear
++    mlx = ModuleType("mlx")
++    mlx.nn = nn
++    monkeypatch.setitem(sys.modules, "mlx", mlx)
++    monkeypatch.setitem(sys.modules, "mlx.nn", nn)
++    view = ArchitectureView.__new__(ArchitectureView)
++    view.blocks = [Block([("q_proj", Wrapped(QuantizedLinear()))])]
++    view.num_layers = 1
++    assert view.lora_targets("auto") == ("q_proj",)
++    # MLX packs eight 4-bit inputs in each stored word: input dimension is 3 * 8.
++    assert view.lora_parameter_count(("q_proj",), 2) == 2 * (7 + 24)
+diff --git a/tests/test_arch_torch.py b/tests/test_arch_torch.py
+new file mode 100644
+index 0000000..324789b
+--- /dev/null
++++ b/tests/test_arch_torch.py
+@@ -0,0 +1,345 @@
++"""CPU fp32 seam tests on real HF blocks; these are not checkpoint acceptance."""
++
++import inspect
++
++import pytest
++import torch
++from jlens.fitting import _check_layer_indices
++from transformers import Gemma3ForCausalLM, Gemma3TextConfig
++
++
++def make_model():
++    torch.manual_seed(17)
++    torch.set_num_threads(1)
++    config = Gemma3TextConfig(
++        vocab_size=64,
++        hidden_size=16,
++        intermediate_size=32,
++        num_hidden_layers=3,
++        num_attention_heads=2,
++        num_key_value_heads=1,
++        head_dim=8,
++        sliding_window=1024,
++        max_position_embeddings=2048,
++        layer_types=["sliding_attention", "full_attention", "sliding_attention"],
++        attn_implementation="eager",
++        pad_token_id=0,
++    )
++    model = Gemma3ForCausalLM(config).float().eval()
++    model.requires_grad_(False)
++    return model
++
++
++@pytest.fixture
++def view():
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    return TorchArchitectureView.from_model(make_model())
++
++
++def test_discovery_calls_upstream(monkeypatch):
++    import jlens.hf
++
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    calls = []
++    original = jlens.hf._find_layout
++
++    def discover(model):
++        calls.append(model)
++        return original(model)
++
++    monkeypatch.setattr(jlens.hf, "_find_layout", discover)
++    model = make_model()
++    view = TorchArchitectureView.from_model(model)
++    assert calls and all(value is model for value in calls)
++    assert (view.num_layers, view.hidden_size, view.vocab_size) == (3, 16, 64)
++    assert [view.attention_span(i) for i in range(3)] == ["sliding", "global", "sliding"]
++    assert view.layer_kind(1) == "attention"
++    assert view.tie_word_embeddings
++
++
++def test_public_call_signatures_are_unchanged():
++    from local_llm_lab.arch import ArchitectureView
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    names = (
++        "embed",
++        "masks",
++        "run_block",
++        "final_norm",
++        "unembed",
++        "native_readout",
++        "make_cache",
++        "residuals",
++        "native_residuals",
++        "residual_source_agreement",
++        "cached_logits",
++        "tail",
++        "layer_kind",
++        "attention_span",
++        "lora_targets",
++    )
++    for name in names:
++
++        def signature(cls, name=name):
++            return [
++                (p.name, p.kind, p.default)
++                for p in inspect.signature(getattr(cls, name)).parameters.values()
++            ]
++
++        assert signature(ArchitectureView) == signature(TorchArchitectureView), name
++
++
++def test_residual_convention_is_upstreams_block_output(view):
++    from jlens.hooks import ActivationRecorder
++
++    sources, target = _check_layer_indices(None, None, view.num_layers)
++    ids = torch.tensor([[1, 4, 9, 2]])
++    with ActivationRecorder(view.blocks, at=[*sources, target]) as recorder:
++        view.model(input_ids=ids, use_cache=False)
++    residuals = view.native_residuals(ids, range(1, view.num_layers + 1))
++    for index, value in recorder.activations.items():
++        assert torch.equal(value, residuals[index + 1])
++    assert torch.equal(
++        view.native_readout(residuals[view.num_layers]),
++        view.model(input_ids=ids, use_cache=False).logits,
++    )
++
++
++@pytest.mark.parametrize("length", [64, 1400])
++def test_sources_agree_and_mask_negative_control(view, length, monkeypatch):
++    ids = torch.arange(length) % view.vocab_size
++    assert set(view.residual_source_agreement(ids, range(4)).values()) == {0.0}
++    observe = view._observe_forward
++
++    def broken(ids, cache=None):
++        entry, bundles = observe(ids, cache)
++        for index in bundles:
++            bundles[index] = {**bundles[index], "attention_mask": bundles[1]["attention_mask"]}
++        return entry, bundles
++
++    monkeypatch.setattr(view, "_observe_forward", broken)
++    errors = view.residual_source_agreement(ids, range(4))
++    assert (max(errors.values()) > 0) == (length > 1024)
++
++
++def test_cached_loop_matches_native_and_observation_does_not_advance_cache(view):
++    native_cache = view.make_cache()
++    loop_cache = view.make_cache()
++    for ids in ([1, 3, 5, 7], [9], [11]):
++        ids = torch.tensor([ids])
++        native = view.model(
++            input_ids=ids, past_key_values=view._unwrap_cache(native_cache), use_cache=True
++        ).logits[:, -1, :]
++        actual = view.cached_logits(ids, loop_cache)
++        torch.testing.assert_close(actual, native, atol=2e-6, rtol=2e-6)
++        before = [entry.offset for entry in loop_cache]
++        view.masks(torch.zeros(1, 1, view.hidden_size), loop_cache)
++        assert [entry.offset for entry in loop_cache] == before
++    assert before == [6, 6, 6]
++    with pytest.raises(ValueError, match="cache"):
++        view._unwrap_cache([loop_cache[0], *native_cache[1:]])
++
++
++def test_tail_has_same_endpoint_and_supports_gradient(view):
++    ids = [1, 4, 8, 10]
++    residuals = view.residuals(ids, range(4))
++    for layer in range(4):
++        h = residuals[layer].detach().requires_grad_()
++        tail = view.tail(layer)(h)
++        assert torch.equal(tail, view.final_norm(residuals[3]))
++        assert torch.isfinite(torch.autograd.grad(tail.square().sum(), h)[0]).all()
++
++
++def test_embed_observes_transform_outside_embedding(view):
++    old = view.blocks[0].register_forward_pre_hook(
++        lambda module, args: (args[0] + 7, *args[1:]), prepend=True
++    )
++    try:
++        expected = view.text_module.embed_tokens(torch.tensor([[1, 2]])) + 7
++        assert torch.equal(view.embed([1, 2]), expected)
++    finally:
++        old.remove()
++
++
++def test_boolean_masks_keep_their_meaning(view):
++    masks = view.masks(torch.zeros(1, 4, view.hidden_size), None)
++    masks[0]["attention_mask"] = torch.ones(1, 1, 4, 4, dtype=torch.bool).tril()
++    before = masks[0]["attention_mask"].clone()
++    # SDPA accepts Boolean masks; the view must not reinterpret them as additive weights.
++    view.model.config._attn_implementation = "sdpa"
++    result = view.run_block(0, view.embed([1, 2, 3, 4]), masks, None)
++    assert torch.isfinite(result).all()
++    assert masks[0]["attention_mask"].dtype == torch.bool
++    assert torch.equal(before, masks[0]["attention_mask"])
++
++
++def test_dense_hidden_spans_fail_and_bad_indices_fail(view):
++    with pytest.raises(ValueError, match="deferred|dense"):
++        view.masks(torch.zeros(1, 1, view.hidden_size), None, hidden_spans=[])
++    for value in (-1, True, view.num_layers):
++        with pytest.raises(ValueError):
++            view.layer_kind(value)
++    with pytest.raises(ValueError):
++        view.native_residuals([1, 2], [])
++    with pytest.raises(ValueError):
++        view.tail(view.num_layers + 1)
++
++
++def test_lora_uses_existing_policy(view):
++    targets = view.lora_targets("auto")
++    assert targets == view.lora_targets("attention+mlp")
++    assert set(targets) == {
++        "self_attn.q_proj",
++        "self_attn.k_proj",
++        "self_attn.v_proj",
++        "self_attn.o_proj",
++        "mlp.gate_proj",
++        "mlp.up_proj",
++        "mlp.down_proj",
++    }
++
++
++def test_constructor_rejects_conflicting_text_module():
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    first, second = make_model(), make_model()
++    with pytest.raises(ValueError, match="disagrees"):
++        TorchArchitectureView(first, second.model)
++
++
++def test_diagnostic_promotion_on_bfloat16_weights_preserves_model_dtype():
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    model = make_model().to(torch.bfloat16)
++    view = TorchArchitectureView.from_model(model)
++    native = view.native_residuals([1, 3, 5], range(4))
++    loop = view.residuals([1, 3, 5], range(4))
++    assert all(h.dtype == torch.bfloat16 for h in native.values())
++    assert all(h.dtype == torch.float32 and torch.isfinite(h).all() for h in loop.values())
++    assert view.unembed(view.final_norm(loop[3])).dtype == torch.float32
++    assert all(p.dtype == torch.bfloat16 for p in model.parameters())
++    assert torch.equal(
++        view.native_readout(native[3]),
++        model(input_ids=torch.tensor([[1, 3, 5]]), use_cache=False).logits,
++    )
++
++
++def test_cached_entry_observes_absolute_position_transform(view, monkeypatch):
++    # An entry transform outside embed_tokens must see the same cache offset as native.
++    old_forward = view.text_module.forward
++
++    def positioned(input_ids=None, past_key_values=None, **kwargs):
++        offset = 0 if past_key_values is None else past_key_values.get_seq_length()
++        h = view._embed_tokens(input_ids) + float(offset)
++        kwargs.pop("inputs_embeds", None)
++        return old_forward(inputs_embeds=h, past_key_values=past_key_values, **kwargs)
++
++    monkeypatch.setattr(view.text_module, "forward", positioned)
++    native_cache, loop_cache = view.make_cache(), view.make_cache()
++    for values in ([1, 2, 3], [4]):
++        ids = torch.tensor([values])
++        expected = view.model(
++            input_ids=ids, past_key_values=view._unwrap_cache(native_cache), use_cache=True
++        ).logits[:, -1, :]
++        torch.testing.assert_close(
++            view.cached_logits(ids, loop_cache), expected, atol=2e-6, rtol=2e-6
++        )
++
++
++def test_readout_probe_preserves_missing_and_zero_and_detects_controls(view):
++    from research.acceptance.torch_seam import decode_readout_probe
++
++    ids = [1, 5, 9, 3]
++    baseline = decode_readout_probe(view, ids, steps=3)
++    assert len(baseline["emitted_ids"]) == 3
++    assert baseline["identity_failures"] == []
++    tolerance = max(baseline["readout_errors"])
++    assert tolerance is not None
++    assert decode_readout_probe(view, ids, steps=3, readout=False)["readout_errors"] == [None] * 3
++    skew = decode_readout_probe(view, ids, steps=3, control="skew_after_prefill")
++    assert skew["readout_errors"][0] <= tolerance
++    assert all(error > tolerance for error in skew["readout_errors"][1:])
++    corrupt = decode_readout_probe(view, ids, steps=3, control="corrupt_residual")
++    assert all(error > tolerance for error in corrupt["readout_errors"])
++
++
++def test_observation_cleans_hooks_after_failure(view, monkeypatch):
++    counts = [len(block._forward_pre_hooks) for block in view.blocks]
++
++    def fail(*args, **kwargs):
++        raise RuntimeError("native failure")
++
++    monkeypatch.setattr(view.text_module, "forward", fail)
++    with pytest.raises(RuntimeError, match="native failure"):
++        view.embed([1, 3])
++    assert [len(block._forward_pre_hooks) for block in view.blocks] == counts
++    assert not view._observing
++
++
++def test_observation_handles_nonleaf_cache_without_mutating_caller(view):
++    view.model.requires_grad_(True)
++    cache = view.make_cache()
++    view.cached_logits([1, 3, 5], cache)
++    native = view._unwrap_cache(cache)
++    original_keys = [layer.keys for layer in native.layers]
++    assert any(value.grad_fn is not None for value in original_keys)
++    value = view.cached_logits([7], cache)
++    value.square().sum().backward()
++    assert [entry.offset for entry in cache] == [4, 4, 4]
++    assert all(
++        layer.keys is not previous
++        for layer, previous in zip(native.layers, original_keys, strict=True)
++    )
++    assert view.blocks[0].self_attn.q_proj.weight.grad is not None
++
++
++def test_cache_crop_preserves_upstream_remove_count_semantics(view):
++    # A global-only DynamicCache supports crop; sliding retention cannot promise rollback.
++    from transformers.cache_utils import DynamicCache
++
++    from local_llm_lab.arch_torch import _CacheEntry
++
++    cache = DynamicCache()
++    keys = torch.zeros(1, 1, 3, 2)
++    cache.update(keys, keys.clone(), 0)
++    entry = _CacheEntry(cache, 0)
++    entry.crop(tokens_to_remove=-3)
++    assert entry.offset == 0
++    assert not view.cache_trimmable
++
++
++def test_deferred_hybrid_is_refused_not_mislabelled_as_attention():
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    model = make_model()
++    model.config.layer_types[0] = "linear_attention"
++    with pytest.raises(NotImplementedError, match="recurrent"):
++        TorchArchitectureView.from_model(model)
++
++
++def test_upstream_gpt2_layout_and_tuple_outputs():
++    from transformers import GPT2Config, GPT2LMHeadModel
++
++    from local_llm_lab.arch_torch import TorchArchitectureView
++
++    torch.manual_seed(19)
++    model = (
++        GPT2LMHeadModel(
++            GPT2Config(
++                vocab_size=64,
++                n_embd=16,
++                n_layer=2,
++                n_head=2,
++                n_positions=64,
++                attn_implementation="eager",
++            )
++        )
++        .float()
++        .eval()
++        .requires_grad_(False)
++    )
++    view = TorchArchitectureView.from_model(model)
++    assert view.layout.path == "transformer"
++    assert set(view.residual_source_agreement([1, 5, 9, 3], range(3)).values()) == {0.0}
+diff --git a/tests/test_torch_capture.py b/tests/test_torch_capture.py
+new file mode 100644
+index 0000000..cce1b72
+--- /dev/null
++++ b/tests/test_torch_capture.py
+@@ -0,0 +1,267 @@
++"""Tiny CPU contracts for the upstream-backed native torch capture seam."""
++
++from types import SimpleNamespace
++
++import pytest
++
++torch = pytest.importorskip("torch")
++from jlens.hooks import ActivationRecorder  # noqa: E402
++from torch import nn  # noqa: E402
++
++from local_llm_lab.torch_capture import TorchCapture  # noqa: E402
++
++
++class Block(nn.Module):
++    def __init__(self, value, tuple_output=False):
++        super().__init__()
++        self.value, self.tuple_output = value, tuple_output
++
++    def forward(
++        self, hidden_states, attention_mask=None, position_embeddings=None, past_key_values=None
++    ):
++        out = hidden_states * self.value
++        return (out, "preserved") if self.tuple_output else out
++
++
++class Model(nn.Module):
++    def __init__(self):
++        super().__init__()
++        self.embed = nn.Embedding(11, 3)
++        self.layers = nn.ModuleList([Block(2), Block(3, tuple_output=True)])
++        self.fail = False
++
++    def forward(self, input_ids, past_key_values=None, use_cache=False):
++        h = self.embed(input_ids)
++        for i, layer in enumerate(self.layers):
++            h = layer(
++                h,
++                attention_mask=f"mask-{i}",
++                position_embeddings=(i, i + 1),
++                past_key_values=past_key_values,
++            )
++            if isinstance(h, tuple):
++                h = h[0]
++        if self.fail:
++            raise RuntimeError("deliberate model failure")
++        return SimpleNamespace(logits=h)
++
++
++class Sink:
++    def __init__(self):
++        self.rows, self.outputs = {}, []
++
++    def residual(self, layer, offset, h):
++        self.rows[layer] = (offset, h)
++
++    def output(self, offset, ids, logits):
++        self.outputs.append((offset, ids, logits))
++
++
++def fixture():
++    torch.set_num_threads(1)
++    model, sink = Model(), Sink()
++    view = SimpleNamespace(
++        model=model,
++        layers=model.layers,
++        num_layers=2,
++        hidden_size=3,
++        _unwrap_cache=lambda value: value,
++    )
++    return view, sink, torch.tensor([[1, 2, 3]])
++
++
++def test_upstream_recorder_and_native_sink_preserve_graph_and_block_convention():
++    view, sink, ids = fixture()
++    assert issubclass(TorchCapture, ActivationRecorder)
++    expected = view.model(ids).logits
++    with TorchCapture(view, sink, layers=(0, 1, 2)) as capture:
++        actual = capture(ids).logits
++        assert torch.equal(actual, expected)
++        assert torch.equal(sink.rows[0][1] * 2, sink.rows[1][1])
++        assert torch.equal(sink.rows[1][1] * 3, sink.rows[2][1])
++        assert capture.activations[1] is sink.rows[2][1]
++        assert capture.layer_inputs[1]["attention_mask"] == "mask-1"
++        assert capture.layer_inputs[1]["position_embeddings"] == (1, 2)
++        assert sink.rows[0][1].dtype == actual.dtype == torch.float32
++        assert sink.outputs == [(0, [1, 2, 3], actual)]
++        actual.sum().backward()
++        assert view.model.embed.weight.grad is not None
++    assert not capture.activations
++    assert all(not layer._forward_hooks and not layer._forward_pre_hooks for layer in view.layers)
++
++
++@pytest.mark.parametrize("layer", [0, 1, 2])
++def test_replacement_intervention_reaches_downstream_and_only_selected_position(layer):
++    view, sink, ids = fixture()
++    expected = view.model(ids).logits
++    donor = torch.tensor([2.0, 4.0, 6.0], requires_grad=True)
++    with TorchCapture(view, sink, layers=(0, 1, 2)) as capture:
++        capture.intervene(layer, 1, lambda h: donor)
++        actual = capture(ids).logits
++        multiplier = {0: 6, 1: 3, 2: 1}[layer]
++        assert torch.equal(actual[0, 1], donor * multiplier)
++        assert torch.equal(actual[0, (0, 2), :], expected[0, (0, 2), :])
++        actual.sum().backward()
++        assert torch.equal(donor.grad, torch.full_like(donor, multiplier))
++
++
++def test_injection_compatibility_and_absolute_cache_positions():
++    view, sink, ids = fixture()
++    cache = SimpleNamespace(get_seq_length=lambda: 5)
++    with TorchCapture(view, sink, layers=(1, 2), injection=(1, 6, [1.0, 2.0, 3.0])) as capture:
++        actual = capture(ids, cache=cache).logits
++        assert torch.equal(
++            actual[0, 1], (view.model.embed(ids)[0, 1] * 2 + torch.tensor([1.0, 2.0, 3.0])) * 3
++        )
++        assert sink.rows[1][0] == sink.outputs[0][0] == 5
++    with (
++        TorchCapture(view, sink, layers=(1,), injection=(1, 2, [0.0, 0.0, 0.0])) as capture,
++        pytest.raises(ValueError, match="already cached"),
++    ):
++        capture(ids, cache=cache)
++
++
++def test_direct_model_call_is_observed_and_hooks_removed_after_failure():
++    view, sink, ids = fixture()
++    capture = TorchCapture(view, sink, layers=(2,))
++    with pytest.raises(RuntimeError, match="deliberate"), capture:
++        view.model(input_ids=ids)
++        view.model.fail = True
++        view.model(input_ids=ids)
++    assert len(sink.outputs) == 1
++    assert not capture.activations and not capture.layer_inputs
++    assert not view.model._forward_hooks and not view.model._forward_pre_hooks
++    assert all(not layer._forward_hooks and not layer._forward_pre_hooks for layer in view.layers)
++
++
++@pytest.mark.parametrize("fn", [lambda h: h[:1], lambda h: h.double(), lambda h: None])
++def test_intervention_refuses_shape_or_dtype_change(fn):
++    view, sink, ids = fixture()
++    with TorchCapture(view, sink, layers=(1,)) as capture:
++        capture.intervene(1, 0, fn)
++        with pytest.raises(ValueError, match="replacement"):
++            capture(ids)
++
++
++def test_unsupported_heads_and_invalid_indices_fail_before_hooks():
++    view, sink, ids = fixture()
++    with pytest.raises(NotImplementedError, match="head"):
++        TorchCapture(view, sink, layers=(1,), attention_blocks=(0,))
++    with pytest.raises(ValueError, match="layers"):
++        TorchCapture(view, sink, layers=(True,))
++    with TorchCapture(view, sink, layers=(1,)) as capture:
++        with pytest.raises(ValueError, match="intervention"):
++            capture.intervene(3, 0, lambda h: h)
++        with pytest.raises(ValueError, match="batch"):
++            capture(ids.expand(2, -1))
++
++
++def test_upstream_index_resolution_matches_sink_residual_indices():
++    from jlens.fitting import _check_layer_indices
++
++    view, sink, ids = fixture()
++    source_blocks, target_block = _check_layer_indices(None, None, view.num_layers)
++    layers = tuple(block + 1 for block in (*source_blocks, target_block))
++    with TorchCapture(view, sink, layers=layers) as capture:
++        capture(ids)
++        for block in (*source_blocks, target_block):
++            assert capture.activations[block] is sink.rows[block + 1][1]
++
++
++def test_interchange_can_be_registered_after_entry_at_an_unrequested_layer():
++    view, sink, ids = fixture()
++    frozen_support = torch.tensor([1.0, 0.0, 1.0])
++    donor = torch.tensor([5.0, 6.0, 7.0])
++    expected = view.model(ids).logits
++    with TorchCapture(view, sink, layers=(2,)) as capture:
++        capture.intervene(1, 0, lambda h: h + frozen_support * (donor - h))
++        result = capture(ids).logits
++        assert result[0, 0, 0] == donor[0] * 3
++        assert result[0, 0, 2] == donor[2] * 3
++        assert result[0, 0, 1] == expected[0, 0, 1]
++        assert set(sink.rows) == {2}
++        assert "hidden_states" not in capture.layer_inputs[0]
++
++
++def test_cache_decode_does_not_apply_intervention_twice_and_fresh_prefill_resets():
++    view, sink, ids = fixture()
++    calls = []
++    offset = [0]
++    cache = SimpleNamespace(get_seq_length=lambda: offset[0])
++    with TorchCapture(view, sink, layers=(2,)) as capture:
++        capture.intervene(1, 1, lambda h: calls.append(True) or h)
++        capture(ids, cache=cache)
++        offset[0] = 3
++        capture(ids[:, :1], cache=cache)
++        assert calls == [True]
++        offset[0] = 0
++        capture(ids, cache=cache)
++        assert calls == [True, True]
++
++
++def test_partial_hook_installation_failure_cleans_up(monkeypatch):
++    view, sink, _ = fixture()
++    capture = TorchCapture(view, sink, layers=(1, 2))
++
++    def fail(*args, **kwargs):
++        raise RuntimeError("registration failed")
++
++    monkeypatch.setattr(view.layers[1], "register_forward_pre_hook", fail)
++    with pytest.raises(RuntimeError, match="registration failed"):
++        capture.__enter__()
++    assert not capture._active
++    assert all(not layer._forward_hooks and not layer._forward_pre_hooks for layer in view.layers)
++
++
++def test_capture_reentry_uses_fresh_hooks_and_refuses_call_outside_context():
++    view, sink, ids = fixture()
++    capture = TorchCapture(view, sink, layers=(2,))
++    with pytest.raises(RuntimeError, match="entered"):
++        capture(ids)
++    for _ in range(2):
++        with capture:
++            capture(ids)
++            with pytest.raises(RuntimeError, match="nested"):
++                capture.__enter__()
++    assert len(sink.outputs) == 2
++
++
++def test_direct_model_positional_cache_reports_absolute_offset():
++    view, sink, ids = fixture()
++    cache = SimpleNamespace(get_seq_length=lambda: 8)
++    with TorchCapture(view, sink, layers=(2,)):
++        view.model(ids, cache)
++    assert sink.rows[2][0] == sink.outputs[0][0] == 8
++
++
++def test_wrapper_declares_no_cache_and_preserves_explicit_cache_choice():
++    view, sink, ids = fixture()
++    choices = []
++    handle = view.model.register_forward_pre_hook(
++        lambda module, args, kwargs: choices.append(kwargs.get("use_cache")), with_kwargs=True
++    )
++    try:
++        with TorchCapture(view, sink, layers=(2,)) as capture:
++            capture(ids)
++            capture(ids, past_key_values=SimpleNamespace(get_seq_length=lambda: 0))
++            capture(ids, use_cache=False, past_key_values=SimpleNamespace(get_seq_length=lambda: 0))
++        assert choices == [False, True, False]
++    finally:
++        handle.remove()
++
++
++def test_block_kwargs_are_flat_and_exclude_positional_hidden_alias():
++    view, sink, ids = fixture()
++
++    class ExtraKwargsBlock(nn.Module):
++        def forward(self, h, **kwargs):
++            return h * 2
++
++    view.model.layers[0] = ExtraKwargsBlock()
++    with TorchCapture(view, sink, layers=(0, 2)) as capture:
++        capture(ids)
++        assert capture.layer_inputs[0] == {
++            "attention_mask": "mask-0",
++            "position_embeddings": (0, 1),
++            "past_key_values": None,
++        }
