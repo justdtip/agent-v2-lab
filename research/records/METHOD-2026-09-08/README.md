@@ -393,6 +393,15 @@ warning. **An assertion that an artefact loads is worth nothing unless the loade
 tolerant reader turns a corrupted artefact into a passing test, which is the guard that passes
 the object it exists to catch, applied to the reader instead of the guard.
 
+
+**The family, named by SWE-2 once its third member was found.** The guard that passed the wrapper it
+existed to catch; the reload assertion satisfied by a reader that treats missing weights as a
+warning; and the `assert X == Y or True` in a record's producer, which parses as
+`(comparison) or True` and has never tested anything (the twenty-sixth entry). None of these is an
+absent check. Each is **a present check that is inert**: silence was read as evidence, and a reader
+looking for a guard found one. That is the sharper form of both rules above and it supersedes them
+as the thing to look for: not "is there a check" but "can this check fail, and has it".
+
 ---
 
 ## Twenty-fourth: the shared index, or why explicit-path `add` was not enough
