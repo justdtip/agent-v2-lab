@@ -1390,3 +1390,34 @@ sub-block and multi-target) are device work against `research/records/WSD-DEVICE
   assert that cannot fail, a broad handler that swallows. Whether a present check discriminates
   is not decidable by parsing; that stays the WS-D record's technique, construct the input the
   check should fail on and confirm it does.
+
+### 16.15 The golden harness is on the integration branch, and the operand it does not produce
+
+The D-CRO's fixture-level golden harness (`pipeline/lens_fitting/golden.py`, merged at abc338e)
+takes two lens artefacts and applies §16.13's structure: exactness gated at exactly zero, since a
+nonzero value there is nondeterminism and a tolerance would hide the one thing the gate exists to
+see; the three controls, transposed, layer-shifted and wrong-corpus, gated to disagree by more than
+the candidate does, the report refusing rather than reporting when one does not; the
+finite-difference-versus-exact residual as the finding with no threshold and the reason in the
+field. Two readings are fixed before any measurement: the storage floor is the **coarsest**
+operand's, a comparison being only as resolved as its blunter side, and "agreement" is not a
+verdict the report can emit; and any two fits differing in more than the estimator are refused,
+since that residual is a sum of causes nothing downstream can take apart. Thirteen tests against
+real fits of the tiny decoder, the fixture's candidate being the reference stored through float16
+and back, so the floor logic is exercised rather than asserted.
+
+**What it does not produce is the finite-difference operand.** `jacobian.py`'s estimator is MLX,
+and the harness's scope was the comparison, the controls and the report. Ruling, in two parts that
+are both taken:
+
+1. **A finite-difference artefact fitted on the laptop under MLX, on the same pinned rows, at the
+   same context length, is the first operand** if one exists in the records or can be made within
+   §16.12's limits; its residual against the device's exact fit is declared as estimator plus
+   backend, with G-2's measured backend floor beside it, and it gives the first hour a number.
+2. **A torch finite-difference reference over `TorchArchitectureView.tail`, fixture-tested against
+   the tiny decoder, is the second operand** and the one that isolates the estimator: the same
+   backend, the same rows, the same precision, so the residual is the estimator difference and
+   nothing else. It is WS-D's, small, and its own record says it exists to be run once and retired,
+   which is what the ledger's deletion of the finite-difference machinery meant.
+
+The golden number is the second; the first is what the hour can have while the second is built.
