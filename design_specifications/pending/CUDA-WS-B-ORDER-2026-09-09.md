@@ -198,3 +198,66 @@ byte for byte, which the two CUDA runs of `calculate-0158` already measured and 
 unavailable until the lens path is ported. The finding at position 506, a single full forward
 against chunked prefill with the cache differing at a near-tie, is carried into the cache-strategy
 gate arm's notes as unchecked; that arm is the equivalence claim it touches.
+
+## The precision-matched arm, 2026-09-10 — the premise was wrong, not the port; rulings
+
+SWE-1, `df2f0a3`: MLX bfloat16 against torch bfloat16, teacher-forced over the turns carrying the
+24 gated positions, 55 s on the laptop. **Twenty-one of the 24 are quantisation**: MLX bf16
+produced exactly what torch bf16 produced and only the 4-bit record dissented, including the
+position recorded at P = 1.000000. **Three are bfloat16 ties**: the top-two gaps, recovered exactly
+from ln(p1/p2) and checked to lie on the 0.25 grid that is the bf16 step at that magnitude, are a
+0-ULP gap (two candidates exactly equal), a 2-ULP gap pointing opposite ways in the two frameworks,
+and one position where the card's own CPU and CUDA already differed, a device tie. A probability
+margin had called all three "not a tie"; the ULP measure is the instrument. No port defect is
+implicated at any of the 24, and the record says plainly that this is not evidence the port is
+correct, only that these positions were never evidence against it; the positive evidence remains
+device consistency to one position in 5,245 and the WS-A gates.
+
+**Rulings.** The rule "a confident flip is a defect" holds only against a precision-matched
+reference, with a margin in ULPs of the stored dtype: a position whose top-two gap on the
+reference lies within two ULPs is a tie, counted and reported as a tie, never as a flip and never
+as agreement; against a differently quantised recording the check is not a defect test and
+refuses to be read as one. The golden records are re-based on MLX bf16: the full fifteen episodes
+through the MLX bf16 arm on the laptop under one announced window, the new reference recorded with
+its provenance beside the 4-bit one, which stays as the record of what the rule was measured
+against; then the kit runs once more on the card against the new reference, and the expectation is
+zero confident flips outside listed ties. The rule goes into code; the lesson goes into the method
+record as the thirty-first entry, in SWE-1's name.
+
+## Ruling on the surviving flip, Chief, 2026-09-10 — `5cdd1de`: below resolution is a class, not a defect and not a wider band
+
+The re-based run is accepted as WS-B's number on the card: 5,213 of 5,245 against the
+precision-matched reference for no change to the port, thirty ties listed under the two-ULP rule,
+and one position reported as a flip rather than cleared by widening the band. The refusal to widen
+was right. The ruling on `agentic-d2-read-0108`, turn 0, position 521:
+
+**Not a defect, and the band does not move.** The record holds three bfloat16 readings of the same
+weights on the same tokens at that position: the MLX reference puts the recorded token ahead by 1.5
+logits; torch on the laptop CPU has the two candidates at an exact tie; torch on the card prefers
+the other token. A port defect is a claim that the port disagrees with the reference by more than
+the port's own arithmetic can explain, and here the port's two devices straddle the reference's
+margin. The rule, stated so that it applies without a threshold moved after the fact: **a flip is
+attributed to the port only where the reference's margin exceeds the port's measured cross-device
+spread at that position.** Where it does not, the position is classed **below resolution** — a
+third class beside tie and flip, counted and listed with both margins, never folded into agreement
+and never called a defect. The two-ULP tie band stays as ruled: it is the reference's storage grid,
+and this class is the port's arithmetic grid, measured from the CPU control the record already has.
+
+**The ULP grid is computed from the value, per position.** The precision-matched arm recorded this
+position's reference gap as 1.5 logits at `bf16_ulp = 0.25`, six ULPs (`flip-margins.json`); the
+re-based run reports the same position at three. The check that every gap is an exact multiple of
+the grid cannot tell 0.25 from 0.5, since a multiple of the finer grid is a multiple of the coarser.
+bfloat16's ULP is 2^(⌊log₂|v|⌋ − 7) for the logit v itself, so `bf16_ulp` takes the stored top
+logit and returns the grid for that magnitude, per position, and the two arms are reconciled in the
+record with the exponent each logit actually has.
+
+**The line must sum.** 5,213 agreed, 30 ties and 1 flip leave one position of 5,245 unaccounted
+for; the README states its class — not compared, if the reference had no answer for it — so the
+headline reads as four counts that add to the corpus.
+
+**For SWE-1, in this order:** the value-derived grid and the reconciliation of the two arms at
+position 521; the below-resolution class in `AgreementReport`, with the CPU control as its second
+measurement and the card's own gap at that position added to the record; the README's four-count
+line; then the method entry, which is the one this week keeps writing — the instrument's resolution
+is a measurement, not a setting. The precision-matched join that Codex was to do (WS-A order, the
+next instruction) is unblocked by the reference and goes out through the Director.

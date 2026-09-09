@@ -448,3 +448,34 @@ is idle before it is quoted as a device performance figure. **Row 8**, graph mem
 context on the real checkpoint against upstream's replicated batch, waits for the card alone; it
 is the measurement the 12B fits need, since the exact fit's peak on the 4B read 43.9 GiB for one
 row at dictionary batch 64.
+
+## Review of the comparability analysis, 2026-09-10 — `f1d934f`, merged into `cuda-migration`
+
+**Verdict: passes as an analysis record; merged.** `research/records/GPU-COMPARABILITY-2026-09-09-0955Z/`
+analyses SWE-1's two full-corpus runs on the card, and its four source hashes equal the bytes
+SWE-1 committed in `WSB-DEVICE-2026-09-10/`, so the analysis is of the canonical record. Its
+conclusions are the record's: 24 reference-gated mismatches on both the card's GPU and its CPU,
+with the per-episode counts differing on two episodes so equal totals are not identical
+positions; one net agreement difference in 5,245; the gate's probability being the MLX 4-bit
+reference's own confidence and not shared ground truth; and the whole labelled instrument
+comparability rather than model behaviour, with no significance claim. The script refuses changed
+source hashes and forbids model imports, which is the right shape for a file-only analysis. The
+figure is honest: the two chat episodes at 19–20% disagreement are the free prose the gate was
+never about, and the gated panel shows where the 24 sit.
+
+Two amendments, small. Cite the canonical record path beside the card's directory, since the
+record is what survives the rental. And the limitation "flip-position identities are absent" was
+true of the sources at the time and is no longer true of the record: SWE-1's `661a453` added
+`confident-flips.json`, all 24 positions with turn, position, both tokens and the recorded
+probability, after a cap in the flip printer was found to hide half of them.
+
+**Codex may read the card.** The analysis reached `/workspace/wsb/out/` as the laptop's own user;
+that is allowed, read-only: no window, no run, no write outside a directory of Codex's own, and
+the seats' output directories are never modified. Every rule of the primer applies there too.
+
+**Next instruction, when SWE-1's precision-matched arm lands** (torch bf16 against MLX bf16 at the
+24 positions, running on the laptop now): extend this analysis, in a new record directory, by
+joining `confident-flips.json` with that arm's per-position outcomes, and draw the figure of
+which of the 24 survive precision matching and at what recorded probability, with the same
+hash-refusing, model-import-free script. That figure is the one the Director reads to decide
+whether the golden records are re-based on MLX bf16 or the port is searched.
