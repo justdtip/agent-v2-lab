@@ -47,6 +47,13 @@ independent of confidence, the chance of none reaching the confident bucket is
 unconfident ones did**, which is what a precision difference predicts and not what a mask,
 position, entry or norm defect would look like.
 
+**A threshold result is not a claim without the base rate beside it.** "0 flips at P ≥ 0.99"
+and "0 of 78 confident positions flipped" are the same fact, and only the second can be read.
+The first is indistinguishable from a threshold nothing came near. The report therefore prints
+every flip with its recorded probability, not only the gating ones, and the JSON carries the
+episode's own count of confident positions. I had to derive that count by hand after the first
+run, which is how the gap was found.
+
 **The projection missed by 4.2% and in the safe direction**, 7.88 GiB measured against 7.56
 projected. The basis was the snapshot's own header: 7.23 GiB of text tensors with the 0.78 GiB
 vision tower discarded, plus a 256 MiB ranking block and 80 MiB of KV. Stating the basis is
