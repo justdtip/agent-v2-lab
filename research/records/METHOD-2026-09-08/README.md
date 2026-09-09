@@ -348,6 +348,14 @@ a separate bug. **The rule: anything that bypasses `forward` inherits none of wh
 to it and must supply it itself.** The §16.7 wrapper dissolves both cases at once by making the
 chunked loss the forward that everything attaches to.
 
+**The third member, found by following the fix to its end.** With the wrapper handed to `Trainer`,
+`_save` branched on `isinstance(model, PreTrainedModel)`, found a wrapper, and wrote a bare state
+dict with `inner.*` keys and no config, silently, producing an artefact nothing downstream could
+load or name-match. So the rule is wider than `forward`: **upstream inspects the object it is
+handed, and a wrapper changes both what runs and what it is.** A wrapper must delegate what
+upstream branches on, and a test must assert the artefact is the kind of thing the next reader
+expects, not that a file exists.
+
 **The second rule, from two readings minutes apart.** `1115 passed, 1110 skipped` and `2211 passed,
 14 skipped` on the same tree, both truthful: a box window was open for the first and the suite
 correctly stood off every model-reaching test. **A suite reading is not a claim unless it carries

@@ -1139,6 +1139,18 @@ which the new one fails to. `reshard_after_forward` on the root is recorded as t
 not yet measured; that measurement is the device's. Two-rank `gloo` on CPU only; no CUDA, no NCCL,
 no real checkpoint.
 
+**Followed to its end (SWE-2, 909bd21): the wrapper is what `Trainer` is handed, and that caught a
+third member of the family.** `Trainer._save` branches on `isinstance(model, PreTrainedModel)`; the
+wrapper is not one, so it wrote a bare state dict with every tensor named `inner.*` and no
+`config.json`, nothing raised, and the artefact was one `checkpoint_delta` could not name-match and
+the registry could not load. `_save` now saves the inner model and the test asserts the checkpoint
+is a **model**: config present, no `inner.` prefix, loads with `from_pretrained`. The rule
+generalises: **upstream inspects the object it is handed; a wrapper changes both what runs and what
+it is.** Anything handed a wrapper in place of the `PreTrainedModel` inherits this silently, and the
+wrapper must also delegate `config` and the checkpointing methods or upstream reaches for them and
+finds nothing. Every seat that wraps a model reads this paragraph before handing the wrapper to
+anything of upstream's.
+
 ### 16.8 Cache strategies are arms of the gate, decided by fidelity; and a checkpoint never follows the box-state override
 
 SWE-1 built the torch cache strategies against the real `DynamicCache` and measured two things a
