@@ -74,19 +74,21 @@ def _stamped_lens(directory, name, arrays, identity, *, in_archive=True, sidecar
     return path, sha
 
 
-QWEN = LensIdentity("mlx-community/Qwen3.5-4B-MLX-4bit", 32)
-GEMMA = LensIdentity("google/gemma-3-4b-it", 34)
+QWEN = LensIdentity(base="mlx-community/Qwen3.5-4B-MLX-4bit", num_layers=32)
+GEMMA = LensIdentity(base="google/gemma-3-4b-it", num_layers=34)
 GEMMA_TRAINED = LensIdentity(
-    "google/gemma-3-4b-it", 34, {"kind": "lora", "rows": 1200, "adapter": "outputs/x"}
+    base="google/gemma-3-4b-it",
+    num_layers=34,
+    training={"kind": "lora", "rows": 1200, "adapter": "outputs/x"},
 )
 
 
 def test_lens_orientation_identity_and_hash_verification(tmp_path):
     path, sha = _stamped_lens(
         tmp_path, "lens.npz", {"J0": np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float16)},
-        LensIdentity("toy/toy", 2),
+        LensIdentity(base="toy/toy", num_layers=2),
     )
-    identity = LensIdentity("toy/toy", 2)
+    identity = LensIdentity(base="toy/toy", num_layers=2)
     lens = LensMaps.load(
         path, expected_sha256=sha, hidden_size=2, num_layers=2, identity=identity
     )
@@ -248,6 +250,28 @@ def test_capture_record_is_deterministic_and_detects_tampering(tmp_path):
         read_record(paths[0])
 
 
+def test_lens_identity_refuses_positional_construction_because_its_fields_have_moved() -> None:
+    """The three fields are not the three this class started with, so position means nothing.
+
+    Until ``a960d80`` the signature was ``(name, hf_id, num_layers)``. The lineage rule replaced
+    the first two with one ``base`` and appended ``training``. Two-argument positional callers
+    survived that by coincidence and were never re-read;
+    ``research/records/GEMMA3-REGRESSION-2026-09-08/compare_maps.py`` did not, and still passes a
+    filesystem path where ``num_layers`` now is. This test is the mechanism that makes the next
+    such change break at the call rather than at a caller nobody thought to open.
+    """
+    with pytest.raises(TypeError):
+        LensIdentity("google/gemma-3-4b-it", 34)  # type: ignore[misc]
+
+    # Specifically the shape the stale record's script uses: a path bound to num_layers and a
+    # layer count bound to training. Under the old signature this constructed; it must not now.
+    with pytest.raises(TypeError):
+        LensIdentity("gemma3-4b-bf16", "/models/gemma-3-4b-it-bf16", 34)  # type: ignore[misc]
+
+    # And the keyword form is unchanged, so the refusal is about position and nothing else.
+    assert LensIdentity(base="google/gemma-3-4b-it", num_layers=34) == GEMMA
+
+
 def test_two_precisions_of_one_model_share_a_lens_and_the_refusal_is_about_the_model() -> None:
     """The correction the Gemma pilot forced, and the line the check has to hold.
 
@@ -268,10 +292,12 @@ def test_two_precisions_of_one_model_share_a_lens_and_the_refusal_is_about_the_m
     assert four_bit.hf_id != bf16.hf_id, "different files"
     assert four_bit.base == bf16.base == "google/gemma-3-4b-it", "one base"
     assert four_bit.training is bf16.training is None, "neither carries training"
-    assert LensIdentity(four_bit.base, 34, four_bit.training) == LensIdentity(
-        bf16.base, 34, bf16.training
+    assert LensIdentity(
+        base=four_bit.base, num_layers=34, training=four_bit.training
+    ) == LensIdentity(base=bf16.base, num_layers=34, training=bf16.training)
+    assert (
+        LensIdentity(base=four_bit.base, num_layers=34, training=four_bit.training) != QWEN
     )
-    assert LensIdentity(four_bit.base, 34, four_bit.training) != QWEN
 
     qwen = load_model_spec("qwen35-4b")
     assert qwen.base == qwen.hf_id, "an unconverted checkpoint is its own base"

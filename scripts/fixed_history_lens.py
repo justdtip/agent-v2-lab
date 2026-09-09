@@ -114,6 +114,48 @@ def hf_tokenizer(hf_id: str):
     return AutoTokenizer.from_pretrained(path)
 
 
+class SeamError(ValueError):
+    """The prompt does not tokenize as a prefix of prompt+turn, so every slice below is off."""
+
+
+def refuse_unless_prompt_is_a_prefix(prompt_ids, joint_ids, *, task_id: str, label: str) -> None:
+    """Refuse unless ``joint_ids`` starts with ``prompt_ids``, naming the two tokenizations.
+
+    **This is the assumption every number in this script rests on**, and it was unguarded until
+    2026-09-09. ``n_prompt_tokens`` is the prompt tokenized *alone*; the teacher-forced passes
+    tokenize prompt and turn *together* and then slice at that count. The slice is the turn's own
+    tokens only if the join does not re-tokenize — and tokenizers merge across a join routinely, at
+    which point the slice starts inside the prompt and the summed log-probability in
+    ``turn_logp`` is computed over the wrong window, silently and plausibly.
+
+    There was an assertion twenty lines below the loop that looked like a guard for a neighbouring
+    form of this and could not fail: ``assert <comparison> or True`` is ``(<comparison>) or True``,
+    because ``==`` binds tighter than ``or``. It never tested anything, and it stood while this
+    script produced the log-probability figures in ``research/records/ARM-A-DIVERGENCE-2026-09-07``.
+    Those figures were checked afterwards from the artefact and the tokenizer alone — 11 adapter
+    turns and 11 base turns, 22 seams, all clean — so the record stands; this is what makes the
+    next run say so itself rather than be checked by hand.
+
+    The refusal prints both tokenizations around the divergence rather than a bare count, because
+    the useful question at that point is *which* token merged, and a count cannot answer it.
+    """
+    if list(joint_ids[: len(prompt_ids)]) == list(prompt_ids):
+        return
+    first = next(
+        (i for i, (a, b) in enumerate(zip(prompt_ids, joint_ids, strict=False)) if a != b),
+        min(len(prompt_ids), len(joint_ids)),
+    )
+    lo, hi = max(0, first - 4), first + 4
+    raise SeamError(
+        f"{task_id}: the {label} prompt does not tokenize as a prefix of prompt+turn, so the "
+        f"teacher-forced slice would start inside the prompt and every log-probability below "
+        f"would be summed over the wrong window. First divergence at token {first} of "
+        f"{len(prompt_ids)}.\n"
+        f"  prompt alone [{lo}:{hi}] = {list(prompt_ids[lo:hi])}\n"
+        f"  prompt+turn  [{lo}:{hi}] = {list(joint_ids[lo:hi])}"
+    )
+
+
 def slots(tok, text: str, n_prompt_chars: int) -> tuple[list[int], int | None, int | None]:
     """Token ids of ``text`` and the indices of the first token of the tool name and of the first argument value."""
     enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
@@ -173,12 +215,26 @@ def main() -> None:
         p["n_prompt_tokens"] = len(tok(p["prompt_text"], add_special_tokens=False)["input_ids"])
         full = p["prompt_text"] + p["adapter_turn_t_raw"]
         ids, slot, arg = slots(tok, full, len(p["prompt_text"]))
+        # Before anything is loaded: --dry-run reaches here and a seam failure must not cost a
+        # model load to discover.
+        refuse_unless_prompt_is_a_prefix(
+            tok(p["prompt_text"], add_special_tokens=False)["input_ids"],
+            ids,
+            task_id=p["task_id"],
+            label="adapter",
+        )
         p["n_total_tokens"] = len(ids)
         p["slot_first_name_token"] = slot
         p["slot_first_argument_token"] = arg
         p["adapter_tool"] = p["adapter_turn_t_action"]["name"]
         if p["base_turn_t_raw"] is not None:
             bids, bslot, barg = slots(tok, p["prompt_text"] + p["base_turn_t_raw"], len(p["prompt_text"]))
+            refuse_unless_prompt_is_a_prefix(
+                tok(p["prompt_text"], add_special_tokens=False)["input_ids"],
+                bids,
+                task_id=p["task_id"],
+                label="base",
+            )
             p["base_turn_tokens"], p["base_slot_first_name_token"], p["base_slot_first_argument_token"] = len(bids) - p["n_prompt_tokens"], bslot, barg
     summary = [{k: v for k, v in p.items() if k not in ("messages", "prompt_text")} for p in pairs]
     json.dump({"candidate_first_tokens": {k: {"id": v, "text": tok.decode([v])} for k, v in cands.items()},
@@ -203,8 +259,28 @@ def main() -> None:
     lens = np.load(args.lens)
     J = {L: mx.array(lens[f"J{L - 1}"].astype(np.float32)) for L in READ}
     sampler = make_sampler(0.0)
+    # Live as of 2026-09-09. This stood as `assert <comparison> or True` — always true, never
+    # tested anything — and the Chief's ruling is that a guard which cannot fail does not stay: if
+    # the two tokenizers disagree, that is a fact about the seam this script exists to protect and
+    # the honest outcome is a refusal naming it, not a disabled check. The two must agree because
+    # the greedy pass runs through `mtok` and the teacher-forced pass through `tok`, and a
+    # disagreement on the prompt makes those two passes different experiments.
     for p in pairs:
-        assert list(mtok.encode(p["prompt_text"])) == tok(p["prompt_text"], add_special_tokens=False)["input_ids"][: p["n_prompt_tokens"]] or True
+        mlx_ids = list(mtok.encode(p["prompt_text"]))
+        hf_ids = tok(p["prompt_text"], add_special_tokens=False)["input_ids"][: p["n_prompt_tokens"]]
+        if mlx_ids != list(hf_ids):
+            first = next(
+                (i for i, (a, b) in enumerate(zip(mlx_ids, hf_ids, strict=False)) if a != b),
+                min(len(mlx_ids), len(hf_ids)),
+            )
+            lo, hi = max(0, first - 4), first + 4
+            raise SeamError(
+                f"{p['task_id']}: the MLX and HF tokenizers disagree on the prompt, so the greedy "
+                f"pass and the teacher-forced pass are not the same experiment. First divergence "
+                f"at token {first}; lengths {len(mlx_ids)} and {len(hf_ids)}.\n"
+                f"  mlx_lm  [{lo}:{hi}] = {mlx_ids[lo:hi]}\n"
+                f"  hf      [{lo}:{hi}] = {list(hf_ids[lo:hi])}"
+            )
 
     def lens_read(h_row: mx.array, L: int) -> mx.array:
         return view.unembed(view.final_norm(h_row.astype(mx.float32) @ J[L].T))

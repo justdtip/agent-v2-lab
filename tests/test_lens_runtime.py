@@ -14,7 +14,7 @@ from local_llm_lab.pipeline.live_lens.instruments import LensIdentity
 
 #: The identity every toy lens in this file is fitted for (issue 99). Three layers because
 #: `write_lens` requires all and only the nonfinal maps, and these fixtures write two.
-_TOY = LensIdentity("example/tiny", 3)
+_TOY = LensIdentity(base="example/tiny", num_layers=3)
 
 
 def api():

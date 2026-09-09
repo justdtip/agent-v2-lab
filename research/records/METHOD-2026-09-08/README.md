@@ -393,6 +393,15 @@ warning. **An assertion that an artefact loads is worth nothing unless the loade
 tolerant reader turns a corrupted artefact into a passing test, which is the guard that passes
 the object it exists to catch, applied to the reader instead of the guard.
 
+
+**The family, named by SWE-2 once its third member was found.** The guard that passed the wrapper it
+existed to catch; the reload assertion satisfied by a reader that treats missing weights as a
+warning; and the `assert X == Y or True` in a record's producer, which parses as
+`(comparison) or True` and has never tested anything (the twenty-sixth entry). None of these is an
+absent check. Each is **a present check that is inert**: silence was read as evidence, and a reader
+looking for a guard found one. That is the sharper form of both rules above and it supersedes them
+as the thing to look for: not "is there a check" but "can this check fail, and has it".
+
 ---
 
 ## Twenty-fourth: the shared index, or why explicit-path `add` was not enough
@@ -491,3 +500,71 @@ waiting". Asking what a merge *would do*, rather than whether it would conflict,
 routine confirmation into the finding: `merge-tree` reporting zero conflicts was the answer to the
 question I was told to ask, and the diff of its written tree was the answer to the one that mattered.
 A clean merge-tree means the merge is unambiguous. It does not mean the merge is harmless.
+
+## Twenty-sixth: twelve benign closures, and the dead assertion found beside one of them
+
+SWE-2 routed twelve `B023` warnings — a function defined in a loop closing over the loop variable —
+across four files owned by other seats, with the reading that all twelve are benign, and the
+explicit caveat that they had read for the closure question only and not for whether the scripts
+compute what their records claim. That second question is the one that came to this seat.
+
+**The closure reading is right, and I confirmed it independently rather than from the message.**
+`ruff check --select B023` returns exactly twelve, in the four named files, at the lines and over
+the variables SWE-2 listed. Every one is invoked inside the iteration that defines it: `g` in
+`build_report.py:242` is consumed by the `"".join(...)` on the next line; `med_cos` in
+`query_cosine.py:69` twice on the next line; `run_rest` in `cache_split_diagnostic.py:143` three
+times at lines 150, 153 and 156, all before the loop turns; `turn_logp` in
+`fixed_history_lens.py:263` three times on the line after it. None is stored, returned or deferred.
+`B023` is about a call that outlives its iteration, and none of these does.
+
+**The thing worth having is the one the closure question walked past.** `turn_logp` closes over
+`n_p` and `ids_full`, and its correctness rests on an assumption the closure warning cannot see:
+`n_p` is `len(tok(prompt_text))`, the prompt tokenized alone, while `ids_full` is
+`tok(prompt_text + adapter_turn_t_raw)`, the two tokenized together. The slice `ids_full[n_p:]` is
+the turn's own tokens **only if the concatenation does not re-tokenize across the seam**. Tokenizers
+merge across a join routinely; when they do, the slice is off by one or more and the summed
+log-probability is computed over a window that starts inside the prompt. These are the numbers the
+record's attribution rests on: the adapter's wrong turn at −0.1 to −4.3 nats against the base's
+correct turn at −12 to −83.
+
+**Twenty lines above it there is a guard for exactly this, and it cannot fail.**
+`fixed_history_lens.py:207` reads
+
+```python
+assert list(mtok.encode(p["prompt_text"])) == tok(p["prompt_text"], ...)["input_ids"][: p["n_prompt_tokens"]] or True
+```
+
+`==` binds tighter than `or`, so the whole expression is `(comparison) or True`, which is `True` for
+every input. The assertion has never tested anything. It is the twenty-third entry's shape a second
+time — a fixture that could not fail — and this time it sat in the run that produced a published
+figure. Its intent also differs from the assumption above: it compares the *MLX* tokenizer against
+the *HF* one, which is a specials-and-BOS question, not a seam question. So even alive it would have
+guarded a neighbouring claim rather than this one, and it may well carry `or True` because it
+tripped on a benign specials mismatch when it was written.
+
+**So I measured the seam instead of arguing about the guard.** Tokenizer only, no weights, no lock:
+for each of the eleven pairs in `run/fixed_history_lens.json`, compare `n_prompt_tokens` plus the
+turn tokenized alone against the recorded `n_total_tokens`, and the same for the base turn against
+`base_turn_tokens`.
+
+```
+11 adapter turns: 11 clean, 0 seam shifts
+11 base turns:    11 clean, 0 inconsistent
+```
+
+Every seam is clean. `ids_full[n_p:]` is the turn's tokens in all twenty-two cases, so the
+log-probability comparison in `ARM-A-DIVERGENCE-2026-09-07` is sound, and now sound by measurement
+rather than by the assumption a dead assert was standing in for.
+
+**What is not fixed, deliberately.** I have not edited the assertion. Making it live is a one-token
+change and a bad unilateral one: if it carries `or True` because the two tokenizers disagree on
+specials, turning it on breaks the script for a reason unrelated to anything it protects. The choice
+belongs to the seat that owns `scripts/fixed_history_lens.py` — either delete it, or replace it with
+the seam check above, which is the assumption the script actually depends on and which now has a
+measured value to assert against. Leaving it as it stands is the one option that should not survive,
+because a reader who greps for a guard finds one.
+
+**The shape.** A lint class defines the question it asks, and answering it well is not the same as
+answering the question the code raises. Twelve closures were benign and reading them was still worth
+it, because the file that held the subtlest of them also held an inert guard over the assumption
+that subtlety depended on. The warning was not the finding; it was the reason someone read the line.

@@ -50,7 +50,7 @@ def resolve_base(named: str) -> str:
     return base_of_artifact(named)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class LensIdentity:
     """What a lens **is** a map of, as opposed to what merely travels with it (R60).
 
@@ -76,6 +76,23 @@ class LensIdentity:
     A base-fitted lens read against a trained model is a real and interesting measurement — it
     shows what training moved — but it is a declared cross-condition read, never two entries
     agreeing on architecture.
+
+    **Keyword-only, and the reason is a record that cannot be re-run.** These three fields are not
+    the three this class started with: it was ``(name, hf_id, num_layers)`` until ``a960d80``
+    applied the lineage rule, which replaced the first two with a single ``base`` and appended
+    ``training``. Positional callers of the two-argument form kept working across that change by
+    coincidence — the new first field sits where the old one did and means something close enough
+    that nothing raised. Nothing forced a caller to be re-read, so nothing was.
+    ``research/records/GEMMA3-REGRESSION-2026-09-08/compare_maps.py`` is what that costs: it still
+    passes three positional arguments in the old order, binding a filesystem path to ``num_layers``
+    and a layer count to ``training``, and it can no longer run. The record's ``comparison.json``
+    carries the old ``{"name", "hf_id", "num_layers"}`` shape, which is how the script's own output
+    dates it.
+
+    ``kw_only=True`` is what makes the next such change loud. A renamed or reordered field then
+    breaks every caller at the call, with the field's name in the error, instead of silently
+    rebinding to a neighbour of the same type. The cost is that every construction names its
+    fields, which is the whole benefit stated as a cost.
     """
 
     base: str
@@ -111,7 +128,7 @@ class LensIdentity:
             raise LensIdentityError("lens identity training must be a mapping or absent")
         if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
             raise LensIdentityError("lens identity num_layers must be a positive integer")
-        return cls(resolve_base(base), layers, training or None)
+        return cls(base=resolve_base(base), num_layers=layers, training=training or None)
 
     def describe(self) -> str:
         trained = "base" if self.training is None else f"trained: {sorted(self.training)}"
