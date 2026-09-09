@@ -20,6 +20,7 @@ import io
 import json
 import platform
 import re
+import shutil
 import sys
 import tarfile
 import time
@@ -752,8 +753,6 @@ def bootstrap(args: argparse.Namespace) -> int:
     preflight. Each step runs the same code as its subcommand, in that order; the first failure
     stops the sequence with its row, and the report is written either way. The login prompt is
     the only thing that needs a hand."""
-    import shutil
-
     cache = configure_local_cache()
     started = time.time()
     rows: list[dict] = []
@@ -783,6 +782,18 @@ def bootstrap(args: argparse.Namespace) -> int:
         )
         return code
 
+    try:
+        return _bootstrap_steps(args, cache=cache, report=report, step=step, finish=finish)
+    except Exception as error:  # noqa: BLE001 - the report is written whatever stopped the run
+        import traceback
+
+        step("exception", False, f"{type(error).__name__}: {error}")
+        traceback.print_exc()
+        return finish(1)
+
+
+def _bootstrap_steps(args: argparse.Namespace, *, cache: Path, report: Path, step, finish) -> int:
+    """The steps, in order; each returns through ``finish`` so the report is written."""
     # 0. login: the one prompt, skipped when a usable token is already stored.
     who = _logged_in()
     if who is not None:

@@ -472,3 +472,18 @@ def test_bootstrap_without_a_token_prompts_or_fails_by_flag(monkeypatch, tmp_pat
     assert calls == []
     assert device_setup.main(["bootstrap", "--dry-run", "--report", str(tmp_path / "b.json")]) == 0
     assert calls == [("login",)], "the prompt ran once, then the plan"
+
+
+def test_bootstrap_writes_its_report_when_a_step_raises(monkeypatch, tmp_path, capsys):
+    calls, _ = _bootstrap_stubs(monkeypatch, tmp_path)
+
+    def explode(args):
+        raise RuntimeError("CUDA is already initialised")
+
+    monkeypatch.setattr(device_setup, "fetch", explode)
+    report = tmp_path / "report.json"
+    assert device_setup.main(["bootstrap", "--report", str(report)]) == 1
+    rows = json.loads(report.read_text())
+    assert rows["exit"] == 1 and rows["rows"][-1]["step"] == "exception"
+    assert "CUDA is already initialised" in rows["rows"][-1]["detail"]
+    assert "Traceback" in capsys.readouterr().err
