@@ -809,3 +809,15 @@ which is why its failures cost whole results rather than degrading them. And a f
 the first instance: **a reporter must not be able to raise.** By the time a logger is called the
 result is already computed, so that is the most expensive possible moment to fail, and it is the
 one place where "write something, whatever you were handed" is the correct engineering.
+
+**Second addendum, Chief, 2026-09-10, on SWE-1's and the D-CRO's offer.** A fifth instance, and it
+is the strongest in the family because it is the family reaching the tool built to catch the family.
+The D-CRO's pinning check for the plan-progress pre-registration passed a document in which 7,629
+had been changed to 7,628, because it searched the whole file rather than the line and six correct
+copies of the number hid the wrong one — and the self-test written to catch exactly that had the
+same defect one level up. So the first rule takes its strong form, which is now in the code on both
+seats: **a reporter is tested by corrupting each claim it makes, in turn, and asserting that it says
+so** — the pinning check line-anchored and its self-test corrupting each pinned figure (33 corrupted,
+0 survivors); the WS-B classifier's four classes corrupted at their own inputs with the class that
+should move asserted to move, every corruption still summing to four. A guard that is not itself
+corrupted and watched is a reporter too.

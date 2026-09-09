@@ -227,3 +227,36 @@ and three of the bfloat16 golden test are withdrawn by the Director's ruling.
 outputs, kept separate — the local sensitivity from the validated autograd path, and the actual
 response to a finite intervention in native precision — with their agreement measured, never
 assumed.
+
+## Amendment, Chief, 2026-09-10 — the boundary check (`4a2cfe2`): the hook is exact, the bfloat16 forward is not batch-invariant, and the matched pair runs at width 1
+
+The protocol's §2, run first as ordered, 23 seconds of card time. The replacement hook fed its own
+unperturbed capture reproduces the ordinary forward **bit for bit** at repository layers 1, 17 and
+33 at batch 1, and the source-equals-target control is exact; the replacement path is sound. At
+widths 64 and 256 it is not exact, and the unhooked control says why: with no hook at all, the same
+frozen row at width 64 differs from itself at width 1 in every one of the 34 blocks, from the first
+(mean absolute 0.0091, maximum 8), compounding by about ×1.35 per block to a mean absolute
+difference of 76.4 at the target, every row of a batch agreeing with every other. The batched
+forward computes a different function — a kernel choosing its reduction by batch size, amplified
+through a 34-block residual stack — and the golden run's two estimators did not share it: exact
+autograd at `dim_batch = 64`, finite differences at `direction_batch = 256`, anchored on a residual
+captured at width 1. `assert_estimator_is_the_only_difference` passed because batch width was not
+among the ν fields it compares: a gate that could not fail on the thing that mattered.
+
+The D-CRO does not claim this explains the compression, and neither does this order: a candidate
+with the right depth profile is exactly what the Director's audit refused an hour earlier, and the
+finite-difference arms share a width, so the offset cancels to first order between them.
+
+**Ruled.** (1) ν gains the batch schedule — each estimator's forward width and the width its anchor
+was captured at — and the gate refuses a cross-width comparison; laptop, first. (2) The matched
+pair runs **at width 1 throughout**: anchor, autograd (one prompt, VJPs with the pre-registered
+cotangents) and finite differences, §4's directions and ladder, both precisions. (3) Then the width
+rows at 64 and 256 for the same directions and a few steps, anchor and forward at that width, the
+unchanged-residual check repeated at each width, reported as the schedule term of the protocol's
+§3 decomposition. When a full map later needs batching, both estimators share the width and the
+anchor is captured at it. (4) The method entry follows the sweep.
+
+**Two consequences for other streams, recorded now:** the plan-progress captures are made at width
+1 with `forward_batch` in the manifest, since a batched capture carries a width-dependent
+arithmetic-path term into every probe fit; and the ν of every lens fitted at `dim_batch = 64`
+declares that width, because the map was fitted on the width-64 function.
