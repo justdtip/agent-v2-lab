@@ -299,6 +299,36 @@ absent-data gates on this checkout, none in the bridge, and each names its reaso
 | `tests/test_tasks.py:389` | 2 | configured protected replay directory is absent: /Users/daniel.tipton/worktrees/cuda-ws-c/data/chat_replay |
 | `tests/test_tasks.py:417` | 1 | run D dataset is not present on this checkout: /Users/daniel.tipton/worktrees/cuda-ws-c/data/agent_v2d |
 
+## After review: three additions on fixtures, 2026-09-09
+
+The Chief's review of e2d2bc2 (merged as 5d32db8) named one gap and two follow-ons. All three are
+on fixtures with no model loaded.
+
+**A dictionary of another checkpoint of the same width is now refused.** `hook_alignment` checked
+layer and hidden size, which a `-pt` dictionary read through the `-it` lens passes. It now reads
+the config's `model_name`, resolves it through the same registry resolution a lens identity goes
+through, and refuses on disagreement with the lens identity's base, with both names in the
+message. When the bridge runs from a registry entry, the entry's `base` is the third party to the
+same comparison. A config that names no model is refused, and so is a lens that carries no
+identity, because a check that passes when it cannot compare is the inert kind. Tests cover the
+pt-against-it case, the missing name, the missing identity, and the registry third party; the
+gated real-artefact test now runs the real config's `google/gemma-3-4b-it` against the real lens
+identity and passes.
+
+**The adapter's decode side and the wrapper's identity through it.** Beyond the encoder check,
+`decoder @ z + bias` agrees with the numpy `decode` to float32 tolerance on the A2 fixture, and
+the wrapper's residual preservation holds through the adapter: after the edit, `h' − b − D z'`
+equals `h − b − D z` to float32 tolerance, with the code changed only where asked.
+
+**The reconstruction-budget gate.** `reconstruction_budget(dictionary, residuals, dominance=…)`
+takes a `(sites, hidden)` array and reports, per site, the residual share `|e| / |h|` and the
+active-feature count, plus their quantiles, the fraction of sites over the declared dominance, and
+a `rankable` mask that is exactly the sites `decompose_position` would accept. The threshold is an
+input and is echoed, never chosen. On the tied orthonormal fixture, explained sites report share 0
+with every feature active and complement sites report share 1 with none, and the declined fraction
+is the designed 0.4. The device supplies the real residuals after A2's first forward; that number
+is what decides Stage B, and it is not in this record.
+
 ## Unexecuted
 
 A2 on any real activation. Stage B entirely. Every layer other than 18 for the full readout — the
