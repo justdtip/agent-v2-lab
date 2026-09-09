@@ -256,3 +256,20 @@ def test_importable_answers_for_a_module_that_is_present_without_a_spec(monkeypa
 
     # A name that is neither loaded nor installed still goes to `find_spec` and still answers False.
     assert device._importable("a_module_that_is_not_installed_anywhere") is False
+
+
+def test_the_shims_readers_set_the_workspace_default_so_a_later_pin_is_not_refused(monkeypatch):
+    """The first device run: preflight read the device before it pinned, and pin refused by its
+    own rule. The shim's readers now set the cuBLAS default before creating a context."""
+    torch = pytest.importorskip("torch")
+    monkeypatch.delenv(device.CUBLAS_ENV, raising=False)
+    monkeypatch.setattr(device, "_pinned", None)
+    device._before_cuda()
+    assert os.environ[device.CUBLAS_ENV] == device.CUBLAS_DETERMINISTIC
+    # A context that exists with the variable at the deterministic value: pin proceeds.
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    assert device.pin(seed=3)["determinism"] == "pinned"
+    # A context that exists with the variable unset, created outside the shim: still refused.
+    monkeypatch.delenv(device.CUBLAS_ENV)
+    with pytest.raises(RuntimeError, match="before the first CUDA use"):
+        device.pin(seed=3)

@@ -188,8 +188,22 @@ def describe() -> dict[str, Any]:
 # ------------------------------------------------------------------ the six calls, two ways
 
 
+def _before_cuda() -> None:
+    """Set the cuBLAS workspace default before this shim creates a CUDA context.
+
+    cuBLAS reads ``CUBLAS_WORKSPACE_CONFIG`` at first use, and :func:`pin` refuses to run after a
+    context exists with it unset. The shim's own readers (``device_info``, ``budget``, the memory
+    calls) create that context, and on the first device run ``preflight`` read the device before
+    it pinned and was refused by its own rule. Setting the default here keeps the readers
+    pin-compatible: a later ``pin`` finds the variable already at the deterministic value. A
+    context created *outside* the shim with the variable unset is still refused, as before.
+    """
+    os.environ.setdefault(CUBLAS_ENV, CUBLAS_DETERMINISTIC)
+
+
 def _cuda_indices(device: Any) -> list[int] | None:
     """CUDA indices for ``device``, or ``None`` when the device is not CUDA."""
+    _before_cuda()
     import torch
 
     if device == "all":
@@ -306,6 +320,7 @@ def set_cache_limit(limit_bytes: int, device: Any = None) -> int | dict[int, int
 
 def device_info(device: Any = None) -> dict[str, Any] | dict[int, dict[str, Any]]:
     """What the device will grant, with ``memory_size`` in bytes on every backend."""
+    _before_cuda()
     if backend() == "mlx":
         import mlx.core as mx
 
@@ -339,6 +354,7 @@ def device_info(device: Any = None) -> dict[str, Any] | dict[int, dict[str, Any]
 def budget(fraction: float = R47_FRACTION, device: Any = None) -> int | dict[int, int]:
     """The R47 planning cap: ``fraction`` of what the device grants, on MLX its recommended working
     set, on CUDA the device total, on CPU host memory. What §10.2 sizes a batch under."""
+    _before_cuda()
     if not 0 < fraction <= 1:
         raise ValueError(f"fraction must lie in (0, 1]; got {fraction!r}")
     info = device_info(device)
