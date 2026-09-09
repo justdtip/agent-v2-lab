@@ -195,7 +195,14 @@ def test_fetch_dictionary_names_files_and_bytes_and_refuses_an_absent_layer(
     import hashlib
 
     folder = "resid_post_all/layer_17_width_16k_l0_small"
-    config = json.dumps({"hook_name": "model.layers.17.output", "l0": 20, "width": 16384}).encode()
+    config = json.dumps(  # the real config's keys
+        {
+            "hf_hook_point_in": "model.layers.17.output",
+            "model_name": "google/x",
+            "l0": 20,
+            "width": 16384,
+        }
+    ).encode()
     params = b"\x00" * 4096
     listing = {
         f"{folder}/config.json": (248, {"blob_id": _blob_sha1(config), "lfs": None}),
@@ -229,7 +236,7 @@ def test_fetch_dictionary_names_files_and_bytes_and_refuses_an_absent_layer(
         "resid_post_all/layer_17_width_16k_l0_small/params.safetensors",
     ]
     out = capsys.readouterr().out
-    assert "hook='model.layers.17.output'" in out and out.count("verified") == 2
+    assert "model='google/x' hook='model.layers.17.output'" in out and out.count("verified") == 2
     assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "18"]) == 2
     assert "no such files" in capsys.readouterr().err
     assert device_setup.main(["fetch-dictionary", "google/x"]) == 2

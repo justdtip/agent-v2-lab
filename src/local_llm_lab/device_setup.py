@@ -519,9 +519,12 @@ def fetch_dictionary(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as error:
             print(f"layer {layer}: config unreadable: {error}", file=sys.stderr)
             return 1
-        hook = declared.get("hook_name", declared.get("hook"))
-        width = declared.get("width", declared.get("d_sae"))
-        print(f"layer {layer}: hook={hook!r} l0={declared.get('l0')} width={width}")
+        # The config's own keys, read from a real one: hf_hook_point_in, model_name, width, l0.
+        hook = declared.get("hf_hook_point_in", declared.get("hook_name"))
+        print(
+            f"layer {layer}: model={declared.get('model_name')!r} hook={hook!r} "
+            f"l0={declared.get('l0')} width={declared.get('width')}"
+        )
     print(f"dictionary layers under {root}")
     return 0
 
