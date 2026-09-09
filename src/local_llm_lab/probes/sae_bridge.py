@@ -446,13 +446,79 @@ ANCHOR_SENSITIVITY_PATH = Path(__file__).with_name("anchor_sensitivity.json")
 
 _ANCHOR_TABLE: dict[str, Any] | None = None
 
+#: The table's allowed shape, checked on load at **every** level. The point is not to ban numbers:
+#: medians, ranges and counts are numbers, and a legitimate statistic may coincidentally equal a
+#: withdrawn ratio, so a value blacklist would catch the wrong thing and miss the right one. What is
+#: checked is the *quantity at each location*: a key nobody declared -- an ``amplification_ratio``
+#: nested three levels down, say -- is refused wherever it appears, because a quantity this record
+#: does not name is a quantity nobody ruled on.
+_CELL_KEYS = frozenset({"median", "min", "max", "count"})
+_ARM_KEYS = frozenset({"float32", "native"})
+_LAYER_KEYS = frozenset(
+    {"sampled_displacement", "equal_norm_random_displacement", "native_anchor_read_in_the_float32_tail"}
+)
+_MODEL_KEYS = frozenset(
+    {"basis", "label", "quantity", "precision_convention", "layers", "reading_notes",
+     "measured_pairings"}
+)  # fmt: skip
+
+
+def _check_keys(node: Any, allowed: frozenset[str], where: str, *, exact: bool = True) -> None:
+    """Refuse a node carrying a key nobody declared, naming it and where it sits."""
+    if not isinstance(node, dict):
+        raise ValueError(
+            f"{ANCHOR_SENSITIVITY_PATH.name}: {where} must be a mapping, not "
+            f"{type(node).__name__}"
+        )
+    undeclared = sorted(set(node) - allowed)
+    if undeclared:
+        raise ValueError(
+            f"{ANCHOR_SENSITIVITY_PATH.name}: {where} carries undeclared {undeclared}; a quantity "
+            "this record does not name is a quantity nobody ruled on"
+        )
+    missing = sorted(allowed - set(node)) if exact else []
+    if missing:
+        raise ValueError(f"{ANCHOR_SENSITIVITY_PATH.name}: {where} is missing {missing}")
+
+
+def _check_cell(cell: Any, where: str) -> None:
+    _check_keys(cell, _CELL_KEYS, where)
+    for key in ("median", "min", "max"):
+        if isinstance(cell[key], bool) or not isinstance(cell[key], (int, float)):
+            raise ValueError(f"{ANCHOR_SENSITIVITY_PATH.name}: {where}.{key} must be a number")
+    if isinstance(cell["count"], bool) or not isinstance(cell["count"], int):
+        raise ValueError(f"{ANCHOR_SENSITIVITY_PATH.name}: {where}.count must be an integer")
+
+
+def _validate_anchor_table(table: dict[str, Any]) -> dict[str, Any]:
+    """Refuse a table carrying any quantity this record does not name, at any depth."""
+    for model, entry in table.items():
+        _check_keys(entry, _MODEL_KEYS, repr(model), exact=False)
+        for layer, measured in (entry.get("layers") or {}).items():
+            where = f"{model}.layers[{layer}]"
+            _check_keys(measured, _LAYER_KEYS, where)
+            for arm in ("sampled_displacement", "equal_norm_random_displacement"):
+                block = measured[arm]
+                _check_keys(block, _ARM_KEYS, f"{where}.{arm}")
+                for precision, cell in block.items():
+                    _check_cell(cell, f"{where}.{arm}.{precision}")
+            _check_cell(
+                measured["native_anchor_read_in_the_float32_tail"],
+                f"{where}.native_anchor_read_in_the_float32_tail",
+            )
+        for layer, pairing in (entry.get("measured_pairings") or {}).items():
+            _validate_pairing(pairing, f"{model}.measured_pairings[{layer}]")
+    return table
+
 
 def anchor_table() -> dict[str, Any]:
-    """The measurement table, read once from :data:`ANCHOR_SENSITIVITY_PATH`."""
+    """The measurement table, read once from :data:`ANCHOR_SENSITIVITY_PATH` and validated."""
     global _ANCHOR_TABLE
     if _ANCHOR_TABLE is None:
         raw = json.loads(ANCHOR_SENSITIVITY_PATH.read_text(encoding="utf-8"))
-        _ANCHOR_TABLE = {key: value for key, value in raw.items() if not key.startswith("_")}
+        _ANCHOR_TABLE = _validate_anchor_table(
+            {key: value for key, value in raw.items() if not key.startswith("_")}
+        )
     return _ANCHOR_TABLE
 
 
@@ -475,22 +541,140 @@ def measured_layers(base: str | None = None) -> list[int]:
     return sorted(int(key) for key in (entry.get("layers") or {}))
 
 
-def path_pairing(layer: int, *, base: str | None = None) -> dict[str, Any] | None:
-    """The measured cross-path pairing at ``layer`` of ``base``, or ``None`` while none exists."""
+#: What identifies the pair a cross-path measurement was taken on. A measurement is evidence about
+#: *an experiment*, so lifting a refusal with it requires the reading to be that experiment. Model
+#: and layer are necessary and nowhere near sufficient: the same layer at another capture
+#: precision, another width, or with the paths reversed is a different object, which is the whole
+#: finding of this week's controls.
+#:
+#: The lens's side comes from its own nu, so it cannot be asserted by the caller: ``fit_dtype`` and
+#: ``fit_width`` are read from the precision block and ``nu_sha256`` digests the nu entire, which
+#: pins the endpoint and the fit's positions with it. ``lens_side`` records which side of the pair
+#: the lens was fitted on, so a measurement taken with the lens on the other side does not match a
+#: reading with it on this one. The reading's own side the caller must declare, because only the
+#: caller knows it: which positions, under which reduction, at which endpoint, at what context
+#: length. A2's caller supplies its actual provenance or it gets no permission.
+PAIR_FIELDS = (
+    "fit_dtype",
+    "fit_width",
+    "capture_dtype",
+    "capture_width",
+    "lens_side",
+    "nu_sha256",
+    "positions",
+    "reduction",
+    "endpoint",
+    "context_tokens",
+)
+
+#: The subset the caller declares about the reading; the rest is read off the lens.
+READING_FIELDS = ("positions", "reduction", "endpoint", "context_tokens")
+
+
+def _validate_pairing(pairing: Any, where: str) -> None:
+    """A registered pairing carries the identity of the pair it measured, or it is not one."""
+    if not isinstance(pairing, dict):
+        raise ValueError(f"{ANCHOR_SENSITIVITY_PATH.name}: {where} must be a mapping")
+    pair = pairing.get("pair")
+    if not isinstance(pair, dict) or set(pair) != set(PAIR_FIELDS):
+        missing = sorted(set(PAIR_FIELDS) - set(pair)) if isinstance(pair, dict) else list(PAIR_FIELDS)
+        extra = sorted(set(pair) - set(PAIR_FIELDS)) if isinstance(pair, dict) else []
+        raise ValueError(
+            f"{ANCHOR_SENSITIVITY_PATH.name}: {where}.pair must carry exactly {list(PAIR_FIELDS)}"
+            + (f"; missing {missing}" if missing else "")
+            + (f"; undeclared {extra}" if extra else "")
+        )
+
+
+def nu_digest(nu: dict | None) -> str | None:
+    """A digest of the lens's nu, which pins its endpoint and its fit's positions along with it."""
+    if not isinstance(nu, dict):
+        return None
+    canonical = json.dumps(nu, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def reading_identity(
+    nu: dict | None,
+    *,
+    capture_dtype: str | None,
+    capture_batch: int | None,
+    reading: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The identity of the pair a proposed reading would be, with ``None`` for what it cannot say.
+
+    Nothing is defaulted. A field the caller did not declare stays ``None``, which cannot equal a
+    registered value, so an undeclared reading is unmeasured rather than permitted -- the failure
+    direction a guard must have.
+    """
+    fit = lens_fit_precision(nu)
+    declared_reading = reading or {}
+    identity: dict[str, Any] = {
+        "fit_dtype": fit["fit_dtype"],
+        "fit_width": fit["forward_batch"],
+        "capture_dtype": capture_dtype,
+        "capture_width": capture_batch,
+        "lens_side": "fit",
+        "nu_sha256": nu_digest(nu),
+    }
+    for field in READING_FIELDS:
+        identity[field] = declared_reading.get(field)
+    return identity
+
+
+def path_pairing(
+    layer: int, *, base: str | None = None, identity: dict[str, Any] | None = None
+) -> tuple[dict[str, Any] | None, str | None]:
+    """The measured pairing at ``layer`` of ``base`` **for this identity**, and why not if not.
+
+    Returns ``(pairing, None)`` only when a registered measurement's pair matches the proposed
+    reading in every bound field. Otherwise ``(None, reason)``: no measurement at that layer, one
+    whose identity is incomplete, or one taken on a different pair, with the differing fields
+    named. Model and layer alone never suffice, which was the defect this replaced.
+    """
     entry = anchor_table().get(base or "", {})
-    measured = (entry.get("measured_pairings") or {}).get(str(int(layer)))
-    return dict(measured) if measured else None
+    registered = (entry.get("measured_pairings") or {}).get(str(int(layer)))
+    if not registered:
+        return None, f"no cross-path pairing is registered at layer {layer} of {base!r}"
+    try:
+        _validate_pairing(registered, f"{base}.measured_pairings[{layer}]")
+    except ValueError as error:
+        return None, f"the registered pairing does not identify its pair, so it measures nothing: {error}"
+    if identity is None:
+        return None, "the proposed reading declared no identity, so it matches no measurement"
+    pair = registered["pair"]
+    undeclared = [field for field in PAIR_FIELDS if identity.get(field) is None]
+    if undeclared:
+        return None, (
+            f"the reading does not declare {undeclared}, and an undeclared field cannot match a "
+            "measured one; the caller supplies its own provenance"
+        )
+    differing = [field for field in PAIR_FIELDS if pair[field] != identity[field]]
+    if differing:
+        detail = "; ".join(
+            f"{field}: measured {pair[field]!r}, this reading {identity[field]!r}"
+            for field in differing
+        )
+        return None, (
+            f"a pairing is registered at layer {layer}, but it measured a different pair -- {detail}"
+        )
+    return dict(registered), None
 
 
-def path_term_for_layer(layer: int, *, base: str | None = None) -> dict[str, Any]:
-    """The cross-path term as it stands for one layer: the measurement if there is one, else the
-    standing statement that there is not, with that layer's sensitivity attached."""
-    measured = path_pairing(layer, base=base)
+def path_term_for_layer(
+    layer: int, *, base: str | None = None, identity: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The cross-path term as it stands for one layer and one proposed pair: the measurement if
+    one was taken on that pair, else the standing statement that none was, with that layer's
+    sensitivity attached and the reason no measurement applies."""
+    measured, reason = path_pairing(layer, base=base, identity=identity)
     if measured is not None:
         return {"layer": int(layer), "base": base, "measured": True, **measured}
     term = dict(LENS_PATH_TERM)
     term["layer"] = int(layer)
     term["base"] = base
+    term["unmeasured_because"] = reason
+    term["proposed_pair"] = dict(identity) if identity else None
     term["anchor_sensitivity"] = anchor_sensitivity(layer, base=base)
     entry = anchor_table().get(base or "", {})
     term["anchor_sensitivity_basis"] = entry.get("basis")
@@ -527,6 +711,7 @@ def fit_precision_record(
     base: str | None = None,
     capture_dtype: str | None = None,
     capture_batch: int | None = None,
+    reading: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compare a lens's declared fit precision with the registry's, and record the path term.
 
@@ -598,7 +783,11 @@ def fit_precision_record(
             "decided. A lens is a statement about the neighbourhood it was fitted in, and that "
             "neighbourhood is a per-layer quantity (WS-D, the displacement control)"
         )
-    term = path_term_for_layer(layer, base=base)
+    identity = reading_identity(
+        nu, capture_dtype=capture_dtype, capture_batch=capture_batch, reading=reading
+    )
+    record["proposed_pair"] = identity
+    term = path_term_for_layer(layer, base=base, identity=identity)
     record["path_term"] = term
     if term["measured"]:
         return record
@@ -628,9 +817,9 @@ def fit_precision_record(
     raise ValueError(
         f"refusing a cross-path reading at layer {layer}: "
         + "; ".join(crossings)
-        + f". {size}. The pairing has not been measured at this layer, and until it is the "
-        "difference is not an annotation on the reading but potentially the whole of it "
-        "(WS-D, the float32 displacement control). Measure it: " + term["to_measure"]
+        + f". {size}. {term['unmeasured_because']}. Until this pair is measured the difference "
+        "is not an annotation on the reading but potentially the whole of it (WS-D, the float32 "
+        "displacement control). Measure it: " + term["to_measure"]
     )
 
 
@@ -643,6 +832,7 @@ def hook_alignment(
     nu: dict | None = None,
     capture_dtype: str | None = None,
     capture_batch: int | None = None,
+    reading: dict[str, Any] | None = None,
 ) -> int:
     """The lens layer this dictionary reads, refusing a lens that is not of the same model.
 
@@ -703,6 +893,7 @@ def hook_alignment(
         base=dict_base,
         capture_dtype=capture_dtype,
         capture_batch=capture_batch,
+        reading=reading,
     )
     return layer
 

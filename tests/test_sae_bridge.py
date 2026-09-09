@@ -699,7 +699,7 @@ def test_a_cross_path_reading_is_refused_by_name_at_a_layer_with_a_measured_sens
     assert "median 1.035116 of their own size in float32 (native 0.470689)" in message
     assert "over 18 projections in one draw, worst 35.1951" in message
     assert "not a condition number" in message
-    assert "has not been measured at this layer" in message
+    assert "no cross-path pairing is registered at layer 1" in message
     assert "paired comparison at that layer" in message
 
     # The last block is refused too, and its own figure travels with it: benign-looking is not
@@ -817,22 +817,109 @@ def test_the_per_layer_term_states_the_crossing_without_offering_a_number():
     assert fresh["float32"]["median"] == 1.035116
 
 
-def test_the_refusal_lifts_where_a_pairing_has_been_measured(monkeypatch):
-    """The refusal is conditioned on the measurement, not on the layer being late."""
-    measurement = {"relative": 0.004, "positions": "all", "context_tokens": 512, "basis": "paired"}
-    monkeypatch.setitem(B.anchor_table()[GEMMA]["measured_pairings"], "1", measurement)
+READING = {
+    "positions": "all",
+    "reduction": "none: one position at a time",
+    "endpoint": "residual after block 17, repository layer 18",
+    "context_tokens": 512,
+}
 
-    record = B.fit_precision_record(
-        FLOAT32_NU, declared="float32", layer=1, base=GEMMA, capture_dtype="bfloat16"
+
+def _register(monkeypatch, layer, identity, **overrides):
+    """Register a pairing that identifies the pair it measured, optionally mutated."""
+    pair = {**identity, **overrides}
+    monkeypatch.setitem(
+        B.anchor_table()[GEMMA]["measured_pairings"],
+        str(layer),
+        {"pair": pair, "relative": 0.004, "basis": "paired comparison, measured-here"},
     )
+
+
+def _reading_identity(capture_dtype="bfloat16", capture_batch=1, reading=READING):
+    return B.reading_identity(
+        FLOAT32_NU, capture_dtype=capture_dtype, capture_batch=capture_batch, reading=reading
+    )
+
+
+def _record(**kwargs):
+    call = {
+        "declared": "float32", "layer": 1, "base": GEMMA,
+        "capture_dtype": "bfloat16", "capture_batch": 1, "reading": READING,
+    }  # fmt: skip
+    call.update(kwargs)
+    return B.fit_precision_record(FLOAT32_NU, **call)
+
+
+def test_a_registered_pairing_lifts_the_refusal_only_for_the_pair_it_measured(monkeypatch):
+    """A measurement is evidence about an experiment, so it licenses that experiment
+    and no other."""
+    identity = _reading_identity()
+    _register(monkeypatch, 1, identity)
+
+    # Positive control: the reading the measurement was taken on.
+    record = _record()
     assert record["path_term"]["measured"] is True
     assert record["path_term"]["relative"] == 0.004
-    assert record["crossing"] == ["the lens was fitted in float32 and the capture is bfloat16"]
-    # Its neighbour is still refused: the measurement is per layer and does not spread.
-    with pytest.raises(ValueError, match="refusing a cross-path reading at layer 17"):
+
+    # Every bound field, mutated one at a time: each is a different pair, so each is unmeasured.
+    # The registered measurement stays put; only the reading moves.
+    for field, changed in (
+        ("capture_dtype", {"capture_dtype": "float16"}),
+        ("capture_width", {"capture_batch": 64}),
+        ("positions", {"reading": {**READING, "positions": "emitted token only"}}),
+        ("reduction", {"reading": {**READING, "reduction": "mean over positions"}}),
+        ("endpoint", {"reading": {**READING, "endpoint": "residual after block 16"}}),
+        ("context_tokens", {"reading": {**READING, "context_tokens": 1400}}),
+    ):
+        with pytest.raises(ValueError, match="measured a different pair") as raised:
+            _record(**changed)
+        assert field in str(raised.value), field
+
+    # The lens's own side is read from its nu and cannot be asserted by the caller: a different
+    # lens is a different nu digest, and a lens fitted at another width is a different fit width.
+    other_nu = {"precision": {**FLOAT32_NU["precision"], "forward_batch": 64}}
+    with pytest.raises(ValueError, match="measured a different pair") as raised:
         B.fit_precision_record(
-            FLOAT32_NU, declared="float32", layer=17, base=GEMMA, capture_dtype="bfloat16"
-        )
+            other_nu, declared="float32", layer=1, base=GEMMA,
+            capture_dtype="bfloat16", capture_batch=1, reading=READING,
+        )  # fmt: skip
+    assert "fit_width" in str(raised.value) and "nu_sha256" in str(raised.value)
+
+
+def test_a_measurement_does_not_transfer_to_a_neighbouring_layer(monkeypatch):
+    _register(monkeypatch, 1, _reading_identity())
+    assert _record(layer=1)["path_term"]["measured"] is True
+    with pytest.raises(ValueError, match="no cross-path pairing is registered at layer 17"):
+        _record(layer=17)
+
+
+def test_a_pairing_that_does_not_identify_its_pair_measures_nothing(monkeypatch):
+    """The bare number this test used to insert, which is the defect the audit found."""
+    monkeypatch.setitem(
+        B.anchor_table()[GEMMA]["measured_pairings"], "1", {"relative": 0.004}
+    )
+    with pytest.raises(ValueError, match="does not identify its pair") as raised:
+        _record()
+    assert "must carry exactly" in str(raised.value)
+
+    # And one that names the fields but omits a single field is equally not a measurement.
+    identity = _reading_identity()
+    partial = {key: value for key, value in identity.items() if key != "context_tokens"}
+    monkeypatch.setitem(
+        B.anchor_table()[GEMMA]["measured_pairings"], "1", {"pair": partial, "relative": 0.004}
+    )
+    with pytest.raises(ValueError, match="missing \\['context_tokens'\\]"):
+        _record()
+
+
+def test_a_reading_that_declares_no_provenance_matches_no_measurement(monkeypatch):
+    _register(monkeypatch, 1, _reading_identity())
+    with pytest.raises(ValueError, match="does not declare") as raised:
+        _record(reading=None)
+    message = str(raised.value)
+    for field in B.READING_FIELDS:
+        assert field in message
+    assert "the caller supplies its own provenance" in message
 
 
 def test_the_fit_precision_lands_in_the_provenance_block(parts, monkeypatch):
@@ -846,10 +933,18 @@ def test_the_fit_precision_lands_in_the_provenance_block(parts, monkeypatch):
     assert "path_term" not in block["lens"]["fit_precision"]
 
     # Where a pairing has been measured, the measurement is what the artefact carries.
-    monkeypatch.setitem(B.anchor_table()[GEMMA]["measured_pairings"], "10", {"relative": 0.004})
-    measured = B.fit_precision_record(
-        FLOAT32_NU, declared="float32", layer=10, base=GEMMA, capture_dtype="bfloat16"
+    identity = B.reading_identity(
+        FLOAT32_NU, capture_dtype="bfloat16", capture_batch=1, reading=READING
     )
+    monkeypatch.setitem(
+        B.anchor_table()[GEMMA]["measured_pairings"],
+        "10",
+        {"pair": identity, "relative": 0.004, "basis": "paired comparison, measured-here"},
+    )
+    measured = B.fit_precision_record(
+        FLOAT32_NU, declared="float32", layer=10, base=GEMMA,
+        capture_dtype="bfloat16", capture_batch=1, reading=READING,
+    )  # fmt: skip
     block = B.bridge_provenance(
         d, lens, u, 10, dictionary_repo="r", dictionary_folder="f", fit_precision=measured
     )
@@ -859,23 +954,38 @@ def test_the_fit_precision_lands_in_the_provenance_block(parts, monkeypatch):
     assert plain["lens"]["fit_precision"] is None
 
 
-def test_no_amplification_ratio_survives_anywhere_in_the_shipped_measurements():
-    """The audit withdrew them; a test is what keeps them withdrawn.
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("layers", "1", "amplification_ratio"),
+        ("layers", "1", "sampled_displacement", "amplification_ratio"),
+        ("layers", "1", "sampled_displacement", "float32", "amplification_ratio"),
+        ("layers", "1", "native_anchor_read_in_the_float32_tail", "amplification_ratio"),
+        ("amplification_ratio",),
+    ],
+)
+def test_a_quantity_this_record_never_named_is_refused_at_every_nesting_location(path, tmp_path):
+    """The withdrawn ratios cannot re-enter, at any depth.
 
-    They divided a derivative change by a displacement norm taken at one position while the
-    intervention replaced the whole sequence, so they were never condition estimates. The data
-    file may name the withdrawal in prose, but no ratio may be readable as a value.
+    Not by banning numbers, which would be the wrong check twice over: medians, ranges and counts
+    are numbers, and a legitimate statistic may coincidentally equal a withdrawn ratio. What is
+    checked is the quantity at each location, so a key nobody declared is refused wherever it
+    appears. The previous version of this test looked only at each layer's immediate keys and then
+    scanned the top-level values, which are dictionaries, so it passed without descending at all.
     """
-    import json
+    table = json.loads(json.dumps(B.anchor_table()))
+    node = table[GEMMA]
+    for step in path[:-1]:
+        node = node[step]
+    node[path[-1]] = 539
 
-    table = B.anchor_table()
-    for model, entry in table.items():
-        for layer, measured in (entry.get("layers") or {}).items():
-            assert not any("amplif" in key for key in measured), (model, layer)
-    # And nothing shaped like the withdrawn ratios is reachable as a number.
-    numbers = [
-        value
-        for value in json.loads(json.dumps(table)).values()
-        if isinstance(value, (int, float))
-    ]
-    assert numbers == []
+    with pytest.raises(ValueError, match="undeclared"):
+        B._validate_anchor_table(table)
+
+
+def test_the_shipped_table_validates_and_says_at_which_precision_it_was_copied():
+    entry = B.anchor_table()[GEMMA]
+    assert "six decimal places" in entry["precision_convention"]
+    # The one field the pairing audit found misrounded, at the declared precision.
+    random_arm = entry["layers"]["33"]["equal_norm_random_displacement"]["native"]
+    assert random_arm["median"] == 0.312953
