@@ -1453,3 +1453,52 @@ compared ν blocks whole; each estimator records its own knob, so two correct fi
 could never have passed it. **A check that cannot pass is as useless as one that cannot fail.** It
 now compares key by key what decides the fitted quantity, with tests at both edges. Findable only by
 building the real operand: a stand-in would have been written to satisfy the gate.
+
+### 16.16 The derivation is a requirement of the device phase
+
+The Director, 2026-09-10: the SAE–J-lens derivation's implementation is a requirement for the remote
+GPU work, each of its gaps accounted for. Verified against its sources tonight (the released code,
+the paper page, the hub's listings), with the corrections in the bridge order's third amendment:
+the code's default target is the final block's pre-norm output and the paper mentions a
+penultimate target only as a variant; the paper's expectation over pairs and the code's sum over
+targets differ by the positive factor the derivation derives; the released code has no J-space
+construction; Gemma Scope 2 covers the 4B, 12B and 27B instruction-tuned residual sites at every
+layer, so no dictionary needs training for this family, while Gemma 4 exists on the hub with no
+dictionaries at all; the 4B dictionary was not on the laptop when the amendment measured it,
+and one layer is now: `resid_post_all` layer 17 `l0_small`, fetched by SWE-2 at 05:11:53Z on
+2026-09-10 through the primary cache and verified against the hub's LFS digest, three minutes
+before the amendment's commit, so both statements were true when made. Every other layer is
+a config file until `lab-device fetch-dictionary --all-layers` runs after the Director logs in.
+
+**Build before the device, all on fixtures:** Stage A, the exact score decomposition (SWE-2, in
+progress); the dictionary loader and JumpReLU encoder with the hook alignment as a test and the
+reconstruction budget per site as the gate (SWE-2); Stage B, the sparse cone fit with the fit
+fraction in its improvement form, the frozen-support span statistic, the sparsity curve and matched
+controls (SWE-2); the decoder intervention wrapper with the re-encoding diagnostic and a clamp mode
+(Codex, in the WS-A order); a sampled decoding path for the state programme only, greedy gates
+untouched (SWE-1, on the Director's ruling); retained-state exchange and branched continuations on
+the torch cache strategies WS-B owns (SWE-1); the dictionary fetch in `lab-device` (done); the
+pre-registration of the state programme (D-CRO).
+
+**Run on the device, in order:** the 4B and 12B lenses at every layer; Stage A and Stage B at
+scale; the episode corpus under sampled decoding, its size set by the tolerances through the
+derivation's own bound and its time by the rate the first device run records, which is unmeasured
+until then; then the state programme's estimands with carrier controls.
+
+**Rulings, 2026-09-10, the Director on the Chief's advice.** The wrapper is Codex's (agreed;
+ordered at ae6ea94). The tolerances are set from a pilot **on the device**, and the script that
+finds them and does the run is ordered in `STATE-PROGRAMME-RUN-ORDER-2026-09-10.md`, the D-CRO's,
+with the derivation table, the drop rule, the budget rule and the seal (agreed). File existence is
+the first state variable, with tool reliability as the observation likelihood ratio through the
+environment's own fault mechanism and two files with swapped states as the relation test (agreed).
+**The temperature, ruled 2026-09-10: lifted as advised.** The Director accepted the Chief's
+recommendation: the sampled decoding path exists only for runs declared as the state programme;
+every golden gate and the tolerance runner stay greedy, because their records were made greedy;
+temperature 1.0 with no top-p or top-k truncation, because the estimands are the model's own
+laws and any tuning measures a different distribution; seed, temperature and sampler in every
+manifest, with the note that sampled draws reproduce only within one backend and kernel set.
+SWE-1 builds the sampler (WS-B order, amendment of this date); the state programme's script
+keeps `--decoding sampled` refused by name until that sampler is on the branch it runs from,
+and names its estimand per mode: the context-averaged outcome frequency under greedy, the
+derivation's distribution under sampled. A record made in one mode is not compared with one
+made in the other.

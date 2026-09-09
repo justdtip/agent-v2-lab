@@ -475,3 +475,88 @@ reweighting. Our ν declares it as `target_reduction: sum, not normalised` and
 - **Stage A's status.** SWE-2 is building Stage A under this order as amended; no Stage A code is on
   any branch yet, and the only "bridge" on a branch is Codex's transcript-lens lane, which is a
   different instrument and is not this.
+
+**Correction to §1 of the third amendment, dated 2026-09-10.** The inventory that found zero
+`params.safetensors` was measured before the commit and was true when made. Three minutes before
+`b21b2a5` was committed, SWE-2 fetched layer 17 `l0_small` of the 4B dictionary into the primary
+cache (335,686,016 bytes, verified against the LFS digest; provenance in their A1 record). Plan
+§16.16 records both times. Every other layer remains a config file, and the sentence "A1 needs a
+download per layer it reads" stands for all of them but that one.
+
+## Review of Stage A, Chief, 2026-09-10 — `e2d2bc2` on `cuda-ws-c`, merged into `cuda-migration` at `5d32db8`
+
+**Verdict: passes; merged.** Checked against the merge result, not the branch: the full suite 2,564
+passed, 10 skipped at nine sites, every skip for untracked data or saved evaluations absent from a
+scratch worktree, under the Chief's own window at 05:49Z; the torch set 154 passed; the
+real-artefact alignment test ran against the primary checkout's lens, checkpoint and dictionary
+rather than skipping; the rules suite clean; no deletion on either side since the base. The module,
+the tests, both record scripts and the record were read in full.
+
+What is right, in the order's terms. **The identity** is computed term by term and asserted on the
+emitted token before anything is ranked, and the per-feature term is taken through row `v` of `L`
+so no vocabulary-by-width block is ever formed; the spy at the matmul enforces that rather than a
+reading of the code. **The gain-only linearisation** is the one choice made and is declared, with
+the per-vector scalar dropped and score values marked as not logits. **Orientation** is read from
+the stored shapes. **The readout** is read from the safetensors container by tensor name with
+bfloat16 widened by bit shift, tested against known bit patterns, after the first real run died on
+a float32 fixture; the fixture now carries the real dtype, which is the fixture rule turned on its
+author and recorded as such. **Hook alignment** is a test on the real hook string and the real
+archive keys. **The discriminator** ran the raw arm first and recorded it before the gain arm was
+looked at, which is what makes 0.245 against 0.995 a measurement and settles the convention: the
+shipped tokens were made through the final gain, which is the answer to Codex's caveat. **Two
+ways** agree to 1.7e-6. **The negative control** bites at every layer tried and is shown to fail on
+the same layer. **Labels** ship as `unlabelled` with the second amendment's reason verbatim, and
+the readout sample is headed as ours. **A2** asserts the identity, refuses to rank under a dominant
+residual, and is unexecuted on real activations because none exist on disk, which is the device's.
+
+**The finding against its author is the best thing in the record.** Two predictions of the control
+ordering failed, each from a matrix aggregate; the engineer measured the curve at every layer
+rather than fit a third model, and the curve is the instrument: single-peaked at the hooked layer,
+slow rise from below, fast fall from above, and a map near the identity is far from the readout.
+The rule it yields transfers: choose controls from the measured curve, twelve or more layers away
+for a strong one, and never from a distance to the identity. The one-line laptop rate claim in
+this order's cost table is corrected by measurement: 39 seconds per layer on this BLAS, not 150.
+
+**One gap, and it is the first item of the next assignment.** Nothing refuses a dictionary trained
+on a different model of the same width: `hook_alignment` checks the layer and the hidden size, and
+a `google/gemma-3-4b-pt` dictionary read through the `-it` lens passes both. The config carries
+`model_name`; it is compared with the lens identity's model and refused on mismatch, with a test
+on the pt-against-it case, and the registry entry's `base` is the third party to the same check
+when the bridge runs from a registry name.
+
+**Next, SWE-2, all on fixtures:** that check; the torch adapter for the decoder intervention
+wrapper on `cuda-migration` (an encoder callable computing the JumpReLU in a declared dtype and
+returning the residual's dtype and device, the decoder as the `[residual, feature]` matrix, which
+is `w_dec` transposed, and `b_dec`), tested against the numpy `encode` and `decode` and through
+the wrapper's residual-preservation identity; and the reconstruction-budget gate, the per-site
+distribution of `|e| / |h|` and the active-feature count with the dominance threshold as a
+declared input, whose real inputs are the device's after A2's first forward. **Stage B stays
+unbuilt** on this order's own condition: A2's residual share on real activations is what justifies
+it. A1 at layers other than 18 waits for the map to name them.
+
+## Review of the three additions, Chief, 2026-09-10 — `9af0abf` on `cuda-ws-c`, merged into `cuda-migration` at `628a6b4`
+
+**Verdict: passes; merged.** Against the merge result: full suite 2,574 passed, 10 skipped at nine
+sites for absent worktree artefacts, with user warnings promoted to errors, under the Chief's
+window at 06:10Z; the torch set 164 passed; no deletion on either side since the base. The
+identity check is three-way and refuses when it cannot compare, which is the non-inert form: a
+config naming no model and a lens carrying no identity are refused, not passed; the registry
+round-trip test pins that every entry's name, hf id and base resolve to one string, and the real
+config's `google/gemma-3-4b-it` is checked against the real lens identity in the gated test. The
+adapter hands the wrapper the transposed decoder, the bias apart, and an encoder computing in the
+declared precision and casting the code to the residual's dtype, with the read-only views of the
+raw reader copied first and the warning that found that promoted to an error in the test; the
+wrapper's residual identity holds through it on the A2 fixture. The reconstruction-budget gate
+echoes its threshold and returns the mask `decompose_position` accepts. The record's after-review
+section, the exploratory heading on the sweep, and the shipped-file wording are as asked; the
+`-qq` note is the honest form of a count read from progress marks.
+
+**Next, SWE-2**, a delegation from WS-E, device-free: `lab-device preflight` gains dictionary rows
+and a render row. For each dictionary layer the registry entry or the run names: present in the
+primary cache, verified against the hub's declared digest for its exact path (the `fetch-dictionary`
+mechanism, reused, with an offline form that reads a digest recorded at fetch time), and its config's
+`model_name` equal to the entry's `base` through `base_of_artifact`, each a row with a basis. And a
+render row: the corpus rendered under the entry reproduces the split digests the manifest of the
+laptop render records, so the 12B re-render assertion in the runbook is a command, not a sentence.
+Tests with stubs and a fixture corpus; pathspec commit on `cuda-ws-c`; review and merge as before.
+Stage B and A1 at other layers wait for the device's numbers as recorded.

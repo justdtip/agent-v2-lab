@@ -19,6 +19,7 @@ import hashlib
 import io
 import json
 import platform
+import re
 import sys
 import tarfile
 import time
@@ -404,6 +405,130 @@ def fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+# ------------------------------------------------------------------------- dictionaries
+
+
+#: The Gemma Scope 2 repositories are laid out as ``<site>/layer_<N>_width_<W>_l0_<S>/`` holding
+#: ``config.json`` (the hook string and the sparsity), ``params.safetensors`` (the dictionary) and
+#: ``examples.safetensors`` (activation examples, large and not needed for the bridge).
+#: ``resid_post`` is the deep-dive subset of a few depths; ``resid_post_all`` is every layer. Read
+#: from the hub's file listing on 2026-09-10, not assumed. Two traps the D-CRO measured: a folder
+#: pull takes ``examples.safetensors`` (816 MB against 336 MB of parameters), so files are named;
+#: and the deep-dive and every-layer files at one hook, width and ``l0`` are identical in size and
+#: header while ``l0_big`` means 150 in one suite and 120 in the other, so a file is verified by
+#: the hub's own digest for its exact path, never by its length.
+DICTIONARY_SITES = (
+    "resid_post",
+    "resid_post_all",
+    "attn_out",
+    "attn_out_all",
+    "mlp_out",
+    "mlp_out_all",
+)
+
+
+def _dictionary_patterns(site: str, layers: list[int], width: str, l0: str, examples: bool):
+    names = ("config.json", "params.safetensors") + (("examples.safetensors",) if examples else ())
+    return [f"{site}/layer_{n}_width_{width}_l0_{l0}/{name}" for n in layers for name in names]
+
+
+def _declared_digest(sibling) -> tuple[str, str] | None:
+    """(algorithm, hex) the hub declares for a file: LFS objects carry a sha256, and every other
+    file its git blob id, which is the sha1 of ``blob <size>\\0`` followed by the content."""
+    lfs = getattr(sibling, "lfs", None)
+    sha256 = lfs.get("sha256") if isinstance(lfs, dict) else getattr(lfs, "sha256", None)
+    if sha256:
+        return "sha256", sha256
+    if getattr(sibling, "blob_id", None):
+        return "blob", sibling.blob_id
+    return None
+
+
+def _file_digest(path: Path, algorithm: str) -> str:
+    if algorithm == "blob":
+        h = hashlib.sha1(f"blob {path.stat().st_size}\0".encode())
+    else:
+        h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def fetch_dictionary(args: argparse.Namespace) -> int:
+    """Download sparse dictionary layers by exact filename, saying which files and how many bytes
+    first, and verify each against the digest the hub declares for that path."""
+    cache = configure_local_cache()
+    if not args.layer and not args.all_layers:
+        print("name --layer N (repeatable) or --all-layers", file=sys.stderr)
+        return 2
+    patterns = _dictionary_patterns(args.site, args.layer or [], args.width, args.l0, args.examples)
+    from huggingface_hub import HfApi, snapshot_download
+
+    try:
+        info = HfApi().model_info(args.repo, files_metadata=True)
+    except Exception as error:  # noqa: BLE001 - a gated repository without a login says so here
+        print(f"cannot list {args.repo}: {error}; run `lab-device login` first", file=sys.stderr)
+        return 2
+    siblings = {s.rfilename: s for s in info.siblings}
+    if args.all_layers:
+        # Every layer the repository holds at this site, width and sparsity, read from its
+        # listing: 0-33 for the 4B, 0-47 for the 12B, and nothing assumed about either.
+        stem = re.compile(
+            rf"^{re.escape(args.site)}/layer_(\d+)_width_{re.escape(args.width)}_l0_{args.l0}/params\.safetensors$"
+        )
+        found = sorted({int(m.group(1)) for name in siblings if (m := stem.match(name))})
+        if not found:
+            print(
+                f"{args.repo} has no {args.site} layers at width {args.width} l0 {args.l0}",
+                file=sys.stderr,
+            )
+            return 2
+        args.layer = found
+        patterns = _dictionary_patterns(args.site, found, args.width, args.l0, args.examples)
+        print(f"{len(found)} layers listed: {found[0]}-{found[-1]}")
+    missing = [pattern for pattern in patterns if pattern not in siblings]
+    if missing:
+        print(f"{args.repo} has no such files: {missing}", file=sys.stderr)
+        return 2
+    total = sum((siblings[pattern].size or 0) for pattern in patterns)
+    for pattern in patterns:
+        print(f"  {(siblings[pattern].size or 0) / 2**20:8.1f} MiB  {pattern}")
+    print(f"{len(patterns)} files, {total / GIB:.2f} GiB, into {cache}")
+    if args.dry_run:
+        return 0
+    root = Path(snapshot_download(args.repo, allow_patterns=patterns))
+    for pattern in patterns:
+        declared = _declared_digest(siblings[pattern])
+        if declared is None:
+            print(
+                f"{pattern}: the hub declares no digest; refusing to call it verified",
+                file=sys.stderr,
+            )
+            return 1
+        algorithm, expected = declared
+        actual = _file_digest(root / pattern, algorithm)
+        if actual != expected:
+            print(f"{pattern}: {algorithm} {actual} != declared {expected}", file=sys.stderr)
+            return 1
+        print(f"  verified {algorithm} {actual[:16]}…  {pattern}")
+    for layer in args.layer:
+        config = root / args.site / f"layer_{layer}_width_{args.width}_l0_{args.l0}" / "config.json"
+        try:
+            declared = json.loads(config.read_text())
+        except (OSError, ValueError) as error:
+            print(f"layer {layer}: config unreadable: {error}", file=sys.stderr)
+            return 1
+        # The config's own keys, read from a real one: hf_hook_point_in, model_name, width, l0.
+        hook = declared.get("hf_hook_point_in", declared.get("hook_name"))
+        print(
+            f"layer {layer}: model={declared.get('model_name')!r} hook={hook!r} "
+            f"l0={declared.get('l0')} width={declared.get('width')}"
+        )
+    print(f"dictionary layers under {root}")
+    return 0
+
+
 # -------------------------------------------------------------------------- pack / verify data
 
 
@@ -494,6 +619,20 @@ def main(argv: list[str] | None = None) -> int:
     pk.add_argument("directory")
     pk.add_argument("--out")
     pk.set_defaults(func=pack_data)
+    fd = sub.add_parser(
+        "fetch-dictionary", help="download sparse dictionary layers (Gemma Scope 2)"
+    )
+    fd.add_argument("repo", help="e.g. google/gemma-scope-2-4b-it")
+    fd.add_argument("--layer", type=int, action="append", help="block index; repeatable")
+    fd.add_argument(
+        "--all-layers", action="store_true", help="every layer the repository lists at this site"
+    )
+    fd.add_argument("--site", default="resid_post_all", choices=DICTIONARY_SITES)
+    fd.add_argument("--width", default="16k")
+    fd.add_argument("--l0", default="small", choices=("small", "medium", "big"))
+    fd.add_argument("--examples", action="store_true", help="also fetch examples.safetensors")
+    fd.add_argument("--dry-run", action="store_true")
+    fd.set_defaults(func=fetch_dictionary)
     vf = sub.add_parser(
         "verify-data", help="extract a packed dataset and verify digests and manifest"
     )

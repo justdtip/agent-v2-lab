@@ -181,3 +181,81 @@ def test_pack_refuses_a_dataset_without_a_manifest(tmp_path):
     (root / "train.jsonl").write_text("{}\n")
     with pytest.raises(Exception, match="manifest"):
         device_setup.main(["pack-data", str(root)])
+
+
+def _blob_sha1(data: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def test_fetch_dictionary_names_files_and_bytes_and_refuses_an_absent_layer(
+    monkeypatch, capsys, tmp_path
+):
+    import hashlib
+
+    folder = "resid_post_all/layer_17_width_16k_l0_small"
+    config = json.dumps(  # the real config's keys
+        {
+            "hf_hook_point_in": "model.layers.17.output",
+            "model_name": "google/x",
+            "l0": 20,
+            "width": 16384,
+        }
+    ).encode()
+    params = b"\x00" * 4096
+    listing = {
+        f"{folder}/config.json": (248, {"blob_id": _blob_sha1(config), "lfs": None}),
+        f"{folder}/params.safetensors": (
+            335_700_000,
+            {"blob_id": "pointer", "lfs": {"sha256": hashlib.sha256(params).hexdigest()}},
+        ),
+        f"{folder}/examples.safetensors": (900_000_000, {"blob_id": "p", "lfs": {"sha256": "0"}}),
+    }
+    info = types.SimpleNamespace(
+        siblings=[types.SimpleNamespace(rfilename=k, size=v[0], **v[1]) for k, v in listing.items()]
+    )
+    root = tmp_path / "snap"
+    (root / folder).mkdir(parents=True)
+    (root / folder / "config.json").write_bytes(config)
+    (root / folder / "params.safetensors").write_bytes(params)
+    fetched = {}
+    hub = types.SimpleNamespace(
+        HfApi=lambda: types.SimpleNamespace(model_info=lambda repo, files_metadata: info),
+        snapshot_download=lambda repo, allow_patterns: (
+            fetched.update(patterns=allow_patterns) or str(root)
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "params.safetensors" in out and "examples" not in out and "0.31 GiB" in out
+    assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17"]) == 0
+    assert fetched["patterns"] == [
+        "resid_post_all/layer_17_width_16k_l0_small/config.json",
+        "resid_post_all/layer_17_width_16k_l0_small/params.safetensors",
+    ]
+    out = capsys.readouterr().out
+    assert "model='google/x' hook='model.layers.17.output'" in out and out.count("verified") == 2
+    assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "18"]) == 2
+    assert "no such files" in capsys.readouterr().err
+    assert device_setup.main(["fetch-dictionary", "google/x"]) == 2
+    assert "--all-layers" in capsys.readouterr().err
+    # Every layer the listing holds, in order, read from the listing rather than assumed.
+    info.siblings.extend(
+        types.SimpleNamespace(
+            rfilename=f"resid_post_all/layer_{n}_width_16k_l0_small/{name}",
+            size=1,
+            blob_id="b",
+            lfs=None,
+        )
+        for n in (3, 0)
+        for name in ("config.json", "params.safetensors")
+    )
+    assert device_setup.main(["fetch-dictionary", "google/x", "--all-layers", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "3 layers listed: 0-17" in out and "6 files" in out
+    # The trap: a file of the right name and length whose bytes are another suite's.
+    (root / folder / "params.safetensors").write_bytes(b"\x01" + b"\x00" * 4095)
+    assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17"]) == 1
+    assert "!= declared" in capsys.readouterr().err

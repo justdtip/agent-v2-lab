@@ -1571,7 +1571,7 @@ def test_a_child_killed_by_a_signal_becomes_the_shells_own_status(tmp_path) -> N
 def test_announce_records_the_holder_a_caller_names_rather_than_a_shell_it_will_discard(
     tmp_path, monkeypatch, capsys
 ) -> None:
-    """The default parent is right for a seat whose shell persists, and wrong for one whose does not.
+    """The default parent is right for a seat whose shell persists, wrong for one whose does not.
 
     A harness that runs each command in a fresh shell and discards it records a parent that is
     already dead, so the window reports "holder not running" from the moment it opens — which is
@@ -1684,7 +1684,13 @@ def test_a_checkpoint_resolves_to_the_primary_even_under_the_box_state_override(
 
     # The HF cache is the third reader of the same fact: weights exist once, in the primary.
     monkeypatch.setenv(runlock.BOX_STATE_DIR_ENV, str(scratch))
-    monkeypatch.delenv("HF_HOME", raising=False)
+    # `setdefault` inside `configure_local_cache` writes HF_HOME for the whole process, and a
+    # `delenv` of an absent variable records nothing to restore, so the fake primary's cache leaked
+    # into every later test in the session whenever nothing had set HF_HOME first (found when a
+    # subset run skipped four tokenizer tests in `test_state_swap.py`). Setting it first records
+    # its absence; the delete then restores to that at teardown.
+    monkeypatch.setenv("HF_HOME", "placeholder-recorded-for-restore")
+    monkeypatch.delenv("HF_HOME")
     from local_llm_lab.project import configure_local_cache
 
     cache = configure_local_cache()
