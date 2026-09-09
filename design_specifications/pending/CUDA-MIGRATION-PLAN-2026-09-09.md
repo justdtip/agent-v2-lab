@@ -1453,3 +1453,41 @@ compared ν blocks whole; each estimator records its own knob, so two correct fi
 could never have passed it. **A check that cannot pass is as useless as one that cannot fail.** It
 now compares key by key what decides the fitted quantity, with tests at both edges. Findable only by
 building the real operand: a stand-in would have been written to satisfy the gate.
+
+### 16.16 The derivation is a requirement of the device phase
+
+The Director, 2026-09-10: the SAE–J-lens derivation's implementation is a requirement for the remote
+GPU work, each of its gaps accounted for. Verified against its sources tonight (the released code,
+the paper page, the hub's listings), with the corrections in the bridge order's third amendment:
+the code's default target is the final block's pre-norm output and the paper mentions a
+penultimate target only as a variant; the paper's expectation over pairs and the code's sum over
+targets differ by the positive factor the derivation derives; the released code has no J-space
+construction; Gemma Scope 2 covers the 4B, 12B and 27B instruction-tuned residual sites at every
+layer, so no dictionary needs training for this family, while Gemma 4 exists on the hub with no
+dictionaries at all; the 4B dictionary is **not** on the laptop, only its config files.
+
+**Build before the device, all on fixtures:** Stage A, the exact score decomposition (SWE-2, in
+progress); the dictionary loader and JumpReLU encoder with the hook alignment as a test and the
+reconstruction budget per site as the gate (SWE-2); Stage B, the sparse cone fit with the fit
+fraction in its improvement form, the frozen-support span statistic, the sparsity curve and matched
+controls (SWE-2); the decoder intervention wrapper with the re-encoding diagnostic and a clamp mode
+(Codex, in the WS-A order); a sampled decoding path for the state programme only, greedy gates
+untouched (SWE-1, on the Director's ruling); retained-state exchange and branched continuations on
+the torch cache strategies WS-B owns (SWE-1); the dictionary fetch in `lab-device` (done); the
+pre-registration of the state programme (D-CRO).
+
+**Run on the device, in order:** the 4B and 12B lenses at every layer; Stage A and Stage B at
+scale; the episode corpus under sampled decoding, its size set by the tolerances through the
+derivation's own bound and its time by the rate the first device run records, which is unmeasured
+until then; then the state programme's estimands with carrier controls.
+
+**Rulings, 2026-09-10, the Director on the Chief's advice.** The wrapper is Codex's (agreed;
+ordered at ae6ea94). The tolerances are set from a pilot **on the device**, and the script that
+finds them and does the run is ordered in `STATE-PROGRAMME-RUN-ORDER-2026-09-10.md`, the D-CRO's,
+with the derivation table, the drop rule, the budget rule and the seal (agreed). File existence is
+the first state variable, with tool reliability as the observation likelihood ratio through the
+environment's own fault mechanism and two files with swapped states as the relation test (agreed).
+**The temperature is not ruled.** Until it is, the sampled path is not built; the state programme's
+script carries the decoding mode as an argument and names its estimand per mode — the
+context-averaged outcome frequency under greedy, the derivation's distribution under sampled — and
+runs whole in greedy mode on the day the device is rented.
