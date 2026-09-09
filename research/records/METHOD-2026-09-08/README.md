@@ -392,3 +392,25 @@ every weight came back freshly initialised, because the reader it used treats mi
 warning. **An assertion that an artefact loads is worth nothing unless the loader fails closed**: a
 tolerant reader turns a corrupted artefact into a passing test, which is the guard that passes
 the object it exists to catch, applied to the reader instead of the guard.
+
+---
+
+## Twenty-fourth: the shared index, or why explicit-path `add` was not enough
+
+**The Chief's, the same shape as the nineteenth, one mechanism deeper.** Commit `9ae4444` says it
+pins upstream `jlens` in the cuda extra. It also deletes `pipeline/lens_fitting/upstream.py` and
+`tests/test_lens_upstream.py`, 1,862 lines, and says nothing about them. The D-CRO had staged that
+removal, step three of their announced move to `cuda-ws-d`, in the shared checkout's one index;
+I added my two files by explicit path, as the nineteenth entry's rule requires, and then ran a
+bare `git commit`, which commits everything staged. The rule against `add -A` protected against
+staging someone else's changes myself. It did not protect against committing changes someone else
+had staged, because `add` and `commit` are two gates and the rule covered one.
+
+**The removal is the D-CRO's and intended**: both files are on `cuda-ws-d`, and `9ae4444`'s parent
+has both, so nothing is lost. The message is wrong, and it is on origin, so this entry and the
+naming commit that carries it are the forward fix; no history is rewritten.
+
+**The rule, sharpened into a mechanism.** In a shared checkout, commit with a pathspec:
+`git commit -- <paths>`, which takes only those paths whether or not anything else is staged, and
+read `git status --short` before every commit, treating any staged entry that is not yours as a
+stop. `git add` by explicit path stays; it was never the whole of the discipline.
