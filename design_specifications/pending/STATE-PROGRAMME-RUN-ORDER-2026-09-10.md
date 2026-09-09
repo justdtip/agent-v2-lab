@@ -449,3 +449,31 @@ and one commit with markers in it, and the twenty-ninth method entry is the cost
 the policy seam is built on the device with its three obligations (positions declared on every
 forward, the diagnostic's form named, `device.pin` before preflight), and the first sampled record
 is made there at a measured rate.
+
+## Ruling, Chief, 2026-09-10 — the carrier is promoted into the substitution test (from an external reviewer's reading of the programme description, relayed by the Director)
+
+The reviewer's point: the door model works because the observation is gone once seen, so the belief
+must be carried; in a transformer nothing is gone, so a substitution test on residual features has a
+failure mode that reads as "no state" but is "state redundantly available" — a later head re-reads
+the carrier tokens and behaviour snaps back to the transcript. A clamp on residual features does not
+stop attention reading those tokens. Update closure can fail the same way: the model never needs
+`s_{e+1} = f(s_e, obs)` if it can recompute from the raw observation.
+
+**What this protocol already does, and what it does not.** Tool results older than `keep_last = 2`
+turns are hidden by construction (`[earlier list_files result hidden … Use your notes.]`), so the
+listing is gone from the context two turns later; the carrier that remains is the model's **own
+progress note**, which by design carries the state in words. The reviewer's failure mode is therefore
+real here with the note as the carrier, and the seats had located it in the retention section (E3, the
+cache exchange, ruled within-pass) rather than in the substitution test. That was the wrong place.
+
+**Ruled.** (1) The substitution test gains a **carrier-ablation arm**: the transcript is re-rendered
+with the state-bearing fact removed from the note after the state-bearing position (and, at the
+first two turns, from the listing itself), so a surviving effect of the feature substitution must be
+carried by the model and not by the context; the arm is run beside the ordinary substitution, and
+the pre-registration names the removal rule per family before any capture is read. (2) A **direct
+re-read diagnostic** at every decision position: attention mass from the decision position onto the
+carrier tokens (listing and note), per layer and per head, with the sliding window's structure used
+as a handle — a carrier more than 1,024 tokens back is reachable only through the global layers, so
+re-reading at that distance is localised to them. (3) Update closure is scored with and without the
+carrier-ablation arm, and the difference is reported as the carrier's share. The clamp is not
+claimed to cover any of this.
