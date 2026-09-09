@@ -206,3 +206,34 @@ def test_the_wrapper_refuses_a_model_it_cannot_find_a_head_on() -> None:
 
     with pytest.raises(TypeError, match="lm_head"):
         wrap_with_chunked_loss(torch.nn.Linear(4, 4), chunk_size=8)
+
+
+def test_the_multimodal_wrapper_is_refused_where_it_is_first_seen() -> None:
+    """`.model` and `.lm_head` do not identify a text causal LM, and this guard used to think so.
+
+    Every published Gemma 3 checkpoint declares `Gemma3ForConditionalGeneration` -- including this
+    repository's own text-only conversion, which carries no `vision_config` but still names that
+    architecture. So `AutoModelForCausalLM.from_pretrained` builds the multimodal wrapper for the
+    real registry entries, and that wrapper *has* both attributes. It passed this guard and failed
+    later somewhere else, which is the failure this guard exists to prevent.
+    """
+    from transformers import AutoModelForCausalLM, Gemma3Config
+
+    from local_llm_lab.training.torch_full import base_model_of
+
+    config = Gemma3Config(
+        text_config=dict(
+            vocab_size=64, hidden_size=32, intermediate_size=64, num_hidden_layers=2,
+            num_attention_heads=2, num_key_value_heads=1, head_dim=16, sliding_window=8,
+        ),
+        vision_config=dict(
+            hidden_size=32, intermediate_size=64, num_hidden_layers=2, num_attention_heads=2,
+            image_size=16, patch_size=8, num_channels=3,
+        ),
+    )
+    wrapper = AutoModelForCausalLM.from_config(config)
+    assert type(wrapper).__name__ == "Gemma3ForConditionalGeneration"
+    assert hasattr(wrapper, "model") and hasattr(wrapper, "lm_head")  # the old guard's whole test
+
+    with pytest.raises(TypeError, match="multimodal wrapper"):
+        base_model_of(wrapper)

@@ -57,6 +57,19 @@ def base_model_of(model: Any) -> Any:
             f"{type(inner).__name__} is not a causal LM with `.model` and `.lm_head`; this loss "
             "applies the head itself and cannot find it"
         )
+    # `.model` and `.lm_head` are not enough to identify a text causal LM, and this guard used to
+    # think they were. Gemma 3's *multimodal* wrapper has both, so it passed here and failed later
+    # and elsewhere -- `.model` is a `Gemma3Model` holding a vision tower and a `.language_model`,
+    # with no `.layers` of its own. Every published Gemma 3 checkpoint, including this repository's
+    # own text-only conversion, declares `Gemma3ForConditionalGeneration`, so
+    # `AutoModelForCausalLM` builds the wrapper and this is the common case, not the exotic one.
+    if not hasattr(inner.model, "layers"):
+        raise TypeError(
+            f"{type(inner).__name__}.model is a {type(inner.model).__name__} with no `.layers`. "
+            "This is the multimodal wrapper, not the text tower: training it would train a vision "
+            "tower for nothing and the layer-freezing recipe would not mean what it says. Load "
+            "through the text loader rather than `AutoModelForCausalLM`."
+        )
     return inner
 
 
