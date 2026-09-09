@@ -119,9 +119,22 @@ reasoning that a real HF block would silently promote a float32 tensor while the
 So the promoted path is not merely refused by the golden gate, it is **unavailable** on a bf16 Gemma,
 and my justification for the gate was wrong even though the gate itself is right. The gate stands on
 the plain ground that two fits which ran different arithmetic are not two measurements of one
-quantity. WS-A's 69.4% figure must therefore come from promoting the whole block rather than from
-injecting a promoted tensor into a bf16 one, and those are different experiments; whoever owns that
-row should say which it was.
+quantity.
+
+**Confirmed from the code, and the inference was right.** WS-A's figure is
+`research/acceptance/torch_seam.py:residual_precision_probe`'s `promoted_fp32_loop`: the residual
+promoted at the embedding and **every block run in float32**, through `arch_torch.run_block` ->
+`_block` -> `_call_promoted`, a stateless `torch.func.functional_call` with that block's own
+parameters and buffers cast to the residual's dtype, never an in-place conversion of the model. It is
+compared site by site against the native bf16 forward's residuals. That is whole-block promotion, and
+it runs on a bf16 Gemma perfectly well; what raises is handing float32 to a bf16 block *without* it,
+which is the different experiment this record ran into.
+
+So the estimator's `promoted-float32` option is not the probe's path and never was. It is now refused
+by name on any model that is not already float32, saying where whole-block promotion lives and why
+this estimator cannot offer it: it drives the model's own forward with a hook, deliberately, so that
+it differentiates the same function upstream does, and running the blocks itself would be a different
+estimator again.
 
 ## 6. What this means for the golden test, and what I recommend
 

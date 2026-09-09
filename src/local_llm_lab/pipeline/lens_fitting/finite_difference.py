@@ -77,11 +77,24 @@ from local_llm_lab.pipeline.lens_fitting.upstream import (
 DEFAULT_EPSILON_SCALE = 0.01
 
 #: The arithmetic path a fit ran, declared because two fits of one checkpoint can share a weight
-#: dtype and not share this. `native` writes the perturbation back in the block's own dtype, which
-#: is the path upstream's exact estimator runs; `promoted-float32` writes float32 back, so every
-#: block above the source runs promoted. They are different arithmetic, and on CUDA at 1,400 tokens
-#: they differ by 69.4% (WS-A, 2026-09-09). A golden comparison across them is not a measurement of
+#: dtype and not share this. `native` writes the perturbation back in the block's own dtype, which is
+#: the path upstream's exact estimator runs. A golden comparison across paths is not a measurement of
 #: the estimator, which is why `golden.COMPARABLE_KEYS` refuses it.
+#:
+#: `promoted-float32` here writes a float32 tensor back into the block's output, and **that is not
+#: the promoted path the 69.4% figure measures**. That figure is
+#: `research/acceptance/torch_seam.py:residual_precision_probe`'s `promoted_fp32_loop`: the residual
+#: promoted at the embedding and every block run in float32 through `arch_torch.run_block` ->
+#: `_block` -> `_call_promoted`, a stateless `torch.func.functional_call` with the block's own
+#: parameters and buffers cast to the residual's dtype — whole-block float32, never an in-place
+#: conversion of the model. Handing float32 into a bf16 block *without* that promotion, which is
+#: what this option does, raises `expected mat1 and mat2 to have the same dtype` on a real Gemma,
+#: measured on the card at every step and both layers tried (`WSD-GOLDEN-4B-2026-09-09` §5, §8).
+#:
+#: So this option is usable only where the model is already float32, and the fit refuses it by name
+#: elsewhere rather than letting a matmul say it three frames down. A real promoted-path estimator
+#: would have to run the blocks through `run_block`, which this one does not: it drives the model's
+#: own forward with a hook, deliberately, so that it differentiates the function upstream does.
 CAPTURE_DTYPES = ("native", "promoted-float32")
 
 #: Human-readable form of the same rule, carried into ν beside the residual. A residual without its
@@ -166,6 +179,19 @@ def fit_finite_difference_jacobian(
         )
     if capture_dtype not in CAPTURE_DTYPES:
         raise ValueError(f"capture_dtype must be one of {CAPTURE_DTYPES}; got {capture_dtype!r}")
+    if capture_dtype == "promoted-float32" and observed["dtype"] != "float32":
+        # By name here rather than as `expected mat1 and mat2 to have the same dtype` three frames
+        # down a real Gemma's attention. This option writes float32 into a block that is not
+        # float32, which torch refuses; the promoted path the 69.4% figure measures is a different
+        # mechanism and lives in `residual_precision_probe`, not here. See CAPTURE_DTYPES.
+        raise ValueError(
+            f"capture_dtype='promoted-float32' writes a float32 residual into blocks that are "
+            f"{observed['dtype']}, which torch refuses inside the block's own matmul. This option "
+            "exists to be measured against 'native' on a float32 model, not to promote a bf16 one. "
+            "Whole-block promotion is research/acceptance/torch_seam.py:residual_precision_probe, "
+            "through arch_torch.run_block and _call_promoted; an estimator wanting that path has to "
+            "run the blocks itself rather than hook the model's own forward."
+        )
     if not isinstance(direction_batch, int) or direction_batch < 1:
         raise ValueError(f"direction_batch must be a positive integer; got {direction_batch!r}")
     if not np.isfinite(epsilon_scale) or epsilon_scale <= 0:

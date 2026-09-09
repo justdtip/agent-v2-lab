@@ -232,9 +232,13 @@ def _bf16_model():
 def test_the_perturbation_keeps_the_block_dtype_under_native_and_promotes_under_the_other() -> None:
     """The claim itself, model-independent: which arithmetic the blocks above the source run.
 
-    Two fits of one checkpoint can declare the same weight dtype and not share this. On CUDA at
-    1,400 tokens the promoted path differs from native bf16 by 69.4% (WS-A on the device,
-    2026-09-09), so a golden comparison across the two paths is not a measurement of the estimator.
+    Two fits of one checkpoint can declare the same weight dtype and not share this, which is why
+    the golden gate refuses a cross-path comparison. The 69.4% figure that motivated the gate is
+    `residual_precision_probe`'s `promoted_fp32_loop` — whole-block float32 through
+    `arch_torch.run_block` and `_call_promoted` — and **not** this option, which writes float32 into
+    a block that is not, and which a real bf16 Gemma refuses inside its own matmul. The fit now says
+    that by name; this test holds the property the gate rests on, which is that the two paths hand
+    the block different dtypes.
     """
     from local_llm_lab.pipeline.lens_fitting.finite_difference import _perturbation
 
@@ -352,3 +356,21 @@ def test_a_repeated_row_is_refused_because_a_repeat_is_not_more_data(upstream) -
     with pytest.raises(ValueError, match="row 0 appears in fit 0 and fit 1"):
         combine_fits([one, _fd_rows(upstream, make_rows(count=1))])
     assert combine_fits([one]) is one, "one fit combines to itself without copying"
+
+
+def test_promoting_a_bf16_model_is_refused_by_name_and_points_at_the_probe(upstream) -> None:
+    """A named refusal beats `expected mat1 and mat2 to have the same dtype` three frames down.
+
+    Measured on the card: asking this estimator for the promoted path on a bf16 Gemma raises inside
+    the block's own matmul, at every step and both layers tried. The refusal now names what the
+    option is for, where whole-block promotion actually lives, and why this estimator cannot offer
+    it — it hooks the model's own forward rather than running the blocks itself.
+    """
+    with pytest.raises(ValueError, match="residual_precision_probe"):
+        fit_finite_difference_jacobian(
+            _bf16_model(), make_rows(), max_seq_len=SEQ_LEN, direction_batch=D_MODEL,
+            dtype="bfloat16", capture_dtype="promoted-float32", upstream=upstream,
+        )
+    # On a float32 model the option is what it was built to be: a path to measure against native.
+    fit = _fd(upstream, capture_dtype="promoted-float32")
+    assert fit.precision["capture_dtype"] == "promoted-float32"

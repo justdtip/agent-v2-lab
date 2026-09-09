@@ -399,13 +399,24 @@ def _observed_precision(model: Any) -> dict:
             grads.add(bool(parameter.requires_grad))
     if not dtypes:
         raise ValueError("model.layers has no parameters; cannot observe device or dtype")
-    # The *arithmetic* path, distinct from the weights' dtype and not derivable from it. A fit
-    # that reads activations and lets the model's own forward carry them runs "native"; one that
-    # writes a promoted tensor back into a block's output makes every block above it run in that
-    # promotion instead. On CUDA at 1,400 tokens the promoted-float32 path differs from native
-    # bf16 by 69.4% (WS-A on the device, 2026-09-09), so two fits of one checkpoint can declare
-    # the same dtype and have run different arithmetic. Native is the truth for any estimator that
-    # does not replace an activation; the one that does overrides this field and says so.
+    # The *arithmetic* path, distinct from the weights' dtype and not derivable from it. A fit that
+    # reads activations and lets the model's own forward carry them runs "native". A promoted fit is
+    # a different thing entirely and it is worth naming precisely, because I had it wrong once:
+    # `research/acceptance/torch_seam.py:residual_precision_probe`'s `promoted_fp32_loop` promotes
+    # the residual at the embedding and runs **every block in float32**, through
+    # `arch_torch.run_block` -> `_block` -> `_call_promoted`, which does a stateless
+    # `torch.func.functional_call` with that block's own parameters and buffers cast to the
+    # residual's dtype. Whole-block float32 arithmetic, never an in-place conversion of the model.
+    # Measured site by site against the native bf16 forward on this card, the two differ by 69.4%
+    # at 1,400 tokens (WS-A, 2026-09-09), so two fits of one checkpoint can declare the same dtype
+    # and have run different arithmetic.
+    #
+    # What that is *not*: handing a float32 tensor to a bf16 block without that promotion, which
+    # simply raises `expected mat1 and mat2 to have the same dtype` on a real Gemma. Any promoted
+    # path built here must go through `run_block` or `_call_promoted`, not around them.
+    #
+    # Native is the truth for any estimator that does not replace an activation; one that does
+    # overrides this field and says so.
     if len(dtypes) > 1 or len(devices) > 1:
         raise MixedPrecisionModel(
             "the fitting model is not uniform, so no single declared precision describes the run: "
