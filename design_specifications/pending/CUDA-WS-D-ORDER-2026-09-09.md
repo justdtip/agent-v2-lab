@@ -367,3 +367,39 @@ SWE-2 carries it. The two in-interval float32 maps ordered above are the first f
 **Step 1 of this order is amended:** upstream's hosted lens was fitted by bfloat16 autograd at the
 width of their recipe and is by this measurement a schedule-specific object; the un-port comparison
 needs their width declared before it means anything, and reports it as such.
+
+## Correction, Chief, 2026-09-10 — Codex's audit of the ladder (`WSA-LADDER-AUDIT-2026-09-09`, `2678218`): five statements of the ladder section above are withdrawn or narrowed
+
+The audit recomputes every cell from the saved record and is accepted. The ladder's headline holds
+in its narrowed form: **float32 convergence is supported for the tested projections, and no broadly
+accurate native-bfloat16 interval has been demonstrated over the tested grid.** What does not hold,
+and was written into this order from the producer's summary rather than from the artefact:
+
+1. *"The unchanged-input fraction is 0.000 in every cell, so the displacement always lands and the
+   loss is downstream"* — false. At layer 1, k = 16, four of six coordinate directions are input
+   no-ops with realized displacement exactly zero; the two dense directions keep nonzero responses.
+   The 1.000 was a median of four no-ops over two live directions. Input representability and
+   downstream rounding are separate mechanisms; the second is unlocalized.
+2. *"The shallower the source, the smaller the step it needs, by 2⁶ across three layers"* — the
+   normalized scales at k = 6 and k = 10 differ by 16; the absolute steps by 1,390, because the source
+   norms differ. Differing optima do not refute a common adequate scale: at k = 10 all three float32
+   medians are at most 0.0043.
+3. *"Flanked within about a factor of three on both sides"* — not everywhere; layer 33 at k = 4 is
+   9.24 times its minimum.
+4. *"The eighteen anchored-at-one rows fail"* — six at width one pass; the twelve cross-width rows
+   fail, as intended.
+5. *The laptop lenses "bounded by this table" at 98%, 129%, 8%* — withdrawn to **unknown**: a
+   different reduction, one source position probed, and a regression lens is not evaluated by a
+   finite-difference check. They are treated as unvalidated pending a matched directional check
+   under their own reduction, which is a policy and not a measured failure of every archive.
+
+**Ordered with the maps:** a full-target no-op comparison before the first derivative at each new
+precision, source and schedule, bound to the records that follow; the width-one failure path in
+`boundary.py` gated like every other width, with the mutation as a regression; the pre-reduction
+archive (native plus, minus and zero outputs per target position; requested and realized input
+vectors) from which equality, signed odd/even, midpoint, representable spacing and AD-predicted
+responses are derived; an accuracy and small-signal policy declared before the maps, with an
+absolute-error floor beside relative error so a small reference signal reads *unresolved*; k = 6
+and k = 10 carried as candidate settings; the two maps labelled as the test of the projection-to-
+column inference, with J − I and FD − I beside the errors; manifests, frozen invocation, progress
+events, frozen-token digest and measured autocast state bound to every record.
