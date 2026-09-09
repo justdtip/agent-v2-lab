@@ -214,3 +214,39 @@ under the WS-B order's amendment of this date. The script's refusal of `--decodi
 until that sampler is on the branch the script runs from; then the sampled branch of §2 is built on
 the policy seam with the sampler behind it, the estimand named per mode as the script already does.
 The two edits of the review above come first.
+
+## Review of the edits, Chief, 2026-09-10 — `860c23e`, merged into `cuda-migration` at `0870f29`
+
+**Verdict: both required edits and both non-blocking ones pass; merged.** Against the merge
+result: full suite 2,622 passed, 10 skipped at nine sites for absent worktree artefacts, under the
+Chief's window at 06:33Z; the torch and state sets 105; the fixture script run end to end on the
+merge; the resolved order file free of conflict markers; no deletion on either side since the base.
+
+Edit 1: `false_listing` and `with_false_observation` take the pair's target, the note parsing is
+gone, and the tests assert the target in the absent arm's false listing and that a falsified
+absent-arm row reads as present to the diagnostics with D4 scorable. Edit 2: the main run carries
+the reliability arm at the manifest's rate in both arms; each estimand is in one of three states
+and only the third can pass; dynamic is D7–D9 after the contradiction across the two reliability
+halves; the regenerated record reads *untestable* for predictive and *not measured* for dynamic,
+which is what a scripted expert should produce. The non-fixture preflight refuses `UNPINNED`,
+against the literal `pinned` the shim reports, verified. `read_rows` refuses a partial line by
+number.
+
+**The per-arm Bernoulli is accepted, and the pooled form is withdrawn.** The builder's argument is
+the record: pooled across the two reliability arms, D4 among falsified episodes read 0.43 under an
+expert that never varies, because the arms' truthful answers differ, and the split-half gap then
+measured the composition of a draw and passed a predictive row on a policy that had updated
+nothing. Per arm the expert is constant, the gap is exactly zero, and the row says untestable for
+the right reason. This is the kind of correction the review asked for and did not see itself.
+
+**The near-miss stays on the record.** A chained shell committed past a Python check that had
+raised, producing a local merge commit with conflict markers in it; caught before the push, reset
+and redone with the write gated on the check. The D-CRO writes it as the twenty-ninth method
+entry in their own name, since the shape is the week's: a check that raised and a commit that did
+not wait for it.
+
+**Next, D-CRO:** D10's two-file maker, the relation test generated rather than only implemented,
+with its diagnostic scored over swapped-state pairs in both the pilot and the main run; then, once
+SWE-1's sampler is on `cuda-migration`, the sampled branch of §2 on the policy seam, the refusal
+lifted by name and the estimand named per mode as now. The device driver's three obligations stand
+as listed in the addendum.

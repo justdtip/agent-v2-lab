@@ -389,3 +389,19 @@ either form; an off-target change of zero everywhere summarises to zeros, not to
 change to the edit itself and no change to the full form. Pathspec commit on
 `codex/cuda-torch-seam`, merged after review as before. After it, nothing further on the laptop:
 the device arms in the checklist are next, in their order.
+
+## Review of the summary form, 2026-09-10 — `fcab5b5`, merged into `cuda-migration` at `3973f95`
+
+**Verdict: passes; merged.** Against the merge result: the intervention, capture, bridge,
+architecture, estimator, state-run, rules, import-tree and device-setup sets, 289 passed with user
+warnings promoted to errors, under the Chief's window at 06:39Z; no deletion on either side. The
+form is what the order asked: `diagnostic="full"` the default and unchanged, `"summary"` keeping
+the selected readings whole and reducing the off-target change to its nonzero count, maximum
+magnitude, L1 norm and eight signed pairs with ties broken by feature index; the kind names the
+mode; an empty or all-zero complement summarises to zeros and an empty list, never to an absence;
+the edit and its gradients identical in both modes. The test that no dictionary-width Python list
+is ever built, with the full form as its negative control, is the check the order's reason rests
+on, and the L1 overflow refusal clears stale evidence rather than keeping it.
+
+Nothing further on the laptop for WS-A. The device arms in the checklist are next, in their order,
+and their records come back here under dated headings.
