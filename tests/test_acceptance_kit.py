@@ -355,7 +355,14 @@ def test_a_flip_at_high_recorded_confidence_fails_the_run(tmp_path: Path) -> Non
     assert "HARD" in violations[0].describe()
 
 
-def test_a_flip_at_low_recorded_confidence_is_reported_and_not_gated(tmp_path: Path) -> None:
+def test_the_recordings_own_confidence_no_longer_gates_anything(tmp_path: Path) -> None:
+    """Superseded 2026-09-10: the gate reads the reference's margin, not the recording's.
+
+    The recorded probability belongs to the 4-bit model. It gated this rule until a
+    bfloat16-against-bfloat16 comparison dropped a real disagreement because a quantised model
+    had been unsure of it — the position that made the four counts fail to sum. The same flip
+    now fails or passes on the reference's gap alone.
+    """
     directory = tmp_path / "soft"
     directory.mkdir()
     _write_record(
@@ -363,19 +370,35 @@ def test_a_flip_at_low_recorded_confidence_is_reported_and_not_gated(tmp_path: P
         _with_confidence(_episode_events("soft", [5, 6], [11, 12]), 0.51),
     )
     episode = golden.load_episodes(directory)[0]
-    flipped = tolerance.teacher_forced_agreement(
-        episode, {(0, 2): 11, (0, 3): 404}, reference=tolerance.MLX_BF16
+    produced = {(0, 2): 11, (0, 3): 404}
+
+    wide = tolerance.teacher_forced_agreement(
+        episode,
+        produced,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 40.0)},
     )
-    assert len(flipped.flips) == 1 and not flipped.hard_flips
-    assert flipped.passed, "a near-tie can flip on precision alone and is not a defect"
+    assert len(wide.hard_flips) == 1 and not wide.passed, (
+        "an unconfident recording does not excuse a disagreement the reference is clear about"
+    )
+
+    tied = tolerance.teacher_forced_agreement(
+        episode,
+        produced,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 1.0)},
+    )
+    assert len(tied.ties) == 1 and tied.passed
 
 
 def test_a_position_with_no_recorded_probability_is_counted_not_assumed(records: Path) -> None:
-    """The fixture records carry no rank rows, so the hard rule cannot apply to them."""
+    """The fixture records carry no rank rows, so the recording's confidence is unknown."""
     episode = golden.load_episodes(records)[0]
     report = tolerance.teacher_forced_agreement(episode, {(0, 3): 999})
     assert report.compared == 1 and report.unrecorded_probability == 1
-    assert not report.hard_flips, "an unrecorded probability is never treated as a high one"
+    assert not report.confident_disagreements, (
+        "an unrecorded probability is never treated as a high one"
+    )
     assert "could not be applied" in report.describe()
 
 
@@ -466,28 +489,32 @@ def test_the_runner_refuses_a_row_count_that_would_shift_the_join(tmp_path: Path
         tolerance.run_tolerance(episode, _fake_forward({(5, 6, 11, 12): [(0, (0,))] * 3}))
 
 
-def test_the_runner_fails_on_a_confident_flip_and_survives_an_unconfident_one(
-    tmp_path: Path,
-) -> None:
-    directory = tmp_path / "flip"
+def test_the_runner_fails_on_a_clear_reference_and_survives_a_tie(tmp_path: Path) -> None:
+    """End to end through ``run_tolerance``: the reference's gap decides, nothing else."""
+    directory = tmp_path / "runner"
     directory.mkdir()
     _write_record(
-        directory / "hard.jsonl",
-        _with_confidence(_episode_events("hard", [5, 6], [11, 12]), 0.999998),
+        directory / "runner.jsonl",
+        _with_confidence(_episode_events("runner", [5, 6], [11, 12]), 0.9999),
     )
-    _write_record(
-        directory / "soft.jsonl",
-        _with_confidence(_episode_events("soft", [5, 6], [11, 12]), 0.55),
-    )
-    hard, soft = golden.load_episodes(directory)
+    episode = golden.load_episodes(directory)[0]
+    forward = _fake_forward({(5, 6, 11, 12): [(0, (0,)), (11, (11,)), (404, (404,)), (0, (0,))]})
 
-    rows = [(0, (0,)), (11, (11,)), (404, (404,)), (0, (0,))]
-    forward = _fake_forward({(5, 6, 11, 12): rows})
-
-    assert not tolerance.run_tolerance(hard, forward, reference=tolerance.MLX_BF16).passed
-    assert tolerance.run_tolerance(soft, forward, reference=tolerance.MLX_BF16).passed, (
-        "a near-tie can flip on precision alone; only a confident flip is a defect"
+    clear = tolerance.run_tolerance(
+        episode,
+        forward,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 40.0)},
     )
+    assert not clear.passed
+
+    tied = tolerance.run_tolerance(
+        episode,
+        forward,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 2.0)},
+    )
+    assert tied.passed
 
 
 def test_the_runner_gates_on_the_divergence_floor_too(tmp_path: Path) -> None:
@@ -591,8 +618,11 @@ def test_a_gating_flip_prints_even_when_soft_flips_would_have_crowded_it_out() -
     flips and the log carried 12, and the positions of the other 12 were recorded nowhere, so
     the input to the follow-up test had to be reconstructed and could not be.
     """
-    soft = [tolerance.Flip(0, index, 10 + index, 900 + index, 0.4) for index in range(20)]
-    late = tolerance.Flip(3, 999, 777, 888, 0.9999)
+    soft = [
+        tolerance.Flip(0, index, 10 + index, 900 + index, 0.4, reference_gap_ulps=1.0)
+        for index in range(20)
+    ]
+    late = tolerance.Flip(3, 999, 777, 888, 0.9999, reference_gap_ulps=40.0)
     report = tolerance.AgreementReport(
         "ep", compared=100, agreed=79, flips=[*soft, late], reference=tolerance.MLX_BF16
     )
@@ -604,16 +634,17 @@ def test_a_gating_flip_prints_even_when_soft_flips_would_have_crowded_it_out() -
     assert "further soft flips, none of them gating" in text, (
         "the reader is told what was withheld, so a short list is not read as a complete one"
     )
-    assert text.count("[soft]") == 12, (
-        "soft flips stay capped; they are the noise this cap exists for"
-    )
+    assert text.count("[TIE]") == 12, "ties stay capped; they are the noise this cap exists for"
 
 
 def test_the_failing_positions_are_in_the_record_and_not_only_in_the_log() -> None:
     """A log truncates and a record is what the next run reads."""
     import tolerance_baseline as runner
 
-    flips = [tolerance.Flip(1, 735, 2818, 107, 1.0), tolerance.Flip(0, 66, 496, 506, 0.3)]
+    flips = [
+        tolerance.Flip(1, 735, 2818, 107, 1.0, reference_gap_ulps=40.0),
+        tolerance.Flip(0, 66, 496, 506, 0.3, reference_gap_ulps=1.0),
+    ]
     report = SimpleNamespace(
         agreement=tolerance.AgreementReport("ep", compared=10, agreed=8, flips=flips),
         jaccard=SimpleNamespace(mean=0.5),
@@ -753,3 +784,60 @@ def test_a_reference_file_that_does_not_declare_its_precision_is_refused(tmp_pat
     )
     reference, readings = tolerance.load_reference(good)
     assert reference.precision_matched and readings["ep"][(0, 5)] == (11, 3.0)
+
+
+def test_a_disagreement_the_ports_own_devices_straddle_is_below_resolution() -> None:
+    """read-0108/521: the reference is 3 ULP clear and the port's devices are 5 apart.
+
+    A defect is a claim that the port disagrees with the reference by more than the port's own
+    arithmetic can explain. Where the port's two devices straddle the reference's margin the
+    claim cannot be made from that position, and calling it a defect reads the port's
+    resolution as the port's error.
+    """
+    covered = tolerance.Flip(
+        0, 521, 2234, 1399, 0.999739, reference_gap_ulps=3.0, port_spread_ulps=5.0
+    )
+    exposed = tolerance.Flip(
+        1, 1912, 3530, 18997, 0.599491, reference_gap_ulps=3.0, port_spread_ulps=1.0
+    )
+
+    assert covered.below_resolution and not covered.hard and not covered.tie
+    assert exposed.hard and not exposed.below_resolution
+    assert "BELOW-RES" in covered.describe() and "port spread 5.0 ULP" in covered.describe()
+
+    report = tolerance.AgreementReport(
+        "ep", compared=10, agreed=8, flips=[covered, exposed], reference=tolerance.MLX_BF16
+    )
+    assert len(report.below_resolution) == 1 and len(report.hard_flips) == 1
+    assert not report.passed, "the one the port's spread does not cover still fails"
+
+
+def test_below_resolution_needs_both_margins_and_never_guesses() -> None:
+    """One device measured is not a spread, and an unmeasured spread is not a small one."""
+    unmeasured = tolerance.Flip(0, 5, 11, 12, 0.9999, reference_gap_ulps=3.0)
+    assert not unmeasured.below_resolution and unmeasured.hard
+
+
+def test_the_four_classes_add_up_to_the_positions_compared() -> None:
+    """The identity that exposed a class the classifier had no name for.
+
+    5,213 agreed, 30 ties and 1 flip left one position of 5,245 unaccounted for: a disagreement
+    outside the tie band that the old confidence gate silently dropped. A count that does not
+    sum is a position nobody will look at, so the identity is asserted rather than assumed.
+    """
+    flips = [
+        tolerance.Flip(0, 1, 11, 12, 0.4, reference_gap_ulps=1.0),
+        tolerance.Flip(0, 2, 11, 12, 0.9, reference_gap_ulps=3.0, port_spread_ulps=4.0),
+        tolerance.Flip(0, 3, 11, 12, 0.5, reference_gap_ulps=3.0, port_spread_ulps=1.0),
+    ]
+    report = tolerance.AgreementReport(
+        "ep", compared=10, agreed=7, flips=flips, reference=tolerance.MLX_BF16
+    )
+    assert report.counts() == {"agreed": 7, "ties": 1, "below_resolution": 1, "flips": 1}
+    assert sum(report.counts().values()) == report.compared
+
+    wrong = tolerance.AgreementReport(
+        "ep", compared=11, agreed=7, flips=flips, reference=tolerance.MLX_BF16
+    )
+    with pytest.raises(AssertionError, match="a position with no class"):
+        wrong.counts()

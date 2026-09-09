@@ -1,0 +1,29 @@
+{
+ "what": "the port cross-device spread at each outstanding position, one measurement per device",
+ "positions": [
+  {
+   "episode": "agentic-d2-read-0108",
+   "turn": 0,
+   "position": 521,
+   "cpu_signed_ulps": 0.0,
+   "cuda_signed_ulps": -5.000000057338932,
+   "port_spread_ulps": 5.000000057338932,
+   "reference_gap_ulps": 2.9999997434007057,
+   "reference_top_logit": 66.0,
+   "reference_exponent": 6,
+   "reference_bf16_ulp": 0.5
+  },
+  {
+   "episode": "chat-long-summary",
+   "turn": 1,
+   "position": 1912,
+   "cpu_signed_ulps": -0.0,
+   "cuda_signed_ulps": -1.000000072508983,
+   "port_spread_ulps": 1.000000072508983,
+   "reference_gap_ulps": 2.999999818370114,
+   "reference_top_logit": 34.75,
+   "reference_exponent": 5,
+   "reference_bf16_ulp": 0.25
+  }
+ ]
+}

@@ -119,11 +119,31 @@ class Flip:
     #: The reference's own top-two gap at this position, in ULPs of its logit dtype. ``None``
     #: when the reference cannot say, which is every reference that only recorded a token.
     reference_gap_ulps: float | None = None
+    #: How far the port's own preference moves across its devices at this position, in the same
+    #: ULPs. ``None`` when only one device has been measured.
+    port_spread_ulps: float | None = None
 
     @property
     def tie(self) -> bool:
         """The reference could not tell its own top two apart at the resolution it stores them."""
         return self.reference_gap_ulps is not None and self.reference_gap_ulps <= TIE_ULPS
+
+    @property
+    def below_resolution(self) -> bool:
+        """The port's own arithmetic moves further than the reference's margin.
+
+        A defect is a claim that the port disagrees with the reference by more than the port's
+        own arithmetic can explain. Where the port's two devices straddle the reference's
+        margin, that claim cannot be made from this position, and calling it a defect would be
+        reading the port's resolution as the port's error. Ruled 2026-09-10 on
+        ``read-0108``/521, where the reference is 3 ULP clear and the port's devices are 5 apart.
+        """
+        return (
+            not self.tie
+            and self.reference_gap_ulps is not None
+            and self.port_spread_ulps is not None
+            and self.reference_gap_ulps <= self.port_spread_ulps
+        )
 
     @property
     def confident(self) -> bool:
@@ -134,8 +154,13 @@ class Flip:
 
     @property
     def hard(self) -> bool:
-        """A disagreement the reference was in a position to have an opinion about."""
-        return self.confident and not self.tie
+        """A disagreement attributable to the port: not a tie, and not below its resolution.
+
+        The recording's own probability does not appear. It is the *4-bit* model's confidence
+        and it gated this rule until 2026-09-10, which is how a bfloat16-against-bfloat16
+        comparison came to drop a disagreement because a quantised model had been unsure.
+        """
+        return not self.tie and not self.below_resolution
 
     def describe(self) -> str:
         probability = (
@@ -143,12 +168,14 @@ class Flip:
             if self.recorded_probability is None
             else f"P={self.recorded_probability:.6f}"
         )
-        severity = "TIE" if self.tie else ("HARD" if self.hard else "soft")
+        severity = "TIE" if self.tie else ("BELOW-RES" if self.below_resolution else "HARD")
         gap = (
             ""
             if self.reference_gap_ulps is None
             else f", reference gap {self.reference_gap_ulps:.1f} ULP"
         )
+        if self.port_spread_ulps is not None:
+            gap += f", port spread {self.port_spread_ulps:.1f} ULP"
         return (
             f"[{severity}] turn {self.turn} position {self.position}: recorded "
             f"{self.recorded} ({probability}), produced {self.produced}{gap}"
@@ -178,9 +205,40 @@ class AgreementReport:
         return [flip for flip in self.flips if flip.tie]
 
     @property
+    def below_resolution(self) -> list[Flip]:
+        """Disagreements the port's own cross-device spread already covers."""
+        return [flip for flip in self.flips if flip.below_resolution]
+
+    @property
+    def confident_disagreements(self) -> list[Flip]:
+        """Disagreements the *recording* was confident about. Descriptive, never a verdict."""
+        return [flip for flip in self.flips if flip.confident]
+
+    @property
     def hard_flips(self) -> list[Flip]:
-        """Disagreements that are not ties and that the recording was confident about."""
+        """Disagreements attributed to the port: not ties, not below its resolution."""
         return [flip for flip in self.flips if flip.hard]
+
+    def counts(self) -> dict[str, int]:
+        """The four classes, which must add to ``compared``.
+
+        Written as a method with the identity asserted because the line not summing is what
+        exposed a whole class the classifier had no name for: a disagreement outside the tie
+        band that the old confidence gate silently dropped.
+        """
+        out = {
+            "agreed": self.agreed,
+            "ties": len(self.ties),
+            "below_resolution": len(self.below_resolution),
+            "flips": len(self.hard_flips),
+        }
+        total = sum(out.values())
+        if total != self.compared:
+            raise AssertionError(
+                f"the four classes sum to {total} and {self.compared} positions were compared; "
+                "a position with no class is a position nobody will look at"
+            )
+        return out
 
     @property
     def passed(self) -> bool:
@@ -196,19 +254,26 @@ class AgreementReport:
                 f"a comparison against {self.reference} is not a defect test and has no verdict: "
                 f"the reference is not precision-matched with the port, so a disagreement "
                 f"measures the difference between the two precisions. It reports "
-                f"{len(self.hard_flips)} confident disagreements and {len(self.ties)} ties as "
+                f"{len(self.confident_disagreements)} confident disagreements as "
                 f"observations. Re-run against a precision-matched reference for a verdict."
             )
         return not self.hard_flips
 
     def describe(self) -> str:
-        lines = [
-            f"{self.label}: {self.agreed}/{self.compared} argmax agree "
-            f"({self.rate:.6f}), {len(self.flips)} flips, "
-            f"{len(self.hard_flips)} of them at P >= {HARD_CONFIDENCE} and not ties, "
-            f"{len(self.ties)} ties, against {self.reference}"
-        ]
-        if not self.reference.precision_matched:
+        if self.reference.precision_matched:
+            lines = [
+                f"{self.label}: {self.agreed}/{self.compared} argmax agree "
+                f"({self.rate:.6f}), {len(self.ties)} ties, "
+                f"{len(self.below_resolution)} below resolution, "
+                f"{len(self.hard_flips)} attributed to the port, against {self.reference}"
+            ]
+        else:
+            lines = [
+                f"{self.label}: {self.agreed}/{self.compared} argmax agree "
+                f"({self.rate:.6f}), {len(self.flips)} flips, "
+                f"{len(self.confident_disagreements)} of them at P >= {HARD_CONFIDENCE}, "
+                f"against {self.reference}"
+            ]
             lines.append(
                 f"  not a defect test: {self.reference} is not precision-matched with the port, "
                 "so these disagreements measure the two precisions and not the port"
@@ -228,7 +293,8 @@ class AgreementReport:
         # carried 12, and the positions of the other 12 were recorded nowhere. A cap that can
         # hide the evidence for the failure it is reporting is the wrong cap.
         lines.extend(f"  {flip.describe()}" for flip in self.hard_flips)
-        soft = [flip for flip in self.flips if not flip.hard]
+        lines.extend(f"  {flip.describe()}" for flip in self.below_resolution)
+        soft = [flip for flip in self.flips if not flip.hard and not flip.below_resolution]
         lines.extend(f"  {flip.describe()}" for flip in soft[:12])
         if len(soft) > 12:
             lines.append(f"  ... and {len(soft) - 12} further soft flips, none of them gating")
@@ -315,6 +381,7 @@ def teacher_forced_agreement(
     *,
     reference: Reference = MLX_4BIT,
     readings: dict[tuple[int, int], tuple[int, float | None]] | None = None,
+    spreads: dict[tuple[int, int], float] | None = None,
 ) -> AgreementReport:
     """Compare a ported argmax against the reference's at every emitted position.
 
@@ -339,6 +406,7 @@ def teacher_forced_agreement(
                 continue
             expected = emission.token_id if reading is None else reading[0]
             gap = None if reading is None else reading[1]
+            spread = None if spreads is None else spreads.get(key)
             report.compared += 1
             produced = produced_argmax[key]
             probability = turn.emitted_confidence(emission.position)
@@ -355,6 +423,7 @@ def teacher_forced_agreement(
                         produced=produced,
                         recorded_probability=probability,
                         reference_gap_ulps=gap,
+                        port_spread_ulps=spread,
                     )
                 )
     return report
@@ -531,6 +600,7 @@ def run_tolerance(
     decoding: object = "greedy",
     reference: Reference = MLX_4BIT,
     readings: dict[tuple[int, int], tuple[int, float | None]] | None = None,
+    spreads: dict[tuple[int, int], float] | None = None,
 ) -> ToleranceReport:
     """The G-2(b) statistics for one episode, from a teacher-forced pass over its records.
 
@@ -544,7 +614,11 @@ def run_tolerance(
     produced_argmax, produced_top = teacher_forced_run(episode, forward, top_k=top_k)
     return ToleranceReport(
         agreement=teacher_forced_agreement(
-            episode, produced_argmax, reference=reference, readings=readings
+            episode,
+            produced_argmax,
+            reference=reference,
+            readings=readings,
+            spreads=spreads,
         ),
         jaccard=top_k_jaccard(episode, produced_top, k=top_k),
         divergence=None if free_running is None else divergence_indices(free_running, floor=floor),

@@ -112,6 +112,7 @@ def run_episodes(
     per_episode: Path | None = None,
     reference=None,
     readings=None,
+    spreads=None,
 ):
     """``reference`` defaults to the stage-two recording, which is not a defect test."""
     """Read every episode, writing each result the moment it is finished.
@@ -125,6 +126,7 @@ def run_episodes(
     So the contract is: whatever finished is on disk, whatever the run does next.
     """
     reference = reference or tolerance.MLX_4BIT
+    spreads = spreads or {}
     reports = []
     for index, episode in enumerate(episodes, 1):
         print(f"\n[{index}/{len(episodes)}] {episode.label} ...", flush=True)
@@ -135,6 +137,7 @@ def run_episodes(
             top_k=top_k,
             reference=reference,
             readings=None if readings is None else readings.get(episode.label, {}),
+            spreads=spreads.get(episode.label),
         )
         elapsed = time.monotonic() - started
         print(f"{episode.label}  ({elapsed:.1f}s)")
@@ -267,6 +270,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--json", type=Path, help="write the report here")
     parser.add_argument(
+        "--spreads",
+        type=Path,
+        help="the port's measured cross-device spread per position, from scripts/flip_margin.py "
+        "on each device. A disagreement the spread already covers is classed below resolution "
+        "rather than attributed to the port",
+    )
+    parser.add_argument(
         "--reference",
         type=Path,
         help="a precision-matched reference from scripts/mlx_reference.py. Without it the "
@@ -299,6 +309,15 @@ def main(argv: list[str] | None = None) -> int:
             "is bfloat16, so disagreements measure the two precisions. Pass --reference for a "
             "verdict."
         )
+
+    spreads: dict[str, dict[tuple[int, int], float]] = {}
+    if arguments.spreads:
+        payload = json.loads(arguments.spreads.read_text())
+        for row in payload["positions"]:
+            spreads.setdefault(row["episode"], {})[(row["turn"], row["position"])] = row[
+                "port_spread_ulps"
+            ]
+        print(f"port cross-device spreads: {sum(len(v) for v in spreads.values())} position(s)")
 
     episodes = golden.load_episodes(arguments.records)
     if arguments.episode:
@@ -350,11 +369,13 @@ def main(argv: list[str] | None = None) -> int:
     agreed = sum(report.agreement.agreed for _, report, _ in reports)
     hard = sum(len(report.agreement.hard_flips) for _, report, _ in reports)
     ties = sum(len(report.agreement.ties) for _, report, _ in reports)
+    below = sum(len(report.agreement.below_resolution) for _, report, _ in reports)
     print("\n" + "=" * 78)
     print(
         f"teacher-forced argmax agreement {agreed}/{compared} "
         f"({agreed / compared if compared else 0:.6f}); "
-        f"{hard} flips at P >= {tolerance.HARD_CONFIDENCE} and not ties; {ties} ties; "
+        f"{ties} ties; {below} below resolution; {hard} attributed to the port; "
+        f"[{agreed} + {ties} + {below} + {hard} = {agreed + ties + below + hard} of {compared}]; "
         + (
             f"gate {'PASS' if hard == 0 else 'FAIL'}"
             if reference.precision_matched
@@ -379,6 +400,9 @@ def main(argv: list[str] | None = None) -> int:
                     "precision_matched": reference.precision_matched,
                     "hard_flips": provenance.Measured(hard, provenance.MEASURED_HERE).as_dict(),
                     "ties": provenance.Measured(ties, provenance.MEASURED_HERE).as_dict(),
+                    "below_resolution": provenance.Measured(
+                        below, provenance.MEASURED_HERE
+                    ).as_dict(),
                     **(
                         {}
                         if peak is None
