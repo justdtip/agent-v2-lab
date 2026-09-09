@@ -567,8 +567,8 @@ def config_eos_ids(model: Any) -> frozenset[int]:
     if declared is None:
         raise ValueError(
             "the model config declares no eos_token_id; refusing to fall back to the "
-            "tokenizer's single id, which would leave <end_of_turn> unrecognised and run "
-            "every turn to the token cap"
+            "tokenizer's single id, which is one marker where the config declares a set, so "
+            "any terminator outside it goes unrecognised and every turn runs to the token cap"
         )
     if isinstance(declared, int):
         return frozenset({declared})

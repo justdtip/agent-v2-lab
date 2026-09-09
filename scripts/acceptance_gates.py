@@ -223,7 +223,12 @@ def _load_backend(arguments: argparse.Namespace) -> tuple[Any, Any, Any, Any] | 
 GATES = [
     Gate(1, "structural discovery of the decoder", "WS-A", _not_this_workstream(1, "WS-A")),
     Gate(2, "residual_source_agreement at 64 and 1,400", "WS-A", _not_this_workstream(2, "WS-A")),
-    Gate(3, "layer-34 identity against the emitted token", "WS-A", _not_this_workstream(3, "WS-A")),
+    Gate(
+        3,
+        "final-layer identity against the emitted token",
+        "WS-A",
+        _not_this_workstream(3, "WS-A"),
+    ),
     Gate(4, "readout gate with both negative controls", "WS-A", _not_this_workstream(4, "WS-A")),
     Gate(5, "golden trajectories", "WS-B", gate_5_golden_trajectories),
     Gate(6, "golden lens reads", "WS-B", gate_6_golden_lens_reads),
