@@ -841,3 +841,55 @@ def test_the_four_classes_add_up_to_the_positions_compared() -> None:
     )
     with pytest.raises(AssertionError, match="a position with no class"):
         wrong.counts()
+
+
+def test_the_runner_classifies_a_known_set_and_not_merely_a_summing_one(tmp_path: Path) -> None:
+    """The guard that was missing when the spread never reached the classifier.
+
+    ``run_episodes`` grew a ``spreads`` parameter and the call site did not pass it. The four
+    classes still summed — 5,213 + 30 + 0 + 2 — because a conservation law is satisfied by a
+    system that has done nothing at all. So the summary is asserted against a known set, class
+    by class, which is the only thing that separates "classified" from "added up".
+    """
+    import tolerance_baseline as runner
+
+    directory = tmp_path / "known"
+    directory.mkdir()
+    _write_record(
+        directory / "known.jsonl",
+        _with_confidence(_episode_events("known", [5, 6], [11, 12, 13, 14]), 0.9999),
+    )
+    episodes = golden.load_episodes(directory)
+    sequence = (5, 6, 11, 12, 13, 14)
+    # Position 2 agrees; 3 is a tie on the reference; 4 is covered by the port's spread; 5 is not.
+    rows = [(0, ()), (11, ()), (99, ()), (99, ()), (99, ()), (0, ())]
+    readings = {(0, 2): (11, 40.0), (0, 3): (12, 1.0), (0, 4): (13, 3.0), (0, 5): (14, 3.0)}
+    spreads = {(0, 4): 5.0, (0, 5): 1.0}
+
+    reports = runner.run_episodes(
+        episodes,
+        _fake_forward({sequence: rows}),
+        reference=tolerance.MLX_BF16,
+        readings={"known": readings},
+        spreads={"known": spreads},
+    )
+    agreement = reports[0][1].agreement
+    assert agreement.counts() == {
+        "agreed": 1,
+        "ties": 1,
+        "below_resolution": 1,
+        "flips": 1,
+    }, "each class by name, because the total alone is satisfied by classifying nothing"
+
+    # And the failure the identity could not see: the spread withheld.
+    without = runner.run_episodes(
+        episodes,
+        _fake_forward({sequence: rows}),
+        reference=tolerance.MLX_BF16,
+        readings={"known": readings},
+    )
+    counts = without[0][1].agreement.counts()
+    assert sum(counts.values()) == 4, "still sums"
+    assert counts["below_resolution"] == 0 and counts["flips"] == 2, (
+        "and is still wrong, which is why the identity needs an expected value beside it"
+    )

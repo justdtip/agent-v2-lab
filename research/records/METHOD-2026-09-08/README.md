@@ -723,3 +723,40 @@ positions compared, or the report raises.
 distrust any check that a too-fine grid would also pass. State a defect as a margin that exceeds
 the port's own measured spread, so a threshold is never moved after the fact to accommodate one.
 And make the classes sum, because the position with no class is the one nobody will look at.
+
+## Thirty-third: the reporter that failed, jointly with the D-CRO
+
+Three defects in one day that no test suite was built to catch, because **neither was a check that
+failed — both were a reporter that failed, and a reporter has no assertion to break.** The sentence
+is the D-CRO's and it is the entry.
+
+**Theirs.** A progress logger raised *after* the fit completed, and threw away twenty-seven minutes
+of forwards on paid hardware. The computation was correct and finished; the thing that was supposed
+to write it down destroyed it. The runbook's write-as-you-go rule was in force and was broken by the
+writer the rule exists to constrain.
+
+**Mine.** A flip printer capped its output at twelve flips per episode **in position order**. An
+episode with many near-ties pushed its confident flips past the cap, so a run reported twenty-four
+gating flips and the log carried twelve — and the record kept probabilities but not positions, so
+the other twelve existed nowhere at all. The cap was found only by trying to build the next test's
+input out of the log and coming up half short. **A display had decided a result.**
+
+**Mine again, one level down, and this is the half that generalises.** The classifier consulted a
+stale field — the 4-bit recording's probability — to decide whether a bfloat16-against-bfloat16
+disagreement counted, and dropped a whole class silently. What exposed it was not a test but an
+arithmetic identity: 5,213 agreed plus 30 ties plus 1 flip against 5,245 compared. Then the
+identity itself proved insufficient. When the spread parameter was loaded, keyed, and never passed
+to the function that reads it, the four classes **still summed** — 5,213 + 30 + 0 + 2 — and only an
+expected classification beside the identity showed that nothing had been classified.
+
+**Why suites miss this family.** A check that fires wrongly is a failing test. A reporter that
+summarises wrongly produces a plausible number, and plausible numbers pass. The three above were
+caught by, in order: a paid clock, an attempt to use the output for something else, and an
+arithmetic identity that then needed an expected value beside it. None of those is a test.
+
+**The rules.** Every reporter that summarises gets a test that feeds it a known set and asserts the
+summary it produces — the summary, not the computation behind it. A cap that can hide the evidence
+for the failure it is reporting is refused by construction: the gating rows are never truncated and
+the withheld count is stated, so a short list is never read as a complete one. And an identity
+guards a gate only beside an expected value, because a conservation law is satisfied by a system
+that has done nothing at all.
