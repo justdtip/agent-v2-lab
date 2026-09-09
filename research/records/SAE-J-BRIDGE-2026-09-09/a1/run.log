@@ -1,0 +1,13 @@
+waiting for the box: 05:31:37Z
+box free at 05:31:37Z after 0x15s; announcing
+loaded: dictionary 16384x2560, lens layer 18, vocab 262208; 3.1s, rss 4.61 GiB
+raw arm overlap@10 with shipped top_tokens: 0.245  (37s)
+gain arm overlap@10: 0.995  (38s)
+conclusion: shipped file applies the final gain; convention settled, bridge proceeds
+A1 through the lens: 16384 features x top-10 in 39s, rss 4.77 GiB
+two ways on 8 features: top-10 sets identical, 0 order-only differences, worst relative score gap 1.71e-06
+control vs layer 2: mean overlap 0.047, identical 0.000, distinguishes True
+control vs layer 10: mean overlap 0.231, identical 0.004, distinguishes True
+control vs layer 30: mean overlap 0.152, identical 0.000, distinguishes True
+control vs itself: overlap 1.0, distinguishes False (the check shown to fail)
+wrote /Users/daniel.tipton/worktrees/cuda-ws-c/research/records/SAE-J-BRIDGE-2026-09-09/a1/layer18.json; total 131.7s, peak rss 5.27 GiB (macOS ru_maxrss is bytes)
