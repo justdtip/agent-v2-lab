@@ -50,9 +50,9 @@ def test_the_registry_lists_every_declared_backbone() -> None:
     from local_llm_lab.models import registered_models
 
     assert registered_models() == [
+        "gemma3-12b-cuda-bf16",  # sorts first: "12b" < "4b" as strings
         "gemma3-4b",
         "gemma3-4b-bf16",
-        "gemma3-12b-cuda-bf16",
         "gemma3-4b-cuda-bf16",
         "qwen25-coder-3b",
         "qwen35-4b",
