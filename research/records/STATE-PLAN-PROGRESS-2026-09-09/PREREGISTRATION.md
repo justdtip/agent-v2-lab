@@ -132,6 +132,17 @@ the position whose readout produces the first token of the model's turn.
 the decoding mode, `capture_dtype: native`, the device reading, and the `basis` field per cell. The
 ground truth is stored beside the cell and comes from the task, never from the model.
 
+**Two fields the first draft did not carry, both required.**
+
+- **`forward_batch: 1`**, and `anchor_batch: 1` beside it. The bf16 forward is not batch-invariant —
+  measured on the card, no block of the stack bitwise identical between two widths
+  (`WSD-FD-CALIBRATION-2026-09-10`) — so a captured residual is a residual *of a width*. A batched
+  capture would carry a width-dependent arithmetic term into every probe fitted on it, silently.
+  Captures are made at width 1, which is the ordinary forward, and the manifest says so per cell.
+- **The token index**, after tokenization, per cell. "The last prompt token" is a rule for finding
+  the position and is not a record of which position was found. A prose definition cannot be checked
+  against the capture; an integer can.
+
 **Set.** `capture-set.jsonl`, 7,629 lines, digest above. It is enumerated once, before the first
 capture, and the capture pass reads it rather than re-deriving the enumeration on the card.
 
@@ -189,11 +200,23 @@ Does the state read after decision *k* move to the state the task's own dynamics
 
 **Score, and why it needs no tolerance.** For each held-out transition, transport the state read at
 *k* by the rule and ask whether the transported state is nearer to the state read at *k+1* than to
-the state read at any other decision of the same episode. A hit is bounded in [0, 1] and its chance
-level is `1 / (decisions in the episode)`, computed per episode and reported beside the score. This
-is a deliberate departure from the first state variable's derived-tolerance design: a retrieval
-score against an explicit chance level has no free parameter to set after looking, and no pilot is
-needed to set one. The departure is flagged for the Chief before sealing.
+the state read at any other decision of the same episode. A hit is bounded in [0, 1], which is what
+makes §7's bound apply. This is a deliberate departure from the first state variable's
+derived-tolerance design: a retrieval score against an explicit chance level has no free parameter to
+set after looking, and no pilot is needed to set one.
+
+**Frozen here, because each of these would otherwise be a choice made after seeing the score:**
+
+- **The candidate set is all *N* decisions of the episode, the source included.** The chance level is
+  then exactly `1/N`, which is the uniform-guess reference this document already quotes. Excluding
+  the source would make it `1/(N−1)` and the two must not be mixed.
+- **Strict nearest target: a tie is a miss.** Named because the alternative — splitting credit — is
+  defensible and gives a different number, and because ties are not rare in a bounded space.
+- **The transport distance is reported descriptively beside the hit rate**, in the metric the rule is
+  fitted under, aggregated as the mean within an episode and then the mean across episodes. Never
+  pooled across decisions, which would weight long episodes more heavily and is the same mistake as
+  counting decisions instead of episodes in §7. It is descriptive: it adds no confirmatory estimand
+  and enters no bound.
 
 **The census, which is what says whether the stratum can carry the claim.** 6,501 transitions:
 
@@ -245,7 +268,11 @@ re-read from the text, and clamping features does not stop that. Three parts:
 3. **E2 scored with and without the arm**, the difference reported as the carrier's share.
 
 **Part 2 is orderable as it stands. Part 1 is not yet, and this section says why rather than
-promising a rule that does not exist.**
+promising a rule that does not exist.** What is pre-registered here is the **text-removal** arm and
+only that. An arm built some other way — masking the carrier spans as attention keys, say, which
+truncates the carrier without touching a token — is a different intervention with a different
+failure mode, and if one is ever ruled into E2 it is ruled in by an amendment that says so. This
+document does not promise it and must not be read as anticipating it.
 
 **The note is not a note with a progress field. It is a running state summary in which nearly every
 clause is a function of the step.** `pipeline/tasks.py` composes it as one `thought` string per step,
@@ -367,9 +394,39 @@ correction is the interesting part and hiding the first one would hide it.
 | ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.09** | 763 |
 | ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.11** | 511 |
 
-*Superseded, kept for the comparison:* counting decisions gave n = 1,781 and ε_main = 0.06,
-transitions gave n = 4,122 and ε_ord = 0.04. Those are two to three times tighter than the corpus
-supports, and every one of them was an artefact of counting dependent observations as independent.
+*Superseded, kept for the comparison, and marked:* counting decisions gave n = 1,781 and
+ε_main = 0.06, transitions gave n = 4,122 and ε_ord = 0.04. **Coverage is not supported at those
+values under the episode unit** — that is the label they carry wherever they appear — and every one
+of them was an artefact of counting dependent observations as independent.
+
+**Subgroups carry their own ε; the pooled one attaches to the pooled set only.** E2's corrective
+stratum is two populations that differ structurally (§4.2): the contiguous transitions, where the
+decision before the correction is itself observed, and those spanning a step with no rendered row.
+Reporting either against the pooled 0.11 would claim a resolution its own n does not support.
+
+| stratum | episodes | exact ε | **declared** | needs n ≥ |
+|---|---:|---:|---:|---:|
+| corrective, pooled | 553 | 0.1057 | **0.11** | 511 |
+| contiguous (`transient`) | 244 | 0.1591 | **0.16** | 242 |
+| across a gap | 309 | 0.1414 | **0.15** | 275 |
+
+**The across-a-gap subgroup declares 0.15 and not 0.14**, for the same reason ε_main is 0.17 and not
+0.16: 0.14 requires 315 episodes and there are 309. Six short. That is the second time in this
+section that the honest-looking rounding is the unmet one, which is why every row above carries the
+n it needs beside the n it has.
+
+**Independence between episodes is an assumption, and it is stated rather than relied on silently.**
+The bound treats each episode's mean as one independent bounded observation. Episodes within a family
+share a generator template and differ in their sampled files, values and paths, so they are not
+independent draws from an arbitrary distribution; what the bound covers is inference **to new
+episodes of the same task distribution**, which is the target this document claims and not a broader
+one. A family-level effect would not be detected by it.
+
+**An episode-level bootstrap is declared beside the Hoeffding form, for the drop rule.** Hoeffding
+assumes only boundedness and ignores the observed variance, so it is the distribution-free floor and
+will be conservative. The drop rule reads a bootstrap over episodes — resampling episodes, not
+decisions — at the same α, and the Hoeffding numbers stay beside it as the floor. Both are reported
+for every quantity; where they disagree the wider one governs the claim.
 
 **ε_main is 0.17 and not 0.16.** The bound at 240 episodes is 0.1604, so 0.16 would be the honest
 figure to a reader — but declaring 0.16 requires n ≥ 242, and there are 240 test episodes. Two short.
@@ -394,6 +451,37 @@ beside it as the distribution-free floor; the seal can carry both. Flagged, not 
 
 **The drop rule is inherited unchanged**: a quantity whose bootstrap bound on its contrast does not
 exceed zero is dropped with its reason, and nothing is added to M after the pilot.
+
+### 7.1 Cross-fitting, so that every transition gets an out-of-fold prediction
+
+Holding out one split would leave most of the corpus scored in-sample or not scored at all. Every
+held-out prediction is instead produced by **cross-fitting over episodes**: K = 5 folds, assigned by
+episode, stratified by `(split, family, variant)`, and applied to the probe and to the transport rule
+alike, so that all 4,122 ordinary and all 553 corrective transitions receive a prediction from a
+model that never saw their episode.
+
+The assignment is computed, not described: `folds.py` walks each stratum's episodes in sorted
+`task_id` order, round-robin, with the stratum's starting fold offset by a digest of the seed and the
+stratum name — a function of the corpus and the seed and of nothing else, with no shuffle and no
+dictionary order in it. Seed **20260910**, and the assignment's own digest is
+`c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c`, which goes into the seal so the
+folds cannot move afterwards.
+
+| fold | episodes | clean | transient | wrong_path | unknown_tool | failed_edit | stale_path |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 220 | 108 | 47 | 38 | 10 | 11 | 6 |
+| 1 | 232 | 111 | 50 | 38 | 15 | 12 | 6 |
+| 2 | 226 | 110 | 50 | 34 | 15 | 11 | 6 |
+| 3 | 224 | 112 | 48 | 34 | 12 | 12 | 6 |
+| 4 | 226 | 109 | 49 | 38 | 12 | 12 | 6 |
+
+**And the limitation the bound inherits from cross-fitting, stated here.** The K models share
+training episodes with one another, so the out-of-fold predictions are not independent across folds
+even though each is out-of-sample for its own episode. The concentration bound is applied to the
+episode-level scores as if they were independent, which the sharing makes an approximation rather
+than a guarantee. It is the same approximation the first state variable's design makes, it is why the
+bootstrap in §7 resamples episodes, and naming it is the difference between a stated limitation and
+an unnoticed one.
 
 ---
 
@@ -510,19 +598,34 @@ controls run, a measurement of the 12B being bigger.**
 
 ---
 
-## 13. Open before sealing
+## 13. Where this stands, and what is open before sealing
 
-1. **§1.1's correction is a change to a ruling, not a note.** A1's retry clause has nothing to
-   predict and A3's occurrence index addresses copies. Both need the Chief's word before the seal.
-2. **E2's retrieval score replaces a derived tolerance** (§4.2). Mine, and flagged.
-3. **The tolerances are recomputed on the episode** (§7), which loosens ε_main from 0.06 to 0.17
-   and ε_ord from 0.04 to 0.09; ε_sub stands at 0.11. The first draft counted decisions and
-   transitions as independent observations when the design holds out by episode, which they are not.
-   The correction is the Chief's, through Codex's file-only review, and it is applied rather than
-   argued with. Whether to put an episode-level bootstrap beside the Hoeffding floor is open.
-4. **The carrier-ablation arm's removal rule** (§4.3) does not exist for eleven of twelve families,
-   and may not exist for some of them at all, because the clause that names the next action is the
+**Settled, and settled by measurement rather than by choice.** The corpus facts and their basis
+(§1); the correction that the repeated step indices are oversampled copies and not retries (§1.1);
+the capture unit, key and contract, including `forward_batch: 1` and the token index (§2); E1's
+relabelling as decodability at matched rank with its two nulls and the `pointer_chain` negative
+control (§4.1); E2's frozen retrieval — candidate set, tie policy, distance and aggregation (§4.2);
+the rank ladder, the fixed headline depth and rank, and the refusal of any figure without them (§5);
+the tolerances on the episode unit with their subgroups and the assumption they rest on (§7); the
+cross-fitting folds, computed and digested (§7.1); the storage table on the corrected unit (§8); the
+twelve exploratory episodes by rule (§9); the three-state reporting (§10); and precondition 1,
+checked on the device copy and passing (§11).
+
+**Open, and each is open for a stated reason rather than for want of a decision.**
+
+1. **The carrier-ablation arm's removal rule** (§4.3). Measured not to exist for eleven of twelve
+   families, and possibly not constructible at all where the clause naming the next action is the
    progress. The acceptance criterion and the harness are fixed; the rules are not written. The
-   re-read diagnostic is unaffected and is orderable now.
-5. The golden-test control design has landed. The capture pass is not scheduled, and the seal follows
-   Codex's file-only review of this draft. Until then this document stays unsealed.
+   re-read diagnostic does not depend on this and is orderable now.
+2. **E3** (§4.4) is not measured and not scheduled: it waits on WS-B's cache exchange, and its
+   absence is a stated gap rather than a silence.
+3. **§1.1's correction changes two rulings** — A1's retry clause has nothing to predict and A3's
+   occurrence index addresses byte-identical copies. Both are accepted by the Chief; they are listed
+   here because the order they amend is the document a later reader will find first.
+4. **The seal itself.** It follows Codex's file-only review of this draft and precedes the first
+   *reading* of any capture. It does not gate the capture pass, which runs on the card's schedule.
+
+**Mine, and flagged as mine rather than presented as settled:** E2's retrieval score in place of a
+derived tolerance (§4.2), the loosened ε_sub and its subgroups (§7), the choice to declare the
+rounded-up ε at three places where the honest-looking value is the unmet one (§7), and the fixed
+headline rank and depth (§5). Any of them is the Chief's to overturn before the seal.
