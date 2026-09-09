@@ -220,12 +220,21 @@ def test_fetch_dictionary_names_files_and_bytes_and_refuses_an_absent_layer(
     (root / folder / "config.json").write_bytes(config)
     (root / folder / "params.safetensors").write_bytes(params)
     fetched = {}
+
+    def hf_hub_download(repo, path, local_files_only):
+        if not (root / path).is_file():
+            raise FileNotFoundError(path)
+        return str(root / path)
+
     hub = types.SimpleNamespace(
         HfApi=lambda: types.SimpleNamespace(model_info=lambda repo, files_metadata: info),
         snapshot_download=lambda repo, allow_patterns: (
             fetched.update(patterns=allow_patterns) or str(root)
         ),
+        hf_hub_download=hf_hub_download,
     )
+    # The sidecar lands under this cache, never under the real one.
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "cache"))
     monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
     assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17", "--dry-run"]) == 0
     out = capsys.readouterr().out
@@ -259,3 +268,66 @@ def test_fetch_dictionary_names_files_and_bytes_and_refuses_an_absent_layer(
     (root / folder / "params.safetensors").write_bytes(b"\x01" + b"\x00" * 4095)
     assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17"]) == 1
     assert "!= declared" in capsys.readouterr().err
+
+
+def test_fetch_dictionary_records_digests_and_the_offline_check_reads_them(
+    monkeypatch, capsys, tmp_path
+):
+    import hashlib
+
+    folder = "resid_post_all/layer_17_width_16k_l0_small"
+    config = json.dumps(
+        {"hf_hook_point_in": "model.layers.17.output", "model_name": "google/x"}
+    ).encode()
+    params = b"\x00" * 4096
+    root = tmp_path / "snap"
+    (root / folder).mkdir(parents=True)
+    (root / folder / "config.json").write_bytes(config)
+    (root / folder / "params.safetensors").write_bytes(params)
+    info = types.SimpleNamespace(
+        siblings=[
+            types.SimpleNamespace(
+                rfilename=f"{folder}/config.json", size=248, blob_id=_blob_sha1(config), lfs=None
+            ),
+            types.SimpleNamespace(
+                rfilename=f"{folder}/params.safetensors",
+                size=4096,
+                blob_id="p",
+                lfs={"sha256": hashlib.sha256(params).hexdigest()},
+            ),
+        ]
+    )
+
+    def hf_hub_download(repo, path, local_files_only):
+        if not (root / path).is_file():
+            raise FileNotFoundError(path)
+        return str(root / path)
+
+    hub = types.SimpleNamespace(
+        HfApi=lambda: types.SimpleNamespace(model_info=lambda repo, files_metadata: info),
+        snapshot_download=lambda repo, allow_patterns: str(root),
+        hf_hub_download=hf_hub_download,
+    )
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "cache"))
+    assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17"]) == 0
+    sidecar = device_setup.dictionary_sidecar(tmp_path / "cache", "google/x", folder)
+    recorded = json.loads(sidecar.read_text())
+    assert set(recorded["files"]) == {"config.json", "params.safetensors"}
+    assert recorded["files"]["params.safetensors"]["algorithm"] == "sha256"
+    assert recorded["config"]["model_name"] == "google/x"
+    capsys.readouterr()
+    # Offline: the hub is never asked; the recorded digests are the comparison.
+    hub.HfApi = lambda: (_ for _ in ()).throw(AssertionError("hub asked offline"))
+    assert device_setup.main(["fetch-dictionary", "google/x", "--layer", "17", "--offline"]) == 0
+    assert capsys.readouterr().out.count("verified") == 2
+    result = device_setup.verify_cached_dictionary("google/x", folder, offline=True)
+    assert result["basis"] == "recorded-at-fetch"
+    assert all(f["ok"] for f in result["files"].values())
+    (root / folder / "params.safetensors").write_bytes(b"\x01" + b"\x00" * 4095)
+    assert device_setup.main(["fetch-dictionary", "google/x", "--all-layers", "--offline"]) == 1
+    assert "MISMATCH" in capsys.readouterr().out
+    # Without a sidecar and without the hub, undecided is the only honest reading.
+    sidecar.unlink()
+    result = device_setup.verify_cached_dictionary("google/x", folder, offline=True)
+    assert result["basis"] is None and result["files"]["params.safetensors"]["ok"] is None

@@ -455,10 +455,87 @@ def _file_digest(path: Path, algorithm: str) -> str:
     return h.hexdigest()
 
 
+DICTIONARY_FILES = ("config.json", "params.safetensors")
+
+
+def dictionary_sidecar(cache: Path, repo: str, folder: str) -> Path:
+    """Where ``fetch-dictionary`` records the digests it verified, for an offline preflight."""
+    return Path(cache) / "dictionaries" / repo / folder / "DIGEST.json"
+
+
+def verify_cached_dictionary(repo: str, folder: str, *, offline: bool) -> dict:
+    """Each of a dictionary folder's files: present in the cache, and its bytes against a digest.
+
+    The expected digest comes from the hub (basis ``hub-declared``) or, offline or when the hub
+    cannot be reached, from what ``fetch-dictionary`` recorded (``recorded-at-fetch``). With
+    neither the file is reported as **undecided**, never as verified: a check that cannot compare
+    must not say the bytes agree. Nothing here downloads.
+    """
+    from huggingface_hub import HfApi, hf_hub_download
+
+    cache = configure_local_cache()
+    sidecar = dictionary_sidecar(cache, repo, folder)
+    recorded = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.is_file() else None
+    declared: dict[str, tuple[str, str]] = {}
+    basis, note = None, None
+    if not offline:
+        try:
+            siblings = {
+                s.rfilename: s for s in HfApi().model_info(repo, files_metadata=True).siblings
+            }
+        except Exception as error:  # noqa: BLE001 - offline is a state, reported not raised
+            note = f"hub not reachable: {error}"
+        else:
+            for name in DICTIONARY_FILES:
+                sibling = siblings.get(f"{folder}/{name}")
+                digest = _declared_digest(sibling) if sibling is not None else None
+                if digest is not None:
+                    declared[name] = digest
+            basis = "hub-declared"
+    if not declared and recorded:
+        declared = {k: (v["algorithm"], v["digest"]) for k, v in recorded["files"].items()}
+        basis = "recorded-at-fetch"
+    out: dict = {"repo": repo, "folder": folder, "basis": basis, "note": note, "files": {}}
+    for name in DICTIONARY_FILES:
+        try:
+            path = Path(hf_hub_download(repo, f"{folder}/{name}", local_files_only=True))
+        except Exception:  # noqa: BLE001 - absent is the finding
+            path = None
+        entry: dict = {"present": path is not None, "path": str(path) if path else None}
+        if path is not None and name in declared:
+            algorithm, expected = declared[name]
+            actual = _file_digest(path, algorithm)
+            entry.update(
+                algorithm=algorithm, expected=expected, actual=actual, ok=actual == expected
+            )
+        elif path is not None:
+            entry.update(ok=None, note="undecided: no hub answer and no digest recorded at fetch")
+        out["files"][name] = entry
+    return out
+
+
+def _write_sidecar(cache: Path, repo: str, folder: str, verified: dict, config: dict) -> Path:
+    sidecar = dictionary_sidecar(cache, repo, folder)
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "repo": repo,
+        "folder": folder,
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "digest_source": "the hub's declared digest per exact path: LFS sha256, else git blob id",
+        "files": verified,
+        "config": config,
+    }
+    sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return sidecar
+
+
 def fetch_dictionary(args: argparse.Namespace) -> int:
     """Download sparse dictionary layers by exact filename, saying which files and how many bytes
-    first, and verify each against the digest the hub declares for that path."""
+    first, verify each against the digest the hub declares for that path, and record the digests
+    beside the cache so a later offline preflight can check the bytes again."""
     cache = configure_local_cache()
+    if args.offline:
+        return _fetch_dictionary_offline(args, cache)
     if not args.layer and not args.all_layers:
         print("name --layer N (repeatable) or --all-layers", file=sys.stderr)
         return 2
@@ -474,9 +551,8 @@ def fetch_dictionary(args: argparse.Namespace) -> int:
     if args.all_layers:
         # Every layer the repository holds at this site, width and sparsity, read from its
         # listing: 0-33 for the 4B, 0-47 for the 12B, and nothing assumed about either.
-        stem = re.compile(
-            rf"^{re.escape(args.site)}/layer_(\d+)_width_{re.escape(args.width)}_l0_{args.l0}/params\.safetensors$"
-        )
+        head = rf"^{re.escape(args.site)}/layer_(\d+)_width_{re.escape(args.width)}_l0_{args.l0}"
+        stem = re.compile(head + r"/params\.safetensors$")
         found = sorted({int(m.group(1)) for name in siblings if (m := stem.match(name))})
         if not found:
             print(
@@ -498,6 +574,7 @@ def fetch_dictionary(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
     root = Path(snapshot_download(args.repo, allow_patterns=patterns))
+    verified: dict[str, dict] = {}
     for pattern in patterns:
         declared = _declared_digest(siblings[pattern])
         if declared is None:
@@ -512,21 +589,66 @@ def fetch_dictionary(args: argparse.Namespace) -> int:
             print(f"{pattern}: {algorithm} {actual} != declared {expected}", file=sys.stderr)
             return 1
         print(f"  verified {algorithm} {actual[:16]}…  {pattern}")
+        verified[pattern] = {
+            "algorithm": algorithm,
+            "digest": actual,
+            "bytes": (root / pattern).stat().st_size,
+        }
     for layer in args.layer:
-        config = root / args.site / f"layer_{layer}_width_{args.width}_l0_{args.l0}" / "config.json"
+        folder = f"{args.site}/layer_{layer}_width_{args.width}_l0_{args.l0}"
+        config = root / folder / "config.json"
         try:
-            declared = json.loads(config.read_text())
+            declared_config = json.loads(config.read_text())
         except (OSError, ValueError) as error:
             print(f"layer {layer}: config unreadable: {error}", file=sys.stderr)
             return 1
         # The config's own keys, read from a real one: hf_hook_point_in, model_name, width, l0.
-        hook = declared.get("hf_hook_point_in", declared.get("hook_name"))
+        hook = declared_config.get("hf_hook_point_in", declared_config.get("hook_name"))
         print(
-            f"layer {layer}: model={declared.get('model_name')!r} hook={hook!r} "
-            f"l0={declared.get('l0')} width={declared.get('width')}"
+            f"layer {layer}: model={declared_config.get('model_name')!r} hook={hook!r} "
+            f"l0={declared_config.get('l0')} width={declared_config.get('width')}"
         )
+        files = {p.rsplit("/", 1)[1]: v for p, v in verified.items() if p.startswith(folder + "/")}
+        sidecar = _write_sidecar(cache, args.repo, folder, files, declared_config)
+        print(f"  recorded {sidecar}")
     print(f"dictionary layers under {root}")
     return 0
+
+
+def _fetch_dictionary_offline(args: argparse.Namespace, cache: Path) -> int:
+    """No hub: verify the cached files of the named layers against the recorded digests."""
+    if args.all_layers:
+        base = Path(cache) / "dictionaries" / args.repo / args.site
+        stem = re.compile(rf"^layer_(\d+)_width_{re.escape(args.width)}_l0_{args.l0}$")
+        found = sorted(
+            int(m.group(1))
+            for d in (base.iterdir() if base.is_dir() else ())
+            if (m := stem.match(d.name))
+        )
+        if not found:
+            print(f"offline: no recorded layers under {base}", file=sys.stderr)
+            return 2
+        args.layer = found
+    if not args.layer:
+        print("name --layer N (repeatable) or --all-layers", file=sys.stderr)
+        return 2
+    failed = 0
+    for layer in args.layer:
+        folder = f"{args.site}/layer_{layer}_width_{args.width}_l0_{args.l0}"
+        result = verify_cached_dictionary(args.repo, folder, offline=True)
+        for name, entry in result["files"].items():
+            state = (
+                "absent"
+                if not entry["present"]
+                else "undecided"
+                if entry.get("ok") is None
+                else "verified"
+                if entry["ok"]
+                else "MISMATCH"
+            )
+            failed += state in ("absent", "undecided", "MISMATCH")
+            print(f"  {state:>9}  {folder}/{name}  ({result['basis'] or 'no digest'})")
+    return 1 if failed else 0
 
 
 # -------------------------------------------------------------------------- pack / verify data
@@ -632,6 +754,11 @@ def main(argv: list[str] | None = None) -> int:
     fd.add_argument("--l0", default="small", choices=("small", "medium", "big"))
     fd.add_argument("--examples", action="store_true", help="also fetch examples.safetensors")
     fd.add_argument("--dry-run", action="store_true")
+    fd.add_argument(
+        "--offline",
+        action="store_true",
+        help="no hub: verify the cache against the recorded digests",
+    )
     fd.set_defaults(func=fetch_dictionary)
     vf = sub.add_parser(
         "verify-data", help="extract a packed dataset and verify digests and manifest"
