@@ -181,3 +181,49 @@ sequence norm against a per-coordinate- or per-position-relative step), at one s
 deep layer, the exact side at float32 preceded by a memory smoke since it peaked at 43.9 GiB in
 bfloat16. The Director is consulting on that design; nothing runs on the card until it is ruled.
 Rows two and three are withdrawn: three rows of a step-limited estimate average nothing.
+
+## Ruling, Chief, 2026-09-10 — the Director's decision: the matched whole-float32 comparison and step sweep, under the consulting mathematician's protocol
+
+**The Director, 2026-09-10:** *proceed with the matched whole-float32 comparison and step sweep; the
+consultation is complete; the cause is still unresolved.* The evidence supports two possibly
+simultaneous problems — small steps amplify rounding error, and the original step may be too large
+to measure a local derivative — and the decisive experiment holds the layer, position, direction
+and forward schedule fixed and varies the step with both estimators in float32, preserving
+individual responses before averaging. Another full bfloat16 map cannot separate them.
+
+**The order is the protocol**, `research/records/FD-NUMERICS-2026-09-09/RESOLUTION-PROTOCOL.md`
+at 558d424 (Codex, on the Director's instruction; merged into `cuda-migration` with this ruling),
+§1–§6, executed by the D-CRO under their seat alone. In the order the protocol gives: freeze the
+function (row 39, 128 tokens, positions {8, 127}, endpoints the decoder-block outputs before the
+final norm, every (source, target) contribution preserved before reduction); verify the
+intervention boundary under the actual forward schedule before any derivative is read, with the
+graph-once-versus-sequential VJP cross-check, the source-equals-target identity control and the
+sign control; the matched arithmetic triangle on a coherent float32 model — the same stored bf16
+weight values cast to float32, autocast off, TF32 off, highest matmul precision, eager attention,
+determinism pinned, all stamped into the manifest — with the native bf16 pair retained and the
+anchored bf16-AD-against-float32-AD control recording its anchor; directional checks at repository
+layers 1, 17 and 33 on a small pre-registered set of directions and cotangents over the ladder
+h × 2^{-k}, k ∈ {0, 2, 4, 6, 8, 10}, refined between useful scales; §5's quantities per cell; §6's
+table for interpretation. **No further full map until a useful interval is demonstrated**, and an
+execution error is never the "float32 still disagrees" branch. The directional stage needs no
+memory smoke; a float32 full map, if the interval justifies one, gets its own.
+
+**Two conclusions of the golden record's §10 exceed its evidence**, per the Director's audit at
+6983d8e (`research/records/FD-SATURATION-AUDIT-2026-09-09/`, merged here): nonzero saved columns
+do not exclude rounding loss, since a column aggregates many responses and nonzero contributions
+can cancel; and the −0.872 correlation does not establish saturation, because both plotted
+quantities carry the exact map's magnitude in opposite directions and a purely linear
+counterexample yields a perfect inverse correlation. The calculations reproduce. §10 is marked
+reproduced-but-not-attributive and cites the audit; the scaling identity of §9 stands as geometry,
+not as a statement about local curvature.
+
+**Schedule on the card:** the calibration first, alone; then the 12B smoke row alone; then the 12B
+exact fits with the plan-progress captures in the same pass, as ordered — the exact estimator is
+unaffected by this calibration and the lens work does not wait on it. Record:
+`research/records/WSD-FD-CALIBRATION-2026-09-10/`, citing 558d424, 6983d8e and c3abdbe. Rows two
+and three of the bfloat16 golden test are withdrawn by the Director's ruling.
+
+**For the eventual instrument**, from the protocol's last section and the Director's note: two
+outputs, kept separate — the local sensitivity from the validated autograd path, and the actual
+response to a finite intervention in native precision — with their agreement measured, never
+assumed.
