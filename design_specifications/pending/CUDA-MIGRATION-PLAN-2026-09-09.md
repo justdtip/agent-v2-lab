@@ -1502,3 +1502,15 @@ the state programme's script selects it through its policy seam (`fa5fadc`, merg
 refusing `--decoding sampled` only where the sampler is absent, and names its estimand per mode: the context-averaged outcome frequency under greedy, the
 derivation's distribution under sampled. A record made in one mode is not compared with one
 made in the other.
+
+### 16.17 The device has no usability ceiling
+
+The Director, 2026-09-10, as a standing rule: the laptop's planning cap of 0.6 of memory (R47)
+existed so the box stayed usable beside a run; a rented card has no user to keep responsive, and
+the only constraint there is not to exhaust the device and crash. So the planning fraction is 0.95
+of a CUDA card, with the remainder for the driver's context, fragmentation and the allocator's
+reserve, and 0.6 on the laptop as before; `LLL_BUDGET_FRACTION` overrides both, and every reader
+of the budget, the feasibility verdicts, the gate scripts' cap checks and the bootstrap's plan
+takes the fraction from `device.budget_fraction()` rather than from the constant. On the 95 GiB
+card that is 90 GiB, under which the 4B's full fine-tuning at 16 bytes per parameter fits
+unsharded, which the 0.6 cap refused.

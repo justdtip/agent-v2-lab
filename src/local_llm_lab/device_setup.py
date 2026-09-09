@@ -224,7 +224,7 @@ def preflight(args: argparse.Namespace) -> int:
         verdict = ""
         if params and budget:
             fits = {mode: params * per <= budget for mode, per in MODES.items()}
-            verdict = " | fits under the R47 budget: " + ", ".join(
+            verdict = f" | fits under the {device.budget_fraction():.2f} budget: " + ", ".join(
                 f"{m}={'yes' if v else 'no'}" for m, v in fits.items()
             )
         rows.append(
@@ -363,11 +363,11 @@ def feasibility(repo_id: str, budget_bytes: float, params: float | None) -> dict
 
 
 def fetch(args: argparse.Namespace) -> int:
+    from local_llm_lab import device
+
     cache = configure_local_cache()
     budget = args.budget_gib * GIB if args.budget_gib else None
     if budget is None:
-        from local_llm_lab import device
-
         try:
             budget = device.budget()
         except Exception as error:  # noqa: BLE001
@@ -376,7 +376,7 @@ def fetch(args: argparse.Namespace) -> int:
             )
             return 2
     print(
-        f"budget {budget / GIB:.1f} GiB (R47 fraction of the device); modes: "
+        f"budget {budget / GIB:.1f} GiB ({device.budget_fraction():.2f} of the device); modes: "
         + ", ".join(f"{m}={p}B/param" for m, p in MODES.items())
     )
     chosen: list[str] = []
@@ -1018,7 +1018,9 @@ def main(argv: list[str] | None = None) -> int:
         help="free space kept for checkpoints and captures",
     )
     bs.add_argument(
-        "--budget-gib", type=float, help="memory to plan under; default: the device's R47 budget"
+        "--budget-gib",
+        type=float,
+        help="memory to plan under; default: 0.95 of a CUDA card, 0.6 of the laptop",
     )
     bs.add_argument("--allow-cpu", action="store_true")
     bs.add_argument(
@@ -1035,7 +1037,9 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("fetch", help="say which checkpoints fit, and download those that do")
     f.add_argument("ids", nargs="*", help=f"hub ids; default: {', '.join(DEFAULT_MODELS)}")
     f.add_argument(
-        "--budget-gib", type=float, help="memory to plan under; default: the device's R47 budget"
+        "--budget-gib",
+        type=float,
+        help="memory to plan under; default: 0.95 of a CUDA card, 0.6 of the laptop",
     )
     f.add_argument("--mode", choices=sorted(MODES), default="inference", help="which mode must fit")
     f.add_argument("--all", action="store_true", help="download every id regardless of the verdict")
