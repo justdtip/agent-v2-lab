@@ -190,13 +190,25 @@ def stage_train_torch(
     output.mkdir(parents=True, exist_ok=True)
 
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoTokenizer
+
+    from local_llm_lab.hf_text import load_text_causal_lm
 
     spec = load_model_spec(config["model"])
-    source = str(PROJECT_ROOT / spec.hf_id) if not Path(spec.hf_id).is_absolute() else spec.hf_id
+    # `spec.hf_id` is already absolute, resolved against the primary checkout: `models/` is
+    # git-ignored and exists once, so a worktree resolving against its own root finds nothing.
+    source = spec.hf_id
     tokenizer = AutoTokenizer.from_pretrained(source)
-    model = AutoModelForCausalLM.from_pretrained(
-        source, dtype=torch.bfloat16, attn_implementation=ATTENTION
+    # Not `AutoModelForCausalLM`. Every published Gemma 3 checkpoint declares
+    # `Gemma3ForConditionalGeneration`, including this repository's own text-only conversion, so
+    # the auto class builds the multimodal wrapper for every registry entry we have -- a vision
+    # tower trained for nothing and a layer-freezing recipe that does not mean what it says. This
+    # loader takes the text tower out of either shape and fails closed on every gap.
+    #
+    # Loaded to CPU and placed by `Trainer`, which is where device placement belongs; the loader's
+    # own note is that loading goes through CPU regardless.
+    model, load_report = load_text_causal_lm(
+        source, dtype="bfloat16", attn_implementation=ATTENTION, device="cpu"
     )
 
     trainable = freeze_all_but_top_layers(model, recipe.trainable_top_layers)
@@ -216,6 +228,8 @@ def stage_train_torch(
         "device": device.select(),
         "determinism": determinism,
         "model": {"name": spec.name, "hf_id": spec.hf_id, "source": source},
+        # What the loader got, not what it was asked for.
+        "load": load_report,
         "recipe": {
             "source_iters": recipe.source_iters,
             "source_units": recipe.source_units,

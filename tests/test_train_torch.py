@@ -19,12 +19,12 @@ pytest.importorskip("transformers")
 from local_llm_lab import device, runlock  # noqa: E402
 from local_llm_lab.pipeline.train_torch import MANIFEST_NAME  # noqa: E402
 
-#: `models/` is gitignored and exists only in the primary checkout, while `project.PROJECT_ROOT` is
-#: the *worktree* root. The registry's own comment says a stage running from a worktree "finds the
-#: same file as one running from here", and for `hf_id: models/...` that is not true. This test
-#: therefore reaches the shared checkout the way `runlock` does, and the mismatch is reported rather
-#: than worked around in the resolver, which is WS-E's.
-TOKENIZER_SOURCE = runlock.box_state_root() / "models" / "gemma-3-4b-it-bf16"
+#: `models/` is git-ignored and exists once, in the primary checkout, so a worktree resolving
+#: against its own root finds nothing. `primary_checkout_root()` is the git-derived primary and is
+#: what the registry now resolves checkpoints against -- deliberately *not*
+#: `$AGENT_V2_BOX_STATE_DIR`, which redirects the lock and the window and would point a checkpoint
+#: into a scratch directory that does not hold one.
+TOKENIZER_SOURCE = runlock.primary_checkout_root() / "models" / "gemma-3-4b-it-bf16"
 
 
 @pytest.fixture
@@ -236,3 +236,66 @@ def test_the_block_class_is_read_through_whatever_is_wrapping_the_model() -> Non
     assert decoder_layer_class_name(inner) == "Gemma3DecoderLayer"
     assert decoder_layer_class_name(wrapped) == "Gemma3DecoderLayer"
     assert decoder_layer_class_name(_Distributed(wrapped)) == "Gemma3DecoderLayer"
+
+
+@pytest.fixture
+def wrapper_checkpoint(tmp_path: Path):
+    """A checkpoint shaped the way every real registry entry is: the multimodal wrapper.
+
+    This closes a blind spot rather than adding coverage. Every other fixture here builds from
+    `Gemma3TextConfig`, which saves `architectures: ['Gemma3ForCausalLM']` -- a shape no published
+    Gemma 3 checkpoint has, including this repository's own text-only conversion. A stand-in that
+    differs from the real artefact in exactly the way that matters is not a test of the loader.
+    """
+    from transformers import AutoTokenizer, Gemma3Config, Gemma3ForConditionalGeneration
+
+    if not (TOKENIZER_SOURCE / "tokenizer.json").is_file():
+        pytest.skip(f"no tokenizer at {TOKENIZER_SOURCE}")
+    tokenizer = AutoTokenizer.from_pretrained(str(TOKENIZER_SOURCE))
+
+    torch.manual_seed(0)
+    config = Gemma3Config(
+        text_config=dict(
+            vocab_size=len(tokenizer), hidden_size=16, intermediate_size=32, num_hidden_layers=4,
+            num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+            rms_norm_eps=1e-6, use_cache=False,
+        ),
+        vision_config=dict(
+            hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2,
+            image_size=16, patch_size=8, num_channels=3,
+        ),
+    )
+    model = Gemma3ForConditionalGeneration(config).to(torch.bfloat16)
+    where = tmp_path / "wrapper"
+    model.save_pretrained(where)
+    tokenizer.save_pretrained(where)
+    return where
+
+
+def test_the_stage_trains_the_text_tower_out_of_a_multimodal_checkpoint(
+    wrapper_checkpoint: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """The shape every registry entry actually has, through the whole stage."""
+    import local_llm_lab.models as models
+    from local_llm_lab.pipeline import cli
+
+    monkeypatch.setenv("LLL_BACKEND", "torch")
+    monkeypatch.setattr(
+        models, "load_model_spec",
+        lambda name: SimpleNamespace(name=name, hf_id=str(wrapper_checkpoint)),
+    )
+
+    output = tmp_path / "run"
+    config = _config(wrapper_checkpoint, _dataset(tmp_path / "rendered", rows=8), output)
+    cli.stage_train(config, iters=None)
+
+    manifest = json.loads((output / MANIFEST_NAME).read_text())
+    # The vision tower is gone: what trained is the text tower alone.
+    assert manifest["load"]["wrapper"] is True
+    assert manifest["result"]["global_step"] == 4
+    assert 0 < manifest["parameters"]["trainable"] < manifest["parameters"]["total"]
+
+    from transformers import Gemma3ForCausalLM
+
+    reloaded = Gemma3ForCausalLM.from_pretrained(output / "checkpoints" / "checkpoint-4")
+    assert not hasattr(reloaded.model, "vision_tower")
