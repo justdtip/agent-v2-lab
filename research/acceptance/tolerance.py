@@ -380,9 +380,23 @@ def teacher_forced_run(episode, forward, *, top_k: int = 5):
 
 
 def run_tolerance(
-    episode, forward, *, top_k: int = 5, free_running: Sequence | None = None, floor: int = 16
+    episode,
+    forward,
+    *,
+    top_k: int = 5,
+    free_running: Sequence | None = None,
+    floor: int = 16,
+    decoding: object = "greedy",
 ) -> ToleranceReport:
-    """The G-2(b) statistics for one episode, from a teacher-forced pass over its records."""
+    """The G-2(b) statistics for one episode, from a teacher-forced pass over its records.
+
+    Greedy only: teacher forcing reads the recorded trajectory, which was made greedy, and a
+    sampled comparison against it would compare a draw with an argmax. The sampled mode is
+    refused by name before anything is read.
+    """
+    from local_llm_lab.pipeline.sampled_decode import require_greedy
+
+    require_greedy(decoding, where="the tolerance runner (G-2b)")
     produced_argmax, produced_top = teacher_forced_run(episode, forward, top_k=top_k)
     return ToleranceReport(
         agreement=teacher_forced_agreement(episode, produced_argmax),

@@ -194,7 +194,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint", type=Path, help="overrides the registry entry")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--json", type=Path, help="write the report here")
+    parser.add_argument(
+        "--decoding",
+        choices=("greedy", "sampled"),
+        default="greedy",
+        help="greedy only: this compares against MLX records made greedy, so 'sampled' is "
+        "refused by name (plan §16.16); the sampled path is the state programme's",
+    )
     arguments = parser.parse_args(argv)
+    if arguments.decoding != "greedy":
+        from local_llm_lab.pipeline.sampled_decode import require_greedy
+
+        try:
+            require_greedy(arguments.decoding, where="the tolerance runner")
+        except ValueError as error:
+            parser.error(str(error))
 
     episodes = golden.load_episodes(arguments.records)
     if arguments.episode:

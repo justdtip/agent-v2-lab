@@ -145,7 +145,9 @@ def gate_5_golden_trajectories(arguments: argparse.Namespace) -> GateResult:
         )
 
     model, view, tokenizer, spec = backend
-    generate = golden.torch_generator(model, view, tokenizer, spec)
+    generate = golden.torch_generator(
+        model, view, tokenizer, spec, decoding=arguments.decoding
+    )
     diverged = []
     tokens = 0
     for episode in episodes:
@@ -308,7 +310,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="run every gate instead of stopping at the first failure",
     )
+    parser.add_argument(
+        "--decoding",
+        choices=("greedy", "sampled"),
+        default="greedy",
+        help="greedy only: this compares against MLX records made greedy, so 'sampled' is "
+        "refused by name (plan §16.16); the sampled path is the state programme's",
+    )
     arguments = parser.parse_args(argv)
+    if arguments.decoding != "greedy":
+        from local_llm_lab.pipeline.sampled_decode import require_greedy
+
+        try:
+            require_greedy(arguments.decoding, where="the acceptance kit")
+        except ValueError as error:
+            parser.error(str(error))
 
     _print_environment()
     if arguments.smoke:

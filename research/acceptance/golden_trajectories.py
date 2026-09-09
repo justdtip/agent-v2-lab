@@ -444,19 +444,28 @@ def recorded_generator(episode: Episode) -> TurnGenerator:
     return generate
 
 
-def torch_generator(model: Any, view: Any, tokenizer: Any, spec: Any) -> TurnGenerator:
+def torch_generator(
+    model: Any, view: Any, tokenizer: Any, spec: Any, *, decoding: Any = "greedy"
+) -> TurnGenerator:
     """The real generator: the runner's torch greedy loop, driven from recorded prompt ids.
 
-    UNEXECUTED. Nothing has run through this, because it needs WS-A's architecture view and no
-    torch view exists yet. It is wired rather than sketched so that swapping the view in is the
-    only remaining step, and so the call shape it assumes is inspectable now rather than
-    discovered on rented hardware.
+    UNEXECUTED against a loaded backend: gate 5's reproduction arm is blocked on the device
+    (WSB-DEVICE-CHECKLIST §1). It is wired rather than sketched so the call shape it assumes
+    is inspectable now rather than discovered on rented hardware.
+
+    **Greedy, and only greedy.** The records it reproduces were made greedy, so the sampled
+    mode is refused here by name whatever the caller says; ``decoding`` exists so that a script
+    which carries the flag hands it through and meets the refusal at the gate rather than at
+    the loop.
 
     It supplies no ``final_top`` and no logit digests. A divergence report will therefore say
     the generated side's layer-34 top is empty, which is true, rather than filling it with the
     recorded one and making a comparison look like it happened.
     """
     from local_llm_lab.pipeline.runner import generate_turn_tokens
+    from local_llm_lab.pipeline.sampled_decode import require_greedy
+
+    require_greedy(decoding, where="gate 5 (golden trajectories)")
 
     def generate(prompt_ids: tuple[int, ...], *, max_tokens: int) -> GeneratedTurn:
         token_ids, reason = generate_turn_tokens(
