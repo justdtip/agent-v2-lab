@@ -337,24 +337,37 @@ schedule change at all. Nine seconds of card time, 108 cells.
 | native bf16 | 33 | 8.8% | 0.120 | 0.313 |
 | **float32** | 33 | 8.8% | 0.125 | 0.299 |
 
-**The float32 derivative moves as much as the bf16 one, and at layer 1 rather more.** So the answer
-is the second branch: **the function is genuinely that ill-conditioned at early layers, and the
-sensitivity is not bfloat16's**. Read as an amplification — how far the derivative moves per unit of
-anchor movement — it is stark and falls steeply with depth:
+**The float32 derivative moves as much as the bf16 one, and at layer 1 rather more.** That is the
+measured fact and it answers the question asked: **the sensitivity is not bfloat16's**. A substantial
+change in coherent float32, under a displacement that changed nothing about the arithmetic, cannot be
+the arithmetic's.
 
-| layer | native bf16 | float32 |
-|---:|---:|---:|
-| 1 | 245× | **539×** |
-| 17 | 39× | 46× |
-| 33 | 1.4× | 1.4× |
+*Amplification ratios were reported here — 245× and 539× at layer 1, 1.4× at layer 33 — and they are
+**withdrawn**, correctly, on Codex's third audit. The hook replaced the residual at **every**
+position while the denominator was one position's norm, so the ratio divides a whole-sequence
+perturbation by a fraction of itself. A defensible sensitivity figure needs a whole-anchor
+displacement norm against a matching output norm, and separately a selected-position-only arm to
+answer the other question; neither is run, and both are queued.*
 
-At the last block the derivative is well conditioned: move the anchor by 8.8% and it moves by 12.5%,
-which is about what a well-behaved map does. At the first block a **0.19%** move of the residual
-changes the directional derivative to the final residual by **about 100%**.
+**And the medians hide a very wide spread**, which a second withdrawal turns on. Over the eighteen
+direction-and-cotangent pairs:
 
-**And it is not a special direction.** A random displacement of identical norm produces a comparable
-or larger change at every layer and both precisions. Any perturbation of that size does this; the map
-near layer 1 simply varies that fast.
+| precision | layer | min | median | max |
+|---|---:|---:|---:|---:|
+| native bf16 | 1 | 0.092 | 0.471 | 28.9 |
+| float32 | 1 | 0.014 | 1.035 | 35.2 |
+| native bf16 | 17 | 0.044 | 0.585 | 2.32 |
+| float32 | 17 | 0.085 | 0.697 | 4.16 |
+| native bf16 | 33 | 0.005 | 0.120 | 7.00 |
+| float32 | 33 | 0.010 | 0.125 | **91.9** |
+
+So **"the last block is well conditioned" is withdrawn too.** It was read off a median of 0.125 while
+that layer's worst pair moved by 91.9. Depth reduces the *typical* change and does not bound the
+worst one, and a median is not a condition number.
+
+**On the random control:** one draw is one draw. The defensible statement is that *the sampled native
+and random displacements both produced substantial changes*, not that any perturbation of that size
+does.
 
 **This reframes three earlier readings and settles one.**
 
@@ -369,9 +382,8 @@ near layer 1 simply varies that fast.
 - It is a caution the programme needs beyond this workstream. **A J-lens fitted at one anchor does
   not transport to a nearby anchor at early layers.** A lens read on a capture taken under any
   different arithmetic — a different batch width, a different precision, a promoted path — is being
-  read at a point it was not fitted at, and at layer 1 an 0.2% difference is enough to change the
-  answer entirely. That is a general statement about early-layer lenses on this model, measured on
-  one row and marked as such.
+  read at a point it was not fitted at. The policy rests on the **sampled** sensitivity above, not on
+  a condition number, and it is measured on one row at one position with eighteen projections.
 
 
 It is the schedule term of the protocol's §3 decomposition as far as this record takes it, and it is
@@ -417,7 +429,7 @@ every layer is refuted — the two minima are a factor of 64 apart.
 | precision | native bf16 | coherent float32, TF32 off, `highest` matmul |
 | forward width | exact 64, difference 256, anchor 1 | **1 on both sides, anchor 1** |
 | step | `epsilon_scale` 0.01 at every layer | k = 10 at layer 1, k = 6 at layer 33 |
-| worst relative difference | **1.0245** | **0.00485** (L1), **0.00286** (L33) |
+| relative Frobenius error of the map | **1.0245** | **0.00485** (L1), **0.00286** (L33) |
 | cosine at repo layer 1 | 0.015 | **0.9999907** |
 | cosine at repo layer 33 | 0.825 | **0.9999962** |
 
@@ -431,9 +443,15 @@ small against the absolute error. The ladder's worst-looking cell, `coordinate:2
 1,462% disagreement, and reading it as the latter would be the same mistake as a relative error
 against a reference that moved.
 
-Both gates hold. The exact estimator reproduces itself at exactly 0.0. The transposed control
+**One gate holds and one was never executed, and the record said both held.** The transposed control
 separates by 292× at layer 1 and 348× at layer 33, so the finding is not a number any wrong lens
-would also produce. And both findings sit **above** the float32 storage floor of 5.96e-8, so the
+would also produce; that gate is real. The repeat gate is **not**: `golden_float32.py` passed
+`reproduction=reference`, the exact map itself, so "the exact estimator reproduces itself at exactly
+0.0" was a comparison of a thing with itself and 0.0 was its only possible value. A gate that cannot
+fail, reported as passing, in the run whose whole point was a comparison done right — found by
+Codex, not by me, and the third of this family in this record alone. It is marked unexecuted here
+and needs a genuine second fit of each layer; the first golden run's repeat stands and is
+unaffected. And both findings sit **above** the float32 storage floor of 5.96e-8, so the
 agreement is a measurement rather than two maps indistinguishable at the precision they are stored in
 — which, as the report's own wording says, is not agreement.
 
@@ -449,12 +467,16 @@ Identical to the last digit, for two independent reasons: `fit_finite_difference
 `activations[layer][:1]`, one replica, and these maps ran at width 1 where there are no replicas to
 sum over.
 
-**The scalar ladder predicted the map.** At layer 1, k = 10, the ladder's median relative error over
-eighteen direction-and-cotangent pairs was 4.3e-3 and the map's worst over 2,560 columns is 4.85e-3.
-At layer 33, k = 6, the ladder gave 8.6e-5 and the map's worst is 2.9e-3; a worst over 2,560 columns
-being some tens of times a median over eighteen scalars is what those two statistics do, and the
-layer-1 agreement is the more informative of the two. Neither was tuned to the other: the k came from
-the ladder before either map existed.
+**Two quantities of one size, which is less than "the ladder predicted the map".** The map figure is
+the **relative Frobenius error of the whole map**, `‖FD − J‖ / ‖J‖`, one number per layer — not a
+worst over 2,560 columns, which is what this section first called it and which the metric does not
+compute. At layer 1, k = 10, the ladder's median over eighteen projections was 4.3e-3 and the map's
+Frobenius error is 4.85e-3; at layer 33, k = 6, the ladder gave 8.6e-5 against the map's 2.9e-3. The
+layer-1 pair agreeing to within 13% is worth noting and is not a prediction: two different aggregates
+of two different samples landing at one order of magnitude is what it is. Neither was tuned to the
+other — the k came from the ladder before either map existed — and per-column errors can be taken
+from the saved arrays if the column-level claim is ever wanted, with the orientation and the
+zero-denominator policy named first.
 
 **What is not gated here.** The layer-shifted control could not be constructed. It needs a second
 layer in the same map to shift to, and each map has one layer, because each layer needs its own step.
@@ -467,7 +489,8 @@ number stood for a week; this one replaces it and inherits the same limits.
 
 **And these two maps are the test of an inference, labelled as that.** The ladder measures eighteen
 scalar projections; a map has 2,560 columns. That projections converge does not entail that columns
-do, and these two maps are the first evidence on that step rather than a confirmation of it. `J − I`
+do, and the whole-map Frobenius error is itself an aggregate, so these two maps are evidence on that
+step and not a confirmation of it. `J − I`
 and `FD − I` in the raw residual coordinates belong beside the errors, because the shared skip
 identity flatters late-layer cosine without validating the learned correction; they are **not yet
 computed** and are queued.
@@ -568,12 +591,19 @@ median is at or below 4.3e-3 at k = 10, so a common adequate scale is not refute
    2.86e-3 against the first run's 1.0245, with cosines of 0.99999 (§9).
 5. Coherent float32 is width-stable at 12B scale at every depth, and a float32 12B exact fit at
    width 1 peaks at 44.10 GiB (§10).
-6. The early-layer derivative is ill-conditioned **in both precisions**: about 539× amplification of
-   an anchor move at repo layer 1 in float32, 1.4× at layer 33. The sensitivity is the function's,
-   not the arithmetic's (§8.2).
+6. The derivative's sensitivity to its anchor is **not bfloat16's**: the same displacement applied in
+   coherent float32 moves it as much or more, median 1.035 at repo layer 1 (§8.2). The amplification
+   ratios first reported there are withdrawn — the perturbation was whole-sequence and the
+   denominator one position's — and so is "the last block is well conditioned", which was a median
+   of 0.125 over a worst pair of 91.9.
 
 **Queued, in the Chief's order, and none of it started.**
 
+0. **The repeat gate for the two float32 maps, which is unexecuted** (§9): a genuine second exact
+   fit per layer, compared against the first. Everything else in §9 stands; that one number does not.
+   With it, a whole-anchor sensitivity figure — displacement norm over the whole anchor against a
+   matching output norm — and a selected-position-only arm, which are what §8.2's withdrawn ratios
+   were reaching for.
 1. The capture code to the R6 contract, with tests: width 1, key `(task_id, step)`, `prompt_sha256`,
    the token index, `rendered_rows`, native precision, `/workspace/captures/<entry>/`.
 2. P1–P6 of Codex's review, with the remaining C2 documentation items.
