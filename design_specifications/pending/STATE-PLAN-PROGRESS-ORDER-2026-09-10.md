@@ -329,3 +329,33 @@ reconstructed independently, 7,629 token-position checks). The seal waits for S1
 this order. The sealed-off activations stay unread.
 
 *2026-09-10 UTC, 10:50Z:* S1 and S2 applied by the D-CRO at `e69098e` on `cuda-ws-d`, each verified against the corpus and the document before acceptance: one operative tolerance table with the superseded paragraphs marked in place and a `competing_tolerances()` check that marks by paragraph and refuses a second operative value (the ε_main = 0.01 probe and ε_sub = 0.11 both fail, the clean document passes); eligible positions for the unknown-horizon control decided by a rule on the visible text (`Node: final` present in all 94 terminal pointer-chain prompts and in 0 of 575 non-terminal ones), with a null conditional on chain length so far, survival, family and difficulty, and the visible progress note. 68 claims check; the self-test corrupts 56 pinned lines with no survivors; exit codes inspected, not piped. The pre-registration is ready to seal; whether Codex takes a confirming pass first is the Director's call, and both the D-CRO and the Chief recommend that it does, the new checker being an hour old.
+
+## Ruling on Codex's confirming pass (`WSA-SEAL-CONFIRMATION-2026-09-10`, `be421b7`), Chief, 2026-09-10 (~11:10Z) — the seal is held; three corrections
+
+Codex confirms the threshold prose and the terminal-position exclusion (its own count: 94 terminal and 575
+non-terminal pointer-chain decisions; 20 terminal and 141 eligible in the test split) and finds three
+remaining defects, each with an executable counterexample. All three accepted; **the seal is held until they
+are applied and Codex has confirmed once more.**
+
+**C1 — the contradiction checker still passes contradictions.** A duplicate corrective-table row changed from
+0.15 to 0.11 passes; a contradictory declaration split across two lines passes; and `--self-test` never
+exercises `competing_tolerances()`. Ruled: the checker parses every tolerance declaration in the document into
+one table keyed by population — table rows, prose declarations and multi-line declarations alike — and refuses
+if any population carries two distinct operative values; the self-test carries both of Codex's counterexamples
+as pinned corruptions that must fail, beside a clean document that must pass. A detector the self-test never
+runs is not a detector (the D-CRO's own rule of the day: ask what the check would say if the thing it guards
+were broken, then break it).
+
+**C2 — §12 still carries the old veto.** It says above-permutation pointer-chain decoding invalidates the
+instrument, contradicting §4.1's corrected conditional rule. Ruled: §12 restated to the conditional rule on
+eligible positions, and the contradiction checker extended to this pair as well — one veto, stated once,
+referenced elsewhere.
+
+**C3 — the conditional null has inputs but no algorithm.** Ruled: the null is written as a procedure — how the
+conditioning variables are binned or modelled, how the permutation or resampling respects them, how many
+draws, and the comparison rule with its threshold — reproducible by a reader from the text alone; until that
+text exists the control is marked *unmeasured* and the veto cannot fire. Beating an unspecified baseline does
+not establish leakage.
+
+To the D-CRO as the pre-registration's owner; Codex's confirming pass again after the edits; then the seal.
+Nothing on the card; the sealed-off activations stay unread.
