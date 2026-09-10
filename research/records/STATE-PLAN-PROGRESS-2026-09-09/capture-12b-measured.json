@@ -1,0 +1,17 @@
+{
+  "all_native_12b": true,
+  "all_width_one_12b": true,
+  "basis": "measured-here",
+  "cells_12b": 7629,
+  "cells_4b": 7629,
+  "checkpoint_identities_12b": 1,
+  "d_model_12b": 3840,
+  "elapsed_s_12b": 2530.08,
+  "identical_read_position": 7629,
+  "identical_token_ids": 7629,
+  "layers_12b": 48,
+  "peak_reserved_gib_12b": 26.453,
+  "same_decision_keys": true,
+  "shards_12b": 30,
+  "source": "both capture passes' manifests, /workspace/captures/gemma3-{4b,12b}-cuda-bf16"
+}

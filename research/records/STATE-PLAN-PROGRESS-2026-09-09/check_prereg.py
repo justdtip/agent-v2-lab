@@ -103,6 +103,13 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      r"in \*\*7,629 of 7,629\*\* cells"),
     ("exploratory positions measured", "capture", "exploratory_positions", 18018,
      r"18,018 positions\*\*, against the 15,776 assumed"),
+    # The precondition the whole comparison rests on, pinned to the artefacts that will be read.
+    ("identical ids across the two models", "both", "identical_token_ids", 7629,
+     r"identical at \*\*7,629 of 7,629 decisions\*\*"),
+    ("identical read position", "both", "identical_read_position", 7629,
+     r"read position is identical at\s*$|position is identical at"),
+    ("12B peak reserved", "both", "peak_reserved_gib_12b", 26.453,
+     r"\| 12B \| 2\.674 GiB \| \*\*2\.7 GB\*\* \| 42\.2 min \| 331\.6 \(shared\) \| 26\.45"),
     # The cross-fitting folds. The digest is what the seal fixes, so it is pinned to the line that
     # states it and the fold table is pinned row by row: a fold table that drifts from the
     # assignment would be a description of folds nobody used.
@@ -161,6 +168,7 @@ def artefacts() -> dict[str, object]:
         "budget": json.loads((HERE / "capture-budget.json").read_text()),
         "folds": json.loads((HERE / "folds.json").read_text()),
         "capture": json.loads((HERE / "capture-4b-measured.json").read_text()),
+        "both": json.loads((HERE / "capture-12b-measured.json").read_text()),
         "file": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                  for path in sorted(HERE.iterdir()) if path.is_file()},
     }

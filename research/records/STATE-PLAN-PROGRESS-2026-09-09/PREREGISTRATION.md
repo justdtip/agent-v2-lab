@@ -596,9 +596,17 @@ against `model.config` on the card before the first capture is written.
 | `gemma3-12b-cuda-bf16` | 48 | 3,840 | 49 | 367.5 | 2.674 |
 | both | | | | 542.5 | **3.947** |
 
-**Measured for the 4B: 1.3 GB on disk in 30 shards**, against the 1.273 GiB predicted — the storage
-table was right. 7,629 of 7,629 decisions, `complete: true`, in 7.7 minutes at 75.6 ms per decision
-alone on the card, peak reserved 9.52 GiB against an estimate of 8.1.
+**Measured, both passes complete**, 7,629 of 7,629 each, `complete: true`, `whole_set: true`, 30
+shards apiece:
+
+| | predicted | on disk | elapsed | ms/decision | peak reserved |
+|---|---:|---:|---:|---:|---:|
+| 4B | 1.273 GiB | **1.3 GB** | 7.7 min | 75.6 (alone) | 9.52 (est. 8.1) |
+| 12B | 2.674 GiB | **2.7 GB** | 42.2 min | 331.6 (shared) | 26.45 (est. 23.7) |
+
+The storage table was right to the tenth of a gigabyte on both. The memory estimates ran about 15%
+light, in the direction the 4B measurement already predicted. The 12B's rate is on a shared card and
+is not a property of the model.
 
 This replaces R6's 4.6 GiB, which was correct arithmetic on 8,907 rendered rows; on the 7,629
 distinct decisions, with the 348 chat replay rows excluded and the 930 duplicates recognised as
@@ -696,10 +704,13 @@ Each fails closed and names itself.
    `capture_set_sha256`. CPU only, seconds, no card time; nothing was written into the shared
    checkout. This is the re-run on the device copy that order §1 asks the owner of the
    pre-registration to do.
-2. **The two models share the rendering byte for byte.** The 12B entry asserts it in a comment with
-   the tokenizer digests; the check compares the two snapshots' `tokenizer.json` and
-   `tokenizer.model` and re-renders one episode under each entry, comparing the digest. The corpus
-   was rendered for the 4B entry, so this is a precondition and not an assumption.
+2. **The two models share the rendering byte for byte. Checked, 2026-09-10, and it passes — by a
+   stronger test than the one planned here.** Rather than compare tokenizer files and re-render one
+   episode, both capture passes recorded the digest of the ids they actually consumed, per decision.
+   Those digests are **identical at 7,629 of 7,629 decisions**, and the read position is identical at
+   7,629 of 7,629. So the two models were given the same input, token for token, at every decision
+   the comparison will use — which is the thing the tokenizer check was a proxy for, measured
+   directly on the artefacts that will be read.
 3. **Depth and width match the registry.** 34 × 2,560 and 48 × 3,840 against `model.config`;
    `capture_budget.json` carries `verified_on_device: false` until this passes.
 4. **`cache.strategy: none` on both entries**, since H2's restatement depends on it.
