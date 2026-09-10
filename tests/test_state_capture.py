@@ -27,7 +27,7 @@ def _decision(**overrides) -> dict:
     base = {
         "task_id": "test-read-0000-clean", "step": 1, "split": "test", "family": "read",
         "variant": "clean", "difficulty": 2, "recovery": False, "rendered_rows": 1,
-        "prompt_sha256": "", "row_ordinals": [0],
+        "messages_sha256": "", "row_ordinals": [0],
     }
     return {**base, **overrides}
 
@@ -45,7 +45,9 @@ def _row(task="test-read-0000-clean", step=1, text="a") -> dict:
 def _cell(**overrides) -> dict:
     base = {
         "task_id": "t", "step": 0, "split": "test", "family": "read", "variant": "clean",
-        "difficulty": 2, "recovery": False, "rendered_rows": 1, "prompt_sha256": "d",
+        "difficulty": 2, "recovery": False, "rendered_rows": 1, "row_ordinals": [0],
+        "messages_sha256": "m", "rendered_prompt_sha256": "r", "token_ids_sha256": "t",
+        "token_ids_length": 4, "dtype": "torch.bfloat16",
         "token_index": 3, "seq_len": 4, "forward_batch": 1, "anchor_batch": 1,
         "capture_dtype": "native", "checkpoint_sha256": "c", "layers": 2, "d_model": 4,
         "device": "cpu", "decoding": "greedy", "shard": 0, "index_in_shard": 0,
@@ -54,14 +56,22 @@ def _cell(**overrides) -> dict:
     return {**base, **overrides}
 
 
-def _forward(layers=2, d_model=4):
+def _forward(layers=2, d_model=4, **override):
+    """A seam that attests to a conforming pass. Overrides let a test make it attest otherwise."""
+    import hashlib
+
     def run(row):
-        ids = list(range(len(row["prompt"].split())))or [0]
-        return {
-            "residuals": torch.zeros(layers + 1, d_model, dtype=torch.bfloat16),
+        ids = list(range(max(1, len(row["prompt"]))))
+        attestation = {
+            "residuals": torch.zeros(layers, d_model, dtype=torch.bfloat16),
             "seq_len": len(ids), "token_index": len(ids) - 1, "layers": layers,
             "d_model": d_model, "device": "cpu", "dtype": "torch.bfloat16",
+            "forward_batch": 1, "anchor_batch": 1, "capture_dtype": "native",
+            "rendered_prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
+            "token_ids_sha256": hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
+            "token_ids_length": len(ids),
         }
+        return {**attestation, **override}
     return run
 
 
@@ -132,7 +142,7 @@ def test_the_position_must_be_an_integer_inside_the_sequence() -> None:
 
 def test_a_corpus_row_whose_prompt_digest_moved_is_refused(tmp_path) -> None:
     row = _row()
-    decision = _decision(prompt_sha256=capture.prompt_digest(row["messages"]))
+    decision = _decision(messages_sha256=capture.prompt_digest(row["messages"]))
     moved = _row(text="something else")
     target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy")
@@ -163,7 +173,7 @@ def test_repeated_keys_index_to_one_decision_because_the_copies_are_identical() 
 def test_a_run_writes_its_shards_and_a_manifest_line_per_decision(tmp_path) -> None:
     rows = [_row(step=i) for i in range(5)]
     decisions = [
-        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
         for i, r in enumerate(rows)
     ]
     target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
@@ -190,7 +200,7 @@ def test_a_second_run_resumes_from_the_manifest_and_does_not_recapture(tmp_path)
     """An interrupted capture pass costs the shard it was writing, never the pass."""
     rows = [_row(step=i) for i in range(4)]
     decisions = [
-        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
@@ -222,7 +232,7 @@ def test_resuming_after_a_partial_shard_does_not_overwrite_it(tmp_path) -> None:
     """
     rows = [_row(step=i) for i in range(7)]
     decisions = [
-        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
@@ -261,7 +271,7 @@ def test_the_summary_reports_what_was_asked_for_and_not_only_what_was_written(tm
     """
     rows = [_row(step=i) for i in range(3)]
     decisions = [
-        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
@@ -311,7 +321,7 @@ def test_an_identity_without_weights_or_without_a_config_is_refused() -> None:
 def _started(tmp_path, shard_size=2, identity=None):
     rows = [_row(step=i) for i in range(3)]
     decisions = [
-        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
@@ -333,11 +343,33 @@ def test_resuming_under_a_different_checkpoint_is_refused(tmp_path) -> None:
                                   target=other)
 
 
-def test_resuming_when_the_prompt_has_moved_is_refused(tmp_path) -> None:
+def test_resuming_when_the_messages_have_moved_is_refused(tmp_path) -> None:
     rows, decisions, _, target = _started(tmp_path)
     moved = capture.rows_by_decision([_row(step=i, text=f"changed {i}") for i in range(3)])
-    with pytest.raises(capture.ResumeUnverified, match="prompt digest has moved"):
+    with pytest.raises(capture.ResumeUnverified, match="message digest has moved"):
         capture.capture_decisions(decisions=decisions, corpus=moved, forward=_forward(),
+                                  target=target)
+
+
+def test_resuming_when_only_the_rendered_bytes_moved_is_refused(tmp_path) -> None:
+    """The case the semantic digest cannot see, which is the whole reason both are recorded.
+
+    Same `messages`, different rendered prompt: the message record hashes identically and the bytes
+    the model would read do not. A resume checking only the semantic digest accepts a capture of an
+    input this run would never produce.
+    """
+    rows, decisions, _, target = _started(tmp_path)
+    restyled = []
+    for i in range(3):
+        row = _row(step=i)
+        row["prompt"] = row["prompt"].replace("<bos>", "<bos> ")   # same messages, other bytes
+        restyled.append(row)
+    corpus = capture.rows_by_decision(restyled)
+    assert capture.prompt_digest(restyled[0]["messages"]) == capture.prompt_digest(
+        _row(step=0)["messages"]
+    ), "the fixture must leave the message record identical"
+    with pytest.raises(capture.ResumeUnverified, match="rendered prompt has moved"):
+        capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
                                   target=target)
 
 
@@ -365,3 +397,86 @@ def test_a_clean_resume_reports_what_it_verified(tmp_path) -> None:
                                         target=target)
     assert summary["complete"] is True
     assert summary["verified"] == 3, "every kept entry was checked, not counted"
+
+
+# ------------- C1: the writer must check the seam's report, not stamp the contract's constants
+
+def _one(tmp_path, **override):
+    row = _row()
+    decision = _decision(messages_sha256=capture.prompt_digest(row["messages"]))
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
+                                   decoding="greedy")
+    return lambda: capture.capture_decisions(
+        decisions=[decision], corpus=capture.rows_by_decision([row]),
+        forward=_forward(**override), target=target,
+    )
+
+
+def test_a_seam_that_ran_at_another_width_is_refused_not_relabelled(tmp_path) -> None:
+    """The defect: the writer wrote `forward_batch = FORWARD_BATCH` and then asserted it was.
+
+    A seam that expanded a batch was recorded as width 1 — the guard erased the evidence it existed
+    to check. Mutating the cell after the fact was refused, which is why the old tests passed; a
+    seam reporting the truth was accepted and overwritten, which is what a real one would do.
+    """
+    with pytest.raises(capture.ContractViolation, match="not batch-invariant"):
+        _one(tmp_path, forward_batch=64)()
+    with pytest.raises(capture.ContractViolation, match="not batch-invariant"):
+        _one(tmp_path, anchor_batch=64)()
+
+
+def test_a_seam_that_ran_a_promoted_path_is_refused_not_relabelled(tmp_path) -> None:
+    with pytest.raises(capture.ContractViolation, match="arithmetic path"):
+        _one(tmp_path, capture_dtype="promoted-float32")()
+
+
+def test_a_non_integer_position_is_refused_before_it_is_coerced(tmp_path) -> None:
+    """`int(1.9)` is 1, and a writer that coerces before validating validates its own coercion."""
+    with pytest.raises(capture.ContractViolation, match="before any coercion"):
+        _one(tmp_path, token_index=1.9)()
+    with pytest.raises(capture.ContractViolation, match="before any coercion"):
+        _one(tmp_path, token_index=True)()
+
+
+def test_a_seam_that_tokenized_other_bytes_is_refused(tmp_path) -> None:
+    """The check `messages_sha256` cannot perform: the ids consumed are not the row's prompt."""
+    with pytest.raises(capture.ContractViolation, match="an input this row does not carry"):
+        _one(tmp_path, rendered_prompt_sha256="0" * 64)()
+
+
+def test_a_seam_whose_residuals_do_not_match_its_declared_shape_is_refused(tmp_path) -> None:
+    with pytest.raises(capture.ContractViolation, match="cannot be indexed by layer"):
+        _one(tmp_path, residuals=torch.zeros(7, 3, dtype=torch.bfloat16))()
+
+
+def test_a_seam_that_attests_to_nothing_is_refused_naming_the_fields(tmp_path) -> None:
+    row = _row()
+    decision = _decision(messages_sha256=capture.prompt_digest(row["messages"]))
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
+                                   decoding="greedy")
+    with pytest.raises(capture.ContractViolation, match="attest to the pass it actually ran"):
+        capture.capture_decisions(
+            decisions=[decision], corpus=capture.rows_by_decision([row]),
+            forward=lambda row: {"residuals": torch.zeros(2, 4), "seq_len": 1, "token_index": 0,
+                                 "layers": 2, "d_model": 4, "device": "cpu", "dtype": "x"},
+            target=target,
+        )
+
+
+def test_a_conforming_pass_is_recorded_from_the_seam_and_not_from_the_constants(tmp_path) -> None:
+    """The positive half: the cell's values come from the seam's report, traceably."""
+    row = _row()
+    decision = _decision(messages_sha256=capture.prompt_digest(row["messages"]))
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
+                                   decoding="greedy")
+    capture.capture_decisions(decisions=[decision], corpus=capture.rows_by_decision([row]),
+                              forward=_forward(), target=target)
+    cell = json.loads((tmp_path / "manifest.jsonl").read_text().splitlines()[0])
+
+    import hashlib
+    assert cell["rendered_prompt_sha256"] == hashlib.sha256(row["prompt"].encode()).hexdigest()
+    assert cell["token_ids_length"] == cell["seq_len"] == len(row["prompt"])
+    assert cell["token_index"] == cell["seq_len"] - 1
+    assert cell["messages_sha256"] == capture.prompt_digest(row["messages"])
+    assert cell["row_ordinals"] == [0]
+    assert cell["dtype"] == "torch.bfloat16"

@@ -34,10 +34,29 @@ from typing import Any
 #: nothing enforces.
 REQUIRED_CELL_FIELDS = (
     "task_id", "step", "split", "family", "variant", "difficulty", "recovery",
-    "rendered_rows", "prompt_sha256", "token_index", "seq_len",
+    "rendered_rows", "row_ordinals",
+    # Three digests, and they are three different claims. `messages_sha256` is the semantic record
+    # the capture set was enumerated under — canonical JSON over `messages[:-1]`, which is what
+    # `prereg_inputs.py` computed and is **not** the model's input. `rendered_prompt_sha256` is the
+    # byte digest of the string that was tokenized. `token_ids_sha256` is the ids actually consumed.
+    # The first was called `prompt_sha256`, which read as the last two and is neither.
+    "messages_sha256", "rendered_prompt_sha256", "token_ids_sha256", "token_ids_length",
+    "token_index", "seq_len",
     "forward_batch", "anchor_batch", "capture_dtype",
     "checkpoint_sha256", "config_sha256", "weight_files",
-    "layers", "d_model", "device", "decoding", "shard", "index_in_shard", "basis",
+    "layers", "d_model", "device", "dtype", "decoding", "shard", "index_in_shard", "basis",
+)
+
+#: What the `forward` seam must report about the pass it actually ran, as opposed to what the
+#: contract wishes were true. The writer compares these to the contract and refuses on a mismatch;
+#: it does **not** write the contract's constants into the cell. The first version did exactly
+#: that — stamped `forward_batch = FORWARD_BATCH` and then asserted it equalled `FORWARD_BATCH` —
+#: so a seam that expanded a batch or promoted its arithmetic was recorded as width 1, native, and
+#: the guard erased the evidence it existed to check (Codex C1).
+REQUIRED_SEAM_FIELDS = (
+    "residuals", "seq_len", "token_index", "layers", "d_model", "device", "dtype",
+    "forward_batch", "anchor_batch", "capture_dtype",
+    "rendered_prompt_sha256", "token_ids_sha256", "token_ids_length",
 )
 
 #: The only accepted width, and the only accepted arithmetic path. Both are refusals.
@@ -110,7 +129,12 @@ class CaptureTarget:
 
 
 def prompt_digest(messages: Sequence[dict]) -> str:
-    """The digest the capture set was enumerated under: the prompt, excluding the model's turn.
+    """The digest the capture set was enumerated under: the **messages**, excluding the model's turn.
+
+    Recorded as `messages_sha256`, because that is what it is: canonical JSON over the semantic
+    record and not the bytes the model reads. Two rows with one message record and different
+    rendered prompts share it, which is why the cell also carries the rendered prompt's byte digest
+    and the ids consumed, and why the capture boundary checks those separately.
 
     Identical to `prereg_inputs.sha` over `messages[:-1]`, and the two must stay identical — a
     capture whose digest is computed differently from the enumeration's would refuse every row for a
@@ -143,15 +167,68 @@ def assert_contract(cell: dict) -> None:
             f"computation and accepts {CAPTURE_DTYPE!r} only. A promoted capture is a different "
             "measurement and belongs to residual_precision_probe."
         )
-    if not isinstance(cell["token_index"], int) or cell["token_index"] < 0:
+    # `isinstance(True, int)` is True, and a float coerced by the writer before this check would
+    # arrive already conforming — 1.9 becomes 1 and passes (Codex C1). The type is checked on the
+    # value the seam reported, before any coercion, and bools are excluded explicitly.
+    index = cell["token_index"]
+    if isinstance(index, bool) or not isinstance(index, int) or index < 0:
         raise ContractViolation(
-            f"token_index={cell['token_index']!r}: the position must be recorded as the integer it "
-            "resolved to. 'the last prompt token' is a rule for finding it, not a record of which "
-            "one was found."
+            f"token_index={index!r} of type {type(index).__name__}: the position must be recorded "
+            "as the integer the seam resolved to, checked before any coercion. 'the last prompt "
+            "token' is a rule for finding it, not a record of which one was found."
         )
     if cell["token_index"] >= cell["seq_len"]:
         raise ContractViolation(
             f"token_index={cell['token_index']} is outside seq_len={cell['seq_len']}"
+        )
+
+
+def assert_seam_ran_the_declared_pass(observed: dict, row: dict, key: tuple[str, int]) -> None:
+    """Compare what the seam says it did against what the contract requires, and refuse on a gap.
+
+    This is the check the first version could not perform, because the writer supplied the answers.
+    Every value here is the seam's own report of the pass it ran; nothing in this function comes
+    from a constant in this module except the constants being compared *against*.
+    """
+    missing = [field for field in REQUIRED_SEAM_FIELDS if field not in observed]
+    if missing:
+        raise ContractViolation(
+            f"{key}: the forward seam reports no {missing}. It must attest to the pass it actually "
+            "ran — its widths, its arithmetic path, the bytes it tokenized and the ids it "
+            "consumed — because a writer that supplies those values checks only itself."
+        )
+    for field in ("forward_batch", "anchor_batch"):
+        if observed[field] != FORWARD_BATCH:
+            raise ContractViolation(
+                f"{key}: the seam ran at {field}={observed[field]!r} and the capture contract "
+                f"accepts {FORWARD_BATCH} only. The bf16 forward is not batch-invariant, so this "
+                "is a residual of another function and is refused rather than relabelled."
+            )
+    if observed["capture_dtype"] != CAPTURE_DTYPE:
+        raise ContractViolation(
+            f"{key}: the seam ran the {observed['capture_dtype']!r} arithmetic path and the "
+            f"contract accepts {CAPTURE_DTYPE!r} only."
+        )
+    expected = hashlib.sha256(row["prompt"].encode()).hexdigest()
+    if observed["rendered_prompt_sha256"] != expected:
+        raise ContractViolation(
+            f"{key}: the seam tokenized bytes digesting to "
+            f"{observed['rendered_prompt_sha256'][:12]} and the corpus row's rendered prompt "
+            f"digests to {expected[:12]}. The capture would be of an input this row does not "
+            "carry. `messages_sha256` cannot catch this: it is a digest of the semantic record "
+            "and not of the model's input."
+        )
+    if observed["token_ids_length"] != observed["seq_len"]:
+        raise ContractViolation(
+            f"{key}: the seam consumed {observed['token_ids_length']} ids and reports a sequence "
+            f"length of {observed['seq_len']}."
+        )
+    shape = tuple(getattr(observed["residuals"], "shape", ()))
+    if shape != (observed["layers"], observed["d_model"]):
+        raise ContractViolation(
+            f"{key}: the residuals have shape {shape} and the seam declares "
+            f"{(observed['layers'], observed['d_model'])}. A capture whose shape is not the shape "
+            "it claims cannot be indexed by layer afterwards."
         )
 
 
@@ -210,11 +287,11 @@ def capture_decisions(
                 f"{key} is in the capture set and not in the corpus: the two have drifted apart "
                 "and a capture attributed to a row that does not exist is worse than no capture."
             )
-        observed = prompt_digest(row["messages"])
-        if observed != decision["prompt_sha256"]:
+        observed_messages = prompt_digest(row["messages"])
+        if observed_messages != decision["messages_sha256"]:
             raise ContractViolation(
-                f"{key}: the corpus row's prompt digest {observed[:12]} is not the "
-                f"{decision['prompt_sha256'][:12]} the capture set was enumerated under. The "
+                f"{key}: the corpus row's message digest {observed_messages[:12]} is not the "
+                f"{decision['messages_sha256'][:12]} the capture set was enumerated under. The "
                 "corpus has changed since the set was fixed; re-enumerate rather than capture."
             )
         absent = [field for field in REQUIRED_ROW_FIELDS if field not in row]
@@ -225,22 +302,30 @@ def capture_decisions(
                 "and is handed the row, not an id list."
             )
         result = forward(row)
+        assert_seam_ran_the_declared_pass(result, row, key)
         cell = {
             **{k: decision[k] for k in
                ("task_id", "step", "split", "family", "variant", "difficulty", "recovery",
-                "rendered_rows", "prompt_sha256")},
-            "token_index": int(result["token_index"]),
-            "seq_len": int(result["seq_len"]),
-            "forward_batch": FORWARD_BATCH,
-            "anchor_batch": FORWARD_BATCH,
-            "capture_dtype": CAPTURE_DTYPE,
+                "rendered_rows", "row_ordinals")},
+            "messages_sha256": observed_messages,
+            # Every field below that describes the pass comes from the seam's own report, not from
+            # this module's constants. `assert_seam_ran_the_declared_pass` has already refused any
+            # that disagree with the contract, so recording them is a record and not a relabelling.
+            "rendered_prompt_sha256": result["rendered_prompt_sha256"],
+            "token_ids_sha256": result["token_ids_sha256"],
+            "token_ids_length": result["token_ids_length"],
+            "token_index": result["token_index"],
+            "seq_len": result["seq_len"],
+            "forward_batch": result["forward_batch"],
+            "anchor_batch": result["anchor_batch"],
+            "capture_dtype": result["capture_dtype"],
+            "layers": result["layers"],
+            "d_model": result["d_model"],
+            "device": str(result["device"]),
+            "dtype": str(result["dtype"]),
             "checkpoint_sha256": target.identity["checkpoint_sha256"],
             "config_sha256": target.identity["config_sha256"],
             "weight_files": target.identity["weight_files"],
-            "layers": int(result["layers"]),
-            "d_model": int(result["d_model"]),
-            "device": str(result["device"]),
-            "dtype": str(result["dtype"]),
             "decoding": target.decoding,
             "shard": shard,
             "index_in_shard": len(buffer),
@@ -317,10 +402,15 @@ def _verified_captures(
                 f"{key} is in the manifest and not in the corpus this run was given: the existing "
                 "captures and this corpus are not of the same rows."
             )
-        if prompt_digest(row["messages"]) != cell.get("prompt_sha256"):
+        if prompt_digest(row["messages"]) != cell.get("messages_sha256"):
             raise ResumeUnverified(
-                f"{key}: the corpus row's prompt digest has moved since it was captured. The "
-                "existing capture is of a prompt this run would not produce."
+                f"{key}: the corpus row's message digest has moved since it was captured. The "
+                "existing capture is of a row this run would not produce."
+            )
+        if hashlib.sha256(row["prompt"].encode()).hexdigest() != cell.get("rendered_prompt_sha256"):
+            raise ResumeUnverified(
+                f"{key}: the corpus row's rendered prompt has moved since it was captured, even "
+                "though its message record has not. The existing capture is of different bytes."
             )
         shard_path = target.directory / f"residuals-{int(cell['shard']):05d}.pt"
         if not shard_path.exists():
@@ -366,9 +456,11 @@ __all__ = [
     "FORWARD_BATCH",
     "REQUIRED_CELL_FIELDS",
     "REQUIRED_ROW_FIELDS",
+    "REQUIRED_SEAM_FIELDS",
     "CaptureTarget",
     "ContractViolation",
     "assert_contract",
+    "assert_seam_ran_the_declared_pass",
     "capture_decisions",
     "prompt_digest",
     "rows_by_decision",
