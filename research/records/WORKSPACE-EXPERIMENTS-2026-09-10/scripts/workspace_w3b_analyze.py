@@ -65,7 +65,7 @@ for r in rows:
             if g["attention_on_masked_keys"] != 0.0 or g["attention_on_masked_edges_all_queries"] != 0.0: why.append(f"{arm}: attention on masked edges")
             if g["local_mass_beyond_window"] != 0.0: why.append(f"{arm}: local mass beyond the window")
             if g["n_blocked_edges_at_P_act"] <= 0: why.append(f"{arm}: no blocked edge at P_act")
-        if arm == "current_note" and x.get("p_note_identical_to_unmasked") is not True: why.append("current_note: P_note not identical to unmasked")
+        if arm in ("current_note", "random_equal_count_note") and x.get("p_note_identical_to_unmasked") is not True: why.append(f"{arm}: P_note not identical to unmasked")
         rc = x.get("receipt")
         if rc is not None:  # v3 rows carry receipts; absence is recorded, not failed (pre-v3 producer)
             if rc.get("missing_edges") or rc.get("unexpected_edges"): why.append(f"{arm}: receipt mismatch (missing {rc.get('missing_edges')}, unexpected {rc.get('unexpected_edges')})")
@@ -78,7 +78,11 @@ complete = not set_problems and not problems
 verdict = "admitted" if complete else "refused"
 
 # ---- estimates on eligible rows only
-per_arm = defaultdict(lambda: defaultdict(list)); trans = defaultdict(Counter); agree = defaultdict(lambda: [0, 0]); paired_random = defaultdict(list)
+per_arm = defaultdict(lambda: defaultdict(list)); trans = defaultdict(Counter); agree = defaultdict(lambda: [0, 0]); paired_random = defaultdict(list); ctrl_used = {}
+script_version = (man or run or {}).get("script_version")
+CONTROL_STATUS = ("v3.2 pool: positions 1..P_note-1 in no carrier span (task statement and format tokens), <bos> never; random_equal_count (all-carriers count, queries from P_note) pairs the carrier arms, random_equal_count_note (the note's prose count, queries from the fence) pairs the current-note arm"
+                  if script_version == "3.2" else
+                  "v3.1 pool: the non-task tokens before P_note — the carrier spans plus the format tokens, so the draw was mostly the all-carriers mask itself (4B pass: three quarters of its keys carrier tokens, <bos> masked in 152 of 187 rows); DEGENERATE — paired_vs_random is not a control comparison in this output, and the current-note arm has no count-matched control")
 skipped = Counter(); arm_rows = Counter(); gates = defaultdict(list)
 for r in eligible:
     base = r["arms"]["unmasked"]; ti = r["tool_idx"]; last = max(base["lens_act"], key=int)
@@ -107,11 +111,12 @@ for r in eligible:
         d_m = x["margin_act_logits"] - base["margin_act_logits"]
         per_arm[arm]["delta_margin_act_logits"].append(d_m); per_arm[arm]["delta_margin_note_logits"].append(x["margin_note_logits"] - base["margin_note_logits"])
         deltas_here[arm] = (d_p, d_m)
-    if "random_equal_count" in deltas_here:
-        rp, rm = deltas_here["random_equal_count"]
-        for arm, (dp, dm) in deltas_here.items():
-            if arm == "random_equal_count": continue
-            paired_random[arm].append({"d_margin_minus_random": dm - rm, "d_p_minus_random": None if (dp is None or rp is None) else dp - rp})
+    for arm, (dp, dm) in deltas_here.items():
+        if arm.startswith("random_equal_count"): continue
+        ctrl = "random_equal_count_note" if arm == "current_note" else "random_equal_count"
+        if ctrl not in deltas_here: continue
+        rp, rm = deltas_here[ctrl]; ctrl_used[arm] = ctrl
+        paired_random[arm].append({"d_margin_minus_random": dm - rm, "d_p_minus_random": None if (dp is None or rp is None) else dp - rp})
 def gate_summary(gs):
     if not gs: return {"n": 0}
     fields = set().union(*(set(g) for g in gs))
@@ -121,7 +126,7 @@ def gate_summary(gs):
         out[f + "_max"] = max(vals) if vals else None; out[f + "_min"] = min(vals) if vals else None
     return out
 out = {"basis": f"{a.w3b}; schema {schema}; queries masked from {(man or run or {}).get('queries_masked_from')}; control: {(man or run or {}).get('control')}; mass floor {FLOOR}; unit = decision",
-       "verdict": verdict, "strict": not a.diagnostic,
+       "verdict": verdict, "strict": not a.diagnostic, "script_version": script_version, "control_status": CONTROL_STATUS,
        "admission": {"rows_on_disk": len(rows), "requested": (len(requested) if requested is not None else None), "eligible": len(eligible), "ineligible": len(problems), "set_problems": set_problems,
                      "ineligible_rows": {str(i): w for i, w in list(problems.items())[:50]}, "receipts_present_arms": receipts_present, "receipts_note": "receipts and the placement oracle exist from producer v3; rows without them are admitted on the schema-2 gates only and say so here",
                      "unique_episodes_eligible": len({r["task_id"] for r in eligible}), "manifest_present": man is not None, "run_json_present": run is not None},
@@ -131,7 +136,7 @@ out = {"basis": f"{a.w3b}; schema {schema}; queries masked from {(man or run or 
                       "retained_share_of_jointly_resolved": share(trans[arm]["retained"], trans[arm]["retained"] + trans[arm]["lost"]),
                       "masked_expert_top_agreement": share(agree[arm][0], agree[arm][1]),
                       **{k: (tail(v) if k != "unresolved_at_act" else share(sum(v), len(v))) for k, v in d.items()},
-                      "paired_vs_random": {"n": len(paired_random[arm]), "d_margin_minus_random": tail([q["d_margin_minus_random"] for q in paired_random[arm]]), "d_p_minus_random": tail([q["d_p_minus_random"] for q in paired_random[arm]])} if arm != "random_equal_count" else None}
+                      "paired_vs_random": {"control_arm": ctrl_used.get(arm), "control_status": CONTROL_STATUS, "n": len(paired_random[arm]), "d_margin_minus_random": tail([q["d_margin_minus_random"] for q in paired_random[arm]]), "d_p_minus_random": tail([q["d_p_minus_random"] for q in paired_random[arm]])} if not arm.startswith("random_equal_count") else None}
                 for arm, d in per_arm.items()}}
 Path(a.out).write_text(json.dumps(out, indent=1) + "\n")
 print(json.dumps({"event": "w3b_analyzed", "verdict": verdict, "rows": len(rows), "eligible": len(eligible), "ineligible": len(problems), "set_problems": set_problems, "arms": list(per_arm)}))

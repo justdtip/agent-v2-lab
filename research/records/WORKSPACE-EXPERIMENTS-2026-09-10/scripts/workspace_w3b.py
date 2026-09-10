@@ -2,7 +2,10 @@
 
 For each sampled decision: the ordinary forward, then forwards with the carrier spans masked as KEYS
 for every query at or after the current turn's start (task statement never masked), one arm per kind
-and one for all kinds, plus a random-span mask of equal token count; and the current turn's note — the
+and one for all kinds, plus a random mask of equal token count drawn from the non-carrier tokens (the task statement and the
+format tokens; never position 0, the <bos> sink) — v3.2, after the 4B pass showed v3.1's pool (the non-task tokens) to be
+mostly the carrier spans themselves — and, for the current-note arm, a second draw of the note's prose count from the
+same pool masked from the fence onward; and the current turn's note — the
 prose before the ```json fence, its trailing newline included, cut as the previous-note spans are cut —
 masked as keys for every query from the fence onward through the last position S-1 (the supplied
 tool-name token, a query that is never read), alone and together with the carriers, so the action
@@ -111,10 +114,10 @@ for line in open(args.corpus):
     if k in seen: continue
     seen.add(k); rows_all.append(r)
 QUERIES = {"carrier_arms": "P_note (the decision position) through S-1", "current_note_arms": "q0 (the first token starting at or after the ```json fence) through S-1; S-1 is the supplied tool-name token, a query never read; P_act = S-2"}
-CONTROL = ("random tokens of equal count (a token-count control only); the same-kind arms (older vs previous note, older vs previous call) are the role- and contiguity-matched comparisons; "
+CONTROL = ("random_equal_count: the all-carriers count of tokens drawn without replacement from the positions 1..P_note-1 in no carrier span (the task statement and the format tokens; never position 0, the <bos> sink), masked from P_note; random_equal_count_note: the current note's prose count from the same pool, masked from q0 — the count-matched control for the current-note arm (v3.2; v3.1's pool, the non-task tokens before P_note, was mostly the carrier spans themselves — degenerate, see the 4B record); the same-kind arms (older vs previous note, older vs previous call) are the role- and contiguity-matched comparisons; "
            "survival under a mask shows non-necessity of the masked edges under this intervention and does not date the decision; for the carrier arms the two-hop relay through unmasked earlier positions is an open route; "
            "for the current-note arm no such relay exists (every position after the note is a masked query)")
-(OUT / "run.json").write_text(json.dumps({"schema_version": 3, "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "maps_sha256": hashlib.sha256(Path(args.maps).read_bytes()).hexdigest(),
+(OUT / "run.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.2", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "maps_sha256": hashlib.sha256(Path(args.maps).read_bytes()).hexdigest(),
     "capture": args.capture, "corpus": args.corpus, "corpus_sha256": corpus_sha, "sample": sample_ids, "requested": len(sample_ids), "kinds": KINDS, "queries_masked_from": QUERIES, "control": CONTROL, "device": args.device, "seed": args.seed,
     "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n")
 
@@ -220,15 +223,28 @@ for n, i in enumerate(sample_ids):
             cut_from["all_carriers_and_current_note"] = turn_start; arm_keys["all_carriers_and_current_note"] = arm_keys["all_carriers"] + note_keys
     else:
         skipped["current_note"] = f"no prose note before the fence (note_prose_tokens={len(note_keys)}, q0={q0}, P_act={P_act})"
+    # v3.2 control pool: every position before the decision position that lies in no carrier span — the task statement and the
+    # format tokens — and never position 0 (the <bos> sink). v3.1 drew from the non-task tokens, which are the carrier spans plus
+    # the format tokens, so its draw of the all-carriers count was three quarters the all-carriers mask itself (4B pass, 187 rows).
+    pool = [k for k, kk in enumerate(kinds) if kk not in KINDS and 0 < k < turn_start]
+    def kind_counts(ks): return {kk: sum(1 for k in ks if kinds[k] == kk) for kk in sorted({kinds[k] for k in ks})}
+    random_info = {"pool": "positions 1..P_note-1 in no carrier span (task statement and format tokens); <bos> never", "pool_size": len(pool), "pool_kinds": kind_counts(pool)}
     n_all = int(arms["all_carriers"][0, 0, turn_start].sum()) if "all_carriers" in arms else 0
-    if n_all:
-        candidates = [k for k, kk in enumerate(kinds) if kk not in ("task",) and k < turn_start]
-        pick = sorted(int(x) for x in rng.choice(candidates, size=min(n_all, len(candidates)), replace=False))
+    if n_all and pool:
+        pick = sorted(int(x) for x in rng.choice(pool, size=min(n_all, len(pool)), replace=False))
+        assert all(kinds[k] not in KINDS and k > 0 for k in pick), "the random control drew a carrier token or position 0"
         e = torch.zeros(1, 1, S, S, dtype=torch.bool); e[0, 0, turn_start:, pick] = True; arms["random_equal_count"] = e
         expected["random_equal_count"] = edge_set(S, turn_start, pick); cut_from["random_equal_count"] = turn_start; arm_keys["random_equal_count"] = pick
+        random_info["random_equal_count"] = {"requested": n_all, "picked": len(pick), "picked_kinds": kind_counts(pick), "queries_from": "P_note"}
+    if "current_note" in arms and pool:  # the count-matched control for the current-note arm: the note's prose count, the same pool, the same queries (from the fence)
+        pick2 = sorted(int(x) for x in rng.choice(pool, size=min(len(note_keys), len(pool)), replace=False))
+        assert all(kinds[k] not in KINDS and k > 0 for k in pick2), "the note control drew a carrier token or position 0"
+        e = torch.zeros(1, 1, S, S, dtype=torch.bool); e[0, 0, q0:, pick2] = True; arms["random_equal_count_note"] = e
+        expected["random_equal_count_note"] = edge_set(S, q0, pick2); cut_from["random_equal_count_note"] = q0; arm_keys["random_equal_count_note"] = pick2
+        random_info["random_equal_count_note"] = {"requested": len(note_keys), "picked": len(pick2), "picked_kinds": kind_counts(pick2), "queries_from": "q0"}
     row = {"i": i, "task_id": m["task_id"], "step": m["step"], "family": m["family"], "tool": rec_row["tool"], "tool_idx": rec_row["tool_idx"],
            "S": S, "P_note": P_note, "P_act": P_act, "note_prose_chars": note_end, "note_prose_tokens": len(note_keys), "note_syntax_tokens": len(syntax_pos),
-           "note_fence_straddle_tokens": straddle, "q0": q0, "placement_oracle": bool(oracle), "kind_token_counts": {k: kinds.count(k) for k in set(kinds)}, "skipped_arms": skipped, "arms": {}}
+           "note_fence_straddle_tokens": straddle, "q0": q0, "placement_oracle": bool(oracle), "kind_token_counts": {k: kinds.count(k) for k in set(kinds)}, "skipped_arms": skipped, "random_control": random_info, "arms": {}}
     if not LEAKY_CHECKED and "all_carriers" in arms:  # the cut verified with a deliberately leaky mask: one carrier key left open must receive attention
         leaky = arms["all_carriers"].clone(); keys = torch.nonzero(leaky[0, 0, P_act]).flatten().tolist(); leaky[0, 0, :, keys[0]] = False
         out_l, _ = run(ids, leaky, True, keep); a = torch.stack([A[0, :, P_act, :].float().mean(0) for A in out_l.attentions]).sum(0)
@@ -260,7 +276,7 @@ for n, i in enumerate(sample_ids):
             assert rec_arm["receipt"]["pre_cut_queries_still_attend"], f"row {i}: arm {arm}: queries before the cut place no mass on the masked keys (over-masking?)"
         assert chk["attention_above_diagonal"] == 0.0, f"row {i}: arm {arm}: mass above the diagonal {chk['attention_above_diagonal']} (causal structure broken)"
         assert chk["local_mass_beyond_window_all_queries"] == 0.0, f"row {i}: arm {arm}: local mass beyond the window {chk['local_mass_beyond_window_all_queries']}"
-        if arm == "current_note":  # queries before the fence are untouched, so P_note's readouts must be bit-identical to the unmasked forward
+        if cut_from.get(arm, 0) > P_note:  # queries before the cut (P_note among them) are untouched, so P_note's readouts must be bit-identical to the unmasked forward
             u = row["arms"]["unmasked"]
             same = all(json.dumps(rec_arm[f]) == json.dumps(u[f]) for f in ("model_six_note", "lens_note", "margin_note_logits"))
             rec_arm["p_note_identical_to_unmasked"] = same
@@ -271,7 +287,7 @@ for n, i in enumerate(sample_ids):
          blocked_at_P_act={k: v["gate"]["n_blocked_edges_at_P_act"] for k, v in row["arms"].items()}, receipts_pass=all(v.get("receipt", {}).get("passes", True) for v in row["arms"].values()))
 for h in handles: h.remove()
 results_fh.close()
-(OUT / "manifest.json").write_text(json.dumps({"schema_version": 3, "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "capture": args.capture, "sample": sample_ids, "requested": len(sample_ids),
+(OUT / "manifest.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.2", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "capture": args.capture, "sample": sample_ids, "requested": len(sample_ids),
     "kinds": KINDS, "queries_masked_from": QUERIES,
     "current_note": {"keys": "completion tokens whose character offset starts before the ```json fence (the prose note, trailing newline included, cut as the previous-note spans are cut)",
                      "queries": "every token from the fence onward through S-1 (the supplied tool-name token, never read), so no relay through the syntax between the note and the action is open",

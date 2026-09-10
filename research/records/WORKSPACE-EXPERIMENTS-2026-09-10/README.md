@@ -262,7 +262,20 @@ degenerate in its `control_status` so that no later reader takes its `paired_vs_
 comparison. The 12B pass runs v3.2 (its driver reads `workspace_w3b.py`, promoted before `GO-12B`); the 4B
 pass is repeated with v3.2 (19 minutes, untimed, behind `GO-W3B-4B-V32`) so that both models carry the
 same control; the v3.1 pass stays as recorded here, its receipts and every non-control reading intact.
-Digests and the CPU regression of v3.2 are recorded in Provenance when they exist.
+**v3.2's regression (CPU, `scripts/w3b_v32_test.sh`, 07:18–07:22Z).** On row 0 of the three-row test
+capture (step 1, a search decision, carriers present): the self-test's sixteen builder cases pass and
+the six wrong masks are rejected; the leaky control passes; nine arms including both controls, every
+receipt passing, attention exactly zero on every masked edge, nothing above the diagonal, nothing beyond
+the window; P_note's readouts bit-identical to the unmasked forward under the current-note arm and
+under the note control; the pool of 452 positions is 416 task and 36 format tokens, the two draws (78
+and 28 keys, the smallest at position 3) overlap the carrier spans in 0 keys; the analyzer admits and
+pairs each carrier arm with `random_equal_count` and the current-note arm with
+`random_equal_count_note`. The v3.2 analyzer on the 4B v3.1 pass still admits 300 of 300, labels the
+control degenerate, pairs the carrier arms with the v3.1 control (187 rows) and the current-note arm
+with nothing; the schema-2 and corrupted-copy fixtures behave as before (admitted; refused with exit 1;
+diagnostic exit 0; the gained-winner case). Promoted on the card at 07:23Z with v3.1 kept beside it
+(`workspace_w3b.py.v3.1-as-run-4b`, `workspace_w3b_analyze.py.v3.1`); the repeat's driver
+`scripts/chief_w3b_4b_v32_gated.sh` refuses to run unless `workspace_w3b.py` carries v3.2's digest.
 
 ## Provenance
 
@@ -274,8 +287,9 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | file | sha256 (first 12) | role |
 |---|---|---|
 | `workspace_capture.py` | 958ccdcf0bae | v1, the first 4B capture (died at 03:22Z); kept on the card as `workspace_capture.py.v1-as-run-4b` |
-| `workspace_w3b.py` | 23c09ec1fe36 | W-3b v3: placement certified (the repaired v2, b2d674d3469e, is kept on the card as `workspace_w3b.py.v2-repaired`) |
-| `workspace_w3b_analyze.py` | 30ffe6d01889 | W-3b aggregate with admission and paired transitions |
+| `workspace_w3b.py` | 0a7869c0d8ed | W-3b v3.2 (the corrected random control and the note control; the 12B pass and the 4B repeat). v3.1, 23c09ec1fe36, is the 4B pass as recorded above — in this record's history through commit 896bd9e and on the card as `workspace_w3b.py.v3.1-as-run-4b`; the repaired v2, b2d674d3469e, on the card as `workspace_w3b.py.v2-repaired` |
+| `workspace_w3b_analyze.py` | 79791aa145ec | W-3b aggregate with admission and paired transitions; v3.2 names the control arm it pairs and labels a v3.1 output's control degenerate (v3.1, 30ffe6d01889, produced the 4B figures above; the two agree on every non-control figure) |
+| `w3b_v32_test.sh`, `chief_w3b_4b_v32_gated.sh` | 84404aa17188, b202280ca584 | the v3.2 regression; the gated driver of the 4B repeat (`GO-W3B-4B-V32`, digest-guarded, memory-guarded) |
 | `workspace_analyze.py` | da680b6e5773 | W-1/W-3/W-4/W-5 with the prose–syntax split |
 | `workspace_w2.py` | 033ae371ef3e | W-2 and W-4 primary |
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
