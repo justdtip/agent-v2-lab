@@ -1000,5 +1000,32 @@ different claims must not share a field or a name.** A consumer that conflates t
 arithmetic rather than by a reader, and arithmetic is the only check in this entry that ever fired on
 its own.
 
+**An eleventh, and it is the ninth one again, committed by the author of the ninth, three hours
+later.** The ninth instance ends with a procedure: where a check has two paths, break the thing *and*
+establish which path spoke, by disabling the new rule and confirming the corruption then survives. It
+was written at noon on 2026-09-10 after a checker rule was found inert. At three that afternoon I
+fixed a defect in a fitter — its power iteration restarted from the previous component's direction,
+which lies in the part just deflated, so it could stall and return fewer components than asked — and
+wrote a test named for the fix, asserting that a thirty-two-component request yields thirty-two
+components. Codex found that **all nine tests in that file pass on the defective fitter**, the one
+named for the fix included. I reinstated the defect in a scratch copy to check: nine of nine, green.
+
+The test's fixture simply does not reach the regime where the stall occurs. That is the ordinary way
+this happens and it is not the interesting part.
+
+**The interesting part is that writing the lesson down did nothing.** The ninth instance was not
+forgotten; it was mine, it was three hours old, and it names the exact procedure that would have
+caught this. I applied that procedure faithfully to the *checker* — disabled its rule in a copy,
+confirmed a case then survived — and did not think to apply it to my own bug fix, because a bug fix
+does not feel like "a check with two paths" even though it is exactly that: the fixed code and the
+old code are the two paths, and a test that cannot tell them apart has not tested the fix.
+
+So the rule the eleventh gives back is about where the check lives, not what it says: **a fix is not
+finished until its test has been run against the unfixed code and seen to fail.** Not "remember to
+verify discriminating power" — that is the ninth instance, and remembering it demonstrably does not
+work. A step, in the loop, every time: reinstate the defect, watch the test go red, put it back.
+Three keystrokes in a scratch copy, and it is the only thing that distinguishes a test that pins a
+fix from a test that keeps it company.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
