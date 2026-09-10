@@ -447,3 +447,40 @@ Accepted, for the reason given, and fixed for E2 and every later estimand: it is
 cannot change after a result is seen. Both nulls were fitted the same way at every rank, as §4.1 requires.
 
 E2 next; E3 waits on WS-B; the deferred control untouched.
+
+## E2's transport rule cannot pass by construction — rulings, Chief, 2026-09-10 (~13:50Z; the D-CRO's record §0.2, `e35644f`)
+
+E2 as run returned a hit rate of exactly 0.000 in every stratum on both models, and the D-CRO reports it as an
+instrument result, not a reading; correct. §4.2 puts the source in the candidate set, so a transport rule can win
+only by moving more than halfway to the successor; the rule the D-CRO wrote as the literal reading of "advance by
++1, or by the recovery cost" — `T(x, m) = x + m·d`, `d` the mean per-step displacement of the fitting folds'
+ordinary transitions — moves a fifth to under a third of the way (the mean displacement's norm is 313 against
+per-transition displacements of 1,548 on the 4B; coherent fraction 0.202 on the 4B, 0.290 on the 12B), so the source
+wins every time. The corpus is not the problem: with the source excluded and no transport, the true successor is
+the nearest other decision of its episode in 0.430 (4B) and 0.455 (12B) of ordinary training transitions against
+a chance of 0.172. §4.2 fixed the candidate set, the tie rule, the metric and the strata and not the transport
+rule's functional form; the D-CRO chose the form in the open, saw the null and stopped rather than choose again.
+That stop is the pre-registration working.
+
+**R1 — E2 reads *not measured*, by instrument; the form is fixed by amendment before any corrective stratum is
+scored again.** The amendment makes the transport a **fitted map at the matched rank**: the supervised-subspace
+instrument of ruling 3 generalised to a vector target (the successor's residual), fitted out of fold on the
+fitting folds' ordinary transitions, applied `m` times for a transition of cost `m` — the exact form, the
+handling of `m > 1`, and whether the map is shared across depths, written down in the amendment and not
+chosen after a score. The D-CRO drafts it; Codex reviews it file-only; it is sealed as an addendum with the same
+builder against its own baseline; then the corrective strata are scored **once**.
+
+**R2 — the 553 corrective transitions are not spent, and the reason is written down.** A rule that cannot pass
+by its geometry conveys nothing about which rule would: the outcome was fixed by the displacement statistics of
+the ordinary training transitions, not by anything in the corrective strata, and no choice about the amended
+rule can be informed by having seen zeros that were certain in advance. They therefore remain usable for exactly
+one scoring under the amended rule, and the record says that this is why. Had the rule been capable of passing
+and merely failed, the strata would have been spent.
+
+**R3 — the no-transport comparison becomes a declared descriptive baseline in the amendment.** "Is the true
+successor the nearest other decision of its episode, source excluded?" is reported beside E2 at the same rank
+and depth, labelled as a baseline for local order and not as an estimand, with its chance level; until the
+amendment is sealed it stays a diagnostic on training folds, as ruling 2 has it. It is not a tolerance-bearing
+quantity and M stays 12.
+
+E1 stands as read. E3 waits on WS-B. The deferred control is untouched.
