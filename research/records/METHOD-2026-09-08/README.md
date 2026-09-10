@@ -981,5 +981,24 @@ Where a check has two paths, break the thing *and* establish which path spoke �
 rule and confirming the corruption then survives, which is the only evidence that the rule does
 anything at all.
 
+**A tenth, which failed loudly, and the reason it did is the point of it.** Writing the seal builder
+for the plan-progress pre-registration I compared the capture set's **byte** digest against the digest
+over its **enumerated triples**, and the builder refused. Both are sixty-four hex characters, both
+answer to "the capture set's digest", and §2 of the document I was sealing says in prose that they are
+two different claims — one is the semantic record the set was enumerated under, the other is the bytes
+on disk. The prose did not stop me. The **storage** did: `prereg-inputs.json` keeps the triples digest
+at `decisions.capture_set_sha256` and stores the file's bytes under no name at all, so the conflation
+had nowhere to succeed and could only come out as a mismatch.
+
+Had one field named `sha256` held either value, the comparison would have passed and the seal would
+have carried the wrong claim under the right name — silently, and in the one artefact whose whole
+purpose is to fix which claim was made. That is this entry's family exactly, and it missed by the
+width of a schema.
+
+So the rule the tenth gives back, which is about design rather than review: **two quantities that are
+different claims must not share a field or a name.** A consumer that conflates them is then caught by
+arithmetic rather than by a reader, and arithmetic is the only check in this entry that ever fired on
+its own.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
