@@ -514,3 +514,31 @@ measured, and reclassified from gate to report on this ruling, with the reason a
 seven thousandths. The ladder (ranks 1 … 32) and the fold discipline are as the D-CRO measured them; nothing
 corrective has been touched. With this the amendment is ready for Codex's file-only review; then the seal
 builder seals it as an addendum against its own baseline; then the corrective strata are scored once.
+
+## Amendment 1, the transport rule's form reverted — ruling, Chief, 2026-09-10 (~15:10Z)
+
+The D-CRO withdraws the identity-plus-correction form and the argument for it: measured out of fold on ordinary
+train transitions at the headline depth with the fitter's restart bug fixed, the direct rank-r supervised map
+from `x_k` to `x_{k+1}` clears the source more often than the correction form at every rank on both models
+(0.769 and 0.751 at rank 8 against 0.586 and 0.493), because the successor is dominated by a large, predictable
+shared component and the displacement is small and only a fifth coherent; the earlier claim came from a
+synthetic case in the wrong regime. Ruled:
+
+**The form is the direct rank-r supervised map to the successor**, on the plain reading of "transport the
+state read at k" — the choice rests on the reading and on the absence of any reason to constrain it, not on
+the capability numbers, which are a two-point comparison on training folds and cannot arbitrate between two
+capable forms; the retrieval score is not consulted, being ε_ord's own population before the seal.
+
+**The gate returns to form A** — half of ordinary training transitions cleared at the headline depth and rank,
+both models — as first drafted; it passes. The ruling of ~14:25Z reclassifying it is superseded and stays in
+the order as history. The headline-rank capability fraction is still reported beside the E2 headline.
+
+**The amendment carries its own history**: the correction form, the argument, its refutation, and the fitter's
+restart defect (power iteration restarting from the deflated direction, able to stall short of the asked
+rank), with the fix and its test.
+
+**One question answered before Codex's review.** The restart defect lived in the supervised-subspace fitter that
+E1 used. The D-CRO states whether E1's sealed reading was produced by the defective code and, if so, re-runs E1
+through the gate with the fixed fitter and reports both numbers side by side — E1's reading stands only if the
+fix does not move it, and moves are recorded either way. Then Codex's file-only review; then the addendum seal;
+then the corrective strata once.
