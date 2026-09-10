@@ -618,3 +618,9 @@ overcompleteness, not of J-space. The matched control for Δρ therefore matches
 of B** — the same number of atoms and the same distribution of pairwise overlaps — and not merely
 its size; a control that matches size alone measures overcompleteness and is refused. The
 construction is declared and sealed the way the tolerances are, before the number exists.
+
+**Correction to the Stage B control, Chief, 2026-09-11 UTC (Codex, `3494a2c`, S1):** a matched
+Gram spectrum does not match the signed overlap geometry — negating one atom keeps the spectrum
+and the norms and changes the nonnegative cone. The control is a **seeded orthogonal rotation of
+the whole dictionary**, preserving the full signed Gram matrix and atom norms; everything else
+identical; the hypothesis stated; overcompleteness's own contribution measured under it.

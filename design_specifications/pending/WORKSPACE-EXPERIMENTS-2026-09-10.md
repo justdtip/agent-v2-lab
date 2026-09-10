@@ -157,3 +157,80 @@ attention pass (minutes); analyses on the CPU. Record: `research/records/WORKSPA
 with the archive's manifests, the scripts as run, and one README per experiment stating its three-state
 outcome. Nothing is cited before Codex's audit. The steering pilot the Director will discuss this
 evening is a separate order and is not started by this one.
+
+## Rulings on Codex's design review, Chief, 2026-09-11 UTC — `WSA-WORKSPACE-AND-PREREG-2026-09-10` (`3494a2c`): this pass is an observational screen, and every quantity is renamed for what it measures
+
+Accepted in full. The captures proceed as raw data; nothing below changes what is captured, and
+nothing is read until these rulings are in the analyses. The mechanism claims — ignition,
+functional availability, causal broadcast, report versus computation — are **reserved** for the
+steering experiments the Director will order; this pass describes.
+
+**W1, the fitting domain.** The lenses are fitted at 128 prose tokens (positions 9 to 128, upstream's
+default selector, the source-mean/target-sum reduction; the archive hashes in the manifests) and
+read at agent positions up to about 3,600 tokens; matched precision and width remove the cross-path
+confound and do not license that transfer. "Nothing is refused" is struck. Every reading carries
+its position, and the position distribution is preserved. The sentence naming "W-C" referred to an
+experiment that was dropped from the final order; it is replaced by **W-5, lens validity by
+position**: the agreement between each lens's last-layer readout and the model's own readout at
+`P_act`, by position band (to 256, to 1,024, to 2,048, beyond), which quantifies the extrapolation
+and is the number that decides the long-horizon lens. A lens score is not a calibrated probability
+of an action; log-odds travel beside every conditional probability.
+
+**W2.** The W-1 quantities are renamed *first confidence crossing* (0.1, 0.5, 0.9 on the six-tool
+conditional mass, with the full-vocabulary probability stored beside it as `six × mass`) and
+*readout competitor*; every individual depth profile is retained; oscillations, missing crossings,
+equal maxima, unresolved layers and initially confident profiles are handled by frozen rules (first
+crossing in depth order; a tie is a miss; an unresolved layer is skipped and counted). A crossing
+width of one layer is consistent with a linear logit trajectory and is not evidence of ignition.
+The input-mixture sweep with a readout-independent activation measurement is the ignition experiment
+proper and is a new arm for the Director to approve.
+
+**W3.** In W-2, r is the dimension of a PCA projection fitted on the training fold, with a ridge
+readout on top; it is a representation constraint, not the rank of the six-class contrast, whose
+softmax-relevant rank is at most five, and the ladder is relabelled accordingly. Family subsets,
+folds, training-only centring, the regulariser and selection are frozen in the manifest. The
+within-family permutation null cannot detect cross-family sharing where a label is constant within a
+family; a **transfer null** is added — labels permuted within family on the training families, the
+readout evaluated on the held-out families — as the null for the transfer design. The result is
+labelled *cross-family linear decodability of the expert action*, not functional availability;
+null-level transfer does not falsify a common subspace, and successful transfer may be a shared
+tool-name encoding. For an invertible lens the rank-r readouts on `Jh` and on `h` span the same
+class; a difference between them is attributed to conditioning and regularisation, not to new
+information.
+
+**W4.** W-3 is renamed *direct attention to tagged spans*. Attention weight is a routing weight,
+not a causal share, and the global layers are the only **single-edge** routes beyond the window,
+not the only end-to-end routes — a source 1,800 tokens back can reach the decision through two local
+hops. Per-head distributions, span sizes, distances and tokenisation boundaries are preserved, and
+"the carrier's share" is struck from both state-variable orders in favour of the direct-attention
+share. The five and eight global layers are re-measured from the checkpoints at capture time.
+
+**W5.** The continuation is the **expert's** teacher-forced completion, and the label is the *expert
+action* wherever Gemma might disagree; a first tool-name token is not an executable action. W-4's
+primary is relabelled *early versus late linear decodability of the expert action*: neither a
+probe's success nor its failure dates the decision, since report and computation have identical
+clean traces. The change of W-4's primary was informed by a mass measurement on three rows of the
+test split (task ids in the record), run on the CPU as a pipeline test, whose only role was to
+show the next-token reading unresolved at `P_note`; that provenance travels with the primary.
+W-3b's branches are narrowed: survival under a mask shows the masked edges were not necessary for
+that outcome under that intervention and does not date the decision; a change under a mask is
+reported as the distribution change it is, not as re-reading. The same-kind arms (older against
+previous note, older against previous call) are the role- and contiguity-matched comparisons; the
+random-token arm is a token-count control only and is labelled so; the cut is verified with a
+deliberately leaky mask on the first sampled row, and the two-hop relay is named as an open route.
+
+**W6.** The capture and analysis scripts' hashes are bound in the record with the sample rule
+(25 per family by sorted key, every k-th, seed 20260910, a balanced family sample and not the corpus
+mixture), the selected keys, and every missingness count; the six tools' first tokens are asserted
+distinct; W-1's thresholds use the six-token conditional mass, with the full-vocabulary probability
+stored; every tail carries its unit count and its unresolved count. The residual archive is
+5.31 GB for the 4B and 11.25 GB for the 12B at two positions, correcting §0. The rendered prompt's
+byte digest and the token ids consumed are bound per cell at capture time; no field named
+`prompt_sha256` is reused across the two programmes.
+
+**S1, for the bridge order.** Matching the Gram spectrum does not match the signed overlap geometry
+(negating one atom preserves the spectrum and changes the nonnegative cone). Ruled: Stage B's null is
+a **seeded orthogonal rotation of the whole dictionary**, preserving the full signed Gram matrix and
+atom norms while randomising orientation relative to the residuals, with budget, solver, selection
+and stopping rule identical, and the hypothesis it tests stated; the claim that overcompleteness
+alone guarantees reconstruction is measured under that null, not assumed.
