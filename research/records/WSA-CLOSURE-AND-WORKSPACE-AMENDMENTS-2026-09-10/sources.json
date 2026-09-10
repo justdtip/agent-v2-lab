@@ -1,0 +1,122 @@
+{
+  "cutoff": {
+    "dcro": "7745327399c073e717c9f36f179a008d0c65df8a",
+    "integration": "a694c429087e57cb2b668233312ace8acb4039ce",
+    "order": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22"
+  },
+  "inputs": [
+    {
+      "bytes": 43147,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "sha256": "a4ee6648f19dc2510e00db3b3b467ae75c8ea9da4194b94fbd34386701daff5c",
+      "snapshot": "source/wsa-order.md"
+    },
+    {
+      "bytes": 49289,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "sha256": "0c4c3b84ad8b397c52dbed44baf09109dfb2d7a4894b287d6dcb2eeafb3b16b8",
+      "snapshot": "source/wsd-order.md"
+    },
+    {
+      "bytes": 15957,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "design_specifications/pending/CODEX-DATA-PRIMER-2026-09-10.md",
+      "sha256": "03ba5192920c71d1a7dcfb25f63a7f3fbcd5814148e59a8c534808db9d978d30",
+      "snapshot": "source/primer.md"
+    },
+    {
+      "bytes": 66533,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "research/records/METHOD-2026-09-08/README.md",
+      "sha256": "8e027518947e9d7b2f8c321e2c34011da6ca530658d402f0df935ea55f95baf4",
+      "snapshot": "source/method.md"
+    },
+    {
+      "bytes": 18444,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "design_specifications/pending/WORKSPACE-EXPERIMENTS-2026-09-10.md",
+      "sha256": "21e5690bc25aa83e93bb91fb4a36aa312bbedd149158d1cd0c4f7924319005e6",
+      "snapshot": "source/workspace-order.md"
+    },
+    {
+      "bytes": 44588,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "design_specifications/pending/SAE-J-BRIDGE-ORDER-2026-09-08.md",
+      "sha256": "715a9cd936d9bb632d2e5a4d0caf9773eda8518d4d3af9e68e369a3b4df69a03",
+      "snapshot": "source/bridge-order.md"
+    },
+    {
+      "bytes": 2163,
+      "commit": "c9c3fc8c2743ea9d1dff65139d18a3f5efc06f22",
+      "path": "research/records/WORKSPACE-EXPERIMENTS-2026-09-10/README.md",
+      "sha256": "ff0f00d865815367a87064b6174e315881a2eeb081df09537cded0ccd660f63c",
+      "snapshot": "source/workspace-record.md"
+    },
+    {
+      "bytes": 24842,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "src/local_llm_lab/pipeline/state_programme/capture.py",
+      "sha256": "a9a3e806d047433791ed07437751a3369e06962e0b2a3f8b143ca79e85409c1d",
+      "snapshot": "source/capture.py"
+    },
+    {
+      "bytes": 8456,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "scripts/state_capture.py",
+      "sha256": "1d7f34add8130c7db80bb5ccc008b3d05b659e0384a7387a4ab62bda0385f7a5",
+      "snapshot": "source/runner.py"
+    },
+    {
+      "bytes": 11754,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "src/local_llm_lab/hf_text.py",
+      "sha256": "806f869fc7062b5123d3668498e8cbc0b4eb71fcd6d4677b24714a2d3a452528",
+      "snapshot": "source/hf_text.py"
+    },
+    {
+      "bytes": 11628,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/repeat_gate.py",
+      "sha256": "22b2b847b3d4f9d9f22a0fb1303fd3c6e533033524cf06ce5b654090d1d8de73",
+      "snapshot": "source/repeat_gate.py"
+    },
+    {
+      "bytes": 24026,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "tests/test_state_capture.py",
+      "sha256": "01f1df16e01edce865c011cea566b6f2ad6a4edecac40487c9050b2928d0fb67",
+      "snapshot": "source/test_capture.py"
+    },
+    {
+      "bytes": 41023,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/PREREGISTRATION.md",
+      "sha256": "41c200ccfa333245dde6df2e550e0495ec510c0755c3f0488bb6b5707ef3797f",
+      "snapshot": "source/prereg.md"
+    },
+    {
+      "bytes": 2249235,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-set.jsonl",
+      "sha256": "8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e",
+      "snapshot": "source/capture-set.jsonl"
+    },
+    {
+      "bytes": 14648,
+      "commit": "a694c429087e57cb2b668233312ace8acb4039ce",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/prereg_inputs.py",
+      "sha256": "f97a4b1a4fff56b82ae52ae75d5be5adc90d8898274d40dba9598f635bca4854",
+      "snapshot": "source/prereg_inputs.py"
+    },
+    {
+      "bytes": 12890,
+      "commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "path": "research/records/WSA-COVERAGE-REVIEW-2026-09-10/check.json",
+      "sha256": "6f0016f16acbb28d4dbcb5a19f485c799e06735f33f4863abd0efd7a683549b9",
+      "snapshot": "source/previous-check.json"
+    }
+  ],
+  "review_basis": "source, pure metadata functions, analytic counterexamples; no capture results read"
+}

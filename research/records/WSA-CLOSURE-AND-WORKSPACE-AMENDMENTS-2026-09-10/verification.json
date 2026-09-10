@@ -1,0 +1,49 @@
+{
+  "basis": "fresh file-only verification",
+  "blocked_imports": [
+    "jlens",
+    "local_llm_lab",
+    "mlx",
+    "mlx_lm",
+    "numpy",
+    "torch",
+    "transformers"
+  ],
+  "check_sha256": "d68ecc939184e7c8c2000ef4203e80d95c95df05ededbc4ef7013f0a31df2389",
+  "forbidden_modules_imported": [],
+  "recorded_output_reproduced": true,
+  "relocated_output_reproduced": true,
+  "semantic_mutations_detected": [
+    "repeat ignores within-process failure",
+    "resume reverts to manifest membership",
+    "consumer passes config-only manifest"
+  ],
+  "source_corruptions_refused": [
+    "source/wsa-order.md",
+    "source/wsd-order.md",
+    "source/primer.md",
+    "source/method.md",
+    "source/workspace-order.md",
+    "source/bridge-order.md",
+    "source/workspace-record.md",
+    "source/capture.py",
+    "source/runner.py",
+    "source/hf_text.py",
+    "source/repeat_gate.py",
+    "source/test_capture.py",
+    "source/prereg.md",
+    "source/capture-set.jsonl",
+    "source/prereg_inputs.py",
+    "source/previous-check.json"
+  ],
+  "source_count": 16,
+  "unexecuted": [
+    "real model forwards, exact fits and boundary checks",
+    "native suites",
+    "real tokenizer and tensor persistence",
+    "workspace analyses and captures",
+    "new ladder raw archives",
+    "all device results"
+  ],
+  "verify_sha256": "e96bcfcfeffd5e7fd976acda6bb5a86ed1be85faa4fa80b918efd5bb0705bf79"
+}

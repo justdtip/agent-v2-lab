@@ -1,0 +1,371 @@
+{
+  "capture": {
+    "basis": "unchanged metadata functions, inert seam and tiny synthetic receipt writer",
+    "new_request_gap": {
+      "fresh_refused": true,
+      "resume_complete": true,
+      "resume_verified": 1
+    },
+    "positive_records_distinct_message_render_and_token_identities": true,
+    "real_tokenizer_forward_or_tensor_storage": "unexecuted",
+    "resume_controls": {
+      "altered_shard": {
+        "reason": "residuals-00000.pt does not hash to the f53d715cb538 the manifest records. Its bytes have changed since it was written.",
+        "refused": true
+      },
+      "checkpoint": {
+        "reason": "('fixture', 0) was captured under checkpoint 6146acda6a3c and this run is 7b90e0937888. Resuming would mix two checkpoints' residuals under one manifest. Capture into a new directory.",
+        "refused": true
+      },
+      "clean": {
+        "captured": 0,
+        "complete": true,
+        "refused": false,
+        "verified": 1
+      },
+      "messages": {
+        "reason": "('fixture', 0): the corpus row's message digest has moved since it was captured. The existing capture is of a row this run would not produce.",
+        "refused": true
+      },
+      "missing_shard": {
+        "reason": "('fixture', 0) names residuals-00000.pt, which is not on disk. The manifest describes a capture nobody has.",
+        "refused": true
+      },
+      "rendered_bytes": {
+        "reason": "('fixture', 0): the corpus row's rendered prompt has moved since it was captured, even though its message record has not. The existing capture is of different bytes.",
+        "refused": true
+      }
+    },
+    "seam_controls_refused": {
+      "anchor_width": "('fixture', 0): the seam ran at anchor_batch=64 and the capture contract accepts 1 only. The bf16 forward is not batch-invariant, so this is a residual of another function and is refused rather than relabelled.",
+      "bool_position": "token_index=True of type bool: the position must be recorded as the integer the seam resolved to, checked before any coercion. 'the last prompt token' is a rule for finding it, not a record of which one was found.",
+      "different_bytes_at_seam": "('fixture', 0): the seam tokenized bytes digesting to 000000000000 and the corpus row's rendered prompt digests to 8e41520cbc15. The capture would be of an input this row does not carry. `messages_sha256` cannot catch this: it is a digest of the semantic record and not of the model's input.",
+      "forward_width": "('fixture', 0): the seam ran at forward_batch=64 and the capture contract accepts 1 only. The bf16 forward is not batch-invariant, so this is a residual of another function and is refused rather than relabelled.",
+      "fractional_position": "token_index=1.9 of type float: the position must be recorded as the integer the seam resolved to, checked before any coercion. 'the last prompt token' is a rule for finding it, not a record of which one was found.",
+      "negative_position": "token_index=-1 of type int: the position must be recorded as the integer the seam resolved to, checked before any coercion. 'the last prompt token' is a rule for finding it, not a record of which one was found.",
+      "past_end": "token_index=3 is outside seq_len=3",
+      "promoted": "('fixture', 0): the seam ran the 'promoted-float32' arithmetic path and the contract accepts 'native' only.",
+      "residual_shape": "('fixture', 0): the residuals have shape (7, 3) and the seam declares (2, 4). A capture whose shape is not the shape it claims cannot be indexed by layer afterwards.",
+      "token_length": "('fixture', 0): the seam consumed 2 ids and reports a sequence length of 3."
+    },
+    "tokenizer_gap": {
+      "fresh_token_hashes_differ": true,
+      "new_tokenization_not_consulted": true,
+      "resume_complete": true,
+      "resume_verified": 1
+    }
+  },
+  "enumeration": {
+    "basis": "frozen decision metadata; no residual captures",
+    "decisions": 7629,
+    "file_sha256": "8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e",
+    "legacy_prompt_sha256_fields": 0,
+    "logical_sha256_unchanged": "1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a"
+  },
+  "gate_counts": {
+    "cannot_certify_claimed_target": 5,
+    "demonstrated_can_disagree": 4,
+    "unexecuted_or_unknown": 4
+  },
+  "gate_inventory_scope": "same 13 IDs traced from 3494a2c and 332bdc9; not programme total",
+  "gate_ledger": [
+    {
+      "evidence": "source/check_prereg.py; audit.prereg_metadata",
+      "gate": "check_prereg pinned-claim consistency",
+      "id": "G1",
+      "negative_control": "7,629 to 7,628 in the distinct-decisions cell",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "pinned documentary claims only; not statistical validity",
+      "status": "demonstrated_can_disagree"
+    },
+    {
+      "evidence": "source/tolerances.py; analytic five-fold example",
+      "gate": "required_n closed-form examples as a confidence guarantee",
+      "id": "G2",
+      "negative_control": "correlated cross-fit losses leave every formula check unchanged",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "can test evaluation of a formula; cannot establish its assumptions",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/carrier_ablation.py; audit.carrier_fixture",
+      "gate": "carrier removal acceptance including preserved action",
+      "id": "G3",
+      "negative_control": "20 notes in ten groups are reported fully ablated; no action identity check",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "producer script is a screening diagnostic, not the promised acceptance gate",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "check.json:capture.seam_controls_refused",
+      "gate": "capture writer actual width and precision",
+      "id": "G9",
+      "latest_receipt": "WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/check.json",
+      "negative_control": "widths, promoted tag, position, shape and prompt mismatch rejected before writer",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "previous_review_commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "previous_status": "cannot_certify_claimed_target",
+      "scope": "honest seam metadata; actual tensor/model arithmetic remains unexecuted",
+      "status": "demonstrated_can_disagree"
+    },
+    {
+      "evidence": "check.json:capture.tokenizer_gap",
+      "gate": "capture input identity as exact consumed tokens",
+      "id": "G10",
+      "latest_receipt": "WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/check.json",
+      "negative_control": "same prompt and weights, changed tokenizer ids: resume skips before preparation",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "previous_review_commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "previous_status": "cannot_certify_claimed_target",
+      "scope": "fresh token hashes are now recorded; current tokens are not verified on resume",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "check.json:capture",
+      "gate": "capture resume identity and shard integrity",
+      "id": "G11",
+      "latest_receipt": "WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/check.json",
+      "negative_control": "new decision digest differs: fresh refuses, resume says complete and verified",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "previous_review_commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "previous_status": "cannot_certify_claimed_target",
+      "scope": "original checkpoint/prompt/shard failures now all refuse; current request still unchecked on skip",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/workspace-order.md W-3",
+      "gate": "workspace local-mask structural gate",
+      "id": "G4",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "direct attention support only, never all causal paths",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md W-3",
+      "gate": "checkpoint layer_types versus is_sliding agreement",
+      "id": "G5",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "architecture identity; count is stated but not independently rechecked here",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md mass floor",
+      "gate": "workspace mass-floor classification",
+      "id": "G6",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "declared 1e-3 retained; tool IDs and boundaries still need fixtures",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md discipline",
+      "gate": "workspace lens/capture manifest binding and seal",
+      "id": "G7",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "no capture-reader scripts in the reviewed commits",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "check.json:mathematics.transfer_null",
+      "gate": "W-2 family permutation and fold exclusion",
+      "id": "G8",
+      "latest_receipt": "WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/check.json",
+      "negative_control": "family-constant labels unchanged by every training-family permutation",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "previous_review_commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "previous_status": "unexecuted_or_unknown",
+      "scope": "new transfer null remains degenerate on this structure; no programme data scored",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "check.json:repeat",
+      "gate": "fresh and saved-map repeat verdict",
+      "id": "G12",
+      "latest_receipt": "WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/check.json",
+      "negative_control": "either comparison independently nonzero at either declared layer rejects",
+      "previous_review_commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "previous_status": "cannot_certify_claimed_target",
+      "scope": "actual verdict expressions with synthetic metrics; no device repeat executed",
+      "status": "demonstrated_can_disagree"
+    },
+    {
+      "evidence": "check.json:identity",
+      "gate": "runner and repeat checkpoint identity",
+      "id": "G13",
+      "latest_receipt": "WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/check.json",
+      "negative_control": "change each config/weight digest separately; missing identity refused by both consumers",
+      "previous_review_commit": "332bdc96509e15375ad6eb3857974d61879ef1ab",
+      "previous_status": "cannot_certify_claimed_target",
+      "scope": "complete loader manifest is upstream contract; no checkpoint files read",
+      "status": "demonstrated_can_disagree"
+    }
+  ],
+  "identity": {
+    "actual_checkpoint_files_read": false,
+    "basis": "actual consumer calls plus unchanged identity helper, synthetic loader manifests",
+    "consumers": {
+      "repeat_gate.py": {
+        "file_manifest_retained_by_helper": true,
+        "individual_file_changes_detected": [
+          "config.json",
+          "model-00001.safetensors",
+          "model-00002.safetensors"
+        ],
+        "missing_identity_cases_refused": [
+          "none",
+          "empty",
+          "string",
+          "config_only",
+          "weights_only"
+        ],
+        "order_invariant": true
+      },
+      "runner.py": {
+        "file_manifest_retained_by_helper": true,
+        "individual_file_changes_detected": [
+          "config.json",
+          "model-00001.safetensors",
+          "model-00002.safetensors"
+        ],
+        "missing_identity_cases_refused": [
+          "none",
+          "empty",
+          "string",
+          "config_only",
+          "weights_only"
+        ],
+        "order_invariant": true
+      }
+    },
+    "loader_completeness_is_upstream_contract": true
+  },
+  "mathematics": {
+    "basis": "exact finite toy examples; no model data or fitted real probes",
+    "pca": {
+      "accuracy_from_PCA_Jh": 1.0,
+      "best_accuracy_from_PCA_h": 0.5,
+      "changed_information_retained_after_PCA": true,
+      "covariance_Jh": [
+        [
+          4.0,
+          0.0
+        ],
+        [
+          0.0,
+          9.0
+        ]
+      ],
+      "covariance_h": [
+        [
+          4.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0
+        ]
+      ],
+      "invertible_map": [
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "labels": [
+        0,
+        1,
+        0,
+        1
+      ],
+      "new_information_in_full_vector": false,
+      "points": [
+        [
+          -2,
+          -1
+        ],
+        [
+          -2,
+          1
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "rank": 1
+    },
+    "readout_not_derivative_gate": {
+      "exact_map_readout": 8.0,
+      "state": 2.0,
+      "true_derivative": 4.0,
+      "true_readout": 7.0,
+      "wrong_map": 3.5,
+      "wrong_map_readout": 7.0
+    },
+    "transfer_null": {
+      "heldout_inputs_need_not_change_for_this_counterexample": true,
+      "unchanged_training_label_assignments": 36,
+      "within_family_permutations_enumerated": 36
+    }
+  },
+  "repeat": {
+    "basis": "actual row-pass expression and overall verdict AST; synthetic comparison metrics",
+    "binding_fields_in_source": [
+      "row_index",
+      "token_ids_sha256",
+      "token_ids_length",
+      "positions",
+      "saved_map",
+      "saved_map_sha256",
+      "fresh_map_sha256",
+      "dtype",
+      "forward_batch",
+      "anchor_batch",
+      "tf32",
+      "float32_matmul_precision",
+      "attn_implementation",
+      "determinism",
+      "source_commit"
+    ],
+    "cases": {
+      "against_L1": false,
+      "against_L33": false,
+      "baseline": true,
+      "within_L1": false,
+      "within_L33": false
+    },
+    "failure_controls_refused": 4,
+    "real_repeat_boundary_and_binding_execution": "unexecuted"
+  },
+  "source_count": 16,
+  "unexecuted": [
+    "real model forwards, exact fits and boundary checks",
+    "native suites",
+    "real tokenizer and tensor persistence",
+    "workspace analyses and captures",
+    "new ladder raw archives",
+    "all device results"
+  ]
+}
