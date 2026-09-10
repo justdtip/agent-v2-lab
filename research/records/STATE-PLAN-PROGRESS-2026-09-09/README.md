@@ -27,6 +27,55 @@ checker. Verified against this seal: thirteen files matched, the baseline re-der
 passing. **No capture is read except through it.** The unknown-horizon control (§4.1) stays deferred
 with its veto disabled; its amendment is a separate reviewed item and the seal does not release it.
 
+## 0.1 E1 read, 2026-09-10, at the pre-registered headline
+
+Read through `require_seal` against seal `998b3bca…`, fitted on the train split's 5,515 decisions and
+evaluated on the 240 clean test episodes, which entered no fit. Rank 8 and the 0.5 depth are the
+headline **fixed in §5 before any capture**, so nothing below is a selected rank or a selected layer.
+`read_e1.py` produced `e1-readings.json`; `summarise_e1.py` produced `e1-summary.json` and re-fits
+nothing.
+
+| comparison | target | probe | over the permutation null | verdict at ε_main = 0.23 |
+|---|---|---:|---:|---|
+| 12B | step index | 0.789 | **0.646** | resolved |
+| 4B | step index | 0.732 | **0.611** | resolved |
+| 12B | steps remaining | 0.325 | 0.073 | not resolvable at this n |
+| 4B | steps remaining | 0.266 | 0.030 | not resolvable at this n |
+| 12B − 4B, paired by episode | step index | | 0.036 | not resolvable at this n |
+| 12B − 4B, paired by episode | steps remaining | | 0.043 | not resolvable at this n |
+
+**What this licenses.** At matched rank the residual at mid-depth carries the **step index** on both
+models, far above both nulls and above the resolution this corpus supports. That is a statement about
+encoding, not about richness, and it is the only one of the four that clears ε.
+
+**What it does not license.** Nothing about **steps remaining**, on either model: 0.073 and 0.030 are
+well inside the resolution, so the corpus cannot tell them from zero. And nothing about the
+**difference between the models**: 0.036 and 0.043 are likewise inside it. Neither is evidence of no
+difference. The document's opening says E1 supports a gap above about 23 accuracy points and nothing
+smaller, and these are the readings that opening was written for.
+
+**The full profile, over the permutation null, at the 0.5 depth.** §5 requires it, and it carries one
+figure that must not be read as a finding.
+
+| model | target | r=1 | r=2 | r=4 | r=8 | r=16 | r=32 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 12B | step index | 0.419 | 0.215 | 0.544 | **0.646** | 0.670 | 0.813 |
+| 4B | step index | 0.434 | 0.223 | 0.546 | **0.611** | 0.649 | 0.738 |
+| 12B | steps remaining | −0.001 | 0.116 | 0.093 | **0.073** | 0.171 | 0.132 |
+| 4B | steps remaining | −0.017 | 0.123 | 0.044 | **0.030** | 0.128 | 0.270 |
+
+**The figure that must not be read as a finding is the 4B's 0.270 at r = 32.** It exceeds ε_main
+while the headline at r = 8 does not, and reporting it as "steps remaining is decodable on the 4B"
+would be choosing the rank after seeing the answer, which is the thing §5's fixed headline exists to
+prevent. It is reported because the profile is required and because hiding it would be worse. If it
+is to become a claim it needs its own pre-registration.
+
+**One anomaly, unexplained and flagged rather than smoothed.** Step index falls from r = 1 to r = 2 on
+both models (0.419 → 0.215 and 0.434 → 0.223) before climbing. The components are nested and greedy,
+so a second component cannot worsen the training fit; it can move held-out predictions across
+rounding boundaries, since the score is exact match on an integer. That is a hypothesis and not a
+measurement, and it is on the open list rather than in the text as an explanation.
+
 ## 1. The hypothesis, stated as one
 
 The Director's, in his terms: **the 12B carries a richer representation of the task than the 4B,

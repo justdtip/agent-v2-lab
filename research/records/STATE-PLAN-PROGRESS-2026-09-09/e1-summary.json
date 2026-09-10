@@ -1,0 +1,77 @@
+{
+  "epsilon_main": 0.23,
+  "seed": 20260910,
+  "seal_sha256": "998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521",
+  "findings": [
+    {
+      "comparison": "probe over permutation null",
+      "model": "gemma3-12b-cuda-bf16",
+      "target": "step_index",
+      "observed": 0.646113159716101,
+      "bootstrap": [
+        0.6205994960241282,
+        0.6709075502044252
+      ],
+      "epsilon": 0.23,
+      "verdict": "resolved"
+    },
+    {
+      "comparison": "probe over permutation null",
+      "model": "gemma3-12b-cuda-bf16",
+      "target": "steps_remaining",
+      "observed": 0.07272050117638354,
+      "bootstrap": [
+        0.03808510800882124,
+        0.10682690943996088
+      ],
+      "epsilon": 0.23,
+      "verdict": "not resolvable at this n"
+    },
+    {
+      "comparison": "probe over permutation null",
+      "model": "gemma3-4b-cuda-bf16",
+      "target": "step_index",
+      "observed": 0.6105590657980363,
+      "bootstrap": [
+        0.5798714855746104,
+        0.6409047017116869
+      ],
+      "epsilon": 0.23,
+      "verdict": "resolved"
+    },
+    {
+      "comparison": "probe over permutation null",
+      "model": "gemma3-4b-cuda-bf16",
+      "target": "steps_remaining",
+      "observed": 0.02989707324266148,
+      "bootstrap": [
+        0.0045249039155289125,
+        0.055983721071956344
+      ],
+      "epsilon": 0.23,
+      "verdict": "not resolvable at this n"
+    },
+    {
+      "comparison": "12B minus 4B, paired by episode",
+      "target": "step_index",
+      "observed": 0.035554093918064515,
+      "bootstrap": [
+        0.011203254704173826,
+        0.05992792385990913
+      ],
+      "epsilon": 0.23,
+      "verdict": "not resolvable at this n"
+    },
+    {
+      "comparison": "12B minus 4B, paired by episode",
+      "target": "steps_remaining",
+      "observed": 0.04282342793372206,
+      "bootstrap": [
+        0.0013294072485248928,
+        0.08314160189619743
+      ],
+      "epsilon": 0.23,
+      "verdict": "not resolvable at this n"
+    }
+  ]
+}
