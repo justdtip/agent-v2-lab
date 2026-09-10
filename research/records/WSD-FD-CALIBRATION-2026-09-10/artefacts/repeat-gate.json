@@ -1,0 +1,122 @@
+{
+  "by_layer": {
+    "1": {
+      "against_saved_map": {
+        "bitwise_identical": true,
+        "max_abs_difference": 0.0,
+        "relative_frobenius_difference": 0.0
+      },
+      "basis": "measured-here",
+      "binding": {
+        "anchor_batch": 1,
+        "attn_implementation": "eager",
+        "checkpoint_files_sha256": {
+          "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+          "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+          "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+        },
+        "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+        "config_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+        "determinism": "pinned",
+        "dtype": "float32",
+        "float32_matmul_precision": "highest",
+        "forward_batch": 1,
+        "fresh_map_sha256": "05f656871be5527fc044256d6a569b808bfeb926df1e8845d86d4be5dc29904d",
+        "positions": [
+          8,
+          127
+        ],
+        "row_index": 39,
+        "saved_map": "/workspace/wsd/out/golden-f32d/exact-maps-L1.npz",
+        "saved_map_sha256": "9a5241feb5b47e661eea28e27907349343d8cbb66bf7d83010b3b463ed05042d",
+        "source_commit": "339057222e0ec5e407dfff8df8182a648f2abe97",
+        "tf32": false,
+        "token_ids_length": 128,
+        "token_ids_sha256": "a9c0d7bef03cea1854ee94b6511b3204cd59b3b2708e50ebb7ee73cda29d94c4",
+        "weight_files": 2
+      },
+      "boundary": {
+        "basis": "measured-here",
+        "bitwise_identical": true,
+        "interventions": 1,
+        "max_abs_difference": 0.0,
+        "precision": "float32",
+        "width": 1
+      },
+      "passes": true,
+      "seconds": 163.05,
+      "within_process": {
+        "bitwise_identical": true,
+        "max_abs_difference": 0.0,
+        "relative_frobenius_difference": 0.0
+      }
+    },
+    "33": {
+      "against_saved_map": {
+        "bitwise_identical": true,
+        "max_abs_difference": 0.0,
+        "relative_frobenius_difference": 0.0
+      },
+      "basis": "measured-here",
+      "binding": {
+        "anchor_batch": 1,
+        "attn_implementation": "eager",
+        "checkpoint_files_sha256": {
+          "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+          "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+          "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+        },
+        "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+        "config_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+        "determinism": "pinned",
+        "dtype": "float32",
+        "float32_matmul_precision": "highest",
+        "forward_batch": 1,
+        "fresh_map_sha256": "065ce66c8559dc55231cfe08c18397efa03331ed667f546b7a8f2079587e40ea",
+        "positions": [
+          8,
+          127
+        ],
+        "row_index": 39,
+        "saved_map": "/workspace/wsd/out/golden-f32d/exact-maps-L33.npz",
+        "saved_map_sha256": "0aa18f85563844d64fa5d6ae018ca5c83dd3e61d0cb203cccb35c40fd3cbbf92",
+        "source_commit": "339057222e0ec5e407dfff8df8182a648f2abe97",
+        "tf32": false,
+        "token_ids_length": 128,
+        "token_ids_sha256": "a9c0d7bef03cea1854ee94b6511b3204cd59b3b2708e50ebb7ee73cda29d94c4",
+        "weight_files": 2
+      },
+      "boundary": {
+        "basis": "measured-here",
+        "bitwise_identical": true,
+        "interventions": 1,
+        "max_abs_difference": 0.0,
+        "precision": "float32",
+        "width": 1
+      },
+      "passes": true,
+      "seconds": 6.15,
+      "within_process": {
+        "bitwise_identical": true,
+        "max_abs_difference": 0.0,
+        "relative_frobenius_difference": 0.0
+      }
+    }
+  },
+  "coverage": {
+    "note": "two layers of the model, one row, the two positions the maps were fitted over; the claim is about those maps and not about the estimator in general",
+    "positions_per_row": 2,
+    "repo_layers_checked": [
+      1,
+      33
+    ],
+    "repo_layers_in_model": 34,
+    "rows": 1
+  },
+  "executed": true,
+  "float32_boundary_holds": true,
+  "gate": "exact_reproduces_itself",
+  "gated_on": "both comparisons at every layer: two fits in one process, and a fresh fit against the saved map the report cites. Either alone leaves a way for the gate to pass while the report shows a disagreement.",
+  "note": "the first run passed reproduction=reference and so never executed this gate; both comparisons here are between independently produced maps",
+  "passes": true
+}

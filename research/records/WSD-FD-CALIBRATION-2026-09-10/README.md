@@ -447,6 +447,19 @@ small against the absolute error. The ladder's worst-looking cell, `coordinate:2
 1,462% disagreement, and reading it as the latter would be the same mistake as a relative error
 against a reference that moved.
 
+**Gate 1 is now executed, and it passes bitwise.** Run 2026-09-10 at 07:05Z, `repeat-gate.json`:
+the float32 no-op boundary holds at both layers (bitwise identical, max difference 0.0), and both
+repeat comparisons are **exactly 0.0 and bitwise identical** — two fits in one process, and a fresh
+fit in a fresh process against the saved map the report cites. So the exact float32 estimator
+reproduces itself across a process boundary, a fresh load and a fresh allocator, at zero rather than
+at something small. Each row is bound to what it is a row of: row 39, 128 ids, positions 8 and 127,
+checkpoint `34f2f9c7…`, source commit `3390572`. Coverage: two layers of thirty-four, one row, two
+positions — the claim is about these maps and not about the estimator in general.
+
+*What follows was written when the gate had not been executed and is kept because the sequence
+matters: the gate was reported as passing before it had run, and a later reader should see that it
+was caught rather than only that it now passes.*
+
 **One gate holds and one was never executed, and the record said both held.** The transposed control
 separates by 292× at layer 1 and 348× at layer 33, so the finding is not a number any wrong lens
 would also produce; that gate is real. The repeat gate is **not**: `golden_float32.py` passed
@@ -576,6 +589,14 @@ which cannot answer a question about bf16: in float32 the two anchors barely dif
 displacement of 4.6e-7 — so both terms vanish by construction and the run would have "shown" width
 stability that its own design guaranteed. The native run was added for that reason, and the script
 now takes the precision as an argument with the trap named in its help text.
+
+### 9.3 The unreduced archive, and the re-run that proves the table
+
+`ladder.py` re-run at width 1, 07:07Z, 22 seconds: **648 of 648 cells reproduce `d_h` and `a`
+exactly**, so §6's table is not merely repeatable in principle. The archive it wrote is the one
+Codex's R2 asked for — plus, minus and zero per selected target position, and the requested and
+realized input vectors, all before any summation — in **36 units, 10.9 MiB, each hashed and named in
+`responses-index.json`**, written per completed unit rather than accumulated and flushed at the end.
 
 ## 11. What this record concludes, and what is queued
 
