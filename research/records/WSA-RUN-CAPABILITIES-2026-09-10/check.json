@@ -1,0 +1,136 @@
+{
+  "scope": "Python slice semantics and producer AST, not torch or a model run",
+  "source_hashes_verified": 8,
+  "cases": [
+    {
+      "prompt_tokens": 2,
+      "tool_index": 0,
+      "sequence_length": 3,
+      "P_act": 1,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 2,
+      "tool_index": 1,
+      "sequence_length": 4,
+      "P_act": 2,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 2,
+      "tool_index": 5,
+      "sequence_length": 8,
+      "P_act": 6,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 2,
+      "tool_index": 30,
+      "sequence_length": 33,
+      "P_act": 31,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 47,
+      "tool_index": 0,
+      "sequence_length": 48,
+      "P_act": 46,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 47,
+      "tool_index": 1,
+      "sequence_length": 49,
+      "P_act": 47,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 47,
+      "tool_index": 5,
+      "sequence_length": 53,
+      "P_act": 51,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 47,
+      "tool_index": 30,
+      "sequence_length": 78,
+      "P_act": 76,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 100,
+      "tool_index": 0,
+      "sequence_length": 101,
+      "P_act": 99,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 100,
+      "tool_index": 1,
+      "sequence_length": 102,
+      "P_act": 100,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 100,
+      "tool_index": 5,
+      "sequence_length": 106,
+      "P_act": 104,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 100,
+      "tool_index": 30,
+      "sequence_length": 131,
+      "P_act": 129,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 1500,
+      "tool_index": 0,
+      "sequence_length": 1501,
+      "P_act": 1499,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 1500,
+      "tool_index": 1,
+      "sequence_length": 1502,
+      "P_act": 1500,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 1500,
+      "tool_index": 5,
+      "sequence_length": 1506,
+      "P_act": 1504,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    },
+    {
+      "prompt_tokens": 1500,
+      "tool_index": 30,
+      "sequence_length": 1531,
+      "P_act": 1529,
+      "current_note_masked_edges": 0,
+      "combined_equals_carrier": true
+    }
+  ],
+  "negative_control": "nonempty note boundary creates blocked edges at P_act; passes",
+  "conclusion": "current_note is empty; combined arm equals all_carriers for the shipped tagging rule"
+}

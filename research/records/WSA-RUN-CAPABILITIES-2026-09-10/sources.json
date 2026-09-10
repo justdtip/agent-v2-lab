@@ -1,0 +1,48 @@
+{
+  "read_at_utc": "2026-09-10T01:43:33.499506+00:00",
+  "scope": "Source files currently present on disk, not proof of which bytes running processes loaded; no result arrays or models read.",
+  "files": [
+    {
+      "file": "source/fit_lens_f32.py",
+      "sha256": "67fdf5559a1a4e4818258dacd1291daba2d0d66f5452f59d22646cae7e11400b",
+      "origin": "rtx6000:/workspace/chief/fit_lens_f32.py"
+    },
+    {
+      "file": "source/workspace_capture.py",
+      "sha256": "958ccdcf0bae1611b920d847da76777c29c3485f930b0a2989bfa8d1f19f649f",
+      "origin": "rtx6000:/workspace/chief/workspace_capture.py"
+    },
+    {
+      "file": "source/workspace_w3b.py",
+      "sha256": "f70eb66ad5ed56997aed8ffcfc4576ded2ac6772a68b279ef6f1c26e6a62edcc",
+      "origin": "rtx6000:/workspace/chief/workspace_w3b.py"
+    },
+    {
+      "file": "source/merge_chunks.py",
+      "sha256": "5c39d626e129f77dfbfe02b0d0ae18cdebf3a79a9643a91a669da83de096026e",
+      "origin": "rtx6000:/workspace/chief/merge_chunks.py"
+    },
+    {
+      "file": "source/chief_4b_passes.sh",
+      "sha256": "0ef283871e025643412a8091edbbda930e5229ba97049929e4926e21b1439ee4",
+      "origin": "rtx6000:/workspace/chief/chief_4b_passes.sh"
+    },
+    {
+      "file": "source/chief_12b_passes.sh",
+      "sha256": "c97b46a212bbc1962b638d2007e921b32ee9ab7f0d36f2cfc5af34a9133457fb",
+      "origin": "rtx6000:/workspace/chief/chief_12b_passes.sh"
+    },
+    {
+      "file": "source/order.md",
+      "sha256": "2b9228589187e4fabca8273eb33988926244cc87c3a424872377fe41b4b0cda1",
+      "commit": "612e08ee42352d27812d0db7b452c2efa7867b64",
+      "path": "design_specifications/pending/WORKSPACE-EXPERIMENTS-2026-09-10.md"
+    },
+    {
+      "file": "source/upstream-adapter.py",
+      "sha256": "337d13c5b4b130b43f7c17d4bf57fcfcd65eda6e18caadc7d499f37ca7c1d30d",
+      "commit": "3f732b7d041b32d86da01290f3cfc359f63dd5f1",
+      "path": "src/local_llm_lab/pipeline/lens_fitting/upstream.py"
+    }
+  ]
+}
