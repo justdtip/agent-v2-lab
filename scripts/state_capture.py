@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -162,6 +163,18 @@ def main(argv: list[str] | None = None) -> int:
             json.loads(line) for line in path.read_text().splitlines() if line.strip()
         )
     corpus = capture.rows_by_decision(corpus_rows)
+    # The allocator's configuration is recorded because the run was launched under it. It changes
+    # segment strategy and not kernels, so it is not expected to change any number here — but "not
+    # expected to" is why it belongs in the manifest rather than in a message: if a later pass
+    # disagrees with this one, the first question is what differed, and an environment variable
+    # nobody wrote down is the answer nobody finds.
+    emit("allocator", pytorch_cuda_alloc_conf=os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
+         cublas_workspace_config=os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
+         cwd=str(Path.cwd()))
+    emit("loaded_peak", peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3),
+         allocated_gib=round(torch.cuda.memory_allocated() / 2**30, 3),
+         free_gib=round(torch.cuda.mem_get_info()[0] / 2**30, 3),
+         note="weights only; the first shard's peak adds one forward at the longest row so far")
     emit("inputs", decisions=len(decisions), capture_set_size=capture_set_size,
          limit=args.limit, whole_set=len(decisions) == capture_set_size,
          capture_set=str(args.capture_set), corpus_rows=len(corpus_rows), keyed=len(corpus))
@@ -170,9 +183,26 @@ def main(argv: list[str] | None = None) -> int:
         directory=args.out, entry=args.entry, identity=identity,
         decoding=args.decoding, shard_size=args.shard_size,
     )
+    (args.out / "run.json").write_text(json.dumps({
+        "entry": args.entry,
+        "checkpoint": args.checkpoint,
+        **identity,
+        "capture_set": str(args.capture_set),
+        "capture_set_size": capture_set_size,
+        "limit": args.limit,
+        "corpus": str(args.corpus),
+        "decoding": args.decoding,
+        "shard_size": args.shard_size,
+        "device": device.describe(),
+        "pytorch_cuda_alloc_conf": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
+        "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
+        "cwd": str(Path.cwd()),
+        "bos_token_id": bos,
+        "basis": "measured-here",
+    }, indent=2, sort_keys=True, default=str) + "\n")
     summary = capture.capture_decisions(
         decisions=decisions, corpus=corpus, forward=forward, prepare=prepare, target=target,
-        progress=emit_shard(emit),
+        progress=emit_shard(emit, torch),
     )
     emit("done", **summary, capture_set_size=capture_set_size,
          whole_set=summary["requested"] == capture_set_size,
@@ -180,9 +210,17 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def emit_shard(emit):
+def emit_shard(emit, torch):
+    """Relay the writer's progress, with the device's own peak beside it.
+
+    The peak belongs on the **first** shard and not only at the end. A capture pass sharing the card
+    has to be confirmed to fit before it has run, and a memory figure that arrives with the summary
+    arrives after the decision it informs. `max_memory_allocated` is a high-water mark, so the first
+    shard's value already covers the model load and one full forward.
+    """
     def progress(row: dict) -> None:
-        emit(row.pop("event", "shard"), **row)
+        emit(row.pop("event", "shard"),
+             peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3), **row)
     return progress
 
 
