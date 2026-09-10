@@ -4,10 +4,13 @@ PLS2, the classical NIPALS construction, which is E1's PLS1 when the target has 
 target here is the successor residual, so the map takes a residual to a residual and can be applied
 `m` times for a transition of cost `m`.
 
-No random number enters the fit. The leading direction of each component is found by power iteration
-on the cross-product with a deterministic start, and the cross-product is **updated** by the rank-one
-deflation terms rather than recomputed, which is what makes thirty-two components affordable at this
-width.
+No random number enters the fit, and no start vector: the leading direction of each component is the
+leading left singular vector of the current cross-product, from a full singular value decomposition
+(LAPACK, deterministic), so it is the leading one by construction rather than a fixed point of an
+iteration that might have started in the wrong place (Codex, WSA-TRANSPORT-AMENDMENT-REVIEW F1: a
+power iteration from `Xᵀ(Y·1)` could divide zero by zero, or converge to a non-leading direction and
+certify it). The cross-product is **updated** by the rank-one deflation terms rather than recomputed.
+A non-finite cross-product or component is a refusal, never a silent NaN.
 
 The input standardisation is internal and the centring is added back, so the rule's output is in the
 untransformed residual space and no normalisation of the rule enters the metric — the clause §4.2
@@ -20,8 +23,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-POWER_ITERATIONS = 200
-POWER_TOLERANCE = 1e-10
 DEFLATION_FLOOR = 1e-12
 
 
@@ -34,8 +35,8 @@ class Transport:
     target_mean: np.ndarray
     weights: np.ndarray  # (features, rank)
     loadings: np.ndarray  # (features, rank)
-    target_loadings: np.ndarray  # (features, rank)
-    iterations: tuple[int, ...]
+    target_loadings: np.ndarray  # (target features, rank)
+    leading_singular_values: tuple[float, ...]  # of the deflated cross-product, per component
 
     @property
     def max_rank(self) -> int:
@@ -55,22 +56,24 @@ class Transport:
         out = np.atleast_2d(x).astype(np.float64)
         for _ in range(times):
             out = self.target_mean + ((out - self.mean) / self.scale) @ beta
-        return out.reshape(np.shape(x))
+        return out.reshape(np.shape(x)[:-1] + (out.shape[-1],))  # the target width, on x's leading shape
 
 
-def _leading_direction(cross: np.ndarray, start: np.ndarray) -> tuple[np.ndarray, int]:
-    """The leading left singular vector of XᵀY, by power iteration on (XᵀY)(XᵀY)ᵀ. Deterministic."""
-    v = start / np.linalg.norm(start)
-    for iteration in range(1, POWER_ITERATIONS + 1):
-        nxt = cross @ (cross.T @ v)
-        norm = np.linalg.norm(nxt)
-        if norm < DEFLATION_FLOOR:
-            return v, iteration
-        nxt /= norm
-        if np.linalg.norm(nxt - v) < POWER_TOLERANCE:
-            return nxt, iteration
-        v = nxt
-    return v, POWER_ITERATIONS
+def _leading_direction(cross: np.ndarray) -> tuple[np.ndarray, float]:
+    """The leading left singular vector of the cross-product and its singular value, by a full SVD.
+
+    Deterministic (LAPACK on the same bytes), no start vector, and the leading one by construction.
+    The sign is fixed so that the entry of largest magnitude is positive, which makes two fits of
+    one input agree bit for bit. A non-finite cross-product is refused.
+    """
+    if not np.isfinite(cross).all():
+        raise ValueError("the cross-product is not finite; the fit refuses rather than carry NaNs")
+    u, sigma, _ = np.linalg.svd(cross, full_matrices=False)
+    w = u[:, 0]
+    pivot = int(np.argmax(np.abs(w)))
+    if w[pivot] < 0:
+        w = -w
+    return w, float(sigma[0])
 
 
 def fit(sources: np.ndarray, targets: np.ndarray, max_rank: int) -> Transport:
@@ -87,37 +90,32 @@ def fit(sources: np.ndarray, targets: np.ndarray, max_rank: int) -> Transport:
     features = x.shape[1]
     weights = np.zeros((features, max_rank))
     loadings = np.zeros((features, max_rank))
-    target_loadings = np.zeros((features, max_rank))
-    iterations: list[int] = []
+    target_loadings = np.zeros((y.shape[1], max_rank))  # the target width, which need not equal the source width
+    leading: list[float] = []
 
-    ones = np.ones(y.shape[1])
     for component in range(max_rank):
-        if np.linalg.norm(cross) < DEFLATION_FLOOR:
-            break
-        # The start is recomputed from the CURRENT cross-product each component. Restarting from
-        # the previous component's direction stalls: after deflation that direction lies in the
-        # part just removed, so the iteration can return a vector with no projection on the data.
-        start = cross @ ones
-        if np.linalg.norm(start) < DEFLATION_FLOOR:
-            start = cross[:, 0].copy()
-        w, used = _leading_direction(cross, start)
+        w, sigma = _leading_direction(cross)
+        if sigma < DEFLATION_FLOOR:
+            break  # nothing left to explain: the rank is honestly short
         t = x @ w
         tt = float(t @ t)
         if tt < DEFLATION_FLOOR:
             break
         p = (x.T @ t) / tt
         c = (y.T @ t) / tt
+        if not (np.isfinite(p).all() and np.isfinite(c).all()):
+            raise ValueError(f"component {component + 1} is not finite; the fit refuses")
         weights[:, component], loadings[:, component], target_loadings[:, component] = w, p, c
-        iterations.append(used)
+        leading.append(sigma)
         # Deflate X and Y, and carry the same deflation into the cross-product.
         xt = x.T @ t
         ty = y.T @ t
         cross = cross - np.outer(xt, c) - np.outer(p, ty) + tt * np.outer(p, c)
         x -= np.outer(t, p)
         y -= np.outer(t, c)
-    kept = len(iterations)
+    kept = len(leading)
     return Transport(mean, scale, target_mean, weights[:, :kept], loadings[:, :kept],
-                     target_loadings[:, :kept], tuple(iterations))
+                     target_loadings[:, :kept], tuple(leading))
 
 
 def nearer_the_successor(transported: np.ndarray, source: np.ndarray, successor: np.ndarray) -> np.ndarray:

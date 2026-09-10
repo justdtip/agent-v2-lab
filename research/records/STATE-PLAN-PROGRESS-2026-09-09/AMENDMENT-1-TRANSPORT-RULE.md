@@ -1,7 +1,8 @@
 # Amendment 1 to the plan-progress pre-registration: E2's transport rule
 
-**D-CRO, 2026-09-10, on the Chief's rulings of 13:50Z, 14:25Z and 15:10Z. Draft, revision 4, for
-Codex's file-only review. §10 records the detour this draft took and why it was wrong.**
+**D-CRO, 2026-09-10, on the Chief's rulings of 13:50Z, 14:25Z and 15:10Z. Draft, revision 5 (the
+Chief, applying Codex's four findings of review 657a08a; §10 records them beside the detour). For
+Codex's file-only re-check. §10 records the detour this draft took and why it was wrong.**
 Amends seal `998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521`, baseline `acc130a`.
 Nothing in it has been run. No corrective transition is scored under it until it is sealed.
 
@@ -44,15 +45,20 @@ a reader should be able to see what was rejected and why.
 2. `Y` is the matrix of **successor residuals**, **centred only**, by the fitting folds' mean. It is
    not scaled per coordinate.
 3. For components `a = 1 … 32`, greedily and with deflation:
-   - `w_a` is the leading left singular vector of `Xᵀ Y`, obtained by power iteration on
-     `v ← Xᵀ(Y(Yᵀ(X v)))` with `v` renormalised each step, started from `v₀ = Xᵀ(Y·1)` normalised —
-     and from the first column of `Xᵀ Y` if that vector is zero — stopped when the update moves `v`
-     by less than 1e-10 or after 200 iterations, whichever comes first. The iterations reached are
-     recorded per component. No random number enters the fit.
+   - `w_a` is the leading left singular vector of the current `Xᵀ Y`, taken from a **full singular
+     value decomposition** of that matrix (`numpy.linalg.svd`, LAPACK; deterministic on the same
+     bytes), its sign fixed so that its entry of largest magnitude is positive. It is the leading
+     direction **by construction**, not the fixed point of an iteration: the earlier power-iteration
+     form could divide zero by zero when its start vector `Xᵀ(Y·1)` and its fallback were both zero,
+     and could converge to a non-leading direction and certify it (§10, Codex F1). The leading
+     singular value `σ_a` of the deflated cross-product is recorded per component. No random number
+     and no start vector enters the fit; a non-finite cross-product or component is a refusal.
    - `t_a = X w_a`; `p_a = Xᵀ t_a / (t_aᵀ t_a)`; `c_a = Yᵀ t_a / (t_aᵀ t_a)`.
    - Deflate: `X ← X − t_a p_aᵀ`, `Y ← Y − t_a c_aᵀ`.
-   - Stop early if `‖Xᵀ Y‖` or `t_aᵀ t_a` falls below 1e-12; the rank is then honestly short and the
-     ladder reports the ranks that exist rather than substituting.
+   - Stop early if `σ_a` or `t_aᵀ t_a` falls below 1e-12; the rank is then honestly short and the
+     ladder reports the ranks that exist rather than substituting. Tests pin that a 32-component fit
+     on a fixture of full rank yields 32, that the full-rank rule is the least-squares map, and that
+     each of Codex's three witnesses (§10) is fitted as the mathematics says.
 4. At rank `r`, `B_r = W_r (P_rᵀ W_r)^{-1} C_rᵀ`, with `W_r`, `P_r`, `C_r` the first `r` columns.
 
 **Applying.** `T_r(x) = ȳ + ((x − x̄) / s) B_r`, where `x̄`, `s` are the fitting folds' source
@@ -98,7 +104,10 @@ transitions only, the rule form must be shown capable of passing.**
 > fails, no corrective stratum is scored, the amendment is revised, and the record says so.
 
 **Measured, out of fold, on the 4,122 ordinary train transitions at the headline depth**, with the
-fitter's restart defect fixed (§10):
+fitter's restart defect fixed (§10). **Provisional**: these figures were produced by the
+power-iteration fitter that §10 records as defective in two further ways (Codex F1). They are
+re-measured with the SVD fitter of §2 before the seal and replaced here; the gate is read on the
+re-measured figures, and the record says whether they moved.
 
 | rank | 1 | 2 | 4 | 8 | 16 | 32 |
 |---|---:|---:|---:|---:|---:|---:|
@@ -108,10 +117,17 @@ fitter's restart defect fixed (§10):
 The gate passes on both models at the headline rank.
 
 **The headline rank's fraction is also a mandatory capability report.** E2's hit rate at r = 8 is
-printed beside **0.769** and **0.751** unconditionally, at every depth and in the record, so a low
-corrective hit rate is read against a rule that beats its own source about three times in four on
-ordinary transitions at that rank. That is a **ceiling on what the rank can show, not a null**, and
-conflating the two would be the same error in the other direction.
+printed beside the table's headline-rank figures unconditionally, at every depth and in the record,
+so a low corrective hit rate is read against a rule that beats its own source about three times in
+four on ordinary transitions at that rank. **What the report bounds, stated exactly (Codex F4).** A
+capability fraction bounds retrieval only on the rows it was measured on, at their depth and rank,
+with their transition cost and their averaging weights: a transported point that is not nearer the
+successor than the source is not the successor's nearest candidate, so on the **same** rows, depth,
+rank, cost and weights, the hit rate cannot exceed the capability fraction. On any other cohort —
+the corrective strata, another depth, a cost-`m` transition whose `m` applications compound, or a
+different weighting of episodes — it is a **capability reference**, not a ceiling, and the record
+labels it so. It is never a null; conflating a reference with a null would be the same error in the
+other direction.
 
 **This clause was read at the top of the ladder for a time, and that reading is superseded.** It was
 reclassified on 2026-09-10 because a rule form since withdrawn failed it at the headline rank by seven
@@ -149,8 +165,12 @@ After this amendment is sealed: the gate; then, if it passes, the four strata of
 train, all 553 corrective, and the contiguous and across-a-gap subgroups — scored **once**, at every
 depth, with the headline at 0.5 and r = 8, each against its own tolerance from §7's operative table,
 each contrast paired per episode against its chance level, with the transport distance reported
-descriptively as §4.2 requires, and with §5's capability report — 0.586 and 0.493 at the headline
-rank — printed beside every headline figure.
+descriptively as §4.2 requires, and with §5's **current** capability report — the headline-rank row
+of §5's table, which §5 alone owns; no figure from it is repeated in this section, so a
+re-measurement cannot leave a stale copy behind (Codex F3: revision 4 still carried the withdrawn
+form's headline figures here) — printed beside every headline figure, as a ceiling where §5's matching
+conditions hold and as a capability reference otherwise. `check_amendment.py` fails the document if
+a §5 table figure recurs outside §5 and §10.
 
 ## 8. Why the 553 corrective transitions are not spent, verified rather than asserted
 
@@ -215,3 +235,35 @@ written after E1 was read. E1's fitter has a scalar target, so its direction is 
 with no iteration and no restart; `read_e1.py` never imports the defective module; and E1 re-run on
 the fixed tree reproduces its readings **byte for byte**, digest
 `ba841d7c0601b6326c621c68701852140e92e931ced570cb2ca2dd03d36f303f`. E1 stands as recorded.
+
+**Codex's review of revision 4 (657a08a, WSA-TRANSPORT-AMENDMENT-REVIEW-2026-09-10), applied by the
+Chief on 2026-09-10 as revision 5.** Four findings, all correct, all applied:
+
+- **F1, the fitter could produce NaNs or certify a weaker direction.** The power iteration started
+  from `Xᵀ(Y·1)`, falling back to the first column of `XᵀY`. Codex's witness `XᵀY =
+  [[0,1,−1],[0,−1,1],[0,0,0]]` zeroes both, so the old fitter divided zero by zero and kept NaN
+  weights while reporting rank 1. Its second witness `XᵀY = [[8,−8,0],[0,0,4],[0,0,0]]` has leading
+  left singular vector `(1,0,0)` (singular value √128), but the start `(0,4,0)` is a fixed point of
+  the iteration with singular value 4, alignment with the leading direction exactly 0, and the old
+  fitter certified it. The leading direction is now the leading left singular vector from a full
+  SVD, sign-fixed, with finite guards; §2 says so.
+- **F2, the nine tests also passed on the defective fitter.** Codex's discriminating fixture —
+  four orthogonal source rows, successors `(2x₀+x₁, 2x₀−x₁, 0)`, rank 2 requested — gets one
+  component from the restart-defective fitter and two from the fixed one. That fixture, the two F1
+  witnesses (finite weights matching the SVD reference; alignment 1 with `(1,0,0)`), a nested
+  32-component ladder, the full-rank-equals-least-squares known answer, a narrower-than-source
+  target, and refusal of a non-finite input are now tests. Run against the fitter at b0cd61c, seven
+  of the fifteen fail; against the current fitter all fifteen pass. Found on the way: the old fitter
+  reached only 11 of 12 components on the full-rank fixture, and its target-loading array was sized
+  by the source width, so a narrower target could not be fitted at all.
+- **F3, §7 still mandated 0.586 and 0.493.** Those were the withdrawn form's headline figures.
+  §7 now refers to §5's current table and repeats none of it; `check_amendment.py` fails the file if
+  a §5 table figure recurs outside §5 and this section.
+- **F4, "at every depth … a ceiling" overstated.** A capability fraction bounds the hit rate only
+  on the same rows, depth, rank, transition cost and averaging weights. §5 now states the bound's
+  exact scope and calls the figure a capability reference everywhere else.
+
+**Consequence for §5.** Its gate table was measured with the fitter F1 describes. It is labelled
+provisional and is re-measured with the SVD fitter before the seal; the gate is read on the
+re-measured figures.
+
