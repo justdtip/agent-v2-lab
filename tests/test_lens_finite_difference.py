@@ -498,3 +498,37 @@ def test_repeating_the_residual_batch_does_not_change_the_per_row_step(upstream)
     assert torch.linalg.vector_norm(repeated[:1]) == pytest.approx(
         torch.linalg.vector_norm(row), rel=1e-6
     )
+
+
+def test_the_progress_callback_is_exercised_and_emits_a_layer_event_per_layer(upstream) -> None:
+    """The per-layer emitter, actually called. Nothing called it until now.
+
+    This callback exists because a fit that reports only at the end lost twenty-seven paid minutes
+    when its logger raised after the work was done. It was added to fix that, and then no test ever
+    passed a callback through it — the same shape as the defect it was written to prevent, and the
+    same shape as the capture pass's `progress`, which referred to a name that did not exist and
+    would have died on the device after its first shard.
+
+    A seam nothing calls is a seam nothing checks.
+    """
+    seen: list[dict] = []
+    fit = _fd(upstream, direction_batch=D_MODEL, anchor_batch=D_MODEL, progress=seen.append)
+
+    layer_events = [e for e in seen if e["event"] == "layer"]
+    row_events = [e for e in seen if e["event"] == "row"]
+    assert layer_events, "no layer event was emitted, so the per-layer reporting is not reporting"
+    assert row_events, "no row event was emitted"
+
+    sources = sorted(fit.jacobians)
+    for event in layer_events:
+        assert event["estimator"] == adapter.ESTIMATOR_FINITE_DIFFERENCE
+        assert event["upstream_layer"] in sources
+        assert 1 <= event["layers_done"] <= event["layers_total"] == len(sources)
+        assert event["epsilon"] > 0
+    # Every layer reports, once per row, which is what "per layer, not per row" means. Counted, not
+    # compared as a sorted sequence: sorting groups the layers and the repetition is per row.
+    from collections import Counter
+
+    assert Counter(e["upstream_layer"] for e in layer_events) == {
+        layer: len(row_events) for layer in sources
+    }
