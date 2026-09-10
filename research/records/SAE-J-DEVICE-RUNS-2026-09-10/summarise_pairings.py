@@ -12,7 +12,7 @@ store = Path(sys.argv[1]); d = json.loads(store.read_text())
 layers = {}
 for L in sorted(m, key=int):
     rs = sorted(e["relative"] for e in m[L]); kinds = Counter(c["cell"]["position"] for c in prov["measurements"][L])
-    widths = sorted({t["forward_batch"] for e in m[L] for t in [e]} | set()) if False else sorted({e["pair"]["fit_width"] for e in m[L]})
+    widths = sorted({json.dumps(e["pair"]["fit_width"]) for e in m[L]})  # a scalar for one chunk, a list for a merged lens
     layers[L] = {"n": len(rs), "median": statistics.median(rs), "p90": rs[int(0.9 * len(rs)) - 1], "max": rs[-1],
                  "above_1e-3": sum(r > 1e-3 for r in rs), "above_1e-2": sum(r > 1e-2 for r in rs), "above_1e-1": sum(r > 1e-1 for r in rs),
                  "cells_by_position": dict(kinds), "fit_widths": widths, "capture_width": sorted({e["pair"]["capture_width"] for e in m[L]})}

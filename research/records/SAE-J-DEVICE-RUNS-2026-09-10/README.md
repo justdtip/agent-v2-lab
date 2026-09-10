@@ -64,6 +64,27 @@ Before a term is written, the tool must reproduce the capture: it re-runs the wi
 
 Every cell lies outside the lens's fit domain (positions 16–126 in 128-token prose prompts): the cells sit at positions 400–4,300 in agent transcripts of up to 4,300 tokens. The positions file therefore carries the lens owner's statement, which the runner checks field by field against the lens and ν digests and the cells' position and context sets. The statement licenses the lens as a readout of the six tool logits at the action position **from repository layer 24** on these contexts, on the strength of W-5's band-resolved agreement (0.99/0.99/0.98 from layer 24, no band dependence), **and nothing else**: an A2 reading below layer 24, and any reading at the note position, is outside measured validity and is reported as such; A1 crosses no capture path. The full text is in the dry-run admission's `provenance.capture.domain_of_validity`.
 
+### The 12B registration (complete, 16:29Z)
+
+The same tool on the 12B: 600 cells (300 sampled decisions × {P_note, P_act}, positions 415–1,552 in contexts up to 1,554 tokens) × 47 repository layers, the merged float32 lens `49001ae6…` with ν `17a4a9e5…` whose three chunks were fitted at widths 16, 16 and 8 — so each cell's fit path was run three times, once per chunk width, and the registered scalar is the maximum of the three chunk terms — against the capture at width 1. 28,200 registrations, 2 h 27 min on the GPU, sha256 `f7b604a130c281aec9e86524d0e3f2ecc036a10d6ba81b4399c3374b4f84baf3`, 80.2 MB on the card at `/workspace/chief/captures/12b/`; summary [pairings-12b-summary.json](pairings-12b-summary.json); the 12B domain statement is [domain-12b.txt](domain-12b.txt) and is discussed under §3.4.
+
+| layer | median | 90th pct | max | cells above 1e-3 |
+|---:|---:|---:|---:|---:|
+| 1 | 5.9e-07 | 1.2e-06 | 2.6e-06 | 0 |
+| 5 | 5.8e-07 | 1.1e-06 | 2.5e-06 | 0 |
+| 10 | 4.5e-07 | 8.4e-07 | 2.0e-06 | 0 |
+| 15 | 3.0e-07 | 5.9e-07 | 1.3e-06 | 0 |
+| 20 | 4.5e-07 | 8.9e-07 | 1.5e-05 | 0 |
+| 25 | 4.7e-07 | 8.5e-07 | 1.7e-05 | 0 |
+| 30 | 7.5e-07 | 1.2e-06 | 1.9e-05 | 0 |
+| 35 | 9.7e-07 | 1.6e-06 | 1.9e-05 | 0 |
+| 40 | 1.2e-06 | 1.9e-06 | 3.2e-05 | 0 |
+| 45 | 1.4e-06 | 2.1e-06 | 4.7e-05 | 0 |
+| 46 | 1.5e-06 | 2.4e-06 | 5.1e-05 | 0 |
+| 47 | 1.4e-06 | 2.5e-06 | 5.0e-05 | 0 |
+
+Every term below 5.1 × 10⁻⁵ (one cell at layer 46), medians 4 × 10⁻⁷ to 1.5 × 10⁻⁶, rising with depth as on the 4B. The width-1 replay reproduced the stored capture bit for bit on all 600 cells at all 47 layers.
+
 ## 2. The declared configuration, before any numeric run
 
 Two configs, written by [bridge_configs.py](bridge_configs.py) on the card from the captures' hash manifests and the admission sidecars (no digest typed), and carried verbatim into every result: [bridge/config-4b.json](bridge/config-4b.json) (dictionary `resid_post_all/layer_17_width_16k_l0_small` of `google/gemma-scope-2-4b-it`, repository layer 18) and [bridge/config-12b.json](bridge/config-12b.json) (`layer_23…` of `google/gemma-scope-2-12b-it`, repository layer 24). Each carries a `declared_basis` block stating why each threshold has the value it has; in brief: `k = 10` and `chunk = 256` as the laptop A1; the control layer a strong control from the laptop control curve (layer 2 for the 4B, 0.047 overlap on the hosted lens; layer 3 for the 12B by analogy), with `maximum_control_overlap = 0.5` because the curve shows a neighbouring layer shares 0.7–0.8 of top-10 sets; the eight named features of the laptop A1 for the two-products check with an absolute tolerance of 1e-3 on scores of order 1–40; the convention discriminator at 0.5, the second amendment's table; and the A2 error budget at 0.5 for both the raw reconstruction share and the lens-score error share, denominator floor 1e-6, near-zero refusing, with the identity tolerance 1e-3 relative. None of these admits by default; each is a refusal line. A third config, `config-4b-l24.json`, is the 4B one with the dictionary at `layer_23` (repository layer 24), the first layer the domain statement covers at the action position, so that one A2 reading is inside measured validity.
