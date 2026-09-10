@@ -194,4 +194,13 @@ By position (median ratio): | position | layer 18 | layer 24 |
 
 **What licenses the reading, in one line of algebra.** With `L` the linear readout, the ratio `(‖L e‖/‖L h‖)/(‖e‖/‖h‖)` equals `(‖L e‖/‖e‖)/(‖L h‖/‖h‖)`: the readout's gain on the residual `e` divided by its gain on the activation `h`. A dictionary trained to make `‖e‖` small in the residual stream's own metric is not trained to make `‖L e‖` small; if the directions `L` amplifies carry little of the activation's variance, the dictionary has no reason to spend features on them, and its error lands there. That is consistent with the published observation that sparse-autoencoder reconstruction errors move the next-token distribution more than random perturbations of the same norm (Gurnee, 2024, "SAE reconstruction errors are (empirically) pathological"); this record measures it on the lens-readout metric at two layers of the 4B and one of the 12B and does not go further than that.
 
+**The same control on the 12B** ([indomain_control_any.py](indomain_control_any.py), the 4B script with its paths as arguments; the 12B lens was fitted on the same prose manifest, which the Gemma 3 tokenizer shared across sizes makes the same token ids; 21 minutes, 16:55Z–17:16Z; [bridge/indomain-12b.json](bridge/indomain-12b.json)):
+
+| layer, in domain | raw share, median [min, max] | lens-score share | ratio | active | ranked |
+|---|---:|---:|---:|---:|---:|
+| 24 | 0.088 [0.021, 0.383] | 0.77 [0.49, 1.46] | 8.5 [3.2, 30.5] | 21 | 1 of 1005 |
+| 47 | 0.182 [0.135, 0.337] | 0.71 [0.48, 0.97] | 3.9 [2.4, 5.9] | 7 | 3 of 1005 |
+
+At 12B layer 47 the in-domain ratio is 3.9 against 3.2–3.3 on the agent transcripts, and at layer 24 it is 8.5 — the 12B's middle layer amplifies the residual as strongly as the 4B's, and a few in-domain cells there have a lens-score share above one (the residual's readout is larger than the whole activation's, which happens when `L e` and `L h` are partly opposed). The ranking of layers and the flatness across positions repeat. Four models-and-layers, in and out of domain, say the same thing.
+
 **What remains not measured.** Whether a wider or denser dictionary (the suites ship `l0_medium` and 65k/262k widths) lowers the ratio; whether a dictionary trained on the readout metric would; and whether the 90 ranked 12B cells' top features say anything about the action — the last requires labels these dictionaries do not have, and the interpretation limits forbid inventing them.
