@@ -6,15 +6,26 @@ Settled with the Chief at 03:45Z. Four phases, each entered on a message, not on
 re-run 4B capture ends about fifteen minutes after c3, and my first two jobs need the card alone
 because they measure time.
 
+Revised 04:05Z: the Director's evening starts about 08:00Z and needs the 4B W-3b readings, so W-3b
+moves ahead of everything of mine and the old phase 3 disappears.
+
 | # | starts on | what runs | roughly |
 |---|---|---|---|
-| 1 | **Chief messages "card clear"** (their capture's manifest exists) | my repeat gate, then my ladder — **alone**, both measure time | minutes |
-| 2 | **I message "timed jobs done"** | my 4B capture **and** their 12B capture together | 8 + ~60 GiB |
-| 3 | **I message that my 4B pass has ended** | their 4B W-3b beside their 12B capture | ~25 GiB, ~1 h |
-| 4 | **Chief messages that W-3b has ended** | my 12B capture beside their 12B capture, **on the rule** | sum ≤ 86 GiB |
+| 0 | the Chief's capture manifest existing (**theirs to run**) | their 4B W-3b, **alone** | ~25 GiB, ~1 h, ends ~07:50Z |
+| 1 | **Chief messages "card clear"** (W-3b ended) | my repeat gate, then my ladder — **alone** | minutes |
+| 2 | **I message "timed jobs done"** | my 4B capture **and** their 12B capture together | ~8 + ~60 GiB |
+| 3 | **I message that my 4B pass has ended** | my 12B capture beside their 12B capture, **on the rule** | sum ≤ 86 GiB |
 
-**The rule at phase 4** is measured process memory on both sides, not the allocator's high-water
-mark, and I report mine on the first shard. Their W-3b is gated on a GO file of their own so it
+My two timed jobs need the card alone because a shared card changes the timings they record, not
+because they are urgent; an hour's delay costs them nothing. The repeat gate still lands before the
+Director's evening, which is the only thing of mine with a reason to be early — it closes a gate the
+calibration record currently carries as unexecuted.
+
+**The rule at phase 3** is measured process memory on both sides, not the allocator's high-water
+mark, and I report mine on the first shard. The Chief's 12B capture is ~45.4 GiB of float32 weights
+plus ~3 GB of recorder at the longest row plus ~7 GB of attentions on sample rows — 57 to 60
+allocated and more reserved — so 60 beside my estimated 24 is already near the line, and if the rule
+fails my 12B waits for their capture to end rather than sharing. Their W-3b is gated on a GO file of their own so it
 cannot start into phase 1 or 2; my phases start only on their message, never on my own estimate of
 when their job ends. **A clock is not a signal here** — both of us have already had a job run long
 tonight, and the whole point of the handshake is that neither seat guesses.
