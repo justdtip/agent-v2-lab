@@ -1,7 +1,7 @@
 # Amendment 1 to the plan-progress pre-registration: E2's transport rule
 
-**D-CRO, 2026-09-10, on the Chief's ruling of 13:50Z. Draft, revision 2, for Codex's file-only
-review. §5 carries an open question that is the Chief's and not mine.**
+**D-CRO, 2026-09-10, on the Chief's rulings of 13:50Z, 14:25Z and 15:10Z. Draft, revision 4, for
+Codex's file-only review. §10 records the detour this draft took and why it was wrong.**
 Amends seal `998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521`, baseline `acc130a`.
 Nothing in it has been run. No corrective transition is scored under it until it is sealed.
 
@@ -24,30 +24,25 @@ seal itself, which this amendment extends rather than replaces.
 
 ## 2. The rule
 
-Let `x_k` be the residual at the read layer for decision *k*, as captured. The rule is the
-**identity plus a rank-r supervised correction**:
+Let `x_k` be the residual at the read layer for decision *k*, as captured. The rule is a **rank-r
+supervised map to the successor**:
 
-    T_r(x) = x + Δ_r(x),
+    T_r(x) = the rank-r supervised prediction of x_{k+1} from x_k,
 
-where `Δ_r` is a rank-r supervised map fitted from the source residual to the **displacement**
-`x_{k+1} − x_k` on ordinary transitions — the instrument the Chief fixed for E1, PLS2, generalised
-from a scalar target to a vector one and reducing to E1's PLS1 when the target has one column.
+fitted on ordinary transitions — the instrument the Chief fixed for E1, PLS2, generalised from a
+scalar target to a vector one and reducing to E1's PLS1 when the target has one column.
 
-**Why the identity is outside the rank, which is this revision's substantive change.** A rank-r map
-straight from `x_k` to `x_{k+1}` must spend its rank representing the **identity**, which is full
-rank and carries nothing about the update. At r = 8 out of 2,560 it cannot, so the transported point
-lands near the training mean rather than near either the source or the successor, and the rank is
-consumed by the part of the answer that was never in question. The state at *k+1* is the state at *k*
-plus a change, and the rule's whole content is the change; the rank should be spent there. This also
-makes the withdrawn rule the **floor of the same ladder** rather than a different animal: a constant
-displacement is exactly `Δ` at rank zero, since `Δ_r`'s intercept is the mean displacement.
+**Why the map is unconstrained.** "Transport the state read at *k*" is a map to the successor, and
+§4.2 gives no reason to constrain its form further. A constrained alternative was drafted and
+withdrawn; §10 records it, the argument for it and its refutation, because the argument was mine and
+a reader should be able to see what was rejected and why.
 
-**Fitting `Δ_r`**, on the fitting folds' ordinary transitions only:
+**Fitting `T_r`**, on the fitting folds' ordinary transitions only:
 
 1. `X` is the matrix of source residuals, standardised by the fitting folds' per-coordinate mean and
    standard deviation, a coordinate whose scale is below 1e-8 held at 1.
-2. `Y` is the matrix of **displacements** `x_{k+1} − x_k`, **centred only**, by the fitting folds'
-   mean displacement. It is not scaled per coordinate.
+2. `Y` is the matrix of **successor residuals**, **centred only**, by the fitting folds' mean. It is
+   not scaled per coordinate.
 3. For components `a = 1 … 32`, greedily and with deflation:
    - `w_a` is the leading left singular vector of `Xᵀ Y`, obtained by power iteration on
      `v ← Xᵀ(Y(Yᵀ(X v)))` with `v` renormalised each step, started from `v₀ = Xᵀ(Y·1)` normalised —
@@ -60,8 +55,8 @@ displacement is exactly `Δ` at rank zero, since `Δ_r`'s intercept is the mean 
      ladder reports the ranks that exist rather than substituting.
 4. At rank `r`, `B_r = W_r (P_rᵀ W_r)^{-1} C_rᵀ`, with `W_r`, `P_r`, `C_r` the first `r` columns.
 
-**Applying.** `T_r(x) = x + ȳ + ((x − x̄) / s) B_r`, where `x̄`, `s` are the fitting folds' source
-statistics and `ȳ` their mean displacement. The output is in the **untransformed residual space**: the standardisation is internal to
+**Applying.** `T_r(x) = ȳ + ((x − x̄) / s) B_r`, where `x̄`, `s` are the fitting folds' source
+statistics and `ȳ` their mean successor. The output is in the **untransformed residual space**: the standardisation is internal to
 the rule's input and the centring is added back, so no normalisation of the rule touches the metric
 and §4.2's warning about a distance in a space the rule normalised and the candidates did not cannot
 arise. This is stated because it is the clause §4.2 asks a rule to answer.
@@ -98,38 +93,30 @@ scored only there.
 **Before any corrective stratum is scored, and on the fitting folds' own held-out ordinary
 transitions only, the rule form must be shown capable of passing.**
 
-> **Gate.** For at least **50%** of out-of-fold ordinary transitions, at the headline depth and at the
-> **top of the ladder, r = 32**, on **both** models, `T_r(x_k)` must be strictly nearer to `x_{k+1}`
-> than to `x_k`. If it fails, no corrective stratum is scored, the amendment is revised, and the
-> record says so.
+> **Gate.** For at least **50%** of out-of-fold ordinary transitions, at the **headline** depth and
+> rank, on **both** models, `T_r(x_k)` must be strictly nearer to `x_{k+1}` than to `x_k`. If it
+> fails, no corrective stratum is scored, the amendment is revised, and the record says so.
 
-The gate tests the **form**, and a property of the form is read where the form is least constrained.
-A geometry that forbids a hit scores near zero at *every* rank — the withdrawn rule scored 0.000 at
-the only rank it had — while a form that can transport shows it once its capacity is not the binding
-constraint. Reading the gate at a rank chosen for a different purpose would confuse "this form cannot
-work" with "eight directions are not many", which are different findings and only the first should
-stop a reading.
+**Measured, out of fold, on the 4,122 ordinary train transitions at the headline depth**, with the
+fitter's restart defect fixed (§10):
 
-**How this clause reached its present form, recorded because the reader is owed it.** It was drafted
-as 50% at the **headline** rank, before anything was run. It was then measured, out of fold, on the
-4,122 ordinary **train** transitions at the headline depth:
-
-| identity + correction at rank | 1 | 2 | 4 | 8 | 16 | 32 |
+| rank | 1 | 2 | 4 | 8 | 16 | 32 |
 |---|---:|---:|---:|---:|---:|---:|
-| 4B, layer 17 | 0.109 | 0.241 | 0.424 | **0.586** | 0.775 | 0.904 |
-| 12B, layer 24 | — | 0.158 | 0.321 | **0.493** | 0.732 | 0.901 |
+| 4B, layer 17 | 0.582 | 0.561 | 0.704 | **0.769** | 0.911 | 0.952 |
+| 12B, layer 24 | 0.552 | 0.588 | 0.671 | **0.751** | 0.892 | 0.954 |
 
-At the headline rank the 12B gives 0.493, so the clause as drafted failed by seven thousandths. It was
-put to the Chief unresolved rather than adjusted, and the Chief reclassified it on 2026-09-10 for the
-reason above: **the gate tests the form, and the form is least constrained at the top of the ladder.**
-The seven thousandths are not the reason and are not a reason; had the form scored 0.11 at r = 32 the
-gate would have failed and E2 would stay unread.
+The gate passes on both models at the headline rank.
 
-**The headline rank's fraction is not a gate. It is a mandatory capability report.** E2's hit rate at
-r = 8 is printed beside **0.586** and **0.493** unconditionally, at every depth and in the record, so
-that a low corrective hit rate is read against a rule that beats its own source about half the time on
+**The headline rank's fraction is also a mandatory capability report.** E2's hit rate at r = 8 is
+printed beside **0.769** and **0.751** unconditionally, at every depth and in the record, so a low
+corrective hit rate is read against a rule that beats its own source about three times in four on
 ordinary transitions at that rank. That is a **ceiling on what the rank can show, not a null**, and
 conflating the two would be the same error in the other direction.
+
+**This clause was read at the top of the ladder for a time, and that reading is superseded.** It was
+reclassified on 2026-09-10 because a rule form since withdrawn failed it at the headline rank by seven
+thousandths. With the form corrected the clause passes as first drafted and returns to the headline
+rank. §10 carries the sequence; the reclassification stays there as history rather than being erased.
 
 The gate and the report are two-point comparisons between the successor and the source. Neither is
 the retrieval score, which ranks all *N* candidates, and both are computed on ordinary **training**
@@ -180,3 +167,51 @@ which stays deferred with its veto disabled under its own separate amendment. It
 any tolerance, any stratum, the metric, the candidate set, the tie rule, or the fold assignment. It
 does not license a second revision of the rule after a result is seen: if the amended rule passes the
 gate and then scores poorly, that is E2's answer.
+
+## 10. The detour this draft took, recorded because the reader is owed it
+
+Three things here were wrong at some point on 2026-09-10 and all three were the D-CRO's.
+
+**The withdrawn rule.** E2 was first read with `T(x, m) = x + m·d`, `d` the mean per-step
+displacement — the literal reading of §4.2's sentence. It returned 0.000 in every stratum and could
+not have returned anything else: on the 4,122 ordinary train transitions the transported point sat
+313.5 from the source and never closer than 398.1 to any successor, **0 of 4,122**. That is what this
+amendment replaces, and why §5 exists at all.
+
+**The withdrawn argument, and the form it produced.** It was then argued that a rank-r map straight to
+the successor must spend its rank representing the **identity**, land near the training mean, and lose
+to an identity-plus-correction form `T_r(x) = x + Δ_r(x)` with `Δ_r` fitted to the displacement. The
+Chief ruled on that argument and the argument is **refuted**. It had been inferred from a synthetic
+case in the wrong regime — a displacement larger than the state, where the corpus's is about 6% of it.
+The test written to pin the claim failed, and widening it inverted the claim: as the rank shrinks as a
+fraction of the space, the direct map wins on every seed. Measured out of fold on the corpus at the
+headline depth, the direct map dominates at **every** rank on **both** models:
+
+| form | model | r1 | r2 | r4 | r8 | r16 | r32 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| direct map | 4B | 0.582 | 0.561 | 0.704 | 0.769 | 0.911 | 0.952 |
+| direct map | 12B | 0.552 | 0.588 | 0.671 | 0.751 | 0.892 | 0.954 |
+| identity + correction | 4B | 0.109 | 0.241 | 0.424 | 0.586 | 0.775 | 0.905 |
+| identity + correction | 12B | 0.162 | 0.158 | 0.321 | 0.493 | 0.732 | 0.901 |
+
+The reason the argument fails is worth keeping: **predicting the successor is easier than predicting
+the displacement.** The successor is dominated by a large, highly predictable shared component; the
+displacement is small and only about 20% coherent. Rank spent on the shared component is not wasted —
+it is what makes the target predictable at all.
+
+The form was chosen back on the **plain reading**, not on this table. The gate is a two-point
+comparison on training folds and cannot arbitrate between two forms that are both capable; the
+retrieval score could, and was not consulted, because on ordinary train transitions it is ε_ord's own
+population and reading it to pick the instrument would be reading an estimand before the seal.
+
+**The fitter's restart defect.** While checking the above, the fitter was found to restart each
+component's power iteration from the **previous component's direction**, which lies in the part just
+deflated, so the iteration could stall and return fewer components than requested. It is fixed — each
+component restarts from the current cross-product, as §2 always specified — and a test pins that a
+32-component fit yields 32 components. §2 was right and the code disagreed with it.
+
+**E1 is unaffected, shown rather than argued.** The defect lived only in the vector-target fitter,
+written after E1 was read. E1's fitter has a scalar target, so its direction is `Xᵀy` in closed form
+with no iteration and no restart; `read_e1.py` never imports the defective module; and E1 re-run on
+the fixed tree reproduces its readings **byte for byte**, digest
+`ba841d7c0601b6326c621c68701852140e92e931ced570cb2ca2dd03d36f303f`. E1 stands as recorded.
