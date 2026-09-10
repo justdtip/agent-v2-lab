@@ -958,5 +958,28 @@ sentence to keep. A verifier that fails loudly gets fixed; a verifier that fails
 gets trusted, cited, and built on, because a wider interval looks like caution rather than a
 different comparison altogether.
 
+**A ninth, the day after, inside the claim checker itself.** The pre-registration's checker gained a
+rule that reads a table's declared-ε column by its header, so that a value counts as a declaration by
+its column and never by whether it is bold. The rule never runs. It recognises a header by asking
+whether the next line is a separator, and builds that question as `following.strip() + "|"` — which
+appends a pipe to a separator row that already ends in one, so the match never succeeds. Against the
+document it was written for it finds 0 header rows among 28 separators. Every tolerance row falls
+through to the branch meant for a table with *no* declared column, which reads every ε-shaped number
+in the row.
+
+Nothing complained, for two reasons that both belong here. The fallback is **stricter** than the rule
+it stood in for, so the failure was conservative in the eighth instance's exact sense. And the rule's
+own counterexample — the unbolded duplicate row it was written to catch — is caught *by the fallback*,
+so the self-test that exists to prove the rule works passes without the rule ever executing. Both
+entry points ran one path, as the earlier correction required. It was the wrong one.
+
+**This is the ninth's own lesson, and it sharpens the diagnostic below rather than repeating it.** The
+diagnostic was followed: the guarded thing was broken, and the checker caught it. What was never asked
+is **which rule caught it**. A self-test that asserts a corruption is detected does not assert that the
+new code detected it, and a fallback that is strictly stricter will answer for any rule it replaces.
+Where a check has two paths, break the thing *and* establish which path spoke — by disabling the new
+rule and confirming the corruption then survives, which is the only evidence that the rule does
+anything at all.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
