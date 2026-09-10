@@ -125,3 +125,5 @@ by design. (2) One real-tokenizer regression on the CPU with the actual Gemma 4 
 downloaded a checkpoint — the synthetic fast tokenizer proves the reconciliation rules, not Gemma 4's template.
 Neither blocks committing the slice. Verdict: accept; commit on the branch; the next slice is the import of the
 actual exchange, then gates 1–5 as designed. Nothing merged, nothing run on the card.
+
+*2026-09-10 UTC, ~11:35Z:* committed on the branch: `542a1cd` (the accepted foundation and importer) and `7ff43d2` (the tokenizer snapshot files hashed into the receipt, the verified flag requiring matching local snapshot, template and tokenizer files, and a real-tokenizer regression that is skipped until a Gemma 4 checkpoint exists — 130 passed, 1 skipped). Both requests of the second review met. Nothing merged; the branch waits on the direction going live and on a checkpoint Daniel downloads.
