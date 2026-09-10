@@ -922,6 +922,18 @@ it was computed over.
 - **A correction is not done until every still-active use of the withdrawn claim is found.** Sweep the
   file for the number, not the paragraph for the sentence; and read the conclusion first, because a
   withdrawn claim doing work in a recommendation is the one that will be acted on.
+- **Make the verdict's type carry its scope, so that omitting the coverage requires deleting a field
+  rather than forgetting one.** The rule above it — report what you checked beside whether it passed —
+  is not enough on its own, and this entry's author is the evidence: I wrote that rule and then broke
+  it twice within the hour, in new code, while it was the thing most recently on my mind. A summary
+  whose keys are only outcomes *cannot express* coverage, so the author has to remember to add a
+  sentence, and a rule the author must remember is a reporter. A return value with the scope in it is
+  a gate. Both fixes were widening the type, not adding a docstring line: the capture pass now returns
+  `requested`, `outstanding` and `complete` beside `captured`, with the runner keeping `whole_set`
+  because completeness against what a *function* was handed is the right scope for that function and
+  the wrong scope for the pass; and the repeat gate's verdict names the two layers of thirty-four, the
+  one row and the two positions it covered, since "the exact estimator reproduces itself" read without
+  them is a claim about the estimator rather than about two maps.
 
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
