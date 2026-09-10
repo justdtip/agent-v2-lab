@@ -97,6 +97,36 @@ capture (`row 0: in-context tool token 236779 is not the standalone first token 
    positions re-derived deterministically at analysis, and every row's token after `P_act` is checked
    against the tool's first token when the index closes (count to be reported here).
 
+## The capture's end-only index, and the insurance written before the pass could fail
+
+The capture as run for the 4B (`workspace_capture.py`, 958ccdcf…) writes `index.jsonl` and
+`manifest.json` only when it finishes; the residual memmaps and `sample.jsonl` are written as it goes.
+Sharing the card with the 12B fit's third chunk, the allocator warned nine times in an hour (free
+memory down to 0.7 GB), recovering each time; 15 of the remaining rows were longer than any yet
+processed (4,321 tokens against 3,950). Rather than restart under the same pressure, the exposure was
+closed while the pass ran, without touching it:
+
+- `scripts/reconstruct_index.py` (279b16d1b79f) rebuilds the deterministic index
+  (positions, tool, token counts, sample membership from `sample.jsonl`) for every non-zero memmap row;
+  the model's own six-tool fields need a forward and stay null; the lens and logit-lens readouts are a
+  pure function of the saved residual, the maps and the unembed, recomputed without a forward. Verified
+  read-only against the live pass at 5,040 rows: no holes, every tool token aligned, every sample row
+  on disk.
+- `scripts/workspace_capture_v2.py` (165d7b59eaf4), for the 12B pass and any
+  re-capture: the index written per row; `--rows-from/--rows-to` (global corpus indices; memmap row =
+  index − rows_from); `--sample-ids-file` so a tail keeps the original sample rows. Regression on the CPU
+  (`capture_v2_test.sh`, `capture_v2_test2.sh`): index and memmaps bit-identical to v1 on the three-row
+  test capture; the ranged run and the sample-ids run exact.
+- `scripts/merge_tail_capture.py` (4d292cf78120) copies a tail re-capture into a
+  dead pass's memmaps, refusing rows that are already non-zero. A simulated death (rows 1–2 zeroed, the
+  index and manifest removed, reconstructed, the ranged tail merged) reproduced the intact capture
+  exactly, memmaps and deterministic index fields.
+
+The 12B passes run from `chief_12b_passes_v2.sh` (f70cae68e67f), gated on a GO
+file so they cannot start into the D-CRO's timed slot, launched with
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (memory management only, recorded here) and from
+`/workspace/chief`, not the shared checkout.
+
 ## Provenance
 
 Sources as run are frozen in `scripts/` (digests below). The on-disk files predate the processes
@@ -114,6 +144,7 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
 | `merge_chunks.py` | 5c39d626e129 | chunk merge, weighted by requested rows (valid when no row skipped: c1 70/70/0, c2 70/70/0; c3 checked at its end) |
 | `chief_4b_passes.sh`, `chief_12b_passes.sh`, `overnight3.sh`, `chief_analyze.sh` | 0ef283871e02, c97b46a212bb, f3d6edd6541b, 49d0dc5589ba | drivers |
+| `workspace_capture_v2.py`, `reconstruct_index.py`, `merge_tail_capture.py`, `chief_12b_passes_v2.sh` | 165d7b59eaf4, 279b16d1b79f, 4d292cf78120, f70cae68e67f | the 12B capture and the insurance (section above) |
 
 Corpus (the three splits concatenated, 7,629 distinct decisions, 1,128 episodes, twelve families):
 sha256 `790cefffc29b…`. 4B lens archive `out/lens4b-f32/exact-maps.npz`: sha256 `56c7b49e1c71…`
