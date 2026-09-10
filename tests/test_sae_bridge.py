@@ -189,7 +189,7 @@ def test_a_hook_that_is_not_a_block_output_is_refused(hook: str) -> None:
 def test_alignment_refuses_a_lens_without_a_map_at_the_hooked_layer(tmp_path: Path) -> None:
     params, config = _write_dictionary(tmp_path / "sae", block=9)  # reads layer 10
     d = B.load_dictionary(params, config)
-    with pytest.raises(ValueError, match="no map at that layer"):
+    with pytest.raises(ValueError, match="no map at layer 10"):
         B.hook_alignment(d, _Lens(layers=6))
     assert B.hook_alignment(d, _Lens(layers=12)) == 10
 
@@ -381,7 +381,8 @@ def test_a2_is_an_exact_identity_on_the_emitted_token(a2_parts) -> None:
     J = lens.maps[B.hook_alignment(d, lens)]
     rng = np.random.default_rng(5)
     for h in (rng.normal(size=HIDDEN), 50 * rng.normal(size=HIDDEN), np.zeros(HIDDEN)):
-        out = B.decompose_position(d, u, J, h.astype(np.float32), int(rng.integers(VOCAB)))
+        out = B.decompose_position(d, u, J, h.astype(np.float32), int(rng.integers(VOCAB)),
+                                   error_budget=_error_budget())
         total = out["bias_term"] + out["feature_sum"] + out["residual_term"]
         assert out["identity_gap"] < 1e-3 * max(1.0, abs(out["score"]))
         assert abs(out["score"] - total) < 1e-3 * max(1.0, abs(out["score"]))
@@ -395,8 +396,10 @@ def test_a2_ranks_when_the_dictionary_explains_the_activation(a2_parts) -> None:
     active = rng.choice(A2_WIDTH, 3, replace=False)
     z[active] = rng.uniform(2, 4, 3)
     h = B.decode(d, z) + rng.normal(scale=1e-3, size=HIDDEN).astype(np.float32)
-    out = B.decompose_position(d, u, J, h, int(rng.integers(VOCAB)), k=3, dominance=0.5)
-    assert out["ranked"] and out["residual_share"] < 0.05
+    out = B.decompose_position(
+        d, u, J, h, int(rng.integers(VOCAB)), k=3, error_budget=_error_budget()
+    )
+    assert out["ranked"] and out["lens_score_error_share"] < 0.05
     assert out["active_features"] == 3
     assert {f["feature"] for f in out["top_features"]} <= set(active.tolist())
     assert all(f["z"] > 0 for f in out["top_features"])
@@ -410,17 +413,18 @@ def test_a2_refuses_to_rank_under_a_dominant_residual(a2_parts) -> None:
     x = rng.normal(size=HIDDEN)
     h = (x - d.w_dec.T @ (d.w_dec @ x)).astype(np.float32)  # orthogonal complement projection
     assert np.abs(d.w_dec @ h).max() < 1e-5
-    out = B.decompose_position(d, u, J, h, 3, dominance=0.5)
+    out = B.decompose_position(d, u, J, h, 3, error_budget=_error_budget())
     assert out["active_features"] == 0
-    assert out["residual_share"] > 0.99
-    assert not out["ranked"] and "residual dominates" in out["reason"]
+    assert out["lens_score_error_share"] > 0.99
+    assert not out["ranked"] and "lens score error" in out["reason"]
     assert "top_features" not in out
 
 
 def test_a2_refuses_a_width_that_is_not_the_dictionarys(parts) -> None:
     d, u, lens = parts
     with pytest.raises(ValueError, match="width"):
-        B.decompose_position(d, u, lens.maps[4], np.zeros(HIDDEN + 1, np.float32), 0)
+        B.decompose_position(d, u, lens.maps[4], np.zeros(HIDDEN + 1, np.float32), 0,
+                             error_budget=_error_budget())
 
 
 # ------------------------------------------------------------------------------- provenance
@@ -617,26 +621,28 @@ def test_reconstruction_budget_reports_share_active_and_the_declined_fraction(a2
     complement = Q[:, d.width:].T[:4].astype(np.float32)
     complement -= (complement @ d.w_dec.T) @ d.w_dec  # exact projection out of the span
     sites = np.vstack([explained, complement])
-    out = B.reconstruction_budget(d, sites, dominance=0.5)
-    assert out["dominance"] == 0.5 and out["sites"] == 10
-    np.testing.assert_allclose(out["residual_share"][:6], 0.0, atol=1e-5)
-    np.testing.assert_allclose(out["residual_share"][6:], 1.0, atol=1e-5)
+    out = B.raw_reconstruction_budget(d, sites, error_budget=_error_budget())
+    assert out["error_budget"]["raw_reconstruction_threshold"] == 0.5 and out["sites"] == 10
+    np.testing.assert_allclose(out["raw_reconstruction_share"][:6], 0.0, atol=1e-5)
+    np.testing.assert_allclose(out["raw_reconstruction_share"][6:], 1.0, atol=1e-5)
     assert list(out["active_features"][:6]) == [d.width] * 6
     assert list(out["active_features"][6:]) == [0] * 4
-    assert out["share_over_dominance"] == pytest.approx(0.4)
-    assert out["rankable"].tolist() == [True] * 6 + [False] * 4
-    assert out["residual_share_quantiles"]["0.5"] == pytest.approx(0.0, abs=1e-5)
+    assert out["raw_over_threshold_fraction"] == pytest.approx(0.4)
+    assert out["raw_admissible"] == [True] * 6 + [False] * 4
+    assert out["raw_reconstruction_share_quantiles"]["0.5"] == pytest.approx(0.0, abs=1e-5)
     assert out["active_features_quantiles"]["1.0"] == d.width
 
 
 def test_reconstruction_budget_refuses_the_wrong_shape_and_an_undeclared_threshold(a2_parts):
     d, _, _ = a2_parts
-    with pytest.raises(ValueError, match="dominance must be in"):
-        B.reconstruction_budget(d, np.ones((2, d.hidden_size), np.float32), dominance=0.0)
+    with pytest.raises((ValueError, TypeError), match="error_budget"):
+        B.raw_reconstruction_budget(d, np.ones((2, d.hidden_size), np.float32))
     with pytest.raises(ValueError, match="residuals must be"):
-        B.reconstruction_budget(d, np.ones((2, d.hidden_size + 1), np.float32), dominance=0.5)
-    with pytest.raises(ValueError, match="zero residual"):
-        B.reconstruction_budget(d, np.zeros((1, d.hidden_size), np.float32), dominance=0.5)
+        B.raw_reconstruction_budget(d, np.ones((2, d.hidden_size + 1), np.float32),
+                                    error_budget=_error_budget())
+    zero = B.raw_reconstruction_budget(d, np.zeros((1, d.hidden_size), np.float32),
+                                       error_budget=_error_budget())
+    assert zero["raw_reconstruction_share"] == [None] and zero["raw_admissible"] == [False]
 
 
 # ------------------------------------------------------------------- lens fit precision
@@ -1044,3 +1050,223 @@ def test_the_shipped_table_validates_and_says_at_which_precision_it_was_copied()
     # The one field the pairing audit found misrounded, at the declared precision.
     random_arm = entry["layers"]["33"]["equal_norm_random_displacement"]["native"]
     assert random_arm["median"] == 0.312953
+
+
+# ------------------------------------------ device endpoint and independently declared errors
+
+
+def _two_axis_parts():
+    """h=(1,.1), reconstruction=(1,0), L=diag(.01,1), calculated by hand."""
+    d = B.JumpReLUDictionary(
+        w_enc=np.array([[1.0], [0.0]], np.float32),
+        b_enc=np.zeros(1, np.float32),
+        threshold=np.array([0.05], np.float32),
+        w_dec=np.array([[1.0, 0.0]], np.float32),
+        b_dec=np.zeros(2, np.float32),
+        config={"model_name": FIXTURE_MODEL, "hf_hook_point_in": "model.layers.1.output"},
+        sha256="fixture", source="fixture",
+    )
+    u = B.Unembedding(
+        weight=np.diag([0.01, 1.0]).astype(np.float32), gain=np.ones(2, np.float32),
+        tied=True, checkpoint="fixture", tensor_names={"head": "head", "norm": "norm"},
+    )
+    return d, u, np.array([1.0, 0.1], np.float32)
+
+
+def _error_budget(**overrides):
+    return B.ErrorBudget.from_dict({
+        "raw_reconstruction_threshold": 0.5,
+        "lens_score_error_threshold": 0.5,
+        "denominator_floor": 1e-8,
+        "near_zero_policy": "refuse",
+        **overrides,
+    })
+
+
+@pytest.mark.parametrize("depth", [34, 48])
+def test_final_dictionary_uses_only_a_declared_identity_endpoint(tmp_path, depth):
+    from local_llm_lab.pipeline.live_lens.instruments import LensMaps, file_sha256
+
+    d, u, h = _two_axis_parts()
+    d = dataclasses.replace(
+        d, config={**d.config, "hf_hook_point_in": f"model.layers.{depth-1}.output"}
+    )
+    archive = tmp_path / "lens.npz"
+    np.savez(archive, **{f"J{i}": np.eye(2, dtype=np.float32) for i in range(depth - 1)})
+    archive.with_suffix(".json").write_text(json.dumps({
+        "npz_sha256": file_sha256(archive),
+        "model": {"base": FIXTURE_MODEL, "num_layers": depth, "endpoint": "identity"},
+    }))
+    # Existing callers know the model but need not invent endpoint metadata to load the stamp.
+    lens = LensMaps.load(
+        archive, expected_sha256=file_sha256(archive), hidden_size=2,
+        num_layers=depth, identity=LensIdentity(base=FIXTURE_MODEL, num_layers=depth),
+    )
+    assert B.hook_alignment(d, lens) == depth
+    assert lens.identity.as_dict()["endpoint"] == "identity"
+    J = B.lens_map_for_layer(lens, depth)
+    assert J is None
+    np.testing.assert_allclose(B.lens_scores(u, J, h)[0], [0.01, 0.1])
+    control = B.negative_control(d, u, lens, depth, depth, k=1)
+    assert control["mean_overlap"] == 1.0 and not control["distinguishes"]
+    undeclared = dataclasses.replace(
+        lens, identity=LensIdentity(base=FIXTURE_MODEL, num_layers=depth)
+    )
+    with pytest.raises(ValueError, match="identity endpoint"):
+        B.hook_alignment(d, undeclared)
+    missing = dataclasses.replace(
+        d, config={**d.config, "hf_hook_point_in": "model.layers.1.output"}
+    )
+    broken = dataclasses.replace(lens, maps={1: np.eye(2)})
+    with pytest.raises(ValueError, match="no map at.*layer 2"):
+        B.hook_alignment(missing, broken)
+    with pytest.raises(ValueError, match="cross-path reading"):
+        B.hook_alignment(d, lens, nu=FLOAT32_NU, lens_fit_dtype="float32",
+                         capture_dtype="bfloat16", capture_batch=1)
+    sidecar = json.loads(archive.with_suffix(".json").read_text())
+    del sidecar["model"]["endpoint"]
+    archive.with_suffix(".json").write_text(json.dumps(sidecar))
+    with pytest.raises(ValueError, match="endpoint"):
+        LensMaps.load(
+            archive, expected_sha256=file_sha256(archive), hidden_size=2, num_layers=depth,
+            identity=LensIdentity(base=FIXTURE_MODEL, num_layers=depth, endpoint="identity"),
+        )
+
+
+def test_unknown_endpoint_is_not_silently_loaded():
+    with pytest.raises(ValueError, match="endpoint"):
+        LensIdentity.from_dict({"base": FIXTURE_MODEL, "num_layers": 34, "endpoint": "unknown"})
+
+
+def test_raw_admission_never_stands_in_for_score_ranking():
+    d, u, h = _two_axis_parts()
+    budget = _error_budget()
+    raw = B.raw_reconstruction_budget(d, h[None, :], error_budget=budget)
+    out = B.decompose_position(d, u, None, h, 1, error_budget=budget)
+    assert raw["raw_reconstruction_share"] == pytest.approx([0.099503719])
+    assert raw["raw_admissible"] == [True]
+    assert out["raw_reconstruction_share"] == pytest.approx(0.099503719)
+    assert out["lens_score_error_share"] == pytest.approx(0.99503719)
+    assert out["raw_admissible"] is True and out["ranked"] is False
+    assert "top_features" not in out
+    assert out["error_budget"] == budget.as_dict()
+    json.dumps(out, allow_nan=False)
+    json.dumps(raw, allow_nan=False)
+
+
+def test_a2_cannot_admit_without_an_explicit_error_budget():
+    d, u, h = _two_axis_parts()
+    with pytest.raises((TypeError, ValueError), match="error_budget"):
+        B.decompose_position(d, u, None, h, 1)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("raw_reconstruction_threshold", None), ("lens_score_error_threshold", None),
+    ("denominator_floor", None), ("near_zero_policy", None),
+    ("raw_reconstruction_threshold", float("nan")),
+    ("lens_score_error_threshold", float("inf")),
+    ("raw_reconstruction_threshold", -0.1), ("denominator_floor", 0.0),
+    ("denominator_floor", float("nan")), ("near_zero_policy", "clamp"),
+])
+def test_error_budget_refuses_missing_or_invalid_declarations(field, value):
+    with pytest.raises(ValueError, match=field):
+        _error_budget(**{field: value})
+
+
+@pytest.mark.parametrize("zero_in", ["raw", "score"])
+def test_near_zero_denominators_refuse_instead_of_adding_epsilon(zero_in):
+    d, u, h = _two_axis_parts()
+    if zero_in == "raw":
+        h = np.array([1e-10, 0.0], np.float32)
+    else:
+        u = dataclasses.replace(u, weight=np.zeros_like(u.weight))
+    out = B.decompose_position(d, u, None, h, 1, error_budget=_error_budget())
+    assert out["ranked"] is False and "top_features" not in out
+    assert "denominator" in out["reason"]
+    key = "raw_reconstruction_share" if zero_in == "raw" else "lens_score_error_share"
+    assert out[key] is None
+    json.dumps(out, allow_nan=False)
+
+
+def test_external_pairing_table_is_checked_without_mutating_the_builtin_table():
+    table = json.loads(B.ANCHOR_SENSITIVITY_PATH.read_text())
+    table[GEMMA]["measured_pairings"]["1"] = {
+        "pair": _reading_identity(), "relative": 0.004, "basis": "fixture measurement",
+    }
+    assert _record(pairing_table=table)["path_term"]["measured"] is True
+    with pytest.raises(ValueError, match="cross-path reading"):
+        _record()
+    table[GEMMA]["measured_pairings"]["1"]["pair"]["lens_sha256"] = OTHER_LENS_SHA
+    with pytest.raises(ValueError, match="lens_sha256"):
+        _record(pairing_table=table)
+    table[GEMMA]["layers"]["1"]["amplification_ratio"] = 539
+    with pytest.raises(ValueError, match="undeclared"):
+        _record(pairing_table=table)
+
+
+@pytest.mark.parametrize(
+    "measurement, diagnostic",
+    [
+        ({}, "missing"),
+        ({"relative": 0.004}, "basis"),
+        ({"basis": "paired measurement"}, "relative"),
+        ({"relative": float("nan"), "basis": "paired measurement"}, "relative"),
+        ({"relative": float("inf"), "basis": "paired measurement"}, "relative"),
+        ({"relative": -0.004, "basis": "paired measurement"}, "relative"),
+        ({"relative": True, "basis": "paired measurement"}, "relative"),
+        ({"relative": "0.004", "basis": "paired measurement"}, "relative"),
+        ({"relative": 0.004, "basis": " \t"}, "basis"),
+        ({"relative": 0.004, "basis": None}, "basis"),
+        ({"relative": 0.004, "basis": 1}, "basis"),
+        ({"relative": 0.004, "basis": "paired measurement", "amplification_ratio": 539},
+         "amplification_ratio"),
+        ({"relative": 0.004, "basis": "paired measurement", "unapproved": {}}, "unapproved"),
+    ],
+)
+def test_external_pairing_requires_a_finite_measured_term_and_declared_basis(
+    measurement, diagnostic,
+):
+    table = json.loads(json.dumps(B.anchor_table()))
+    table[GEMMA]["measured_pairings"]["1"] = {"pair": _reading_identity(), **measurement}
+    with pytest.raises(ValueError, match=diagnostic):
+        _record(pairing_table=table)
+
+
+def test_merged_width_schedule_is_preserved_and_requires_its_own_pairing():
+    nu = {"precision": {
+        "fit_dtype": "float32", "forward_batch": [16, 16, 8], "anchor_batch": [16, 16, 8],
+    }}
+    with pytest.raises(ValueError, match="cross-path reading"):
+        B.fit_precision_record(nu, declared="float32", layer=1, base=GEMMA,
+                               capture_dtype="float32", capture_batch=1)
+    pair = B.reading_identity(nu, lens_sha256=LENS_SHA, capture_dtype="float32",
+                              capture_batch=1, reading=READING)
+    assert pair["fit_width"] == [16, 16, 8]
+    table = json.loads(json.dumps(B.anchor_table()))
+    table[GEMMA]["measured_pairings"]["1"] = {
+        "pair": pair, "relative": 0.004, "basis": "fixture measurement of merged schedule",
+    }
+    out = B.fit_precision_record(nu, declared="float32", layer=1, base=GEMMA,
+                                 lens_sha256=LENS_SHA, capture_dtype="float32", capture_batch=1,
+                                 reading=READING, pairing_table=table)
+    assert out["path_term"]["measured"] and out["proposed_pair"]["fit_width"] == [16, 16, 8]
+
+
+def test_score_ranking_does_not_consume_the_raw_admission_mask():
+    d, u, _ = _two_axis_parts()
+    u = dataclasses.replace(u, weight=np.diag([1.0, 0.01]).astype(np.float32))
+    out = B.decompose_position(d, u, None, np.array([0.1, 1.0], np.float32), 0,
+                               error_budget=_error_budget())
+    assert out["raw_reconstruction_share"] == pytest.approx(0.99503719)
+    assert out["lens_score_error_share"] == pytest.approx(0.099503719)
+    assert out["raw_admissible"] is False and out["ranked"] is True
+    assert out["top_features"][0]["feature"] == 0
+
+
+@pytest.mark.parametrize("missing", ["raw_reconstruction_threshold", "lens_score_error_threshold",
+                                     "denominator_floor", "near_zero_policy"])
+def test_missing_budget_config_field_cannot_supply_an_admitting_default(missing):
+    config = _error_budget().as_dict()
+    del config[missing]
+    with pytest.raises(ValueError, match=missing):
+        B.ErrorBudget.from_dict(config)

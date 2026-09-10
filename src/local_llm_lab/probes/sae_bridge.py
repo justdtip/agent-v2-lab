@@ -56,7 +56,8 @@ import hashlib
 import json
 import re
 import struct
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,7 @@ import numpy as np
 
 __all__ = [
     "UNLABELLED_REASON",
+    "ErrorBudget",
     "JumpReLUDictionary",
     "Unembedding",
     "bridge_provenance",
@@ -76,11 +78,13 @@ __all__ = [
     "hook_alignment",
     "layer_for_hook",
     "lens_scores",
+    "lens_map_for_layer",
     "load_dictionary",
     "load_unembedding",
     "negative_control",
     "overlap_at_k",
     "read_tensor",
+    "raw_reconstruction_budget",
     "safetensors_header",
     "top_tokens",
 ]
@@ -246,42 +250,102 @@ def decode(dictionary: JumpReLUDictionary, z: np.ndarray) -> np.ndarray:
 # ------------------------------------------------------------------------------------ budget
 
 
-def reconstruction_budget(
-    dictionary: JumpReLUDictionary, residuals: np.ndarray, *, dominance: float
-) -> dict[str, Any]:
-    """Per-site residual share ``|e| / |h|`` and active-feature count, against a declared budget.
+@dataclass(frozen=True, kw_only=True)
+class ErrorBudget:
+    """Declared before interpretation; neither error threshold has an admitting default."""
 
-    ``residuals`` is ``(sites, hidden)``: one row per position the bridge would decompose. For
-    each, ``e = h - decode(encode(h))`` is what the dictionary did not explain, and its share of
-    ``|h|`` is the quantity ``decompose_position`` refuses to rank on when it exceeds
-    ``dominance``. This reports the distribution of that share over the set, and how many of the
-    sites the bridge would decline, so a set of real activations can be judged before any
-    per-site table is drawn. ``dominance`` is an input and is echoed, never chosen here.
+    raw_reconstruction_threshold: float
+    lens_score_error_threshold: float
+    denominator_floor: float
+    near_zero_policy: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "raw_reconstruction_threshold", "lens_score_error_threshold", "denominator_floor"
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Real) or not np.isfinite(value):
+                raise ValueError(f"{name} must be an explicitly declared finite number")
+            if value < 0 or (name == "denominator_floor" and value == 0):
+                bound = "positive" if name == "denominator_floor" else "nonnegative"
+                raise ValueError(f"{name} must be {bound}")
+        if self.near_zero_policy != "refuse":
+            raise ValueError("near_zero_policy must be explicitly declared as 'refuse'")
+
+    @classmethod
+    def from_dict(cls, value: object) -> ErrorBudget:
+        fields = {
+            "raw_reconstruction_threshold", "lens_score_error_threshold",
+            "denominator_floor", "near_zero_policy",
+        }
+        if not isinstance(value, dict):
+            raise ValueError(
+                "error_budget must declare both thresholds, denominator_floor and near_zero_policy"
+            )
+        if set(value) != fields:
+            raise ValueError(
+                f"error_budget fields missing {sorted(fields - set(value))}; "
+                f"undeclared {sorted(set(value) - fields)}"
+            )
+        return cls(**value)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            key: value if key == "near_zero_policy" else float(value)
+            for key, value in asdict(self).items()
+        }
+
+
+def _require_error_budget(error_budget: ErrorBudget) -> None:
+    if not isinstance(error_budget, ErrorBudget):
+        raise ValueError("error_budget must be an explicitly declared ErrorBudget")
+
+
+def _error_share(error: np.ndarray, reference: np.ndarray, budget: ErrorBudget) -> float | None:
+    """No epsilon changes the measured ratio; a denominator at/below its floor is unmeasured."""
+    if not np.isfinite(error).all() or not np.isfinite(reference).all():
+        raise ValueError("reconstruction error and denominator must be finite")
+    denominator = float(np.linalg.norm(np.asarray(reference, dtype=np.float64)))
+    if denominator <= budget.denominator_floor:
+        return None
+    return float(np.linalg.norm(np.asarray(error, dtype=np.float64)) / denominator)
+
+
+def raw_reconstruction_budget(
+    dictionary: JumpReLUDictionary, residuals: np.ndarray, *, error_budget: ErrorBudget
+) -> dict[str, Any]:
+    """Raw ``||e||/||h||`` distribution and admission, never an A2 score-ranking mask.
+
+    ``decompose_position`` separately measures ``||Le||/||Lh||``. Anisotropic readouts can
+    change these ratios in either direction; raw admission therefore licenses no score ranking.
     """
-    if not 0.0 < float(dominance) <= 1.0:
-        raise ValueError(f"dominance must be in (0, 1], not {dominance!r}")
+    _require_error_budget(error_budget)
     H = np.asarray(residuals, dtype=np.float32)
-    if H.ndim != 2 or H.shape[1] != dictionary.hidden_size:
+    if H.ndim != 2 or H.shape[1] != dictionary.hidden_size or H.shape[0] == 0:
         raise ValueError(
             f"residuals must be (sites, {dictionary.hidden_size}), not {tuple(H.shape)}"
         )
     z = encode(dictionary, H)
     e = H - decode(dictionary, z)
-    h_norm = np.linalg.norm(H, axis=1)
-    if not np.all(h_norm > 0):
-        raise ValueError("a zero residual has no share to report")
-    share = np.linalg.norm(e, axis=1) / h_norm
+    share = [_error_share(error, h, error_budget) for error, h in zip(e, H, strict=True)]
     active = (z > 0).sum(axis=1)
-    over = share > float(dominance)
+    over = [s is not None and s > error_budget.raw_reconstruction_threshold for s in share]
+    admissible = [s is not None and not too_large for s, too_large in zip(share, over, strict=True)]
+    measured = [s for s in share if s is not None]
     q = [0.0, 0.25, 0.5, 0.75, 1.0]
     return {
-        "dominance": float(dominance),
+        "error_budget": error_budget.as_dict(),
         "sites": int(H.shape[0]),
-        "residual_share": share,
-        "active_features": active,
-        "rankable": ~over,
-        "share_over_dominance": float(over.mean()),
-        "residual_share_quantiles": {str(x): float(v) for x, v in zip(q, np.quantile(share, q), strict=True)},
+        "raw_reconstruction_share": share,
+        "active_features": active.tolist(),
+        "raw_admissible": admissible,
+        "raw_over_threshold_fraction": float(np.mean(over)),
+        "raw_refused_fraction": float(1.0 - np.mean(admissible)),
+        "raw_near_zero_count": sum(s is None for s in share),
+        "raw_reconstruction_share_quantiles": (
+            {str(x): float(v) for x, v in zip(q, np.quantile(measured, q), strict=True)}
+            if measured else {str(x): None for x in q}
+        ),
         "active_features_quantiles": {
             str(x): int(v) for x, v in zip(q, np.quantile(active, q), strict=True)
         },
@@ -522,6 +586,15 @@ def anchor_table() -> dict[str, Any]:
     return _ANCHOR_TABLE
 
 
+def _supplied_pairing_table(table: dict[str, Any]) -> dict[str, Any]:
+    """Use the on-disk table schema, including its non-model underscore metadata."""
+    if not isinstance(table, dict) or any(not isinstance(key, str) for key in table):
+        raise ValueError("pairing_table must be a mapping keyed by model")
+    return _validate_anchor_table(
+        {key: value for key, value in table.items() if not key.startswith("_")}
+    )
+
+
 def anchor_sensitivity(layer: int, *, base: str | None = None) -> dict[str, Any] | None:
     """What the displacement control measured at ``layer`` of ``base``, or ``None``.
 
@@ -581,7 +654,7 @@ READING_FIELDS = ("positions", "reduction", "endpoint", "context_tokens")
 
 
 def _validate_pairing(pairing: Any, where: str) -> None:
-    """A registered pairing carries the identity of the pair it measured, or it is not one."""
+    """Require an identified pair, its finite measured term, and the measurement's basis."""
     if not isinstance(pairing, dict):
         raise ValueError(f"{ANCHOR_SENSITIVITY_PATH.name}: {where} must be a mapping")
     pair = pairing.get("pair")
@@ -592,6 +665,21 @@ def _validate_pairing(pairing: Any, where: str) -> None:
             f"{ANCHOR_SENSITIVITY_PATH.name}: {where}.pair must carry exactly {list(PAIR_FIELDS)}"
             + (f"; missing {missing}" if missing else "")
             + (f"; undeclared {extra}" if extra else "")
+        )
+    _check_keys(pairing, frozenset({"pair", "relative", "basis"}), where)
+    relative = pairing["relative"]
+    if (
+        isinstance(relative, bool)
+        or not isinstance(relative, (int, float))
+        or not np.isfinite(relative)
+        or relative < 0
+    ):
+        raise ValueError(
+            f"{ANCHOR_SENSITIVITY_PATH.name}: {where}.relative must be finite and nonnegative"
+        )
+    if not isinstance(pairing["basis"], str) or not pairing["basis"].strip():
+        raise ValueError(
+            f"{ANCHOR_SENSITIVITY_PATH.name}: {where}.basis must be a nonblank measurement basis"
         )
 
 
@@ -636,7 +724,8 @@ def reading_identity(
 
 
 def path_pairing(
-    layer: int, *, base: str | None = None, identity: dict[str, Any] | None = None
+    layer: int, *, base: str | None = None, identity: dict[str, Any] | None = None,
+    pairing_table: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """The measured pairing at ``layer`` of ``base`` **for this identity**, and why not if not.
 
@@ -645,7 +734,8 @@ def path_pairing(
     whose identity is incomplete, or one taken on a different pair, with the differing fields
     named. Model and layer alone never suffice, which was the defect this replaced.
     """
-    entry = anchor_table().get(base or "", {})
+    table = anchor_table() if pairing_table is None else _supplied_pairing_table(pairing_table)
+    entry = table.get(base or "", {})
     registered = (entry.get("measured_pairings") or {}).get(str(int(layer)))
     if not registered:
         return None, f"no cross-path pairing is registered at layer {layer} of {base!r}"
@@ -675,12 +765,13 @@ def path_pairing(
 
 
 def path_term_for_layer(
-    layer: int, *, base: str | None = None, identity: dict[str, Any] | None = None
+    layer: int, *, base: str | None = None, identity: dict[str, Any] | None = None,
+    pairing_table: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The cross-path term as it stands for one layer and one proposed pair: the measurement if
     one was taken on that pair, else the standing statement that none was, with that layer's
     sensitivity attached and the reason no measurement applies."""
-    measured, reason = path_pairing(layer, base=base, identity=identity)
+    measured, reason = path_pairing(layer, base=base, identity=identity, pairing_table=pairing_table)
     if measured is not None:
         return {"layer": int(layer), "base": base, "measured": True, **measured}
     term = dict(LENS_PATH_TERM)
@@ -726,6 +817,7 @@ def fit_precision_record(
     capture_dtype: str | None = None,
     capture_batch: int | None = None,
     reading: dict[str, Any] | None = None,
+    pairing_table: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compare a lens's declared fit precision with the registry's, and record the path term.
 
@@ -743,6 +835,8 @@ def fit_precision_record(
     which is the dictionary-direction readout and crosses nothing; passing the capture's own
     dtype is what a caller does when a residual is involved.
     """
+    if pairing_table is not None:
+        _supplied_pairing_table(pairing_table)
     fit = lens_fit_precision(nu)
     fit_dtype = fit["fit_dtype"]
     if declared is not None and fit_dtype is None:
@@ -779,7 +873,10 @@ def fit_precision_record(
     if (
         capture_batch is not None
         and fit["forward_batch"] is not None
-        and int(capture_batch) != int(fit["forward_batch"])
+        and (
+            isinstance(fit["forward_batch"], list)
+            or int(capture_batch) != int(fit["forward_batch"])
+        )
     ):
         crossings.append(
             f"the lens was fitted at forward width {fit['forward_batch']} and the capture is at "
@@ -805,7 +902,7 @@ def fit_precision_record(
         reading=reading,
     )
     record["proposed_pair"] = identity
-    term = path_term_for_layer(layer, base=base, identity=identity)
+    term = path_term_for_layer(layer, base=base, identity=identity, pairing_table=pairing_table)
     record["path_term"] = term
     if term["measured"]:
         return record
@@ -841,6 +938,17 @@ def fit_precision_record(
     )
 
 
+def lens_map_for_layer(lens: Any, layer: int) -> np.ndarray | None:
+    """A stored map, or the final identity only when the instrument explicitly declares it."""
+    if layer == lens.num_layers:
+        if getattr(getattr(lens, "identity", None), "endpoint", None) == "identity":
+            return None
+        raise ValueError(f"lens layer {layer} has no declared identity endpoint")
+    if layer not in lens.maps:
+        raise ValueError(f"lens carries no map at layer {layer}; stored layers are {sorted(lens.maps)}")
+    return lens.maps[layer]
+
+
 def hook_alignment(
     dictionary: JumpReLUDictionary,
     lens: Any,
@@ -851,6 +959,7 @@ def hook_alignment(
     capture_dtype: str | None = None,
     capture_batch: int | None = None,
     reading: dict[str, Any] | None = None,
+    pairing_table: dict[str, Any] | None = None,
 ) -> int:
     """The lens layer this dictionary reads, refusing a lens that is not of the same model.
 
@@ -893,11 +1002,7 @@ def hook_alignment(
                 f"{dict_base!r}"
             )
     layer = layer_for_hook(dictionary.hook_point)
-    if layer not in lens.maps:
-        raise ValueError(
-            f"dictionary hook {dictionary.hook_point!r} reads layer {layer}, and the lens carries "
-            f"no map at that layer (it has {min(lens.maps)}..{max(lens.maps)})"
-        )
+    lens_map_for_layer(lens, layer)
     if lens.hidden_size != dictionary.hidden_size:
         raise ValueError(
             f"lens width {lens.hidden_size} is not the dictionary's {dictionary.hidden_size}"
@@ -913,6 +1018,7 @@ def hook_alignment(
         capture_dtype=capture_dtype,
         capture_batch=capture_batch,
         reading=reading,
+        pairing_table=pairing_table,
     )
     return layer
 
@@ -1088,8 +1194,8 @@ def negative_control(
     behaviour a control must exhibit under a deliberate mismatch, or it is not a control.
     """
     sub = dictionary if features is None else _subset(dictionary, features)
-    here, _ = feature_scores(sub, unembedding, lens.maps[layer], k=k)
-    there, _ = feature_scores(sub, unembedding, lens.maps[other_layer], k=k)
+    here, _ = feature_scores(sub, unembedding, lens_map_for_layer(lens, layer), k=k)
+    there, _ = feature_scores(sub, unembedding, lens_map_for_layer(lens, other_layer), k=k)
     overlap = overlap_at_k(here, there)
     return {
         "layer": int(layer),
@@ -1157,8 +1263,8 @@ def decompose_position(
     h: np.ndarray,
     emitted_token: int,
     *,
+    error_budget: ErrorBudget,
     k: int = 10,
-    dominance: float = 0.5,
     gain: bool = True,
     tolerance: float = 1e-3,
 ) -> dict[str, Any]:
@@ -1167,9 +1273,11 @@ def decompose_position(
 
     Computes every term of ``L h = L b + sum_i z_i (L d_i) + L e`` and asserts the identity on the
     emitted token before reporting anything, so a wrong orientation cannot produce a ranked table.
-    If ``|L e| / |L h|`` exceeds ``dominance`` the decomposition is describing the dictionary's
-    failure and not the model, and the result says so instead of ranking under it.
+    Raw reconstruction admission and score-space ranking are separate decisions. Thresholds and
+    the denominator policy must be supplied explicitly, before interpretation. A denominator at
+    or below the declared floor is refused, not repaired with an additive epsilon.
     """
+    _require_error_budget(error_budget)
     h = np.asarray(h, dtype=np.float32).reshape(-1)
     if h.shape[0] != dictionary.hidden_size:
         raise ValueError(f"activation has width {h.shape[0]}, dictionary {dictionary.hidden_size}")
@@ -1194,7 +1302,13 @@ def decompose_position(
             f"the score decomposition is not exact at token {emitted_token}: gap {identity_gap:.3e} "
             f"against a score of {scale:.3e}; orientation or convention is wrong"
         )
-    share = float(np.linalg.norm(le) / (np.linalg.norm(lh) + 1e-12))
+    raw_share = _error_share(e, h, error_budget)
+    score_share = _error_share(le, lh, error_budget)
+    raw_admissible = raw_share is not None and raw_share <= error_budget.raw_reconstruction_threshold
+    ranked = (
+        raw_share is not None and score_share is not None
+        and score_share <= error_budget.lens_score_error_threshold
+    )
     active = int((z > 0).sum())
     out: dict[str, Any] = {
         "emitted_token": int(emitted_token),
@@ -1203,16 +1317,27 @@ def decompose_position(
         "residual_term": float(le[emitted_token]),
         "feature_sum": float(contributions.sum()),
         "identity_gap": identity_gap,
-        "residual_share": share,
+        "raw_reconstruction_share": raw_share,
+        "lens_score_error_share": score_share,
+        "raw_admissible": raw_admissible,
         "active_features": active,
-        "dominance_threshold": dominance,
-        "ranked": share <= dominance,
+        "error_budget": error_budget.as_dict(),
+        "ranked": ranked,
     }
-    if share > dominance:
-        out["reason"] = (
-            "residual dominates: the decomposition describes the dictionary's failure at this "
-            "position, not the model; features are not ranked under it"
-        )
+    if not ranked:
+        if raw_share is None or score_share is None:
+            which = [
+                name for name, value in (("raw reconstruction", raw_share), ("lens score", score_share))
+                if value is None
+            ]
+            out["reason"] = (
+                f"near-zero denominator for {', '.join(which)}; declared policy refuses ranking"
+            )
+        else:
+            out["reason"] = (
+                "lens score error exceeds its declared threshold: the decomposition describes "
+                "the dictionary's failure at this position; features are not ranked under it"
+            )
         return out
     order = np.argsort(-np.abs(contributions), kind="stable")[:k]
     out["top_features"] = [
