@@ -93,51 +93,54 @@ selected after the fact, the headline stays the 0.5 fraction at r = 8, and the f
 reported as §5 requires. The rule at a depth is fitted on residuals at that depth and is applied and
 scored only there.
 
-## 5. The capability gate, which is the clause this amendment exists for
+## 5. The capability gate, and the capability report beside the result
 
 **Before any corrective stratum is scored, and on the fitting folds' own held-out ordinary
-transitions only, the rule must be shown capable of passing.**
+transitions only, the rule form must be shown capable of passing.**
 
-> **Gate, form A — as drafted before measuring.** For at least **50%** of out-of-fold ordinary
-> transitions, at the **headline** depth and rank, on **both** models, `T_r(x_k)` must be strictly
-> nearer to `x_{k+1}` than to `x_k`.
->
-> **Gate, form B — proposed after measuring, and the reason is below.** The same threshold and the
-> same comparison, but read at the **top of the ladder**, r = 32, because the gate's purpose is to
-> reject a rule form that cannot pass *by its geometry*, which is a property of the form and not of
-> one rank. The fraction at every rank is reported either way.
+> **Gate.** For at least **50%** of out-of-fold ordinary transitions, at the headline depth and at the
+> **top of the ladder, r = 32**, on **both** models, `T_r(x_k)` must be strictly nearer to `x_{k+1}`
+> than to `x_k`. If it fails, no corrective stratum is scored, the amendment is revised, and the
+> record says so.
 
-**The measurement, and the open question, stated plainly because it is a threshold moved after seeing
-a number.** I wrote form A before running anything. Measured out of fold on the 4,122 ordinary
-**train** transitions, at the headline depth:
+The gate tests the **form**, and a property of the form is read where the form is least constrained.
+A geometry that forbids a hit scores near zero at *every* rank — the withdrawn rule scored 0.000 at
+the only rank it had — while a form that can transport shows it once its capacity is not the binding
+constraint. Reading the gate at a rank chosen for a different purpose would confuse "this form cannot
+work" with "eight directions are not many", which are different findings and only the first should
+stop a reading.
+
+**How this clause reached its present form, recorded because the reader is owed it.** It was drafted
+as 50% at the **headline** rank, before anything was run. It was then measured, out of fold, on the
+4,122 ordinary **train** transitions at the headline depth:
 
 | identity + correction at rank | 1 | 2 | 4 | 8 | 16 | 32 |
 |---|---:|---:|---:|---:|---:|---:|
 | 4B, layer 17 | 0.109 | 0.241 | 0.424 | **0.586** | 0.775 | 0.904 |
 | 12B, layer 24 | — | 0.158 | 0.321 | **0.493** | 0.732 | 0.901 |
 
-Form A **fails**, on the 12B, by seven thousandths. Form B passes on both at 0.90. I am not choosing
-between them: the argument for form B is one I can make on principle — the gate exists to reject a
-form whose geometry forbids a hit, my withdrawn rule scored 0.000 at the only rank it had, and this
-form reaches 0.90 — but I wrote form A first and the number is what prompted the rethink, so the
-choice is the Chief's. If form A stands, E2 stays unread at the pre-registered headline and the
-amendment is revised again.
+At the headline rank the 12B gives 0.493, so the clause as drafted failed by seven thousandths. It was
+put to the Chief unresolved rather than adjusted, and the Chief reclassified it on 2026-09-10 for the
+reason above: **the gate tests the form, and the form is least constrained at the top of the ladder.**
+The seven thousandths are not the reason and are not a reason; had the form scored 0.11 at r = 32 the
+gate would have failed and E2 would stay unread.
 
-Whichever is chosen, the headline rank's fraction is **reported beside the headline result**, so that
-a low hit rate at r = 8 is read against the fact that the rule clears the source on 0.586 and 0.493 of
-ordinary transitions there. That reporting is not conditional on the gate's form.
+**The headline rank's fraction is not a gate. It is a mandatory capability report.** E2's hit rate at
+r = 8 is printed beside **0.586** and **0.493** unconditionally, at every depth and in the record, so
+that a low corrective hit rate is read against a rule that beats its own source about half the time on
+ordinary transitions at that rank. That is a **ceiling on what the rank can show, not a null**, and
+conflating the two would be the same error in the other direction.
 
-If the gate fails, no corrective stratum is scored, the amendment is revised, and the record says so.
+The gate and the report are two-point comparisons between the successor and the source. Neither is
+the retrieval score, which ranks all *N* candidates, and both are computed on ordinary **training**
+transitions, so neither says anything about any corrective stratum nor can inform a later choice
+about them.
 
-This is a two-point comparison between the successor and the source. It is **not** the retrieval
-score, which ranks all *N* candidates, and it is computed on ordinary training transitions, so
-passing it says nothing about any corrective stratum and cannot inform a later choice about them.
-
-The gate exists because the rule it replaces failed it absolutely: measured on the 4,122 ordinary
+The clause exists because the rule it replaces failed it absolutely: measured on the 4,122 ordinary
 train transitions, the transported point sat 313.5 from the source and never closer than 398.1 to any
 successor — **0 of 4,122** — so the zeros in every stratum were determined before a corrective
 transition was ever touched. A score that cannot come out otherwise measures the instrument
-(`METHOD-2026-09-08`, entry 27), and a gate that would have said so beforehand costs one number.
+(`METHOD-2026-09-08`, entry 27), and a clause that would have said so beforehand costs one number.
 
 ## 6. A declared descriptive baseline for local order
 
