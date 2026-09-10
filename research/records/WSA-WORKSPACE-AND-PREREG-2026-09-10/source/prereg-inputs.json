@@ -1,0 +1,1231 @@
+{
+  "a2_decisions_without_a_rendered_row": {
+    "by_task": {
+      "train-aggregate_report-0023-wrong_path": [
+        0
+      ],
+      "train-aggregate_report-0047-unknown_tool": [
+        9
+      ],
+      "train-aggregate_report-0059-stale_path": [
+        4
+      ],
+      "train-aggregate_report-0071-failed_edit": [
+        9
+      ],
+      "train-aggregate_report-0095-wrong_path": [
+        10
+      ],
+      "train-aggregate_report-0119-unknown_tool": [
+        9
+      ],
+      "train-aggregate_report-0131-stale_path": [
+        4
+      ],
+      "train-aggregate_report-0143-failed_edit": [
+        9
+      ],
+      "train-aggregate_report-0167-wrong_path": [
+        4
+      ],
+      "train-aggregate_report-0191-unknown_tool": [
+        9
+      ],
+      "train-aggregate_report-0203-stale_path": [
+        3
+      ],
+      "train-aggregate_report-0215-failed_edit": [
+        9
+      ],
+      "train-aggregate_report-0239-wrong_path": [
+        10
+      ],
+      "train-aggregate_report-0263-unknown_tool": [
+        9
+      ],
+      "train-aggregate_report-0275-stale_path": [
+        4
+      ],
+      "train-aggregate_report-0287-failed_edit": [
+        9
+      ],
+      "train-aggregate_report-0311-wrong_path": [
+        8
+      ],
+      "train-aggregate_report-0335-unknown_tool": [
+        9
+      ],
+      "train-aggregate_report-0347-stale_path": [
+        4
+      ],
+      "train-aggregate_report-0359-failed_edit": [
+        9
+      ],
+      "train-aggregate_report-0383-wrong_path": [
+        2
+      ],
+      "train-aggregate_report-0407-unknown_tool": [
+        9
+      ],
+      "train-aggregate_report-0419-stale_path": [
+        4
+      ],
+      "train-aggregate_report-0431-failed_edit": [
+        9
+      ],
+      "train-aggregate_report-0455-wrong_path": [
+        0
+      ],
+      "train-aggregate_report-0479-unknown_tool": [
+        9
+      ],
+      "train-batch_update-0022-wrong_path": [
+        6
+      ],
+      "train-batch_update-0046-unknown_tool": [
+        3
+      ],
+      "train-batch_update-0058-failed_edit": [
+        3
+      ],
+      "train-batch_update-0082-wrong_path": [
+        1
+      ],
+      "train-batch_update-0106-unknown_tool": [
+        4
+      ],
+      "train-batch_update-0118-failed_edit": [
+        3
+      ],
+      "train-batch_update-0142-wrong_path": [
+        5
+      ],
+      "train-batch_update-0166-unknown_tool": [
+        4
+      ],
+      "train-batch_update-0178-failed_edit": [
+        3
+      ],
+      "train-batch_update-0202-wrong_path": [
+        6
+      ],
+      "train-batch_update-0226-unknown_tool": [
+        4
+      ],
+      "train-batch_update-0238-failed_edit": [
+        3
+      ],
+      "train-batch_update-0262-wrong_path": [
+        2
+      ],
+      "train-batch_update-0286-unknown_tool": [
+        4
+      ],
+      "train-batch_update-0298-failed_edit": [
+        4
+      ],
+      "train-batch_update-0322-wrong_path": [
+        2
+      ],
+      "train-batch_update-0346-unknown_tool": [
+        4
+      ],
+      "train-batch_update-0358-failed_edit": [
+        3
+      ],
+      "train-batch_update-0382-wrong_path": [
+        5
+      ],
+      "train-batch_update-0406-unknown_tool": [
+        3
+      ],
+      "train-batch_update-0418-failed_edit": [
+        4
+      ],
+      "train-batch_update-0442-wrong_path": [
+        5
+      ],
+      "train-batch_update-0466-unknown_tool": [
+        3
+      ],
+      "train-batch_update-0478-failed_edit": [
+        4
+      ],
+      "train-conditional_update-0021-wrong_path": [
+        2
+      ],
+      "train-conditional_update-0045-unknown_tool": [
+        5
+      ],
+      "train-conditional_update-0057-stale_path": [
+        4
+      ],
+      "train-conditional_update-0069-failed_edit": [
+        5
+      ],
+      "train-conditional_update-0093-wrong_path": [
+        6
+      ],
+      "train-conditional_update-0117-unknown_tool": [
+        5
+      ],
+      "train-conditional_update-0129-stale_path": [
+        4
+      ],
+      "train-conditional_update-0141-failed_edit": [
+        5
+      ],
+      "train-conditional_update-0165-wrong_path": [
+        3
+      ],
+      "train-conditional_update-0189-unknown_tool": [
+        5
+      ],
+      "train-conditional_update-0201-stale_path": [
+        4
+      ],
+      "train-conditional_update-0213-failed_edit": [
+        5
+      ],
+      "train-conditional_update-0237-wrong_path": [
+        3
+      ],
+      "train-conditional_update-0261-unknown_tool": [
+        5
+      ],
+      "train-conditional_update-0273-stale_path": [
+        6
+      ],
+      "train-conditional_update-0285-failed_edit": [
+        5
+      ],
+      "train-conditional_update-0309-wrong_path": [
+        4
+      ],
+      "train-conditional_update-0333-unknown_tool": [
+        5
+      ],
+      "train-conditional_update-0345-stale_path": [
+        6
+      ],
+      "train-conditional_update-0357-failed_edit": [
+        5
+      ],
+      "train-conditional_update-0381-wrong_path": [
+        4
+      ],
+      "train-conditional_update-0405-unknown_tool": [
+        5
+      ],
+      "train-conditional_update-0417-stale_path": [
+        6
+      ],
+      "train-conditional_update-0429-failed_edit": [
+        5
+      ],
+      "train-conditional_update-0453-wrong_path": [
+        2
+      ],
+      "train-conditional_update-0477-unknown_tool": [
+        5
+      ],
+      "train-cross_reference-0020-wrong_path": [
+        1
+      ],
+      "train-cross_reference-0056-wrong_path": [
+        3
+      ],
+      "train-cross_reference-0092-wrong_path": [
+        1
+      ],
+      "train-cross_reference-0128-wrong_path": [
+        3
+      ],
+      "train-cross_reference-0164-wrong_path": [
+        1
+      ],
+      "train-cross_reference-0200-wrong_path": [
+        1
+      ],
+      "train-cross_reference-0236-wrong_path": [
+        3
+      ],
+      "train-cross_reference-0272-wrong_path": [
+        5
+      ],
+      "train-cross_reference-0308-wrong_path": [
+        3
+      ],
+      "train-cross_reference-0344-wrong_path": [
+        1
+      ],
+      "train-cross_reference-0380-wrong_path": [
+        5
+      ],
+      "train-cross_reference-0416-wrong_path": [
+        5
+      ],
+      "train-cross_reference-0452-wrong_path": [
+        3
+      ],
+      "train-ledger_reconcile-0019-wrong_path": [
+        6
+      ],
+      "train-ledger_reconcile-0043-unknown_tool": [
+        7
+      ],
+      "train-ledger_reconcile-0055-stale_path": [
+        4
+      ],
+      "train-ledger_reconcile-0067-failed_edit": [
+        7
+      ],
+      "train-ledger_reconcile-0091-wrong_path": [
+        0
+      ],
+      "train-ledger_reconcile-0115-unknown_tool": [
+        7
+      ],
+      "train-ledger_reconcile-0127-stale_path": [
+        3
+      ],
+      "train-ledger_reconcile-0139-failed_edit": [
+        7
+      ],
+      "train-ledger_reconcile-0163-wrong_path": [
+        0
+      ],
+      "train-ledger_reconcile-0187-unknown_tool": [
+        7
+      ],
+      "train-ledger_reconcile-0199-stale_path": [
+        4
+      ],
+      "train-ledger_reconcile-0211-failed_edit": [
+        7
+      ],
+      "train-ledger_reconcile-0235-wrong_path": [
+        8
+      ],
+      "train-ledger_reconcile-0259-unknown_tool": [
+        7
+      ],
+      "train-ledger_reconcile-0271-stale_path": [
+        3
+      ],
+      "train-ledger_reconcile-0283-failed_edit": [
+        7
+      ],
+      "train-ledger_reconcile-0307-wrong_path": [
+        0
+      ],
+      "train-ledger_reconcile-0331-unknown_tool": [
+        7
+      ],
+      "train-ledger_reconcile-0343-stale_path": [
+        4
+      ],
+      "train-ledger_reconcile-0355-failed_edit": [
+        7
+      ],
+      "train-ledger_reconcile-0379-wrong_path": [
+        4
+      ],
+      "train-ledger_reconcile-0403-unknown_tool": [
+        7
+      ],
+      "train-ledger_reconcile-0415-stale_path": [
+        4
+      ],
+      "train-ledger_reconcile-0427-failed_edit": [
+        7
+      ],
+      "train-ledger_reconcile-0451-wrong_path": [
+        0
+      ],
+      "train-ledger_reconcile-0475-unknown_tool": [
+        7
+      ],
+      "train-list-0017-wrong_path": [
+        0
+      ],
+      "train-list-0053-wrong_path": [
+        1
+      ],
+      "train-list-0089-wrong_path": [
+        0
+      ],
+      "train-list-0125-wrong_path": [
+        1
+      ],
+      "train-list-0161-wrong_path": [
+        0
+      ],
+      "train-list-0197-wrong_path": [
+        0
+      ],
+      "train-list-0233-wrong_path": [
+        0
+      ],
+      "train-list-0269-wrong_path": [
+        0
+      ],
+      "train-list-0305-wrong_path": [
+        0
+      ],
+      "train-list-0341-wrong_path": [
+        1
+      ],
+      "train-list-0377-wrong_path": [
+        0
+      ],
+      "train-list-0413-wrong_path": [
+        0
+      ],
+      "train-list-0449-wrong_path": [
+        1
+      ],
+      "train-pointer_chain-0018-wrong_path": [
+        1
+      ],
+      "train-pointer_chain-0054-wrong_path": [
+        4
+      ],
+      "train-pointer_chain-0090-wrong_path": [
+        1
+      ],
+      "train-pointer_chain-0126-wrong_path": [
+        4
+      ],
+      "train-pointer_chain-0162-wrong_path": [
+        4
+      ],
+      "train-pointer_chain-0198-wrong_path": [
+        3
+      ],
+      "train-pointer_chain-0234-wrong_path": [
+        3
+      ],
+      "train-pointer_chain-0270-wrong_path": [
+        4
+      ],
+      "train-pointer_chain-0306-wrong_path": [
+        4
+      ],
+      "train-pointer_chain-0342-wrong_path": [
+        3
+      ],
+      "train-pointer_chain-0378-wrong_path": [
+        3
+      ],
+      "train-pointer_chain-0414-wrong_path": [
+        1
+      ],
+      "train-pointer_chain-0450-wrong_path": [
+        3
+      ],
+      "train-search-0013-wrong_path": [
+        1
+      ],
+      "train-search-0049-wrong_path": [
+        1
+      ],
+      "train-search-0085-wrong_path": [
+        1
+      ],
+      "train-search-0121-wrong_path": [
+        1
+      ],
+      "train-search-0157-wrong_path": [
+        1
+      ],
+      "train-search-0193-wrong_path": [
+        1
+      ],
+      "train-search-0229-wrong_path": [
+        1
+      ],
+      "train-search-0265-wrong_path": [
+        1
+      ],
+      "train-search-0301-wrong_path": [
+        1
+      ],
+      "train-search-0337-wrong_path": [
+        1
+      ],
+      "train-search-0373-wrong_path": [
+        1
+      ],
+      "train-search-0409-wrong_path": [
+        1
+      ],
+      "train-search-0445-wrong_path": [
+        1
+      ],
+      "train-synthesis-0015-wrong_path": [
+        1
+      ],
+      "train-synthesis-0051-wrong_path": [
+        1
+      ],
+      "train-synthesis-0087-wrong_path": [
+        1
+      ],
+      "train-synthesis-0123-wrong_path": [
+        1
+      ],
+      "train-synthesis-0159-wrong_path": [
+        1
+      ],
+      "train-synthesis-0195-wrong_path": [
+        1
+      ],
+      "train-synthesis-0231-wrong_path": [
+        1
+      ],
+      "train-synthesis-0267-wrong_path": [
+        1
+      ],
+      "train-synthesis-0303-wrong_path": [
+        1
+      ],
+      "train-synthesis-0339-wrong_path": [
+        1
+      ],
+      "train-synthesis-0375-wrong_path": [
+        1
+      ],
+      "train-synthesis-0411-wrong_path": [
+        1
+      ],
+      "train-synthesis-0447-wrong_path": [
+        1
+      ],
+      "train-update-0016-wrong_path": [
+        2
+      ],
+      "train-update-0040-unknown_tool": [
+        1
+      ],
+      "train-update-0052-failed_edit": [
+        1
+      ],
+      "train-update-0076-wrong_path": [
+        2
+      ],
+      "train-update-0100-unknown_tool": [
+        1
+      ],
+      "train-update-0112-failed_edit": [
+        1
+      ],
+      "train-update-0136-wrong_path": [
+        2
+      ],
+      "train-update-0160-unknown_tool": [
+        1
+      ],
+      "train-update-0172-failed_edit": [
+        1
+      ],
+      "train-update-0196-wrong_path": [
+        2
+      ],
+      "train-update-0220-unknown_tool": [
+        1
+      ],
+      "train-update-0232-failed_edit": [
+        1
+      ],
+      "train-update-0256-wrong_path": [
+        2
+      ],
+      "train-update-0280-unknown_tool": [
+        1
+      ],
+      "train-update-0292-failed_edit": [
+        1
+      ],
+      "train-update-0316-wrong_path": [
+        2
+      ],
+      "train-update-0340-unknown_tool": [
+        1
+      ],
+      "train-update-0352-failed_edit": [
+        1
+      ],
+      "train-update-0376-wrong_path": [
+        2
+      ],
+      "train-update-0400-unknown_tool": [
+        1
+      ],
+      "train-update-0412-failed_edit": [
+        1
+      ],
+      "train-update-0436-wrong_path": [
+        2
+      ],
+      "train-update-0460-unknown_tool": [
+        1
+      ],
+      "train-update-0472-failed_edit": [
+        1
+      ],
+      "train1-aggregate_report-0023-wrong_path": [
+        1
+      ],
+      "train1-aggregate_report-0047-unknown_tool": [
+        10
+      ],
+      "train1-aggregate_report-0059-stale_path": [
+        3
+      ],
+      "train1-aggregate_report-0071-failed_edit": [
+        10
+      ],
+      "train1-aggregate_report-0095-wrong_path": [
+        0
+      ],
+      "train1-aggregate_report-0119-unknown_tool": [
+        10
+      ],
+      "train1-aggregate_report-0131-stale_path": [
+        5
+      ],
+      "train1-aggregate_report-0143-failed_edit": [
+        10
+      ],
+      "train1-aggregate_report-0167-wrong_path": [
+        11
+      ],
+      "train1-aggregate_report-0191-unknown_tool": [
+        10
+      ],
+      "train1-aggregate_report-0203-stale_path": [
+        5
+      ],
+      "train1-aggregate_report-0215-failed_edit": [
+        10
+      ],
+      "train1-aggregate_report-0239-wrong_path": [
+        4
+      ],
+      "train1-batch_update-0022-wrong_path": [
+        7
+      ],
+      "train1-batch_update-0046-unknown_tool": [
+        6
+      ],
+      "train1-batch_update-0058-failed_edit": [
+        6
+      ],
+      "train1-batch_update-0082-wrong_path": [
+        2
+      ],
+      "train1-batch_update-0106-unknown_tool": [
+        6
+      ],
+      "train1-batch_update-0118-failed_edit": [
+        5
+      ],
+      "train1-batch_update-0142-wrong_path": [
+        8
+      ],
+      "train1-batch_update-0166-unknown_tool": [
+        5
+      ],
+      "train1-batch_update-0178-failed_edit": [
+        6
+      ],
+      "train1-batch_update-0202-wrong_path": [
+        3
+      ],
+      "train1-batch_update-0226-unknown_tool": [
+        6
+      ],
+      "train1-batch_update-0238-failed_edit": [
+        6
+      ],
+      "train1-conditional_update-0021-wrong_path": [
+        2
+      ],
+      "train1-conditional_update-0045-unknown_tool": [
+        6
+      ],
+      "train1-conditional_update-0057-stale_path": [
+        4
+      ],
+      "train1-conditional_update-0069-failed_edit": [
+        6
+      ],
+      "train1-conditional_update-0093-wrong_path": [
+        7
+      ],
+      "train1-conditional_update-0117-unknown_tool": [
+        6
+      ],
+      "train1-conditional_update-0129-stale_path": [
+        7
+      ],
+      "train1-conditional_update-0141-failed_edit": [
+        6
+      ],
+      "train1-conditional_update-0165-wrong_path": [
+        3
+      ],
+      "train1-conditional_update-0189-unknown_tool": [
+        6
+      ],
+      "train1-conditional_update-0201-stale_path": [
+        4
+      ],
+      "train1-conditional_update-0213-failed_edit": [
+        6
+      ],
+      "train1-conditional_update-0237-wrong_path": [
+        7
+      ],
+      "train1-cross_reference-0020-wrong_path": [
+        7
+      ],
+      "train1-cross_reference-0056-wrong_path": [
+        1
+      ],
+      "train1-cross_reference-0092-wrong_path": [
+        5
+      ],
+      "train1-cross_reference-0128-wrong_path": [
+        7
+      ],
+      "train1-cross_reference-0164-wrong_path": [
+        3
+      ],
+      "train1-cross_reference-0200-wrong_path": [
+        1
+      ],
+      "train1-cross_reference-0236-wrong_path": [
+        3
+      ],
+      "train1-ledger_reconcile-0019-wrong_path": [
+        3
+      ],
+      "train1-ledger_reconcile-0043-unknown_tool": [
+        8
+      ],
+      "train1-ledger_reconcile-0055-stale_path": [
+        5
+      ],
+      "train1-ledger_reconcile-0067-failed_edit": [
+        8
+      ],
+      "train1-ledger_reconcile-0091-wrong_path": [
+        0
+      ],
+      "train1-ledger_reconcile-0115-unknown_tool": [
+        8
+      ],
+      "train1-ledger_reconcile-0127-stale_path": [
+        3
+      ],
+      "train1-ledger_reconcile-0139-failed_edit": [
+        8
+      ],
+      "train1-ledger_reconcile-0163-wrong_path": [
+        9
+      ],
+      "train1-ledger_reconcile-0187-unknown_tool": [
+        8
+      ],
+      "train1-ledger_reconcile-0199-stale_path": [
+        4
+      ],
+      "train1-ledger_reconcile-0211-failed_edit": [
+        8
+      ],
+      "train1-ledger_reconcile-0235-wrong_path": [
+        1
+      ],
+      "train1-list-0017-wrong_path": [
+        0
+      ],
+      "train1-list-0053-wrong_path": [
+        1
+      ],
+      "train1-list-0089-wrong_path": [
+        0
+      ],
+      "train1-list-0125-wrong_path": [
+        0
+      ],
+      "train1-list-0161-wrong_path": [
+        1
+      ],
+      "train1-list-0197-wrong_path": [
+        1
+      ],
+      "train1-list-0233-wrong_path": [
+        0
+      ],
+      "train1-pointer_chain-0018-wrong_path": [
+        2
+      ],
+      "train1-pointer_chain-0054-wrong_path": [
+        4
+      ],
+      "train1-pointer_chain-0090-wrong_path": [
+        1
+      ],
+      "train1-pointer_chain-0126-wrong_path": [
+        5
+      ],
+      "train1-pointer_chain-0162-wrong_path": [
+        5
+      ],
+      "train1-pointer_chain-0198-wrong_path": [
+        2
+      ],
+      "train1-pointer_chain-0234-wrong_path": [
+        3
+      ],
+      "train1-search-0013-wrong_path": [
+        1
+      ],
+      "train1-search-0049-wrong_path": [
+        1
+      ],
+      "train1-search-0085-wrong_path": [
+        1
+      ],
+      "train1-search-0121-wrong_path": [
+        1
+      ],
+      "train1-search-0157-wrong_path": [
+        1
+      ],
+      "train1-search-0193-wrong_path": [
+        1
+      ],
+      "train1-search-0229-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0015-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0051-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0087-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0123-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0159-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0195-wrong_path": [
+        1
+      ],
+      "train1-synthesis-0231-wrong_path": [
+        1
+      ],
+      "train1-update-0016-wrong_path": [
+        2
+      ],
+      "train1-update-0040-unknown_tool": [
+        1
+      ],
+      "train1-update-0052-failed_edit": [
+        1
+      ],
+      "train1-update-0076-wrong_path": [
+        2
+      ],
+      "train1-update-0100-unknown_tool": [
+        1
+      ],
+      "train1-update-0112-failed_edit": [
+        1
+      ],
+      "train1-update-0136-wrong_path": [
+        2
+      ],
+      "train1-update-0160-unknown_tool": [
+        1
+      ],
+      "train1-update-0172-failed_edit": [
+        1
+      ],
+      "train1-update-0196-wrong_path": [
+        2
+      ],
+      "train1-update-0220-unknown_tool": [
+        1
+      ],
+      "train1-update-0232-failed_edit": [
+        1
+      ],
+      "train2-aggregate_report-0023-wrong_path": [
+        5
+      ],
+      "train2-aggregate_report-0047-unknown_tool": [
+        11
+      ],
+      "train2-aggregate_report-0059-stale_path": [
+        6
+      ],
+      "train2-aggregate_report-0071-failed_edit": [
+        11
+      ],
+      "train2-aggregate_report-0095-wrong_path": [
+        5
+      ],
+      "train2-aggregate_report-0119-unknown_tool": [
+        11
+      ],
+      "train2-batch_update-0022-wrong_path": [
+        9
+      ],
+      "train2-batch_update-0046-unknown_tool": [
+        6
+      ],
+      "train2-batch_update-0058-failed_edit": [
+        5
+      ],
+      "train2-batch_update-0082-wrong_path": [
+        1
+      ],
+      "train2-batch_update-0106-unknown_tool": [
+        6
+      ],
+      "train2-batch_update-0118-failed_edit": [
+        5
+      ],
+      "train2-conditional_update-0021-wrong_path": [
+        5
+      ],
+      "train2-conditional_update-0045-unknown_tool": [
+        7
+      ],
+      "train2-conditional_update-0057-stale_path": [
+        6
+      ],
+      "train2-conditional_update-0069-failed_edit": [
+        7
+      ],
+      "train2-conditional_update-0093-wrong_path": [
+        8
+      ],
+      "train2-conditional_update-0117-unknown_tool": [
+        7
+      ],
+      "train2-cross_reference-0020-wrong_path": [
+        5
+      ],
+      "train2-cross_reference-0056-wrong_path": [
+        1
+      ],
+      "train2-cross_reference-0092-wrong_path": [
+        3
+      ],
+      "train2-ledger_reconcile-0019-wrong_path": [
+        0
+      ],
+      "train2-ledger_reconcile-0043-unknown_tool": [
+        9
+      ],
+      "train2-ledger_reconcile-0055-stale_path": [
+        6
+      ],
+      "train2-ledger_reconcile-0067-failed_edit": [
+        9
+      ],
+      "train2-ledger_reconcile-0091-wrong_path": [
+        0
+      ],
+      "train2-ledger_reconcile-0115-unknown_tool": [
+        9
+      ],
+      "train2-list-0017-wrong_path": [
+        1
+      ],
+      "train2-list-0053-wrong_path": [
+        0
+      ],
+      "train2-list-0089-wrong_path": [
+        0
+      ],
+      "train2-pointer_chain-0018-wrong_path": [
+        3
+      ],
+      "train2-pointer_chain-0054-wrong_path": [
+        3
+      ],
+      "train2-pointer_chain-0090-wrong_path": [
+        5
+      ],
+      "train2-search-0013-wrong_path": [
+        1
+      ],
+      "train2-search-0049-wrong_path": [
+        1
+      ],
+      "train2-search-0085-wrong_path": [
+        1
+      ],
+      "train2-synthesis-0015-wrong_path": [
+        1
+      ],
+      "train2-synthesis-0051-wrong_path": [
+        1
+      ],
+      "train2-synthesis-0087-wrong_path": [
+        1
+      ],
+      "train2-update-0016-wrong_path": [
+        2
+      ],
+      "train2-update-0040-unknown_tool": [
+        1
+      ],
+      "train2-update-0052-failed_edit": [
+        1
+      ],
+      "train2-update-0076-wrong_path": [
+        2
+      ],
+      "train2-update-0100-unknown_tool": [
+        1
+      ],
+      "train2-update-0112-failed_edit": [
+        1
+      ]
+    },
+    "missing_steps_total": 334,
+    "rule": "the renderer drops a row whose observation begins ERROR unless that step is an injected fault; the dropped turn still enters the context, so the turn count is still the step index",
+    "tasks_affected": 334
+  },
+  "basis": "measured-here",
+  "corpus_archive_sha256": "7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120",
+  "decisions": {
+    "capture_set_sha256": "1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a",
+    "extra_rows_from_oversampling": 930,
+    "note": "the capture unit: one distinct (task_id, step). The extra rendered rows are byte-identical copies made by `recovery_repeats` in the training split only (data.py), which is a training-mix weight and not a second decision",
+    "per_split": {
+      "test": 1781,
+      "train": 5515,
+      "valid": 333
+    },
+    "recovery": 578,
+    "rendered_rows_per_decision": {
+      "1": 7051,
+      "2": 490,
+      "6": 88
+    },
+    "repeated_keys_that_are_not_identical_rows": {},
+    "total": 7629
+  },
+  "e2_transition_census": {
+    "by_kind": {
+      "into_recovery": 244,
+      "into_recovery_across_a_gap": 309,
+      "ordinary": 5948
+    },
+    "by_split": {
+      "test": {
+        "ordinary": 1541
+      },
+      "train": {
+        "into_recovery": 244,
+        "into_recovery_across_a_gap": 309,
+        "ordinary": 4122
+      },
+      "valid": {
+        "ordinary": 285
+      }
+    },
+    "by_variant": {
+      "clean": {
+        "ordinary": 2930
+      },
+      "failed_edit": {
+        "into_recovery_across_a_gap": 58,
+        "ordinary": 449
+      },
+      "stale_path": {
+        "into_recovery_across_a_gap": 30,
+        "ordinary": 285
+      },
+      "transient": {
+        "into_recovery": 244,
+        "ordinary": 1008
+      },
+      "unknown_tool": {
+        "into_recovery_across_a_gap": 64,
+        "ordinary": 445
+      },
+      "wrong_path": {
+        "into_recovery_across_a_gap": 157,
+        "ordinary": 831
+      }
+    },
+    "rule": "a transition is a consecutive pair of distinct decisions in step order; the update rule predicts +1 ordinarily and the recovery cost at a corrective decision. A transition that spans a step with no rendered row is named as such and is never scored as an ordinary +1.",
+    "total": 6501
+  },
+  "file_sha256": {
+    "manifest.json": "6157ad5794ba2985cac25d26fafed86df02ec438d999afcd22db76f3e3a7ea73",
+    "provenance.json": "27c7fbb97981a90a8b319032bcb067d93b14418c3491d8c4811ba89c42f2b15d",
+    "test.jsonl": "6518f957fc2e1ab530d5180d47ea6e84cfa295a22665361c66a4d94c231b7ce8",
+    "train.jsonl": "d7feef2ece3d6c7e53eaa0d0cbb8835782dde0a24b74c624f73b469d2298515d",
+    "valid.jsonl": "533395927e6035d991b2c87dc8d695a71df2cbb2a2a27bb3e3e7ddbacf4528c4"
+  },
+  "generated_from": "data/agent_v2e-gemma3-4b",
+  "r6_exploratory_episodes": {
+    "by_family": {
+      "aggregate_report": "test-aggregate_report-0011-clean",
+      "batch_update": "test-batch_update-0010-clean",
+      "calculate": "test-calculate-0002-clean",
+      "conditional_update": "test-conditional_update-0009-clean",
+      "cross_reference": "test-cross_reference-0008-clean",
+      "ledger_reconcile": "test-ledger_reconcile-0007-clean",
+      "list": "test-list-0005-clean",
+      "pointer_chain": "test-pointer_chain-0006-clean",
+      "read": "test-read-0000-clean",
+      "search": "test-search-0001-clean",
+      "synthesis": "test-synthesis-0003-clean",
+      "update": "test-update-0004-clean"
+    },
+    "count": 12,
+    "detail": {
+      "test-aggregate_report-0011-clean": {
+        "decisions": 14,
+        "decisions_without_a_row": [],
+        "family": "aggregate_report",
+        "highest_step": 13
+      },
+      "test-batch_update-0010-clean": {
+        "decisions": 14,
+        "decisions_without_a_row": [],
+        "family": "batch_update",
+        "highest_step": 13
+      },
+      "test-calculate-0002-clean": {
+        "decisions": 2,
+        "decisions_without_a_row": [],
+        "family": "calculate",
+        "highest_step": 1
+      },
+      "test-conditional_update-0009-clean": {
+        "decisions": 10,
+        "decisions_without_a_row": [],
+        "family": "conditional_update",
+        "highest_step": 9
+      },
+      "test-cross_reference-0008-clean": {
+        "decisions": 11,
+        "decisions_without_a_row": [],
+        "family": "cross_reference",
+        "highest_step": 10
+      },
+      "test-ledger_reconcile-0007-clean": {
+        "decisions": 12,
+        "decisions_without_a_row": [],
+        "family": "ledger_reconcile",
+        "highest_step": 11
+      },
+      "test-list-0005-clean": {
+        "decisions": 3,
+        "decisions_without_a_row": [],
+        "family": "list",
+        "highest_step": 2
+      },
+      "test-pointer_chain-0006-clean": {
+        "decisions": 8,
+        "decisions_without_a_row": [],
+        "family": "pointer_chain",
+        "highest_step": 7
+      },
+      "test-read-0000-clean": {
+        "decisions": 2,
+        "decisions_without_a_row": [],
+        "family": "read",
+        "highest_step": 1
+      },
+      "test-search-0001-clean": {
+        "decisions": 3,
+        "decisions_without_a_row": [],
+        "family": "search",
+        "highest_step": 2
+      },
+      "test-synthesis-0003-clean": {
+        "decisions": 4,
+        "decisions_without_a_row": [],
+        "family": "synthesis",
+        "highest_step": 3
+      },
+      "test-update-0004-clean": {
+        "decisions": 4,
+        "decisions_without_a_row": [],
+        "family": "update",
+        "highest_step": 3
+      }
+    },
+    "rule": {
+      "difficulty": 2,
+      "per_family": 1,
+      "selection": "first task_id in sorted order within each family",
+      "split": "test",
+      "variant": "clean"
+    }
+  },
+  "rows": {
+    "agentic": 8559,
+    "chat_replay": 348,
+    "per_split": {
+      "test": 1841,
+      "train": 6685,
+      "valid": 381
+    },
+    "total": 8907
+  },
+  "rows_without_a_family": {
+    "disposition": "excluded from the capture",
+    "per_category": {
+      "code": 58,
+      "compare": 58,
+      "explain": 58,
+      "follow_up": 58,
+      "plan": 58,
+      "rewrite": 58
+    },
+    "per_source": {
+      "pre-expansion-policy-replay": 348
+    },
+    "per_split": {
+      "test": 60,
+      "train": 240,
+      "valid": 48
+    },
+    "total": 348,
+    "what_they_are": "chat replay rows, not agentic episodes: no task, no step, no plan progress, so no ground truth for this state variable exists for them"
+  },
+  "tasks": {
+    "per_split": {
+      "test": 240,
+      "train": 840,
+      "valid": 48
+    },
+    "per_variant": {
+      "clean": 550,
+      "failed_edit": 58,
+      "stale_path": 30,
+      "transient": 244,
+      "unknown_tool": 64,
+      "wrong_path": 182
+    },
+    "total": 1128
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "inputs": [
+    {
+      "commit": "03d7f141b9cf02315a7dd688c2ecdc35cde390c5",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "snapshot": "source/order.md",
+      "sha256": "a4ee6648f19dc2510e00db3b3b467ae75c8ea9da4194b94fbd34386701daff5c",
+      "bytes": 43147
+    },
+    {
+      "commit": "03d7f141b9cf02315a7dd688c2ecdc35cde390c5",
+      "path": "design_specifications/pending/CODEX-DATA-PRIMER-2026-09-10.md",
+      "snapshot": "source/primer.md",
+      "sha256": "03ba5192920c71d1a7dcfb25f63a7f3fbcd5814148e59a8c534808db9d978d30",
+      "bytes": 15957
+    },
+    {
+      "commit": "03d7f141b9cf02315a7dd688c2ecdc35cde390c5",
+      "path": "research/records/METHOD-2026-09-08/README.md",
+      "snapshot": "source/method.md",
+      "sha256": "8e027518947e9d7b2f8c321e2c34011da6ca530658d402f0df935ea55f95baf4",
+      "bytes": 66533
+    },
+    {
+      "commit": "0f455e8c209860ed90b369e08a75973728e97401",
+      "path": "src/local_llm_lab/pipeline/state_programme/capture.py",
+      "snapshot": "source/capture.py",
+      "sha256": "f57a30d26dd3f1f3a2008fcef3d687ddb671210c4d7e4282da63910aad1b3f0a",
+      "bytes": 13788
+    },
+    {
+      "commit": "0f455e8c209860ed90b369e08a75973728e97401",
+      "path": "scripts/state_capture.py",
+      "snapshot": "source/runner.py",
+      "sha256": "14b603c0a8061e5d2cc99dcaf76dc6e336f26466663f3b350f9848110cf44730",
+      "bytes": 6783
+    },
+    {
+      "commit": "0f455e8c209860ed90b369e08a75973728e97401",
+      "path": "tests/test_state_capture.py",
+      "snapshot": "source/test_capture.py",
+      "sha256": "3b8a8976039e96dab822d07907ce8f0518d21475ef55dd3a00c7c4c9ee2eacc7",
+      "bytes": 13160
+    },
+    {
+      "commit": "0f455e8c209860ed90b369e08a75973728e97401",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/repeat_gate.py",
+      "snapshot": "source/repeat_gate.py",
+      "sha256": "5528a146a90deb03be42c8a102b94500314a86facc3f70213ad086cc098029c9",
+      "bytes": 8905
+    },
+    {
+      "commit": "0f455e8c209860ed90b369e08a75973728e97401",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/ladder.py",
+      "snapshot": "source/ladder.py",
+      "sha256": "c92cd4d8e1e526284293bb7038cbf681f9f51b17d8c23a3d345e8f07358a6985",
+      "bytes": 21262
+    },
+    {
+      "commit": "0f455e8c209860ed90b369e08a75973728e97401",
+      "path": "src/local_llm_lab/hf_text.py",
+      "snapshot": "source/hf_text.py",
+      "sha256": "806f869fc7062b5123d3668498e8cbc0b4eb71fcd6d4677b24714a2d3a452528",
+      "bytes": 11754
+    },
+    {
+      "commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "path": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10/audit.json",
+      "snapshot": "source/previous-audit.json",
+      "sha256": "1504bd328ef9fadd99714b03a3f55bb0b0f17365bf892fe27c8f798066962dd1",
+      "bytes": 10945
+    }
+  ],
+  "prior_review": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6"
+}

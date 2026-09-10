@@ -1,0 +1,160 @@
+{
+  "format": 1,
+  "review_head": "dc7308703666087945db1e0e53eb737fcb2e50da",
+  "inputs": [
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "design_specifications/pending/WORKSPACE-EXPERIMENTS-2026-09-10.md",
+      "snapshot": "source/workspace-order.md",
+      "sha256": "da29bb8cd6c26dccc34c015e2fdee96bc6792db053b01ca400db474e19935eed",
+      "bytes": 9338
+    },
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "snapshot": "source/wsa-order.md",
+      "sha256": "b34594ebdbbe5a6cba0aa4e6939842d83fa497d2d69e8073002884488961c530",
+      "bytes": 42349
+    },
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "design_specifications/pending/CODEX-DATA-PRIMER-2026-09-10.md",
+      "snapshot": "source/primer.md",
+      "sha256": "03ba5192920c71d1a7dcfb25f63a7f3fbcd5814148e59a8c534808db9d978d30",
+      "bytes": 15957
+    },
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "research/records/METHOD-2026-09-08/README.md",
+      "snapshot": "source/method.md",
+      "sha256": "39487aa5b28fd42c1a1b11f74d6cfc1c45ea6562fcc6cdea9d68d92df354ca3e",
+      "bytes": 59490
+    },
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "design_specifications/pending/STATE-PLAN-PROGRESS-ORDER-2026-09-10.md",
+      "snapshot": "source/plan-order.md",
+      "sha256": "12cbb52ac5e02dd5c294fbf4fff71df734d1afe10d8ca2c987c6e1cc4f84b6d7",
+      "bytes": 23150
+    },
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "design_specifications/pending/STATE-PROGRAMME-RUN-ORDER-2026-09-10.md",
+      "snapshot": "source/state-order.md",
+      "sha256": "804a8030eedb9382145711e32bad901d3bb7132669d12b32a2989525fe60364d",
+      "bytes": 35427
+    },
+    {
+      "commit": "d801db7c118d0a9961187903de29cb5612c2e336",
+      "path": "design_specifications/pending/SAE-J-BRIDGE-ORDER-2026-09-08.md",
+      "snapshot": "source/bridge-order.md",
+      "sha256": "33f8a80c3649f6590c7a0e94a47968200479c70fc9b63aebf83353b10bbead83",
+      "bytes": 44113
+    },
+    {
+      "commit": "59b1e77278c221d8aa21edbe7f118c7d9a4a5289",
+      "path": "src/local_llm_lab/pipeline/state_programme/tolerances.py",
+      "snapshot": "source/tolerances.py",
+      "sha256": "ae213db2e337889f5fc478ea874d1fb5644cc9d206b67d3914be6552b0147f03",
+      "bytes": 10106
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/PREREGISTRATION.md",
+      "snapshot": "source/PREREGISTRATION.md",
+      "sha256": "921f80edcba4096f315432d20e34ab75da44475d70dd7e957df84121fa847c7c",
+      "bytes": 39077
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/check_prereg.py",
+      "snapshot": "source/check_prereg.py",
+      "sha256": "412f2439e08de9911e3cfd4abd7e4a5a3bace1823b54a51de9ec6a878f4c07fb",
+      "bytes": 14402
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/folds.py",
+      "snapshot": "source/folds.py",
+      "sha256": "82c7b52c3da3b68d81296977f271bdabcb2b220edb6dc89c6f974fcf318abc62",
+      "bytes": 4629
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/folds.json",
+      "snapshot": "source/folds.json",
+      "sha256": "d9df843e95ec1ad47777d2bfb082b268ff3ed942b9c183d72205c15828837128",
+      "bytes": 48353
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-set.jsonl",
+      "snapshot": "source/capture-set.jsonl",
+      "sha256": "98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d",
+      "bytes": 2233977
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/prereg-inputs.json",
+      "snapshot": "source/prereg-inputs.json",
+      "sha256": "935a6eaca020d60c4c998eadbdd7c3577be10dc3404c0475fafe92795e30e04e",
+      "bytes": 28958
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-budget.json",
+      "snapshot": "source/capture-budget.json",
+      "sha256": "afe560f31f874221e9c62efa522e99d1e75a3338dc6e25a4da5e444094c69155",
+      "bytes": 3454
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/carrier_ablation.py",
+      "snapshot": "source/carrier_ablation.py",
+      "sha256": "2495c5f86da1d30f68bca30243f5f31acd2dd2146e051ee5c15074a9509a62da",
+      "bytes": 5619
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/carrier-ablation.json",
+      "snapshot": "source/carrier-ablation.json",
+      "sha256": "a89965617340448334ef4d19e8c19d00946414c7ea60064b03d61069bb675576",
+      "bytes": 7825
+    },
+    {
+      "commit": "bbdc8dcba7146aca1e17db8ecb15d692a6806b38",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/prereg_inputs.py",
+      "snapshot": "source/prereg_inputs.py",
+      "sha256": "bb1de3e8d3249e94afe2606688efc524697a3489192f7b74fb07a23d9222f5ed",
+      "bytes": 14454
+    },
+    {
+      "commit": "08ce0504b3f22adafd5446a1aaeac765eda6b2c8",
+      "path": "design_specifications/pending/WORKSPACE-EXPERIMENTS-2026-09-10.md",
+      "snapshot": "source/workspace-order-amended.md",
+      "sha256": "a6315479778ee526427f18969ad738dc821410169341bed0811e1bcb256279e7",
+      "bytes": 11967
+    },
+    {
+      "commit": "144fa1cf1f753c008daf1eb4f38282a1e71184d0",
+      "path": "research/records/STATE-PLAN-PROGRESS-2026-09-09/PREREGISTRATION.md",
+      "snapshot": "source/PREREGISTRATION-amended.md",
+      "sha256": "0fb0c07cf4c7114c12805b192922a1ece063f860fb93bab2bfcdd5d2e8f9f6e6",
+      "bytes": 39499
+    },
+    {
+      "commit": "144fa1cf1f753c008daf1eb4f38282a1e71184d0",
+      "path": "src/local_llm_lab/pipeline/state_programme/capture.py",
+      "snapshot": "source/capture.py",
+      "sha256": "fc59297b1c07d04f98db85e16dc20667578afe86e1e76f084703af7abcab8db0",
+      "bytes": 11668
+    },
+    {
+      "commit": "144fa1cf1f753c008daf1eb4f38282a1e71184d0",
+      "path": "tests/test_state_capture.py",
+      "snapshot": "source/test_state_capture.py",
+      "sha256": "8f6c5fd1a7d5ae9ebcf63799c58ca72b718fc1bed6774393b01014e529cbcf66",
+      "bytes": 10133
+    }
+  ]
+}
