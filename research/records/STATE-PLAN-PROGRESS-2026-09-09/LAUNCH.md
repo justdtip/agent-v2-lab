@@ -95,7 +95,17 @@ $VENV -m local_llm_lab.runlock run --seat d-cro \
 ## 4. The 12B capture — **only if the headroom rule holds**
 
 The Chief's rule: their measured peak plus this pass's measured first-shard peak must leave at least
-9 GiB, so the sum must be ≤ 86 GiB. Both numbers are measured by then — theirs from their progress
+9 GiB, so the sum must be ≤ 86 GiB — **read as process memory, not as the allocator's high-water
+mark**. Their 4B capture died at 03:22Z on a 4.20 GiB allocation with 3.41 GiB free, and the numbers
+around it are the reason: c3 showed 62.25 GiB of process memory against 59.72 allocated, and their
+own capture 29.30 against 22.12 with 6.52 reserved and unhanded-out. A rule read on `allocated`
+plans with a figure 2.5 GiB smaller than the one that decides. The runner therefore reports
+`peak_allocated_gib`, `peak_reserved_gib` and the device's own `device_used_gib` / `device_free_gib`
+on every shard event; the last two need no proxy and are what the rule is evaluated on.
+
+*This pass has no logits allocation.* `HFLensModel.forward` calls the text module, not the causal LM,
+so the decoder stack runs and the vocabulary-sized head does not — there is no spike on a long row of
+the kind that ended the Chief's capture. Checked in the source rather than assumed. Both numbers are measured by then — theirs from their progress
 log every 100 rows, mine from the `shard` event, which carries the device high-water mark and by the
 first shard already includes a full forward at the longest row seen. If the sum exceeds 86, this
 waits for their capture to end or runs beside their 12B W-3b later.

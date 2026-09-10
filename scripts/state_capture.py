@@ -171,10 +171,11 @@ def main(argv: list[str] | None = None) -> int:
     emit("allocator", pytorch_cuda_alloc_conf=os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
          cublas_workspace_config=os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
          cwd=str(Path.cwd()))
-    emit("loaded_peak", peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3),
-         allocated_gib=round(torch.cuda.memory_allocated() / 2**30, 3),
-         free_gib=round(torch.cuda.mem_get_info()[0] / 2**30, 3),
-         note="weights only; the first shard's peak adds one forward at the longest row so far")
+    emit("loaded_peak", **memory(torch),
+         note="weights only; the first shard adds one forward at the longest row seen. This pass "
+              "runs the decoder stack alone — `HFLensModel.forward` calls the text module, not the "
+              "causal LM — so it has no vocabulary-sized logits allocation and no spike on long "
+              "rows, which is the allocation that ended the Chief's 4B capture at 03:22Z")
     emit("inputs", decisions=len(decisions), capture_set_size=capture_set_size,
          limit=args.limit, whole_set=len(decisions) == capture_set_size,
          capture_set=str(args.capture_set), corpus_rows=len(corpus_rows), keyed=len(corpus))
@@ -205,22 +206,39 @@ def main(argv: list[str] | None = None) -> int:
         progress=emit_shard(emit, torch),
     )
     emit("done", **summary, capture_set_size=capture_set_size,
-         whole_set=summary["requested"] == capture_set_size,
-         peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3))
+         whole_set=summary["requested"] == capture_set_size, **memory(torch))
     return 0
 
 
-def emit_shard(emit, torch):
-    """Relay the writer's progress, with the device's own peak beside it.
+def memory(torch) -> dict:
+    """What this pass costs the card, in the terms a shared card is planned in.
 
-    The peak belongs on the **first** shard and not only at the end. A capture pass sharing the card
-    has to be confirmed to fit before it has run, and a memory figure that arrives with the summary
-    arrives after the decision it informs. `max_memory_allocated` is a high-water mark, so the first
-    shard's value already covers the model load and one full forward.
+    `max_memory_allocated` is the allocator's high-water mark for **tensors**, and it is not what
+    another seat needs. A process also holds allocator segments it has not handed out and a CUDA
+    context on top of that: the Chief's capture measured 29.30 GiB of process memory against 22.12
+    allocated, with 6.52 reserved-unallocated, and c3 showed 62.25 process against 59.72 allocated —
+    a 2.5 GiB gap that decided an out-of-memory. So the headroom rule is read on **process memory**,
+    and the closest in-process proxy is peak *reserved*, with the device's own free/total beside it
+    as the figure that needs no proxy at all.
+    """
+    free, total = torch.cuda.mem_get_info()
+    return {
+        "peak_allocated_gib": round(torch.cuda.max_memory_allocated() / 2**30, 3),
+        "peak_reserved_gib": round(torch.cuda.max_memory_reserved() / 2**30, 3),
+        "device_used_gib": round((total - free) / 2**30, 3),
+        "device_free_gib": round(free / 2**30, 3),
+    }
+
+
+def emit_shard(emit, torch):
+    """Relay the writer's progress, with what the pass costs the card beside it.
+
+    The figures belong on the **first** shard and not only at the end. Two passes share the card and
+    whether the second may start depends on the first's measured cost, so a number that arrives with
+    the summary arrives after the decision it informs.
     """
     def progress(row: dict) -> None:
-        emit(row.pop("event", "shard"),
-             peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 3), **row)
+        emit(row.pop("event", "shard"), **memory(torch), **row)
     return progress
 
 
