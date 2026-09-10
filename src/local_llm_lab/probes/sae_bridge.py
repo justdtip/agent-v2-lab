@@ -1330,12 +1330,19 @@ def decompose_position(
             "orientation or convention is wrong"
         )
     # The float32 score path (norms, shares, top-k) must be the same map as the float64 identity.
+    # Its own rounding is that of one dot product of length d, bounded by d·u·‖u‖‖W[v]‖ (about
+    # 1.5e-4 of ‖u‖‖W[v]‖ at d = 2560), while a wrong orientation moves the score by an order-1/√d
+    # fraction of ‖u‖‖W[v]‖; the gap is therefore measured against ‖u‖‖W[v]‖, not against the net
+    # score, which can be a small remainder of large terms (device, 4B layer 18: 3.8e-3 against a
+    # net score of 0.11 was rounding).
+    u64 = h.astype(np.float64) if map64 is None else h.astype(np.float64) @ map64.T
+    path_scale = float(np.linalg.norm(u64 * gain_vector) * np.linalg.norm(weight_row))
     path_gap = abs(score_v - float(lh[emitted_token]))
-    if path_gap > tolerance * max(1.0, scale):
+    if path_gap > tolerance * max(1.0, path_scale):
         raise ValueError(
             f"the score decomposition is not exact at token {emitted_token}: the float32 score path "
-            f"differs from the float64 identity by {path_gap:.3e} against a score of {scale:.3e}; "
-            "orientation or convention is wrong"
+            f"differs from the float64 identity by {path_gap:.3e} against a term scale of "
+            f"{path_scale:.3e}; orientation or convention is wrong"
         )
     raw_share = _error_share(e, h, error_budget)
     score_share = _error_share(le, lh, error_budget)
@@ -1354,6 +1361,8 @@ def decompose_position(
         "feature_sum": float(contributions.sum()),
         "identity_gap": float(identity_gap),
         "identity_gap_float32": identity_gap_float32,
+        "score_path_gap_float32": float(path_gap),
+        "score_path_scale": path_scale,
         "identity_terms_abs_sum": float(np.abs(contributions).sum() + abs(bias_v) + abs(residual_v)),
         "raw_reconstruction_share": raw_share,
         "lens_score_error_share": score_share,
