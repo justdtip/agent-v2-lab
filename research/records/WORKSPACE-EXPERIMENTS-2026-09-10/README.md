@@ -284,6 +284,8 @@ that loaded them and were not modified after: `workspace_capture.py` last modifi
 capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on the 9th, chunk c3
 (pid 46410) started 00:24:21Z.
 
+Successor: `scripts/merge_device_lens_chunks.py` writes the complete merge declaration; the Chief's real-artefact CPU replay (`7527075`) reproduced the as-run 12B archive bit for bit (sha256 `e7942f1d6a73…`), while this record's `scripts/merge_chunks.py` remains unchanged.
+
 | file | sha256 (first 12) | role |
 |---|---|---|
 | `workspace_capture.py` | 958ccdcf0bae | v1, the first 4B capture (died at 03:22Z); kept on the card as `workspace_capture.py.v1-as-run-4b` |
