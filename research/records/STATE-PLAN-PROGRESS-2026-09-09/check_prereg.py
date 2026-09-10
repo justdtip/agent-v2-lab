@@ -93,13 +93,16 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      r"367\.5 \| 2\.674"),
     ("both, main stratum GiB", "budget", "main_stratum.total_gib", 3.947,
      r"542\.5 \| \*\*3\.947\*\*"),
-    ("prompt chars, median", "budget", "prompt_length_chars.median", 4738,
-     r"minimum 1,824, median 4,738, maximum 14,316"),
-    ("prompt chars, max", "budget", "prompt_length_chars.max", 14316,
-     r"median 4,738, maximum 14,316"),
-    ("prompt chars, min", "budget", "prompt_length_chars.min", 1824, r"minimum 1,824"),
-    ("exploratory positions", "budget", "exploratory_stratum.positions_total", 15776,
-     r"About 15,776 positions"),
+    # The token figures are now measured from the 4B capture's own manifest, so they are pinned to
+    # that artefact rather than to the budget script's character-based projection. The projection is
+    # still in the document beside them, being scored, which is why the assumed numbers appear too.
+    ("tokens measured, median", "capture", "median", 1310, r"\| median \| ~1,185 \| \*\*1,310\*\*"),
+    ("tokens measured, max", "capture", "max", 4274, r"\| longest \| ~3,579 \| \*\*4,274\*\*"),
+    ("tokens measured, min", "capture", "min", 416, r"\| minimum \| 456 \| \*\*416\*\*"),
+    ("cells captured", "capture", "cells", 7629,
+     r"in \*\*7,629 of 7,629\*\* cells"),
+    ("exploratory positions measured", "capture", "exploratory_positions", 18018,
+     r"18,018 positions\*\*, against the 15,776 assumed"),
     # The cross-fitting folds. The digest is what the seal fixes, so it is pinned to the line that
     # states it and the fold table is pinned row by row: a fold table that drifts from the
     # assignment would be a description of folds nobody used.
@@ -157,6 +160,7 @@ def artefacts() -> dict[str, object]:
         "inputs": json.loads((HERE / "prereg-inputs.json").read_text()),
         "budget": json.loads((HERE / "capture-budget.json").read_text()),
         "folds": json.loads((HERE / "folds.json").read_text()),
+        "capture": json.loads((HERE / "capture-4b-measured.json").read_text()),
         "file": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                  for path in sorted(HERE.iterdir()) if path.is_file()},
     }

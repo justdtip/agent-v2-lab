@@ -1,0 +1,16 @@
+{
+  "all_native": true,
+  "all_width_one": true,
+  "basis": "measured-here",
+  "cells": 7629,
+  "chars_per_token_implied": 3.617,
+  "checkpoint_identities": 1,
+  "exploratory_episodes": 12,
+  "exploratory_positions": 18018,
+  "max": 4274,
+  "median": 1310,
+  "min": 416,
+  "p99": 3300,
+  "position_is_last_token": 7629,
+  "source": "the 4B capture pass's own manifest, /workspace/captures/gemma3-4b-cuda-bf16"
+}

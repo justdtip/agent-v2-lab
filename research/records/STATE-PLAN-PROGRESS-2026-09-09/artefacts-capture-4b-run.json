@@ -1,0 +1,52 @@
+{
+  "basis": "measured-here",
+  "bos_token_id": 2,
+  "capture_set": "research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-set.jsonl",
+  "capture_set_size": 7629,
+  "checkpoint": "/workspace/.hf_home/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767/",
+  "checkpoint_files_sha256": {
+    "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+    "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+    "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+  },
+  "checkpoint_sha256": "34f2f9c7439ef501cfd3fa43413c3ecb316619d4a82e9b94fbdac5d1e6d61d9c",
+  "config_sha256": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+  "corpus": "/workspace/rendered-corpus/agent_v2e-gemma3-4b",
+  "cublas_workspace_config": ":4096:8",
+  "cwd": "/workspace/wsd/ws-d",
+  "decoding": "teacher-forced",
+  "device": {
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "backend": "torch",
+    "cublas_workspace_before_cuda": true,
+    "cuda_available": true,
+    "cudnn_benchmark": false,
+    "cudnn_deterministic": true,
+    "determinism": "pinned",
+    "deterministic_algorithms": true,
+    "device": "cuda",
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "float32_matmul_precision": "highest",
+    "mlx": null,
+    "pinned": {
+      "attn_implementation": "eager",
+      "deterministic": true,
+      "seed": 0
+    },
+    "platform": "Linux 6.17.0-35-generic x86_64",
+    "python": "3.13.15",
+    "tf32_cudnn": false,
+    "tf32_matmul": false,
+    "threads": 8,
+    "torch": "2.14.0",
+    "transformers": "5.16.1"
+  },
+  "entry": "gemma3-4b-cuda-bf16",
+  "limit": null,
+  "pytorch_cuda_alloc_conf": "expandable_segments:True",
+  "shard_size": 256,
+  "weight_files": 2
+}

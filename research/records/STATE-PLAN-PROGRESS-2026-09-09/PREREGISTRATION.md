@@ -596,6 +596,10 @@ against `model.config` on the card before the first capture is written.
 | `gemma3-12b-cuda-bf16` | 48 | 3,840 | 49 | 367.5 | 2.674 |
 | both | | | | 542.5 | **3.947** |
 
+**Measured for the 4B: 1.3 GB on disk in 30 shards**, against the 1.273 GiB predicted — the storage
+table was right. 7,629 of 7,629 decisions, `complete: true`, in 7.7 minutes at 75.6 ms per decision
+alone on the card, peak reserved 9.52 GiB against an estimate of 8.1.
+
 This replaces R6's 4.6 GiB, which was correct arithmetic on 8,907 rendered rows; on the 7,629
 distinct decisions, with the 348 chat replay rows excluded and the 930 duplicates recognised as
 copies, it is 3.95 GiB. Against 235 GiB free on the card at 10:37Z.
@@ -603,11 +607,24 @@ copies, it is 3.95 GiB. Against 235 GiB free on the card at 10:37Z.
 Captures live outside the checkout at `/workspace/captures/<entry>/`, because `data/` was ignored
 only after this corpus was made and the resume key hashes untracked files.
 
-**Prompt lengths are measured in characters here, not tokens**, because no Gemma tokenizer is
-present on the laptop: minimum 1,824, median 4,738, maximum 14,316. At 4.0 characters per token
-those give a median of about 1,185 tokens and a longest of about 3,579, which reproduces the Chief's
-independently measured 1,200 and 3,600 to within one per cent. The token figures are re-measured on
-the card at capture time and the measured values go in the manifest beside these.
+**Prompt lengths, measured on the card at capture time**, from the 4B pass's own manifest — the
+assumed figures are kept beside them because the assumption was declared and should be scored:
+
+| | assumed (4.0 chars/token) | **measured** |
+|---|---:|---:|
+| minimum | 456 | **416** |
+| median | ~1,185 | **1,310** |
+| 99th percentile | — | **3,300** |
+| longest | ~3,579 | **4,274** |
+
+The implied ratio is **3.617** characters per token, not 4.0, so every token figure derived from the
+assumption ran about 10% light and the longest row is 19% longer than assumed. The assumption was
+declared as one and is now scored rather than quietly replaced.
+
+Three things the manifest establishes that no arithmetic could: the captured position is the last
+token of the prompt in **7,629 of 7,629** cells, every cell reports `forward_batch` and
+`anchor_batch` of 1, every cell reports `capture_dtype: native`, and all 7,629 carry **one**
+checkpoint identity. Those are the contract's own claims, read back from what was written.
 
 ---
 
@@ -636,9 +653,11 @@ seal.**
 None of the twelve has a dropped decision or an oversampled one, which follows from their being
 clean: only recovery decisions are duplicated and only recovery variants lose rows.
 
-About 15,776 positions in total at 4.0 characters per token, so **about 8.2 GiB for both models** —
-below R6's estimate of about 12 GiB, on the same basis that the main stratum is below its estimate.
-The figure is re-computed from the measured token counts on the card before the stratum is written.
+**Measured from the 4B capture's manifest: 18,018 positions**, against the 15,776 assumed at 4.0
+characters per token — 14% more, in the same direction as the length correction above. At the
+per-position costs of §8 that is about **9.3 GiB for both models**, still below R6's estimate of
+about 12 GiB. The stratum is read only after the seal; the figure is now a measurement rather than a
+projection.
 
 ---
 
