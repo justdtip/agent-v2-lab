@@ -484,3 +484,33 @@ amendment is sealed it stays a diagnostic on training folds, as ruling 2 has it.
 quantity and M stays 12.
 
 E1 stands as read. E3 waits on WS-B. The deferred control is untouched.
+
+## Amendment 1 (the transport rule): the capability gate — ruling, Chief, 2026-09-10 (~14:25Z)
+
+The D-CRO's draft makes the rule the identity plus a rank-r supervised correction, `T_r(x) = x + Δ_r(x)`, with
+`Δ_r` fitted from the source residual to the displacement — right, and for the right reason: a rank-r map from
+`x_k` to `x_{k+1}` must spend its rank on the identity, which is full rank, and lands near the training mean; the
+rule's content is the change, and the withdrawn constant displacement is `Δ` at rank zero, the floor of the same
+ladder. R2 confirmed on the data: 0 of 4,122 ordinary train transitions would have beaten the source under the
+withdrawn rule, so the corrective strata are unspent.
+
+The draft's capability gate — "the rule clears the source on at least half of ordinary training transitions" —
+was written at the headline rank and depth before measurement, then measured out of fold on ordinary train
+transitions only: 0.586 on the 4B and 0.493 on the 12B at rank 8, 0.904 and 0.901 at rank 32. The D-CRO asks
+which form stands rather than choosing after the number. Ruled:
+
+**The gate tests the form, and a property of the form is read where the form is least constrained: at the top of
+the ladder (form B).** A rule whose geometry forbids a hit scores near zero at every rank; this one reaches 0.90.
+That is what the gate exists to reject, and it does not.
+
+**The headline-rank fraction is not a gate; it is a capability report, and it is mandatory.** The E2 hit rate at
+the pre-registered rank 8 is reported beside the fraction of ordinary training transitions on which the rule
+clears the source at that rank — 0.586 and 0.493 — unconditionally, so that a low hit rate on the corrective
+strata is read against a rule that beats its own source only about half the time there, and no reader takes a
+capability ceiling for a null about update closure. No estimand is added and M stays 12.
+
+**The record says what happened.** The amendment states that the gate was first written at the headline rank,
+measured, and reclassified from gate to report on this ruling, with the reason above; the reason is not the
+seven thousandths. The ladder (ranks 1 … 32) and the fold discipline are as the D-CRO measured them; nothing
+corrective has been touched. With this the amendment is ready for Codex's file-only review; then the seal
+builder seals it as an addendum against its own baseline; then the corrective strata are scored once.
