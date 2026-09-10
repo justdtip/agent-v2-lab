@@ -218,6 +218,22 @@ VETO_COUNTEREXAMPLES = {
         "read *not measured* because they are.\n\nThe instrument is falsified by any decoding of\n"
         "`pointer_chain` steps-remaining above the permutation null.",
     ),
+    "'above the null' without the word permutation (D-CRO)": (
+        "read *not measured* because they are.",
+        "read *not measured* because they are.\n\nDecoding above the null on `pointer_chain` invalidates the instrument.",
+    ),
+    "'better than chance' (D-CRO)": (
+        "read *not measured* because they are.",
+        "read *not measured* because they are.\n\nA steps-remaining decoder better than chance identifies a leak.",
+    ),
+    "'if the null is exceeded' (D-CRO)": (
+        "read *not measured* because they are.",
+        "read *not measured* because they are.\n\nIf the null is exceeded by the steps-remaining decoder the instrument is falsified.",
+    ),
+    "the pinned wording beside a stray 'never' (D-CRO's escape hatch)": (
+        "read *not measured* because they are.",
+        "read *not measured* because they are.\n\nThe instrument is falsified by any decoding above the permutation null, and this was never in doubt.",
+    ),
     "the §4.1 deferral removed": ("**Status: DEFERRED, its veto disabled", "**Status: ARMED"),
     "the §10 state changed": ("**deferred, not measured**, its **veto disabled**", "**measured**"),
 }
@@ -319,7 +335,9 @@ def _declarations(document: str) -> list[tuple[int, str, str, str]]:
         # Emphasis stripped: asterisks and backticks only — the tolerance names carry underscores.
         fields = [re.sub(r"[*`]", "", f).strip() for f in stripped.strip("|").split("|")]
         following = all_lines[number] if number < len(all_lines) else ""
-        if re.fullmatch(r"\|?(\s*:?-+:?\s*\|)+\s*", following.strip() + "|") and "---" in following:
+        if re.fullmatch(r"\|?(\s*:?-+:?\s*\|)+\s*", following.strip().rstrip("|") + "|") and "---" in following:
+            # (The D-CRO found the first version appended a pipe to a separator that already ended in
+            # one, so the rule never matched and every row took the fail-closed branch.)
             # A header row: the declared-ε column is the one whose header says so. Emphasis is
             # formatting, not semantics (Codex R1): a value is a declaration by its column, never
             # by whether it is bold.
@@ -369,24 +387,33 @@ VETO_PINS = (
 )
 #: A sentence that says decoding above the permutation null falsifies or invalidates the
 #: instrument, unless it is the negation ("does not", "not by itself").
-_NULL = r"(above[- ](the )?(unconditional )?permutation( null)?|(exceed\w*|beat\w*) the (unconditional )?permutation null)"
-_VERDICT = r"(falsif\w*|invalidat\w*|identif\w* a leak|is a leak)"
+#: A backstop against the wordings that have been seen or proposed, not a parser of intent: the three
+#: exact-string pins above are the load-bearing check and fail closed. Negation is honoured only in
+#: the clause that carries the verdict word (within sixty characters before it), never anywhere in the
+#: sentence — a sentence-wide exemption was an escape hatch (the D-CRO, on 6ee2563).
+_NULL = (r"(above[- ](the )?(unconditional )?(permutation )?null|(exceed\w*|beat\w*) the (unconditional )?"
+         r"(permutation )?null|(the )?null (is|was|were) exceeded|better than chance|above chance)")
+_VERDICT = r"(falsif\w*|invalidat\w*|identif\w* a leak|is a leak|a leak)"
 FORBIDDEN_VETO = re.compile(rf"{_VERDICT}[^.]{{0,160}}?{_NULL}|{_NULL}[^.]{{0,160}}?{_VERDICT}", re.IGNORECASE)
-_NEGATED = re.compile(r"\b(does|do|did) not\b|\bnot by itself\b|\bnever\b|\bnot\s+(a|an|the)?\s*(leak|falsif|invalid)", re.IGNORECASE)
+_NEGATED = re.compile(r"\b(does|do|did) not\b|\bnot by itself\b|\bnever\b|\bnot\s+(a|an|the)?\s*(leak|falsif|invalid)|\bno\b", re.IGNORECASE)
 
 
 def veto_form(document: str) -> list[str]:
     """One veto, deferred and disabled, stated as a diagnostic in every place it is named."""
     problems = []
+    flat = " ".join(document.split())
     for name, text in VETO_PINS:
-        if text not in document:
+        if " ".join(text.split()) not in flat:  # a re-wrap is not a restored veto
             problems.append(f"veto pin missing: {name}")
     for block in document.split("\n\n"):
         text = " ".join(block.split())
         for sentence in re.split(r"(?<=[.;])\s+", re.sub(r"[*`]", "", text)):
             match = FORBIDDEN_VETO.search(sentence)
-            if match and not _NEGATED.search(sentence):
-                problems.append(f"veto restored in unconditional form: {sentence[:90]!r}")
+            if match:
+                verdict = re.search(_VERDICT, sentence[match.start():match.end()], re.IGNORECASE)
+                at = match.start() + (verdict.start() if verdict else 0)
+                if not _NEGATED.search(sentence[max(0, at - 60): at + 12]):
+                    problems.append(f"veto restored in unconditional form: {sentence[:90]!r}")
     return sorted(set(problems))
 
 

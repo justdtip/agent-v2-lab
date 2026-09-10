@@ -261,35 +261,6 @@ representational richness, and every figure carries that label.
   note**, which the protocol writes at every step. A probe may know all of that without knowing the
   horizon.
 
-  **The null is a conditional randomization, specified here as a procedure.** Naming its inputs is
-  not enough to run it, and an unspecified null cannot govern a verdict.
-
-  1. **Strata.** Eligible decisions are grouped by `(difficulty, nodes visited so far)`. `family` is
-     constant by construction, `survival` is constant given eligibility, and the visible progress
-     note is a deterministic function of nodes visited — so it adds no stratum, and saying that is
-     part of the specification rather than an omission from it.
-  2. **Extraction.** `nodes visited so far` is read from the rendered prompt as the count of
-     `read_file` observations before the decision, never from the label or the step index.
-  3. **The randomization.** Within each stratum the steps-remaining labels are permuted across
-     decisions, **10,000 draws**, seeded from the seal. Permuting within the stratum is what makes
-     the null conditional: everything the conditioning variables carry is preserved exactly, and
-     only the association with the residual is destroyed.
-  4. **Unsupported strata.** A stratum with fewer than **10** eligible decisions is dropped, with its
-     size reported; strata are never merged to reach the threshold, because merging changes the
-     conditioning set after seeing it.
-  5. **The comparison.** The probe's accuracy on eligible decisions against the permutation
-     distribution of the same quantity, at the ε and α of §7's table. The veto fires when the probe
-     exceeds the null's `1 − α` quantile by more than ε.
-
-  **What firing supports, stated narrowly.** Exceeding this null is evidence that the residual
-  carries steps-remaining information **beyond what the four conditioning variables carry** — it is
-  not a proof of leakage in general, because the conditioning set may be incomplete and a null built
-  on an incomplete set can be beaten by a probe reading a legitimate cue nobody listed. The veto is
-  therefore an instruction to **investigate and name the cue**, and the instrument is called into
-  question only if no visible cue accounts for the excess. Codex's objection is right and this is the
-  narrower claim that answers it: naming several conditioning variables does not establish their
-  sufficiency.
-
   **Status: DEFERRED, its veto disabled (the Chief, on Codex's second confirming pass, 2026-09-10).**
   The procedure above is provisional. Codex measured what it would retain on this corpus: the
   stratum floor keeps **15 episodes and 100 eligible decisions, all at difficulty 2**, while step 5
@@ -302,6 +273,39 @@ representational richness, and every figure carries that label.
   before any result of this control is read**. Until that amendment is sealed the control reads
   *deferred, not measured* and its veto cannot fire (§10, §12). The seal of this document does not
   wait for the amendment; the reading of this control does.
+
+  **The null is a conditional randomization, specified here as a provisional procedure** (deferred,
+  above). Naming its inputs is not enough to run it, and an unspecified null cannot govern a verdict.
+
+  1. **Strata** *(provisional; the reason given here is false, see the status above: the note is not a
+     function of nodes visited).* Eligible decisions are grouped by `(difficulty, nodes visited so far)`.
+     `family` is constant by construction, `survival` is constant given eligibility, and the visible
+     progress note was taken to be a deterministic function of nodes visited — it is not; at "Visited 2
+     node(s)" the corpus carries 92 distinct notes, each naming the node it follows.
+  2. **Extraction.** `nodes visited so far` is read from the rendered prompt as the count of
+     `read_file` observations before the decision, never from the label or the step index.
+  3. **The randomization.** Within each stratum the steps-remaining labels are permuted across
+     decisions, **10,000 draws**, seeded from the seal. Permuting within the stratum is what makes
+     the null conditional: everything the conditioning variables carry is preserved exactly, and
+     only the association with the residual is destroyed.
+  4. **Unsupported strata.** A stratum with fewer than **10** eligible decisions is dropped, with its
+     size reported; strata are never merged to reach the threshold, because merging changes the
+     conditioning set after seeing it.
+  5. **The comparison** *(provisional; the veto is disabled, see the status above).* The probe's
+     accuracy on eligible decisions against the permutation distribution of the same quantity, at the
+     ε and α of §7's table — a tolerance this control's own population does not support, which is one
+     of the reasons it is deferred. When the amended procedure is measured, exceeding the null's
+     `1 − α` quantile by more than its own ε is the diagnostic flag of §12, not a veto.
+
+  **What firing supports, stated narrowly.** Exceeding this null is evidence that the residual
+  carries steps-remaining information **beyond what the four conditioning variables carry** — it is
+  not a proof of leakage in general, because the conditioning set may be incomplete and a null built
+  on an incomplete set can be beaten by a probe reading a legitimate cue nobody listed. The veto is
+  therefore an instruction to **investigate and name the cue**, and the instrument is called into
+  question only if no visible cue accounts for the excess. Codex's objection is right and this is the
+  narrower claim that answers it: naming several conditioning variables does not establish their
+  sufficiency.
+
 - **Evaluation set**: the test split's 1,781 decisions, 240 episodes, clean variants only. Held out
   by episode by construction, never by position.
 
