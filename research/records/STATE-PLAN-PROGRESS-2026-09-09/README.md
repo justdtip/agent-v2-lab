@@ -5,6 +5,28 @@ This is a design to be ruled on, not a result, and it is written before any 12B 
 captured so that the pre-registration cannot be shaped by looking. Where a choice is the Director's
 or the Chief's it is marked **open** rather than settled quietly.
 
+## 0. Sealed, 2026-09-10
+
+`seal.json`, digest **998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521**, written at
+commit `f2a4265` with `--baseline acc130a`, on the Chief's relay of Codex's delta review
+(`6ee2563..4dc39d5`, no further review hold). The baseline is the commit whose text Codex reviewed;
+naming it is the claim that all thirteen sealed files are byte-identical to it, and the seal was
+created from a later tip precisely so that claim is checked rather than assumed.
+
+The seal fixes the seed (20260910), the fold assignment
+(`c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c`, recomputed by re-running
+`folds.py` rather than read from `folds.json`), both of §2's capture-set digests, the five operative
+tolerances with every ε recomputed from the bound at M = 12, α = 0.05 and the paired range width, and
+the digests of thirteen files. `make_seal.py` produced it and is recorded beside it as `produced_by`
+rather than sealed, because it postdates the reviewed text and was not reviewed as part of the study.
+
+Precondition 5's refusal is code: `state_programme.read_gate.require_seal` raises unless the seal is
+complete, its own bytes digest as expected, every sealed file still has the bytes it fixed, those
+files still match their bytes at the baseline commit, and the sealed document still passes the sealed
+checker. Verified against this seal: thirteen files matched, the baseline re-derived, the document
+passing. **No capture is read except through it.** The unknown-horizon control (§4.1) stays deferred
+with its veto disabled; its amendment is a separate reviewed item and the seal does not release it.
+
 ## 1. The hypothesis, stated as one
 
 The Director's, in his terms: **the 12B carries a richer representation of the task than the 4B,
