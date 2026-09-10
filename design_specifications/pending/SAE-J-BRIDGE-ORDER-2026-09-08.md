@@ -713,3 +713,33 @@ band figures from W-5); the pairing registrations for the 4B (fit width 32, capt
 (16/16/8 against 1) with their measured terms; the shipped-token example files fetched to the card; then A1
 through both admitted lenses with the corrupted-layer control, and A2 on the 4B capture, on the card after the
 12B W-3b pass.
+
+## T5, Chief, 2026-09-10 (~12:00Z) — the pairing-measurement tool, file-only for Codex; the runs are the Chief's
+
+No tool in the tree measures a pairing; the bridge only validates and consumes registrations. A pairing is the
+cross-path term the WS-D order defined: the same prompt run through the **fit's path** (float32, the forward
+batch the lens was fitted at — dimension batch 32 for the 4B; 16, 16 and 8 for the 12B's chunks, each chunk's
+term measured at its own width and the merged lens carrying all three) and through the **capture's path**
+(float32, width 1, the capture's kernel and precision flags), and the relative displacement of the residual at
+the read layer and position, `‖h_fit − h_capture‖ / ‖h_capture‖`, on the exact cell the reading will use.
+
+`scripts/measure_pairings.py`, explicit inputs only: the model snapshot (its hash manifest checked against the
+capture's `load_report_sha256`), the admitted lens archive and sidecar (for `lens_sha256`, `nu_sha256` and the
+fit widths — read from the admission, never typed), the capture directory and the positions file (the cells,
+already validated by the runner's rules: row, position, token_index, token_id, context_tokens), the layers to
+measure, and an output path that must not exist. For each cell and layer it runs both paths on the card (one
+prompt, two batch schedules; the width-1 path must reproduce the capture's stored residual to the bit or
+refuse, which is the check that the capture path is the one being measured), and writes registrations in the
+table's schema — `measured_pairings` keyed by repository layer, each entry `{pair, relative, basis}` with all
+eleven pair fields (`fit_dtype`, `fit_width`, `capture_dtype`, `capture_width`, `lens_side`, `nu_sha256`,
+`lens_sha256`, `positions`, `reduction`, `endpoint`, `context_tokens`) derived from the admission, the capture
+manifest and the cell, and `basis` naming the measurement in words with the prompt's identity and both
+schedules. One registration per cell per layer; the file carries provenance (checkpoint hashes, capture and
+positions digests, torch and kernel flags, the source commit). Refusals by name: hash mismatch, a cell outside
+the capture, a width-1 residual that does not reproduce the stored one, non-finite values, an existing output.
+Tests on the CPU with a tiny model and a synthetic capture: the width-1 reproduction check passes on an intact
+capture and refuses on a perturbed one; two schedules that differ give a nonzero term and identical schedules
+give zero; every refusal exercised; the written table validates through `_supplied_pairing_table` and matches
+its cells through the runner's `_cell_pairing`. Laptop only; commit on the tests' own exit code; report by commit
+with the checked set named. The Chief runs it on the card for the 300-decision population at both positions
+after the day's masking passes, registers the result, and states the domain of validity beside it.
