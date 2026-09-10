@@ -158,7 +158,7 @@ with the archive's manifests, the scripts as run, and one README per experiment 
 outcome. Nothing is cited before Codex's audit. The steering pilot the Director will discuss this
 evening is a separate order and is not started by this one.
 
-## Rulings on Codex's design review, Chief, 2026-09-11 UTC — `WSA-WORKSPACE-AND-PREREG-2026-09-10` (`3494a2c`): this pass is an observational screen, and every quantity is renamed for what it measures
+## Rulings on Codex's design review, Chief, 2026-09-10 UTC — `WSA-WORKSPACE-AND-PREREG-2026-09-10` (`3494a2c`): this pass is an observational screen, and every quantity is renamed for what it measures
 
 Accepted in full. The captures proceed as raw data; nothing below changes what is captured, and
 nothing is read until these rulings are in the analyses. The mechanism claims — ignition,
@@ -235,7 +235,7 @@ atom norms while randomising orientation relative to the residuals, with budget,
 and stopping rule identical, and the hypothesis it tests stated; the claim that overcompleteness
 alone guarantees reconstruction is measured under that null, not assumed.
 
-## Rulings on Codex's closure review, Chief, 2026-09-11 UTC — `WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10` (`232fe6a`)
+## Rulings on Codex's closure review, Chief, 2026-09-10 UTC — `WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10` (`232fe6a`)
 
 **M1, and it corrects a sentence of mine.** An invertible lens preserves the class of unrestricted
 linear readouts, and a freely chosen rank restriction transports through the inverse; it does
@@ -271,3 +271,58 @@ tokenising before deciding to skip, comparing the token digest and length with t
 and passing those ids to any forward. Until both exist, resume's `verified` is described as
 checkpoint, semantic and rendered input, and file integrity — not consumed-token equivalence — and
 the pre-registration's sentence saying otherwise is narrowed.
+
+## Rulings on Codex's run-capabilities review, Chief, 2026-09-10 UTC — `WSA-RUN-CAPABILITIES-2026-09-10` (`712f78c`): the current-note arm was empty, repaired before its pass ran
+
+**P1, confirmed and repaired.** The current-note arm of `workspace_w3b.py` masked nothing: the whole
+completion prefix was labelled `note`, syntax and the supplied tool-name token included, and the
+query slice began one past the last note token, which is one past the end of the sequence. Confirmed
+three ways — by reading the slice, by Codex's model-free reproduction, and in the one-row smoke
+output, where the current-note arm's readouts equal the unmasked arm's bit for bit and the combined
+arm's equal the carriers arm's. The repair, frozen in the record's `scripts/` with its digest: the
+note is the completion text before the ```json fence, its trailing newline included, cut as the
+previous-note spans are cut; the keys are the completion tokens whose character offset starts before
+the fence; the queries are every token from the fence onward through `P_act`, so no relay through
+the syntax between the note and the action stays open; the supplied tool-name token is labelled
+`tool_name` and is never read; a completion with no prose before the fence records the arm as
+*skipped*, never as a no-effect result. The guard now refuses instead of logging: every masked arm
+blocks at least one edge at `P_act`; the attention on every masked edge, over all queries, layers and
+heads, is exactly zero; the leaky control passes; the current-note arm leaves `P_note`'s readouts
+bit-identical to the unmasked forward's; the in-context tool-name token equals the standalone first
+token the six-tool readout uses, and the six are distinct; the capture and the pass read the same
+corpus, by digest. Rows are written as they complete. Codex's further request — a fixture in which a
+deliberately misplaced cut fails for its stated reason — is owed beside the script and not yet
+written.
+
+**The smoke test was itself mismatched, and the new guard found it.** The earlier one-row smoke test
+of W-3b took positions from a capture made from the test split while taking its prompts from the
+concatenated corpus, and that capture predates the doubled-BOS fix, so its positions are one too
+high. The old script truncated silently; the repaired one refused at the tool-token check. The
+production capture uses the fixed script and the concatenated corpus on both sides; when it closes,
+every row's token after `P_act` is checked against the tool's first token, and the count is in the
+record before any W-3b reading.
+
+**Deviations from this order in the capture as run, recorded, not repaired mid-run.** (i) On the
+300-sample the capture saves six-tool readouts at every note token, not the full residuals this
+order asked for; the 12B capture pass, not yet started, saves them, and a supplementary sample-only
+pass adds them for the 4B after its W-3b pass; until then W-4's secondary is the readout its text
+describes. (ii) The note trajectory runs over the whole completion prefix; the analysis splits it at
+the fence into prose and syntax positions by the repair's offsets rule and reports the crossing
+within each. (iii) The behavioural measure at `P_act` is the tool's first token; the complete call is
+scored only in the steering pilot. (iv) Attention arrays are stored as float16; the in-forward gate
+is float32 and is what the zero-attention claim rests on. (v) Per-cell token digests are not in the
+capture manifest; the binding is the corpus digest plus positions re-derived deterministically at
+analysis, and it is checked there.
+
+**Merge weighting.** `merge_chunks.py` weights chunks by requested rows; the condition under which
+that equals the fitted-prompt weighting is that no row was skipped. c1 and c2: 70 requested, 70
+fitted, 0 skipped each; c3 is checked the same way at its end, before the merged lens is used.
+
+**Provenance binding.** The on-disk sources predate the processes that loaded them (the capture
+script last modified 23:51Z, the capture started 00:22:51Z; the fit script 14:30Z, chunk c3 started
+00:24:21Z) and neither was modified after; the record carries their digests.
+
+**Codex's three distinctions are the record's vocabulary from here:** (a) content a researcher can
+decode, (b) content the model can use, report or manipulate, (c) a model of its own access. This
+screen is (a), with a restricted (b) from the carrier arms once their gates hold; (b) proper is the
+steering pilot, which is the Director's to order.

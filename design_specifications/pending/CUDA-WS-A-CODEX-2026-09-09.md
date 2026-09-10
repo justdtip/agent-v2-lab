@@ -558,9 +558,11 @@ producers against the ones that cannot.
 on main, before any capture is read; (4) an audit of each experiment's record when it lands on
 `cuda-migration`.
 
-*2026-09-11 UTC:* standing request 1 is live on `cuda-ws-d` at bbdc8dc (P1–P6 applied) and covers, with it, the plan-progress capture code at 144fa1c (`pipeline/state_programme/capture.py`, its 34 tests, and the resume shard numbering the D-CRO found and fixed); both are merged into `cuda-migration`. Standing request 3 (the workspace-experiments design) is live on main through 70c44bb, W-3b included.
+*2026-09-10 UTC:* standing request 1 is live on `cuda-ws-d` at bbdc8dc (P1–P6 applied) and covers, with it, the plan-progress capture code at 144fa1c (`pipeline/state_programme/capture.py`, its 34 tests, and the resume shard numbering the D-CRO found and fixed); both are merged into `cuda-migration`. Standing request 3 (the workspace-experiments design) is live on main through 70c44bb, W-3b included.
 
-*Added to the brief, 2026-09-11 UTC, from method entry thirty-four (the D-CRO):* the one-line
+*Added to the brief, 2026-09-10 UTC, from method entry thirty-four (the D-CRO):* the one-line
 diagnostic that found six of seven broken verifiers this week — ask what the check would say if the
 thing it guards were broken, then break it — and the rule that a verdict without the set it was
 computed over is half a verdict: every review states what was checked beside whether it passed.
+
+*2026-09-10 UTC, later:* Codex's run-capabilities review (`712f78c`) found the empty current-note cut before its pass ran; ruled and repaired in the workspace order of this date. **Standing request 5, file-only:** audit the repaired `workspace_w3b.py` and `workspace_w3b_analyze.py` at the commit that carries this line (`research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/`) against P1's requirements — the boundary from token offsets, the explicit query cut, non-empty forbidden edges at `P_act`, refusal on a failed check — and say what each check would say if the cut were misplaced; the fixture for a deliberately misplaced cut is owed and may be specified by the review. Request 4 stands for the readings that follow.
