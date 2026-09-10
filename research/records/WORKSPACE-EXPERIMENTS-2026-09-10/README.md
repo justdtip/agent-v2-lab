@@ -287,15 +287,15 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | file | sha256 (first 12) | role |
 |---|---|---|
 | `workspace_capture.py` | 958ccdcf0bae | v1, the first 4B capture (died at 03:22Z); kept on the card as `workspace_capture.py.v1-as-run-4b` |
-| `workspace_w3b.py` | 359ca54b1862 | W-3b v3.3 (v3.2's controls plus the count-matched carrier arm; the 12B pass and the 4B v3.3 repeat). v3.2, 0a7869c0d8ed, is the 4B repeat above, in this record's history through commit a9f4e19. v3.1, 23c09ec1fe36, is the 4B pass as recorded above — in this record's history through commit 896bd9e and on the card as `workspace_w3b.py.v3.1-as-run-4b`; the repaired v2, b2d674d3469e, on the card as `workspace_w3b.py.v2-repaired` |
+| `workspace_w3b.py` | c59326c11e56 | W-3b v3.4 (v3.3's arms plus the mandatory capture-digest guard; the 12B pass and the 4B repeat). v3.3 359ca54b1862, in this record's history through 6e16943; v3.2, 0a7869c0d8ed, is the 4B repeat above, in this record's history through commit a9f4e19. v3.1, 23c09ec1fe36, is the 4B pass as recorded above — in this record's history through commit 896bd9e and on the card as `workspace_w3b.py.v3.1-as-run-4b`; the repaired v2, b2d674d3469e, on the card as `workspace_w3b.py.v2-repaired` |
 | `workspace_w3b_analyze.py` | d4f7f563d2f4 (v3.3; v3.2 79791aa145ec) | W-3b aggregate with admission and paired transitions; v3.2 names the control arm it pairs and labels a v3.1 output's control degenerate (v3.1, 30ffe6d01889, produced the 4B figures above; the two agree on every non-control figure) |
-| `w3b_v32_test.sh`, `chief_w3b_4b_v32_gated.sh`, `chief_w3b_4b_v33_gated.sh` | 84404aa17188, b202280ca584, bc01a10684fc | the v3.2 regression; the gated driver of the 4B repeat (`GO-W3B-4B-V32`, digest-guarded, memory-guarded) |
+| `w3b_v32_test.sh`, `w3b_v34_test.sh`, `chief_w3b_4b_v32_gated.sh`, `chief_w3b_4b_v33_gated.sh`, `chief_w3b_4b_v34_gated.sh` | 84404aa17188, (in scripts/), b202280ca584, bc01a10684fc, (in scripts/) | the v3.2 regression; the gated driver of the 4B repeat (`GO-W3B-4B-V32`, digest-guarded, memory-guarded) |
 | `workspace_analyze.py` | da680b6e5773 | W-1/W-3/W-4/W-5 with the prose–syntax split |
 | `workspace_w2.py` | 033ae371ef3e | W-2 and W-4 primary |
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
 | `merge_chunks.py` | 5c39d626e129 | chunk merge, weighted by requested rows (valid: no row skipped — c1 70/70/0, c2 70/70/0, c3 61/61/0) |
 | `chief_4b_passes.sh`, `chief_12b_passes.sh`, `overnight3.sh`, `chief_analyze.sh` | 0ef283871e02, c97b46a212bb, f3d6edd6541b, 49d0dc5589ba | drivers |
-| `workspace_capture_v2.py` | d4651269f23c | the capture with the index per row, as the 12B pass reads it. Lineage, each version in this record's history: 165d7b59eaf4 (v2, tested; commit 3e82317) → 422435f2f0b7 (v2.1, the copy the 4B re-run loaded at 03:33Z; commit 4315b44) → 6f87954ed5dd (the guard's stop widened to 1e-2; e6845f6) → d4651269f23c (the inner loop variables renamed; 1757284) |
+| `workspace_capture_v2.py` | d4651269f23c | the capture with the index per row, as the 12B pass reads it. Lineage, each version in this record's history: 165d7b59eaf4 (v2, tested; commit 3e82317) → 422435f2f0b7 (v2.1, the copy the 4B re-run loaded at 03:33Z; commit 4315b44) → 6f87954ed5dd (the guard's stop widened to 1e-2; e6845f6) → d4651269f23c (the inner loop variables renamed; 1757284) → c1dc5e93fea7 (v2.2: the corpus digest written into the manifest; the 12B capture in progress runs d4651269 and carries the digest in its capture-time event) |
 | `reconstruct_index.py`, `merge_tail_capture.py`, `verify_capture_index.py`, `chief_12b_passes_v2.sh` | 279b16d1b79f, 4d292cf78120, 3caf3d683c0e, f70cae68e67f | the insurance and the index verification (section above); the gated 12B driver |
 | `chief_w3b_4b_gated.sh`, `chief_pilot_gated.sh` | e0ac7c3b0ba4, 5192a4b80905 (in the pilot record) | the phase-0 W-3b driver; the pilot's first driver, which died at load (the pilot record) |
 
@@ -429,6 +429,20 @@ the 4B is repeated behind `GO-W3B-4B-V33` when the card is next free, at Daniel'
 outnumber a pool of 555, the matched arm subsampled 555 carrier keys (a subset of the carrier set, equal to the
 control's count), every receipt passed, the analyzer admitted the six rows and reported the one short row; on the
 v3.2 pass it reports 55 short rows. Promoted on the card at 09:12Z, before the 12B W-3b; v3.2 kept beside it.
+
+**v3.4 — the corpus digest made mandatory (Codex, `WSA-OUTSTANDING-REVIEWS-2026-09-10`, M1; 10:35Z).** The
+producer's G10 guard compared the capture's corpus digest only when the capture manifest carried one, and fell
+back to path equality otherwise; no capture manifest so far carries one, so every pass to date took the
+fallback, and an isolated execution of the guard accepted a wrong digest under it. Capture-time byte identity
+for the passes so far is nonetheless established: each capture's own progress record carries a `corpus` event
+with the digest of the bytes it read (790cefff… for the 4B and the 12B), and every masking run recorded the same
+digest. v3.4 (c59326c11e56) takes the digest from the manifest or from that capture-time event and refuses
+otherwise — a path is not an identity — with a three-case self-test in the run log and the source named in
+`run.json`; the capture script writes the digest into its manifest from v2.2 (c1dc5e93fea7) for every future
+capture. Regression 10:32–10:35Z: self-test 3 of 3; the one-row pass admitted; on the real 4B and 12B captures'
+metadata the guard reads the capture-time event and the true digest, and a capture without either is refused.
+Promoted on the card at 10:40Z, before the 12B W-3b, which therefore runs v3.4; the 4B repeat is re-armed behind
+`GO-W3B-4B-V34` (driver digest-guarded on v3.4).
 
 **W-2, the primary of W-4: linear decodability of the expert action at P_note and P_act (all 7,629
 decisions, 1,128 episodes; unit the episode, accuracies are episode means).** A PCA-r projection fitted

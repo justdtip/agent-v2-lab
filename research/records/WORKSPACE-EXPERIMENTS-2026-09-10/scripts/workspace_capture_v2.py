@@ -57,7 +57,8 @@ rows_all = rows; LO = int(args.rows_from); HI = int(args.rows_to) if args.rows_t
 assert 0 <= LO < HI <= len(rows_all), f"row range [{LO}, {HI}) outside the corpus of {len(rows_all)}"
 rows = rows_all[LO:HI]
 if args.max_rows: rows = rows[: args.max_rows]; HI = LO + len(rows)
-emit("corpus", decisions=len(rows), rows_from=LO, rows_to=HI, corpus_decisions=len(rows_all), corpus_sha256=hashlib.sha256(Path(args.corpus).read_bytes()).hexdigest())
+CORPUS_SHA = hashlib.sha256(Path(args.corpus).read_bytes()).hexdigest()
+emit("corpus", decisions=len(rows), rows_from=LO, rows_to=HI, corpus_decisions=len(rows_all), corpus_sha256=CORPUS_SHA)
 
 model, report = hf_text.load_text_causal_lm(args.snapshot, dtype="bfloat16", attn_implementation="eager", device=args.device)
 for p in model.parameters(): p.requires_grad_(False)
@@ -179,7 +180,7 @@ with torch.no_grad():
 res_note.flush(); res_act.flush(); sample_out.close(); index_out.close()
 assert sum(1 for l in (OUT / "index.jsonl").read_text().splitlines() if l.strip()) == len(index), "the incremental index does not hold every row"
 (OUT / "manifest.json").write_text(json.dumps({"schema_version": 1, "seat": "chief", "model": args.model, "checkpoint": args.snapshot, "load_report_sha256": report.get("sha256"),
-    "corpus": args.corpus, "decisions": N, "rows_from": LO, "rows_to": HI, "corpus_decisions": len(rows_all), "memmap_row": "global index minus rows_from", "positions": ["P_note: last prompt token", "P_act: token before the tool-name token"], "precision": "float32", "width": 1,
+    "corpus": args.corpus, "corpus_sha256": CORPUS_SHA, "decisions": N, "rows_from": LO, "rows_to": HI, "corpus_decisions": len(rows_all), "memmap_row": "global index minus rows_from", "positions": ["P_note: last prompt token", "P_act: token before the tool-name token"], "precision": "float32", "width": 1,
     "device": args.device, "maps": args.maps, "repo_layers": repo_layers, "tools": TOOLS, "tool_first_tokens": tool_first,
     "sample": sorted(sample), "sample_rule": f"per family, sorted (task_id, step), prompts <= {args.sample_max_tokens} tokens, every k-th to {args.sample_per_family}",
     "tf32": {"matmul_allow_tf32": torch.backends.cuda.matmul.allow_tf32, "float32_matmul_precision": torch.get_float32_matmul_precision()},

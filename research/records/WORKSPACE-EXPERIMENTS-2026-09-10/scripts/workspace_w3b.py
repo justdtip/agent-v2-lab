@@ -101,9 +101,33 @@ _src = Path(__file__).with_name("workspace_capture.py").read_text()
 _ns = {"re": re}; exec(_src[_src.index("def spans(prompt):"): _src.index("# ---- the sample, by rule")], _ns); spans = _ns["spans"]
 
 man = json.loads((Path(args.capture) / "manifest.json").read_text()); sample_ids = man["sample"]
+def capture_corpus_digest(capture_dir, manifest):
+    """The digest of the corpus bytes the capture actually read: from its manifest (capture v2.2+) or, failing that, from the
+    capture-time "corpus" event in its progress record (every capture since v1 emits one). No other source is accepted — in
+    particular not the path (Codex, G10/M1: path equality accepted a wrong digest when the manifest lacked the field)."""
+    if manifest.get("corpus_sha256"): return manifest["corpus_sha256"], "manifest"
+    prog = Path(capture_dir) / "progress.jsonl"
+    if prog.exists():
+        for line in prog.read_text().splitlines():
+            if not line.strip(): continue
+            ev = json.loads(line)
+            if ev.get("event") == "corpus" and ev.get("corpus_sha256"): return ev["corpus_sha256"], "capture-time progress event"
+    raise SystemExit(f"refused: the capture at {capture_dir} records no corpus digest (manifest or capture-time event); path equality is not identity")
 corpus_sha = hashlib.sha256(Path(args.corpus).read_bytes()).hexdigest()
-if man.get("corpus_sha256"): assert man["corpus_sha256"] == corpus_sha, f"corpus digest {corpus_sha[:12]} is not the capture's {man['corpus_sha256'][:12]}"
-else: assert man["corpus"] == args.corpus, f"corpus {args.corpus} is not the capture's {man['corpus']} (no digest in its manifest to compare)"
+CAPTURE_SHA, CAPTURE_SHA_SOURCE = capture_corpus_digest(args.capture, man)
+assert CAPTURE_SHA == corpus_sha, f"refused: corpus digest {corpus_sha[:12]} is not the capture's {CAPTURE_SHA[:12]} (from its {CAPTURE_SHA_SOURCE})"
+def digest_guard_selftest():
+    import tempfile
+    good = "a" * 64
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "progress.jsonl").write_text(json.dumps({"event": "corpus", "corpus_sha256": good}) + "\n")
+        assert capture_corpus_digest(d, {"corpus_sha256": good})[1] == "manifest"
+        assert capture_corpus_digest(d, {"corpus": "/x"}) == (good, "capture-time progress event")
+        Path(d, "progress.jsonl").write_text(json.dumps({"event": "loaded"}) + "\n")
+        try: capture_corpus_digest(d, {"corpus": "/x"}); raise AssertionError("a capture without a digest was accepted")
+        except SystemExit: pass
+    return {"digest_guard_cases": 3, "capture_digest_source": CAPTURE_SHA_SOURCE}
+emit("digest_guard_selftest", **digest_guard_selftest())
 if args.max_sample: sample_ids = sample_ids[: args.max_sample]
 idx = {r["i"]: r for r in (json.loads(l) for l in (Path(args.capture) / "index.jsonl").read_text().splitlines() if l.strip())}
 rows_all, seen = [], set()
@@ -117,8 +141,8 @@ QUERIES = {"carrier_arms": "P_note (the decision position) through S-1", "curren
 CONTROL = ("random_equal_count: the all-carriers count of tokens drawn without replacement from the positions 1..P_note-1 in no carrier span (the task statement and the format tokens; never position 0, the <bos> sink), masked from P_note; random_equal_count_note: the current note's prose count from the same pool, masked from q0 — the count-matched control for the current-note arm; all_carriers_matched: the carrier keys subsampled to the pool's size where the carriers outnumber it, else all of them — the carrier arm that is count-matched to random_equal_count in every row (v3.3; v3.2 added the pool and the note control; v3.1's pool, the non-task tokens before P_note, was mostly the carrier spans themselves — degenerate, see the 4B record); the same-kind arms (older vs previous note, older vs previous call) are the role- and contiguity-matched comparisons; "
            "survival under a mask shows non-necessity of the masked edges under this intervention and does not date the decision; for the carrier arms the two-hop relay through unmasked earlier positions is an open route; "
            "for the current-note arm no such relay exists (every position after the note is a masked query)")
-(OUT / "run.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.3", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "maps_sha256": hashlib.sha256(Path(args.maps).read_bytes()).hexdigest(),
-    "capture": args.capture, "corpus": args.corpus, "corpus_sha256": corpus_sha, "sample": sample_ids, "requested": len(sample_ids), "kinds": KINDS, "queries_masked_from": QUERIES, "control": CONTROL, "device": args.device, "seed": args.seed,
+(OUT / "run.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.4", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "maps_sha256": hashlib.sha256(Path(args.maps).read_bytes()).hexdigest(),
+    "capture": args.capture, "corpus": args.corpus, "corpus_sha256": corpus_sha, "capture_corpus_sha256_source": CAPTURE_SHA_SOURCE, "sample": sample_ids, "requested": len(sample_ids), "kinds": KINDS, "queries_masked_from": QUERIES, "control": CONTROL, "device": args.device, "seed": args.seed,
     "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n")
 
 model, report = hf_text.load_text_causal_lm(args.snapshot, dtype="bfloat16", attn_implementation="eager", device=args.device)
@@ -297,7 +321,7 @@ for n, i in enumerate(sample_ids):
          blocked_at_P_act={k: v["gate"]["n_blocked_edges_at_P_act"] for k, v in row["arms"].items()}, receipts_pass=all(v.get("receipt", {}).get("passes", True) for v in row["arms"].values()))
 for h in handles: h.remove()
 results_fh.close()
-(OUT / "manifest.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.3", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "capture": args.capture, "sample": sample_ids, "requested": len(sample_ids),
+(OUT / "manifest.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.4", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "capture": args.capture, "sample": sample_ids, "requested": len(sample_ids),
     "kinds": KINDS, "queries_masked_from": QUERIES,
     "current_note": {"keys": "completion tokens whose character offset starts before the ```json fence (the prose note, trailing newline included, cut as the previous-note spans are cut)",
                      "queries": "every token from the fence onward through S-1 (the supplied tool-name token, never read), so no relay through the syntax between the note and the action is open",
