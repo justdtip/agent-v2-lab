@@ -16,6 +16,13 @@ import torch
 from local_llm_lab.pipeline.state_programme import capture
 
 
+def _identity(config="cfg", weights=("aa", "bb")) -> dict:
+    """A checkpoint identity of the shape the loader's digest manifest produces."""
+    manifest = {"config.json": config}
+    manifest.update({f"model-{i:05d}.safetensors": w for i, w in enumerate(weights)})
+    return capture.checkpoint_identity(manifest)
+
+
 def _decision(**overrides) -> dict:
     base = {
         "task_id": "test-read-0000-clean", "step": 1, "split": "test", "family": "read",
@@ -42,7 +49,7 @@ def _cell(**overrides) -> dict:
         "token_index": 3, "seq_len": 4, "forward_batch": 1, "anchor_batch": 1,
         "capture_dtype": "native", "checkpoint_sha256": "c", "layers": 2, "d_model": 4,
         "device": "cpu", "decoding": "greedy", "shard": 0, "index_in_shard": 0,
-        "basis": "measured-here",
+        "config_sha256": "cfg", "weight_files": 2, "basis": "measured-here",
     }
     return {**base, **overrides}
 
@@ -127,7 +134,7 @@ def test_a_corpus_row_whose_prompt_digest_moved_is_refused(tmp_path) -> None:
     row = _row()
     decision = _decision(prompt_sha256=capture.prompt_digest(row["messages"]))
     moved = _row(text="something else")
-    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c",
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy")
     with pytest.raises(capture.ContractViolation, match="re-enumerate rather than capture"):
         capture.capture_decisions(
@@ -137,7 +144,7 @@ def test_a_corpus_row_whose_prompt_digest_moved_is_refused(tmp_path) -> None:
 
 
 def test_a_decision_absent_from_the_corpus_is_refused(tmp_path) -> None:
-    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c",
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy")
     with pytest.raises(capture.ContractViolation, match="drifted apart"):
         capture.capture_decisions(decisions=[_decision()], corpus={}, forward=_forward(),
@@ -159,7 +166,7 @@ def test_a_run_writes_its_shards_and_a_manifest_line_per_decision(tmp_path) -> N
         _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
         for i, r in enumerate(rows)
     ]
-    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c0ffee",
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy", shard_size=2)
     summary = capture.capture_decisions(
         decisions=decisions, corpus=capture.rows_by_decision(rows),
@@ -171,7 +178,7 @@ def test_a_run_writes_its_shards_and_a_manifest_line_per_decision(tmp_path) -> N
     assert len(lines) == 5
     for cell in lines:
         capture.assert_contract(cell)          # the manifest itself meets the contract
-        assert cell["checkpoint_sha256"] == "c0ffee"
+        assert cell["checkpoint_sha256"] == _identity()["checkpoint_sha256"]
         assert cell["shard_sha256"]
         assert (tmp_path / f"residuals-{cell['shard']:05d}.pt").exists()
     # Three shards at size two, and the residuals keep their native dtype rather than promoting.
@@ -187,7 +194,7 @@ def test_a_second_run_resumes_from_the_manifest_and_does_not_recapture(tmp_path)
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
-    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c",
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy", shard_size=2)
     capture.capture_decisions(decisions=decisions[:2], corpus=corpus, forward=_forward(),
                               target=target)
@@ -219,7 +226,7 @@ def test_resuming_after_a_partial_shard_does_not_overwrite_it(tmp_path) -> None:
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
-    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c",
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy", shard_size=2)
 
     capture.capture_decisions(decisions=decisions[:5], corpus=corpus, forward=_forward(),
@@ -258,7 +265,7 @@ def test_the_summary_reports_what_was_asked_for_and_not_only_what_was_written(tm
         for i, r in enumerate(rows)
     ]
     corpus = capture.rows_by_decision(rows)
-    target = capture.CaptureTarget(directory=tmp_path, entry="e", checkpoint_sha256="c",
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
                                    decoding="greedy", shard_size=2)
 
     partial = capture.capture_decisions(decisions=decisions[:2], corpus=corpus,
@@ -272,3 +279,89 @@ def test_the_summary_reports_what_was_asked_for_and_not_only_what_was_written(tm
     assert full["already_present"] == 2
     assert full["captured"] == 1
     assert full["outstanding"] == 0 and full["complete"] is True
+
+
+# ----------------------------------------- F2: an identity that cannot tell checkpoints apart
+
+def test_two_checkpoints_sharing_a_config_do_not_share_an_identity() -> None:
+    """The defect: `sha256["config.json"]` as the checkpoint's identity.
+
+    Same config, every weight different, identical identity — an identity that cannot distinguish
+    the thing it identifies. The captures would then be attributed to a checkpoint that did not
+    produce them, and nothing downstream could tell.
+    """
+    a = _identity(config="same", weights=("w1", "w2"))
+    b = _identity(config="same", weights=("DIFFERENT", "ALSO-DIFFERENT"))
+    assert a["config_sha256"] == b["config_sha256"], "the fixture must share a config"
+    assert a["checkpoint_sha256"] != b["checkpoint_sha256"]
+
+
+def test_an_identity_without_weights_or_without_a_config_is_refused() -> None:
+    with pytest.raises(capture.ContractViolation, match="no config.json"):
+        capture.checkpoint_identity({"model-00000.safetensors": "w"})
+    with pytest.raises(capture.ContractViolation, match="different weights would then share"):
+        capture.checkpoint_identity({"config.json": "c"})
+    for empty in ({}, None, "abc"):
+        with pytest.raises(capture.ContractViolation, match="no file digests"):
+            capture.checkpoint_identity(empty)
+
+
+# --------------------------------------------- F3: a resume that verifies rather than trusts
+
+def _started(tmp_path, shard_size=2, identity=None):
+    rows = [_row(step=i) for i in range(3)]
+    decisions = [
+        _decision(step=i, prompt_sha256=capture.prompt_digest(r["messages"]))
+        for i, r in enumerate(rows)
+    ]
+    corpus = capture.rows_by_decision(rows)
+    target = capture.CaptureTarget(directory=tmp_path, entry="e",
+                                   identity=identity or _identity(), decoding="greedy",
+                                   shard_size=shard_size)
+    capture.capture_decisions(decisions=decisions[:2], corpus=corpus, forward=_forward(),
+                              target=target)
+    return rows, decisions, corpus, target
+
+
+def test_resuming_under_a_different_checkpoint_is_refused(tmp_path) -> None:
+    _, decisions, corpus, _ = _started(tmp_path)
+    other = capture.CaptureTarget(directory=tmp_path, entry="e",
+                                  identity=_identity(weights=("zz", "yy")), decoding="greedy",
+                                  shard_size=2)
+    with pytest.raises(capture.ResumeUnverified, match="mix two checkpoints"):
+        capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                                  target=other)
+
+
+def test_resuming_when_the_prompt_has_moved_is_refused(tmp_path) -> None:
+    rows, decisions, _, target = _started(tmp_path)
+    moved = capture.rows_by_decision([_row(step=i, text=f"changed {i}") for i in range(3)])
+    with pytest.raises(capture.ResumeUnverified, match="prompt digest has moved"):
+        capture.capture_decisions(decisions=decisions, corpus=moved, forward=_forward(),
+                                  target=target)
+
+
+def test_resuming_with_a_missing_shard_is_refused(tmp_path) -> None:
+    _, decisions, corpus, target = _started(tmp_path)
+    (tmp_path / "residuals-00000.pt").unlink()
+    with pytest.raises(capture.ResumeUnverified, match="not on disk"):
+        capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                                  target=target)
+
+
+def test_resuming_with_altered_shard_bytes_is_refused(tmp_path) -> None:
+    """The one a membership check can never see: the file is there and it is not the file."""
+    _, decisions, corpus, target = _started(tmp_path)
+    path = tmp_path / "residuals-00000.pt"
+    path.write_bytes(path.read_bytes() + b"\x00")
+    with pytest.raises(capture.ResumeUnverified, match="bytes have changed"):
+        capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                                  target=target)
+
+
+def test_a_clean_resume_reports_what_it_verified(tmp_path) -> None:
+    _, decisions, corpus, target = _started(tmp_path)
+    summary = capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                                        target=target)
+    assert summary["complete"] is True
+    assert summary["verified"] == 3, "every kept entry was checked, not counted"

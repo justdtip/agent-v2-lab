@@ -35,7 +35,8 @@ from typing import Any
 REQUIRED_CELL_FIELDS = (
     "task_id", "step", "split", "family", "variant", "difficulty", "recovery",
     "rendered_rows", "prompt_sha256", "token_index", "seq_len",
-    "forward_batch", "anchor_batch", "capture_dtype", "checkpoint_sha256",
+    "forward_batch", "anchor_batch", "capture_dtype",
+    "checkpoint_sha256", "config_sha256", "weight_files",
     "layers", "d_model", "device", "decoding", "shard", "index_in_shard", "basis",
 )
 
@@ -57,13 +58,53 @@ class ContractViolation(ValueError):
     """A cell the capture contract does not describe, refused before anything is written."""
 
 
+class ResumeUnverified(ContractViolation):
+    """An existing capture that cannot be shown to be the capture this run would have made."""
+
+
+def checkpoint_identity(sha256_map: object) -> dict:
+    """The checkpoint's identity: every file's digest, and one digest over all of them.
+
+    `report["sha256"]` from the loader is a mapping of file name to digest covering the config
+    **and every weight shard**. The first version of this module took `sha256["config.json"]` alone
+    and called it the checkpoint's identity, which two checkpoints sharing a config and differing in
+    every weight would satisfy identically — an identity that cannot tell apart the thing it
+    identifies. The config digest is still recorded, named as the config's and not as the
+    checkpoint's.
+    """
+    if not isinstance(sha256_map, dict) or not sha256_map:
+        raise ContractViolation(
+            "the loader reported no file digests, so this capture cannot say which checkpoint it "
+            "is of. A capture without a checkpoint identity is unattributable and is refused "
+            "rather than written."
+        )
+    if "config.json" not in sha256_map:
+        raise ContractViolation(
+            f"the digest manifest names {sorted(sha256_map)[:4]}… and no config.json; the loader's "
+            "complete manifest is required, not a subset of it."
+        )
+    weights = sorted(k for k in sha256_map if k != "config.json")
+    if not weights:
+        raise ContractViolation(
+            "the digest manifest names config.json and no weight files. Two checkpoints with one "
+            "config and different weights would then share an identity."
+        )
+    canonical = json.dumps(dict(sorted(sha256_map.items())), sort_keys=True)
+    return {
+        "checkpoint_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+        "config_sha256": sha256_map["config.json"],
+        "checkpoint_files_sha256": dict(sorted(sha256_map.items())),
+        "weight_files": len(weights),
+    }
+
+
 @dataclass(frozen=True, kw_only=True)
 class CaptureTarget:
     """Where a capture goes and what it is a capture of."""
 
     directory: Path
     entry: str
-    checkpoint_sha256: str
+    identity: dict          # `checkpoint_identity(report["sha256"])`, never one file's digest
     decoding: str
     shard_size: int = DEFAULT_SHARD_SIZE
 
@@ -152,7 +193,7 @@ def capture_decisions(
     """
     target.directory.mkdir(parents=True, exist_ok=True)
     manifest_path = target.directory / "manifest.jsonl"
-    done, highest_shard = _already_captured(manifest_path)
+    done, highest_shard = _verified_captures(manifest_path, target, corpus)
     pending = [d for d in decisions if (d["task_id"], d["step"]) not in done]
 
     # The next shard is one past the highest the manifest names, never `len(done) // shard_size`.
@@ -193,7 +234,9 @@ def capture_decisions(
             "forward_batch": FORWARD_BATCH,
             "anchor_batch": FORWARD_BATCH,
             "capture_dtype": CAPTURE_DTYPE,
-            "checkpoint_sha256": target.checkpoint_sha256,
+            "checkpoint_sha256": target.identity["checkpoint_sha256"],
+            "config_sha256": target.identity["config_sha256"],
+            "weight_files": target.identity["weight_files"],
             "layers": int(result["layers"]),
             "d_model": int(result["d_model"]),
             "device": str(result["device"]),
@@ -219,7 +262,7 @@ def capture_decisions(
     # truncated one, and both look like success. `complete` is computed against the decisions this
     # call was given — a caller that passed a subset gets `requested` equal to that subset, which is
     # why `requested` is reported beside it rather than assumed to be the whole set.
-    final = _already_captured(manifest_path)[0]
+    final, _ = _verified_captures(manifest_path, target, corpus)
     outstanding = [d for d in decisions if (d["task_id"], d["step"]) not in final]
     return {
         "captured": written,
@@ -227,23 +270,72 @@ def capture_decisions(
         "requested": len(decisions),
         "outstanding": len(outstanding),
         "complete": not outstanding,
+        "verified": len(final),
         "shards": shard + (1 if cells else 0),
         "coverage_note": "requested is what this call was given, not necessarily the whole capture "
-                         "set; complete says every requested decision now has a manifest line",
+                         "set; complete says every requested decision now has a manifest line, and "
+                         "verified is how many of those lines were checked against the checkpoint "
+                         "identity, the corpus row's prompt digest and the shard's own bytes",
     }
 
 
-def _already_captured(manifest_path: Path) -> tuple[set[tuple[str, int]], int]:
-    """What the manifest says exists, and the highest shard number it names (-1 if none)."""
+def _verified_captures(
+    manifest_path: Path, target: CaptureTarget, corpus: dict[tuple[str, int], dict]
+) -> tuple[set[tuple[str, int]], int]:
+    """The captures this run may keep, **verified**, and the highest shard the manifest names.
+
+    The first version counted a key as done on manifest membership alone. A changed checkpoint, a
+    changed prompt, a missing shard and altered shard bytes all resumed as complete, and a resumed
+    pass would then have mixed two checkpoints' residuals under one manifest with nothing saying
+    so. Membership in a manifest is a claim; this checks it.
+
+    Four conditions, and a failure of any is refused by name rather than silently re-captured,
+    because a manifest that disagrees with its own files is a fact about the directory that the
+    operator needs to see, not one for this function to paper over.
+    """
     if not manifest_path.exists():
         return set(), -1
     done: set[tuple[str, int]] = set()
     highest = -1
+    shard_digests: dict[int, str] = {}
     for line in manifest_path.read_text().splitlines():
-        if line.strip():
-            cell = json.loads(line)
-            done.add((cell["task_id"], int(cell["step"])))
-            highest = max(highest, int(cell["shard"]))
+        if not line.strip():
+            continue
+        cell = json.loads(line)
+        key = (cell["task_id"], int(cell["step"]))
+        highest = max(highest, int(cell["shard"]))
+
+        if cell.get("checkpoint_sha256") != target.identity["checkpoint_sha256"]:
+            raise ResumeUnverified(
+                f"{key} was captured under checkpoint {str(cell.get('checkpoint_sha256'))[:12]} "
+                f"and this run is {target.identity['checkpoint_sha256'][:12]}. Resuming would mix "
+                "two checkpoints' residuals under one manifest. Capture into a new directory."
+            )
+        row = corpus.get(key)
+        if row is None:
+            raise ResumeUnverified(
+                f"{key} is in the manifest and not in the corpus this run was given: the existing "
+                "captures and this corpus are not of the same rows."
+            )
+        if prompt_digest(row["messages"]) != cell.get("prompt_sha256"):
+            raise ResumeUnverified(
+                f"{key}: the corpus row's prompt digest has moved since it was captured. The "
+                "existing capture is of a prompt this run would not produce."
+            )
+        shard_path = target.directory / f"residuals-{int(cell['shard']):05d}.pt"
+        if not shard_path.exists():
+            raise ResumeUnverified(
+                f"{key} names {shard_path.name}, which is not on disk. The manifest describes a "
+                "capture nobody has."
+            )
+        if int(cell["shard"]) not in shard_digests:
+            shard_digests[int(cell["shard"])] = hashlib.sha256(shard_path.read_bytes()).hexdigest()
+        if shard_digests[int(cell["shard"])] != cell.get("shard_sha256"):
+            raise ResumeUnverified(
+                f"{shard_path.name} does not hash to the {str(cell.get('shard_sha256'))[:12]} the "
+                "manifest records. Its bytes have changed since it was written."
+            )
+        done.add(key)
     return done, highest
 
 
@@ -269,6 +361,8 @@ def _flush(target: CaptureTarget, shard: int, buffer: list, cells: list[dict],
 
 __all__ = [
     "CAPTURE_DTYPE",
+    "ResumeUnverified",
+    "checkpoint_identity",
     "FORWARD_BATCH",
     "REQUIRED_CELL_FIELDS",
     "REQUIRED_ROW_FIELDS",

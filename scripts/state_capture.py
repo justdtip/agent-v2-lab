@@ -66,6 +66,10 @@ def main(argv: list[str] | None = None) -> int:
     if observed != "torch.bfloat16":
         raise SystemExit(f"the model loaded as {observed}; the capture contract is native bf16")
 
+    # The whole digest manifest, never one file's (Codex F2): two checkpoints sharing a config and
+    # differing in every weight would otherwise carry the same identity into every captured cell.
+    identity = capture.checkpoint_identity(report.get("sha256"))
+
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
     load_upstream()
     import jlens.hf as upstream_hf
@@ -76,7 +80,9 @@ def main(argv: list[str] | None = None) -> int:
     every = list(range(n_layers))
     bos = tokenizer.bos_token_id
     emit("loaded", dtype=observed, n_layers=n_layers, d_model=d_model, entry=args.entry,
-         checkpoint_sha256=report.get("sha256", {}).get("config.json"), bos_token_id=bos)
+         checkpoint_sha256=identity["checkpoint_sha256"],
+         config_sha256=identity["config_sha256"], weight_files=identity["weight_files"],
+         bos_token_id=bos)
 
     def forward(row: dict) -> dict:
         ids = tokenizer(row["prompt"], add_special_tokens=False)["input_ids"]
@@ -120,8 +126,7 @@ def main(argv: list[str] | None = None) -> int:
          capture_set=str(args.capture_set), corpus_rows=len(corpus_rows), keyed=len(corpus))
 
     target = capture.CaptureTarget(
-        directory=args.out, entry=args.entry,
-        checkpoint_sha256=report.get("sha256", {}).get("config.json") or "",
+        directory=args.out, entry=args.entry, identity=identity,
         decoding=args.decoding, shard_size=args.shard_size,
     )
     summary = capture.capture_decisions(
