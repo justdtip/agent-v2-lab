@@ -16,8 +16,27 @@ checkout, and how an environment variable that should be set is not.
   the shared checkout, and a process sitting there trips the pull gate. Everything below runs from
   `/workspace/wsd/ws-d`, which is this branch's worktree, with `PYTHONPATH` pointing at its `src`.
 
+## 0a. First, and it is not a formality: is the worktree the tree these commands describe?
+
+Written commands do not protect against a stale tree. When these four were first written the card's
+worktree sat eleven commits behind and contained **neither** `capture.py` **nor**
+`state_capture.py` — the commands were right and would have failed at the moment the slot opened,
+with a file-not-found and the window burning. The commands say what to run; this says what to run it
+*from*, and it is the half that was missing.
+
 ```bash
-# 0. shared prelude for every launch
+cd /workspace/wsd/ws-d
+git fetch -q origin && git checkout -q --detach origin/cuda-ws-d && git log --oneline -1
+# then prove the code is actually importable from this tree, not merely present:
+PYTHONPATH=/workspace/wsd/ws-d/src /workspace/agent-v2-lab/.venv/bin/python -c \
+  "from local_llm_lab.pipeline.state_programme import capture; \
+   import pathlib; assert pathlib.Path('scripts/state_capture.py').exists(); print('ready')"
+```
+
+If that last line does not print `ready`, nothing below is worth starting.
+
+```bash
+# 0b. shared prelude for every launch
 cd /workspace/wsd/ws-d
 export PYTHONPATH=/workspace/wsd/ws-d/src
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
