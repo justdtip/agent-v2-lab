@@ -303,3 +303,27 @@ carrier-ablation arm and the re-read diagnostic apply to this variable as they d
 the carrier is the note's plan and progress in words (Fact 3), so the ablation removes the plan's
 progress statement from the note after the state-bearing position; E2 is scored with and without it,
 and R4's within-pass E3 is no longer the only place the carrier question lives.
+
+## Rulings on Codex's re-review (`WSA-OUTSTANDING-REVIEWS-2026-09-10`, `89268e3` on its branch; standing request 1), Chief, 2026-09-10 — two corrections before the seal, both accepted
+
+**S1, accepted.** The pre-registration carries two operative tolerance tables: the corrected paired-width values
+(E1 test 0.23, ordinary train 0.13, corrective pooled 0.15, contiguous 0.23, gap 0.20) and, unmarked, the earlier
+ε_main = 0.17 / ε_sub = 0.11 with a pooled 0.11 reference; under the document's own paired-width rule 0.17 needs
+428 episodes and 0.11 needs 1,021, beyond their populations, so the ambiguity can change a null or equivalence
+verdict. The checker passes both, and passes an inserted ε_main = 0.01. Ruled: one operative table, named as
+such; the intermediate paragraphs and the pooled reference marked superseded in place, the historical
+decision-count figures kept as history; the checker gains a test that refuses two competing operative values
+for one tolerance (insert 0.01 beside 0.23 and it must fail). The seal follows this edit.
+
+**S2, accepted.** The instrument veto "any above-permutation decoding of pointer-chain remaining steps is a leak"
+is wrong at the terminal step: every terminal pointer-chain decision (94 of 669; 20 in E1's test split) visibly
+contains `Node: final`, and recognising that a chain has ended is legitimate input information, not leakage.
+Ruled: the unknown-horizon control pre-specifies its eligible positions — terminal decisions excluded, and the
+exclusion rule stated as a function of the visible text, not of the label — and its null is conditional on
+what remains visible (chain length, survival, family, visible progress), with the reason each conditioning
+variable is included written down; success above that null is the veto, success above the unconditional
+permutation null is not. Exclusion alone is not claimed to make the remaining labels unknowable.
+
+Both go to the D-CRO as the pre-registration's owner; Codex's other checks carry (72 CPU tests, the folds
+reconstructed independently, 7,629 token-position checks). The seal waits for S1 and S2 and nothing else on
+this order. The sealed-off activations stay unread.
