@@ -140,19 +140,23 @@ with torch.no_grad():
         c_ids = enc_c.input_ids[: t_idx + 1]
         ids = torch.tensor([p_ids + c_ids], device=args.device)
         P_note = len(p_ids) - 1; P_act = len(p_ids) + t_idx - 1
+        keep = torch.tensor([P_note, P_act], device=args.device)  # the model's logits only where they are read: the full [seq, vocab] logits were the 4.2 GiB allocation that killed the first 4B pass
         in_sample = i in sample
         with ActivationRecorder(lens_model.layers, at=record_at) as rec:
-            out = model(input_ids=ids, output_attentions=in_sample)
+            out = model(input_ids=ids, output_attentions=in_sample, logits_to_keep=keep)
             acts = {k: rec.activations[k].detach()[0].float() for k in record_at}
         for j, rr in enumerate(repo_layers):
             u = upstream_index_of_repo_layer(rr); res_note[k, j] = acts[u][P_note].cpu().numpy(); res_act[k, j] = acts[u][P_act].cpu().numpy()
-        logits = out.logits[0].float()
-        s_note, m_note = six(logits[P_note]); s_act, m_act = six(logits[P_act])
+        logits = out.logits[0].float(); assert logits.shape[0] == 2, f"logits_to_keep returned {tuple(logits.shape)}"
+        if k == 0:  # the kept logits must equal the full forward's at the same positions (the same lm_head rows; recorded, and a hard stop beyond 1e-4)
+            full = model(input_ids=ids).logits[0].float()[[P_note, P_act]]; diff = float((full - logits).abs().max()); del full
+            emit("logits_to_keep_check", identical=bool(diff == 0.0), max_abs_diff=diff); assert diff <= 1e-4, f"kept logits differ from the full logits by {diff}"
+        s_note, m_note = six(logits[0]); s_act, m_act = six(logits[1])
         top5 = lambda v: [tok.decode([int(t)]) for t in torch.topk(v, 5).indices.tolist()]
         rec_row = {"i": i, "task_id": m["task_id"], "step": m["step"], "family": m["family"], "variant": m["variant"], "recovery": m.get("recovery"),
                    "tool": tool, "tool_idx": TOOLS.index(tool), "P_note": P_note, "P_act": P_act, "n_prompt_tokens": len(p_ids), "n_note_tokens": t_idx,
                    "model_six_note": s_note.tolist(), "model_six_act": s_act.tolist(), "model_mass_note": float(m_note), "model_mass_act": float(m_act),
-                   "model_top5_note": top5(logits[P_note]), "model_top5_act": top5(logits[P_act]),
+                   "model_top5_note": top5(logits[0]), "model_top5_act": top5(logits[1]),
                    "lens_note": readouts(acts, P_note), "lens_act": readouts(acts, P_act), "in_sample": in_sample}
         index.append(rec_row); index_out.write(json.dumps(rec_row) + "\n"); index_out.flush()
         if in_sample:

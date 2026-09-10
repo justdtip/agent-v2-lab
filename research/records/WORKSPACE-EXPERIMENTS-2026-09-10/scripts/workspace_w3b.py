@@ -154,10 +154,10 @@ def readouts(acts, pos):
     for r in repo_layers:
         h = acts[upstream_index_of_repo_layer(r)][pos]; s, m = six(lens_model.unembed(h @ maps[r].T)); out[str(r)] = {"six": s, "mass": m}
     return out
-def run(ids, extra, want_attn):
+def run(ids, extra, want_attn, keep):
     STATE["extra"] = extra; STATE["hook_calls"] = 0; STATE["no_mask_calls"] = 0
     with torch.no_grad(), ActivationRecorder(lens_model.layers, at=record_at) as rec:
-        out = model(input_ids=ids, output_attentions=want_attn)
+        out = model(input_ids=ids, output_attentions=want_attn, logits_to_keep=keep)  # logits only at P_note and P_act, where they are read
         acts = {k: rec.activations[k].detach()[0].float() for k in record_at}
     calls = (STATE["hook_calls"], STATE["no_mask_calls"]); STATE["extra"] = None
     if extra is not None:
@@ -189,7 +189,7 @@ for n, i in enumerate(sample_ids):
     enc_c = tok(comp, add_special_tokens=False, return_offsets_mapping=True); t_idx = rec_row["P_act"] - len(p_ids) + 1
     assert enc_c.input_ids[t_idx] == tool_first[rec_row["tool_idx"]], f"row {i}: in-context tool token {enc_c.input_ids[t_idx]} is not the standalone first token {tool_first[rec_row['tool_idx']]} of {rec_row['tool']}"
     ids = torch.tensor([p_ids + enc_c.input_ids[: t_idx + 1]], device=args.device); S = ids.shape[1]
-    P_note, P_act = rec_row["P_note"], rec_row["P_act"]
+    P_note, P_act = rec_row["P_note"], rec_row["P_act"]; keep = torch.tensor([P_note, P_act], device=args.device)
     assert P_note == len(p_ids) - 1 and P_act == S - 2, f"row {i}: positions {P_note},{P_act} do not match the sequence ({len(p_ids)} prompt tokens, S={S}; the tool-name token is last)"
     kinds = ["format"] * S
     for k, (a, b) in enumerate(enc_p.offset_mapping):
@@ -231,19 +231,19 @@ for n, i in enumerate(sample_ids):
            "note_fence_straddle_tokens": straddle, "q0": q0, "placement_oracle": bool(oracle), "kind_token_counts": {k: kinds.count(k) for k in set(kinds)}, "skipped_arms": skipped, "arms": {}}
     if not LEAKY_CHECKED and "all_carriers" in arms:  # the cut verified with a deliberately leaky mask: one carrier key left open must receive attention
         leaky = arms["all_carriers"].clone(); keys = torch.nonzero(leaky[0, 0, P_act]).flatten().tolist(); leaky[0, 0, :, keys[0]] = False
-        out_l, _ = run(ids, leaky, True); a = torch.stack([A[0, :, P_act, :].float().mean(0) for A in out_l.attentions]).sum(0)
+        out_l, _ = run(ids, leaky, True, keep); a = torch.stack([A[0, :, P_act, :].float().mean(0) for A in out_l.attentions]).sum(0)
         open_mass = float(a[keys[0]]); masked_mass = float(a[keys[1:]].sum()) if len(keys) > 1 else 0.0
         passes = open_mass > 0.0 and masked_mass == 0.0
         emit("leaky_mask_check", open_key_attention_sum_over_layers=open_mass, masked_keys_attention=masked_mass, passes=passes)
         assert passes, "leaky negative control failed: the open key received no attention or the masked keys received some"
         LEAKY_CHECKED = True
     for arm, extra in arms.items():
-        out, acts = run(ids, extra, True)
-        lg = out.logits[0].float()
+        out, acts = run(ids, extra, True, keep)
+        lg = out.logits[0].float(); assert lg.shape[0] == 2, f"logits_to_keep returned {tuple(lg.shape)}"; lg_note, lg_act = lg[0], lg[1]
         def margin(v):  # taken tool's logit minus the best other tool's logit, in logits
             t = v[tool_ids]; own = float(t[rec_row["tool_idx"]]); others = torch.cat([t[:rec_row["tool_idx"]], t[rec_row["tool_idx"] + 1:]]); return own - float(others.max())
-        rec_arm = {"model_six_note": six(lg[P_note]), "model_six_act": six(lg[P_act]), "lens_note": readouts(acts, P_note), "lens_act": readouts(acts, P_act),
-                   "margin_act_logits": margin(lg[P_act]), "margin_note_logits": margin(lg[P_note])}
+        rec_arm = {"model_six_note": six(lg_note), "model_six_act": six(lg_act), "lens_note": readouts(acts, P_note), "lens_act": readouts(acts, P_act),
+                   "margin_act_logits": margin(lg_act), "margin_note_logits": margin(lg_note)}
         extra_dev = extra[0, 0].to(args.device) if extra is not None else None
         chk = effective_checks(out.attentions, extra_dev, P_act, cut_from.get(arm, 0), arm_keys.get(arm, []))
         n_blk_act = int(extra[0, 0, P_act].sum()) if extra is not None else 0; n_blk_total = int(extra.sum()) if extra is not None else 0

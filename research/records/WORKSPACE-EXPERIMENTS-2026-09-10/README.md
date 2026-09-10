@@ -77,6 +77,33 @@ now differ from their controls. One row, a test of the instrument; not a reading
 The earlier mismatch was found by the repaired script's own tool-token check, which refused the stale
 capture (`row 0: in-context tool token 236779 is not the standalone first token 1399 of read_file`).
 
+## The first 4B capture died at 03:22Z, 128 rows from its end; the re-run, with the fatal allocation removed
+
+At row 7,501–7,628 of 7,629 the capture raised `torch.OutOfMemoryError`: it tried to allocate
+4.20 GiB with 3.41 GiB free, the 12B fit's chunk c3 holding 62.25 GiB of process memory (its
+`max_memory_allocated` was 59.72 GiB; the process figure is the one to plan with) and the capture
+29.30 GiB (22.12 allocated, 6.52 reserved and unallocated). The allocation was the full-vocabulary
+logits of a 4,321-token row — 4,321 × 262,144 float32 — of which the pass reads two positions. The
+W-3b pass then failed at once for want of the capture's manifest. The dead capture is kept as
+`captures/4b-died-0322Z` (7,501 rows of residuals, reconstructable by `reconstruct_index.py`); its
+per-row readouts were in the end-only index and are lost, so the clean recovery is a full re-run with
+the index written per row, beside the fit, whose remaining hours would otherwise leave a third of the
+card idle.
+
+The fix, in both scripts: the model's logits are computed only at the two positions read
+(`logits_to_keep=[P_note, P_act]`), which removes the spike entirely; the first row of every run also
+computes the full logits and records the maximum difference at those positions, a hard stop beyond
+1e-4. The kept logits are **not bit-identical** to the full-sequence ones — 3.8e-5 on the CPU
+regression, the lm_head matmul's reduction order depending on its shape — and the residuals, the
+sample and the lens readouts are unchanged. Every reading of the model's own logits in this
+programme (the capture's six-tool fields, the W-3b arms' six-tool fields and margins) now takes the
+same path, so comparisons within and across passes share it; the figure is stated here so that no
+later pass is compared with a full-logits one without knowing it. Scripts as re-run:
+`workspace_capture_v2.py` v2.1 (422435f2f0b7), `workspace_w3b.py` v3.1 (23c09ec1fe36), driver
+`chief_4b_passes_v2.sh` (387bed5cf3a1), from `/workspace/chief` with expandable segments; CPU regression in
+`recover_4b_test.sh` (residuals and sample identical to v2; receipts and oracle pass; the analyzer
+admits).
+
 ## Codex's audit of the repair (63d0549, standing request 5): placement certified, admission and the retained metric corrected
 
 Codex found three things in the repaired script and its analysis, none a finding that the production
@@ -173,14 +200,14 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | file | sha256 (first 12) | role |
 |---|---|---|
 | `workspace_capture.py` | 958ccdcf0bae | the capture as running for the 4B (and queued for the 12B) |
-| `workspace_w3b.py` | 9bf3f0e66581 | W-3b v3: placement certified (the repaired v2, b2d674d3469e, is kept on the card as `workspace_w3b.py.v2-repaired`) |
+| `workspace_w3b.py` | 23c09ec1fe36 | W-3b v3: placement certified (the repaired v2, b2d674d3469e, is kept on the card as `workspace_w3b.py.v2-repaired`) |
 | `workspace_w3b_analyze.py` | 30ffe6d01889 | W-3b aggregate with admission and paired transitions |
 | `workspace_analyze.py` | da680b6e5773 | W-1/W-3/W-4/W-5 with the prose–syntax split |
 | `workspace_w2.py` | 033ae371ef3e | W-2 and W-4 primary |
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
 | `merge_chunks.py` | 5c39d626e129 | chunk merge, weighted by requested rows (valid when no row skipped: c1 70/70/0, c2 70/70/0; c3 checked at its end) |
 | `chief_4b_passes.sh`, `chief_12b_passes.sh`, `overnight3.sh`, `chief_analyze.sh` | 0ef283871e02, c97b46a212bb, f3d6edd6541b, 49d0dc5589ba | drivers |
-| `workspace_capture_v2.py`, `reconstruct_index.py`, `merge_tail_capture.py`, `chief_12b_passes_v2.sh` | 165d7b59eaf4, 279b16d1b79f, 4d292cf78120, f70cae68e67f | the 12B capture and the insurance (section above) |
+| `workspace_capture_v2.py`, `reconstruct_index.py`, `merge_tail_capture.py`, `chief_12b_passes_v2.sh` | 422435f2f0b7, 279b16d1b79f, 4d292cf78120, f70cae68e67f | the 12B capture and the insurance (section above) |
 
 Corpus (the three splits concatenated, 7,629 distinct decisions, 1,128 episodes, twelve families):
 sha256 `790cefffc29b…`. 4B lens archive `out/lens4b-f32/exact-maps.npz`: sha256 `56c7b49e1c71…`
