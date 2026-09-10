@@ -306,7 +306,7 @@ loader's complete hash manifest (`load_report_sha256` in each capture manifest).
 TF32 off, highest matmul precision, eager attention, width 1 at capture; determinism pinned. Sample
 rule: per family, sorted (task_id, step), prompts ≤ 1,500 tokens, every k-th to 25; 300 decisions.
 
-## Results — 4B, first readings (07:20Z; W-2 pending)
+## Results — 4B (07:20Z–08:20Z)
 
 Each experiment reports in three states with its unit count, its unresolved count and its tail, and
 nothing in this record is a claim about a workspace property. Unit: the decision (7,629; the 300-sample
@@ -415,6 +415,38 @@ spans loses the winner in 37 of 179 against 9 of 179 for the same count of task 
 depresses the margin as much on the median but flips far fewer; the carrier spans' joint removal is
 what flips the 37. Each single carrier span costs less than the equal-count control.
 
-**W-2 (the primary of W-4: early versus late linear decodability of the expert action at P_note and
-P_act, rank ladder with the permutation and transfer nulls).** Running on the host CPU at this writing;
-its readings follow in this section.
+**W-2, the primary of W-4: linear decodability of the expert action at P_note and P_act (all 7,629
+decisions, 1,128 episodes; unit the episode, accuracies are episode means).** A PCA-r projection fitted
+on the training fold with a ridge one-hot readout, five folds by episode stratified by family ("within";
+its within-family permutation null is uninformative for family-constant strata and reads high), and a
+leave-families-out transfer — trained on aggregate_report, calculate, cross_reference, list, read and
+synthesis, tested on the other six — against a per-family label-bijection null. The tool prior
+(`read_file` always) scores 0.566. Layers 6, 11, 16, 22, 27, 33; ranks 1 to 16; the raw residual and
+the lens readout agree throughout (a lens-versus-raw gap at a rank reflects which directions the PCA
+keeps, never information the lens created).
+
+| position, rank 16 | layer 6 | 11 | 16 | 22 | 27 | 33 |
+|---|---|---|---|---|---|---|
+| P_act within (raw) | 0.69 | 0.70 | 0.87 | 0.96 | 0.98 | 0.98 |
+| P_act transfer across family halves (raw) | 0.48 | 0.46 | 0.66 | 0.95 | 0.98 | 0.97 |
+| P_act bijection null | 0.23 | 0.13 | 0.33 | 0.12 | 0.28 | 0.14 |
+| P_note within (raw) | 0.50 | 0.54 | 0.59 | 0.63 | 0.61 | 0.59 |
+| P_note transfer across family halves (raw) | 0.28 | 0.37 | 0.40 | 0.53 | 0.55 | 0.49 |
+| P_note bijection null | 0.16 | 0.09 | 0.23 | 0.18 | 0.14 | 0.07 |
+
+The lens cells sit within 0.03 of these. Down the ladder at P_act: rank 1 stays near its null at every
+layer; rank 4 reaches 0.83–0.92 within and 0.72–0.78 in transfer from layer 22; rank 8 reaches 0.90–0.98
+within and 0.79–0.97 in transfer from layer 22. At P_note no rank at any layer exceeds 0.63 within or
+0.55 in transfer.
+
+Reading: at the action position, after the expert's note, the expert action is linearly decodable
+from a sixteen-dimensional projection of the residual almost perfectly from layer 22 (0.96–0.98) and
+transfers across families at the same level (0.95–0.98 against a null of 0.12–0.28); at layer 16 it
+is partly there (0.87 within, 0.66 transfer) and at layers 6–11 barely above the prior. At the note
+position, before the note is written, the same projection recovers the expert action at 0.59–0.63
+within — a few points above the prior's 0.566 — and transfers at 0.49–0.55 against a null of
+0.07–0.23: above chance, far below P_act, and not above the prior by much. Under the order's frame:
+what the specified pipeline retains of the expert action is late and post-note at this position pair;
+whether the note *creates* the decodable information or the action position merely *gathers* it is a
+question for the interventions (W-3b: the note's prose removed from the post-fence queries costs the
+winner in 63 of 288, the same count of arbitrary tokens in 1 of 288), not for this screen.
