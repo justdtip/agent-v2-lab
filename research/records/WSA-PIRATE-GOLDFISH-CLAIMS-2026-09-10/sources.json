@@ -1,0 +1,52 @@
+{
+  "inputs": [
+    {
+      "kind": "local uncommitted visualization; embedded producer-reported arrays",
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/preview/jspace-heatmap.html",
+      "snapshot": "source/jspace-heatmap.html",
+      "sha256": "12f2a28ecc94c61f5b3965a0a4989abc389b45bd470cb0cf6e628199a4b245c4",
+      "bytes": 917660,
+      "mtime_utc": "2026-09-09T20:58:48.027402+00:00"
+    },
+    {
+      "kind": "committed context",
+      "commit": "612e08ee42352d27812d0db7b452c2efa7867b64",
+      "path": "design_specifications/pending/WORKSPACE-EXPERIMENTS-2026-09-10.md",
+      "snapshot": "source/workspace-order.md",
+      "sha256": "2b9228589187e4fabca8273eb33988926244cc87c3a424872377fe41b4b0cda1",
+      "bytes": 21380
+    },
+    {
+      "kind": "committed context",
+      "commit": "612e08ee42352d27812d0db7b452c2efa7867b64",
+      "path": "design_specifications/pending/CODEX-DATA-PRIMER-2026-09-10.md",
+      "snapshot": "source/primer.md",
+      "sha256": "03ba5192920c71d1a7dcfb25f63a7f3fbcd5814148e59a8c534808db9d978d30",
+      "bytes": 15957
+    },
+    {
+      "kind": "committed context",
+      "commit": "232fe6a2d6e709c0db1262f6f599d1b093c9c45f",
+      "path": "research/records/WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10/README.md",
+      "snapshot": "source/prior-scope-review.md",
+      "sha256": "1e631d3f1534ec14dee6317fd4f6d73a2bfa3a2babf188c01b363b833fea40a7",
+      "bytes": 13995
+    }
+  ],
+  "cutoff": {
+    "main": "612e08ee42352d27812d0db7b452c2efa7867b64",
+    "integration": "de93689d8123e49a9bcf0300e91120d5318feb19",
+    "dcro": "6b39d3c6f69576341f1df3a595eba78f49b597af"
+  },
+  "external_primary_sources": [
+    {
+      "title": "The preregistration revolution",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5856500/"
+    },
+    {
+      "title": "Verbalizable Representations Form a Global Workspace in Language Models",
+      "url": "https://transformer-circuits.pub/2026/workspace/index.html"
+    }
+  ],
+  "analysis_status": "retrospective exploratory audit; metrics and selected examples chosen after inspecting the visualization"
+}

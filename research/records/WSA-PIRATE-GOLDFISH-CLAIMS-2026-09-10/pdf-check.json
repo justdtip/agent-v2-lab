@@ -1,0 +1,12 @@
+{
+  "pages": 12,
+  "text_characters": 19990,
+  "required_text_present": true,
+  "pdf_sha256": "f7dbcb51099ba64d5cb8a10663a2cf77a605b52d7242574d80a9e59b304383bf",
+  "page_rendering": "pypdfium2, all pages, 1.4x",
+  "visual_review": "All 12 pages inspected in rendered contact sheet; final table and audit appendix inspected at full page size. Text and tables fit; page numbers and repeated table headers are visible.",
+  "input_analysis_sha256": "de401ee5e6e809aeec49c17d92b66e655a33d61c45f5aaef726ac254f2312e4a",
+  "input_readme_sha256": "a14805154584b5701c9068a5c36c8c977f3324885eaf4ed3413af02e3c63a429",
+  "static_checks": "ruff --no-cache --select F,E9: all three owned scripts passed",
+  "build_report_sha256": "6ae017612dccd9d19032485255415383e55f667875222e84858deb4e61b59f44"
+}

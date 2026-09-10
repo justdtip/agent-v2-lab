@@ -1,0 +1,31 @@
+{
+  "analyze_sha256": "3025ac77771b9fdb04aa96ff317d6268cbefd7083a27a18522d28c72ccccb126",
+  "array_mutations_refused": [
+    "missing_token",
+    "negative_probability",
+    "nan_probability",
+    "zero_rank",
+    "negative_entropy",
+    "impossible_probability_rank",
+    "broken_text_join"
+  ],
+  "basis": "model-free verification of recorded arrays, not original measurement reproduction",
+  "experimental_workspace_gates_passed_by_this_audit": 0,
+  "independent_count_formulations_agree": true,
+  "model_modules_imported": [],
+  "recorded_output_reproduced": true,
+  "relocated_output_reproduced": true,
+  "source_corruptions_refused": [
+    "source/jspace-heatmap.html",
+    "source/workspace-order.md",
+    "source/primer.md",
+    "source/prior-scope-review.md"
+  ],
+  "unexecuted": [
+    "model/tokenizer/forward/lens reconstruction",
+    "checkpoint and matrix digest validation",
+    "real path/precision/width acceptance for these maps and this capture",
+    "workspace causality, generalisation or behavioural steering test"
+  ],
+  "verify_sha256": "be5200ac7ce7da97afc50c969208ec72dc35b2908e4f8919becc9499b3f1065e"
+}
