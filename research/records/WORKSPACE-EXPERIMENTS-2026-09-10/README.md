@@ -366,7 +366,34 @@ matched one 4, the control 1. So the 12B's joint carrier effect sits mostly in t
 carrier set outnumbers everything else in the prompt, and count-matched it is a few rows above its control.
 Note and carriers together lose 44 of 178.
 
-W-2 for the 12B follows in this section when its pass ends.
+**W-2 on the 12B (CPU pass 11:30Z–18:06Z; `results/w2-12b.json`; the same pipeline, script and folds
+as the 4B's, all 7,629 decisions, 1,128 episodes; layers 8, 16, 24, 31, 39, 47 of 47; the tool prior
+0.566; the lens cells sit within 0.16 of the raw ones at ranks 8 and 16).**
+
+| position, rank 16 | layer 8 | 16 | 24 | 31 | 39 | 47 |
+|---|---|---|---|---|---|---|
+| P_act within (raw) | 0.69 | 0.71 | 0.90 | 0.99 | 0.99 | 0.99 |
+| P_act transfer across family halves (raw) | 0.52 | 0.52 | 0.81 | 0.99 | 0.98 | 0.99 |
+| P_act bijection null | 0.25 | 0.09 | 0.26 | 0.13 | 0.27 | 0.15 |
+| P_note within (raw) | 0.55 | 0.54 | 0.64 | 0.66 | 0.63 | 0.64 |
+| P_note transfer across family halves (raw) | 0.38 | 0.40 | 0.47 | 0.47 | 0.43 | 0.46 |
+| P_note bijection null | 0.23 | 0.07 | 0.17 | 0.19 | 0.15 | 0.09 |
+
+Down the ladder at P_act (raw): rank 4 within 0.41 / 0.47 / 0.73 / 0.92 / 0.84 / 0.92 and in transfer 0.31 / 0.17 / 0.63 / 0.76 / 0.78 / 0.79; rank 8 within 0.57 / 0.59 / 0.78 / 0.98 / 0.98 / 0.98 and in transfer
+0.45 / 0.51 / 0.68 / 0.95 / 0.95 / 0.95, layers 8 to 47 in order. Rank 1 stays near its null at every layer, as on the 4B.
+
+Reading, beside the 4B's: the same shape at the same relative depth. On the 4B the action-position
+decodability crossed from partial to near-perfect between layers 16 and 22 of 33 (0.87 → 0.96 within,
+0.66 → 0.95 in transfer); on the 12B it crosses between layers 24 and 31 of 47 (0.90 → 0.99 within,
+0.81 → 0.99 in transfer) — the same half-to-two-thirds depth — and then holds at 0.99 to the last
+layer, against a bijection null of 0.08–0.27. At the note position the 12B, like the 4B, never exceeds
+0.66 within or 0.47 in transfer at any rank or layer: a few points above the prior's 0.566, above
+chance, far below P_act. What the pipeline retains of the expert action is late and post-note on both
+models; the 12B's W-3b (44 of 289 against a control of 3) is the intervention that bears on whether the
+note creates that information, and W-2 does not decide it. The 12B lens crossing in W-1 was at layer
+30 with gradual resolution, later than its W-2 crossing (24–31): the action is linearly present in the
+residual before the lens readout resolves it, on the 12B as on the 4B (W-2 crossing 16–22, lens
+crossing 24).
 
 ## Results — 4B (07:20Z–08:20Z)
 

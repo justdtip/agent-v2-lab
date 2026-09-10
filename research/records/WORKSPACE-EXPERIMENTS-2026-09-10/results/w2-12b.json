@@ -1,0 +1,4117 @@
+{
+ "basis": "computed from /workspace/chief/captures/12b; r is the dimension of a PCA projection fitted on the training fold (a representation constraint, not the rank of the six-class contrast, which is at most five), with a ridge (1.0) readout to one-hot on top, argmax; the label is the EXPERT action; the result is cross-family linear decodability of the information the specified pipeline retains, not functional availability, and a lens-vs-raw difference at rank r reflects which directions the fitted PCA keeps (an invertible lens changes that), never information the lens created; the transfer null is a per-family random bijection of the labels on the training families (the within-family permutation is uninformative for family-constant strata and is used only for the within design); folds by episode stratified by family (5); leave-families-out halves by sorted order; unit = episode",
+ "tool_prior_accuracy": 0.5656049285620658,
+ "ranks": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "layers": [
+  8,
+  16,
+  24,
+  31,
+  39,
+  47
+ ],
+ "families_A": [
+  "aggregate_report",
+  "calculate",
+  "cross_reference",
+  "list",
+  "read",
+  "synthesis"
+ ],
+ "families_B": [
+  "batch_update",
+  "conditional_update",
+  "ledger_reconcile",
+  "pointer_chain",
+  "search",
+  "update"
+ ],
+ "cells": [
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.09661700389954457,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2857142857142857
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4030677314156663,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.06482045092417432,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.056372673327460564,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.23076923076923078
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.22526669345348943,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4037673839105316,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.625
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.227020251801228,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2367230167331857,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3587657084606396,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3003023439037206,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2946283325155353,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.22405664203223652,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5833333333333334
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5207356751161507,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7857142857142857
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3369819091815337,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3687945637139943,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12535102612934276,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5966962175230323,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.8571428571428571
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32412481092471707,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.36421050832424423,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.09957506105816494,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2680691703767423,
+    "accuracy_episode_p10": 0.1111111111111111,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.27503401693795937,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2654095959086572,
+    "accuracy_episode_p10": 0.1111111111111111,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24716834033949178,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5714285714285714
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3432850974582827,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1526076923644195,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.40268031477746746,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08195205110098727,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4059688460267309,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2530972175566982,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3096398962716234,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18071383215704243,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4444444444444444
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5733303448220533,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.875
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33828165197454935,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4506412259228279,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30480335759591076,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.75
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6904027330732587,
+    "accuracy_episode_p10": 0.4,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3483837655067317,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5216923694786648,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.75
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.25168064549713487,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32357969523176033,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6153846153846154
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4110421269096175,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24631318711418837,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.13529238196791388,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4444444444444444
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3363445705201024,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3503793045016449,
+    "accuracy_episode_p10": 0.15384615384615385,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11219301285790648,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2857142857142857
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.110865363169024,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.40496306077110206,
+    "accuracy_episode_p10": 0.18181818181818182,
+    "accuracy_episode_p90": 0.6428571428571429
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35350230515671693,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5384615384615384
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.25793254339875116,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2176734369788187,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5516595678634164,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.75
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.377707797376915,
+    "accuracy_episode_p10": 0.16666666666666666,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.48279073650240734,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10723906707949261,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.640341727873017,
+    "accuracy_episode_p10": 0.4,
+    "accuracy_episode_p90": 0.8888888888888888
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3693283788246241,
+    "accuracy_episode_p10": 0.08333333333333333,
+    "accuracy_episode_p90": 0.8
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5227624732670102,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.04070318717925101,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.15384615384615385
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.31966344970099664,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3447975803341886,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6363636363636364
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30201033322122184,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10736162507126211,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24307074528053876,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.34667412010184223,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.19601195865275964,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.46153846153846156
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.20231406563931595,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.46583920717603444,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.7272727272727273
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.25079981857594497,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17178633767729512,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.35714285714285715
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.14972807664453472,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5910521689581452,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.7857142857142857
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3967546151526126,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5116992258888379,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.06712902198274538,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7102232184678993,
+    "accuracy_episode_p10": 0.36363636363636365,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3716566761935973,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5226431154427087,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08902671272430346,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2857142857142857
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.44554382786939106,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.625
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.16493746513302207,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3222430127467674,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.20076298799703055,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.491907973099306,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4289224444261991,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.47495852531443894,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11475038948443203,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3076923076923077
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6924327140261121,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 0.9090909090909091
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.37847018988289327,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5384615384615384
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6089339467663936,
+    "accuracy_episode_p10": 0.4,
+    "accuracy_episode_p90": 0.9090909090909091
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18821529531401246,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7871148657639584,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3944235021167124,
+    "accuracy_episode_p10": 0.2222222222222222,
+    "accuracy_episode_p90": 0.6
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6633088306781987,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 0.9166666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30196087649545095,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5833333333333334
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.8776592545092232,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4473937679272473,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.8070002738651049,
+    "accuracy_episode_p10": 0.5384615384615384,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21926147905888208,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5393983890072751,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21007941569972233,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5131513944209501,
+    "accuracy_episode_p10": 0.2727272727272727,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.19758737386240516,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5135836924166085,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.7272727272727273
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4690199305225901,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4592206588491006,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07362783652286155,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7300503146091382,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 0.9090909090909091
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.544285442689698,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.75
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6261249293398855,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 0.8571428571428571
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18137421335559634,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7762420079457001,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.44222366454062323,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6835021565661428,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2513021906013145,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.8961183286942048,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4568452616833405,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6923076923076923
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.8139479665214959,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.26482807234137024,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10584359739944846,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.26103745834659475,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.26975437286372833,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.45454545454545453
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30863120721928605,
+    "accuracy_episode_p10": 0.07692307692307693,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7185604442722715,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.624246460412762,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7136453779093016,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.060678100407449594,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.26666666666666666
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.8523865075961446,
+    "accuracy_episode_p10": 0.5454545454545454,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7496978209235718,
+    "accuracy_episode_p10": 0.5384615384615384,
+    "accuracy_episode_p90": 0.9285714285714286
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7265231106908203,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1833520818228265,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.375
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9837537215079455,
+    "accuracy_episode_p10": 0.8888888888888888,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6901336747316097,
+    "accuracy_episode_p10": 0.4,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9532060767941556,
+    "accuracy_episode_p10": 0.8,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.06812161106982759,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9886282046130294,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5777204879207383,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.7777777777777778
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9862732173785053,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08230463274268031,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08986270734549834,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2001532087772701,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2603641391462105,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2140299651329063,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.375
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7460203276536193,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6500699026903658,
+    "accuracy_episode_p10": 0.42857142857142855,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7389570334697055,
+    "accuracy_episode_p10": 0.5384615384615384,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.510459867046225,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.75
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9177089580562672,
+    "accuracy_episode_p10": 0.6666666666666666,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7431773555443768,
+    "accuracy_episode_p10": 0.5454545454545454,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7623944912860745,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11427748826059214,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.982752095572809,
+    "accuracy_episode_p10": 0.9090909090909091,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.678511636494271,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 0.9230769230769231
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9528489116802634,
+    "accuracy_episode_p10": 0.8,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.188964534775705,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9871253226736644,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5689317744034578,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9852037908436532,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12708753389682675,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2857142857142857
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3797683182656587,
+    "accuracy_episode_p10": 0.2222222222222222,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1396301671489406,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2866289320411661,
+    "accuracy_episode_p10": 0.09090909090909091,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.19775886226136538,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7164159239800667,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6448318338767337,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7099945798592544,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.23657280827571817,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5833333333333334
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9162903731935333,
+    "accuracy_episode_p10": 0.625,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.77573033584063,
+    "accuracy_episode_p10": 0.5714285714285714,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7908816006398922,
+    "accuracy_episode_p10": 0.5384615384615384,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11705522233525988,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9846537605767893,
+    "accuracy_episode_p10": 0.9166666666666666,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7306967815767879,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9524940828014983,
+    "accuracy_episode_p10": 0.8,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17654484748899643,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9925261033756028,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5844234259401656,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9844697690364148,
+    "accuracy_episode_p10": 0.9166666666666666,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10009802303685282,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.375
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7109113748741408,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5886289999517471,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.8
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7155683639530636,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.0822011819821582,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7380671863423741,
+    "accuracy_episode_p10": 0.5384615384615384,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6220056135458201,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7209677535358073,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2741430135594716,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.75
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.8384940003212844,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7504747044836219,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7759855251016077,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1955268013113758,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6153846153846154
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.984134126546517,
+    "accuracy_episode_p10": 0.9166666666666666,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.707585752997987,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9508626772511316,
+    "accuracy_episode_p10": 0.8,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07642920312663742,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9947810211968535,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5905203599939207,
+    "accuracy_episode_p10": 0.29411764705882354,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.984800201015783,
+    "accuracy_episode_p10": 0.9166666666666666,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.274256544977759,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5164341215498912,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4658290833940083,
+    "accuracy_episode_p10": 0.16666666666666666,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.545447649624746,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.03617832128470426,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.14285714285714285
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.717446661106705,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.47227343532099475,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.7333333333333333
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.698146472814026,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.046365105540637455,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.14285714285714285
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9128629685106531,
+    "accuracy_episode_p10": 0.625,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7423018686512116,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7904075457697173,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2092757155061598,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9846669221590999,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7033213168303907,
+    "accuracy_episode_p10": 0.42857142857142855,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9838861697161134,
+    "accuracy_episode_p10": 0.9090909090909091,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.013548121123997219,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.07142857142857142
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.993449562825345,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5489341310719597,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.875
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9856757537530378,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1274027739805274,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.713107172662085,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6148906230688146,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.8
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7164431031178528,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21695910776402014,
+    "accuracy_episode_p10": 0.07692307692307693,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7427700473343465,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5139210951867398,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7236531713025768,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17863810200715707,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9186241965458173,
+    "accuracy_episode_p10": 0.6666666666666666,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7790099928984472,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.7918467184150851,
+    "accuracy_episode_p10": 0.5,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11225604649024548,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.375
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9845506368660311,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6730943245844685,
+    "accuracy_episode_p10": 0.42857142857142855,
+    "accuracy_episode_p90": 0.9230769230769231
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9499777260298224,
+    "accuracy_episode_p10": 0.8181818181818182,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.19136468642491797,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_act",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9935423841791176,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5504251887152388,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.9860884419316834,
+    "accuracy_episode_p10": 1,
+    "accuracy_episode_p90": 1
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1458112913369484,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.09626239397046656,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2857142857142857
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3326740859555315,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5384615384615384
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1362047901745962,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12322266976522296,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.20845905791932073,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4166666666666667
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.26617745564475853,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.26697716279224415,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21667791240303755,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.46153846153846156
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3676106754055753,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32796713611794964,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.22002198451666535,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2452944168252366,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3990623434068365,
+    "accuracy_episode_p10": 0.18181818181818182,
+    "accuracy_episode_p90": 0.6923076923076923
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.34779753763248755,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.28710388094383715,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07764444393042641,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5336906088626989,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.31617049368144484,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3129770476649388,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.13358107381887108,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08753241815663593,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.15954073651977282,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.46153846153846156
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.13224216927674373,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1593478470551374,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24933020338605444,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6363636363636364
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2660844502169596,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12472719418902146,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.16342110801982515,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.42857142857142855
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3546401496338918,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6428571428571429
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33049666764075397,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.23519209809103425,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21282201840712478,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.44366256208793753,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2896077083811752,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3721626100224348,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24254989421995055,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 8,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5451430861239998,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8888888888888888
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3486090392653284,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.38288183563527745,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.22685936951033947,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.206406251931909,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.31388073637760744,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12338989378257213,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.147477106719128,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33243586015801285,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35065871628371625,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5384615384615384
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17826219042974362,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.38461538461538464
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.16557503388698633,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.250467306068057,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2725399674202866,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1426396741556316,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4444444444444444
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08548713706332604,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3076923076923077
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3883860427860741,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30506607030386756,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18801022411394752,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.42857142857142855
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10465932589289911,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5349583169866337,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.335312639082977,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4469315881471701,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.13785609583481923,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.09999948815264835,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3049960243483397,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21111903078032615,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1801020763121827,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.46153846153846156
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2283141548746993,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2133493227673453,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.15091917842621846,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18405229305182372,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.42857142857142855
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4151071703872079,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32487031999312976,
+    "accuracy_episode_p10": 0.09090909090909091,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2051284861594624,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.42857142857142855
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1637170188836334,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.40696218211862767,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2762653485901296,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.45454545454545453
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32917374411038364,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6363636363636364
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24303512189150486,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 16,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5358047731483276,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8181818181818182
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2967379139078138,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3991231091082468,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07316878252813797,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.31280300234461683,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.39560260261918584,
+    "accuracy_episode_p10": 0.18181818181818182,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12664710683327704,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.16153416126820383,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2271265092565155,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3652695740383475,
+    "accuracy_episode_p10": 0.23076923076923078,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.0977525306647647,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10082977372949213,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.36363636363636365
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.47969860312241414,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2949680118993323,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.339467665961721,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.23330174119441954,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5876764812622134,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8571428571428571
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3460867261360065,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.44052258349817797,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.7272727272727273
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21920833419581853,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.593663315604805,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.8571428571428571
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35511944511475174,
+    "accuracy_episode_p10": 0.23076923076923078,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.482292204272805,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.29128492781496534,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.45928771374641214,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.29495001026994144,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.45702520258214874,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12639002545917438,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32551927847218837,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.38497844776787205,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5384615384615384
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30166695528084764,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10958078897299799,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4523498289651293,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33792957465516915,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3508789892198841,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.625
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18299391949657906,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5774207725709603,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.8571428571428571
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.31956963764692176,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.36516100451488437,
+    "accuracy_episode_p10": 0.1111111111111111,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.0745127237813408,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 24,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6354705586792571,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.9
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.343016843427513,
+    "accuracy_episode_p10": 0.2222222222222222,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4736884848626088,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7272727272727273
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17292483032079403,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4444444444444444
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2214333912159319,
+    "accuracy_episode_p10": 0.06666666666666667,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.34793383793696686,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.301408820401311,
+    "accuracy_episode_p10": 0.07142857142857142,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.06986071598868845,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30556105317525845,
+    "accuracy_episode_p10": 0.13333333333333333,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.34165021403757323,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18579823258718753,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.25247829961143475,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.43564556908580687,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.27500129705620946,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3917430035546431,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.22587744325854464,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5563364453305004,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.7857142857142857
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35714988379256213,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.48304919785285866,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.13959554285352158,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.4
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6496288626255773,
+    "accuracy_episode_p10": 0.4444444444444444,
+    "accuracy_episode_p90": 0.9
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3729657827397189,
+    "accuracy_episode_p10": 0.21428571428571427,
+    "accuracy_episode_p90": 0.625
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.49579877560556534,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10313112436860872,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3865790390078563,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3865790390078563,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.16144467234892768,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.45454545454545453
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.06005051680114258,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.2222222222222222
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.38274965181645404,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.6
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3759724552668858,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2567401028837199,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18938934173993624,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.42248264673953034,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.313078277670737,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.372073680560852,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.12959983626441698,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.42857142857142855
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5591962099979935,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.8571428571428571
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33029576574632896,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5063319520140547,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.75
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07293178548263028,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 31,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6577263312870322,
+    "accuracy_episode_p10": 0.42857142857142855,
+    "accuracy_episode_p90": 0.9
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3282680420156953,
+    "accuracy_episode_p10": 0.16666666666666666,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.47009007135728037,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.187385329406606,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.214804433155497,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4029071755956925,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2576111634622273,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2899537184932992,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.27125178453401233,
+    "accuracy_episode_p10": 0.08333333333333333,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35548796001314775,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32374786682515094,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5454545454545454
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1319780304292194,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.43037378636174006,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.29070163456114645,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.31566425653565827,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.09019866299278063,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5489503798014437,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 0.75
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.34566243536049546,
+    "accuracy_episode_p10": 0.2222222222222222,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4739310320583787,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07691552467835322,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6296894846566311,
+    "accuracy_episode_p10": 0.4,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.32983540123715344,
+    "accuracy_episode_p10": 0.16666666666666666,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4180104316603065,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.21916363705709763,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2527153672765375,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33432354031149397,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3353951333339631,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08925180081703861,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33392304124860445,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.6
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35876901832001956,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.23697699562061264,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.07166289737472466,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.40379111875122514,
+    "accuracy_episode_p10": 0.15384615384615385,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2486129229089179,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3072876173275109,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11186693483705373,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5017934879402338,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.318454748590074,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4447675354590248,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7142857142857143
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17271752867028212,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.375
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 39,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6338778166336051,
+    "accuracy_episode_p10": 0.4,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3470489647155792,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4293585185442194,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.14541096766534814,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08996755559255559,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3076923076923077
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3898744867807759,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.17586043088233325,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.6
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.11171248544136529,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.36544708058709935,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.24263297079317103,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2809238513595522,
+    "accuracy_episode_p10": 0.1,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.10648582429715095,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.33659873073202234,
+    "accuracy_episode_p10": 0.125,
+    "accuracy_episode_p90": 0.625
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.27640730048818285,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.34909288363215146,
+    "accuracy_episode_p10": 0.14285714285714285,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.20951720774937296,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4850799425971516,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3811456223572932,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.625
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4310309361349724,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.1100891315378174,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.3333333333333333
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "lens",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.620049153235167,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3680074993552778,
+    "accuracy_episode_p10": 0.2222222222222222,
+    "accuracy_episode_p90": 0.6
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.5217295373819153,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.7333333333333333
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.27199880222799494,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 1,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.23717229049284744,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5555555555555556
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.25749645582248837,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2822338630810158,
+    "accuracy_episode_p10": 0.09090909090909091,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.30178638227762133,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 2,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3835455536096963,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.6
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.3430331543832795,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.23012249999108572,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18710645305998874,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 4,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35587525176464474,
+    "accuracy_episode_p10": 0.18181818181818182,
+    "accuracy_episode_p90": 0.5833333333333334
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2762961578355821,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.2808163343285371,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.18609633569739953,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 8,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.48933313708032106,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35745558704726416,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.5714285714285714
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4390910117208615,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.19725601181718203,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.5
+   }
+  },
+  {
+   "position": "P_note",
+   "layer": 47,
+   "representation": "raw",
+   "rank": 16,
+   "within": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.6381428720250685,
+    "accuracy_episode_p10": 0.3333333333333333,
+    "accuracy_episode_p90": 1
+   },
+   "null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.35865881586313375,
+    "accuracy_episode_p10": 0.2,
+    "accuracy_episode_p90": 0.6
+   },
+   "leave_families_out": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.4619087002495951,
+    "accuracy_episode_p10": 0.25,
+    "accuracy_episode_p90": 0.6666666666666666
+   },
+   "transfer_null": {
+    "episodes": 1128,
+    "decisions": 7629,
+    "accuracy_episode_mean": 0.08877768632540221,
+    "accuracy_episode_p10": 0,
+    "accuracy_episode_p90": 0.25
+   }
+  }
+ ]
+}
