@@ -102,6 +102,39 @@ on the emitted token, and refuses when the gap exceeds `1e-3 × max(1, |L h|)`; 
 
 **What the diagnostic also showed, ahead of the A2 result.** On these 600 out-of-domain cells at layer 18 the dictionary reconstructs the residual well in the raw sense — raw share `‖e‖/‖h‖` median **0.066**, max 0.087, inside the 0.5 line — but the *lens-score* error share `‖L e‖/‖L h‖` is median **0.63**, max 0.82, outside it: the 6.6% of the residual the dictionary leaves unexplained carries most of the readout-relevant direction at this layer. That is exactly the "rankable by the raw share, refused by the score share" case T3 was built to name, and it says that at layer 18 an A2 ranking would describe the dictionary's failure at these positions, not the position. Median active features 20. The A2 result files will carry this per cell.
 
-### 3.3 The 4B at repository layers 18 and 24 with the fixed identity — pending
+### 3.3 The 4B at repository layers 18 and 24 — A1 passed at both, A2 ranked nothing at either, and what that measures
 
-*Filled in when the runs end.*
+Both runs from a fresh checkout of the fixed code (`aa2daa4`: the identity in float64, the float32-path guard measured against the dot product's term scale; the first fix `468756c` had the guard against the net score and refused rounding once more — recorded in the order), 13:48Z–14:04Z, CPU: [bridge/result-4b-l18.json](bridge/result-4b-l18.json), [bridge/result-4b-l24.json](bridge/result-4b-l24.json), summaries beside them from [summarise_a2.py](summarise_a2.py). The layer-24 run that had completed under the earlier code gives the same shares to every printed digit; only the identity terms changed.
+
+**A1, both layers, all checks passed.**
+
+| | layer 18 (dictionary `layer_17`) | layer 24 (dictionary `layer_23`) |
+|---|---:|---:|
+| convention: raw arm, recorded first / gain arm | 0.245 / 0.995 — gain, settled | 0.575 / 0.997 — both above 0.5, uninformative, not a stop |
+| two products, worst absolute gap (line 1e-3) | 4.3 × 10⁻⁶ | 3.8 × 10⁻⁶ |
+| control, layer 2, mean overlap@10 (line 0.5) | 0.000 | 0.000 |
+| top-10 scores, min / median / max | 0.54 / 5.9 / 71 | 0.44 / 3.1 / 28 |
+| distinct top-1 tokens of 16,384; most common share | 10,016; 1.6% | 11,510; 0.9% |
+
+The layer-18 convention numbers reproduce the laptop's to the third decimal (0.245 / 0.995), as they must — the discriminator reads the dictionary against the unembedding with no lens and does not depend on the device. At layer 24 the raw arm already agrees with the shipped file above the line, so the check has no power there and says so; the gain arm's 0.997 is consistent with the settled convention, and nothing is concluded from it. The control at layer 2 through the float32 device lens shares nothing at all (the laptop's bf16 lens shared 0.047 on 512 features; this is 8 features), and the two-products identity holds to a few parts in 10⁶.
+
+**A2, both layers, both positions: raw reconstruction admissible everywhere, lens-score ranking refused everywhere.**
+
+| position, layer | raw share ‖e‖/‖h‖, median [min, max] | lens-score share ‖L e‖/‖L h‖ | ratio | active features | identity gap, float64 (float32) |
+|---|---:|---:|---:|---:|---:|
+| P_note, 18 | 0.064 [0.056, 0.074] | 0.70 [0.55, 0.82] | 11.1 | 21 [11, 27] | 9 × 10⁻¹² (4.8 × 10⁻³) |
+| P_act, 18 | 0.070 [0.062, 0.087] | 0.59 [0.53, 0.71] | 8.4 | 20 [12, 27] | 6 × 10⁻¹² (4.9 × 10⁻³) |
+| P_note, 24 | 0.123 [0.096, 0.175] | 0.67 [0.54, 0.82] | 5.5 | 19 [7, 31] | 1.5 × 10⁻¹¹ (7.8 × 10⁻³) |
+| P_act, 24 | 0.135 [0.109, 0.159] | 0.71 [0.63, 0.82] | 5.4 | 16 [10, 25] | 1.1 × 10⁻¹¹ (9.8 × 10⁻³) |
+
+Ranked: **0 of 300** in every row; raw-admissible: 300 of 300 in every row; every refusal reason the same: "lens score error exceeds its declared threshold: the decomposition describes the dictionary's failure at this position; features are not ranked under it".
+
+**What the two shares measure, and why they disagree.** The dictionary writes the residual as `h = b + Σ_i z_i d_i + e`, with `e` the part it does not reconstruct. The *raw* share is `‖e‖ / ‖h‖` in the residual stream's own metric: here 6–7% at layer 18 and 12–14% at layer 24 — the dictionary reconstructs these out-of-domain, agent-transcript activations about as well as such dictionaries reconstruct anything, with 16–21 features active of 16,384. The *lens-score* share is the same ratio after the linear readout `L = W · diag(g) · J_ℓ` has been applied: `‖L e‖ / ‖L h‖`, over all 262,144 vocabulary scores. The ratio of the two shares is
+
+    (‖L e‖ / ‖L h‖) / (‖e‖ / ‖h‖)  =  (‖L e‖ / ‖e‖) / (‖L h‖ / ‖h‖) ,
+
+the gain of the readout on the unexplained part relative to its gain on the whole activation. That ratio is **8–11 at layer 18 and 5–7 at layer 24**, in every one of the 600 cells (the minimum over cells is 3.7). A ratio of one would mean the residual `e` points in directions the readout treats like any other; a ratio of ten means it points, disproportionately, along the directions the readout amplifies most. So the 6% of the activation the dictionary leaves behind carries 60–70% of the norm of what the vocabulary would read from this layer, and the 94% the dictionary does explain carries the rest. The A2 stage, as declared in the config before any run, therefore does not rank features by their contribution to the emitted token's score: any such ranking would be a ranking of contributions to a third of the score, presented as if it were the score. This is the case T3 was built to name — "rankable by the raw share, refused by the score share" — on real activations, at both layers, both positions, all 600 cells.
+
+**What it does and does not say.** It does not say the features are meaningless, nor that the dictionary is wrong about the residual stream: in its own metric it is good. It says that the readout-relevant part of these activations, at these out-of-domain positions, lives mostly in the dictionary's error term, so a feature-level account of *what the model is about to read out* cannot be built from these dictionaries here. It also does not say the lens is at fault: the same amplification appears at layer 24, which the domain statement covers at the action position (W-5 agreement 0.99), and at layer 18, which it does not. Whether the ratio falls where the dictionary is in its own domain (prose, short contexts), whether a wider or lower-sparsity dictionary explains the readout-relevant directions, and whether the ratio is a property of these dictionaries' training objective (the residual metric) rather than of the model, are three measurements this record does not make and does not guess at. Under the two interpretation limits carried in every result: a contribution to a lens score is a contribution to that score at that layer under this averaging convention, not a probability and not a cause; and no description here is a published label.
+
+**The identity, now asserted in float64.** The float64 gap is at most 1.5 × 10⁻¹¹ across 1,200 cells, while the same terms summed in float32 miss by up to 9.8 × 10⁻³ — the rounding the first run refused. Both numbers are in every A2 row so a reader can see what the float32 path did.
