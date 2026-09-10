@@ -357,7 +357,21 @@ def capture_decisions(
             written += _flush(target, shard, buffer, cells, manifest_path)
             shard, buffer, cells = shard + 1, [], []
             if progress is not None:
-                progress({"event": "shard", "shard": shard - 1, "captured": written + len(done)})
+                # `written + reused` is every decision of this request now covered — the ones this
+                # pass wrote and the ones it verified and kept — and `requested` is the denominator,
+                # so a reader of the progress line can see how far through the pass is rather than
+                # only that a shard went out. `len(done)` stood here and `done` does not exist: I
+                # renamed it to `reused` in the summary and missed the callback, which no test
+                # passed, so the name error waited for the device. Entry thirty-four's diagnostic
+                # exactly — the check never exercised the thing it guards.
+                progress({
+                    "event": "shard",
+                    "shard": shard - 1,
+                    "captured": written + reused,
+                    "written_this_pass": written,
+                    "reused": reused,
+                    "requested": len(decisions),
+                })
     if buffer:
         written += _flush(target, shard, buffer, cells, manifest_path)
 

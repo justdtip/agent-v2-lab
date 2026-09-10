@@ -537,3 +537,59 @@ def test_a_conforming_pass_is_recorded_from_the_seam_and_not_from_the_constants(
     assert cell["messages_sha256"] == capture.prompt_digest(row["messages"])
     assert cell["row_ordinals"] == [0]
     assert cell["dtype"] == "torch.bfloat16"
+
+
+def test_the_progress_callback_is_actually_called_and_its_fields_are_right(tmp_path) -> None:
+    """The callback path, exercised. It had never been, and it raised NameError on the device.
+
+    `progress({... "captured": written + len(done)})` referred to a name that does not exist: the
+    variable was renamed in the summary and the callback was missed. Every test passed because none
+    supplied a callback, so the first thing to reach the line was the capture pass on the card,
+    which would have died after shard 0 with one shard on disk and the manifest naming it.
+
+    The point of this test is not the arithmetic. It is that a seam nothing calls is a seam nothing
+    checks, and the fixture must call it.
+    """
+    rows = [_row(step=i) for i in range(5)]
+    decisions = [
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
+        for i, r in enumerate(rows)
+    ]
+    corpus = capture.rows_by_decision(rows)
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
+                                   decoding="greedy", shard_size=2)
+
+    seen: list[dict] = []
+    capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                              prepare=_prepare(), target=target, progress=seen.append)
+
+    # Two full shards of two; the trailing partial shard flushes without a progress event.
+    assert [e["shard"] for e in seen] == [0, 1]
+    assert [e["captured"] for e in seen] == [2, 4]
+    for event in seen:
+        assert event["event"] == "shard"
+        assert event["requested"] == 5
+        assert event["reused"] == 0
+        assert event["written_this_pass"] == event["captured"]
+
+
+def test_the_progress_callback_counts_reused_cells_in_its_running_total(tmp_path) -> None:
+    """`captured` is what the request now has, not what this pass happened to write."""
+    rows = [_row(step=i) for i in range(5)]
+    decisions = [
+        _decision(step=i, messages_sha256=capture.prompt_digest(r["messages"]))
+        for i, r in enumerate(rows)
+    ]
+    corpus = capture.rows_by_decision(rows)
+    target = capture.CaptureTarget(directory=tmp_path, entry="e", identity=_identity(),
+                                   decoding="greedy", shard_size=2)
+    capture.capture_decisions(decisions=decisions[:2], corpus=corpus, forward=_forward(),
+                              prepare=_prepare(), target=target)
+
+    seen: list[dict] = []
+    capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                              prepare=_prepare(), target=target, progress=seen.append)
+    assert seen, "a resumed pass with three still to capture must still report a shard"
+    assert seen[0]["reused"] == 2
+    assert seen[0]["written_this_pass"] == 2
+    assert seen[0]["captured"] == 4
