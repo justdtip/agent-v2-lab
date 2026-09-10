@@ -201,6 +201,17 @@ CONTRADICTION_COUNTEREXAMPLES = {
         "\n| ε_sub | E2 corrective transitions | episodes (one each) | 553 | 0.11 | 549 | 4 |\n",
 }
 
+#: Edits that must **not** fail: they discriminate a live rule from a dead one. A decimal placed in a
+#: non-declared column of an operative row is ignored by the header-column rule and would be a false
+#: "competing tolerance" under the fail-closed fallback — the D-CRO found the rule inert and the suite
+#: green, because every other case gets the same verdict whichever path runs.
+MUST_PASS_EDITS = {
+    "a decimal in the spare column of an operative row (the column rule, not the fallback)": (
+        "| ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 |",
+        "| ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 | 0.109 |",
+    ),
+}
+
 #: Edits that replace text rather than append it; each must be rejected with a "veto form" failure.
 VETO_COUNTEREXAMPLES = {
     "the old unconditional veto restored in §12 (Codex R1)": (
@@ -233,6 +244,10 @@ VETO_COUNTEREXAMPLES = {
     "the pinned wording beside a stray 'never' (D-CRO's escape hatch)": (
         "read *not measured* because they are.",
         "read *not measured* because they are.\n\nThe instrument is falsified by any decoding above the permutation null, and this was never in doubt.",
+    ),
+    "the passive wording, 'the instrument is invalid' (D-CRO)": (
+        "read *not measured* because they are.",
+        "read *not measured* because they are.\n\nIf the null is exceeded by the steps-remaining decoder, the instrument is invalid.",
     ),
     "the §4.1 deferral removed": ("**Status: DEFERRED, its veto disabled", "**Status: ARMED"),
     "the §10 state changed": ("**deferred, not measured**, its **veto disabled**", "**measured**"),
@@ -393,7 +408,7 @@ VETO_PINS = (
 #: sentence — a sentence-wide exemption was an escape hatch (the D-CRO, on 6ee2563).
 _NULL = (r"(above[- ](the )?(unconditional )?(permutation )?null|(exceed\w*|beat\w*) the (unconditional )?"
          r"(permutation )?null|(the )?null (is|was|were) exceeded|better than chance|above chance)")
-_VERDICT = r"(falsif\w*|invalidat\w*|identif\w* a leak|is a leak|a leak)"
+_VERDICT = r"(falsif\w*|invalid\w*|identif\w* a leak|is a leak|a leak)"
 FORBIDDEN_VETO = re.compile(rf"{_VERDICT}[^.]{{0,160}}?{_NULL}|{_NULL}[^.]{{0,160}}?{_VERDICT}", re.IGNORECASE)
 _NEGATED = re.compile(r"\b(does|do|did) not\b|\bnot by itself\b|\bnever\b|\bnot\s+(a|an|the)?\s*(leak|falsif|invalid)|\bno\b", re.IGNORECASE)
 
@@ -507,6 +522,12 @@ def self_test() -> int:
         exercised += 1
         if not any(f.startswith("competing tolerance") for f in check(document + edit, verbose=False)):
             survived.append(f"contradiction: {name}")
+    for name, (old, new) in MUST_PASS_EDITS.items():
+        exercised += 1
+        if old not in document:
+            survived.append(f"must-pass: {name} (anchor text absent)")
+        elif check(document.replace(old, new), verbose=False):
+            survived.append(f"must-pass edit wrongly rejected: {name}")
     for name, (old, new) in VETO_COUNTEREXAMPLES.items():
         exercised += 1
         if old not in document:
