@@ -65,6 +65,13 @@ CAPTURE_DTYPE = "native"
 
 DEFAULT_SHARD_SIZE = 256
 
+#: The enumeration fields a reused cell must still agree with the request about. A capture set
+#: re-enumerated after a pass began can change any of them, and a cell that disagrees describes a
+#: decision the request no longer makes.
+ENUMERATION_FIELDS = (
+    "split", "family", "variant", "difficulty", "recovery", "rendered_rows", "row_ordinals",
+)
+
 #: What a corpus row must carry for this module to be able to capture from it. Declared, and checked
 #: against a real row by `tests/test_state_capture.py`, because the first version of this module
 #: read `row["ids"]` — the *lens* corpus's shape — and the agent corpus has no such key. Every test
@@ -252,8 +259,9 @@ def capture_decisions(
     *,
     decisions: Sequence[dict],
     corpus: dict[tuple[str, int], dict],
-    forward: Callable[[Sequence[int]], Any],
+    forward: Callable[..., Any],
     target: CaptureTarget,
+    prepare: Callable[[dict], dict] | None = None,
     progress: Callable[[dict], None] | None = None,
 ) -> dict:
     """Capture one decision position per decision, writing each shard as it completes.
@@ -265,28 +273,28 @@ def capture_decisions(
     belongs to the caller that owns the tokenizer. Passing it in keeps this function testable
     without a model, and keeps the contract checks in one place rather than in the caller.
 
+    `prepare` is the second seam and it exists for resume. It turns a row into the **exact model
+    input** — the ids, their digest and length, and the rendered bytes' digest — *before* this
+    function decides whether an existing capture may be reused. Without it a resumed pass cannot
+    check that this run's tokenizer produces the ids the existing cells record, and two tokenizers
+    give different ids for the same bytes while the checkpoint identity covers no tokenizer asset at
+    all (Codex R2). When it is absent, resume verifies everything except the consumed ids and the
+    summary says exactly that, rather than reporting a verification it did not perform.
+
     Shards are written as they fill, and the manifest line for a cell is appended only after its
     shard is on disk, so an interrupted run leaves a manifest that describes exactly what exists.
     """
     target.directory.mkdir(parents=True, exist_ok=True)
     manifest_path = target.directory / "manifest.jsonl"
-    done, highest_shard = _verified_captures(manifest_path, target, corpus)
-    pending = [d for d in decisions if (d["task_id"], d["step"]) not in done]
+    existing, highest_shard = _existing_cells(manifest_path)
 
-    # The next shard is one past the highest the manifest names, never `len(done) // shard_size`.
-    # A run that ended on a partial shard leaves a count that is not a multiple of the shard size,
-    # and the division would then hand the next run the partial shard's own number: it would
-    # overwrite a shard whose manifest lines already point at it, and the `shard_sha256` beside
-    # those lines would stop matching. That is detectable afterwards and it should not be possible.
-    written, shard, buffer, cells = 0, highest_shard + 1, [], []
-    for decision in pending:
-        key = (decision["task_id"], decision["step"])
-        row = corpus.get(key)
-        if row is None:
-            raise ContractViolation(
-                f"{key} is in the capture set and not in the corpus: the two have drifted apart "
-                "and a capture attributed to a row that does not exist is worse than no capture."
-            )
+    # Every **requested** decision is validated, whether it is to be captured or reused. The first
+    # version validated a decision only on the path that captured it, so a resumed pass reported
+    # complete and verified without ever consulting the request it was given (Codex R1).
+    pending, reused = [], 0
+    for decision in decisions:
+        key = (decision["task_id"], int(decision["step"]))
+        row = _row_for(corpus, key)
         observed_messages = prompt_digest(row["messages"])
         if observed_messages != decision["messages_sha256"]:
             raise ContractViolation(
@@ -294,14 +302,25 @@ def capture_decisions(
                 f"{decision['messages_sha256'][:12]} the capture set was enumerated under. The "
                 "corpus has changed since the set was fixed; re-enumerate rather than capture."
             )
-        absent = [field for field in REQUIRED_ROW_FIELDS if field not in row]
-        if absent:
-            raise ContractViolation(
-                f"{key}: the corpus row declares no {absent}. This corpus carries the rendered "
-                "`prompt` as a string and no token ids; the caller's `forward` owns tokenization "
-                "and is handed the row, not an id list."
-            )
-        result = forward(row)
+        cell = existing.get(key)
+        if cell is None:
+            pending.append((decision, row))
+            continue
+        _assert_reusable(cell, decision, row, target,
+                         prepare(row) if prepare is not None else None)
+        reused += 1
+
+    # The next shard is one past the highest the manifest names, never `len(done) // shard_size`.
+    # A run that ended on a partial shard leaves a count that is not a multiple of the shard size,
+    # and the division would then hand the next run the partial shard's own number: it would
+    # overwrite a shard whose manifest lines already point at it, and the `shard_sha256` beside
+    # those lines would stop matching. That is detectable afterwards and it should not be possible.
+    written, shard, buffer, cells = 0, highest_shard + 1, [], []
+    for decision, row in pending:
+        key = (decision["task_id"], int(decision["step"]))
+        observed_messages = prompt_digest(row["messages"])
+        prepared = prepare(row) if prepare is not None else None
+        result = forward(row, prepared) if prepare is not None else forward(row)
         assert_seam_ran_the_declared_pass(result, row, key)
         cell = {
             **{k: decision[k] for k in
@@ -347,86 +366,120 @@ def capture_decisions(
     # truncated one, and both look like success. `complete` is computed against the decisions this
     # call was given — a caller that passed a subset gets `requested` equal to that subset, which is
     # why `requested` is reported beside it rather than assumed to be the whole set.
-    final, _ = _verified_captures(manifest_path, target, corpus)
-    outstanding = [d for d in decisions if (d["task_id"], d["step"]) not in final]
+    final, _ = _existing_cells(manifest_path)
+    outstanding = [d for d in decisions if (d["task_id"], int(d["step"])) not in final]
     return {
         "captured": written,
-        "already_present": len(done),
+        "already_present": reused,
         "requested": len(decisions),
         "outstanding": len(outstanding),
         "complete": not outstanding,
-        "verified": len(final),
+        "reused": reused,
+        "verified_scope": (
+            "checkpoint identity, semantic record, rendered input, requested enumeration, file "
+            "integrity, and the consumed ids"
+            if prepare is not None else
+            "checkpoint identity, semantic record, rendered input, requested enumeration and file "
+            "integrity — **not** the consumed ids, because no `prepare` seam was supplied and this "
+            "run cannot know what ids its tokenizer would produce"
+        ),
+        "consumed_ids_verified_on_reuse": prepare is not None,
         "shards": shard + (1 if cells else 0),
         "coverage_note": "requested is what this call was given, not necessarily the whole capture "
-                         "set; complete says every requested decision now has a manifest line, and "
-                         "verified is how many of those lines were checked against the checkpoint "
-                         "identity, the corpus row's prompt digest and the shard's own bytes",
+                         "set; complete says every requested decision now has a manifest line; "
+                         "reused is how many were accepted from a previous pass, each checked "
+                         "against the scope named in verified_scope",
     }
 
 
-def _verified_captures(
-    manifest_path: Path, target: CaptureTarget, corpus: dict[tuple[str, int], dict]
-) -> tuple[set[tuple[str, int]], int]:
-    """The captures this run may keep, **verified**, and the highest shard the manifest names.
+def _row_for(corpus: dict[tuple[str, int], dict], key: tuple[str, int]) -> dict:
+    row = corpus.get(key)
+    if row is None:
+        raise ContractViolation(
+            f"{key} is in the capture set and not in the corpus: the two have drifted apart and a "
+            "capture attributed to a row that does not exist is worse than no capture."
+        )
+    absent = [field for field in REQUIRED_ROW_FIELDS if field not in row]
+    if absent:
+        raise ContractViolation(
+            f"{key}: the corpus row declares no {absent}. This corpus carries the rendered "
+            "`prompt` as a string and no token ids; tokenization belongs to the caller's seams."
+        )
+    return row
 
-    The first version counted a key as done on manifest membership alone. A changed checkpoint, a
-    changed prompt, a missing shard and altered shard bytes all resumed as complete, and a resumed
-    pass would then have mixed two checkpoints' residuals under one manifest with nothing saying
-    so. Membership in a manifest is a claim; this checks it.
 
-    Four conditions, and a failure of any is refused by name rather than silently re-captured,
-    because a manifest that disagrees with its own files is a fact about the directory that the
-    operator needs to see, not one for this function to paper over.
-    """
+def _existing_cells(manifest_path: Path) -> tuple[dict[tuple[str, int], dict], int]:
+    """The manifest as a map, and the highest shard it names. No judgement, only reading."""
     if not manifest_path.exists():
-        return set(), -1
-    done: set[tuple[str, int]] = set()
+        return {}, -1
+    cells: dict[tuple[str, int], dict] = {}
     highest = -1
-    shard_digests: dict[int, str] = {}
     for line in manifest_path.read_text().splitlines():
-        if not line.strip():
-            continue
-        cell = json.loads(line)
-        key = (cell["task_id"], int(cell["step"]))
-        highest = max(highest, int(cell["shard"]))
+        if line.strip():
+            cell = json.loads(line)
+            cells[(cell["task_id"], int(cell["step"]))] = cell
+            highest = max(highest, int(cell["shard"]))
+    return cells, highest
 
-        if cell.get("checkpoint_sha256") != target.identity["checkpoint_sha256"]:
+
+def _assert_reusable(
+    cell: dict, decision: dict, row: dict, target: CaptureTarget, prepared: dict | None
+) -> None:
+    """Refuse an existing capture that is not the capture this run would have made.
+
+    Membership in a manifest is a claim. Every condition below was, at some point, something this
+    module took on trust: the checkpoint, the semantic record, the rendered bytes, the shard's
+    existence, the shard's contents, the request's own enumeration, and the ids actually consumed.
+    Each is refused by name, because a manifest that disagrees with its own files or with the
+    request is a fact the operator needs, not one for this function to paper over.
+    """
+    key = (decision["task_id"], int(decision["step"]))
+    if cell.get("checkpoint_sha256") != target.identity["checkpoint_sha256"]:
+        raise ResumeUnverified(
+            f"{key} was captured under checkpoint {str(cell.get('checkpoint_sha256'))[:12]} and "
+            f"this run is {target.identity['checkpoint_sha256'][:12]}. Resuming would mix two "
+            "checkpoints' residuals under one manifest. Capture into a new directory."
+        )
+    if prompt_digest(row["messages"]) != cell.get("messages_sha256"):
+        raise ResumeUnverified(
+            f"{key}: the corpus row's message digest has moved since it was captured."
+        )
+    if hashlib.sha256(row["prompt"].encode()).hexdigest() != cell.get("rendered_prompt_sha256"):
+        raise ResumeUnverified(
+            f"{key}: the corpus row's rendered prompt has moved since it was captured, even though "
+            "its message record has not. The existing capture is of different bytes."
+        )
+    differing = [f for f in ENUMERATION_FIELDS if cell.get(f) != decision.get(f)]
+    if differing:
+        raise ResumeUnverified(
+            f"{key}: the existing capture and the requested decision disagree about {differing}. "
+            "The capture set has been re-enumerated since the pass began, and reusing the cell "
+            "would attribute it to a decision this request does not make."
+        )
+    if prepared is not None:
+        if prepared["token_ids_sha256"] != cell.get("token_ids_sha256"):
             raise ResumeUnverified(
-                f"{key} was captured under checkpoint {str(cell.get('checkpoint_sha256'))[:12]} "
-                f"and this run is {target.identity['checkpoint_sha256'][:12]}. Resuming would mix "
-                "two checkpoints' residuals under one manifest. Capture into a new directory."
+                f"{key}: this run's tokenizer produces ids digesting to "
+                f"{prepared['token_ids_sha256'][:12]} and the existing capture records "
+                f"{str(cell.get('token_ids_sha256'))[:12]}. Two tokenizers give different ids for "
+                "the same bytes, and the checkpoint identity covers no tokenizer asset."
             )
-        row = corpus.get(key)
-        if row is None:
+        if prepared["token_ids_length"] != cell.get("token_ids_length"):
             raise ResumeUnverified(
-                f"{key} is in the manifest and not in the corpus this run was given: the existing "
-                "captures and this corpus are not of the same rows."
+                f"{key}: this run tokenizes to {prepared['token_ids_length']} ids and the existing "
+                f"capture records {cell.get('token_ids_length')}."
             )
-        if prompt_digest(row["messages"]) != cell.get("messages_sha256"):
-            raise ResumeUnverified(
-                f"{key}: the corpus row's message digest has moved since it was captured. The "
-                "existing capture is of a row this run would not produce."
-            )
-        if hashlib.sha256(row["prompt"].encode()).hexdigest() != cell.get("rendered_prompt_sha256"):
-            raise ResumeUnverified(
-                f"{key}: the corpus row's rendered prompt has moved since it was captured, even "
-                "though its message record has not. The existing capture is of different bytes."
-            )
-        shard_path = target.directory / f"residuals-{int(cell['shard']):05d}.pt"
-        if not shard_path.exists():
-            raise ResumeUnverified(
-                f"{key} names {shard_path.name}, which is not on disk. The manifest describes a "
-                "capture nobody has."
-            )
-        if int(cell["shard"]) not in shard_digests:
-            shard_digests[int(cell["shard"])] = hashlib.sha256(shard_path.read_bytes()).hexdigest()
-        if shard_digests[int(cell["shard"])] != cell.get("shard_sha256"):
-            raise ResumeUnverified(
-                f"{shard_path.name} does not hash to the {str(cell.get('shard_sha256'))[:12]} the "
-                "manifest records. Its bytes have changed since it was written."
-            )
-        done.add(key)
-    return done, highest
+    shard_path = target.directory / f"residuals-{int(cell['shard']):05d}.pt"
+    if not shard_path.exists():
+        raise ResumeUnverified(
+            f"{key} names {shard_path.name}, which is not on disk. The manifest describes a "
+            "capture nobody has."
+        )
+    if hashlib.sha256(shard_path.read_bytes()).hexdigest() != cell.get("shard_sha256"):
+        raise ResumeUnverified(
+            f"{shard_path.name} does not hash to the {str(cell.get('shard_sha256'))[:12]} the "
+            "manifest records. Its bytes have changed since it was written."
+        )
 
 
 def _flush(target: CaptureTarget, shard: int, buffer: list, cells: list[dict],
@@ -451,6 +504,7 @@ def _flush(target: CaptureTarget, shard: int, buffer: list, cells: list[dict],
 
 __all__ = [
     "CAPTURE_DTYPE",
+    "ENUMERATION_FIELDS",
     "ResumeUnverified",
     "checkpoint_identity",
     "FORWARD_BATCH",
