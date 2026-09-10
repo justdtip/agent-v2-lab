@@ -219,6 +219,10 @@ def build(directory: Path, baseline: str | None = None) -> tuple[dict, list[str]
             }
         },
         "files": files,
+        # The instrument, recorded but not sealed: it is not part of the reviewed study, and it
+        # postdates the baseline, so a reader re-running it later can tell whether it has the same
+        # builder without the seal claiming the builder was reviewed.
+        "produced_by": {"path": "make_seal.py", "sha256": sha256_of(Path(__file__).resolve())},
         "refusals": {
             "reader": "the reader refuses to read any capture without this file (§11 precondition 5)",
             "folds": "the assignment digest is fixed here so the folds cannot move afterwards (§7.1)",
