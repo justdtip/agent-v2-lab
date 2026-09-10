@@ -308,6 +308,36 @@ loader's complete hash manifest (`load_report_sha256` in each capture manifest).
 TF32 off, highest matmul precision, eager attention, width 1 at capture; determinism pinned. Sample
 rule: per family, sorted (task_id, step), prompts ≤ 1,500 tokens, every k-th to 25; 300 decisions.
 
+## Results — 12B, first readings (11:35Z–12:00Z; W-2 and W-3b pending)
+
+The 12B capture (7,629 decisions, 199.8 minutes alone at 1.57 s per row, peak 60.4 GiB allocated) verified
+against the corpus at 11:35Z with 0 differences; its masking pass (v3.4) runs as this is written, its W-2 on the
+host CPU. The same screen, the same floor, 47 layers (global attention at 6, 12, … 48):
+
+**The anchor.** The model's own six-tool winner is the expert's in 0.973 of 7,629 decisions (cross_reference
+0.905, batch_update 0.892, update 0.978, the rest ≥ 0.99).
+
+**W-1 and W-5.** Through the fitted 12B lens the expert action first ranks first at median depth 0.766 — layer
+36 of 47 — but with a far wider spread than the 4B's (p10 layer 31, p90 layer 46); never in 0.021; a late
+competitor in 0.083. Through the plain unembedding the crossing is at median layer 31 (depth 0.660), never
+0.007, with a late competitor in only 0.093 of rows (the prior favourite in 0.14 of those) — the 4B's mid-layer
+`read_file` default (0.385) is largely absent on the 12B. W-5 shows the lens resolving gradually rather than at
+once: through the fitted maps the six-tool readout clears the floor in 420 rows at layer 30, 960 at 31, 1,343 at
+32, and a tenth of decisions resolve only in the last two layers, where the 4B lens went from 1 row at layer 23
+to 3,916 at layer 24; the unembedding resolves from layer 27. The 12B lens is a merge of three chunks fitted at
+dimension batches 16, 16 and 8 on 128-token prose, read here at width 1 on prompts up to 4,300 tokens: the
+gradual resolution is the instrument's extrapolation, and the ranking of its "first crossing" is correspondingly
+less sharp. Where it resolves it agrees with the model's winner as on the 4B (per-band figures in `w5.json`).
+
+**W-3 (300-sample).** The same routing: from P_act the note's prose receives 0.104 of direct attention in the
+local layers (0.026 in the global), the note's syntax 0.184, the task 0.126 local and 0.333 global, format 0.399
+and 0.402, the carriers ≤ 0.07; mass beyond the window in the global layers p90 0.38.
+
+**W-4's note trajectory (300-sample).** As on the 4B: the expert tool is first at the note's start in 2 of 300
+rows and at its end in 289; the crossing lies in the syntax in 249 rows, in the prose in 46, nowhere in 5.
+
+W-2 and W-3b for the 12B follow in this section when their passes end.
+
 ## Results — 4B (07:20Z–08:20Z)
 
 Each experiment reports in three states with its unit count, its unresolved count and its tail, and
