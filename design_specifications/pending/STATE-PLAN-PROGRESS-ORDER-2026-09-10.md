@@ -407,3 +407,43 @@ To the D-CRO; Codex's third look on the three points only; then the seal.
 *2026-09-10 UTC, ~12:30Z:* the seal-consuming read gate is built at `f2a4265` (`state_programme/read_gate.require_seal`): five claims each on its own path — the seal exists and is complete, its bytes digest as expected, every sealed file still has its bytes, those files still match the baseline commit, and the sealed document still passes the sealed checker loaded from the sealed `check_prereg.py` — no argument disables a check; fifteen tests, two isolating single paths (a document matching its digest but failing its checker; a file moved after the baseline with the seal digest updated); git calls through `spawn.run` after the fork guard caught `subprocess` under a loaded model. The seal digest 58734285… is superseded by the baseline normalisation (4dc39d5); the final digest is reported at sealing. Relayed: seal now at the tip with `--baseline acc130a`.
 
 *2026-09-10 UTC, ~12:45Z:* **SEALED.** Seal digest `998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521`, written at `f2a4265` with baseline `acc130a4c2057717c462564e5f4ed5dc35fa60ed` (the stronger form: all thirteen sealed files byte-identical to the commit Codex reviewed; the tip recorded beside it), committed `5525ac8` and pushed; verified through `require_seal` on the real seal, refusing by name on any other expected digest; the seal fixes the seed 20260910, the fold assignment c5e9622f… recomputed, both capture-set digests, the five operative tolerances recomputed from the bound, and thirteen file digests; the builder recorded as `produced_by`, not sealed. The permitted readings run on the card through the gate, under the shared-card rule beside the Chief's 12B masking pass and 4B repeat; the deferred control untouched.
+
+## First sealed reading, E1, and three rulings — Chief, 2026-09-10 (~13:15Z; the D-CRO's record §0.1, `5b1c9a1`)
+
+The seal travels: `require_seal` passes on the card's own clone with the baseline re-derived from its objects.
+Both captures are the sealed set, 7,629 of 7,629, precondition 2 re-derived on the card (identical ids and read
+position at every decision). E1 at the pre-registered headline (§5: rank 8, depth 0.5), fitted on the train
+split's 5,515 decisions and scored on the 240 clean test episodes:
+
+| quantity | probe | over the permutation null | against ε_main = 0.23 |
+|---|---|---|---|
+| 12B step index | 0.789 | 0.646 | resolved |
+| 4B step index | 0.732 | 0.611 | resolved |
+| 12B steps remaining | 0.325 | 0.073 | not resolvable |
+| 4B steps remaining | 0.266 | 0.030 | not resolvable |
+| 12B − 4B, step index (paired) | | 0.036 | not resolvable |
+| 12B − 4B, steps remaining (paired) | | 0.043 | not resolvable |
+
+The residual at mid-depth carries the step index on both models; it carries nothing about the horizon this corpus
+can distinguish from zero; and the difference between the models lies inside the resolution — the hypothesis is
+unresolved at this n, neither supported nor refuted, which is what the document's opening said a null would mean.
+
+**Ruling 1 — the r = 32 figure is not a finding.** The 4B reaches 0.270 on steps remaining at rank 32, above
+ε_main, where the pre-registered rank 8 does not. Reading it would be choosing the rank after seeing the answer,
+the thing §5's fixed headline exists to prevent. It stays in the record marked in place as a figure that must
+not be read as a finding; a claim about it needs its own pre-registration, with its own seal, before any capture
+is read for it.
+
+**Ruling 2 — the r = 1 → r = 2 drop stays on the open list, as a diagnostic.** Step index falls from rank 1 to
+rank 2 on both models (0.419 → 0.215, 0.434 → 0.223) and then climbs. The rounding hypothesis (exact match on an
+integer moving across boundaries as a second component enters) may be checked as a diagnostic on the training
+folds — never on the test episodes — and reported as a diagnostic, not as an explanation, until it is.
+
+**Ruling 3 — the supervised subspace stands, and is now fixed.** §5 fixed the rank and not its construction; the
+D-CRO built the rank as a supervised subspace (PLS1, greedy, nested, the first r of 32 components equal to the
+r-component fit, pinned by a test), so that r measures the capacity the probe is allowed rather than the share of
+the stream's variance, and the wider 12B residual is matched on capacity rather than penalised for its width.
+Accepted, for the reason given, and fixed for E2 and every later estimand: it is now part of the instrument and
+cannot change after a result is seen. Both nulls were fitted the same way at every rank, as §4.1 requires.
+
+E2 next; E3 waits on WS-B; the deferred control untouched.
