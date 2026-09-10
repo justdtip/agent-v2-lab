@@ -84,14 +84,12 @@ def main(argv: list[str] | None = None) -> int:
          config_sha256=identity["config_sha256"], weight_files=identity["weight_files"],
          bos_token_id=bos)
 
-    def forward(row: dict) -> dict:
-        """Run the pass and **attest to the pass that ran**, not to the pass that was intended.
+    def prepare(row: dict) -> dict:
+        """The exact model input, computed **before** the reuse decision.
 
-        Every field returned here is read back from the objects that did the work — the tensor's own
-        leading dimension, the residual's own dtype, the digest of the bytes handed to the tokenizer
-        and of the ids it returned. The writer compares these to the contract and refuses on a gap.
-        It used to stamp the contract's constants into the cell itself, which meant a seam that
-        expanded a batch or promoted its arithmetic was recorded as width 1, native (Codex C1).
+        Resume cannot otherwise check that this run's tokenizer produces the ids the existing cells
+        record, and two tokenizers give different ids for the same bytes while the checkpoint
+        identity covers no tokenizer asset (Codex R2).
         """
         import hashlib
 
@@ -103,6 +101,25 @@ def main(argv: list[str] | None = None) -> int:
                 "by one and the decision position is the last one, so the capture would be off by "
                 "one exactly where it matters."
             )
+        return {
+            "token_ids": ids,
+            "token_ids_sha256": hashlib.sha256(json.dumps(list(ids)).encode()).hexdigest(),
+            "token_ids_length": len(ids),
+            "rendered_prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
+        }
+
+    def forward(row: dict, prepared: dict) -> dict:
+        """Run the pass and **attest to the pass that ran**, not to the pass that was intended.
+
+        Every field returned here is read back from the objects that did the work — the tensor's own
+        leading dimension, the residual's own dtype, the digest of the bytes handed to the tokenizer
+        and of the ids it returned. The writer compares these to the contract and refuses on a gap.
+        It used to stamp the contract's constants into the cell itself, which meant a seam that
+        expanded a batch or promoted its arithmetic was recorded as width 1, native (Codex C1).
+        """
+        # The ids `prepare` already produced, so the pass forwards exactly what was compared
+        # against the existing cells rather than tokenizing a second time and hoping.
+        ids = prepared["token_ids"]
         tensor = torch.as_tensor(ids, dtype=torch.int64, device="cuda:0").reshape(1, -1)
         with torch.no_grad():
             with ActivationRecorder(wrapped.layers, at=every) as recorder:
@@ -126,9 +143,9 @@ def main(argv: list[str] | None = None) -> int:
             "forward_batch": int(tensor.shape[0]),
             "anchor_batch": int(tensor.shape[0]),
             "capture_dtype": "native" if str(moved.dtype) == observed else "promoted-float32",
-            "rendered_prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
-            "token_ids_sha256": hashlib.sha256(json.dumps(list(ids)).encode()).hexdigest(),
-            "token_ids_length": len(ids),
+            "rendered_prompt_sha256": prepared["rendered_prompt_sha256"],
+            "token_ids_sha256": prepared["token_ids_sha256"],
+            "token_ids_length": prepared["token_ids_length"],
         }
 
     decisions = [json.loads(line) for line in args.capture_set.read_text().splitlines() if line.strip()]
@@ -154,7 +171,8 @@ def main(argv: list[str] | None = None) -> int:
         decoding=args.decoding, shard_size=args.shard_size,
     )
     summary = capture.capture_decisions(
-        decisions=decisions, corpus=corpus, forward=forward, target=target, progress=emit_shard(emit)
+        decisions=decisions, corpus=corpus, forward=forward, prepare=prepare, target=target,
+        progress=emit_shard(emit),
     )
     emit("done", **summary, capture_set_size=capture_set_size,
          whole_set=summary["requested"] == capture_set_size,

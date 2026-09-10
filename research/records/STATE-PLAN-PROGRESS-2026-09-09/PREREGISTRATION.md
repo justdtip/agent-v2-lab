@@ -174,6 +174,16 @@ the writer refuses any that disagree with this contract. It does not write the c
 into the cell — a writer that supplies the answers checks only itself, and a pass that ran at another
 width or on a promoted path would be recorded as conforming.
 
+**Resume verifies rather than trusts, and names what it verified.** Every *requested* decision is
+checked on both paths, not only the one that captures it: the corpus row against the request's own
+digest, and then, for a decision a previous pass already captured, the checkpoint identity, the
+semantic record, the rendered bytes, the enumeration the request now makes, the shard's presence and
+its bytes, **and the ids this run's tokenizer would produce**. That last one needs the model input
+prepared *before* the reuse decision, because two tokenizers give different ids for the same bytes
+and the checkpoint identity covers no tokenizer asset. A pass run without that preparation still
+resumes, and its summary says in words that the consumed ids were not verified rather than reporting
+a verification it did not perform.
+
 **Two fields the first draft did not carry, both required.**
 
 - **`forward_batch: 1`**, and `anchor_batch: 1` beside it. The bf16 forward is not batch-invariant —

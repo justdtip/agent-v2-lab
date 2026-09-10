@@ -56,19 +56,34 @@ def _cell(**overrides) -> dict:
     return {**base, **overrides}
 
 
-def _forward(layers=2, d_model=4, **override):
-    """A seam that attests to a conforming pass. Overrides let a test make it attest otherwise."""
+def _prepare(**override):
+    """The preparation seam: the exact model input, before the reuse decision."""
     import hashlib
 
     def run(row):
         ids = list(range(max(1, len(row["prompt"]))))
+        return {
+            "token_ids": ids,
+            "token_ids_sha256": hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
+            "token_ids_length": len(ids),
+            "rendered_prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
+        } | override
+    return run
+
+
+def _forward(layers=2, d_model=4, **override):
+    """A seam that attests to a conforming pass. Overrides let a test make it attest otherwise."""
+    import hashlib
+
+    def run(row, prepared=None):
+        ids = (prepared or _prepare()(row))["token_ids"]
         attestation = {
             "residuals": torch.zeros(layers, d_model, dtype=torch.bfloat16),
             "seq_len": len(ids), "token_index": len(ids) - 1, "layers": layers,
             "d_model": d_model, "device": "cpu", "dtype": "torch.bfloat16",
             "forward_batch": 1, "anchor_batch": 1, "capture_dtype": "native",
             "rendered_prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
-            "token_ids_sha256": hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
+            "token_ids_sha256": hashlib.sha256(json.dumps(list(ids)).encode()).hexdigest(),
             "token_ids_length": len(ids),
         }
         return {**attestation, **override}
@@ -344,9 +359,15 @@ def test_resuming_under_a_different_checkpoint_is_refused(tmp_path) -> None:
 
 
 def test_resuming_when_the_messages_have_moved_is_refused(tmp_path) -> None:
+    """The corpus moved and the request did not: refused before the reuse branch is reached.
+
+    The request's own digest is checked first, so a corpus that has drifted from the capture set is
+    a `ContractViolation` — re-enumerate — and only a corpus agreeing with the request but not with
+    the manifest reaches `ResumeUnverified`.
+    """
     rows, decisions, _, target = _started(tmp_path)
     moved = capture.rows_by_decision([_row(step=i, text=f"changed {i}") for i in range(3)])
-    with pytest.raises(capture.ResumeUnverified, match="message digest has moved"):
+    with pytest.raises(capture.ContractViolation, match="re-enumerate rather than capture"):
         capture.capture_decisions(decisions=decisions, corpus=moved, forward=_forward(),
                                   target=target)
 
@@ -394,9 +415,45 @@ def test_resuming_with_altered_shard_bytes_is_refused(tmp_path) -> None:
 def test_a_clean_resume_reports_what_it_verified(tmp_path) -> None:
     _, decisions, corpus, target = _started(tmp_path)
     summary = capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
-                                        target=target)
+                                        prepare=_prepare(), target=target)
     assert summary["complete"] is True
-    assert summary["verified"] == 3, "every kept entry was checked, not counted"
+    assert summary["reused"] == 2, "the two already captured were checked and kept"
+    assert summary["captured"] == 1
+    assert summary["consumed_ids_verified_on_reuse"] is True
+    assert "the consumed ids" in summary["verified_scope"]
+
+
+def test_without_a_prepare_seam_the_summary_says_the_ids_were_not_verified(tmp_path) -> None:
+    """A verification not performed is named, not omitted — the coverage rule, applied here."""
+    _, decisions, corpus, target = _started(tmp_path)
+    summary = capture.capture_decisions(decisions=decisions, corpus=corpus, forward=_forward(),
+                                        target=target)
+    assert summary["consumed_ids_verified_on_reuse"] is False
+    assert "not** the consumed ids" in summary["verified_scope"]
+
+
+def test_a_reused_cell_whose_ids_this_tokenizer_would_not_produce_is_refused(tmp_path) -> None:
+    """Codex R2: two tokenizers give different ids for the same bytes, and the checkpoint identity
+    covers no tokenizer asset, so nothing else in the chain can see this."""
+    _, decisions, corpus, target = _started(tmp_path)
+    with pytest.raises(capture.ResumeUnverified, match="no tokenizer asset"):
+        capture.capture_decisions(
+            decisions=decisions, corpus=corpus, forward=_forward(),
+            prepare=_prepare(token_ids_sha256="0" * 64), target=target,
+        )
+
+
+def test_a_reused_cell_the_request_no_longer_describes_is_refused(tmp_path) -> None:
+    """Codex R1: the capture set re-enumerated after the pass began.
+
+    The manifest and the corpus still agree with each other, so every earlier check passes; only a
+    comparison against the *request* can see that the decision has been re-labelled.
+    """
+    _, decisions, corpus, target = _started(tmp_path)
+    reenumerated = [{**d, "variant": "wrong_path"} for d in decisions]
+    with pytest.raises(capture.ResumeUnverified, match="re-enumerated since the pass began"):
+        capture.capture_decisions(decisions=reenumerated, corpus=corpus, forward=_forward(),
+                                  prepare=_prepare(), target=target)
 
 
 # ------------- C1: the writer must check the seam's report, not stamp the contract's constants
